@@ -67,17 +67,22 @@ object LiveTalkRules {
 
     /**
      * The voices the picker offers (Google's prebuilt Live voices with Google's own one-word character), the default
-     * first: a short list, chosen for a warm, clear British-friendly sound.
+     * first: Obi is a man (the Obi plan, slice 2), so the men lead; the women he heard before stay offered after them.
+     * The Live prompt asks for a British accent whichever voice speaks.
      */
     val VOICES: List<Voice> = listOf(
-        Voice("Kore", "Firm · the nearest to Amy"),
-        Voice("Aoede", "Breezy"),
-        Voice("Leda", "Youthful"),
-        Voice("Sulafat", "Warm"),
-        Voice("Achernar", "Soft"),
-        Voice("Vindemiatrix", "Gentle"),
-        Voice("Charon", "Informative"),
+        Voice("Charon", "Informative · Obi's voice"),
+        Voice("Orus", "Firm"),
+        Voice("Iapetus", "Clear"),
+        Voice("Achird", "Friendly"),
+        Voice("Umbriel", "Easy-going"),
         Voice("Puck", "Upbeat"),
+        Voice("Kore", "Firm · a woman's voice"),
+        Voice("Aoede", "Breezy · a woman's voice"),
+        Voice("Leda", "Youthful · a woman's voice"),
+        Voice("Sulafat", "Warm · a woman's voice"),
+        Voice("Achernar", "Soft · a woman's voice"),
+        Voice("Vindemiatrix", "Gentle · a woman's voice"),
     )
 
     /**

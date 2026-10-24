@@ -55,14 +55,15 @@ class SpeechTest {
         val polly = FakePolly(gb)
         val v = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }).voices()
         assertEquals(SpeechCodec.Voices.ON, v.state)
-        assertEquals(listOf("Amy" to "generative", "Olivia" to "generative", "Emma" to "neural", "Brian" to "neural", "Arthur" to "neural"), v.voices.map { it.id to it.engine })
-        assertEquals("Amy", v.defaultVoice)
+        // Obi's voice (Brian, a British man's) leads whatever its engine (the Obi plan, slice 2), then generative first.
+        assertEquals(listOf("Brian" to "neural", "Amy" to "generative", "Olivia" to "generative", "Arthur" to "neural", "Emma" to "neural"), v.voices.map { it.id to it.engine })
+        assertEquals("Brian", v.defaultVoice)
         assertEquals("2026-10", v.month)
         assertEquals(1_000_000L, v.capChars)
         assertEquals(listOf("en-GB"), polly.listed)
         // Only neural here (a region without generative): neural voices, Meka's shortlist first.
         val neuralOnly = SpeechService.rank(gb.map { it.copy(engines = it.engines - "generative") })
-        assertEquals(listOf("Amy", "Emma", "Brian", "Arthur", "Olivia"), neuralOnly.map { it.id })
+        assertEquals(listOf("Brian", "Arthur", "Amy", "Emma", "Olivia"), neuralOnly.map { it.id })
         assertTrue(neuralOnly.all { it.engine == "neural" })
     }
 
@@ -78,8 +79,8 @@ class SpeechTest {
         assertContentEquals("ID3:Brian:Good morning, Meka.".toByteArray(), Base64.getDecoder().decode(r.audio))
         assertEquals(19L, usage.used("2026-10"))
         // No voice, or one this server doesn't offer (a standard-only one included), is said by the default.
-        assertEquals("Amy" to "generative", s.speak(SpeechCodec.Request("Hello.")).let { it.voice to it.engine })
-        assertEquals("Amy", s.speak(SpeechCodec.Request("Hello.", "Robot")).voice)
+        assertEquals("Brian" to "neural", s.speak(SpeechCodec.Request("Hello.")).let { it.voice to it.engine })
+        assertEquals("Brian", s.speak(SpeechCodec.Request("Hello.", "Robot")).voice)
         assertEquals("Emma", s.speak(SpeechCodec.Request("Hello.", "emma")).voice)
         assertEquals(37L, usage.used("2026-10"))
         // The voice list is read once and kept for six hours.
@@ -139,7 +140,7 @@ class SpeechTest {
         val voicesBody = SpeechCodec.encodeVoicesRequest()
         val v = client.post("/v1/speech/voices") { with(foldKey) { signed(foldSecret, "/v1/speech/voices", voicesBody) } }
         assertEquals(HttpStatusCode.OK, v.status)
-        assertEquals("Amy", SpeechCodec.decodeVoices(v.bodyAsText()).defaultVoice)
+        assertEquals("Brian", SpeechCodec.decodeVoices(v.bodyAsText()).defaultVoice)
 
         val body = SpeechCodec.encodeRequest(SpeechCodec.Request("Shall I move Book dentist to tomorrow at 09:00?", "Arthur"))
         val ok = client.post("/v1/speech/speak") { with(foldKey) { signed(foldSecret, "/v1/speech/speak", body) } }
@@ -189,19 +190,19 @@ class SpeechTest {
         val usage = InMemorySpeechUsageStore()
         val s = SpeechService(polly, usage, nowMs = { now })
         s.warm()
-        assertEquals(listOf(Triple(SpeechService.WARM_LINE, "Amy", "generative")), polly.said)
+        assertEquals(listOf(Triple(SpeechService.WARM_LINE, "Brian", "neural")), polly.said)
         assertEquals(SpeechService.WARM_LINE.length.toLong(), usage.used("2026-10"))
         assertEquals(1, polly.listed.size)
         // A request after warming doesn't read the list again.
         s.speak(SpeechCodec.Request("Hi."))
         assertEquals(1, polly.listed.size)
         // The background refresh reads it, and a failed refresh keeps the old list.
-        polly.voices = gb.filter { it.id != "Amy" }
+        polly.voices = gb.filter { it.id != "Brian" }
         s.refreshVoices()
-        assertEquals("Olivia", s.offered().first().id)
+        assertEquals("Amy", s.offered().first().id)
         polly.fail = true
         s.refreshVoices()
-        assertEquals("Olivia", s.offered().first().id)
+        assertEquals("Amy", s.offered().first().id)
         // Warming never throws, and without Polly does nothing.
         s.warm()
         SpeechService(null, usage).warm()
@@ -254,12 +255,12 @@ class SpeechTest {
         val google = FakePolly(chirp)
         val s = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = google)
         val v = s.voices()
-        assertEquals(listOf("Aoede", "Charon", "Aoede-US", "Amy"), v.voices.take(4).map { it.id })
+        assertEquals(listOf("Charon", "Aoede", "Aoede-US", "Brian"), v.voices.take(4).map { it.id })
         assertEquals(listOf("google", "google", "google", "polly"), v.voices.take(4).map { it.provider })
-        assertEquals("Amy", v.defaultVoice)
+        assertEquals("Brian", v.defaultVoice)
         assertEquals(SpeechCodec.Google(SpeechCodec.Google.ON, 0, 1_000_000, 900_000, null), v.google)
         // No voice asked for: Polly's default speaks, never a Google voice.
-        assertEquals("Amy", s.speak(SpeechCodec.Request("Hello.")).voice)
+        assertEquals("Brian", s.speak(SpeechCodec.Request("Hello.")).voice)
         // No key: Google's voices are hidden and the line says how to add it.
         val noKey = object : SpeechEngine by FakePolly(chirp) { override fun configured() = false }
         val off = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = noKey).voices()
@@ -288,7 +289,7 @@ class SpeechTest {
         google.fail = true
         val fell = s.speak(SpeechCodec.Request("Ten past seven.", "Aoede"))
         assertEquals(SpeechCodec.Response.SPOKEN, fell.state)
-        assertEquals("Amy" to "generative", fell.voice to fell.engine)
+        assertEquals("Brian" to "neural", fell.voice to fell.engine)
         assertEquals("Ten past seven.", polly.said.single().first)
         assertEquals(now, s.googleFailedAtMs)
         assertEquals(15L, pollyUsage.used("2026-10"))
@@ -302,12 +303,12 @@ class SpeechTest {
         val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = google)
         s.offered()
         google.fail = true
-        assertEquals("Amy", s.speak(SpeechCodec.Request("One.", "Aoede")).voice)
+        assertEquals("Brian", s.speak(SpeechCodec.Request("One.", "Aoede")).voice)
         assertTrue(s.googleSwitched())
         // Google works again, but the next sentences (and a call line) don't ask it inside the hold: Polly at once.
         google.fail = false
         now += 5 * 60_000L
-        assertEquals("Amy", s.speak(SpeechCodec.Request("Two.", "Aoede")).voice)
+        assertEquals("Brian", s.speak(SpeechCodec.Request("Two.", "Aoede")).voice)
         assertEquals(null, s.googleClip("Three.", "Aoede"))
         assertTrue(google.said.isEmpty())
         assertEquals(5 * 60_000L, s.googleSwitchedForMs())
@@ -323,7 +324,7 @@ class SpeechTest {
         s.speak(SpeechCodec.Request("Six.", "Aoede"))
         google.fail = false
         now += 1 * 60_000L
-        assertEquals("Amy", s.speak(SpeechCodec.Request("Seven.", "Aoede")).voice)
+        assertEquals("Brian", s.speak(SpeechCodec.Request("Seven.", "Aoede")).voice)
         assertTrue(s.googleSwitched())
     }
 
@@ -353,7 +354,7 @@ class SpeechTest {
         assertEquals(SpeechCodec.Response.SPOKEN, s.speak(SpeechCodec.Request("Good morning, Meka.", "Aoede")).state)
         assertTrue(store.month("2026-10").isEmpty())
         // Polly's generative Amy: 15 characters at $30 a million.
-        assertEquals(SpeechCodec.Response.SPOKEN, s.speak(SpeechCodec.Request("Ten past seven.")).state)
+        assertEquals(SpeechCodec.Response.SPOKEN, s.speak(SpeechCodec.Request("Ten past seven.", "Amy")).state)
         assertEquals(AiUsage(SpeechService.VOICE_FEATURE, 1, 0, 0, 450), store.month("2026-10").single())
         assertEquals(450L, store.day("2026-10-09").single().microUsd)
         // Neural Emma costs less a character.
@@ -371,7 +372,7 @@ class SpeechTest {
         // Warming at start is counted too; without a budget nothing changes.
         val other = InMemoryAiUsageStore()
         SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, budget = AiBudget(20_000_000L, other, nowMs = { now })).warm()
-        assertEquals(SpeechService.WARM_LINE.length * 30L, other.month("2026-10").single().microUsd)
+        assertEquals(SpeechService.WARM_LINE.length * 16L, other.month("2026-10").single().microUsd) // Obi's neural Brian
         assertEquals(SpeechCodec.Response.SPOKEN, SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }).speak(SpeechCodec.Request("Hi.")).state)
     }
 
@@ -383,7 +384,7 @@ class SpeechTest {
         val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = google, googleUsage = googleUsage)
         assertEquals("Aoede", s.speak(SpeechCodec.Request("Hi there.", "Aoede")).voice) // 899,999: still free
         val over = s.speak(SpeechCodec.Request("Good morning.", "Aoede"))
-        assertEquals("Amy", over.voice)
+        assertEquals("Brian", over.voice)
         assertEquals(1, google.said.size)
         assertEquals(899_999L, googleUsage.used("2026-10"))
         assertEquals(null, s.googleFailedAtMs) // the cap isn't a failure

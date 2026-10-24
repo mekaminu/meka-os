@@ -578,15 +578,16 @@ class CallAssistantTest {
         assertEquals(CallVoice("Amy", "generative"), CallVoice.choose(null, offered))
         assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Zed", offered)) // not offered here: the default
         assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("not a voice!", offered))
-        // Polly off or unreachable: the chosen name on the neural engine, else Amy.
+        // Polly off or unreachable: the chosen name on the neural engine, else Obi's Brian.
         assertEquals(CallVoice("Arthur", "neural"), CallVoice.choose("Arthur", emptyList()))
         assertEquals(CallVoice.DEFAULT, CallVoice.choose("device", emptyList()))
         assertEquals(CallVoice.DEFAULT, CallVoice.choose(null, emptyList()))
-        // Twilio's names: generative where Twilio has it, else neural; a voice Twilio lacks speaks as Amy, never fails.
+        // Twilio's names: generative where Twilio has it, else neural; a voice Twilio lacks speaks as Brian, never fails.
         assertEquals("Polly.Amy-Generative", TwilioVoice.voiceName(CallVoice("Amy", "generative")))
         assertEquals("Polly.Amy-Neural", TwilioVoice.voiceName(CallVoice("Amy", "neural")))
         assertEquals("Polly.Arthur-Neural", TwilioVoice.voiceName(CallVoice("Arthur", "generative")))
-        assertEquals("Polly.Amy-Neural", TwilioVoice.voiceName(CallVoice("Zed", "neural")))
+        assertEquals("Polly.Brian-Neural", TwilioVoice.voiceName(CallVoice("Zed", "neural"))) // Obi's voice (the Obi plan, slice 2)
+        assertEquals(CallVoice("Brian", "neural"), CallVoice.DEFAULT)
         // Webhooks before a household exists still answer (busy), in no voice at all.
         val none = CallAssistant(ops, FieldReader.scanning(ops), household = { null }, speechVoices = { error("not asked") })
         assertEquals(CallVoice.DEFAULT, none.voice())

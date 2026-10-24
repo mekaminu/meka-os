@@ -11423,6 +11423,9 @@ class MekaCore(
             if (seedsAboutYou && report.rejected.isEmpty()) releaseOneCouncil?.let { aboutYou.seedCouncilOnce(it) }
             // Release 2 slice 6: the train route the code carried goes into the profile once.
             if (seedsAboutYou && report.rejected.isEmpty()) releaseOneRoute?.let { aboutYou.seedRouteOnce(it) }
+            // The Obi plan, slice 2: a woman's voice chosen for Ada goes back to Obi's (a man's) once, on every device,
+            // and the change goes up at once so the other devices don't run it from an older copy.
+            if (report.rejected.isEmpty() && runCatching { mekaVoice.obiVoiceOnce() }.getOrDefault(false)) runCatchingNotCancel { client.syncOnce() }
             // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
             if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
             // The Vault, slice 2a: this phone's or Mac's key is published, the household's made or opened, and what

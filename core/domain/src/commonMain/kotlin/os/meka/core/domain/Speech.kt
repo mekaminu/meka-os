@@ -360,6 +360,11 @@ object MekaVoiceFields {
     const val LIVE = "live"
     /** Obi's Live mode, slice 2: the Live voice he picked (one of [LiveTalkRules.VOICES]); Null for the default. */
     const val LIVE_VOICE = "live_voice"
+    /**
+     * The Obi plan, slice 2: [ObiVoiceRules.DONE] once a woman's voice chosen for Ada has been put back to Obi's
+     * default (a man's), so it happens once on every device and a woman's voice he picks after that stays. Synced.
+     */
+    const val OBI_VOICE = "obi_voice"
 }
 
 object MekaVoiceRules {
@@ -390,9 +395,13 @@ class MekaVoiceStore(private val replica: Replica) {
         val wanted = MekaVoiceRules.normalize(name)
         if (name != null && name.isNotBlank() && wanted == null) return false
         if (wanted == chosen()) return true
+        // A voice picked from now on is his pick for Obi: the switch below never puts it back.
         replica.commitLocal(
             EntityTypes.CONTEXT_MODE, ENTITY_ID,
-            mapOf(MekaVoiceFields.NAME to (wanted?.let { FieldValue.Text(it) } ?: FieldValue.Null)),
+            mapOf(
+                MekaVoiceFields.NAME to (wanted?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                MekaVoiceFields.OBI_VOICE to FieldValue.Text(ObiVoiceRules.DONE),
+            ),
         )
         return true
     }
@@ -431,8 +440,29 @@ class MekaVoiceStore(private val replica: Replica) {
         if (wanted == liveVoice()) return true
         replica.commitLocal(
             EntityTypes.CONTEXT_MODE, ENTITY_ID,
-            mapOf(MekaVoiceFields.LIVE_VOICE to (if (wanted == LiveModeRules.DEFAULT_VOICE) FieldValue.Null else FieldValue.Text(wanted))),
+            mapOf(
+                MekaVoiceFields.LIVE_VOICE to (if (wanted == LiveModeRules.DEFAULT_VOICE) FieldValue.Null else FieldValue.Text(wanted)),
+                MekaVoiceFields.OBI_VOICE to FieldValue.Text(ObiVoiceRules.DONE),
+            ),
         )
+        return true
+    }
+
+    /**
+     * The Obi plan, slice 2: once, after a clean sync, a woman's voice chosen while the assistant was Ada (Navilife's
+     * voice or the Live voice) goes back to the default, Obi's British man's voice. A voice picked with this version
+     * ([choose], [chooseLiveVoice]) carries the mark, so his own picks after the switch always stay. Writes nothing
+     * when there's nothing to put back. True when a choice was put back.
+     */
+    fun obiVoiceOnce(): Boolean {
+        val e = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID) ?: return false
+        if (e[MekaVoiceFields.OBI_VOICE]?.textOrNull == ObiVoiceRules.DONE) return false
+        val changes = mutableMapOf<String, FieldValue>()
+        if (ObiVoiceRules.female(chosen())) changes[MekaVoiceFields.NAME] = FieldValue.Null
+        if (ObiVoiceRules.female(e[MekaVoiceFields.LIVE_VOICE]?.textOrNull)) changes[MekaVoiceFields.LIVE_VOICE] = FieldValue.Null
+        if (changes.isEmpty()) return false
+        changes[MekaVoiceFields.OBI_VOICE] = FieldValue.Text(ObiVoiceRules.DONE)
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, changes)
         return true
     }
 

@@ -36,8 +36,8 @@ object LiveModeRules {
     /** Google's current Live model, unless MEKA_LIVE_MODEL names another. */
     const val DEFAULT_MODEL = "gemini-3.8-live"
 
-    /** The voice he hears until he picks one (Google's prebuilt voices; a warm, clear female voice, nearest Amy). */
-    const val DEFAULT_VOICE = "Kore"
+    /** The voice he hears until he picks one (Google's prebuilt voices; Obi's: a clear, informative man's voice). */
+    const val DEFAULT_VOICE = "Charon"
 
     enum class Level(val wire: String) {
         OK("ok"), HEADS_UP("heads_up"), OVER("over");

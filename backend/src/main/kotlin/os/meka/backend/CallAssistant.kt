@@ -187,8 +187,11 @@ interface VoiceProvider {
  */
 data class CallVoice(val name: String, val engine: String, val google: String? = null) {
     companion object {
-        /** Before MEKA's voice is known (Polly off or unreachable, nothing chosen): Amy, the server's first choice. */
-        val DEFAULT = CallVoice("Amy", SpeechService.NEURAL)
+        /**
+         * Before MEKA's voice is known (Polly off or unreachable, nothing chosen): Obi's, Brian, the server's first
+         * choice (the Obi plan, slice 2).
+         */
+        val DEFAULT = CallVoice(SpeechService.DEFAULT_VOICE, SpeechService.NEURAL)
 
         /**
          * The voice for calls: the synced choice ([chosen], a `context_mode/voice` name) when the server offers it,
@@ -1076,7 +1079,7 @@ class TwilioVoice(
 
         /**
          * MEKA's voice as Twilio names it: generative where Twilio has it, else neural; a voice Twilio doesn't offer
-         * says the call in Amy's neural voice rather than failing the call.
+         * says the call in Obi's (Brian's) neural voice rather than failing the call.
          */
         fun voiceName(voice: CallVoice): String = when {
             voice.engine == SpeechService.GENERATIVE && voice.name in GENERATIVE_VOICES -> "Polly.${voice.name}-Generative"

@@ -77,7 +77,7 @@ class LiveTalkTest {
         assertNull(on.meterLine)
         assertTrue(on.showVoices)
         assertEquals(listOf("Leda"), on.voices.filter { it.selected }.map { it.name })
-        assertEquals("Kore", LiveTalkRules.VOICES.first().name) // the default first
+        assertEquals("Charon", LiveTalkRules.VOICES.first().name) // the default first: Obi, a man's voice
         assertEquals(LiveModeRules.DEFAULT_VOICE, LiveTalkRules.voice("nobody"))
         assertEquals(LiveTalkRules.NO_KEY, LiveTalkRules.view(true, null, true, configured = false, "ok", 0, 1_500).line)
         assertEquals(LiveTalkRules.UNREACHABLE, LiveTalkRules.view(true, null, meterKnown = false, false, "ok", 0, 0).line)

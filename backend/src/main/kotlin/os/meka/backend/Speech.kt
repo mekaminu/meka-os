@@ -657,10 +657,15 @@ class SpeechService(
 
         const val GENERATIVE = "generative"
         const val NEURAL = "neural"
-        /** Meka's shortlist (build plan): these lead the list on the same engine. */
-        val PREFERRED = listOf("Amy", "Emma", "Brian", "Arthur")
-        /** Google voices that lead their group (the build plan's example first). */
-        val PREFERRED_GOOGLE = listOf("Aoede", "Kore", "Leda", "Charon", "Puck", "Orus")
+        /**
+         * The server's default voice, first in the list whatever its engine: Obi is a British man (the Obi plan, slice
+         * 2: Polly's Brian until Meka picks an ElevenLabs voice). When Polly doesn't offer it here the list's first is.
+         */
+        const val DEFAULT_VOICE = "Brian"
+        /** Meka's shortlist (build plan): these lead the list on the same engine, the men first. */
+        val PREFERRED = listOf("Brian", "Arthur", "Amy", "Emma")
+        /** Google voices that lead their group: Obi's men first, then the women the build plan named. */
+        val PREFERRED_GOOGLE = listOf("Charon", "Puck", "Orus", "Aoede", "Kore", "Leda")
         const val UNREACHABLE = "Couldn't reach Amazon Polly"
         const val OVER = "This month's voice is used up; Navilife's own voice speaks until the 1st"
         const val BUDGET_OVER = "This month's AI budget is used up; the device's own voice speaks until the 1st"
@@ -684,6 +689,7 @@ class SpeechService(
             .distinctBy { it.id }
             .sortedWith(
                 compareBy<SpeechCodec.Voice>(
+                    { if (it.id == DEFAULT_VOICE) 0 else 1 },
                     { if (it.engine == GENERATIVE) 0 else 1 },
                     { PREFERRED.indexOf(it.id).let { i -> if (i < 0) PREFERRED.size else i } },
                     { it.id },
