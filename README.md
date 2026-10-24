@@ -176,6 +176,8 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/health/cover-light-many.png](docs/screens/fold/health/cover-light-many.png)
 - [fold/health/inner-dark-many.png](docs/screens/fold/health/inner-dark-many.png)
 - [fold/health/inner-dark-not-connected.png](docs/screens/fold/health/inner-dark-not-connected.png)
+- [fold/hello-stage/cover-dark-mic-off.png](docs/screens/fold/hello-stage/cover-dark-mic-off.png)
+- [fold/hello-stage/cover-dark-nothing-heard.png](docs/screens/fold/hello-stage/cover-dark-nothing-heard.png)
 - [fold/kids/cover-dark-empty.png](docs/screens/fold/kids/cover-dark-empty.png)
 - [fold/kids/cover-dark-many.png](docs/screens/fold/kids/cover-dark-many.png)
 - [fold/kids/cover-dark-one.png](docs/screens/fold/kids/cover-dark-one.png)
