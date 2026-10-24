@@ -39,3 +39,10 @@ beside the tick, no "Any time" chips (the length alone), the weekend no wider th
 `design-1280.png`, for the next slice: the header is the old size (the 34 sp month, 48 dp Obi pill and buttons) and
 the goals row takes a line of its own; "+ add" is a 40 dp box where the mockup's is a slim dashed row; the narrow
 pills stack "nothing yet / 4h" over three lines; the weekend's empty pills and "+ add" are still big.
+
+## Density pass slice 2 (2026-10-24, CI run 1212)
+
+`app-fold-unfolded.png` is now `inner-dark-dense-head` (screens branch). Closer to `design-1280.png`: the header is one
+row at the mockup's size with "+ Goal" beside "W43", Obi's pill, Today and the round ‹ ›; "+ add" is a slim dashed row;
+the narrow pills are "planned" over "– / 4h". Still off: a tall empty gap between the weekdays and the weekend when the
+week is light (the weekday row's minimum height), and Obi's line wraps to two lines in the header at 829 dp.
