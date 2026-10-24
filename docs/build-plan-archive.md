@@ -3226,6 +3226,7 @@ docs/screens/fold/shutdown/.
   have failed every shot; grouped numbers now read whole (ScreenSenseRulesTest); SpeechTest reads the picker's and Live's
   words in every state.
 - Design check: no design file covers Obi's voice. No server change, no wire change, no migration, Mac checked nightly.
+- 6af88aa, CI run 1177 (40063741529) green first try; shots published 8b5345e.
 
 ### Quality gate — slice 58 (2026-10-23): Setup's shots and its first hand test
 
