@@ -703,7 +703,7 @@ private struct BoardCardView: View {
         let rawDuration = dense.duration(card: card)
         let duration: String? = rawDuration.isEmpty ? nil : rawDuration
         let foot = planner.footChips(card: card)
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if !time.isEmpty || duration != nil {
                 HStack(spacing: MekaSpace.xs) {
                     if !time.isEmpty {
@@ -756,7 +756,7 @@ private struct BoardCardView: View {
                 }
             }
         }
-        .padding(.horizontal, CGFloat(dense.CARD_PAD)).padding(.top, CGFloat(dense.CARD_PAD)).padding(.bottom, 6)
+        .padding(.horizontal, CGFloat(dense.CARD_PAD)).padding(.top, CGFloat(dense.CARD_PAD)).padding(.bottom, MekaSpace.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Refinement 3: a borderless tile on the lighter surface; a done one fades rather than sinking or striking through.
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
@@ -890,7 +890,7 @@ private struct BoardTick: View {
                     .background(Circle().fill(done ? palette.accent : Color.clear))
                     .frame(width: CGFloat(BoardDenseRules.shared.TICK), height: CGFloat(BoardDenseRules.shared.TICK))
                 if done {
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(palette.background)
+                    Image(systemName: "checkmark").font(MekaType.micro).foregroundStyle(palette.background)
                 }
             }
             .frame(width: 28, height: 28)
@@ -1308,15 +1308,15 @@ extension MekaPalette {
 /// `.fontDesign(.serif)` (New York).
 enum BoardFont {
     /// The density pass (BoardDenseRules): times, lengths and the budget's figures at the mockup's 10.5 in mono.
-    static var mono: Font { .system(size: CGFloat(BoardDenseRules.shared.CHIP_SP), design: .monospaced) }
+    static var mono: Font { .system(size: CGFloat(BoardDenseRules.shared.CHIP_SP), design: .monospaced) } // type: ok (the density pass: the mockup's sizes)
     /// A day's date in serif, 19 (was the now-title token).
-    static var date: Font { .system(size: CGFloat(BoardDenseRules.shared.DATE_SP), weight: .semibold, design: .serif) }
+    static var date: Font { .system(size: CGFloat(BoardDenseRules.shared.DATE_SP), weight: .semibold, design: .serif) } // type: ok (the density pass: the mockup's sizes)
     /// The weekday beside it, 11.
-    static var weekday: Font { .system(size: CGFloat(BoardDenseRules.shared.WEEKDAY_SP)) }
+    static var weekday: Font { .system(size: CGFloat(BoardDenseRules.shared.WEEKDAY_SP)) } // type: ok (the density pass: the mockup's sizes)
     /// A card's title, 13.5.
-    static var title: Font { .system(size: CGFloat(BoardDenseRules.shared.TITLE_SP)) }
+    static var title: Font { .system(size: CGFloat(BoardDenseRules.shared.TITLE_SP)) } // type: ok (the density pass: the mockup's sizes)
     /// The area's name in a card's foot, 11.
-    static var foot: Font { .system(size: CGFloat(BoardDenseRules.shared.FOOT_SP)) }
+    static var foot: Font { .system(size: CGFloat(BoardDenseRules.shared.FOOT_SP)) } // type: ok (the density pass: the mockup's sizes)
 }
 
 /// The density pass: Saturday and Sunday under the weekdays, each the row's share but at most one and a half weekday
@@ -1360,7 +1360,7 @@ private struct BoardTimeChip: View {
 
     var body: some View {
         Text(time).font(BoardFont.mono).foregroundStyle(ink).lineLimit(1)
-            .padding(.horizontal, 6).padding(.vertical, 2)
+            .padding(.horizontal, 6).padding(.vertical, 2) // rhythm: ok (the mockup's time chip, 6 × 2, BoardDenseRules)
             .background(RoundedRectangle(cornerRadius: 4).fill(quiet ? palette.surface : ink.opacity(0.16)))
     }
 }

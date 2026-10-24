@@ -1010,11 +1010,11 @@ internal object BoardType {
     val monoSmall = mono
 
     // The density pass (BoardDenseRules): the unfolded board and its lists in the mockup's proportions.
-    val dateDense = date.copy(fontSize = BoardDenseRules.DATE_SP.sp, lineHeight = (BoardDenseRules.DATE_SP * 1.2f).sp)
-    val weekdayDense = MekaType.micro.copy(fontSize = BoardDenseRules.WEEKDAY_SP.sp, lineHeight = (BoardDenseRules.WEEKDAY_SP * 1.3f).sp)
-    val titleDense = MekaType.caption.copy(fontSize = BoardDenseRules.TITLE_SP.sp, lineHeight = (BoardDenseRules.TITLE_SP * 1.3f).sp)
-    val monoDense = mono.copy(fontSize = BoardDenseRules.CHIP_SP.sp, lineHeight = (BoardDenseRules.CHIP_SP * 1.3f).sp)
-    val footDense = MekaType.micro.copy(fontSize = BoardDenseRules.FOOT_SP.sp, lineHeight = (BoardDenseRules.FOOT_SP * 1.3f).sp)
+    val dateDense = date.copy(fontSize = BoardDenseRules.DATE_SP.sp, lineHeight = (BoardDenseRules.DATE_SP * 1.2f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
+    val weekdayDense = MekaType.micro.copy(fontSize = BoardDenseRules.WEEKDAY_SP.sp, lineHeight = (BoardDenseRules.WEEKDAY_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
+    val titleDense = MekaType.caption.copy(fontSize = BoardDenseRules.TITLE_SP.sp, lineHeight = (BoardDenseRules.TITLE_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
+    val monoDense = mono.copy(fontSize = BoardDenseRules.CHIP_SP.sp, lineHeight = (BoardDenseRules.CHIP_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
+    val footDense = MekaType.micro.copy(fontSize = BoardDenseRules.FOOT_SP.sp, lineHeight = (BoardDenseRules.FOOT_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
 }
 
 /** The density pass: the lane being drawn is on the unfolded board or the Mac-sized layout (BoardDenseRules). */
