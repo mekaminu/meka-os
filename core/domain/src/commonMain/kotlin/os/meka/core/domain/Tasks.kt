@@ -50,6 +50,8 @@ data class Task(
     val boardWeek: Long? = null,
     /** Where it came from (its provenance: "user", "discord", "meka:mail"…); null when unknown (Board slice 5). */
     val source: String? = null,
+    /** The part of his life it belongs to, as stored ([TaskFields.AREA]: a [BoardArea] name or [BoardAreaRules.NONE]); read through [BoardAreaRules.of]. */
+    val area: String? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -104,6 +106,7 @@ data class Task(
                 boardRank = s[TaskFields.BOARD_RANK].longOrNull,
                 boardWeek = s[TaskFields.BOARD_WEEK].longOrNull,
                 source = s[ActionableFields.PROVENANCE_SOURCE].textOrNull,
+                area = s[TaskFields.AREA].textOrNull,
             )
         }
     }
@@ -225,6 +228,17 @@ class Tasks(
         if (before != minutes) {
             replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.ESTIMATE_MINUTES to (minutes?.fv() ?: FieldValue.Null)))
         }
+        return before
+    }
+
+    /**
+     * The task's area as stored ([TaskFields.AREA], Option B slice 3): a [BoardArea] name, [BoardAreaRules.NONE], or
+     * null to forget the choice (Navilife guesses again). Returns what it stored before, for Undo.
+     */
+    fun setArea(id: String, raw: String?): String? {
+        val before = (get(id) ?: throw ValidationException("Task not found")).area
+        if (raw != null && raw != BoardAreaRules.NONE && BoardAreaRules.stored(raw) == null) throw ValidationException("Unknown area")
+        if (before != raw) replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.AREA to (raw?.fv() ?: FieldValue.Null)))
         return before
     }
 

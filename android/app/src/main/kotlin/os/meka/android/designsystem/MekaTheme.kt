@@ -160,6 +160,18 @@ fun MekaColors.calendarTone(tone: Int): Color = when (tone) {
     else -> calendar5
 }
 
+/**
+ * A Board card's area dot (Option B slice 3, the approved mockup's colours): Family the warm orange, Work the blue, Side
+ * hustle the brass, Money the green, House the violet.
+ */
+fun MekaColors.areaTone(area: os.meka.core.domain.BoardArea): Color = when (area) {
+    os.meka.core.domain.BoardArea.FAMILY -> calendar3
+    os.meka.core.domain.BoardArea.WORK -> calendar4
+    os.meka.core.domain.BoardArea.SIDE_HUSTLE -> accent
+    os.meka.core.domain.BoardArea.MONEY -> success
+    os.meka.core.domain.BoardArea.HOUSE -> calendar2
+}
+
 object Meka {
     val colors: MekaColors @Composable get() = LocalMekaColors.current
     val reducedMotion: Boolean @Composable get() = LocalReducedMotion.current

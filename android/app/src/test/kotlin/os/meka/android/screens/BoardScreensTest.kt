@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import os.meka.android.calendar.AREA_DOT_TAG
 import os.meka.android.calendar.BUDGET_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.core.domain.BoardHandRules
@@ -228,6 +230,44 @@ class BoardScreensTest {
         compose.onNodeWithContentDescription("Previous week").performClick()
         settle()
         cardBounds("Fix the gate latch")
+    }
+
+    /**
+     * Option B slice 3 (the colour categories), unfolded: a Someday card Navilife reads as House sits in the House list
+     * with "House" by its dot; its menu's AREA files it under Family, and it moves back to the Someday list.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun aCardsAreaShowsByItsDotAndItsMenuRefilesIt() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        val id = runBlocking {
+            core.tick()
+            val id = core.addOnBoardSized("Boiler service", core.weekBoard.value.todayEpochDay, 30)!!
+            core.somedayOnBoard(id)
+            id
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-areas"))
+        ScreenShots.assertSensible(compose, "inner-dark-areas")
+        ScreenShots.assertShows(compose, "areas", "Side hustle")
+        if (compose.onAllNodesWithContentDescription("House, 1 task").fetchSemanticsNodes().isEmpty()) fail("the House list doesn't hold the card")
+        if (compose.onAllNodesWithTag(AREA_DOT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no area dot on the card")
+        ScreenShots.assertShows(compose, "areas", "House")
+
+        val card = core.weekBoard.value.find(id)!!.card
+        compose.onNodeWithContentDescription(card.accessibilityLabel).performClick()
+        settle()
+        compose.onNodeWithText("Family").performClick()
+        awaitCore("area") { core.weekBoard.value.find(id)?.card?.task?.area == "FAMILY" }
+        if (compose.onAllNodesWithContentDescription("Someday, 1 task").fetchSemanticsNodes().isEmpty()) fail("the card didn't move to Someday's list")
     }
 
     private fun cardBounds(title: String): androidx.compose.ui.geometry.Rect {

@@ -1622,6 +1622,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertLessThan(tiers.weekend, tiers.weekdays)
         XCTAssertEqual(layout.heights(viewportHeight: 100).weekend, layout.MIN_WEEKEND_DP, accuracy: 0.01)
         XCTAssertEqual(layout.NO_DAY_EMPTY, "Nothing waiting for a day")
+        // Option B, slice 3: the colour categories and the Side hustle and House lists.
+        let areas = BoardAreaRules.shared
+        XCTAssertEqual(areas.label(area: BoardArea.sideHustle), "Side hustle")
+        XCTAssertEqual(areas.raw(area: nil), "NONE")
+        XCTAssertEqual(CoreModel.area("HOUSE"), BoardArea.house)
+        XCTAssertNil(CoreModel.area(nil))
+        XCTAssertEqual(areas.line(title: "boiler service", area: BoardArea.house), "“Boiler service” · House")
+        let lists = layout.lists(week: BoardWeek(startEpochDay: 0, title: "This week", range: "", days: [], lane: [], goals: []),
+                                 board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))
+        XCTAssertEqual(lists.map(\.title), ["No day yet", "Someday", "Side hustle", "House"])
+        XCTAssertEqual(lists.last?.area, BoardArea.house)
         // Slice 4: the week's lane and the Someday tray.
         XCTAssertEqual(WeekBoardRules.shared.NO_DAY, "No day yet")
         XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")

@@ -57,8 +57,9 @@ class BoardWeekLayoutTest {
     fun theListsAreNoDayYetThenSomedayEachSayingWhenEmpty() {
         val w = week.copy(lane = listOf(card("a"), card("b")))
         val lists = BoardWeekLayoutRules.lists(w, WeekBoard(20_002, listOf(w), someday = emptyList()))
-        assertEquals(listOf(BoardTray.NO_DAY, BoardTray.SOMEDAY), lists.map { it.tray })
-        assertEquals(listOf("No day yet · 2", "Someday"), lists.map { it.title })
+        assertEquals(listOf(BoardTray.NO_DAY, BoardTray.SOMEDAY, BoardTray.SOMEDAY, BoardTray.SOMEDAY), lists.map { it.tray })
+        assertEquals(listOf("No day yet · 2", "Someday", "Side hustle", "House"), lists.map { it.title })
+        assertEquals(listOf("a", "b"), lists[0].cards.map { it.id })
         assertEquals("No day yet, 2 tasks", lists[0].accessibilityLabel)
         assertEquals("Someday, empty. Drop a task here", lists[1].accessibilityLabel)
         assertEquals("Nothing on Someday", lists[1].empty)

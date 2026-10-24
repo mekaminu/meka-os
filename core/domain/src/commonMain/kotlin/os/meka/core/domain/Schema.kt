@@ -240,6 +240,11 @@ object TaskFields {
      * week's "This week" lane ([WeekBoardRules.parked]); absent for every other task. Out of Today until it has a day.
      */
     const val BOARD_WEEK = "boardWeek"
+    /**
+     * Option B slice 3, the colour categories (additive, Lww): the part of his life a task belongs to, a [BoardArea] name,
+     * or [BoardAreaRules.NONE] once he takes it off; absent until he picks one (Navilife guesses meanwhile).
+     */
+    const val AREA = "boardArea"
 }
 
 object ChecklistFields {

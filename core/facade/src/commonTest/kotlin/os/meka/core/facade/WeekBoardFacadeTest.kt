@@ -204,6 +204,46 @@ class WeekBoardFacadeTest {
         assertEquals(listOf(mot), mac.weekBoard.value.someday.map { it.id })
     }
 
+    @Test
+    fun anAreaPickedOnTheFoldSyncsAndADropOnHouseFilesItUnderSomeday() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val boiler = fold.addTask("Boiler service")
+        val rates = fold.addTask("Update rates")
+        fold.tick()
+        val area = os.meka.core.domain.BoardAreaRules
+        fun card(c: MekaCore, id: String) = c.weekBoard.value.find(id)!!.card
+        assertEquals(os.meka.core.domain.BoardArea.HOUSE, area.of(card(fold, boiler)), "Navilife's guess")
+
+        assertEquals("“Boiler service” · Work", fold.areaOnBoard(boiler, os.meka.core.domain.BoardArea.WORK))
+        assertNull(fold.areaOnBoard(boiler, os.meka.core.domain.BoardArea.WORK), "already Work")
+        fold.syncNow(); mac.syncNow()
+        assertEquals(os.meka.core.domain.BoardArea.WORK, area.of(card(mac, boiler)))
+        assertTrue(fold.undoBoardArea())
+        assertEquals(os.meka.core.domain.BoardArea.HOUSE, area.of(card(fold, boiler)))
+        assertFalse(fold.undoBoardArea())
+        assertEquals("“Boiler service” · no area", fold.areaOnBoard(boiler, null))
+        assertNull(area.of(card(fold, boiler)))
+
+        // Dropped on Side hustle off today: on Someday, filed under Side hustle; Undo puts it back on today.
+        val today = fold.weekBoard.value.todayEpochDay
+        assertEquals("Moved “Update rates” to Side hustle", fold.listOnBoard(rates, os.meka.core.domain.BoardArea.SIDE_HUSTLE))
+        val lists = os.meka.core.domain.BoardWeekLayoutRules.lists(fold.weekBoard.value.weeks[0], fold.weekBoard.value)
+        assertEquals(listOf(rates), lists.single { it.area == os.meka.core.domain.BoardArea.SIDE_HUSTLE }.cards.map { it.id })
+        assertNull(fold.listOnBoard(rates, os.meka.core.domain.BoardArea.SIDE_HUSTLE), "already there")
+        assertNull(fold.listOnBoard(rates, os.meka.core.domain.BoardArea.MONEY), "Money has no list")
+        assertTrue(fold.undoBoardList())
+        assertTrue(fold.weekBoard.value.day(today)!!.cards.any { it.id == rates })
+        assertNull(fold.weekBoard.value.find(rates)!!.card.task.area)
+        assertFalse(fold.undoBoardList())
+
+        // From Someday's list onto House, then back onto Someday (House comes off).
+        fold.somedayOnBoard(rates)
+        assertEquals("Moved “Update rates” to House", fold.listOnBoard(rates, os.meka.core.domain.BoardArea.HOUSE))
+        assertEquals("Moved “Update rates” to Someday", fold.listOnBoard(rates, null))
+        assertEquals(area.NONE, fold.weekBoard.value.find(rates)!!.card.task.area)
+        assertNull(fold.listOnBoard(rates, null), "already on Someday")
+    }
+
     private inner class EditingTransport(
         private val list: List<ConnectedAccount>,
         private val inner: FaultyTransport = FaultyTransport(service),

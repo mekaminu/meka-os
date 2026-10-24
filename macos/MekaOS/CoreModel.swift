@@ -3483,6 +3483,42 @@ final class CoreModel {
         }
     }
 
+    // MARK: Week board Option B, slice 3: the colour categories
+
+    /// The Kotlin area for its name ("HOUSE"), or nil for none; made where it is used so no Kotlin value crosses
+    /// isolation twice.
+    nonisolated static func area(_ name: String?) -> BoardArea? {
+        switch name {
+        case "FAMILY": return .family
+        case "WORK": return .work
+        case "SIDE_HUSTLE": return .sideHustle
+        case "MONEY": return .money
+        case "HOUSE": return .house
+        default: return nil
+        }
+    }
+
+    /// The card menu's Area: files the task under the area named ("HOUSE"), or nil for No area; Undo on the bar.
+    func areaOnBoard(_ id: String, area: String?) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.areaOnBoard(taskId: id, area: Self.area(area)) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardArea)
+        }
+    }
+
+    /// A card dropped on Someday, Side hustle or House under the weekend (the list's area name, nil for Someday).
+    func listOnBoard(_ id: String, list: String?) {
+        guard let core else { return }
+        if boardSelectedID == id { boardSelectedID = nil }
+        Task {
+            guard let line = try? await core.listOnBoard(taskId: id, list: Self.area(list)) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardList)
+        }
+    }
+
     // MARK: Week board, item (11): "How are you feeling?"
 
     /// The Kotlin feeling for a name, made where it is used so no Kotlin value crosses isolation twice.
@@ -4038,6 +4074,8 @@ final class CoreModel {
         case .estimate: run { _ = try await $0.undoEstimate() }
         case .block: run { _ = try await $0.undoBlock() }
         case .goalTag: run { _ = try await $0.undoTagOnBoard() }
+        case .boardArea: run { _ = try await $0.undoBoardArea() }
+        case .boardList: run { _ = try await $0.undoBoardList() }
         case .boardGoal: run { _ = try await $0.undoBoardGoal() }
         case .lighten: run { _ = try await $0.undoLighten() }
         case .weekPlan: run { _ = try await $0.undoWeekPlan() }
@@ -6899,6 +6937,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case block
         /// For a goal on a Board card (slice 7): the goal it had comes back.
         case goalTag
+        /// Area on a Board card (Option B slice 3): the area it had comes back.
+        case boardArea
+        /// A card dropped on Someday, Side hustle or House (Option B slice 3): its day or week and its area come back.
+        case boardList
         /// A goal picked, typed or taken off a week on the Board (slice 7): taken back.
         case boardGoal
         /// Lighten tomorrow (Week board, item (11)): every task it moved goes back to tomorrow.

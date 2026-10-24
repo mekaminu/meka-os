@@ -2481,6 +2481,64 @@ class MekaCore(
         os.meka.core.domain.WeekBoardRules.somedayLine(title)
     }
 
+    // ---- Week board Option B, slice 3: the colour categories ----
+
+    /**
+     * The card menu's AREA: files the task under [area] (Family, Work, Side hustle, Money, House), or null for "No area"
+     * (no guess shown any more). Returns the undo bar's line ("“Boiler service” · House"), or null when nothing changed;
+     * [undoBoardArea] puts back what it had.
+     */
+    suspend fun areaOnBoard(taskId: String, area: os.meka.core.domain.BoardArea?): String? = onCore {
+        val task = tasks.get(taskId) ?: return@onCore null
+        if (task.lifecycle.isTerminal) return@onCore null
+        val raw = os.meka.core.domain.BoardAreaRules.raw(area)
+        if (task.area == raw) return@onCore null
+        areaUndo = taskId to tasks.setArea(taskId, raw)
+        os.meka.core.domain.BoardAreaRules.line(task.title, area)
+    }
+
+    /** Undo after [areaOnBoard]. False when nothing to undo. */
+    suspend fun undoBoardArea(): Boolean = onCore {
+        val (id, before) = areaUndo ?: return@onCore false
+        areaUndo = null
+        if (tasks.get(id) == null) return@onCore false
+        tasks.setArea(id, before)
+        true
+    }
+    private var areaUndo: Pair<String, String?>? = null
+
+    /**
+     * A card dropped on one of the lists under the weekend that keep Someday: [list] Side hustle or House files it there,
+     * null is Someday itself (taking Side hustle or House off it). Off a day or a week it goes to Someday too. Returns
+     * "Moved “Update rate card” to Side hustle", or null when it can't go or is already there; [undoBoardList] takes it back.
+     */
+    suspend fun listOnBoard(taskId: String, list: os.meka.core.domain.BoardArea?): String? = onCore {
+        val board = _board.value
+        val spot = board.find(taskId) ?: return@onCore null
+        if (!spot.card.canMove || spot.card.task.isRepeating) return@onCore null
+        if (list != null && list !in os.meka.core.domain.BoardAreaRules.LISTS) return@onCore null
+        val task = spot.card.task
+        val raw = os.meka.core.domain.BoardAreaRules.listRaw(task, list)
+        val toSomeday = spot.source != os.meka.core.domain.BoardSource.SOMEDAY
+        if (!toSomeday && raw == null) return@onCore null
+        val move = if (toSomeday) tasks.somedayOnBoard(taskId).also { followBlocks(listOf(taskId)) } else null
+        val oldArea = if (raw != null) tasks.setArea(taskId, raw) else null
+        listUndo = ListUndo(taskId, move, raw != null, oldArea)
+        os.meka.core.domain.BoardAreaRules.listLine(task.title, list)
+    }
+
+    /** Undo after [listOnBoard]: its day or week and its area come back. False when nothing to undo. */
+    suspend fun undoBoardList(): Boolean = onCore {
+        val u = listUndo ?: return@onCore false
+        listUndo = null
+        if (tasks.get(u.taskId) == null) return@onCore false
+        if (u.areaChanged) tasks.setArea(u.taskId, u.oldArea)
+        u.move?.let { m -> tasks.undoBoard(m).also { if (m.before != m.after) followBlocks(listOf(m.taskId)) } }
+        true
+    }
+    private class ListUndo(val taskId: String, val move: os.meka.core.domain.BoardUndo?, val areaChanged: Boolean, val oldArea: String?)
+    private var listUndo: ListUndo? = null
+
     /** Undo after [moveOnBoard] or [nudgeOnBoard]: the task's day and the day's order come back. False when nothing to undo. */
     suspend fun undoBoardMove(): Boolean = onCore {
         val u = boardUndo ?: return@onCore false

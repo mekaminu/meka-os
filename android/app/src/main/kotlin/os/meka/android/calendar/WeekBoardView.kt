@@ -126,6 +126,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.areaTone
 import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
@@ -150,6 +151,8 @@ import os.meka.core.domain.BoardBlockRules
 import os.meka.core.domain.BoardFreeTime
 import os.meka.core.domain.WeekBoard
 import os.meka.core.domain.WeekBoardRules
+import os.meka.core.domain.BoardArea
+import os.meka.core.domain.BoardAreaRules
 import os.meka.core.domain.BoardListColumn
 import os.meka.core.domain.BoardWeekLayoutRules
 import os.meka.core.facade.MekaCore
@@ -284,6 +287,20 @@ fun WeekBoardView(
     fun showLine(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } } }
     val onPark: (BoardCard, Long) -> Unit = { card, week -> scope.launch { showLine(runCatching { core.parkOnBoard(card.id, week, Int.MAX_VALUE) }.getOrNull()) } }
     val onSomeday: (BoardCard) -> Unit = { card -> scope.launch { showLine(runCatching { core.somedayOnBoard(card.id) }.getOrNull()) } }
+    // Option B slice 3: a drop on one of the lists that keep Someday (Someday, Side hustle, House) files it there; the
+    // card menu's AREA files it under one of the five.
+    val onList: (BoardCard, BoardArea?) -> Unit = { card, list ->
+        scope.launch {
+            val line = runCatching { core.listOnBoard(card.id, list) }.getOrNull()
+            if (line != null) { haptics.light(); undo.show(line) { core.undoBoardList() } }
+        }
+    }
+    val onArea: (BoardCard, BoardArea?) -> Unit = { card, area ->
+        scope.launch {
+            val line = runCatching { core.areaOnBoard(card.id, area) }.getOrNull()
+            if (line != null) { haptics.light(); undo.show(line) { core.undoBoardArea() } }
+        }
+    }
     val onTag: (BoardCard, String?) -> Unit = { card, goal ->
         scope.launch {
             val line = runCatching { core.tagOnBoard(card.id, goal) }.getOrNull()
@@ -291,6 +308,7 @@ fun WeekBoardView(
         }
     }
 
+    CompositionLocalProvider(LocalBoardArea provides onArea) {
     BoxWithConstraints(
         modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }
             // A tap outside the open add field closes it (watched only, never consumed, so the tap still does its job).
@@ -432,7 +450,10 @@ fun WeekBoardView(
                     }
                     scope.launch { showLine(runCatching { core.parkOnBoard(d.card.id, week.startEpochDay, index) }.getOrNull()) }
                 }
+                at == TRAY && wide -> onList(d.card, null)
                 at == TRAY -> onSomeday(d.card)
+                at == SIDE_HUSTLE_OPEN -> onList(d.card, BoardArea.SIDE_HUSTLE)
+                at == HOUSE_OPEN -> onList(d.card, BoardArea.HOUSE)
                 else -> board.day(at)?.takeIf { it.canDrop }?.let { target ->
                     val index = place?.takeIf { it.first == target.epochDay }?.second
                         ?: BoardHandRules.insertIndex(target.openCards.filter { it.id != d.card.id }.map { c -> cards[c.id]?.center?.y ?: 0f }, d.pointer.y)
@@ -629,7 +650,11 @@ fun WeekBoardView(
             }
         }
     }
+    }
 }
+
+/** Option B slice 3: the card menu's AREA rows file a card under one of the five (null outside the Board). */
+private val LocalBoardArea = androidx.compose.runtime.staticCompositionLocalOf<((BoardCard, BoardArea?) -> Unit)?> { null }
 
 private const val LIFT = 1.04f
 /** How long a dropped card's landing glow and spring last. */
@@ -735,6 +760,17 @@ private const val TRAY = -2L
 /** By hand, slice 4: the open No day yet lane and the open Someday lane (unfolded), the same targets as their chips. */
 private const val LANE_OPEN = -3L
 private const val TRAY_OPEN = -4L
+/** Option B slice 3: the Side hustle and House lists under the weekend (unfolded). */
+private const val SIDE_HUSTLE_OPEN = -5L
+private const val HOUSE_OPEN = -6L
+
+/** A list's drop-target key, and the list a key stands for (Side hustle, House, or null for Someday). */
+private fun listKey(column: BoardListColumn): Long = when {
+    column.tray == BoardTray.NO_DAY -> LANE_OPEN
+    column.area == BoardArea.SIDE_HUSTLE -> SIDE_HUSTLE_OPEN
+    column.area == BoardArea.HOUSE -> HOUSE_OPEN
+    else -> TRAY_OPEN
+}
 /** Slice 7: the week's goals are drop targets GOAL_KEY, GOAL_KEY - 1, GOAL_KEY - 2 (first, second, third). */
 private const val GOAL_KEY = -10L
 
@@ -1041,6 +1077,7 @@ private fun BoardCardRow(
     landed: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
+    val onArea = LocalBoardArea.current
     var offer by remember(card.id) { mutableStateOf<BlockOffer?>(null) }
     if (onBlockOffer != null) {
         LaunchedEffect(menu) { if (menu) offer = runCatching { onBlockOffer(card) }.getOrNull() }
@@ -1129,6 +1166,15 @@ private fun BoardCardRow(
                     )
                     tags.forEach { t -> entry(t.label) { if (!t.selected) onTag?.invoke(card, t.goalId) } }
                 }
+                // Option B slice 3: AREA — Family, Work, Side hustle, Money, House (the one it shows ticked), or No area.
+                if (onArea != null) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
+                    Text(
+                        BoardAreaRules.MENU_TITLE, style = MekaType.micro, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+                    )
+                    BoardAreaRules.choices(card).forEach { c -> entry(c.label) { if (!c.selected) onArea(card, c.area) } }
+                }
                 // Slice 6: Block time — a free start in the day; his tap adds the block to his calendar (Undo on the bar).
                 offer?.let { o ->
                     Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
@@ -1197,15 +1243,19 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                 ) { foot.forEach { CardChipPill(it) } }
             }
-            // Slice 5: a small colour dot for where it came from, now with its short name ("● Mail"); the screen reader
-            // hears it in the card's label.
-            card.source?.let { src ->
+            // Option B slice 3: the area's colour dot and name ("● Family"); a card with no area keeps slice 5's dot for
+            // where it came from ("● Mail"). The screen reader hears either in the card's label.
+            val area = BoardAreaRules.of(card)
+            val src = card.source
+            if (area != null || src != null) {
                 Row(Modifier.padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.calendarTone(src.tone)).testTag(SOURCE_DOT_TAG))
+                    val dot = if (area != null) Meka.colors.areaTone(area) else Meka.colors.calendarTone(src!!.tone)
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
                     if (!compact) {
                         Spacer(Modifier.width(MekaSpace.xxs))
                         Text(
-                            BoardPlannerRules.sourceLabel(src), style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
+                            if (area != null) BoardAreaRules.label(area) else BoardPlannerRules.sourceLabel(src!!),
+                            style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
                             modifier = Modifier.clearAndSetSemantics {},
                         )
                     }
@@ -1230,6 +1280,8 @@ private val FOOT_TICK = 32.dp
 
 /** The colour dot on a Board card that came from mail, Needs you, Discord or School (slice 5, UI tests). */
 internal const val SOURCE_DOT_TAG = "board-source-dot"
+/** Option B slice 3: the area's colour dot in a card's foot. */
+internal const val AREA_DOT_TAG = "board-area-dot"
 
 /** A Board card's face (Option B slice 1, UI tests read its fade). */
 internal const val PLANNER_CARD_TAG = "board-planner-card"
@@ -1705,11 +1757,14 @@ private fun TrayCards(
     onSomeday: (BoardCard) -> Unit,
     onTag: (BoardCard, String?) -> Unit,
     modifier: Modifier = Modifier,
+    /** Option B slice 3: a list's own cards (Someday's share, Side hustle, House); null for the whole tray. */
+    only: List<BoardCard>? = null,
 ) {
-    val (cards, source, spot) = when (tray) {
+    val (all, source, spot) = when (tray) {
         BoardTray.NO_DAY -> Triple(week.lane, BoardSource.WEEK, week.startEpochDay)
         BoardTray.SOMEDAY -> Triple(board.someday, BoardSource.SOMEDAY, 0L)
     }
+    val cards = only ?: all
     @Composable
     fun row(card: BoardCard, mod: Modifier) = BoardCardRow(
         card, source, spot, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
@@ -1973,7 +2028,7 @@ private fun WideWeek(
                 }
                 Row(Modifier.fillMaxWidth().height(tiers.lists.dp), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     BoardWeekLayoutRules.lists(w, board).forEach { column ->
-                        key(column.tray) { list(w, column, Modifier.weight(1f).fillMaxHeight()) }
+                        key(column.key) { list(w, column, Modifier.weight(1f).fillMaxHeight()) }
                     }
                 }
             }
@@ -2008,7 +2063,7 @@ private fun BoardList(
     modifier: Modifier = Modifier,
 ) {
     val reduced = Meka.reducedMotion
-    val key = if (column.tray == BoardTray.NO_DAY) LANE_OPEN else TRAY_OPEN
+    val key = listKey(column)
     val lit = hovered == key
     val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline.copy(alpha = 0f), MekaMotion.appear(reduced), label = "board-list-glow-$key")
     val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.background, MekaMotion.appear(reduced), label = "board-list-fill-$key")
@@ -2021,10 +2076,17 @@ private fun BoardList(
             .padding(MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(
-            column.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clearAndSetSemantics { contentDescription = column.accessibilityLabel; heading() },
-        )
+        ) {
+            // Option B slice 3: Side hustle and House wear their area's dot before the name.
+            column.area?.let { a ->
+                Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.areaTone(a)))
+                Spacer(Modifier.width(MekaSpace.xs))
+            }
+            Text(column.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         if (column.count == 0) {
             Text(if (lit) WeekBoardRules.DROP_HERE else column.empty, style = MekaType.caption, color = if (lit) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 2)
         } else {
@@ -2032,7 +2094,7 @@ private fun BoardList(
                 column.tray, week, board, stacked = true, cardWidth = 0.dp, dragging = dragging,
                 onCardBounds = onCardBounds, onPick = onPick, onDrag = onDrag, onDrop = onDrop, onCancel = onCancel,
                 onMoveTo = onMoveTo, onPark = onPark, onSomeday = onSomeday, onTag = onTag,
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f), only = column.cards,
             )
         }
     }

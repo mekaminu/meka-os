@@ -93,8 +93,8 @@ struct WeekBoardScreen: View {
                     dayRow(weekend, minHeight: CGFloat(layout.MIN_WEEKEND_DP))
                 }
                 HStack(alignment: .top, spacing: MekaSpace.xs) {
-                    ForEach(layout.lists(week: w, board: board), id: \.title) { column in
-                        let key = column.tray == BoardTray.noDay ? laneKey : trayKey
+                    ForEach(layout.lists(week: w, board: board), id: \.key) { column in
+                        let key = listKey(column)
                         BoardListView(column: column, week: w, board: board, palette: palette, targeted: target == key) { on in
                             if on { target = key } else if target == key { target = nil }
                         }
@@ -141,6 +141,14 @@ struct WeekBoardScreen: View {
     /// Drop-target keys besides a day's epoch day.
     private let laneKey: Int64 = -1
     private let trayKey: Int64 = -2
+
+    /// A list's drop-target key (Option B slice 3: Side hustle -5, House -6 beside No day yet and Someday).
+    private func listKey(_ column: BoardListColumn) -> Int64 {
+        if column.tray == BoardTray.noDay { return laneKey }
+        if column.area == BoardArea.sideHustle { return -5 }
+        if column.area == BoardArea.house { return -6 }
+        return trayKey
+    }
 
     private func step(_ by: Int) {
         MekaHaptics.tick()
@@ -521,8 +529,17 @@ private struct BoardCardView: View {
                         }
                     }
                 }
-                // Slice 5: a small colour dot for where it came from, now with its short name ("● Mail").
-                if let source = card.source {
+                // Option B slice 3: the area's colour dot and name ("● Family"); a card with no area keeps slice 5's dot
+                // for where it came from ("● Mail").
+                if let area = BoardAreaRules.shared.of(card: card) {
+                    HStack(spacing: MekaSpace.xxs) {
+                        Circle().fill(palette.areaTone(area)).frame(width: 8, height: 8)
+                        if !compact {
+                            Text(BoardAreaRules.shared.label(area: area)).font(MekaType.micro)
+                                .foregroundStyle(palette.textSecondary).lineLimit(1)
+                        }
+                    }
+                } else if let source = card.source {
                     HStack(spacing: MekaSpace.xxs) {
                         Circle().fill(palette.calendarTone(source.tone)).frame(width: 8, height: 8)
                         if !compact {
@@ -602,6 +619,14 @@ private struct BoardCardView: View {
                             Button(t.label) { model.tagOnBoard(card.id, goal: t.goalId) }
                                 .disabled(t.selected)
                         }
+                    }
+                }
+                // Option B slice 3: Area — Family, Work, Side hustle, Money, House (the one it shows ticked), or No area.
+                Divider()
+                Section(BoardAreaRules.shared.MENU_TITLE.capitalized) {
+                    ForEach(Array(BoardAreaRules.shared.choices(card: card).enumerated()), id: \.offset) { _, c in
+                        Button(c.label) { model.areaOnBoard(card.id, area: c.area?.name) }
+                            .disabled(c.selected)
                     }
                 }
                 // Slice 6: Block time — a free start in the day; his click adds the block to his calendar (Undo on the bar).
@@ -806,7 +831,8 @@ private struct BoardDrag: ViewModifier {
                 let place = week.lane.firstIndex { $0.id == card.id } ?? week.lane.count
                 model.parkOnBoard(id, week: week.startEpochDay, index: place)
             case .someday:
-                model.somedayOnBoard(id)
+                // Option B slice 3: onto a card in Someday, Side hustle or House: into that card's list.
+                model.listOnBoard(id, list: BoardAreaRules.shared.listOf(card: card)?.name)
             }
             return true
         } isTargeted: { over = $0 && canDrop }
@@ -833,11 +859,18 @@ private struct BoardListView: View {
 
     var body: some View {
         let someday = column.tray == BoardTray.someday
-        let cards = someday ? board.someday : week.lane
+        let cards = column.cards
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(column.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
-                .accessibilityLabel(column.accessibilityLabel)
-                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: MekaSpace.xs) {
+                // Option B slice 3: Side hustle and House wear their area's dot before the name.
+                if let area = column.area {
+                    Circle().fill(palette.areaTone(area)).frame(width: 8, height: 8)
+                }
+                Text(column.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(column.accessibilityLabel)
+            .accessibilityAddTraits(.isHeader)
             if cards.isEmpty {
                 Text(targeted ? WeekBoardRules.shared.DROP_HERE : column.empty).font(MekaType.caption)
                     .foregroundStyle(targeted ? palette.accent : palette.textTertiary)
@@ -853,8 +886,9 @@ private struct BoardListView: View {
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             if someday {
-                guard WeekBoardRules.shared.canSomeday(board: board, taskId: id) else { return false }
-                model.somedayOnBoard(id)
+                // Option B slice 3: Someday, Side hustle or House; the core says no when it is already there.
+                guard board.find(taskId: id) != nil else { return false }
+                model.listOnBoard(id, list: column.area?.name)
             } else {
                 guard board.find(taskId: id) != nil else { return false }
                 model.parkOnBoard(id, week: week.startEpochDay, index: Int.max / 2)
@@ -1025,5 +1059,17 @@ private struct BoardGoalsView: View {
                 offers = await model.boardGoalChoices(ws)
             }
         }
+    }
+}
+
+extension MekaPalette {
+    /// A Board card's area dot (Option B slice 3, the approved mockup's colours): Family the warm orange, Work the blue,
+    /// Side hustle the brass, Money the green, House the violet.
+    func areaTone(_ area: BoardArea) -> Color {
+        if area == BoardArea.family { return calendar3 }
+        if area == BoardArea.work { return calendar4 }
+        if area == BoardArea.sideHustle { return accent }
+        if area == BoardArea.money { return success }
+        return calendar2
     }
 }

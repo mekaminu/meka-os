@@ -47,7 +47,10 @@ data class BoardCard(
 
     /** Screen readers: "Book MOT, 14:30, about 30m, carried 2 days". */
     val accessibilityLabel: String
-        get() = listOfNotNull(title, time, estimate?.let { "about $it" }, line?.lowercase(), goalTitle?.let { "for goal $it" }, source?.let(BoardSourceRules::spoken)).joinToString(", ")
+        get() = listOfNotNull(
+            title, time, estimate?.let { "about $it" }, line?.lowercase(), goalTitle?.let { "for goal $it" },
+            BoardAreaRules.cardLabel(this)?.lowercase(), source?.let(BoardSourceRules::spoken),
+        ).joinToString(", ")
 }
 
 /** A day's event as a faded chip above its cards: "09:30 Dentist", "All day Half term". */
