@@ -56,16 +56,16 @@ struct WeekBoardScreen: View {
             HStack {
                 // Option B match: "October 2026  W44", the month in serif, the ISO week in mono.
                 let head = BoardMatchRules.shared.weekHead(startEpochDay: w.startEpochDay)
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
-                    Text(head.month).font(BoardFont.month).foregroundStyle(palette.textPrimary).lineLimit(1)
-                    Text(head.week).font(BoardFont.mono(16)).foregroundStyle(palette.textTertiary).lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(head.month).font(MekaType.greeting).fontDesign(.serif).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(head.week).font(MekaType.itemTitle).fontDesign(.monospaced).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(head.spoken + ", " + w.title)
                 Spacer()
                 Button(BoardMatchRules.shared.TODAY) { MekaHaptics.tick(); goTo(0) }
                     .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                    .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
                     .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
                     .help("Back to this week")
                 // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
@@ -392,10 +392,10 @@ private struct BoardColumnView: View {
             let head = BoardMatchRules.shared.dayHead(day: day)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(head.date).font(BoardFont.date)
+                    Text(head.date).font(MekaType.nowTitle).fontDesign(.serif)
                         .foregroundStyle(day.isToday ? palette.accent : palette.textPrimary).lineLimit(1)
                     Spacer(minLength: 0)
-                    Text(head.weekday).font(MekaType.itemMeta.weight(.medium)).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Text(head.weekday).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
                 if let progress = BoardLookRules.shared.progress(day: day) {
                     DayProgressBar(progress: progress, palette: palette)
@@ -650,7 +650,7 @@ private struct BoardCardView: View {
                 BoardTimeChip(time: time, ink: timed ? palette.accent : palette.textTertiary, quiet: !timed, palette: palette)
                 Spacer(minLength: 0)
                 if let duration {
-                    Text(duration).font(BoardFont.mono(11)).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Text(duration).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
             }
             Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body)
@@ -693,7 +693,7 @@ private struct BoardCardView: View {
                 }
             }
         }
-        .padding(.horizontal, MekaSpace.s).padding(.top, MekaSpace.s).padding(.bottom, MekaSpace.xxs)
+        .padding(.horizontal, MekaSpace.xs).padding(.top, MekaSpace.xs).padding(.bottom, MekaSpace.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Refinement 3: a borderless tile on the lighter surface; a done one fades rather than sinking or striking through.
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
@@ -904,19 +904,19 @@ private struct BudgetPill: View {
         VStack(spacing: 0) {
             HStack(spacing: MekaSpace.xs) {
                 if compact {
-                    Text(BoardPlannerRules.shared.compactLine(b: b)).font(BoardFont.mono(11))
+                    Text(BoardPlannerRules.shared.compactLine(b: b)).font(BoardFont.mono)
                         .foregroundStyle(b.over ? palette.calendar3 : palette.textSecondary).lineLimit(2)
                     Spacer(minLength: 0)
                 } else {
-                    Text(b.label).font(BoardFont.mono(12)).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Text(b.label).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
                     Spacer(minLength: 0)
                     if !b.value.isEmpty {
-                        Text(b.value).font(BoardFont.mono(12))
+                        Text(b.value).font(BoardFont.mono)
                             .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(1)
                     }
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
+            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Rectangle().fill(palette.hairline)
@@ -1215,12 +1215,11 @@ extension MekaPalette {
     }
 }
 
-/// Option B match: the mockup's type. Its serif (Fraunces) for the month and the dates is the system's serif (New York),
-/// its mono (JetBrains Mono) for times the system's monospaced; the sizes and weights are the mockup's.
+/// Option B match: the mockup's mono (JetBrains Mono) for times and figures is the micro token in the system's
+/// monospaced design; its serif (Fraunces) for the month and the dates is the greeting and now-title tokens with
+/// `.fontDesign(.serif)` (New York).
 enum BoardFont {
-    static var month: Font { .system(size: MekaTextScale.size(32), weight: .semibold, design: .serif) }
-    static var date: Font { .system(size: MekaTextScale.size(19), weight: .semibold, design: .serif) }
-    static func mono(_ size: CGFloat) -> Font { .system(size: MekaTextScale.size(size), weight: .regular, design: .monospaced) }
+    static var mono: Font { MekaType.micro.monospaced() }
 }
 
 /// The time chip on a card's top line (the mockup's `.tm`): mono figures on a faint tint, gold for a task's time, blue
@@ -1232,8 +1231,8 @@ private struct BoardTimeChip: View {
     let palette: MekaPalette
 
     var body: some View {
-        Text(time).font(BoardFont.mono(11)).foregroundStyle(ink).lineLimit(1)
-            .padding(.horizontal, 7).padding(.vertical, 3)
+        Text(time).font(BoardFont.mono).foregroundStyle(ink).lineLimit(1)
+            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
             .background(RoundedRectangle(cornerRadius: 6).fill(quiet ? palette.surface : ink.opacity(0.16)))
     }
 }
@@ -1253,7 +1252,7 @@ private struct BoardEventCardView: View {
                     BoardTimeChip(time: card.time, ink: palette.calendar4, palette: palette)
                     Spacer(minLength: 0)
                     if let duration = card.duration {
-                        Text(duration).font(BoardFont.mono(11)).foregroundStyle(palette.textTertiary).lineLimit(1)
+                        Text(duration).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
                     }
                 }
                 Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body).foregroundStyle(palette.textPrimary)
@@ -1267,7 +1266,7 @@ private struct BoardEventCardView: View {
                     }
                 }
             }
-            .padding(MekaSpace.s)
+            .padding(MekaSpace.xs)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }

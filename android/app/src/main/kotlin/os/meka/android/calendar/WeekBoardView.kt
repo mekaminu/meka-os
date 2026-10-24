@@ -118,9 +118,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -166,7 +163,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import os.meka.core.facade.MekaCore
 import os.meka.core.domain.BoardMatchRules
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.TextStyle
 
 /**
  * Calendar's Board view on the Fold (Week board and roll-over, slice 2; core [WeekBoardRules]): a column per day from
@@ -857,26 +853,27 @@ private fun WeekHeader(
     }
     // Option B match: "October 2026  W44", the month in serif, the ISO week in mono, then Today and ‹ › on the right.
     val head = BoardMatchRules.weekHead(w.startEpochDay)
-    Row(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+    val title: @Composable (Modifier) -> Unit = { m ->
         Row(
-            Modifier.weight(1f, fill = false).clearAndSetSemantics { contentDescription = head.spoken + ", " + w.title },
+            m.clearAndSetSemantics { contentDescription = head.spoken + ", " + w.title },
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
-                if (wide) head.month else head.monthShort, style = if (wide) BoardType.month else BoardType.monthFolded, color = Meka.colors.textPrimary,
+                head.month, style = if (wide) BoardType.month else BoardType.monthFolded, color = Meka.colors.textPrimary,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag(MONTH_TAG),
             )
             Spacer(Modifier.width(MekaSpace.xs))
-            Text(head.week, style = BoardType.mono.copy(fontSize = if (wide) 18.sp else 14.sp), color = Meka.colors.textTertiary, maxLines = 1)
+            Text(head.week, style = if (wide) BoardType.week else BoardType.weekFolded, color = Meka.colors.textTertiary, maxLines = 1)
         }
-        Spacer(Modifier.weight(1f))
+    }
+    val buttons: @Composable () -> Unit = {
         // Folded, the day strip already takes him to today; unfolded, Today goes back to this week.
         if (wide) Text(
             BoardMatchRules.TODAY, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button) { haptics.tick(); onToday() }
-                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         )
         // Item (8): from Friday, on this week, Review the week (tick haptic; Review slides in as a tab change).
         if (board.offersReview && week == 0) {
@@ -909,6 +906,18 @@ private fun WeekHeader(
         }
         StepButton("‹", "Previous week", week > 0) { go(week - 1) }
         StepButton("›", "Next week", week < board.weeks.size - 1) { go(week + 1) }
+    }
+    if (wide) {
+        Row(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            title(Modifier.weight(1f))
+            buttons()
+        }
+    } else {
+        // The cover screen: the month on its own line so "Oct 2026 W43" is never cut, the buttons under it on the right.
+        Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs)) {
+            title(Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { buttons() }
+        }
     }
 }
 
@@ -960,12 +969,17 @@ private fun Color.compositeOverWhite(): Color = Color(red + (1f - red) * 0.6f, g
  * font is bundled), its mono (JetBrains Mono) for times the platform's monospace; the weights and sizes are the mockup's.
  */
 internal object BoardType {
-    val month = TextStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight(600), fontSize = 34.sp, lineHeight = 36.sp, letterSpacing = (-0.02).em)
-    val monthFolded = month.copy(fontSize = 22.sp, lineHeight = 26.sp)
-    val date = TextStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight(600), fontSize = 22.sp, lineHeight = 26.sp, letterSpacing = (-0.01).em)
-    val list = date.copy(fontSize = 20.sp, lineHeight = 24.sp)
-    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight(500), fontSize = 12.sp, lineHeight = 16.sp)
-    val monoSmall = mono.copy(fontWeight = FontWeight(400), fontSize = 11.sp, lineHeight = 14.sp)
+    /** "October 2026": the greeting token (34, semibold) in serif. */
+    val month = MekaType.greeting.copy(fontFamily = FontFamily.Serif)
+    /** "Oct 2026" on the cover screen, and each day's "27 Oct": the now-title token (22, semibold) in serif. */
+    val monthFolded = MekaType.nowTitle.copy(fontFamily = FontFamily.Serif)
+    val date = MekaType.nowTitle.copy(fontFamily = FontFamily.Serif)
+    /** "W44" beside the month: the item-title token in mono (the cover screen: item meta). */
+    val week = MekaType.itemTitle.copy(fontFamily = FontFamily.Monospace)
+    val weekFolded = MekaType.itemMeta.copy(fontFamily = FontFamily.Monospace)
+    /** Times, lengths and the budget's figures: the micro token in mono. */
+    val mono = MekaType.micro.copy(fontFamily = FontFamily.Monospace)
+    val monoSmall = mono
 }
 
 /** The month in the Board's header (Option B match, UI tests). */
@@ -1088,7 +1102,7 @@ private fun DayColumn(
                     modifier = Modifier.testTag(DAY_DATE_TAG),
                 )
                 Spacer(Modifier.weight(1f))
-                Text(head.weekday, style = MekaType.itemMeta.copy(fontWeight = FontWeight(500)), color = Meka.colors.textTertiary, maxLines = 1)
+                Text(head.weekday, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1)
             }
             BoardLookRules.progress(day)?.let { DoneBar(it) }
         }
@@ -1342,7 +1356,7 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
             .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, TILE) else Modifier)
             .alpha(fade)
             .testTag(PLANNER_CARD_TAG)
-            .padding(start = MekaSpace.s, end = MekaSpace.s, top = MekaSpace.s, bottom = MekaSpace.xxs),
+            .padding(start = MekaSpace.xs, end = MekaSpace.xs, top = MekaSpace.xs, bottom = MekaSpace.xxs),
     ) {
         Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             top.time?.let { TimeChip(it, if (timed) ChipTone.TASK else ChipTone.QUIET) }
@@ -1401,7 +1415,7 @@ private fun TimeChip(time: String, tone: ChipTone = ChipTone.TASK) {
     Text(
         time, style = BoardType.monoSmall, color = ink, maxLines = 1,
         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (tone == ChipTone.QUIET) Meka.colors.surface else ink.copy(alpha = 0.16f))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )
 }
 
@@ -1417,7 +1431,7 @@ private fun EventCard(e: os.meka.core.domain.BoardEventCard, onOpen: () -> Unit)
             .clickable(role = Role.Button, onClick = onOpen)
             .testTag(EVENT_CARD_TAG)
             .clearAndSetSemantics { contentDescription = e.spoken; role = Role.Button; onClick { onOpen(); true } }
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s),
+            .padding(MekaSpace.xs),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TimeChip(e.time, ChipTone.EVENT)
@@ -1776,17 +1790,17 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
         t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "budget-alpha").value
     } else 1f
     // Option B match: the mockup's mono figures in a 30 dp pill.
-    val figures = BoardType.mono.copy(fontWeight = FontWeight(400))
+    val figures = BoardType.mono
     Column(
         Modifier.padding(top = MekaSpace.xs).heightIn(min = 30.dp).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
             .border(1.dp, edge, RoundedCornerShape(MekaRadius.s))
             .testTag(BUDGET_TAG)
             .clearAndSetSemantics { contentDescription = b.spoken },
     ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
             if (compact) {
                 // A narrow lane lets "nothing yet / 6h 15" wrap rather than cut it short.
-                Text(BoardPlannerRules.compactLine(b), style = figures.copy(fontSize = 11.sp), color = if (b.over) amber else Meka.colors.textSecondary, maxLines = 2)
+                Text(BoardPlannerRules.compactLine(b), style = figures, color = if (b.over) amber else Meka.colors.textSecondary, maxLines = 2)
             } else {
                 Text(b.label, style = figures, color = Meka.colors.textTertiary, maxLines = 1)
                 Spacer(Modifier.weight(1f))
