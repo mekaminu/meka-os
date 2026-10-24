@@ -1685,6 +1685,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(dense.DATE_SP, 19, accuracy: 0.01)
         XCTAssertEqual(dense.CARD_PAD, 10)
         XCTAssertEqual(dense.WEEKEND_SCALE, 1.5, accuracy: 0.01)
+        // Density pass slice 2: the header at the mockup's size, the goals in its row, a narrow pill's one line of figures.
+        let head = BoardDenseHeadRules.shared
+        XCTAssertEqual(head.MONTH_SP, 28, accuracy: 0.01)
+        XCTAssertEqual(head.BUTTON, 36)
+        XCTAssertFalse(head.goalHint(empty: true, inHeader: true))
+        let empty = BoardPlannerRules.shared.budget(c: BoardCapacity(plannedMin: 0, freeMin: 240, unsized: 0))
+        XCTAssertEqual(head.pillValue(b: empty, narrow: true), "– / 4h")
         let block = DayBlock(key: "t:a", title: "Send the quote", startMinute: 750, endMinute: 795, kind: DayBlockKind.task,
                              done: false, taskId: "a", event: nil, tone: 0, column: 0, columns: 1)
         XCTAssertEqual(block.label, "12:30–13:15")

@@ -54,8 +54,9 @@ struct WeekBoardScreen: View {
     @ViewBuilder private func weekTitle(_ w: BoardWeek) -> some View {
         let head = BoardMatchRules.shared.weekHead(startEpochDay: w.startEpochDay)
         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-            Text(head.month).font(MekaType.greeting).fontDesign(.serif).foregroundStyle(palette.textPrimary).lineLimit(1)
-            Text(head.week).font(MekaType.itemTitle).fontDesign(.monospaced).foregroundStyle(palette.textTertiary).lineLimit(1)
+            // Density pass slice 2: the mockup's header, the month 28 serif and "W44" 12 mono (BoardDenseHeadRules).
+            Text(head.month).font(BoardFont.month).foregroundStyle(palette.textPrimary).lineLimit(1)
+            Text(head.week).font(BoardFont.weekTag).foregroundStyle(palette.textTertiary).lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(head.spoken + ", " + w.title)
@@ -65,9 +66,9 @@ struct WeekBoardScreen: View {
     @ViewBuilder private var weekButtons: some View {
         // Match slice 4: the mockup's round buttons (`.btn`), 40 high, outlined on the card surface.
         Button { MekaHaptics.tick(); goTo(0) } label: {
-            Text(BoardMatchRules.shared.TODAY).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            Text(BoardMatchRules.shared.TODAY).font(BoardFont.label).foregroundStyle(palette.textPrimary)
                 .padding(.horizontal, MekaSpace.m)
-                .frame(height: CGFloat(BoardMatchRules.shared.BUTTON))
+                .frame(height: CGFloat(BoardDenseHeadRules.shared.BUTTON))
                 .background(Capsule().fill(palette.surface))
                 .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
                 .contentShape(Capsule())
@@ -77,7 +78,7 @@ struct WeekBoardScreen: View {
         // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
         if board.offersReview && week == 0 {
             Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
-                .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
+                .foregroundStyle(palette.textSecondary).font(BoardFont.label)
                 .help("Review this week: planned against done, and what kept slipping")
         }
         // Option B slice 5: Timeline / Hide timeline opens or shuts today's timeline beside the week.
@@ -85,11 +86,11 @@ struct WeekBoardScreen: View {
             MekaHaptics.tick()
             withAnimation(MekaMotion.replan(reduced: reduceMotion)) { showTimeline.toggle() }
         }
-        .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
+        .foregroundStyle(palette.textSecondary).font(BoardFont.label)
         .help(showTimeline ? "Hide today's timeline" : "Show today's timeline beside the week")
         // Item (6): Plan your week opens the guided sheet.
         Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
-            .foregroundStyle(palette.accent).font(MekaType.itemMeta)
+            .foregroundStyle(palette.accent).font(BoardFont.label)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Plan your week (⇧⌘P)")
         Button { step(-1) } label: { RoundStep(systemName: "chevron.left", palette: palette) }
@@ -115,6 +116,9 @@ struct WeekBoardScreen: View {
             ViewThatFits(in: .horizontal) {
                 HStack {
                     weekTitle(w)
+                    // Density pass slice 2: the week's goals and "+ Goal" in the header's row (no goals row of its own).
+                    BoardGoalsView(week: w, palette: palette, target: $target, inHeader: true)
+                        .padding(.leading, MekaSpace.m)
                     Spacer(minLength: MekaSpace.xs)
                     if let nudge {
                         ObiNudgeLine(nudge: nudge, palette: palette)
@@ -130,13 +134,12 @@ struct WeekBoardScreen: View {
                         weekButtons
                     }
                     if let nudge { ObiNudgeLine(nudge: nudge, palette: palette) }
+                    // A narrow window: the goals keep a row of their own, with the hint while there are none.
+                    BoardGoalsView(week: w, palette: palette, target: $target)
                 }
             }
             .buttonStyle(.borderless)
-
-            // The week's goals as small gold pills across the top (Option B slice 2: the trays are lists below now).
-            BoardGoalsView(week: w, palette: palette, target: $target)
-                .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
+            .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
 
             // Option B slice 2 (the layout; Meka's refinement 1): Monday to Friday as five columns across, the weekend
             // as two shorter columns underneath, then No day yet and Someday as lists, each a place to drop a card.
@@ -273,17 +276,17 @@ private struct ObiNudgeLine: View {
             Circle()
                 .fill(RadialGradient(
                     colors: [palette.accent.opacity(0.45), palette.accent, palette.accent.opacity(0.35)],
-                    center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: CGFloat(BoardMatchRules.shared.NUDGE_ORB) / 2
+                    center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB) / 2
                 ))
-                .frame(width: CGFloat(BoardMatchRules.shared.NUDGE_ORB), height: CGFloat(BoardMatchRules.shared.NUDGE_ORB))
+                .frame(width: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB), height: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB))
                 .accessibilityHidden(true)
-            Text(BoardNudgeRules.shared.SPEAKER).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-            Text(nudge.line).font(MekaType.caption).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.NUDGE_LINES))
+            Text(BoardNudgeRules.shared.SPEAKER).font(BoardFont.label).foregroundStyle(palette.textPrimary)
+            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.NUDGE_LINES))
                 .id(nudge.line)
                 .transition(.opacity)
         }
         .padding(.leading, MekaSpace.xs).padding(.trailing, MekaSpace.m)
-        .frame(minHeight: 32)
+        .frame(minHeight: CGFloat(BoardDenseHeadRules.shared.BUTTON))
         .background(Capsule().fill(palette.surface))
         .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: nudge.line)
@@ -592,8 +595,9 @@ private struct BoardAddRow: View {
                     MekaHaptics.tick()
                     withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open = true }
                 } label: {
-                    Text(BoardMatchRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                        .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
+                    // Density pass slice 2: a slim dashed row, 28 high with 11 type, as the mockup's.
+                    Text(BoardMatchRules.shared.ADD).font(BoardFont.add).foregroundStyle(palette.textTertiary)
+                        .frame(maxWidth: .infinity, minHeight: CGFloat(BoardDenseHeadRules.shared.ADD_HEIGHT), alignment: .center)
                         .padding(.horizontal, MekaSpace.m)
                         .contentShape(Rectangle())
                         .overlay(
@@ -956,7 +960,7 @@ private struct RoundStep: View {
     let palette: MekaPalette
 
     var body: some View {
-        let size = CGFloat(BoardMatchRules.shared.BUTTON)
+        let size = CGFloat(BoardDenseHeadRules.shared.BUTTON)
         Image(systemName: systemName).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
             .frame(width: size, height: size)
             .background(Circle().fill(palette.surface))
@@ -987,8 +991,9 @@ private struct BudgetPill: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(BoardMatchRules.shared.pillLabel(b: b)).font(BoardFont.mono)
                             .foregroundStyle(palette.textTertiary).lineLimit(1)
-                        Text(BoardPlannerRules.shared.compactLine(b: b)).font(BoardFont.mono)
-                            .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(2)
+                        // Density pass slice 2: the figures keep one line ("– / 4h"), so the pill is two lines at most.
+                        Text(BoardDenseHeadRules.shared.pillValue(b: b, narrow: true)).font(BoardFont.mono)
+                            .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 } else {
@@ -1189,6 +1194,8 @@ private struct BoardGoalsView: View {
     let week: BoardWeek
     let palette: MekaPalette
     @Binding var target: Int64?
+    /// Density pass slice 2: in the header's row (36 high pills, no hint, no spacer of its own).
+    var inHeader: Bool = false
     @State private var offers: [GoalPickChoice] = []
     @State private var typing = false
     @State private var text = ""
@@ -1199,7 +1206,7 @@ private struct BoardGoalsView: View {
                 chip(g, key: goalKey - Int64(i))
             }
             if week.canAddGoal { add }
-            Spacer(minLength: 0)
+            if !inHeader { Spacer(minLength: 0) }
         }
     }
 
@@ -1211,14 +1218,14 @@ private struct BoardGoalsView: View {
         let lit = target == key && !g.finished
         let pill = BoardTidyRules.shared.goalPill(g: g)
         return HStack(spacing: MekaSpace.xs) {
-            Text(pill.label).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+            Text(pill.label).font(inHeader ? BoardFont.nudge : MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
             if let count = pill.count {
                 Text(count).font(MekaType.micro).foregroundStyle(pill.finished ? palette.accent : palette.textSecondary)
             }
         }
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
-        .frame(minHeight: 28)
-        .frame(maxWidth: 240)
+        .frame(minHeight: inHeader ? CGFloat(BoardDenseHeadRules.shared.BUTTON) : 28)
+        .frame(maxWidth: inHeader ? CGFloat(BoardDenseHeadRules.shared.GOAL_MAX_DP) : 240)
         .background(
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -1270,8 +1277,8 @@ private struct BoardGoalsView: View {
                 Button(BoardGoalRules.shared.NEW_GOAL) { typing = true }
             } label: {
                 HStack(spacing: MekaSpace.xs) {
-                    Text(BoardGoalRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.accent)
-                    if week.goals.isEmpty {
+                    Text(BoardGoalRules.shared.ADD).font(inHeader ? BoardFont.label : MekaType.caption).foregroundStyle(palette.accent)
+                    if BoardDenseHeadRules.shared.goalHint(empty: week.goals.isEmpty, inHeader: inHeader) {
                         Text(BoardGoalRules.shared.EMPTY).font(MekaType.micro).foregroundStyle(palette.textTertiary)
                     }
                 }
@@ -1317,6 +1324,16 @@ enum BoardFont {
     static var title: Font { .system(size: CGFloat(BoardDenseRules.shared.TITLE_SP)) } // type: ok (the density pass: the mockup's sizes)
     /// The area's name in a card's foot, 11.
     static var foot: Font { .system(size: CGFloat(BoardDenseRules.shared.FOOT_SP)) } // type: ok (the density pass: the mockup's sizes)
+    /// Density pass slice 2 (BoardDenseHeadRules): "October 2026", 28 serif semibold.
+    static var month: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.MONTH_SP), weight: .semibold, design: .serif) } // type: ok (density pass slice 2: the mockup's header)
+    /// "W44" beside it, 12 mono.
+    static var weekTag: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.WEEK_SP), design: .monospaced) } // type: ok (density pass slice 2: the mockup's header)
+    /// Today, Hide timeline, Review, Plan your week and Obi's name, 13.
+    static var label: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.LABEL_SP)) } // type: ok (density pass slice 2: the mockup's header)
+    /// Obi's line and a goal's title in the header, 12.
+    static var nudge: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.NUDGE_SP)) } // type: ok (density pass slice 2: the mockup's header)
+    /// "+ add", 11.
+    static var add: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.ADD_SP)) } // type: ok (density pass slice 2: the mockup's "+ add")
 }
 
 /// The density pass: Saturday and Sunday under the weekdays, each the row's share but at most one and a half weekday

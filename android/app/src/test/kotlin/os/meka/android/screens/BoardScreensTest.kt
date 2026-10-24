@@ -36,6 +36,7 @@ import os.meka.android.calendar.AREA_LABEL_TAG
 import os.meka.android.calendar.BUDGET_VALUE_TAG
 import os.meka.android.calendar.STEP_TAG
 import os.meka.android.calendar.PAST_EMPTY_TAG
+import os.meka.android.calendar.MONTH_TAG
 import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -419,6 +420,45 @@ class BoardScreensTest {
         assertTrue("the timeline sits right of today's card ($timeline vs $card)", timeline.left >= card.right)
         val bins = cardBounds("Order new bins")
         assertTrue("tomorrow's card is beside today's, not off screen ($bins)", bins.right <= timeline.left + 1f)
+    }
+
+    /**
+     * The density pass, slice 2 (the rest of the side-by-side check): unfolded on a Wednesday, "+ Goal" sits in the
+     * header's row beside the month (no goals row of its own, no hint there); the month is the mockup's 28 sp; "+ add"
+     * is a slim dashed row (under 32 dp); an empty weekday's narrow pill reads "– / …" on one line under "planned".
+     * The shot is `inner-dark-dense-head` (screens branch), for docs/screens/week-board beside design-1280.png.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theHeaderAndAddAreTheMockupsSize() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            val id = core.addOnBoardSized("Fix the gate latch", today, 45)!!
+            core.areaOnBoard(id, os.meka.core.domain.BoardArea.HOUSE)
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-dense-head"))
+        ScreenShots.assertSensible(compose, "inner-dark-dense-head")
+        val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
+        val month = compose.onAllNodesWithTag(MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            ?: throw AssertionError("no month in the header")
+        val goal = compose.onAllNodesWithText(os.meka.core.domain.BoardGoalRules.ADD, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            ?: throw AssertionError("no + Goal")
+        assertTrue("+ Goal is in the month's row ($goal vs $month)", goal.top < month.bottom && goal.bottom > month.top && goal.left >= month.right)
+        if (compose.onAllNodesWithText(os.meka.core.domain.BoardGoalRules.EMPTY, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("the goals' hint still shows in the header")
+        }
+        val monthDp = month.height / density
+        assertTrue("the month is the mockup's size, not the 34 greeting ($monthDp dp high)", monthDp < 38f)
+        val adds = compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot.height / density }
+        if (adds.isEmpty()) fail("no + add")
+        assertTrue("+ add is a slim row (${adds.max()} dp)", adds.max() < 32f)
+        val values = compose.onAllNodesWithTag(BUDGET_VALUE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+        assertTrue("an empty weekday's pill reads \"– / …\" ($values)", values.any { it.startsWith(os.meka.core.domain.BoardDenseHeadRules.NOTHING_SHORT) })
+        assertTrue("no narrow pill says \"nothing yet\" ($values)", values.none { it.contains(os.meka.core.domain.BoardPlannerRules.NOTHING_YET) })
     }
 
     /** Option B slice 5: folded, the Cards · Timeline tab shows the day in view as a timeline, and back. */

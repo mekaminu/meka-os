@@ -3834,3 +3834,16 @@ Findings fixed on both apps:
   (shot `inner-dark-dense`: no "Any time", the length alone, card 90–140 dp wide, the timeline right of the week,
   tomorrow's card beside today's) and the timeline test now expects it open by default; MekaCoreBridgeTests checks
   BoardDenseRules from Swift.
+- Slice 2 (2026-10-24, the header, "+ add" and the narrow pills). Core `BoardDenseHeadRules` (BoardDenseHead.kt): the
+  header at the mockup's size (month 28 serif, "W44" 12 mono, Today / Hide timeline / Review / Plan your week / Obi's
+  name 13, Obi's line 12, the round ‹ › and Today, Obi's pill and the goals' pills 36 high, the orb 20);
+  `goalsInHeader(wide)` puts the week's goals and "+ Goal" in the header's row after "W44" (each goal at most 160 dp,
+  "+ Goal" without its hint there: `goalHint`; the cover screen and a narrow Mac window keep the goals' own row and
+  hint); "+ add" a slim dashed row 28 high in 11 type (`ADD_HEIGHT`, `ADD_SP`); `pillValue(b, narrow)` gives a narrow
+  lane "– / 4h" for "nothing yet / 4h" so the stacked pill is two lines at most (the spoken line unchanged), the
+  figures on one line. Android: WeekHeader takes `goals` (GoalsLane `inHeader`), BoardType month/week/label/nudge/add
+  dense tokens, ObiNudgeLine `dense`, StepButton `size`, AddAtTop and BudgetPill read LocalBoardDense. Mac: the same
+  through BoardFont month/weekTag/label/nudge/add, BoardGoalsView `inHeader`, RoundStep and the add row. No server
+  change, no migration. Tests: BoardDenseHeadTest (5), BoardScreensTest `theHeaderAndAddAreTheMockupsSize` (shot
+  `inner-dark-dense-head`: "+ Goal" in the month's row, no hint, the month under 38 dp high, "+ add" under 32 dp, an
+  empty weekday's pill "– / …"), MekaCoreBridgeTests checks BoardDenseHeadRules from Swift.

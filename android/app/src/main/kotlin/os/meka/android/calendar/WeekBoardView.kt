@@ -166,6 +166,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import os.meka.core.facade.MekaCore
 import os.meka.core.domain.BoardMatchRules
 import os.meka.core.domain.BoardDenseRules
+import os.meka.core.domain.BoardDenseHeadRules
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontFamily
 
@@ -493,7 +494,16 @@ fun WeekBoardView(
             // on the cover screen), never a row of its own under the whole header.
             val nudge = remember(board, weekIndex) { board.weeks.getOrNull(weekIndex)?.let { core.boardNudge(board, it.startEpochDay) } }
             val nudgePill: (@Composable (Modifier) -> Unit)? = if (nudge == null) null else { m ->
-                ObiNudgeLine(nudge, m) { fix -> scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) } }
+                ObiNudgeLine(nudge, m, dense = wide) { fix -> scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) } }
+            }
+            // Density pass slice 2: unfolded, the week's goals and "+ Goal" sit in the header's row after "W44".
+            val headerWeek = board.weeks.getOrNull(weekIndex)
+                ?.takeIf { BoardDenseHeadRules.goalsInHeader(wide) && (it.goals.isNotEmpty() || it.canAddGoal) }
+            val headerGoals: (@Composable (Modifier) -> Unit)? = if (headerWeek == null) null else { mod ->
+                GoalsLane(
+                    week = headerWeek, core = core, undo = undo, hovered = if (drag != null) hovered else null,
+                    onBounds = { key, r -> columns[key] = r }, modifier = mod, inHeader = true,
+                )
             }
             WeekHeader(
                 board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview,
@@ -504,6 +514,7 @@ fun WeekBoardView(
                     if (wide) goWeek(0) else turnTo(board.days.indexOfFirst { it.isToday }.coerceAtLeast(0))
                 },
                 nudge = nudgePill,
+                goals = headerGoals,
             )
             board.weeks.getOrNull(weekIndex)?.let { week ->
                 // By hand, slice 4: the week's goals as small gold pills and the two trays as chips (unfolded on one
@@ -524,8 +535,7 @@ fun WeekBoardView(
                     )
                 }
                 if (wide) {
-                    // Option B slice 2: unfolded, the trays are lists under the weekend, so the goals have the row.
-                    goalsLane(Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).fillMaxWidth().appear(rememberAppearance(3)))
+                    // Density pass slice 2: unfolded, the goals are in the header's row (headerGoals), not a row of their own.
                 } else {
                     Column(Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         if (week.goals.isNotEmpty() || week.canAddGoal) goalsLane(Modifier)
@@ -853,9 +863,13 @@ private fun WeekHeader(
     board: WeekBoard, week: Int, onGo: (Int) -> Unit, modifier: Modifier, onPlanWeek: (() -> Unit)?, onReview: () -> Unit,
     timeline: Boolean? = null, onTimeline: () -> Unit = {}, wide: Boolean = true, onToday: () -> Unit = {},
     nudge: (@Composable (Modifier) -> Unit)? = null,
+    goals: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val haptics = rememberMekaHaptics()
     val w = board.weeks[week]
+    // Density pass slice 2: unfolded, the header at the mockup's size (BoardDenseHeadRules).
+    val label = if (wide) BoardType.labelDense else MekaType.itemMeta
+    val button = if (wide) BoardDenseHeadRules.BUTTON else BoardMatchRules.BUTTON
     fun go(to: Int) {
         haptics.tick()
         onGo(to)
@@ -868,11 +882,11 @@ private fun WeekHeader(
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
-                head.month, style = if (wide) BoardType.month else BoardType.monthFolded, color = Meka.colors.textPrimary,
+                head.month, style = if (wide) BoardType.monthDense else BoardType.monthFolded, color = Meka.colors.textPrimary,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag(MONTH_TAG),
             )
             Spacer(Modifier.width(MekaSpace.xs))
-            Text(head.week, style = if (wide) BoardType.week else BoardType.weekFolded, color = Meka.colors.textTertiary, maxLines = 1)
+            Text(head.week, style = if (wide) BoardType.weekDense else BoardType.weekFolded, color = Meka.colors.textTertiary, maxLines = 1)
         }
     }
     val buttons: @Composable () -> Unit = {
@@ -883,8 +897,8 @@ private fun WeekHeader(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                BoardMatchRules.TODAY, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
-                modifier = Modifier.height(BoardMatchRules.BUTTON.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                BoardMatchRules.TODAY, style = label, color = Meka.colors.textPrimary, maxLines = 1,
+                modifier = Modifier.height(button.dp).clip(RoundedCornerShape(MekaRadius.pill))
                     .background(Meka.colors.surface)
                     .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
                     .wrapContentHeight(Alignment.CenterVertically)
@@ -894,7 +908,7 @@ private fun WeekHeader(
         // Item (8): from Friday, on this week, Review the week (tick haptic; Review slides in as a tab change).
         if (board.offersReview && week == 0) {
             Text(
-                os.meka.core.domain.BoardReviewRules.REVIEW, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                os.meka.core.domain.BoardReviewRules.REVIEW, style = label, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) { haptics.tick(); onReview() }
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
@@ -903,7 +917,7 @@ private fun WeekHeader(
         // Option B slice 5: unfolded, Timeline / Hide timeline opens or shuts today's timeline beside the week.
         if (timeline != null) {
             Text(
-                if (timeline) BoardTimelineRules.HIDE else BoardTimelineRules.SHOW, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                if (timeline) BoardTimelineRules.HIDE else BoardTimelineRules.SHOW, style = label, color = Meka.colors.textSecondary,
                 maxLines = 1,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) { haptics.tick(); onTimeline() }
@@ -914,14 +928,14 @@ private fun WeekHeader(
         // Item (6): Plan your week opens the guided flow (tick haptic; the pane springs up).
         if (onPlanWeek != null) {
             Text(
-                os.meka.core.domain.PlanWeekRules.OPEN, style = MekaType.itemMeta, color = Meka.colors.accent,
+                os.meka.core.domain.PlanWeekRules.OPEN, style = label, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) { haptics.tick(); onPlanWeek() }
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
             )
         }
-        StepButton("‹", "Previous week", week > 0) { go(week - 1) }
-        StepButton("›", "Next week", week < board.weeks.size - 1) { go(week + 1) }
+        StepButton("‹", "Previous week", week > 0, button) { go(week - 1) }
+        StepButton("›", "Next week", week < board.weeks.size - 1, button) { go(week + 1) }
     }
     if (wide) {
         // Match slice 3: "October 2026 W44" on the left; Obi's pill, Today and ‹ › on the right (the pill takes what's
@@ -929,11 +943,14 @@ private fun WeekHeader(
         Row(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             if (nudge != null && BoardMatchRules.nudgePlace(wide) == BoardNudgePlace.BESIDE_TODAY) {
                 title(Modifier)
+                if (goals != null) goals(Modifier.padding(start = MekaSpace.m).weight(1f, fill = false))
                 Box(Modifier.weight(1f).padding(horizontal = MekaSpace.xs), contentAlignment = Alignment.CenterEnd) {
                     nudge(Modifier.widthIn(max = BoardMatchRules.NUDGE_MAX_WIDTH.dp))
                 }
             } else {
-                title(Modifier.weight(1f))
+                title(Modifier)
+                if (goals != null) goals(Modifier.padding(start = MekaSpace.m).weight(1f, fill = false))
+                Spacer(Modifier.weight(1f))
             }
             buttons()
         }
@@ -954,7 +971,7 @@ private fun WeekHeader(
  * a tap moves that card (light haptic, Undo on the bar). A new line cross-fades in (Reduced motion: a plain fade).
  */
 @Composable
-private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix) -> Unit) {
+private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, dense: Boolean = false, onFix: (PressureFix) -> Unit) {
     val reduced = Meka.reducedMotion
     val amber = Meka.colors.calendar3
     val accent = Meka.colors.accent
@@ -964,7 +981,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
         modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
             .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
             .then(if (fix != null) Modifier.clickable(role = Role.Button) { onFix(fix) } else Modifier)
-            .heightIn(min = MekaSpace.touch)
+            .heightIn(min = if (dense) BoardDenseHeadRules.BUTTON.dp else MekaSpace.touch)
             .padding(start = MekaSpace.xs, end = MekaSpace.m)
             .testTag(NUDGE_TAG)
             .clearAndSetSemantics {
@@ -974,17 +991,17 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(BoardMatchRules.NUDGE_ORB.dp).clip(CircleShape).background(
+            Modifier.size((if (dense) BoardDenseHeadRules.NUDGE_ORB else BoardMatchRules.NUDGE_ORB).dp).clip(CircleShape).background(
                 androidx.compose.ui.graphics.Brush.radialGradient(
                     0f to accent.copy(alpha = 0.45f).compositeOverWhite(), 0.4f to accent, 1f to accent.copy(alpha = 0.35f),
                 ),
             ),
         )
         Spacer(Modifier.width(MekaSpace.xs))
-        Text(BoardNudgeRules.SPEAKER, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
+        Text(BoardNudgeRules.SPEAKER, style = if (dense) BoardType.labelDense else MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
         Spacer(Modifier.width(MekaSpace.xs))
         androidx.compose.animation.Crossfade(n.line, animationSpec = MekaMotion.appear(reduced), label = "nudge-line") { line ->
-            Text(line, style = MekaType.caption, color = tone, maxLines = BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
+            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1015,6 +1032,13 @@ internal object BoardType {
     val titleDense = MekaType.caption.copy(fontSize = BoardDenseRules.TITLE_SP.sp, lineHeight = (BoardDenseRules.TITLE_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
     val monoDense = mono.copy(fontSize = BoardDenseRules.CHIP_SP.sp, lineHeight = (BoardDenseRules.CHIP_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
     val footDense = MekaType.micro.copy(fontSize = BoardDenseRules.FOOT_SP.sp, lineHeight = (BoardDenseRules.FOOT_SP * 1.3f).sp) // type: ok (the density pass: the mockup's sizes, BoardDenseRules)
+
+    // Density pass slice 2 (BoardDenseHeadRules): the header and "+ add" at the mockup's size.
+    val monthDense = month.copy(fontSize = BoardDenseHeadRules.MONTH_SP.sp, lineHeight = (BoardDenseHeadRules.MONTH_SP * 1.15f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
+    val weekDense = week.copy(fontSize = BoardDenseHeadRules.WEEK_SP.sp, lineHeight = (BoardDenseHeadRules.WEEK_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
+    val labelDense = MekaType.itemMeta.copy(fontSize = BoardDenseHeadRules.LABEL_SP.sp, lineHeight = (BoardDenseHeadRules.LABEL_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
+    val nudgeDense = MekaType.caption.copy(fontSize = BoardDenseHeadRules.NUDGE_SP.sp, lineHeight = (BoardDenseHeadRules.NUDGE_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
+    val addDense = MekaType.caption.copy(fontSize = BoardDenseHeadRules.ADD_SP.sp, lineHeight = (BoardDenseHeadRules.ADD_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's "+ add", BoardDenseHeadRules)
 }
 
 /** The density pass: the lane being drawn is on the unfolded board or the Mac-sized layout (BoardDenseRules). */
@@ -1044,7 +1068,7 @@ internal const val NUDGE_TAG = "board-nudge"
  * edged in the hairline, inside the 48 dp touch target; dimmed when there's no week that way.
  */
 @Composable
-private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepButton(glyph: String, label: String, enabled: Boolean, size: Int = BoardMatchRules.BUTTON, onClick: () -> Unit) {
     Box(
         Modifier.size(MekaSpace.touch).clip(CircleShape)
             .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
@@ -1054,7 +1078,7 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: 
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(BoardMatchRules.BUTTON.dp).clip(CircleShape).background(Meka.colors.surface)
+            Modifier.size(size.dp).clip(CircleShape).background(Meka.colors.surface)
                 .border(1.dp, Meka.colors.hairline, CircleShape),
             contentAlignment = Alignment.Center,
         ) { Text(glyph, style = MekaType.itemTitle, color = Meka.colors.textPrimary) }
@@ -1669,6 +1693,7 @@ private fun AddAtTop(
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
+    val dense = LocalBoardDense.current
     var text by remember(day.epochDay) { mutableStateOf("") }
     var picked by remember(day.epochDay) { mutableStateOf<Int?>(null) }
     val hairline = Meka.colors.hairline
@@ -1686,8 +1711,9 @@ private fun AddAtTop(
         modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
     ) { isOpen ->
         if (!isOpen) {
+            // Density pass slice 2: unfolded, a slim dashed row (28 high, 11 type) as the mockup's.
             Box(
-                Modifier.fillMaxWidth().height(40.dp).testTag(ADD_TAG)
+                Modifier.fillMaxWidth().height(if (dense) BoardDenseHeadRules.ADD_HEIGHT.dp else 40.dp).testTag(ADD_TAG)
                     .drawBehind {
                         drawRoundRect(
                             hairline, cornerRadius = androidx.compose.ui.geometry.CornerRadius(MekaRadius.m.toPx()),
@@ -1699,7 +1725,7 @@ private fun AddAtTop(
                     .semantics { contentDescription = BoardHandRules.addLabel(day.title) }
                     .padding(horizontal = MekaSpace.m),
                 contentAlignment = Alignment.Center,
-            ) { Text(BoardMatchRules.ADD, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            ) { Text(BoardMatchRules.ADD, style = if (dense) BoardType.addDense else MekaType.caption, color = Meka.colors.textTertiary) }
         } else {
             val focus = remember { FocusRequester() }
             val keyboard = LocalSoftwareKeyboardController.current
@@ -1877,7 +1903,8 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
         t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "budget-alpha").value
     } else 1f
     // Option B match: the mockup's mono figures in a 30 dp pill.
-    val figures = if (LocalBoardDense.current) BoardType.monoDense else BoardType.mono
+    val dense = LocalBoardDense.current
+    val figures = if (dense) BoardType.monoDense else BoardType.mono
     Column(
         Modifier.padding(top = MekaSpace.xs).heightIn(min = 30.dp).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
             .border(1.dp, edge, RoundedCornerShape(MekaRadius.s))
@@ -1890,8 +1917,11 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
                 // 6h 15" keeps its whole line (it may still wrap rather than be cut short).
                 Column {
                     Text(BoardMatchRules.pillLabel(b), style = figures, color = Meka.colors.textTertiary, maxLines = 1)
+                    // Density pass slice 2: unfolded the figures keep one line ("– / 4h"), so the pill is two lines at most.
                     Text(
-                        BoardPlannerRules.compactLine(b), style = figures, color = if (b.over) amber else Meka.colors.textPrimary, maxLines = 2,
+                        if (dense) BoardDenseHeadRules.pillValue(b, narrow = true) else BoardPlannerRules.compactLine(b),
+                        style = figures, color = if (b.over) amber else Meka.colors.textPrimary,
+                        maxLines = if (dense) 1 else 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag(BUDGET_VALUE_TAG),
                     )
                 }
@@ -2109,24 +2139,26 @@ private fun GoalsLane(
     hovered: Long?,
     onBounds: (Long, Rect) -> Unit,
     modifier: Modifier = Modifier,
+    inHeader: Boolean = false,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     fun show(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardGoal() } } }
     Row(
-        modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).horizontalScroll(rememberScrollState()),
+        // Density pass slice 2: in the header's row the goals take only their own width (scrolling if three are long).
+        (if (inHeader) modifier else modifier.fillMaxWidth().padding(bottom = MekaSpace.xs)).horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         week.goals.forEachIndexed { i, g ->
-            GoalChip(g, lit = hovered == GOAL_KEY - i, reduced = reduced, onBounds = { onBounds(GOAL_KEY - i, it) }) {
+            GoalChip(g, lit = hovered == GOAL_KEY - i, reduced = reduced, onBounds = { onBounds(GOAL_KEY - i, it) }, inHeader = inHeader) {
                 scope.launch { show(runCatching { core.unpickBoardGoal(g.goalId, week.startEpochDay) }.getOrNull()) }
             }
         }
         if (week.canAddGoal) {
             AddGoalChip(
-                week = week, empty = week.goals.isEmpty(),
+                week = week, empty = week.goals.isEmpty(), inHeader = inHeader,
                 choices = { runCatching { core.boardGoalChoices(week.startEpochDay) }.getOrDefault(emptyList()) },
                 onPick = { id -> scope.launch { show(runCatching { core.pickBoardGoal(id, week.startEpochDay) }.getOrNull()) } },
                 onNew = { title -> scope.launch { show(runCatching { core.addBoardGoal(title, week.startEpochDay) }.getOrNull()) } },
@@ -2141,7 +2173,7 @@ private fun GoalsLane(
  * Reduced motion: the fill and glow cross-fade.
  */
 @Composable
-private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Rect) -> Unit, onOff: () -> Unit) {
+private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Rect) -> Unit, inHeader: Boolean = false, onOff: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val pill = BoardTidyRules.goalPill(g)
     val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.accent.copy(alpha = 0.45f), MekaMotion.appear(reduced), label = "goal-glow")
@@ -2150,7 +2182,7 @@ private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Re
     val swell by animateFloatAsState(if (lit && !reduced) BoardFoldRules.PILL_SWELL else 1f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "goal-swell")
     Box {
         Box(
-            Modifier.widthIn(max = 220.dp).heightIn(min = 32.dp)
+            Modifier.widthIn(max = if (inHeader) BoardDenseHeadRules.GOAL_MAX_DP.dp else 220.dp).heightIn(min = if (inHeader) BoardDenseHeadRules.BUTTON.dp else 32.dp)
                 .onGloballyPositioned { onBounds(it.boundsInRoot()) }
                 .graphicsLayer { scaleX = swell; scaleY = swell }
                 .clip(RoundedCornerShape(MekaRadius.pill))
@@ -2163,7 +2195,7 @@ private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Re
             contentAlignment = Alignment.CenterStart,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(pill.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(pill.label, style = if (inHeader) BoardType.nudgeDense else MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 pill.count?.let {
                     Spacer(Modifier.width(MekaSpace.xs))
                     Text(it, style = MekaType.micro, color = if (pill.finished) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
@@ -2184,6 +2216,7 @@ private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Re
 private fun AddGoalChip(
     week: BoardWeek,
     empty: Boolean,
+    inHeader: Boolean = false,
     choices: suspend () -> List<GoalPickChoice>,
     onPick: (String) -> Unit,
     onNew: (String) -> Unit,
@@ -2213,14 +2246,15 @@ private fun AddGoalChip(
     Box {
         // By hand, slice 4: "+ Goal" is a small pill beside the goals (with the hint beside it while the week has none).
         Row(
-            Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(MekaRadius.pill))
+            Modifier.heightIn(min = if (inHeader) BoardDenseHeadRules.BUTTON.dp else 32.dp).clip(RoundedCornerShape(MekaRadius.pill))
                 .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button) { haptics.tick(); menu = true }
                 .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(BoardGoalRules.ADD, style = MekaType.caption, color = Meka.colors.accent)
-            if (empty) {
+            Text(BoardGoalRules.ADD, style = if (inHeader) BoardType.labelDense else MekaType.caption, color = Meka.colors.accent)
+            // Density pass slice 2: in the header "+ Goal" is a small pill alone; its hint stays on the cover screen.
+            if (BoardDenseHeadRules.goalHint(empty, inHeader)) {
                 Spacer(Modifier.width(MekaSpace.xs))
                 Text(BoardGoalRules.EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
             }
