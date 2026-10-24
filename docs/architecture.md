@@ -75,7 +75,7 @@ CI is `mekaminu/meka-os`, GitHub Actions. All four jobs went green on 2026-10-01
 |---|---|---|
 | Kernel: sync, merge, domain, policy, wire | 47 tests under real `kotlin.test` (CI) and offline (`tools/core-verify.sh`) | ✅ |
 | Store contract on real SQLite (`SqlReplicaStore`) | `:core:data:jvmTest` | ✅ |
-| Facade: Today flows, offline→online, conflict choices | `:core:facade:jvmTest` and `macosArm64Test` | ✅ |
+| Facade: Today flows, offline→online, conflict choices | `:core:facade:jvmTest` and `macosArm64ReleaseTest` (optimised binary, nightly) | ✅ |
 | Sync API: auth, idempotent push, household isolation; concurrent pushes on Postgres 17 | `:backend:test` with a Postgres service container | ✅ |
 | Android app: assemble, unit tests, lint | `android` job | ✅ |
 | Kotlin/Native, XCFramework, SwiftUI app, Swift↔Kotlin bridge test | `macos` job (macOS 26, Xcode 26.6) | ✅ |

@@ -24,6 +24,13 @@ kotlin {
             export(project(":core:sync"))
             xcf.add(this)
         }
+        // The nightly Mac build (2026-10-24, ci run 1219): the facade's native tests had grown from 35 min (10-12) to
+        // ~100 (10-19) on the debug test binary and no longer fit their watched step (classes A–H in 50 min, about 20 s
+        // a test; nothing hung). The same tests from an optimised binary: :core:facade:macosArm64ReleaseTest.
+        binaries.test(listOf(org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE))
+        testRuns.create("release") {
+            setExecutionSourceFrom(binaries.getTest(org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE))
+        }
     }
 
     sourceSets {

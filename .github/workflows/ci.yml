@@ -121,9 +121,11 @@ jobs:
       - name: Kotlin/Native tests (sync, domain)
         env: { CI_RUN_WATCH_MIN: "45" }
         run: tools/ci-run.sh ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test
+      # From the optimised test binary (nightly run 1219, 2026-10-24: the debug one took ~20 s a test and passed
+      # 50 min at class H with nothing hung; core/facade/build.gradle.kts).
       - name: Kotlin/Native tests (facade)
-        env: { CI_RUN_WATCH_MIN: "50" }
-        run: tools/ci-run.sh ./gradlew :core:facade:macosArm64Test
+        env: { CI_RUN_WATCH_MIN: "60" }
+        run: tools/ci-run.sh ./gradlew :core:facade:macosArm64ReleaseTest
       - name: XCFramework
         env: { CI_RUN_WATCH_MIN: "30" }
         run: tools/ci-run.sh ./gradlew :core:facade:assembleMekaKitReleaseXCFramework
@@ -132,7 +134,8 @@ jobs:
       - name: Native facade test crash (only when the step above failed)
         if: failure()
         run: |
-          kexe=core/facade/build/bin/macosArm64/debugTest/test.kexe
+          kexe=core/facade/build/bin/macosArm64/releaseTest/test.kexe
+          [ -x "$kexe" ] || kexe=core/facade/build/bin/macosArm64/debugTest/test.kexe
           [ -x "$kexe" ] || { echo "no test binary"; exit 0; }
           set +e
           "$kexe" --ktest_logger=SIMPLE --ktest_filter='os.meka.core.facade.AboutYouFacadeTest.*' 2>&1 | tail -80
