@@ -60,6 +60,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.BalanceArea
 import os.meka.core.domain.BalanceView
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NorthStarMetric
 import os.meka.core.domain.ReviewRules
 import os.meka.core.domain.ReviewCard
@@ -192,8 +193,9 @@ fun ReviewRoute(core: MekaCore) {
     }
 }
 
+/** The week as drawn, from its views (internal for the quality gate's ReviewScreensTest). */
 @Composable
-private fun Week(
+internal fun Week(
     v: WeeklyReviewView,
     wins: WinsView,
     said: WinAdded?,
@@ -243,7 +245,7 @@ private fun Week(
                     }
                 }
                 v.comparedLine?.let {
-                    Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(3)))
+                    Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(3)))
                 }
             }
         }
@@ -283,7 +285,7 @@ private fun Week(
             item(key = "h-more") {
                 Column(Modifier.appear(rememberAppearance(7))) {
                     SectionLabel("Fasting and lists", Modifier.padding(top = MekaSpace.l))
-                    more.forEach { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
+                    more.forEach { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
                 }
             }
         }
@@ -300,7 +302,7 @@ private fun Week(
             item(key = "h-ahead") {
                 Column(Modifier.appear(rememberAppearance(9))) {
                     SectionLabel(title, Modifier.padding(top = MekaSpace.l))
-                    v.aheadLines.forEach { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
+                    v.aheadLines.forEach { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
                 }
             }
         }
@@ -318,7 +320,7 @@ private fun Week(
                 Spacer(Modifier.height(MekaSpace.xs))
                 val line = v.reviewedLine
                 if (v.reviewed && line != null) {
-                    Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                    Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                 } else {
                     Text(
                         "Done reviewing", style = MekaType.itemTitle, color = Meka.colors.onAccent,
@@ -334,7 +336,7 @@ private fun Week(
 @Composable
 private fun StepButton(label: String, description: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape)
+        Modifier.size(MekaSpace.touch).clip(CircleShape)
             .then(if (enabled) Modifier.clickable(role = Role.Button, onClickLabel = description) { onClick() } else Modifier)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
@@ -351,7 +353,7 @@ private fun Tile(t: ReviewTile, modifier: Modifier) {
     ) {
         Text(t.label, style = MekaType.caption, color = Meka.colors.textTertiary)
         CountUpText(t.value, MekaType.greeting, Meka.colors.textPrimary)
-        t.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1) }
+        t.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2) }
     }
 }
 
@@ -359,13 +361,13 @@ private fun Tile(t: ReviewTile, modifier: Modifier) {
 private fun Section(label: String, index: Int, line: String? = null) {
     Column(Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(index))) {
         SectionLabel(label)
-        line?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
+        line?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
     }
 }
 
 @Composable
 private fun Note(text: String, index: Int) {
-    Text(text, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xxs).appear(rememberAppearance(index)))
+    Text(LoneWordGlue.kept(text), style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xxs).appear(rememberAppearance(index)))
 }
 
 @Composable
@@ -406,7 +408,7 @@ private fun GoalLine(g: ReviewGoal, modifier: Modifier) {
         Box(Modifier.padding(vertical = MekaSpace.xs).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
             Box(Modifier.fillMaxWidth(fill.value.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
         }
-        Text(g.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(g.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
     }
 }
 
@@ -417,9 +419,10 @@ private fun NorthStarLine(m: NorthStarMetric, modifier: Modifier) {
             Text(m.label, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
             val n = m.value?.toIntOrNull()
             if (n != null) CountUpText(n, MekaType.itemMeta, Meka.colors.textSecondary) // e.g. Interruptions
-            else Text(m.value ?: "—", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            // Not counted yet: its line says when; no lone dash (quality gate slice 61).
+            else m.value?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         }
-        Text(m.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(m.line), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

@@ -71,7 +71,7 @@ struct ReviewScreen: View {
                 }
             }
             if let compared = v.comparedLine {
-                Text(compared).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(3)
+                Text(LoneWordGlue.shared.kept(line: compared)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(3)
             }
 
             if let b = model.balance, b.weekStart == v.weekStart {
@@ -107,7 +107,7 @@ struct ReviewScreen: View {
             if !more.isEmpty {
                 section("Fasting and lists", 7)
                 ForEach(more, id: \.self) { l in
-                    Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xxs).staggeredAppear(7)
+                    Text(LoneWordGlue.shared.kept(line: l)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xxs).staggeredAppear(7)
                 }
             }
 
@@ -120,7 +120,7 @@ struct ReviewScreen: View {
             if let ahead = v.aheadTitle {
                 section(ahead, 9)
                 ForEach(v.aheadLines, id: \.self) { l in
-                    Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xxs).staggeredAppear(9)
+                    Text(LoneWordGlue.shared.kept(line: l)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xxs).staggeredAppear(9)
                 }
             }
 
@@ -132,11 +132,11 @@ struct ReviewScreen: View {
                         Spacer()
                         Group {
                             if let n = m.value.flatMap({ Int($0) }) { CountUpText(n) } // e.g. Interruptions
-                            else { Text(m.value ?? "—") }
+                            else if let value = m.value { Text(value) } // not counted yet: its line says when, no dash
                         }
                         .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
-                    Text(m.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: m.line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 .padding(.vertical, MekaSpace.xxs)
                 .accessibilityElement(children: .combine)
@@ -149,7 +149,7 @@ struct ReviewScreen: View {
                         .font(MekaType.greeting)
                         .foregroundStyle(palette.accent)
                         .transition(reduceMotion ? .opacity : .scale(scale: 0.6).combined(with: .opacity))
-                    if let l = v.reviewedLine { Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary) }
+                    if let l = v.reviewedLine { Text(LoneWordGlue.shared.kept(line: l)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary) }
                 } else {
                     Button("Done reviewing") { model.reviewDone() }
                         .buttonStyle(.borderedProminent)
@@ -170,14 +170,14 @@ struct ReviewScreen: View {
     private func section(_ label: String, _ index: Int, _ sub: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             SectionLabel(label, palette)
-            if let sub { Text(sub).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.xs) }
+            if let sub { Text(LoneWordGlue.shared.kept(line: sub)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.xs) }
         }
         .padding(.top, MekaSpace.l)
         .staggeredAppear(index)
     }
 
     private func note(_ text: String, _ index: Int) -> some View {
-        Text(text).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.vertical, MekaSpace.xxs).staggeredAppear(index)
+        Text(LoneWordGlue.shared.kept(line: text)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.vertical, MekaSpace.xxs).staggeredAppear(index)
     }
 
     private func line(_ title: String, _ detail: String, _ index: Int, lit: Bool = false) -> some View {
@@ -203,7 +203,7 @@ private struct TileView: View {
             CountUpText(Int(tile.value))
                 .font(MekaType.greeting)
                 .foregroundStyle(palette.textPrimary)
-            if let d = tile.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1) }
+            if let d = tile.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(MekaSpace.m)
@@ -256,7 +256,7 @@ private struct GoalWeekRow: View {
             }
             .frame(height: 6)
             .padding(.vertical, MekaSpace.xxs)
-            Text(goal.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: goal.line)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
         }
         .padding(.vertical, MekaSpace.xxs)
         .accessibilityElement(children: .combine)

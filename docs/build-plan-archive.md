@@ -3202,6 +3202,26 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 61 (2026-10-24): Review's shots and its hand tests
+
+- ReviewScreensTest (8, Robolectric + Roborazzi) draws Ask → Daily → Review (the review's `Week`, now internal) from
+  invented weeks: this week with nothing done yet (pending north-star numbers, Done reviewing), last week reviewed with
+  one of everything (a done task, a habit, a goal, a decision, one still open, a win), and a full week (twelve done and
+  three more, three habits, two goals, fasts, four list lines, five still open and two more, three wins and the
+  quarter's, two counted north-star numbers), on the cover and inner sizes, Dark and Light, shot at the top, at Wins and
+  at the north star, under docs/screens/fold/review/; read for nonsense, cut titles, broken words, split numbers and
+  dates, lone words and dots starting lines, each still-open date and habit line on one line, every button a 48 dp
+  touch, and no dash where a number isn't counted yet.
+- By hand: ‹ steps back a week; › can't be tapped on this week and steps forward on a past one; typing a win and Done
+  keeps it; a win's Remove removes that win; "This quarter" unfolds its weeks; Done reviewing reviews the week.
+- Fixed first (both apps): a north-star metric not counted yet showed "—" beside its label (ScreenSenseRules' lone
+  dash), now only its line saying when it will be counted; ‹ › were 44 dp (now 48 dp) and a win's Remove ~32 dp tall
+  (now a 48 dp touch, the Fold); a tile's detail ("3 reached the goal") could be cut at one line in a half-width tile,
+  now up to two; the compared line, habits line, fasting and lists lines, the week ahead, goals' and north-star lines,
+  notes, the reviewed line and Wins' week line keep their last words together (LoneWordGlue).
+- Design check: no design file covers Review. Balance and Reflect (null here) are shot in the next slice. No server
+  change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 60 (2026-10-24): Navilife's AI's shots and its first hand test
 
 - AiScreensTest (7, Robolectric + Roborazzi) draws Ask → Settings → Navilife's AI (AiSpendRow) from invented statuses:

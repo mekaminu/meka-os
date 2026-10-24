@@ -39,6 +39,7 @@ import os.meka.android.goals.fold
 import os.meka.android.goals.unfold
 import os.meka.android.lists.Field
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.WinAdded
 import os.meka.core.domain.WinRow
 import os.meka.core.domain.WinsView
@@ -69,7 +70,7 @@ internal fun LazyListScope.winsItems(
         Column(Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(index))) {
             SectionLabel("Wins")
             Crossfade(wins.weekLine, animationSpec = MekaMotion.appear(reduced), label = "wins-week-line") { l ->
-                Text(l, style = MekaType.itemMeta, color = color, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                Text(LoneWordGlue.kept(l), style = MekaType.itemMeta, color = color, modifier = Modifier.padding(bottom = MekaSpace.xs))
             }
         }
     }
@@ -111,7 +112,7 @@ private fun WinLine(w: WinRow, modifier: Modifier, onRemove: () -> Unit) {
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${w.text}" }
-                .padding(MekaSpace.xs),
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }

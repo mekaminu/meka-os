@@ -22,7 +22,7 @@ struct WinsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             SectionLabel("Wins", palette)
-            Text(wins.weekLine).font(MekaType.itemMeta)
+            Text(LoneWordGlue.shared.kept(line: wins.weekLine)).font(MekaType.itemMeta)
                 .foregroundStyle(wins.asking ? palette.accent : palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
