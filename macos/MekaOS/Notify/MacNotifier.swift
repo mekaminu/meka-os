@@ -63,6 +63,8 @@ enum MacNotifier {
         for notice in result.post {
             let content = UNMutableNotificationContent()
             content.title = notice.title
+            // Obi slice 4: what the card asks of him ("To know" · "Asks you" · "Needs your yes").
+            content.subtitle = ObiInterruptRules.shared.cardLine(n: notice)
             content.body = notice.text
             content.threadIdentifier = "meka"
             content.interruptionLevel = .active

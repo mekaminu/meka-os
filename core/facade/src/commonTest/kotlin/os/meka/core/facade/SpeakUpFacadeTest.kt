@@ -62,6 +62,22 @@ class SpeakUpFacadeTest {
     }
 
     @Test
+    fun focusHoldsTheTrainButNotMoney() = runTest {
+        val c = core()
+        try {
+            // Obi slice 4: the phone's Do Not Disturb is focus; the train stays a card, money that can't wait is said.
+            assertNull(c.speakUp(result, listOf(train.key), SpeakPlace.PRIVATE, onCall = false, talking = false, deviceFocus = true))
+            val money = train.copy(key = "approval:a1:ending", source = NoticeSource.APPROVAL, tier = NoticeTier.CRITICAL,
+                speak = SpeakMoment.MONEY, spoken = "a payment approval from Kestrel runs out at 09:30. It's in Needs you.")
+            val r = GovernorResult(listOf(money), null, GovernorState(), null, NoticePrecision.SOFT)
+            assertEquals("A payment approval from Kestrel runs out at 09:30. It's in Needs you.",
+                c.speakUp(r, listOf(money.key), SpeakPlace.PRIVATE, onCall = false, talking = false, deviceFocus = true)?.line)
+            // Out of focus the train is said as before.
+            assertEquals("Your 08:42 is cancelled.", c.speakUp(result, listOf(train.key), SpeakPlace.PRIVATE, onCall = false, talking = false)?.line)
+        } finally { c.close() }
+    }
+
+    @Test
     fun switchOffAndMute() = runTest {
         val c = core()
         try {

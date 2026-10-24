@@ -15,6 +15,12 @@ import os.meka.core.sync.Replica
  */
 enum class SpeakMoment(val label: String, val line: String, val defaultOn: Boolean) {
     URGENT("Urgent from family", "A message or call from family or someone on Always notify that says it's urgent", true),
+    /**
+     * Obi slice 4 (the interrupt governor): money that can't wait, a payment or trade approval in its last 15 minutes
+     * or a trading position near liquidation. With [URGENT] it breaks through focus, quiet hours and meetings
+     * ([ObiInterruptRules.breaksThrough]). No amounts are ever said.
+     */
+    MONEY("Money that can't wait", "A payment or trade approval about to run out, or a position near liquidation", true),
     TRAIN("Your train", "Cancelled, or 10 minutes or more late, in the 2 hours before you leave", true),
     LEAVE_NOW("Time to leave", "For an event or a booked session with its travel time set", true),
     PRESSURE("Tomorrow stacking up", "Once in the evening, when tomorrow has three or more things on it", true),
@@ -35,7 +41,7 @@ enum class SpeakOften(val label: String, val perDay: Int) {
 enum class SpeakPlace { PRIVATE, BEDSIDE, MAC, SPEAKER }
 
 /** Why a moment stayed silent (for tests and Health later); null in [SpeakUpRules.check] means "say it". */
-enum class SpeakHold { OFF, NOT_PRIVATE, QUIET_HOURS, MEETING, ON_CALL, TALKING, MUTED, DAILY_CAP, ALREADY_SAID }
+enum class SpeakHold { OFF, NOT_PRIVATE, QUIET_HOURS, MEETING, ON_CALL, TALKING, MUTED, DAILY_CAP, ALREADY_SAID, FOCUS }
 
 /** His choices, synced (one `context_mode` row), the same on every device. */
 data class SpeakUpSettings(
@@ -72,6 +78,11 @@ data class SpeakContext(
     val onCall: Boolean = false,
     /** A Talk or Hello conversation is running: Obi never talks over himself. */
     val talking: Boolean = false,
+    /**
+     * Obi slice 4: he is in focus, the phone's Do Not Disturb or a focus block on his calendar
+     * ([ObiInterruptRules.inFocus]). Only money and family break through it.
+     */
+    val focus: Boolean = false,
 )
 
 object SpeakUpRules {
@@ -82,7 +93,7 @@ object SpeakUpRules {
 
     const val TITLE = "Speaking up"
     const val ROW_LINE = "When Obi says something out loud on his own"
-    const val INTRO = "For a few moments that really matter, Obi lights the orb, plays a soft chime and says it in a sentence or two, starting with your name. Only through headphones or the car, on the bedside clock in the evening, or on the Mac while you're using it; never out of the phone's speaker. Never in quiet hours, in a meeting or on a call. It only tells you: anything to do is the usual card."
+    const val INTRO = "For a few moments that really matter, Obi lights the orb, plays a soft chime and says it in a sentence or two, starting with your name. Only through headphones or the car, on the bedside clock in the evening, or on the Mac while you're using it; never out of the phone's speaker. Never in quiet hours, a meeting, focus or on a call, except money and family that can't wait. It only tells you: anything to do is the usual card."
     /** Quality gate slice 55: the intro said short (the full [INTRO] was ten lines on the cover screen). */
     const val INTRO_SHORT = "Obi says what really matters out loud, starting with your name, only where just you can hear."
     const val OFTEN_LABEL = "How often"
@@ -121,8 +132,9 @@ object SpeakUpRules {
     }
 
     /**
-     * Whether [n] is said now, or why not: a moment of its own and switched on; somewhere private; not in quiet hours,
-     * a meeting, a call or a conversation; not muted; under the day's cap; not already said (on any device).
+     * Whether [n] is said now, or why not: a moment of its own and switched on; somewhere private; not on a call or in a
+     * conversation; not muted; not already said (on any device); and, unless it breaks through (money and family, Obi
+     * slice 4), not in quiet hours, a meeting or focus, and under the day's cap.
      */
     fun check(
         n: Notice, s: SpeakUpSettings, ctx: SpeakContext, quiet: Boolean, meeting: Boolean,
@@ -137,16 +149,21 @@ object SpeakUpRules {
         m: SpeakMoment, spoken: String?, s: SpeakUpSettings, ctx: SpeakContext, quiet: Boolean, meeting: Boolean,
         spokenToday: Int, alreadySaid: Boolean, nowMs: Long,
     ): SpeakHold? {
+        // Obi slice 4: what can never be talked over (where he'd be heard, a call, a conversation, "shh") holds for
+        // everything; quiet hours, meetings, focus and the cap hold all but money and family.
+        val through = ObiInterruptRules.breaksThrough(m)
         return when {
             spoken.isNullOrBlank() || !s.isOn(m) -> SpeakHold.OFF
             ctx.place == SpeakPlace.SPEAKER -> SpeakHold.NOT_PRIVATE
-            quiet -> SpeakHold.QUIET_HOURS
-            meeting -> SpeakHold.MEETING
             ctx.onCall -> SpeakHold.ON_CALL
             ctx.talking -> SpeakHold.TALKING
             s.muted(nowMs) -> SpeakHold.MUTED
-            spokenToday >= s.often.perDay -> SpeakHold.DAILY_CAP
             alreadySaid -> SpeakHold.ALREADY_SAID
+            through -> null
+            quiet -> SpeakHold.QUIET_HOURS
+            meeting -> SpeakHold.MEETING
+            ctx.focus -> SpeakHold.FOCUS
+            spokenToday >= s.often.perDay -> SpeakHold.DAILY_CAP
             else -> null
         }
     }
@@ -229,7 +246,8 @@ object SpeakUpRules {
     fun view(s: SpeakUpSettings, spokenToday: Int, nowMs: Long, cal: LocalCalendar): SpeakUpView {
         val moments = SpeakMoment.entries.map { m ->
             val on = s.isOn(m)
-            TalkSetupSection(m.label, if (on) "On" else "Off", on, listOf(m.line), if (on) TURN_OFF else TURN_ON)
+            val lines = listOf(m.line) + listOfNotNull(ObiInterruptRules.BREAKS_THROUGH_LINE.takeIf { ObiInterruptRules.breaksThrough(m) })
+            TalkSetupSection(m.label, if (on) "On" else "Off", on, lines, if (on) TURN_OFF else TURN_ON)
         }
         val other = SpeakOften.entries.first { it != s.often }
         val often = TalkSetupSection(OFTEN_LABEL, s.often.label, false,

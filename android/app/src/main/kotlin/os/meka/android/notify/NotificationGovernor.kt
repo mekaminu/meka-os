@@ -121,6 +121,8 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         val b = NotificationCompat.Builder(context, channel)
             .setSmallIcon(os.meka.android.R.drawable.ic_stat_meka)
             .setContentTitle(n.title)
+            // Obi slice 4: what the card asks of him, beside Navilife's name ("To know" · "Asks you" · "Needs your yes").
+            .setSubText(os.meka.core.domain.ObiInterruptRules.cardLine(n))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(public) // titles stay off the lock screen
             .setCategory(NotificationCompat.CATEGORY_REMINDER)

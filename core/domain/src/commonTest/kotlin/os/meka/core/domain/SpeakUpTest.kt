@@ -131,7 +131,8 @@ class SpeakUpTest {
         val pick = SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, false, false, 0, now, "Alex", false)
         assertEquals("Alex, Sam says it's urgent on WhatsApp: “Urgent, call me when you can.”", pick?.line)
         assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), SpeakContext(SpeakPlace.SPEAKER), false, false, 0, now, "Alex", false))
-        assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, true, false, 0, now, "Alex", false))
+        // Obi slice 4: family breaks through quiet hours.
+        assertEquals(pick, SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, true, false, 0, now, "Alex", false))
         assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, false, false, 0, now, "Alex", true))
         assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words,
             SpeakUpSettings(choices = mapOf(SpeakMoment.URGENT to false)), ctx, false, false, 0, now, "Alex", false))

@@ -343,7 +343,11 @@ object ApprovalRules {
             title = "$heading · expires ${clock(a.expiresAtMs, maxOf(urgentFrom, a.askedAtMs), cal)}", text = a.title,
             atMs = maxOf(urgentFrom, a.askedAtMs), target = NoticeTarget.NEEDS_YOU, expiresAtMs = a.expiresAtMs,
             postAs = slot,
-        )
+        ).let { n ->
+            // Obi slice 4: a payment or trade about to run out is money that can't wait, said out loud (no amounts).
+            val words = ObiInterruptRules.approvalWords(a.kind, a.source, clock(a.expiresAtMs, maxOf(urgentFrom, a.askedAtMs), cal))
+            if (words == null) n else n.copy(speak = SpeakMoment.MONEY, spoken = words)
+        }
         if (urgentFrom <= a.askedAtMs) listOf(ending) else listOf(
             Notice(
                 key = slot, source = NoticeSource.APPROVAL, tier = NoticeTier.ACTION,

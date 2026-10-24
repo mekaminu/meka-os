@@ -235,6 +235,8 @@ object TradingAlerts {
                     title = "${p.coin} $side ${if (very) "very near" else "near"} liquidation",
                     text = "${TradingTracker.pct(d)} from liquidation · ${w.label} · the figures are in Money · Navilife can't trade",
                     atMs = readAt, target = NoticeTarget.MONEY, expiresAtMs = expires, postAs = slot,
+                    // Obi slice 4: money that can't wait, said out loud when he can hear it privately (no amounts).
+                    speak = SpeakMoment.MONEY, spoken = ObiInterruptRules.liquidationWords(p.coin, p.long, very),
                 )
             }
             val drop = setting.drop.share

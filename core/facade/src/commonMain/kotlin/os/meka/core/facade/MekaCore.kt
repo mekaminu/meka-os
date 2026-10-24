@@ -5406,14 +5406,25 @@ class MekaCore(
      */
     suspend fun speakUp(
         result: GovernorResult, keys: List<String>, place: os.meka.core.domain.SpeakPlace, onCall: Boolean, talking: Boolean,
+    ): os.meka.core.domain.SpeakUpPick? = speakUp(result, keys, place, onCall, talking, deviceFocus = false)
+
+    /**
+     * [speakUp] with [deviceFocus]: the device is in focus on its own (the Fold's Do Not Disturb). Obi slice 4: focus
+     * (that, or a focus block on his calendar, [os.meka.core.domain.ObiInterruptRules.inFocus]) holds every moment but
+     * money and family.
+     */
+    suspend fun speakUp(
+        result: GovernorResult, keys: List<String>, place: os.meka.core.domain.SpeakPlace, onCall: Boolean, talking: Boolean,
+        deviceFocus: Boolean,
     ): os.meka.core.domain.SpeakUpPick? = onCore {
         val set = keys.toSet()
         val posted = result.post.filter { it.key in set && it.speak != null }
         if (posted.isEmpty()) return@onCore null
         val now = nowMs()
         val cal = ZoneCalendar(timeZone)
+        val focus = deviceFocus || os.meka.core.domain.ObiInterruptRules.inFocus(currentEvents(), now)
         val pick = os.meka.core.domain.SpeakUpRules.pick(
-            posted, speakUp.settings(), os.meka.core.domain.SpeakContext(place, onCall, talking),
+            posted, speakUp.settings(), os.meka.core.domain.SpeakContext(place, onCall, talking, focus),
             quiet = notifyPrefs.settings().quiet.isQuietAt(now, cal),
             meeting = os.meka.core.domain.SpeakUpRules.inMeeting(currentEvents(), now),
             spokenToday = activity.spokenSince(cal.toEpochMs(cal.epochDayOf(now), 0)), nowMs = now,
@@ -5438,6 +5449,7 @@ class MekaCore(
         val words = os.meka.core.domain.SpeakUpRules.urgentWords(item, lists, now) ?: return@onCore null
         val cal = ZoneCalendar(timeZone)
         val key = os.meka.core.domain.SpeakUpRules.urgentKey(item)
+        // Family breaks through focus (Obi slice 4), so the device's own focus isn't asked for here.
         val pick = os.meka.core.domain.SpeakUpRules.pickOne(
             key, os.meka.core.domain.SpeakMoment.URGENT, words, speakUp.settings(),
             os.meka.core.domain.SpeakContext(place, onCall, talking),

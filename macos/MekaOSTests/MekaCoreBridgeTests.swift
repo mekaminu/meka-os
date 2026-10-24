@@ -3520,5 +3520,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.replied.label, "Replies you were waiting for")
         XCTAssertEqual(rules.replyWords(who: "Sam Taylor", topic: "Quote"), "Sam Taylor replied to your email about Quote.")
     }
-}
 
+    /// Obi slice 4: money breaks through, and every notification says what it asks of him.
+    func testObiInterruptGovernorOnTheMac() {
+        let obi = ObiInterruptRules.shared
+        XCTAssertTrue(obi.breaksThrough(m: SpeakMoment.money))
+        XCTAssertFalse(obi.breaksThrough(m: SpeakMoment.train))
+        XCTAssertEqual(SpeakMoment.money.label, "Money that can't wait")
+        XCTAssertTrue(obi.isFocusTitle(title: "Focus time"))
+        XCTAssertEqual(ObiCardKind.approve.label, "Needs your yes")
+    }
+}

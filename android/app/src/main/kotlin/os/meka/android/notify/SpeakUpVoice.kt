@@ -48,7 +48,8 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
     suspend fun consider(result: GovernorResult, postedKeys: List<String>) {
         if (postedKeys.isEmpty()) return
         val pick = runCatching {
-            app.core.speakUp(result, postedKeys, place(), onCall = onCall(), talking = app.talkPhase.value != TalkPhase.ENDED)
+            app.core.speakUp(result, postedKeys, place(), onCall = onCall(), talking = app.talkPhase.value != TalkPhase.ENDED,
+                deviceFocus = inFocus())
         }.getOrNull() ?: return
         say(pick.line)
     }
@@ -144,6 +145,16 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
     fun stop() {
         main.launch { speaker.stop(); _speaking.value = false; giveBackFocus() }
     }
+
+    /**
+     * Obi slice 4: the phone's Do Not Disturb is on (Samsung's Do not disturb, or a Mode that silences it), so he is in
+     * focus and only money and family are said. Reading the filter needs no permission.
+     */
+    private fun inFocus(): Boolean = runCatching {
+        val filter = context.getSystemService(android.app.NotificationManager::class.java)?.currentInterruptionFilter
+        filter != null && filter != android.app.NotificationManager.INTERRUPTION_FILTER_ALL &&
+            filter != android.app.NotificationManager.INTERRUPTION_FILTER_UNKNOWN
+    }.getOrDefault(false)
 
     private fun onCall(): Boolean = runCatching {
         val mode = context.getSystemService(AudioManager::class.java)?.mode
