@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Talking to Ada like a conversation, slice 7: a little pause after a reaction, a touch quicker, nothing becomes a tag. */
+/** Talking to Obi like a conversation, slice 7: a little pause after a reaction, a touch quicker, nothing becomes a tag. */
 class SpokenSsmlTest {
     @Test
     fun aReactionThatOpensAPieceGetsASmallPause() {

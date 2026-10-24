@@ -75,9 +75,9 @@ object SpeechRules {
     const val READ_PIECE = 200
 
     /**
-     * When a piece is late in a conversation where Ada's voice has already been heard, the device keeps waiting up to
-     * this much longer for it, quietly (the orb still shows her speaking), instead of switching to the device's voice
-     * mid-conversation (Meka, 2026-10-09: "never switch voice"). Nothing is said meanwhile: talking to Ada like a
+     * When a piece is late in a conversation where Obi's voice has already been heard, the device keeps waiting up to
+     * this much longer for it, quietly (the orb still shows his speaking), instead of switching to the device's voice
+     * mid-conversation (Meka, 2026-10-09: "never switch voice"). Nothing is said meanwhile: talking to Obi like a
      * conversation, slice 1 (2026-10-21) dropped the old "One moment…" holding line.
      */
     const val HOLD_AUDIO_MS = 6_000L
@@ -356,9 +356,9 @@ object MekaVoiceFields {
      * name. Synced, so Ask, Talk and Hello say the same on every device.
      */
     const val CALL_ME = "call_me"
-    /** Ada's Live mode, slice 2: "on" while Live is on; Null (or absent) for off, the default. Synced. */
+    /** Obi's Live mode, slice 2: "on" while Live is on; Null (or absent) for off, the default. Synced. */
     const val LIVE = "live"
-    /** Ada's Live mode, slice 2: the Live voice he picked (one of [LiveTalkRules.VOICES]); Null for the default. */
+    /** Obi's Live mode, slice 2: the Live voice he picked (one of [LiveTalkRules.VOICES]); Null for the default. */
     const val LIVE_VOICE = "live_voice"
 }
 
@@ -410,7 +410,7 @@ class MekaVoiceStore(private val replica: Replica) {
         )
     }
 
-    /** Ada's Live mode, slice 2: whether Live is on (off unless he turns it on). */
+    /** Obi's Live mode, slice 2: whether Live is on (off unless he turns it on). */
     fun liveOn(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(MekaVoiceFields.LIVE)?.textOrNull == LIVE_ON
 
     /** Turns Live on or off on every device; nothing written when it's already so. */
@@ -490,7 +490,7 @@ data class VoicePickerView(
 object VoicePickerRules {
     /** What ▶ Sample says: MEKA's own words, never anything of Meka's. */
     const val SAMPLE = "Good morning, Meka. You've got three things today and it's 14 degrees."
-    const val TITLE = "Ada's voice"
+    const val TITLE = "Obi's voice"
 
     /** The longest sample sent (natural voice, slice 2): two short sentences, never a whole paragraph of the brief. */
     const val SAMPLE_MAX = 240

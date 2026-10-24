@@ -1,7 +1,7 @@
 package os.meka.core.domain
 
 /**
- * Ada's Live mode, slice 5 (non-AI, pure): **Navilife's own tools in a Live conversation**.
+ * Obi's Live mode, slice 5 (non-AI, pure): **Navilife's own tools in a Live conversation**.
  *
  * Besides the web search ([LiveTalkRules.SEARCH_TOOL]) a Live session has two tools, both answered on the device
  * where his data lives (nothing of his calendar or tasks is read on Navilife's server):
@@ -103,21 +103,21 @@ object LiveToolRules {
         else lines.joinToString("\n") { i -> "${i.kind.wire}${if (i.ref.isNotEmpty()) " ${i.ref}" else ""}: ${i.line}" }
 
     /**
-     * One Live turn as Ask shows it: what Ada said, its sources, and the cards she offered (at most [MAX_CARDS], no two
-     * alike). Null when she said nothing and offered nothing.
+     * One Live turn as Ask shows it: what Obi said, its sources, and the cards he offered (at most [MAX_CARDS], no two
+     * alike). Null when he said nothing and offered nothing.
      */
     fun turnAnswer(said: String, sources: List<AskSource>, cards: List<AskCard>, unlockMoney: Boolean = false): AskOutcome? {
         val kept = cards.distinctBy { it.proposal }.take(MAX_CARDS)
         val text = said.replace(Regex("""\s+"""), " ").trim().take(AskRules.MAX_ANSWER)
         if (text.isEmpty() && kept.isEmpty() && !unlockMoney) return null
-        // Slice 5b: Money was locked when she looked: Ask's own Unlock under her words (then he asks again in Ask).
+        // Slice 5b: Money was locked when he looked: Ask's own Unlock under his words (then he asks again in Ask).
         return AskOutcome.Answered(AskAnswer(
             text.ifEmpty { if (kept.isEmpty()) MoneyAskRules.LOCKED else CARDS_ONLY }, kept, sources = sources,
             unlockMoney = if (unlockMoney) MoneyAskRules.UNLOCK else null,
         ))
     }
 
-    /** A turn with cards and no words heard of hers. */
+    /** A turn with cards and no words heard of Obi's. */
     const val CARDS_ONLY = "Here it is to tap."
 
     // ---- Slice 5b: two more read-only look-ups, answered on the device ----
@@ -134,7 +134,7 @@ object LiveToolRules {
     /**
      * Slice 5b: his money ([MoneyAskRules]): the device's own answer to his money question, worked out on the phone
      * from his statements, only while Money is unlocked (open, or unlocked from Ask in the last few minutes); never his
-     * transactions. Locked: Ada says so and Ask shows Unlock.
+     * transactions. Locked: Obi says so and Ask shows Unlock.
      */
     const val MONEY_TOOL = "look_up_my_money"
     /** The money look-up's argument: his money question in his words ("how much did I spend on takeaways last month?"). */

@@ -49,7 +49,7 @@ data class ModelRequest(
     val turns: List<ModelTurn>,
     val maxTokens: Int = 1024,
     /**
-     * Talking to Ada like a conversation, slice 3 (prompt caching): how many leading characters of [system] never change
+     * Talking to Obi like a conversation, slice 3 (prompt caching): how many leading characters of [system] never change
      * between calls (Ask's long instructions), so the provider can mark them for the model's prompt cache; 0 caches
      * nothing. What follows them (his name, the voice lines) is sent after, uncached.
      */
@@ -166,7 +166,7 @@ object ModelPrices {
         of(model).let { it.inputMicroUsd * inputTokens + it.outputMicroUsd * outputTokens }
 
     /**
-     * Talking to Ada like a conversation, slice 3: a call that used the prompt cache. [inputTokens] is every input token
+     * Talking to Obi like a conversation, slice 3: a call that used the prompt cache. [inputTokens] is every input token
      * (as [ModelOutcome.Answered.inputTokens] counts them), of which [cacheWriteTokens] were written to the cache (at
      * 1.25× the input price) and [cacheReadTokens] read from it (at 0.1×); the rest at the input price. Rounded up, so
      * the meter never under-counts.

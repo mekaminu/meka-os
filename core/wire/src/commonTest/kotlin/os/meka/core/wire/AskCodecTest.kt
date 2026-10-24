@@ -216,7 +216,7 @@ class AskCodecTest {
 
     @Test
     fun theDaysFirstConversationTravelsAsIntroduce() {
-        // The companion is called Ada, slice 1: left out when false; only a JSON true reads as true.
+        // The companion is called Obi, slice 1: left out when false; only a JSON true reads as true.
         val first = req.copy(introduce = true)
         assertEquals(first, AskCodec.decodeRequest(AskCodec.encodeRequest(first)))
         assertFalse(AskCodec.encodeRequest(req).contains("introduce"))
@@ -243,7 +243,7 @@ class AskCodecTest {
 
     @Test
     fun aSpokenAnswersWordsComeFirstAndItsActionsSourcesAndNoteAfterThem() {
-        // Talking to Ada like a conversation, slice 4.
+        // Talking to Obi like a conversation, slice 4.
         val spoken = "Oh nice. Shall I add it?\n<after>{\"actions\":[{\"kind\":\"add_task\",\"title\":\"Call Sam\"}],\"note\":\"Talked about Sam\",\"answer\":\"ignored\"}</after>"
         val normal = AskCodec.normaliseModelAnswer(spoken)
         val (words, actions) = AskCodec.parseModelAnswer(normal)
@@ -317,7 +317,7 @@ class AskCodecTest {
 
     @Test
     fun laterPiecesGoAheadOnlyToADeviceThatAskedForThem() {
-        // Talking to Ada like a conversation, slice 7.
+        // Talking to Obi like a conversation, slice 7.
         val next = AskCodec.StreamLine.Next("Heat pumps suit a well-insulated house.", "AQID", "Amy")
         assertEquals(next, AskCodec.decodeStreamLine(AskCodec.encodeStreamNext(next)))
         assertEquals(null, AskCodec.decodeStreamLine(AskCodec.encodeStreamNext(next.copy(audio = ""))))

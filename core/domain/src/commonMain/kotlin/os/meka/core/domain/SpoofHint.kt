@@ -29,7 +29,7 @@ data class SpoofLookalike(val line: OfficialLine, val exact: Boolean) {
     val hint: String
         get() = "${SpoofHintRules.COULD_BE}: this ${if (exact) "is" else "looks like"} ${line.whose}, and scammers fake it. " +
             "Hang up and call back on a number you know."
-    /** Ada's line in his earbuds. */
+    /** Obi's line in his earbuds. */
     val spoken: String
         get() = "Careful: this number looks like ${line.whose}, and it could be faked. Never give card details or move money."
 }

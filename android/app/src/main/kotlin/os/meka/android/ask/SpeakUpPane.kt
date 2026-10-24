@@ -49,7 +49,7 @@ import os.meka.core.domain.TalkSetupSection
 import os.meka.core.facade.MekaCore
 
 /**
- * Ask → Settings → Speaking up (the JARVIS step, slice 1): a section per moment Ada says out loud on her own, each with
+ * Ask → Settings → Speaking up (the JARVIS step, slice 1): a section per moment Obi says out loud on his own, each with
  * Turn on / Turn off; How often (up to 6 a day or 3); Mute for 2 hours / Speak again now. The words are the core's
  * [os.meka.core.domain.SpeakUpRules.view], synced, the same as the Mac's sheet.
  *

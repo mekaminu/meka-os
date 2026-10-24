@@ -1,14 +1,14 @@
 package os.meka.core.domain
 
 /*
- * The orb says hello like a person, slice 4 (Fix first, Meka 2026-10-20 18:13, point 5): fresh openers Ada writes
- * herself, in the background, so the hello keeps surprising him. Non-AI and pure: these rules decide when to ask, check
+ * The orb says hello like a person, slice 4 (Fix first, Meka 2026-10-20 18:13, point 5): fresh openers Obi writes
+ * himself, in the background, so the hello keeps surprising him. Non-AI and pure: these rules decide when to ask, check
  * every line that comes back against the same rules as the hand-written openers, and keep the set on the device.
  *
  * Once a week at most (and one try a day), the device asks the companion's small model for a few openers per part of
  * the day, with "{n}" where his name goes. Nothing about him is sent: no name, no day, no data, only "write openers".
  * Every line is checked here: his name exactly once, the question at the end, short, no digits or symbols, no other
- * names (no capitalised word but Ada's few allowed ones), nothing private (family, money, health, work details), the
+ * names (no capitalised word but Obi's few allowed ones), nothing private (family, money, health, work details), the
  * right part of the day, and not a copy of an opener already in the pools. Lines that pass join that part's plain pool
  * (never the first hello, a quick second tap, the welcome back or the moments, which keep their own), take their turn
  * in the same shuffle and are never said within the last [HelloOpeners.RECENT] like any other.
@@ -59,12 +59,12 @@ object HelloFreshRules {
     /** Capitalised words allowed anywhere (sentence starts are always fine). */
     private val ALLOWED_CAPS = setOf("I", "I'm", "I've", "I'll", "I'd")
 
-    /** Words that would make a hello personal or odd: other people, money, health, work details, Ada naming herself. */
+    /** Words that would make a hello personal or odd: other people, money, health, work details, Obi naming himself. */
     private val BLOCKED = setOf(
         "wife", "husband", "partner", "kids", "children", "child", "son", "daughter", "boys", "boy", "girls", "family",
         "school", "mum", "dad", "money", "bank", "pay", "paid", "salary", "debt", "bills", "trading", "trade", "health",
         "doctor", "hospital", "sick", "ill", "pain", "weight", "diet", "drink", "drinks", "beer", "wine", "boss",
-        "meeting", "meetings", "deadline", "ada", "navilife", "sir", "darling", "love", "babe", "dear", "sexy",
+        "meeting", "meetings", "deadline", "obi", "ada", "navilife", "sir", "darling", "love", "babe", "dear", "sexy",
         "weekend", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tomorrow",
         "yesterday", "rain", "raining", "sun", "sunny", "snow", "cold", "hot", "football", "match", "game",
     )

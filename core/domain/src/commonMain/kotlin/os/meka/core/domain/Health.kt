@@ -343,9 +343,9 @@ object HealthRules {
     }
 
     private fun voice(f: HealthFacts, cal: LocalCalendar): HealthRow = when (f.server?.speech) {
-        null -> HealthRow("voice", "Ada's voice", "Couldn't check", HealthState.UNKNOWN)
-        true -> HealthRow("voice", "Ada's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
-        false -> HealthRow("voice", "Ada's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
+        null -> HealthRow("voice", "Obi's voice", "Couldn't check", HealthState.UNKNOWN)
+        true -> HealthRow("voice", "Obi's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
+        false -> HealthRow("voice", "Obi's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
     }
 
     /**

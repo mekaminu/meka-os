@@ -13,7 +13,7 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 /**
- * Talking to Ada like a conversation, slice 2: how long the server took over its answers (`POST` [PATH], a keyed
+ * Talking to Obi like a conversation, slice 2: how long the server took over its answers (`POST` [PATH], a keyed
  * device or GitHub's release publisher). The request carries only the version; the answer lists the household's
  * newest timings (at most [TURNS_MAX]), each the ms since the question reached the server for each step, whether it
  * was an open turn and spoken, and the model's name. Times only: nothing of what was asked or answered.

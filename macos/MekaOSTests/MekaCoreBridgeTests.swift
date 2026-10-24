@@ -1641,7 +1641,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let move = FeelingMove(taskId: "t", title: "Gym", toDay: KotlinLong(value: 12), dayLabel: "Sat")
         XCTAssertEqual(FeelingRules.shared.lightenedLine(moves: [move]), "Tomorrow's lighter · “Gym” to Sat")
         XCTAssertEqual(FeelingOffer(feeling: .tired, line: "x", moves: [move], drop: nil, holdLabel: nil, holdLine: nil).lightenLabel, "Lighten tomorrow")
-        // Item (11) part 2: "I'm shattered" to Ada, and Stretched's hold.
+        // Item (11) part 2: "I'm shattered" to Obi, and Stretched's hold.
         XCTAssertEqual(FeelingAskRules.shared.request(q: "I'm shattered"), .tired)
         XCTAssertEqual(FeelingAskRules.shared.request(q: "I've got too much on"), .stretched)
         XCTAssertNil(FeelingAskRules.shared.request(q: "I'm tired of waiting"))
@@ -3326,7 +3326,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(accepted)
         let undidPlan = try await core.undoWeekPlan()
         XCTAssertFalse(undidPlan.boolValue)
-        // Item (6) part 2: "plan my week" said to Ada on the Mac opens Plan your week; the card's words reach Swift.
+        // Item (6) part 2: "plan my week" said to Obi on the Mac opens Plan your week; the card's words reach Swift.
         let planSaid = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my week",
                                              places: TalkOpenRules.shared.MAC)
         XCTAssertEqual((planSaid.effects.first as? TalkEffectSpeak)?.text, PlanWeekNudgeRules.shared.OPENING)

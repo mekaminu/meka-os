@@ -78,7 +78,7 @@ class BoardPlanWeekNudgeTest {
     @Test
     fun planMyWeekOpensTheFlowAndOnlyThat() {
         listOf(
-            "plan my week", "Hey Ada, let's plan next week", "can you help me plan out my week please", "plan the week ahead",
+            "plan my week", "Hey Obi, let's plan next week", "can you help me plan out my week please", "plan the week ahead",
             "weekly plan", "open plan your week", "sort out my week", "plan this week",
         ).forEach {
             assertEquals(TalkPlace.PLAN_WEEK, TalkOpenRules.request(it, TalkOpenRules.FOLD), it)

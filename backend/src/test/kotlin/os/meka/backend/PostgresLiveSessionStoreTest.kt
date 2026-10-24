@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Ada's Live mode's meter on real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset. */
+/** Obi's Live mode's meter on real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset. */
 class PostgresLiveSessionStoreTest {
     private val url = System.getenv("MEKA_TEST_DB_URL")
 

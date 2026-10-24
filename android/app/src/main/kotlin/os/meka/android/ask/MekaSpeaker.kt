@@ -90,7 +90,7 @@ class MekaSpeaker(
      * ([SpeechRules.firstWaitMs]) and, when one piece is late, lets the phone say only that piece before MEKA's voice
      * carries on ([SpeechRules.onMiss]). In a conversation where MEKA's voice has been heard ([SpeechRules.holds]) a
      * late piece never switches voice at once: it waits quietly up to [SpeechRules.HOLD_AUDIO_MS] more before the
-     * phone's voice takes over (no holding line: talking to Ada like a conversation, slice 1).
+     * phone's voice takes over (no holding line: talking to Obi like a conversation, slice 1).
      */
     fun say(text: String, reading: Boolean = false, onDone: () -> Unit = {}) {
         stop()
@@ -249,7 +249,7 @@ class MekaSpeaker(
     }
 
     /**
-     * Ada's Live mode, slice 2b: ▶ Sample on a Live voice — Google's studio voice of that name ([MekaCore.liveVoiceSample]).
+     * Obi's Live mode, slice 2b: ▶ Sample on a Live voice — Google's studio voice of that name ([MekaCore.liveVoiceSample]).
      * Never the phone's voice or Polly standing in: [onDone] gets false when the clip couldn't be had or played, so the
      * row can say so. Stops anything already being said.
      */

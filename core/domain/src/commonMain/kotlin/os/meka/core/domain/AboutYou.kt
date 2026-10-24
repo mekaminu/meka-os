@@ -182,7 +182,7 @@ data class AboutYou(
  * is the fuller how-to TalkBack and the Mac's label read ("Train route, for example …").
  */
 enum class AboutField(val key: String, val label: String, val hint: String, val emptyLine: String, val spokenHint: String = "$label, $hint") {
-    SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Ada calls you", "Ada says “you” until you add it"),
+    SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Obi calls you", "Obi says “you” until you add it"),
     PARTNER_NAME(AboutYouFields.PARTNER_NAME, "Partner", "Their first name", "Add your partner to get their requests flagged"),
     PARTNER_PHONE(AboutYouFields.PARTNER_PHONE, "Partner's number", "Their mobile number", "Add their number so their calls always ring"),
     PARTNER_EMAIL(AboutYouFields.PARTNER_EMAIL, "Partner's email", "Their email address", "Add it so Inbox autopilot never tidies their emails away"),

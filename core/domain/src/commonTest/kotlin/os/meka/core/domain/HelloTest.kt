@@ -152,33 +152,41 @@ class HelloTest {
     }
 
     @Test
-    fun heyAdaWakesHerAndNearWordsDont() {
-        // The companion is called Ada (Meka 2026-10-20 21:04); "Hello Navilife" keeps working.
-        assertTrue(HelloWakeRules.heard("Hey Ada"))
-        assertTrue(HelloWakeRules.heard("hello Ada, what's on tomorrow"))
-        assertTrue(HelloWakeRules.heard("hi ada"))
-        assertTrue(HelloWakeRules.heard("OK, Aida!"))
+    fun heyObiWakesHimAndNearWordsDont() {
+        // The assistant is called Obi (Meka 2026-10-22/23; he was Ada); "Hello Navilife" keeps working.
+        assertTrue(HelloWakeRules.heard("Hey Obi"))
+        assertTrue(HelloWakeRules.heard("hello Obi, what's on tomorrow"))
+        assertTrue(HelloWakeRules.heard("hi obie"))
+        assertTrue(HelloWakeRules.heard("OK, Oby!"))
+        assertTrue(HelloWakeRules.heard("Okay Obi"))
+        assertTrue(HelloWakeRules.heard("hey OB")) // the recogniser's letters
+        assertTrue(HelloWakeRules.heard("hey oh be")) // and its two words
+        assertTrue(HelloWakeRules.heard("Hello, O.B."))
         assertTrue(HelloWakeRules.heard("Hello Navilife"))
-        assertEquals(false, HelloWakeRules.heard("hey other"))
-        assertEquals(false, HelloWakeRules.heard("hello data"))
+        // The near words: none of them is his name.
+        assertEquals(false, HelloWakeRules.heard("hey Toby"))
+        assertEquals(false, HelloWakeRules.heard("hey hobby"))
+        assertEquals(false, HelloWakeRules.heard("okay"))
+        assertEquals(false, HelloWakeRules.heard("okay okay"))
+        assertEquals(false, HelloWakeRules.heard("oh be careful")) // no greeting before it
         assertEquals(false, HelloWakeRules.heard("hey there"))
-        assertEquals(false, HelloWakeRules.heard("hey aider"))
-        assertEquals(false, HelloWakeRules.heard("I was talking to Ada at work")) // no greeting before it
-        assertEquals(false, HelloWakeRules.heard("Ada")) // the short name alone isn't enough
-        assertEquals("Say “Hey Ada”", HelloWakeRules.LABEL)
-        assertEquals("Listening for “Hey Ada”", HelloWakeRules.LISTENING_LINE)
-        assertEquals("Ada", HelloEntrance.LABEL)
+        assertEquals(false, HelloWakeRules.heard("hey Ada")) // the old name no longer wakes him
+        assertEquals(false, HelloWakeRules.heard("I was talking to Obi at work")) // no greeting before it
+        assertEquals(false, HelloWakeRules.heard("Obi")) // the short name alone isn't enough
+        assertEquals("Say “Hey Obi”", HelloWakeRules.LABEL)
+        assertEquals("Listening for “Hey Obi”", HelloWakeRules.LISTENING_LINE)
+        assertEquals("Obi", HelloEntrance.LABEL)
     }
 
     @Test
     fun adaIntroducesHerselfOnlyAtTheStartOfTheDaysFirstConversation() {
-        assertTrue(AdaRules.introduces(lastDay = null, today = 100, earlierTurns = 0))
-        assertTrue(AdaRules.introduces(lastDay = 99, today = 100, earlierTurns = 0))
-        assertEquals(false, AdaRules.introduces(lastDay = 100, today = 100, earlierTurns = 0))
-        assertEquals(false, AdaRules.introduces(lastDay = 99, today = 100, earlierTurns = 2))
-        assertEquals(100L, AdaRules.dayOf(" 100 "))
-        assertEquals(null, AdaRules.dayOf("x"))
-        assertEquals(null, AdaRules.dayOf(null))
+        assertTrue(ObiRules.introduces(lastDay = null, today = 100, earlierTurns = 0))
+        assertTrue(ObiRules.introduces(lastDay = 99, today = 100, earlierTurns = 0))
+        assertEquals(false, ObiRules.introduces(lastDay = 100, today = 100, earlierTurns = 0))
+        assertEquals(false, ObiRules.introduces(lastDay = 99, today = 100, earlierTurns = 2))
+        assertEquals(100L, ObiRules.dayOf(" 100 "))
+        assertEquals(null, ObiRules.dayOf("x"))
+        assertEquals(null, ObiRules.dayOf(null))
     }
 
     @Test
@@ -240,10 +248,10 @@ class HelloTest {
         // A tap says hello at rest; during a conversation it goes back to it.
         assertEquals(DockTap.HELLO, HelloDock.tap(TalkPhase.ENDED))
         assertEquals(DockTap.CONVERSATION, HelloDock.tap(TalkPhase.THINKING))
-        assertEquals("Say hello to Ada", HelloDock.label(TalkPhase.ENDED, 0))
-        assertEquals("Say hello to Ada · 1 thing needs you", HelloDock.label(TalkPhase.ENDED, 1))
-        assertEquals("Say hello to Ada · 3 things need you", HelloDock.label(TalkPhase.ENDED, 3))
-        assertEquals("Ada is listening · back to the conversation", HelloDock.label(TalkPhase.LISTENING, 3))
+        assertEquals("Say hello to Obi", HelloDock.label(TalkPhase.ENDED, 0))
+        assertEquals("Say hello to Obi · 1 thing needs you", HelloDock.label(TalkPhase.ENDED, 1))
+        assertEquals("Say hello to Obi · 3 things need you", HelloDock.label(TalkPhase.ENDED, 3))
+        assertEquals("Obi is listening · back to the conversation", HelloDock.label(TalkPhase.LISTENING, 3))
     }
 
     @Test
@@ -440,12 +448,12 @@ class HelloTest {
 
     @Test
     fun adasSettingsAreNamedForHer() {
-        // The companion is called Ada, slice 2: Settings names her; Activity and the app stay Navilife.
-        assertEquals("Ada's voice", VoicePickerRules.TITLE)
-        assertEquals("What Ada remembers", CompanionMemoryRules.TITLE)
-        assertEquals("Ada calls you", CompanionRules.CALL_TITLE)
-        assertTrue(CompanionRules.callLine(true).startsWith("Ada calls you sir"))
-        assertTrue(CompanionRules.callLine(false).startsWith("Ada calls you by your name"))
-        assertEquals("Ada is Navilife's assistant", AdaRules.WHO)
+        // The companion is called Obi, slice 2: Settings names him; Activity and the app stay Navilife.
+        assertEquals("Obi's voice", VoicePickerRules.TITLE)
+        assertEquals("What Obi remembers", CompanionMemoryRules.TITLE)
+        assertEquals("Obi calls you", CompanionRules.CALL_TITLE)
+        assertTrue(CompanionRules.callLine(true).startsWith("Obi calls you sir"))
+        assertTrue(CompanionRules.callLine(false).startsWith("Obi calls you by your name"))
+        assertEquals("Obi is Navilife's assistant", ObiRules.WHO)
     }
 }

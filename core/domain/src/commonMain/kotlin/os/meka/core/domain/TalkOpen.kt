@@ -184,7 +184,7 @@ object TalkOpenRules {
 
     /** Words around the request that change nothing ("ok MEKA, can you plan my day for me please"). */
     private val DROP = setOf(
-        "please", "meka", "navilife", "ada", "hey", "ok", "okay", "yes", "yeah", "yep", "sure", "go", "ahead", "and", "then", "so", "now", "just",
+        "please", "meka", "navilife", "obi", "hey", "ok", "okay", "yes", "yeah", "yep", "sure", "go", "ahead", "and", "then", "so", "now", "just",
         "um", "umm", "uh", "er", "erm", "can", "could", "would", "will", "you", "me", "for", "let's", "lets", "let", "us",
         "i", "want", "to", "like", "help", "need", "out",
     )

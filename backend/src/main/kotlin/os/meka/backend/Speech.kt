@@ -110,7 +110,7 @@ class PollySpeech : SpeechEngine {
         }.take(SpeechCodec.MAX_MARKS * 2).toList()
 
         /**
-         * Talking to Ada like a conversation, slice 7 (speech that sounds alive): [text] said as SSML
+         * Talking to Obi like a conversation, slice 7 (speech that sounds alive): [text] said as SSML
          * ([os.meka.core.domain.SpokenSsmlRules]: a small pause after an opening reaction, a touch quicker) through
          * [call] (words, "ssml" or "text"). If the engine refuses the SSML the same words are said plainly at once, and
          * that engine is kept in [plainOnly] so it isn't asked with SSML again; a plain failure is thrown as before.

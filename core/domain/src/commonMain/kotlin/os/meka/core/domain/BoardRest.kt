@@ -1,7 +1,7 @@
 package os.meka.core.domain
 
 /**
- * "How are you feeling?", part 2 (Week board, item (11); Meka 2026-10-20 19:56): saying it to Ada. "I'm shattered",
+ * "How are you feeling?", part 2 (Week board, item (11); Meka 2026-10-20 19:56): saying it to Obi. "I'm shattered",
  * "I'm knackered", "I'm exhausted" are [Feeling.TIRED]; "I'm stretched", "I'm swamped", "I've got too much on" are
  * [Feeling.STRETCHED]. Only the whole remark counts ("I'm tired of waiting" is not one): it is kept as today's feeling on
  * this device (the same as tapping it on Shut down the day) and answered with the offer, with Open Shut down the day
@@ -17,8 +17,8 @@ object FeelingAskRules {
         .replace(Regex("\\s+"), " ")
         .trim()
 
-    private val LEAD = Regex("^(hey ada |hello ada |ada |hey navilife |navilife |honestly |to be honest |ugh |god |oh |man |well )+")
-    private val TAIL = Regex("( today| tonight| right now| now| at the moment| this week| lately| ada| mate)+$")
+    private val LEAD = Regex("^(hey obi |hello obi |obi |hey navilife |navilife |honestly |to be honest |ugh |god |oh |man |well )+")
+    private val TAIL = Regex("( today| tonight| right now| now| at the moment| this week| lately| obi| mate)+$")
 
     private const val I_AM = "(i'm|i am|im|feeling|i feel|i'm feeling|i am feeling|i'm so|i feel so)"
     private const val SO = "( so| really| absolutely| completely| totally| utterly| proper| well| a bit| pretty| very)*"
@@ -48,7 +48,7 @@ object FeelingAskRules {
     }
 
     /**
-     * What Ada says back: a kind word, the offer's own line, and where the taps are. "Sorry to hear it. Let's go easy
+     * What Obi says back: a kind word, the offer's own line, and where the taps are. "Sorry to hear it. Let's go easy
      * tomorrow: move “Gym” to Fri? Lighten tomorrow is in Shut down the day."
      */
     fun answer(offer: FeelingOffer): String {

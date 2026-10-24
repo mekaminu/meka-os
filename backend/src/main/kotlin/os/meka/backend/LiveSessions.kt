@@ -16,7 +16,7 @@ import java.time.ZoneOffset
 import javax.sql.DataSource
 
 /**
- * Ada's Live mode, slice 1 (Meka 2026-10-21 20:56): Navilife's server side of a Gemini Live session.
+ * Obi's Live mode, slice 1 (Meka 2026-10-21 20:56): Navilife's server side of a Gemini Live session.
  *
  * The Gemini key (Secrets Manager `meka-os-dev/ai/gemini`, `{"api_key"}`) stays here: for each session the server
  * asks Google for an ephemeral token (`POST v1beta/auth_tokens`, one use, [LiveModeRules.START_MS] to open,
@@ -31,7 +31,7 @@ interface LiveTokens {
 
     /**
      * Google's token for one session, or null when Google refused or couldn't be reached. Never the key. Slice 4:
-     * [instruction] (Ada and his compact day, [LivePrompt]) and the search tool are locked into it. Slice 5: with
+     * [instruction] (Obi and his compact day, [LivePrompt]) and the search tool are locked into it. Slice 5: with
      * [tools] (the device answers them), Navilife's own look-up and proposing tools too. Slice 2c: with [resume]
      * (Google's handle for a conversation already running), the token carries that conversation on. Slice 5b: with
      * [mailMoney] (and [tools]), the mail and money look-ups too.
@@ -74,7 +74,7 @@ class LiveSessions(
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
     private val onLevel: (LiveModeRules.Level, String) -> Unit = { _, _ -> },
-    /** Slice 4: the web search Ada's search tool uses (Ask's live answers' [LiveFacts.lookQuery]); null: none. */
+    /** Slice 4: the web search Obi's search tool uses (Ask's live answers' [LiveFacts.lookQuery]); null: none. */
     private val webSearch: ((String) -> LiveFacts.Found?)? = null,
 ) {
     private val told = mutableSetOf<Pair<String, LiveModeRules.Level>>()
@@ -119,7 +119,7 @@ class LiveSessions(
     }
 
     /**
-     * Slice 4: one search Ada asked for in a session this household opened and whose token's window hasn't closed;
+     * Slice 4: one search Obi asked for in a session this household opened and whose token's window hasn't closed;
      * refused when the query touches his own life ([os.meka.core.domain.LiveFactsRules.searchable], checked on the
      * device too), failed when there's no search, the day's searches are used, it was slow or the session is unknown.
      * Nothing is kept or logged.
@@ -177,8 +177,8 @@ class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExc
         const val TOKENS_URL = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
 
         /**
-         * Slice 4: with an [instruction], the session's system instruction (Ada and his day) and the search tool are part
-         * of the locked config, and both sides of the conversation are transcribed (his words and hers, for Ask's
+         * Slice 4: with an [instruction], the session's system instruction (Obi and his day) and the search tool are part
+         * of the locked config, and both sides of the conversation are transcribed (his words and Obi's, for Ask's
          * answer and its sources); Navilife keeps none of it.
          */
         fun request(model: String, voice: String, nowMs: Long, instruction: String = "", tools: Boolean = false, resume: String? = null, mailMoney: Boolean = false): String = buildJsonObject {
@@ -207,7 +207,7 @@ class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExc
         }.toString()
 
         /**
-         * Slice 4: the one tool a Live session has: Ada asks Navilife to search the web (the device checks the query and
+         * Slice 4: the one tool a Live session has: Obi asks Navilife to search the web (the device checks the query and
          * Navilife's server searches it, as Ask's live answers are found), never Google's own search, so the
          * never-his-life filter applies to every query.
          */

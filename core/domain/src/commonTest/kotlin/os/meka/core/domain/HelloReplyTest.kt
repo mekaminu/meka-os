@@ -6,7 +6,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The orb says hello like a person, slice 3: Ada answers "good thanks, you?" like a person, then hands back. */
+/** The orb says hello like a person, slice 3: Obi answers "good thanks, you?" like a person, then hands back. */
 class HelloReplyTest {
     private val asked = "Evening, Alex. Good day? What can I do for you?"
     private val plain = "Morning, Alex. What's first?"

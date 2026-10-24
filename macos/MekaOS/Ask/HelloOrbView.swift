@@ -251,7 +251,7 @@ struct SayHelloButton: View {
         .buttonStyle(MekaPressStyle())
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.listening)
         .help(line)
-        .accessibilityLabel(wake.listening ? "Ada · \(line) · \(HelloWakeRules.shared.LISTENING_LINE)" : "Ada · \(line)")
+        .accessibilityLabel(wake.listening ? "Obi · \(line) · \(HelloWakeRules.shared.LISTENING_LINE)" : "Obi · \(line)")
         .accessibilityIdentifier("say-hello")
     }
 }

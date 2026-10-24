@@ -210,7 +210,7 @@ fun HelloOrbView(
 @Composable
 fun BedsideHelloOrb(
     needsYou: Int, onHello: () -> Unit, modifier: Modifier = Modifier, dim: Boolean = false, onPlaced: (Offset) -> Unit = {},
-    /** Speaking up, slice 3: Ada is saying a moment on her own; the orb shows Speaking (lit even in quiet dimming). */
+    /** Speaking up, slice 3: Obi is saying a moment on his own; the orb shows Speaking (lit even in quiet dimming). */
     speaking: Boolean = false,
 ) {
     val haptics = rememberMekaHaptics()

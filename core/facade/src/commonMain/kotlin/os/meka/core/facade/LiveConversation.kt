@@ -27,16 +27,16 @@ import os.meka.core.wire.LiveCodec
 import os.meka.core.wire.LiveProtocol
 
 /**
- * Ada's Live mode, slice 3 (the Mac): one real-time Gemini Live conversation, run here in the core so the Mac's Swift
+ * Obi's Live mode, slice 3 (the Mac): one real-time Gemini Live conversation, run here in the core so the Mac's Swift
  * only moves sound. The Fold's own `LiveTalk` does the same on Android; the rules are the same ones
  * ([LiveTalkRules], [LiveToolRules], [LiveHandOnRules]).
  *
  * The device gives the microphone in 40 ms chunks ([sendAudio], base64 16 kHz PCM with its loudness) and plays what
  * [events] hands back ([LiveEvent.Audio], base64 24 kHz PCM; [LiveEvent.Interrupted]: drop what is queued at once).
- * Here: the session token from Navilife's server (never the Gemini key), Google's WebSocket, the setup, Ada's tools
+ * Here: the session token from Navilife's server (never the Gemini key), Google's WebSocket, the setup, Obi's tools
  * (the web search, his days, Ask's cards through the policy gate, his mail, his money while unlocked), the turn's
  * words and sources for Ask, the seconds reported, a fresh window carrying the conversation on while he is still
- * talking, and normal Ada taking over when the session isn't set up within [LiveTalkRules.FALLBACK_MS].
+ * talking, and normal Obi taking over when the session isn't set up within [LiveTalkRules.FALLBACK_MS].
  *
  * Every call is made on [scope]'s thread (the Mac's main thread); [events] has one collector.
  */
@@ -161,8 +161,8 @@ class LiveConversation internal constructor(
     }
 
     /**
-     * One microphone chunk: [base64] 16 kHz PCM of [bytes] bytes, at [dbfs]. While Ada speaks on the speaker, only his
-     * voice clearly over hers goes up ([LiveTalkRules.sendWhileSpeaking]); the rest goes as silence of the same length.
+     * One microphone chunk: [base64] 16 kHz PCM of [bytes] bytes, at [dbfs]. While Obi speaks on the speaker, only his
+     * voice clearly over Obi's goes up ([LiveTalkRules.sendWhileSpeaking]); the rest goes as silence of the same length.
      */
     fun sendAudio(base64: String, bytes: Int, dbfs: Float, headphones: Boolean) {
         if (!running || !setUp) return
@@ -185,7 +185,7 @@ class LiveConversation internal constructor(
         discardPrepared()
     }
 
-    /** Ada's voice is still playing at [now] (nothing yet arrived reads as quiet). */
+    /** Obi's voice is still playing at [now] (nothing yet arrived reads as quiet). */
     private fun herVoice(now: Long): Boolean = playUntil > 0 && LiveTalkRules.speaking(playUntil, now)
 
     private fun ready(s: LiveCodec.Session?): Boolean =
@@ -275,7 +275,7 @@ class LiveConversation internal constructor(
         }
     }
 
-    /** Ada asked Navilife for something: answered here exactly as the Fold answers it. */
+    /** Obi asked Navilife for something: answered here exactly as the Fold answers it. */
     private suspend fun answerTool(gen: Int, call: LiveProtocol.Event.ToolCall) {
         val id = session?.sessionId
         val reply = when (call.name) {
@@ -311,7 +311,7 @@ class LiveConversation internal constructor(
         if (gen == generation) outgoing?.trySend(reply)
     }
 
-    /** The turn as Ask shows it (her words, sources, cards, Unlock), then a clean slate for the next. */
+    /** The turn as Ask shows it (his words, sources, cards, Unlock), then a clean slate for the next. */
     private fun finishTurn() {
         val sources = LiveFactsRules.sources(pagesNow)
         LiveToolRules.turnAnswer(saidNow.toString(), sources, cardsNow.toList(), unlockNow)?.let {
@@ -348,7 +348,7 @@ class LiveConversation internal constructor(
         outgoing = null
         playUntil = 0
         speakingNow = false
-        finishTurn() // a turn cut short still shows what Ada said
+        finishTurn() // a turn cut short still shows what Obi said
         reportUsage()
         session = null
         connectJob = null
@@ -387,17 +387,17 @@ class LiveConversation internal constructor(
 sealed interface LiveEvent {
     /** Google set the session up: he can talk. */
     data object Ready : LiveEvent
-    /** Ada started or stopped speaking. */
+    /** Obi started or stopped speaking. */
     data class Speaking(val speaking: Boolean) : LiveEvent
-    /** Ada's voice to play next: base64 PCM, 24 kHz, 16-bit, mono. */
+    /** Obi's voice to play next: base64 PCM, 24 kHz, 16-bit, mono. */
     data class Audio(val base64: String) : LiveEvent
-    /** He talked over her: drop whatever is still queued to play, at once. */
+    /** Meka talked over him: drop whatever is still queued to play, at once. */
     data object Interrupted : LiveEvent
-    /** This turn's words so far, his and Ada's. */
+    /** This turn's words so far, his and Obi's. */
     data class Words(val heard: String, val said: String) : LiveEvent
-    /** A turn finished: his words and Ada's answer (sources, cards, Unlock) for Ask. */
+    /** A turn finished: his words and Obi's answer (sources, cards, Unlock) for Ask. */
     data class Turn(val question: String, val answer: AskOutcome) : LiveEvent
-    /** The conversation ended; [fellBack] when Live never opened and normal Ada should answer instead. */
+    /** The conversation ended; [fellBack] when Live never opened and normal Obi should answer instead. */
     data class Ended(val fellBack: Boolean) : LiveEvent
 }
 

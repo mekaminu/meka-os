@@ -28,18 +28,18 @@ import os.meka.core.domain.TalkPhase
 /**
  * Speaking up on the Fold (the JARVIS step, slice 1): after the governor posts, the core picks at most one notice that
  * is one of his Speaking up moments ([SpeakUpRules]) and this says it — a soft chime, the docked orb lit as speaking,
- * then the line in Ada's voice ([MekaSpeaker]) — only through headphones, earbuds or the car, or on the bedside clock
+ * then the line in Obi's voice ([MekaSpeaker]) — only through headphones, earbuds or the car, or on the bedside clock
  * in the evening; never out of the phone's speaker, on a call, or while a Talk conversation is running.
  *
  * Slice 5: Android Auto (wired or wireless) counts as the car ([inCar]: the phone is in car mode, which Android Auto
- * sets while it drives the car's screen), and while she speaks up the music or podcast playing is turned down under
- * her (transient audio focus, "may duck") and comes back as she finishes, is stopped, or after [FOCUS_MAX_MS] at most.
+ * sets while it drives the car's screen), and while he speaks up the music or podcast playing is turned down under
+ * him (transient audio focus, "may duck") and comes back as he finishes, is stopped, or after [FOCUS_MAX_MS] at most.
  */
 class SpeakUpVoice(private val context: Context, private val app: MekaApplication) {
     private val main = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val speaker by lazy { MekaSpeaker(context, app.core, main) }
     private val _speaking = MutableStateFlow(false)
-    /** Ada is speaking up now: the docked orb shows Speaking. */
+    /** Obi is speaking up now: the docked orb shows Speaking. */
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
 
     /** The bedside clock is on screen (set by the shell). */
@@ -68,7 +68,7 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
     }
 
     /**
-     * Scam call fix, slice 2: an unknown caller is ringing through. Ada says [line] once, only into headphones or
+     * Scam call fix, slice 2: an unknown caller is ringing through. Obi says [line] once, only into headphones or
      * earbuds ([os.meka.core.domain.InCallWarningRules.speak]), never out of the speaker and never over a Talk
      * conversation; no chime (the ringtone is already playing).
      */
@@ -95,7 +95,7 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
     /** Bumped by every line, so an old line's safety timer never hands back a newer line's focus. */
     private var focusLine = 0
 
-    /** Turns other audio down under Ada while she speaks up (never pauses it: the music carries on, quieter). */
+    /** Turns other audio down under Obi while he speaks up (never pauses it: the music carries on, quieter). */
     private fun duckOthers(): Int {
         val id = ++focusLine
         runCatching {
@@ -140,7 +140,7 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
         }
     }
 
-    /** "shh" while she speaks up: stop now (Talk mutes for 2 hours through the core). */
+    /** "shh" while he speaks up: stop now (Talk mutes for 2 hours through the core). */
     fun stop() {
         main.launch { speaker.stop(); _speaking.value = false; giveBackFocus() }
     }
@@ -160,7 +160,7 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
 
     companion object {
         private const val CHIME_MS = 450L
-        /** The longest she keeps the music down for one speaking up (a line is one or two sentences). */
+        /** The longest he keeps the music down for one speaking up (a line is one or two sentences). */
         const val FOCUS_MAX_MS = 30_000L
 
         /** Android Auto is driving the car's screen: the phone is in car mode. */

@@ -7,7 +7,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 1: the session, its meter and the usage report on the wire. */
+/** Obi's Live mode, slice 1: the session, its meter and the usage report on the wire. */
 class LiveCodecTest {
     private val meter = LiveCodec.Meter(configured = true, level = "heads_up", spentPence = 1_210, capPence = 1_500)
 

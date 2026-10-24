@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Talking to Ada like a conversation, slice 2: the server's own timings and the lines Speed and the report show. */
+/** Talking to Obi like a conversation, slice 2: the server's own timings and the lines Speed and the report show. */
 class ServerSpeedTest {
     private val now = 1_791_476_100_000L
 

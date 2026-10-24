@@ -165,7 +165,7 @@ interface AiApi {
         speakVoice: String?,
         onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
         /**
-         * Talking to Ada like a conversation, slice 7: each later piece the server said ahead (its words, its clip as
+         * Talking to Obi like a conversation, slice 7: each later piece the server said ahead (its words, its clip as
          * base64 MP3, the voice), before the answer returns. Asking for them is what tells the server this device reads them.
          */
         onNext: (suspend (text: String, audio: String, voice: String?) -> Unit)? = null,
@@ -458,7 +458,7 @@ interface TalkWarmApi {
 }
 
 /**
- * Talking to Ada like a conversation, slice 2: how long the server took over the last day's answers (`POST
+ * Talking to Obi like a conversation, slice 2: how long the server took over the last day's answers (`POST
  * /v1/talk/speed`), times only. Null from an older server without the route. Network failures throw.
  */
 interface ServerSpeedApi {
@@ -466,7 +466,7 @@ interface ServerSpeedApi {
 }
 
 /**
- * Ada's Live mode, slice 1: the month's Live meter, a one-session Gemini Live token (Google's, never the key) and the
+ * Obi's Live mode, slice 1: the month's Live meter, a one-session Gemini Live token (Google's, never the key) and the
  * seconds a session heard and spoke. Null from an older server without the routes. Network failures throw.
  */
 interface LiveApi {
@@ -477,7 +477,7 @@ interface LiveApi {
      */
     suspend fun liveSession(voice: String?, day: os.meka.core.wire.LiveCodec.Day? = null, resume: String? = null): os.meka.core.wire.LiveCodec.Session?
     suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): os.meka.core.wire.LiveCodec.Usage?
-    /** Slice 4: a web search Ada asked for in a Live session. Null from a server without the route. */
+    /** Slice 4: a web search Obi asked for in a Live session. Null from a server without the route. */
     suspend fun liveSearch(request: os.meka.core.wire.LiveCodec.SearchRequest): os.meka.core.wire.LiveCodec.SearchResult? = null
 }
 

@@ -131,7 +131,7 @@ class StreamedTalkFacadeTest {
 
     @Test
     fun theRestsPiecesSaidAheadPlayFromMemoryToo() = runTest {
-        // Talking to Ada like a conversation, slice 7: the rest said sentence by sentence as it is written.
+        // Talking to Obi like a conversation, slice 7: the rest said sentence by sentence as it is written.
         val c = core()
         c.talkStreamed("why is the sky blue", emptyList()) {}
         assertTrue(server.askedNext)

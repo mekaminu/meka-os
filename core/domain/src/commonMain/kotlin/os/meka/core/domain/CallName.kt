@@ -57,7 +57,7 @@ object CallNameRules {
         "no", "nope", "nah", "nothing", "none", "skip", "pass", "later", "dunno", "whatever", "hello", "hi", "hey", "yes",
         "yeah", "yep", "ok", "okay", "thanks", "thank", "sorry", "what", "why", "who", "back", "a", "an", "the", "me",
         "when", "at", "on", "in", "tomorrow", "tonight", "today", "now", "please", "not", "fine", "good", "great",
-        "tired", "busy", "here", "home", "sir", "it", "that", "this", "navilife", "ada", "you", "him", "her", "them",
+        "tired", "busy", "here", "home", "sir", "it", "that", "this", "navilife", "obi", "ada", "you", "him", "her", "them",
         "us", "my", "your", "is", "am", "are", "and", "or", "to", "of", "for", "with", "up", "what's", "who's",
         "that's", "there's", "where's", "how", "how's", "doing", "well", "alright", "cool", "sure", "busy", "off",
     )

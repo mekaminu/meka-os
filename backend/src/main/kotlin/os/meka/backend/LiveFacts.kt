@@ -32,7 +32,7 @@ class LiveFacts(
     fun look(question: String): Found? = run(LiveFactsRules.query(question) ?: return null)
 
     /**
-     * Ada's Live mode, slice 4: a search the Live model asked for, checked by [LiveFactsRules.searchable] (never his
+     * Obi's Live mode, slice 4: a search the Live model asked for, checked by [LiveFactsRules.searchable] (never his
      * own life) rather than Ask's "is it current" test; the same key, the same daily cap and the same wait.
      */
     fun lookQuery(query: String): Found? = run(LiveFactsRules.searchable(query) ?: return null)

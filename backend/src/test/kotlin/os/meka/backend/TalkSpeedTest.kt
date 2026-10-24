@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Talking to Ada like a conversation, slice 2: the server keeps its answer timings and the deploy job prints them. */
+/** Talking to Obi like a conversation, slice 2: the server keeps its answer timings and the deploy job prints them. */
 class TalkSpeedTest {
     private val now = 1_791_476_100_000L
 

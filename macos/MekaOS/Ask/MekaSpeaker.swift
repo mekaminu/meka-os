@@ -45,7 +45,7 @@ final class MekaSpeaker {
     /// longer for its first piece and, when one piece is late, lets the Mac say only that piece before MEKA's voice
     /// carries on (`SpeechRules.onMiss`). In a conversation where MEKA's voice has been heard (`SpeechRules.holds`) a
     /// late piece never switches voice at once: it waits quietly up to `SpeechRules.HOLD_AUDIO_MS` more before the
-    /// Mac's voice takes over (no holding line: talking to Ada like a conversation, slice 1).
+    /// Mac's voice takes over (no holding line: talking to Obi like a conversation, slice 1).
     func say(_ text: String, reading: Bool = false, done: (@MainActor @Sendable () -> Void)? = nil) {
         stop()
         line += 1
@@ -241,7 +241,7 @@ final class MekaSpeaker {
         }
     }
 
-    /// Ada's Live mode, slice 3: ▶ Sample on a Live voice row — the start of today's brief in Google's studio voice of
+    /// Obi's Live mode, slice 3: ▶ Sample on a Live voice row — the start of today's brief in Google's studio voice of
     /// that name (`CoreModel.liveSample`), never another voice standing in: when it can't be had or played nothing is
     /// said and `done(false)` lets the sheet say so. Stops anything already being said. Only Strings and Data cross.
     func sampleLive(_ name: String, done: @escaping @MainActor (Bool) -> Void) {

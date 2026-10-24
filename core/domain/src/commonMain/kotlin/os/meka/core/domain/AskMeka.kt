@@ -45,8 +45,8 @@ data class AskContext(
      */
     val callName: String? = null,
     /**
-     * The companion is called Ada, slice 1: the first conversation of the day on this device ([AdaRules.introduces]),
-     * when she may say "Ada here" once; sent as the request's `introduce`.
+     * The companion is called Obi, slice 1: the first conversation of the day on this device ([ObiRules.introduces]),
+     * when he may say "Obi here" once; sent as the request's `introduce`.
      */
     val introduce: Boolean = false,
 ) {

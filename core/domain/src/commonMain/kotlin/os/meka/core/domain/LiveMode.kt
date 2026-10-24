@@ -1,7 +1,7 @@
 package os.meka.core.domain
 
 /**
- * Ada's Live mode, slice 1 (Meka 2026-10-21 20:56, new paid service and data sharing approved; non-AI, pure): the
+ * Obi's Live mode, slice 1 (Meka 2026-10-21 20:56, new paid service and data sharing approved; non-AI, pure): the
  * money side of real-time speech-to-speech on Google's Gemini Live.
  *
  * A device never holds the Gemini key: Navilife's server mints a short-lived, single-session token for each Live
@@ -11,7 +11,7 @@ package os.meka.core.domain
  * whole window ([reserveMicroUsd]); when the device reports how long it really heard and spoke, the count drops to
  * that ([reportedMicroUsd], never more than the window allows), so a device that crashes or goes offline mid-session
  * can never let the month run past the cap unseen. From [HEADS_UP_PERCENT] a heads-up; at the cap Live switches
- * itself off until the 1st and normal Ada carries on.
+ * itself off until the 1st and normal Obi carries on.
  */
 object LiveModeRules {
     /** Google's paid-tier audio prices for the Live models (ai.google.dev pricing, 2026-10-22), per minute. */
@@ -100,7 +100,7 @@ object LiveModeRules {
     }
 
     /** What goes to Google while Live is on, as the settings say it. */
-    const val SHARING = "Your voice and today's Navilife context (Needs you, tasks, calendar, weather, commute, shopping) go to Google while Live is on, with any other day, email or money answer you ask her about (money only while it is unlocked), and Ada may search the web for things about the world, never your life"
+    const val SHARING = "Your voice and today's Navilife context (Needs you, tasks, calendar, weather, commute, shopping) go to Google while Live is on, with any other day, email or money answer you ask him about (money only while it is unlocked), and Obi may search the web for things about the world, never your life"
 
     /** "£3.40", or "£15" for whole pounds. */
     fun money(pence: Long): String {

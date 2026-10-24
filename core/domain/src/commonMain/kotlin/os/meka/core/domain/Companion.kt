@@ -72,13 +72,13 @@ object CompanionRules {
     fun callMe(raw: String?): String? = raw?.trim()?.lowercase()?.takeIf { it == CALL_SIR }
 
     /** Settings → Voice's row: its heading, the two choices and the line under them. */
-    const val CALL_TITLE = "Ada calls you"
+    const val CALL_TITLE = "Obi calls you"
     const val CALL_BY_NAME = "By name"
     const val CALL_SIR_LABEL = "Sir"
 
     fun callLine(sir: Boolean): String =
-        if (sir) "Ada calls you sir now and then, in Ask, Talk and Hello, on every device."
-        else "Ada calls you by your name now and then, in Ask, Talk and Hello, on every device."
+        if (sir) "Obi calls you sir now and then, in Ask, Talk and Hello, on every device."
+        else "Obi calls you by your name now and then, in Ask, Talk and Hello, on every device."
 
     /** Lower case, apostrophes kept, other punctuation and extra spaces dropped. */
     private fun norm(s: String): String =
@@ -137,7 +137,7 @@ object LiveFactsRules {
     }
 
     /**
-     * Ada's Live mode, slice 4: a search the Live model asked for, as sent to the web, or null when it mustn't go: it
+     * Obi's Live mode, slice 4: a search the Live model asked for, as sent to the web, or null when it mustn't go: it
      * is about his own life (the same words [query] refuses), carries a number of five or more digits, an email
      * address or a postcode, or [personalNames] (his family's and his own names, from About you) — the same filter as
      * Ask's, without the "is it about something current" test, since the model already chose to search.

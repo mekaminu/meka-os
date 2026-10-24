@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Talking to Ada like a conversation, slice 1: no holding line, only the orb and one late soft tone. */
+/** Talking to Obi like a conversation, slice 1: no holding line, only the orb and one late soft tone. */
 class AnswerWaitTest {
     @Test
     fun adaNeverSpeaksWhileWorkingOutAnAnswer() {

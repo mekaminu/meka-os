@@ -6,7 +6,7 @@ package os.meka.core.domain
  *
  * Whenever a number nobody knows rings through (off work, the assistant off or paused, a stranger's redial) and always
  * when the network name claims an official body, the Fold puts a warning over the incoming-call screen and on the
- * lock screen (a heads-up notification, shown in full on the lock screen), and Ada says one short line in his earbuds
+ * lock screen (a heads-up notification, shown in full on the lock screen), and Obi says one short line in his earbuds
  * while it rings when earbuds or headphones are connected (never out of the phone's speaker). Never for family, his
  * always-notify list, contacts, anyone he called lately, the household, his call assistant, his own number or an
  * emergency number.
@@ -18,7 +18,7 @@ data class InCallWarning(
     val line: String,
     /** For a claimed official body: how to check that one ([OfficialCallerRules.headsUp]); null otherwise. */
     val check: String?,
-    /** Ada's one line in his earbuds. */
+    /** Obi's one line in his earbuds. */
     val spoken: String,
     val claim: OfficialClaim?,
     /** Slice 4: the number looks like an official switchboard's ([SpoofHintRules]); null otherwise. */
@@ -40,7 +40,7 @@ object InCallWarningRules {
 
     /** The line in Work mode → Spam protection (both apps) saying the warning exists. */
     const val SETTINGS_LINE = "When a number you don't know rings through, a scam warning shows over the call screen " +
-        "and on the lock screen, and Ada says it in your earbuds if they're in. A number that looks like a police, bank " +
+        "and on the lock screen, and Obi says it in your earbuds if they're in. A number that looks like a police, bank " +
         "or HMRC switchboard says “Could be spoofed”; add your own force's and bank's in About you → Official numbers."
 
     /** The reasons a call rang that leave the caller unvetted: off work, the assistant off or paused, a redial. */
@@ -88,6 +88,6 @@ object InCallWarningRules {
         return InCallWarning(title, ADVICE, claim?.let { OfficialCallerRules.headsUp(it) }, spoken, claim, spoof)
     }
 
-    /** Ada says it only into his ears: headphones or earbuds connected, never the speaker (the ringtone is there). */
+    /** Obi says it only into his ears: headphones or earbuds connected, never the speaker (the ringtone is there). */
     fun speak(headphones: Boolean): Boolean = headphones
 }

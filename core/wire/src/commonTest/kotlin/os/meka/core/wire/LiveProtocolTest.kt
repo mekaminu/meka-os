@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 2: the messages a device sends Google and reads back. */
+/** Obi's Live mode, slice 2: the messages a device sends Google and reads back. */
 class LiveProtocolTest {
     @Test
     fun theTokenGoesInTheUrlAndTheSetupAsksForAudioInTheVoice() {
@@ -22,10 +22,10 @@ class LiveProtocolTest {
         assertEquals("Kore", gen["speechConfig"]!!.jsonObject["voiceConfig"]!!.jsonObject["prebuiltVoiceConfig"]!!.jsonObject["voiceName"]!!.jsonPrimitive.content)
         assertFalse("systemInstruction" in setup)
         assertTrue("sessionResumption" in setup)
-        val resumed = Json.parseToJsonElement(LiveProtocol.setup("models/m-live", "Puck", resumeHandle = "h1", instruction = "You are Ada.")).jsonObject["setup"]!!.jsonObject
+        val resumed = Json.parseToJsonElement(LiveProtocol.setup("models/m-live", "Puck", resumeHandle = "h1", instruction = "You are Obi.")).jsonObject["setup"]!!.jsonObject
         assertEquals("models/m-live", resumed["model"]!!.jsonPrimitive.content)
         assertEquals("h1", resumed["sessionResumption"]!!.jsonObject["handle"]!!.jsonPrimitive.content)
-        assertEquals("You are Ada.", resumed["systemInstruction"]!!.jsonObject["parts"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content)
+        assertEquals("You are Obi.", resumed["systemInstruction"]!!.jsonObject["parts"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content)
         val audio = Json.parseToJsonElement(LiveProtocol.audio("AAAA")).jsonObject["realtimeInput"]!!.jsonObject["audio"]!!.jsonObject
         assertEquals("audio/pcm;rate=16000", audio["mimeType"]!!.jsonPrimitive.content)
         assertEquals("AAAA", audio["data"]!!.jsonPrimitive.content)

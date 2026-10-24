@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
-/** Ada's Live mode, slice 5b: Ada looks up his mail and his money on the device, money only while it's unlocked. */
+/** Obi's Live mode, slice 5b: Obi looks up his mail and his money on the device, money only while it's unlocked. */
 class LiveMailMoneyFacadeTest {
     private var now = 1_792_225_800_000L // Sat 17 Oct 2026, 09:30 in London
     private val hour = 3_600_000L
@@ -66,7 +66,7 @@ class LiveMailMoneyFacadeTest {
             "Current account",
             "Date,Description,Amount\n02/10/2026,TESCO STORES 2041,-40.00\n03/10/2026,COSTA COFFEE,-3.20\n05/10/2026,SALARY OAKFIELD LTD,2500.00\n",
         )
-        // Open: the device's own sentence, quoted for Ada.
+        // Open: the device's own sentence, quoted for Obi.
         val open = c.liveMoney("how much have I spent on coffee this month?")
         assertEquals(false, open.unlockMoney)
         assertTrue("You spent £3.20 on coffee" in open.reply, open.reply)

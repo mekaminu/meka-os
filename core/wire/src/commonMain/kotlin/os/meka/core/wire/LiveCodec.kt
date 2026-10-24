@@ -16,7 +16,7 @@ import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.add
 
 /**
- * Ada's Live mode, slice 1: the device ↔ Navilife server exchange for a Gemini Live session.
+ * Obi's Live mode, slice 1: the device ↔ Navilife server exchange for a Gemini Live session.
  *
  * - [STATUS_PATH]: the month's Live meter (Settings' line under the switch). Nothing in but the version.
  * - [SESSION_PATH]: a short-lived token for one session, with the voice he picked. Out: the token (Google's, never the
@@ -28,7 +28,7 @@ object LiveCodec {
     const val STATUS_PATH = "/v1/ai/live/status"
     const val SESSION_PATH = "/v1/ai/live/session"
     const val USAGE_PATH = "/v1/ai/live/usage"
-    /** Slice 4: a web search Ada asked for in a Live session (its query only, checked on the device and here). */
+    /** Slice 4: a web search Obi asked for in a Live session (its query only, checked on the device and here). */
     const val SEARCH_PATH = "/v1/ai/live/search"
 
     /**
@@ -47,10 +47,10 @@ object LiveCodec {
     )
 
     /**
-     * Slice 4 (additive; an older device leaves it out and Ada starts with no picture of his day): the compact day a
+     * Slice 4 (additive; an older device leaves it out and Obi starts with no picture of his day): the compact day a
      * Live session starts with, as Ask sends it — the [date] and [now] line, today's lines ([items]: Needs you, the
-     * tasks, the calendar, the weather, the train, the commute, the shopping; Ask's handles only with [tools]), what he is called ([name], [callMe]), short [recall] notes of earlier chats and whether Ada may
-     * [introduce] herself. The server puts it in the session's system instruction, locked into Google's token.
+     * tasks, the calendar, the weather, the train, the commute, the shopping; Ask's handles only with [tools]), what he is called ([name], [callMe]), short [recall] notes of earlier chats and whether Obi may
+     * [introduce] himself. The server puts it in the session's system instruction, locked into Google's token.
      */
     data class Day(
         val date: String,
@@ -61,14 +61,14 @@ object LiveCodec {
         val recall: List<String> = emptyList(),
         val introduce: Boolean = false,
         /**
-         * Slice 5 (additive): the device answers Navilife's own Live tools (Ada looks up a day and offers Ask's cards,
+         * Slice 5 (additive): the device answers Navilife's own Live tools (Obi looks up a day and offers Ask's cards,
          * [os.meka.core.domain.LiveToolRules]), so the server adds them to the session; the [items] then carry Ask's
          * handles (t1, e1). An older device leaves it out and its session has the web search alone.
          */
         val tools: Boolean = false,
         /**
-         * Slice 2c (additive): what Ada has just said out loud in Navilife's own voice (the hello) before the Live
-         * session takes over, so she carries on from it rather than greeting him again. One line, at most [MAX_GREETED].
+         * Slice 2c (additive): what Obi has just said out loud in Navilife's own voice (the hello) before the Live
+         * session takes over, so he carries on from it rather than greeting Meka again. One line, at most [MAX_GREETED].
          */
         val greeted: String? = null,
         /**
@@ -95,7 +95,7 @@ object LiveCodec {
 
     /**
      * [state]: [READY] (the rest is set) · [OFF] (no key on the server) · [OVER] (the month's cap) · [FAILED] (Google
-     * refused the token; normal Ada answers).
+     * refused the token; normal Obi answers).
      */
     data class Session(
         val state: String,
@@ -264,7 +264,7 @@ object LiveCodec {
         s.reason?.let { put("reason", it) }
     }.toString()
 
-    /** An unknown state, or a ready one missing its token, model or URL, reads as [Session.FAILED]: normal Ada answers. */
+    /** An unknown state, or a ready one missing its token, model or URL, reads as [Session.FAILED]: normal Obi answers. */
     fun decodeSession(body: String): Session = wrap("live session") {
         val o = json.parseToJsonElement(body).jsonObject
         checkVersion(o)

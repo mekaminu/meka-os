@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 1: the per-minute meter and the £15 cap. */
+/** Obi's Live mode, slice 1: the per-minute meter and the £15 cap. */
 class LiveModeTest {
     @Test
     fun minutesArePricedEachWayAndRoundedUp() {

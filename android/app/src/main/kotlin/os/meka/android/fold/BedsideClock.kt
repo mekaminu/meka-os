@@ -176,7 +176,7 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     // ‹ Back (bedside clock slice 1): leaves the clock for the app; on a table stand it stays away until the Fold stops standing.
     BackHandler(enabled = !dayOpen && !talkOpen && newsOpen == null && open == null) { onBack() }
     val talkApp = context.applicationContext as? os.meka.android.MekaApplication
-    // Speaking up, slice 3: while Ada says a moment on her own, the bedside orb lights as Speaking; a tap stops her.
+    // Speaking up, slice 3: while Obi says a moment on his own, the bedside orb lights as Speaking; a tap stops him.
     val speakFlow = remember(talkApp) { talkApp?.speakUp?.speaking ?: kotlinx.coroutines.flow.MutableStateFlow(false) }
     val speakingUp by speakFlow.collectAsState()
     val density = LocalDensity.current

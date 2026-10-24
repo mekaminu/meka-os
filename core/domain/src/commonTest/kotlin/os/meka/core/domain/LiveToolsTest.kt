@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 5: Navilife's own tools in Live — the look-up's handles and the proposal's shape. */
+/** Obi's Live mode, slice 5: Navilife's own tools in Live — the look-up's handles and the proposal's shape. */
 class LiveToolsTest {
     private val event = AskEventRef("ev-dentist", "Dentist", 20_749, 600, 30, "google")
 
@@ -86,7 +86,7 @@ class LiveToolsTest {
         assertTrue(LiveToolRules.moneyAnswer("You spent £60 on groceries last month.").contains("\"You spent £60 on groceries last month.\""))
         assertEquals("what's safe to spend", LiveToolRules.moneyQuestion(" "))
         assertEquals(LiveToolRules.LOOK_UPS, listOf("look_up_my_days", "look_up_my_mail", "look_up_my_money"))
-        // Locked during the turn: Ask's Unlock under her words, or the locked line when she said nothing.
+        // Locked during the turn: Ask's Unlock under his words, or the locked line when he said nothing.
         val said = LiveToolRules.turnAnswer("That's behind your fingerprint.", emptyList(), emptyList(), unlockMoney = true) as AskOutcome.Answered
         assertEquals(MoneyAskRules.UNLOCK, said.answer.unlockMoney)
         assertEquals("That's behind your fingerprint.", said.answer.text)

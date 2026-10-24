@@ -7,7 +7,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The orb says hello like a person, slice 4: fresh openers Ada writes, checked against the same rules. */
+/** The orb says hello like a person, slice 4: fresh openers Obi writes, checked against the same rules. */
 class HelloFreshTest {
     private val f = HelloFreshRules
     private val day = 20_747L // a Wednesday
@@ -39,7 +39,7 @@ class HelloFreshTest {
         assertEquals("capital", f.problem("Evening, {n}. Seen Sam lately?", "What's up?", e))
         assertEquals("blocked", f.problem("Evening, {n}. How's the wife?", "What's up?", e))
         assertEquals("blocked", f.problem("Evening, {n}. Payday soon, money in the bank?", "What's up?", e))
-        assertEquals("capital", f.problem("Evening, {n}. It's Ada.", "What's up?", e))
+        assertEquals("capital", f.problem("Evening, {n}. It's Obi.", "What's up?", e))
         assertEquals("capital", f.problem("Evening, {n}. Happy Friday.", "What's up?", e))
         assertEquals("blocked", f.problem("Evening, {n}. Good weekend?", "What's up?", e))
         assertEquals("blocked", f.problem("Evening, {n}. ada here.", "What's up?", e))

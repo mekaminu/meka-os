@@ -125,7 +125,7 @@ class SpeakUpFacadeTest {
         } finally { c.close() }
     }
 
-    /** Slice 4: a reply to an email he put on Waiting for posts a heads-up; Ada says it once he turns that moment on. */
+    /** Slice 4: a reply to an email he put on Waiting for posts a heads-up; Obi says it once he turns that moment on. */
     @Test
     fun aReplyHeWasWaitingForIsSaidOnlyOnceTurnedOn() = runTest {
         val clock = HlcClock("server", { now })

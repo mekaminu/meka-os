@@ -77,7 +77,7 @@ class StreamedSpeechTest {
 
     @Test
     fun theRestsPiecesGoAheadOnlyOnceTheyCanNoLongerChange() {
-        // Talking to Ada like a conversation, slice 7: the rest said sentence by sentence as it is written.
+        // Talking to Obi like a conversation, slice 7: the rest said sentence by sentence as it is written.
         val full = "Oh nice. Heat pumps work best in a well-insulated house. Is yours?\n<after>{\"actions\":[]}</after>"
         val early = StreamedSpeechRules.earlyPiece(full.take(12))!!
         assertEquals("Oh nice.", early)

@@ -111,8 +111,8 @@ object DurationGlue {
 }
 
 /**
- * No word left alone on a line (the quality gate's Settings shots, slice 25: on the cover screen "When Ada says
- * something out loud on her / own" and "Gmail and Outlook · read, tidied, sent only on / your tap"). The last two
+ * No word left alone on a line (the quality gate's Settings shots, slice 25: on the cover screen "When Obi says
+ * something out loud on his / own" and "Gmail and Outlook · read, tidied, sent only on / your tap"). The last two
  * words of a line of three or more are joined by a no-break space, so a line that must wrap takes them down together;
  * a "·" or "–" just before them goes too, so no line starts with one. A pair longer than [PAIR_MAX] characters is
  * left free to wrap. Dates, numbers and counts are kept whole as [PhraseGlue] does. Non-AI, pure; only for words

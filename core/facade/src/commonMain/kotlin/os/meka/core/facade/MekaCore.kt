@@ -2334,7 +2334,7 @@ class MekaCore(
 
     /**
      * "Plan my week" typed in Ask ([os.meka.core.domain.PlanWeekNudgeRules.isRequest]): answered here with the
-     * suggested spread and where to accept it, no AI and no card; nothing moves. (Said to Ada it opens the flow.)
+     * suggested spread and where to accept it, no AI and no card; nothing moves. (Said to Obi it opens the flow.)
      */
     private suspend fun planWeekAsk(q: String): os.meka.core.domain.AskOutcome? {
         if (!os.meka.core.domain.PlanWeekNudgeRules.isRequest(q)) return null
@@ -2383,7 +2383,7 @@ class MekaCore(
     /** The planned week before the last Accept (-1: none), put back by [undoWeekPlan]; null when nothing to put back. */
     private var planMarkUndo: Long? = null
 
-    // ---- Week board, item (11) part 2: "I'm shattered" to Ada, and Stretched holds the alerts that can wait ----
+    // ---- Week board, item (11) part 2: "I'm shattered" to Obi, and Stretched holds the alerts that can wait ----
 
     /** When the Stretched hold on this device ends (ms), or null; kept on this device only, never synced. */
     val alertHold: StateFlow<Long?> get() = _alertHold
@@ -2438,7 +2438,7 @@ class MekaCore(
     }
 
     /**
-     * "I'm shattered", "I'm knackered", "I've got too much on" typed in Ask or said to Ada
+     * "I'm shattered", "I'm knackered", "I've got too much on" typed in Ask or said to Obi
      * ([os.meka.core.domain.FeelingAskRules.request]): kept as today's feeling on this device, like tapping it on Shut
      * down the day, and answered with the offer (no AI, no card) with Open Shut down the day under it, where the taps
      * are. Nothing moves from the words. Null for anything else.
@@ -5400,7 +5400,7 @@ class MekaCore(
     private val speakUp = os.meka.core.domain.SpeakUpStore(replica)
 
     /**
-     * Speaking up: of the notices this device just posted ([result]'s, by [keys], plain strings for Swift), the one Ada
+     * Speaking up: of the notices this device just posted ([result]'s, by [keys], plain strings for Swift), the one Obi
      * says out loud now, or null. [place] is where this device would say it; [onCall] and [talking] what it is busy
      * with. A pick is written to Activity at once (once per notice across devices, and counted for the day's cap).
      */
@@ -5487,7 +5487,7 @@ class MekaCore(
         return speakUpView()
     }
 
-    /** "shh" / "not now" to Ada: mutes speaking up for 2 hours on every device. */
+    /** "shh" / "not now" to Obi: mutes speaking up for 2 hours on every device. */
     suspend fun muteSpeakUp() = onCore { speakUp.mute(nowMs() + os.meka.core.domain.SpeakUpRules.MUTE_MS) }
 
     // ---- Activity log ----
@@ -6115,7 +6115,7 @@ class MekaCore(
         return local.copy(recent = o.merged(local.recent, shared))
     }
 
-    /** Hello slice 4: the fresh openers Ada wrote, as kept on this device; none when missing or unreadable. Caller is on the core. */
+    /** Hello slice 4: the fresh openers Obi wrote, as kept on this device; none when missing or unreadable. Caller is on the core. */
     private fun helloFresh(): os.meka.core.domain.HelloFreshSet = os.meka.core.domain.HelloFreshRules.decode(
         runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.HelloFreshRules.KEY) } }.getOrNull(),
     )
@@ -6151,15 +6151,15 @@ class MekaCore(
         os.meka.core.domain.HelloMomentRules.of(officeToday(), _today.value.events, weather.forecast(), now, cal)
     }.getOrDefault(os.meka.core.domain.HelloMoments())
 
-    /** Whether Ada already introduced herself today on this device (the hello's or the companion's first). Caller is on the core. */
-    private fun adaIntroducedToday(day: Long): Boolean = os.meka.core.domain.AdaRules.dayOf(
-        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.AdaRules.INTRO_KEY) } }.getOrNull(),
+    /** Whether Obi already introduced himself today on this device (the hello's or the companion's first). Caller is on the core. */
+    private fun adaIntroducedToday(day: Long): Boolean = os.meka.core.domain.ObiRules.dayOf(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.ObiRules.INTRO_KEY) } }.getOrNull(),
     ) == day
 
     /**
      * The orb says hello like a person: picks this tap's opener ([os.meka.core.domain.HelloOpeners.pick]), keeps it
-     * among the recent ones on this device, marks Ada's introduction for the day when it is the first hello, and makes
-     * the next openers ready in Ada's voice in the background. Caller is on the core.
+     * among the recent ones on this device, marks Obi's introduction for the day when it is the first hello, and makes
+     * the next openers ready in Obi's voice in the background. Caller is on the core.
      */
     private fun helloOpener(now: Long, cal: ZoneCalendar, welcome: Boolean): os.meka.core.domain.HelloOpener {
         val o = os.meka.core.domain.HelloOpeners
@@ -6171,7 +6171,7 @@ class MekaCore(
         runCatching {
             localStore.transaction {
                 localStore.setLocalValue(o.KEY, o.encode(after))
-                if (moment.first) localStore.setLocalValue(os.meka.core.domain.AdaRules.INTRO_KEY, day.toString())
+                if (moment.first) localStore.setLocalValue(os.meka.core.domain.ObiRules.INTRO_KEY, day.toString())
             }
         }
         // Hello slice 2: the last openers shared through the synced profile, so the other app doesn't echo this one.
@@ -9286,7 +9286,7 @@ class MekaCore(
                 .copy(
                     callSir = mekaVoice.callsSir(), recall = companionRecall(q, history, cal),
                     callName = os.meka.core.domain.CallNameRules.called(aboutYou.profile().shownName),
-                    // The companion is called Ada, slice 1: she may say "Ada here" in the day's first conversation.
+                    // The companion is called Obi, slice 1: he may say "Obi here" in the day's first conversation.
                     introduce = adaIntroduces(history, cal),
                 )
         }
@@ -9311,7 +9311,7 @@ class MekaCore(
                         onEarly(text)
                     }
                 },
-                // Talking to Ada like a conversation, slice 7: the rest's pieces, said ahead, wait in memory for the speaker.
+                // Talking to Obi like a conversation, slice 7: the rest's pieces, said ahead, wait in memory for the speaker.
                 onNext = { text, audio, _, marks ->
                     if (text.isNotBlank() && audio.isNotEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio, marks) }
                 },
@@ -9661,16 +9661,16 @@ class MekaCore(
     suspend fun chooseMekaVoice(name: String?): Boolean = onCore { mekaVoice.choose(name) }
 
     /**
-     * The companion is called Ada, slice 1: whether this question may let her introduce herself (the first conversation
-     * of the day on this device, [os.meka.core.domain.AdaRules.introduces]); marks the day when it does. Caller is on the core.
+     * The companion is called Obi, slice 1: whether this question may let him introduce himself (the first conversation
+     * of the day on this device, [os.meka.core.domain.ObiRules.introduces]); marks the day when it does. Caller is on the core.
      */
     private fun adaIntroduces(history: List<os.meka.core.domain.TalkTurn>, cal: ZoneCalendar): Boolean {
         val today = cal.epochDayOf(nowMs())
-        val last = os.meka.core.domain.AdaRules.dayOf(
-            runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.AdaRules.INTRO_KEY) } }.getOrNull(),
+        val last = os.meka.core.domain.ObiRules.dayOf(
+            runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.ObiRules.INTRO_KEY) } }.getOrNull(),
         )
-        if (!os.meka.core.domain.AdaRules.introduces(last, today, history.size)) return false
-        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.AdaRules.INTRO_KEY, today.toString()) } }
+        if (!os.meka.core.domain.ObiRules.introduces(last, today, history.size)) return false
+        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.ObiRules.INTRO_KEY, today.toString()) } }
         return true
     }
 
@@ -10616,7 +10616,7 @@ class MekaCore(
 
     /** Speed's Clear: forgets the kept turns on this device. */
     /**
-     * Talking to Ada like a conversation, slice 2: Speed's "On the server" part, how long Navilife's server took over
+     * Talking to Obi like a conversation, slice 2: Speed's "On the server" part, how long Navilife's server took over
      * the last day's answers (the middle of each step, quick look-ups and conversation; times only). Null when not
      * connected, the server is older or didn't answer. Never throws.
      */
@@ -10631,7 +10631,7 @@ class MekaCore(
     }
 
     /**
-     * Ada's Live mode, slice 1: the month's Live meter as Settings shows it under the switch ("£3.40 of £15 this
+     * Obi's Live mode, slice 1: the month's Live meter as Settings shows it under the switch ("£3.40 of £15 this
      * month"). Null when not connected, the server is older or didn't answer. Never throws.
      */
     suspend fun liveStatus(): os.meka.core.wire.LiveCodec.Meter? {
@@ -10642,15 +10642,15 @@ class MekaCore(
     /**
      * A token for one Gemini Live session in [voice] (null: the default). Anything but a ready session (no key, the
      * month's cap, Google refusing, offline, an older server) is null or not [os.meka.core.wire.LiveCodec.Session.READY],
-     * and normal Ada answers. Slice 2c: [greeted] is the hello just said before Live takes over; [resume] Google's
+     * and normal Obi answers. Slice 2c: [greeted] is the hello just said before Live takes over; [resume] Google's
      * handle when the same conversation carries on into a fresh window ([os.meka.core.domain.LiveHandOnRules]). Never throws.
      */
     suspend fun liveSession(voice: String?, greeted: String? = null, resume: String? = null): os.meka.core.wire.LiveCodec.Session? {
         val api = liveApi ?: return null
         val handle = os.meka.core.domain.LiveHandOnRules.handle(resume)
-        // Slice 4: the compact day goes with the request, so the server can start the session as Ada with his day.
+        // Slice 4: the compact day goes with the request, so the server can start the session as Obi with his day.
         // Slice 2c: a fresh window for the same conversation sends the same day again (its handles keep meaning the same
-        // tasks and events, and she doesn't introduce herself or greet again); a new one is built afresh, with the hello
+        // tasks and events, and he doesn't introduce himself or greet again); a new one is built afresh, with the hello
         // Navilife has just said ([greeted]) when Live takes over from it.
         val day = try {
             onCore {
@@ -10666,11 +10666,11 @@ class MekaCore(
     private var liveDaySent: os.meka.core.wire.LiveCodec.Day? = null
 
     /**
-     * Ada's Live mode, slice 4: the compact day a Live session starts with, built here as Ask builds its <today> block
+     * Obi's Live mode, slice 4: the compact day a Live session starts with, built here as Ask builds its <today> block
      * ([os.meka.core.domain.AskRules.context]) but only its always-on part: Needs you, today's tasks and calendar, the
      * weather (home, work on an office day, the route's train line), the commute and the shopping; what he is called,
-     * the notes of earlier chats (when he keeps them) and whether Ada may introduce herself. Slice 5: tasks and movable
-     * events carry their handles (t1, e1), kept here in [liveAsk] for her tools, and the day says the device answers
+     * the notes of earlier chats (when he keeps them) and whether Obi may introduce himself. Slice 5: tasks and movable
+     * events carry their handles (t1, e1), kept here in [liveAsk] for his tools, and the day says the device answers
      * them ([os.meka.core.wire.LiveCodec.Day.tools]). Caller is on the core.
      */
     private fun liveDay(): os.meka.core.wire.LiveCodec.Day {
@@ -10711,9 +10711,9 @@ class MekaCore(
     private var liveAsk: os.meka.core.domain.AskContext = os.meka.core.domain.AskContext.EMPTY
 
     /**
-     * Ada's Live mode, slice 5: Ada's read-only look-up ([os.meka.core.domain.LiveToolRules.LOOK_UP_TOOL]) — the day
+     * Obi's Live mode, slice 5: Obi's read-only look-up ([os.meka.core.domain.LiveToolRules.LOOK_UP_TOOL]) — the day
      * or days [whenText] names, from his own calendar and tasks on this device, with the trains on an office day, as
-     * the lines her tool answer gives the model. Their tasks and movable events keep handles for the session, so a
+     * the lines his tool answer gives the model. Their tasks and movable events keep handles for the session, so a
      * proposal can name them. Never throws: a failure reads as [os.meka.core.domain.LiveToolRules.LOOK_UP_FAILED].
      */
     suspend fun liveLookUp(whenText: String): String = try {
@@ -10739,7 +10739,7 @@ class MekaCore(
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveToolRules.LOOK_UP_FAILED }
 
     /**
-     * Ada's Live mode, slice 5: one action Ada offers in Live ([os.meka.core.domain.LiveToolRules.PROPOSE_TOOL], its
+     * Obi's Live mode, slice 5: one action Obi offers in Live ([os.meka.core.domain.LiveToolRules.PROPOSE_TOOL], its
      * arguments as the tool call gave them). It becomes Ask's usual card ([os.meka.core.domain.AskRules.card], against
      * the session's own handles) only when the policy gate allows it ([AskPolicy.allowed]); it never runs by itself,
      * not even under earned trust: he taps it ([doAsk]). [os.meka.core.domain.LiveOffer.reply] is what the model is told.
@@ -10760,10 +10760,10 @@ class MekaCore(
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_UNUSABLE) }
 
     /**
-     * Ada's Live mode, slice 5b: Ada's mail look-up ([os.meka.core.domain.LiveToolRules.MAIL_TOOL]) — the emails sorted
+     * Obi's Live mode, slice 5b: Obi's mail look-up ([os.meka.core.domain.LiveToolRules.MAIL_TOOL]) — the emails sorted
      * as needing him and, when [about] names a sender or subject, the recent ones from them with what the autopilot
      * tidied from them: the same lines Ask sends with a mail question ([os.meka.core.domain.MailAskRules.askLines]),
-     * read here on the device. Emails are other people's words, so the session's picture turns untrusted: a card she
+     * read here on the device. Emails are other people's words, so the session's picture turns untrusted: a card he
      * offers afterwards passes the gate as one from mail would. Never throws: a failure reads as
      * [os.meka.core.domain.LiveToolRules.MAIL_FAILED].
      */
@@ -10781,7 +10781,7 @@ class MekaCore(
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveToolRules.MAIL_FAILED }
 
     /**
-     * Ada's Live mode, slice 5b: Ada's money look-up ([os.meka.core.domain.LiveToolRules.MONEY_TOOL]) — the device's own
+     * Obi's Live mode, slice 5b: Obi's money look-up ([os.meka.core.domain.LiveToolRules.MONEY_TOOL]) — the device's own
      * answer to his money [question] ([os.meka.core.domain.MoneyAskRules.answer], the sentence Ask shows), only while
      * Money is open or unlocked from Ask; never his transactions. Locked: no figures, and the turn shows Ask's Unlock.
      * Never throws.
@@ -10798,7 +10798,7 @@ class MekaCore(
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveMoney(os.meka.core.domain.LiveToolRules.MONEY_FAILED) }
 
     /**
-     * Ada's Live mode, slice 4: a web search Ada asked for in Live session [sessionId]. Checked here first
+     * Obi's Live mode, slice 4: a web search Obi asked for in Live session [sessionId]. Checked here first
      * ([os.meka.core.domain.LiveFactsRules.searchable] with his family's names and the boys' school from About you): a
      * query about his own life never leaves the phone and reads as refused. Otherwise Navilife's server searches it
      * (and checks it again). Failed when offline, an older server, or anything else. Never throws.
@@ -10829,7 +10829,7 @@ class MekaCore(
     }
 
     /**
-     * Ada's Live mode, slice 2b: Activity's line about Live this month ("Ada's Live · 3 talks · 13 min · £0.42 of £15
+     * Obi's Live mode, slice 2b: Activity's line about Live this month ("Obi's Live · 3 talks · 13 min · £0.42 of £15
      * in October", [os.meka.core.domain.LiveTalkRules.activityLine]); null when there's nothing to say, not connected or
      * the server didn't answer. Never throws.
      */
@@ -10863,7 +10863,7 @@ class MekaCore(
         }
     }
 
-    /** Ada's Live mode, slice 2: whether Live is on (synced; off unless he turns it on). */
+    /** Obi's Live mode, slice 2: whether Live is on (synced; off unless he turns it on). */
     suspend fun liveOn(): Boolean = onCore { mekaVoice.liveOn() }
 
     /** Turns Live on or off on every device. */
@@ -10875,7 +10875,7 @@ class MekaCore(
     /** Picks the Live voice on every device; false for a name the picker doesn't offer. */
     suspend fun setLiveVoice(name: String): Boolean = onCore { mekaVoice.chooseLiveVoice(name) }
 
-    /** The Live block in Ada's voice settings: the switch, the month's meter or why Live can't run, the voices. */
+    /** The Live block in Obi's voice settings: the switch, the month's meter or why Live can't run, the voices. */
     suspend fun liveSettings(): os.meka.core.domain.LiveSettingsView {
         val (on, voice) = onCore { mekaVoice.liveOn() to mekaVoice.liveVoice() }
         val m = liveStatus()
@@ -10989,7 +10989,7 @@ class MekaCore(
      * so a tap on the orb speaks at once with no voice fetch. Already here: nothing is asked. Never throws.
      */
     suspend fun warmHello(welcome: Boolean = false) {
-        // Hello slice 4: once a week at most, Ada writes a few fresh openers first, so they're made ahead too.
+        // Hello slice 4: once a week at most, Obi writes a few fresh openers first, so they're made ahead too.
         try { freshenHelloOpeners() } catch (e: CancellationException) { throw e } catch (e: Exception) {}
         if (speechApi == null) return
         val lines = onCore {
@@ -11010,9 +11010,9 @@ class MekaCore(
         }
         // Each piece as the speaker asks for it (a later piece may join two sentences: "Good day? What can I do for you?").
         lines.forEach { if (!speechPrefetchPiece(it)) return }
-        // The orb says hello like a person, slice 3: Ada's answers to "good thanks, you?" are ready too (no name in them).
+        // The orb says hello like a person, slice 3: Obi's answers to "good thanks, you?" are ready too (no name in them).
         os.meka.core.domain.HelloReplyRules.warmLines().forEach { if (!speechPrefetchPiece(it)) return }
-        // Talking to Ada like a conversation, slice 1: no holding lines are made any more (Ada never says "One sec").
+        // Talking to Obi like a conversation, slice 1: no holding lines are made any more (Obi never says "One sec").
     }
 
     /**
@@ -12015,7 +12015,7 @@ class MekaCore(
             moneyLook = moneyLookItems(),
             // Balance view, slice 4: Thursday evening's nudge when an area is well short as planned.
             balance = balanceNudge,
-            // Speaking up, slice 3: tomorrow stacking up, for the evening heads-up Ada says.
+            // Speaking up, slice 3: tomorrow stacking up, for the evening heads-up Obi says.
             pressure = _board.value.days.firstNotNullOfOrNull { d -> d.pressure?.takeIf { it.epochDay == todayEpochDay() + 1 } },
             // Speaking up, slice 4: a reply to an email he put on Waiting for (said only if he turned that moment on).
             mailFinds = activity.mailFinds(),

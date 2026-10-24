@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
-/** Talking to Ada like a conversation, slice 2: the server's timings go out as times and flags only. */
+/** Talking to Obi like a conversation, slice 2: the server's timings go out as times and flags only. */
 class ServerSpeedCodecTest {
     private val turn = ServerSpeedCodec.Turn(1_791_476_100_000L, open = true, spoken = true, model = "claude-haiku-4-5", webMs = 700, firstTokenMs = 400, firstSentenceMs = 800, clipMs = 1_200, doneMs = 2_000)
 

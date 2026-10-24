@@ -24,8 +24,8 @@ object StreamedSpeechRules {
      * begun. Plain words (a spoken turn, slice 4 of the conversation item) are read as they are written ([plainWords]).
      */
     fun partialAnswer(prefix: String): Partial? {
-        // Talking to Ada like a conversation, slice 4: a spoken turn's answer is her words first, as plain text, then
-        // (only when there are any) her actions, sources and note in one short tagged block after them.
+        // Talking to Obi like a conversation, slice 4: a spoken turn's answer is his words first, as plain text, then
+        // (only when there are any) his actions, sources and note in one short tagged block after them.
         if (isPlain(prefix)) return plainWords(prefix)
         val key = Regex(""""answer"\s*:\s*"""").find(prefix) ?: return null
         // The field must be the object's own, near its start (not "answer" inside some other string).
@@ -88,7 +88,7 @@ object StreamedSpeechRules {
     }
 
     /**
-     * Talking to Ada like a conversation, slice 7 (the rest said sentence by sentence as it is written): the pieces the
+     * Talking to Obi like a conversation, slice 7 (the rest said sentence by sentence as it is written): the pieces the
      * device will say after [early] ([rest], then [SpeechRules.pieces]) that can no longer change in [prefix], the
      * model's answer so far: once the words have closed, every one; before that, each but the last, and only when it
      * ends a sentence (the last may still grow, and a later piece joins sentences). At most [MAX_NEXT], within
@@ -117,7 +117,7 @@ object StreamedSpeechRules {
     const val MAX_NEXT = 2
 
     /**
-     * Talking to Ada like a conversation, slice 4: where a spoken turn's words end and what comes after them begins
+     * Talking to Obi like a conversation, slice 4: where a spoken turn's words end and what comes after them begins
      * (`<after>{"actions":[…],"sources":[…],"note":"…"}</after>`). Never said; the same tag as [os.meka.core.wire.AskCodec].
      */
     const val AFTER_OPEN = "<after>"

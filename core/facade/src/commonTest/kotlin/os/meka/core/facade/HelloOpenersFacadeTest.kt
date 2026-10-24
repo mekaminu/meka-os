@@ -30,23 +30,23 @@ class HelloOpenersFacadeTest {
     fun everyTapSaysHisNameAndTheGreetingChanges() = runTest(timeout = SLOW_RUNNER) {
         val c = core()
         c.setAboutYou(AboutField.SHOWN_NAME, "Alex Smith")
-        // The day's first hello: Ada introduces herself.
+        // The day's first hello: Obi introduces himself.
         val first = c.hello()
         assertTrue("Alex" in first.opening, first.opening)
-        assertTrue("Ada" in first.opening, first.opening)
+        assertTrue("Obi" in first.opening, first.opening)
         assertTrue(first.closing.endsWith("?"), first.closing)
         // A quick second tap: "again".
         now += 2 * 60_000
         val again = c.hello()
         assertTrue("Alex" in again.opening)
         assertTrue(HelloOpeners.AGAIN.any { it.openFor("Alex") == again.opening }, again.opening)
-        // Later taps through the day: no repeats within ten, no Ada again.
+        // Later taps through the day: no repeats within ten, no Obi again.
         val seen = mutableListOf(first.spoken, again.spoken)
         repeat(8) {
             now += HelloOpeners.AGAIN_WITHIN_MS + 60_000
             val g = c.hello()
             assertTrue("Alex" in g.opening, g.opening)
-            assertFalse("Ada" in g.opening, g.opening)
+            assertFalse("Obi" in g.opening, g.opening)
             assertFalse(g.spoken in seen, g.spoken)
             seen += g.spoken
         }
@@ -62,11 +62,11 @@ class HelloOpenersFacadeTest {
         c2.setAboutYou(AboutField.SHOWN_NAME, "Alex")
         // A second hello the same day on the same device never re-introduces.
         now += HelloOpeners.AGAIN_WITHIN_MS + 60_000
-        assertFalse("Ada" in c.hello().opening)
+        assertFalse("Obi" in c.hello().opening)
         // A fresh device (its own store) does, once.
-        assertTrue("Ada" in c2.hello().opening)
+        assertTrue("Obi" in c2.hello().opening)
         now += HelloOpeners.AGAIN_WITHIN_MS + 60_000
-        assertFalse("Ada" in c2.hello().opening)
+        assertFalse("Obi" in c2.hello().opening)
     }
 
     @Test
@@ -81,7 +81,7 @@ class HelloOpenersFacadeTest {
         val mac = dev("mac")
         fold.setAboutYou(AboutField.SHOWN_NAME, "Alex")
         fold.syncNow(); mac.syncNow()
-        // Ada introduces herself on each device; then the ordinary openers alternate between the two apps.
+        // Obi introduces himself on each device; then the ordinary openers alternate between the two apps.
         fold.hello(); fold.syncNow(); mac.syncNow(); mac.hello(); mac.syncNow(); fold.syncNow()
         val said = mutableListOf<String>()
         repeat(8) { i ->

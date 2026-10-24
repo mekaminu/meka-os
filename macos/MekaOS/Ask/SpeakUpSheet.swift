@@ -2,8 +2,8 @@
 import SwiftUI
 
 /// Ask → Settings → Speaking up on the Mac (the JARVIS step, slice 1), like the Fold's SpeakUpPane: a section per moment
-/// Ada says out loud on her own (Turn on / Turn off), How often, and Mute for 2 hours / Speak again now. The words are
-/// the core's `SpeakUpRules.view`, synced with the Fold. On the Mac she speaks only while he is using it.
+/// Obi says out loud on his own (Turn on / Turn off), How often, and Mute for 2 hours / Speak again now. The words are
+/// the core's `SpeakUpRules.view`, synced with the Fold. On the Mac he speaks only while he is using it.
 ///
 /// Motion: the sheet scale-fades (system); sections stagger in; a button presses in with a tick haptic and the status
 /// line blends to the accent while on (`themeBlend`, the words cross-fade). Reduce Motion: cross-fades.

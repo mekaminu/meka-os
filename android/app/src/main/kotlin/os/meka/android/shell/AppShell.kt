@@ -177,7 +177,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         if (HelloDock.tap(talkPhase) == DockTap.HELLO && entrance == null) { app.talkAnswerCards.value = emptyList(); app.talkNeedsAsk.value = false; app.helloGreeting.value = null; entrance = EntranceKind.BIG }
         if (current != ShellDestination.ASK) { arrival = SharedMotion.arrivalAfterGo(ShellDestination.ASK, arrival); current = ShellDestination.ASK }
     }
-    // Speaking up: while Ada says a moment on her own, the docked orb shows Speaking (a tap still says hello as ever).
+    // Speaking up: while Obi says a moment on his own, the docked orb shows Speaking (a tap still says hello as ever).
     val speakingUp by app.speakUp.speaking.collectAsState()
     val dockPhase = if (speakingUp && talkPhase == TalkPhase.ENDED) TalkPhase.SPEAKING else talkPhase
     val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(dockPhase, needsYou, { if (speakingUp) app.speakUp.stop(); dockTap() }, m, onPlaced = { dockAt = it }) }

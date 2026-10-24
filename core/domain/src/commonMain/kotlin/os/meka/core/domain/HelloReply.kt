@@ -3,17 +3,17 @@ package os.meka.core.domain
 /*
  * The orb says hello like a person, slice 3 (Fix first, Meka 2026-10-20 18:13, item (4)). Non-AI and pure.
  *
- * Ada's hello often asks how he is ("Evening, Alex. Good day? What can I do for you?"). When the very next thing he says
- * is only the answer to that ("good thanks, you?", "not bad", "shattered, long day"), Ada answers like a person, at once
+ * Obi's hello often asks how he is ("Evening, Alex. Good day? What can I do for you?"). When the very next thing he says
+ * is only the answer to that ("good thanks, you?", "not bad", "shattered, long day"), Obi answers like a person, at once
  * and on the device (no AI wait), then hands back with "What can I do for you?". Before this, "I'm good, thanks" was
  * taken as a goodbye and Talk ended. Anything more than small talk ("good thanks, what's on tomorrow?") is a question
  * as before, with the hello in the conversation so the companion knows what he's answering. The lines name nobody and
- * hold nothing from his day, so they are made ahead in Ada's voice with the hello's openers ([warmLines]).
+ * hold nothing from his day, so they are made ahead in Obi's voice with the hello's openers ([warmLines]).
  */
 
 enum class HelloMood { GOOD, OK, LOW }
 
-/** What his reply to the hello said: how he is, and whether he asked after Ada ("you?"). */
+/** What his reply to the hello said: how he is, and whether he asked after Obi ("you?"). */
 data class HelloSmallTalk(val mood: HelloMood, val askedBack: Boolean)
 
 object HelloReplyRules {
@@ -38,7 +38,7 @@ object HelloReplyRules {
         "you", "and you", "how about you", "what about you", "how are you", "how are you doing", "how're you",
         "yourself", "and yourself", "how about yourself", "you ok", "you okay", "you good", "you alright", "you all right",
         "how's yours", "how was yours", "how's your day", "how was your day", "how's your evening", "how's your morning",
-        "how's it going", "how about ada", "and ada",
+        "how's it going", "how about obi", "and obi", "how about you obi",
     )
     /** Words around the answer that change nothing ("I'm", "thanks", "really"). */
     private val AROUND = phrases(
@@ -46,7 +46,7 @@ object HelloReplyRules {
         "been", "was", "thanks", "thank you", "thanks for asking", "thank you for asking", "cheers", "ta", "really",
         "very", "pretty", "quite", "a bit", "bit", "a little", "kind of", "kinda", "but", "though", "actually", "today",
         "day", "the day", "evening", "morning", "afternoon", "night", "so far", "yeah", "yes", "yep", "yup", "ah", "aye",
-        "too", "as well", "honestly", "to be fair", "tbh", "thanks ada", "cheers ada", "ada", "mate", "lol",
+        "too", "as well", "honestly", "to be fair", "tbh", "thanks obi", "cheers obi", "obi", "mate", "lol",
     )
 
     private val VOCAB: List<List<String>> by lazy { (GOOD + OK + LOW + BACK + AROUND).sortedByDescending { it.size } }
@@ -112,15 +112,15 @@ object HelloReplyRules {
         ),
     )
 
-    /** Ada's answer to [talk], one of two by [seed] so it isn't always the same: warm, short, and it hands back. */
+    /** Obi's answer to [talk], one of two by [seed] so it isn't always the same: warm, short, and it hands back. */
     fun answer(talk: HelloSmallTalk, seed: Int): String {
         val pool = LINES.getValue(talk.mood to talk.askedBack)
         return pool[seed.mod(pool.size)]
     }
 
     /**
-     * Ada's answer when [utterance] is the first thing said after the hello [greeting] and only small talk: when the
-     * hello asked how he is, or he asked after her ("fine, you?"). Null otherwise (Talk reads it as before).
+     * Obi's answer when [utterance] is the first thing said after the hello [greeting] and only small talk: when the
+     * hello asked how he is, or Meka asked after Obi ("fine, you?"). Null otherwise (Talk reads it as before).
      */
     fun reply(greeting: String, utterance: String): String? {
         val talk = smallTalk(utterance) ?: return null
@@ -128,6 +128,6 @@ object HelloReplyRules {
         return answer(talk, greeting.length)
     }
 
-    /** Every line [answer] can say, to be made ahead in Ada's voice with the hello's openers (each piece as said). */
+    /** Every line [answer] can say, to be made ahead in Obi's voice with the hello's openers (each piece as said). */
     fun warmLines(): List<String> = LINES.values.flatten().flatMap { SpeechRules.pieces(it) }.distinct()
 }

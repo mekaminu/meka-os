@@ -1,8 +1,8 @@
 package os.meka.core.domain
 
 /**
- * Talking to Ada like a conversation, slice 5 (Meka 2026-10-21 20:32: "it's not like a natural conversation and it's
- * not chatty, feels weird"): what Ada's spoken words look like. A spoken turn is one to three short sentences, like a
+ * Talking to Obi like a conversation, slice 5 (Meka 2026-10-21 20:32: "it's not like a natural conversation and it's
+ * not chatty, feels weird"): what Obi's spoken words look like. A spoken turn is one to three short sentences, like a
  * person on the phone, with no lists, headings or "Here are some options:", and under [MAX_WORDS] words unless he
  * asked for detail. The server asks for that in the spoken-conversation prompt and [tidy]s an answer that came back
  * otherwise, so what is said never reads out list markers or runs on. Pure, plain loops (ADR-011); nothing is stored.

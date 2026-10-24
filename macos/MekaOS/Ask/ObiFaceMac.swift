@@ -8,7 +8,7 @@ import SwiftUI
 /// the repository, never shared), like the Fold's ObiFaceStore. `refresh` asks Navilife's server for its list when
 /// `FaceFileRules.due` (weekly; sooner while nothing or only part is there), fetches only the files whose tag changed
 /// and lets go of any the server no longer has. `ready` turns true only with all seven kept; `on` is the Face setting
-/// in Ada's voice (on by default, kept on this Mac). Until both, the orb stays, with no error shown. While the face can
+/// in Obi's voice (on by default, kept on this Mac). Until both, the orb stays, with no error shown. While the face can
 /// show, the core asks Navilife's clips with their mouth sounds (`CoreModel.speechFaceMarks`).
 ///
 /// Main actor throughout; only Strings and Data cross to the core.

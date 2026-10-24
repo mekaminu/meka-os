@@ -177,7 +177,7 @@ class SpeechTest {
         assertEquals(5_000L, SpeechRules.waitMs(first = true, reading = true))
         assertEquals(10_000L, SpeechRules.budgetMs(first = true, reading = false, hold = true))
         assertEquals(4_000L, SpeechRules.budgetMs(first = true, reading = false, hold = false))
-        // Talking to Ada like a conversation, slice 1: the hold is quiet, so no holding line is fetched ahead.
+        // Talking to Obi like a conversation, slice 1: the hold is quiet, so no holding line is fetched ahead.
         assertTrue(SpeechRules.COMMON.none { it.startsWith("One moment") })
     }
 

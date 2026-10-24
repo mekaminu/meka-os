@@ -84,13 +84,13 @@ class HelloOpenersTest {
         val m = o.moment(8 * 60, day, 1L, HelloOpenerMemory(), introduced = false, welcome = true)
         assertTrue(m.first)
         val pick = o.pick(m, emptyList(), day)
-        assertTrue("Ada" in pick.openFor("Alex"), pick.open)
-        // Later hellos don't name her.
+        assertTrue("Obi" in pick.openFor("Alex"), pick.open)
+        // Later hellos don't name him.
         val later = o.pick(o.moment(9 * 60, day, 1L, HelloOpenerMemory(), introduced = true, welcome = false), listOf(pick.id), day)
-        assertFalse("Ada" in later.open, later.open)
-        // Every first-of-day opener names her; no other does.
-        (o.FIRST_MORNING + o.FIRST_AFTERNOON + o.FIRST_EVENING + o.FIRST_LATE).forEach { assertTrue("Ada" in it.open) }
-        (o.ALL - (o.FIRST_MORNING + o.FIRST_AFTERNOON + o.FIRST_EVENING + o.FIRST_LATE).toSet()).forEach { assertFalse("Ada" in it.open, it.open) }
+        assertFalse("Obi" in later.open, later.open)
+        // Every first-of-day opener names him; no other does.
+        (o.FIRST_MORNING + o.FIRST_AFTERNOON + o.FIRST_EVENING + o.FIRST_LATE).forEach { assertTrue("Obi" in it.open) }
+        (o.ALL - (o.FIRST_MORNING + o.FIRST_AFTERNOON + o.FIRST_EVENING + o.FIRST_LATE).toSet()).forEach { assertFalse("Obi" in it.open, it.open) }
     }
 
     @Test

@@ -87,7 +87,7 @@ enum class ActivityKind {
      */
     APPROVAL,
     /**
-     * Speaking up, slice 1: a moment Ada said out loud on her own ("Said: Meka, your 07:42 is cancelled. …"), once per
+     * Speaking up, slice 1: a moment Obi said out loud on his own ("Said: Meka, your 07:42 is cancelled. …"), once per
      * notice whichever device said it. Nothing to undo. Added 2026-10-21; older apps skip it.
      */
     SPOKE,

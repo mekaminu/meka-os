@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 2c: Live after the hello, and carrying a conversation on past one window. */
+/** Obi's Live mode, slice 2c: Live after the hello, and carrying a conversation on past one window. */
 class LiveHandOnTest {
     @Test
     fun aConversationCarriesOnOnlyWhileHeIsTalkingAndAtMostAnHour() {

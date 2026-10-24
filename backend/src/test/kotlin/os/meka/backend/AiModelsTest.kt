@@ -186,7 +186,7 @@ class AiModelsTest {
             ModelTurn(ModelTurn.Role.ASSISTANT, "{\"answer\":\"one\"}"),
             ModelTurn(ModelTurn.Role.USER, "Question: second"),
         )
-        val fixed = "You are Ada. " + "Long rules. ".repeat(20)
+        val fixed = "You are Obi. " + "Long rules. ".repeat(20)
         val out = assertIs<ModelOutcome.Answered>(p.complete(ModelRequest("ask", ModelTier.SMALL, fixed + "\nHis name is Alex.", turns, 600, fixed.length, 2)))
         assertEquals(6100, out.inputTokens)
         val sent = Json.parseToJsonElement(http.calls.last().third!!).jsonObject

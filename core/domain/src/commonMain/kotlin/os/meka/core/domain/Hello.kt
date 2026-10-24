@@ -311,15 +311,15 @@ object HelloDock {
     /** A conversation running takes him back to it; otherwise the tap says hello. */
     fun tap(phase: TalkPhase): DockTap = if (phase == TalkPhase.ENDED) DockTap.HELLO else DockTap.CONVERSATION
 
-    /** The screen reader's label: "Say hello to Ada · 2 things need you" · "Ada is listening · back to the conversation" (Ada: [AdaRules]). */
+    /** The screen reader's label: "Say hello to Obi · 2 things need you" · "Obi is listening · back to the conversation" (Obi: [ObiRules]). */
     fun label(phase: TalkPhase, needsYou: Int): String = when (phase) {
-        TalkPhase.LISTENING -> "Ada is listening · back to the conversation"
-        TalkPhase.THINKING, TalkPhase.DOING -> "Ada is thinking · back to the conversation"
-        TalkPhase.SPEAKING -> "Ada is speaking · back to the conversation"
+        TalkPhase.LISTENING -> "Obi is listening · back to the conversation"
+        TalkPhase.THINKING, TalkPhase.DOING -> "Obi is thinking · back to the conversation"
+        TalkPhase.SPEAKING -> "Obi is speaking · back to the conversation"
         TalkPhase.ENDED -> when {
-            needsYou <= 0 -> "Say hello to Ada"
-            needsYou == 1 -> "Say hello to Ada · 1 thing needs you"
-            else -> "Say hello to Ada · $needsYou things need you"
+            needsYou <= 0 -> "Say hello to Obi"
+            needsYou == 1 -> "Say hello to Obi · 1 thing needs you"
+            else -> "Say hello to Obi · $needsYou things need you"
         }
     }
 }
@@ -505,8 +505,8 @@ object HelloEntrance {
      */
     fun standKeepsTalk(needsAsk: Boolean): Boolean = needsAsk
 
-    /** The screen reader's label for the stage (the companion's name, [AdaRules.NAME]), and the hint under the orb. */
-    const val LABEL = AdaRules.NAME
+    /** The screen reader's label for the stage (the companion's name, [ObiRules.NAME]), and the hint under the orb. */
+    const val LABEL = ObiRules.NAME
     const val CLOSE_HINT = "Swipe down to close"
 }
 
@@ -661,12 +661,12 @@ object HelloCards {
  * (Non-AI, pure.)
  */
 object HelloWakeRules {
-    const val LABEL = "Say “Hey Ada”"
+    const val LABEL = "Say “Hey Obi”"
     const val DEFAULT_ON = false
     const val TURN_ON = "Turn on"
     const val TURN_OFF = "Turn off"
     /** Beside the orb while it listens for the phrase (the visible indicator). */
-    const val LISTENING_LINE = "Listening for “Hey Ada”"
+    const val LISTENING_LINE = "Listening for “Hey Obi”"
 
     /** The Mac's on-device speech stops a task after about a minute: a fresh one starts each window. */
     const val MAC_WINDOW_MS = 50_000L
@@ -686,11 +686,23 @@ object HelloWakeRules {
     )
 
     /**
-     * The companion is called Ada (Meka 2026-10-20 21:04): how the recogniser writes "Ada" after a greeting. Only
-     * with a greeting straight before it ("hey Ada", "hello Ada"): the short name alone, or in a sentence, isn't a
-     * wake, and near words ("other", "data", "hey there", "aider") aren't her name.
+     * The assistant is called Obi (Meka 2026-10-22/23; he was Ada): how the recogniser writes "Obi" after a greeting.
+     * Only with a greeting straight before it ("hey Obi", "hello Obi", "OK Obi"): the short name alone, or in a
+     * sentence, isn't a wake. Tuned against the near words: "Toby", "hobby", "obey me"-style sentences without a
+     * greeting, and "okay" on its own aren't his name; the recogniser's spellings of it ("Obie", "Oby", "OB", "oh be")
+     * are.
      */
-    private val ADA = setOf("ada", "adah", "ayda", "aida", "adda", "adar")
+    val OBI_WORDS: Set<String> = setOf("obi", "obie", "oby", "obee", "obbie", "obby", "obis", "obey", "ob", "obe")
+
+    /** The recogniser's two-word spellings of Obi ("oh be", "O B"), only straight after a greeting like the rest. */
+    private val OBI_PAIRS: List<List<String>> = listOf(
+        listOf("oh", "be"), listOf("oh", "bee"), listOf("o", "b"), listOf("oh", "b"), listOf("o", "be"), listOf("o", "bee"),
+    )
+
+    /** Whether the words from [at] spell Obi ([OBI_WORDS], [OBI_PAIRS]). */
+    private fun obiAt(w: List<String>, at: Int): Boolean =
+        (at < w.size && w[at] in OBI_WORDS) ||
+            OBI_PAIRS.any { p -> at + p.size <= w.size && p.indices.all { w[at + it] == p[it] } }
 
     /** The words, lower case, letters and digits only, split on everything else ("Hey, Navi-life!" → hey navi life). */
     fun words(text: String): List<String> =
@@ -699,15 +711,15 @@ object HelloWakeRules {
 
     /**
      * Whether [transcript] (a partial or final result) holds the phrase: a greeting word straight before the name, or
-     * the name alone as the first thing said ("Navilife, …"); or a greeting straight before Ada ("hey Ada", [ADA]).
-     * Anything else (the name in the middle of a sentence on the radio, "hello" alone, "Ada" without a greeting)
+     * the name alone as the first thing said ("Navilife, …"); or a greeting straight before Obi ("hey Obi", [OBI_WORDS]).
+     * Anything else (the name in the middle of a sentence on the radio, "hello" alone, "Obi" without a greeting)
      * isn't a wake.
      */
     fun heard(transcript: String?): Boolean {
         val w = words(transcript ?: return false)
         if (w.isEmpty()) return false
         for (i in w.indices) {
-            if (w[i] in GREETINGS && i + 1 < w.size && w[i + 1] in ADA) return true
+            if (w[i] in GREETINGS && obiAt(w, i + 1)) return true
             val nameAt = i + if (w[i] in GREETINGS) 1 else 0
             if (nameAt == i && i != 0) continue
             if (NAMES.any { n -> nameAt + n.size <= w.size && n.indices.all { w[nameAt + it] == n[it] } }) return true
@@ -735,8 +747,8 @@ object HelloWakeRules {
         LABEL,
         when {
             !available -> "This ${if (mac) "Mac" else "phone"} can't recognise speech on the device, so the phrase can't be listened for."
-            on && mac -> "On: while Navilife is the app in front, say “Hey Ada” (or “Hello Navilife”) and Ada greets you."
-            on -> "On: with the phone on its stand (the bedside clock, charging), say “Hey Ada” (or “Hello Navilife”) and Ada greets you."
+            on && mac -> "On: while Navilife is the app in front, say “Hey Obi” (or “Hello Navilife”) and Obi greets you."
+            on -> "On: with the phone on its stand (the bedside clock, charging), say “Hey Obi” (or “Hello Navilife”) and Obi greets you."
             else -> "Off: tap the orb to say hello."
         },
         lit = on && available,

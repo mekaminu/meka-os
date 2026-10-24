@@ -1,11 +1,11 @@
 package os.meka.core.domain
 
 /**
- * Talking to Ada like a conversation, slice 2 (Meka, 2026-10-21 20:32: "it takes a while to respond"; find the real
+ * Talking to Obi like a conversation, slice 2 (Meka, 2026-10-21 20:32: "it takes a while to respond"; find the real
  * wait first): the server times each answer it writes, times only, nothing of what was asked or said.
  *
  * Every mark is ms since the question reached the server: the web looked up ([webMs], a searched question only), the
- * model's first words back ([firstTokenMs]), the answer's first sentence whole ([firstSentenceMs], what Ada says
+ * model's first words back ([firstTokenMs]), the answer's first sentence whole ([firstSentenceMs], what Obi says
  * first), its clip ready in Navilife's voice ([clipMs], a spoken answer only) and the whole answer done ([doneMs]).
  * [open]: an open turn (the companion) rather than a quick look-up. [spoken]: Talk, not typed. [model]: the model's
  * name the provider reported (e.g. "claude-haiku-4-5"), so the next slice can compare models; never anything of his.

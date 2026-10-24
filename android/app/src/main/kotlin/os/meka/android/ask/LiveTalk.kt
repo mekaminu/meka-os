@@ -40,36 +40,36 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
- * Ada's Live mode on the Fold, slice 2: one real-time Gemini Live conversation.
+ * Obi's Live mode on the Fold, slice 2: one real-time Gemini Live conversation.
  *
  * Navilife's server mints a one-session token ([MekaCore.liveSession]; the Gemini key never reaches the phone), and the
  * phone talks to Google's Live WebSocket with it: the microphone goes up in 40 ms chunks (16 kHz, through the voice-call
- * path with the echo canceller and noise suppressor where the phone has them), Ada's voice comes back at 24 kHz and
- * plays as it arrives; when he talks over her Google says so and what is still queued is dropped at once. On the
- * phone's own speaker, while she speaks only his voice clearly over hers goes up ([LiveTalkRules.sendWhileSpeaking]).
+ * path with the echo canceller and noise suppressor where the phone has them), Obi's voice comes back at 24 kHz and
+ * plays as it arrives; when Meka talks over him Google says so and what is still queued is dropped at once. On the
+ * phone's own speaker, while Obi speaks only Meka's voice clearly over his goes up ([LiveTalkRules.sendWhileSpeaking]).
  * Nothing is recorded or kept; only the seconds heard and spoken are reported back ([MekaCore.liveUsage]).
  *
  * If the session isn't set up within [LiveTalkRules.FALLBACK_MS] (no key, the month's cap, Google refusing, no
- * signal), [Listener.onEnded] says fell back and Talk carries on as normal Ada. Callbacks arrive on the main thread.
+ * signal), [Listener.onEnded] says fell back and Talk carries on as normal Obi. Callbacks arrive on the main thread.
  *
  * Slice 2c: a session can be asked for ahead ([prepare], while the hello plays) so Live opens at once when it ends; one
  * never used is reported as 0 seconds ([discardPrepared]). As a session's window closes (or Google says it is going
  * away) and he is still talking, a fresh token carrying Google's resumption handle carries the same conversation on
- * ([LiveHandOnRules]): the microphone and her voice stay open, only the connection to Google is swapped.
+ * ([LiveHandOnRules]): the microphone and his voice stay open, only the connection to Google is swapped.
  */
 class LiveTalk(private val context: Context, private val core: MekaCore, private val scope: CoroutineScope, private val listener: Listener) {
     interface Listener {
         /** Google set the session up: he can talk. */
         fun onReady()
-        /** Ada started or stopped speaking. */
+        /** Obi started or stopped speaking. */
         fun onSpeaking(speaking: Boolean)
-        /** The orb's level, 0 … 1: his voice while he talks, hers while she speaks. */
+        /** The orb's level, 0 … 1: his voice while he talks, Obi's while Obi speaks. */
         fun onLevel(level: Float)
-        /** The conversation ended; [fellBack] when Live never opened and normal Ada should answer instead. */
+        /** The conversation ended; [fellBack] when Live never opened and normal Obi should answer instead. */
         fun onEnded(fellBack: Boolean)
-        /** Slice 4: this turn's words so far, his ([heard]) and Ada's ([said]), from Google's transcripts. */
+        /** Slice 4: this turn's words so far, his ([heard]) and Obi's ([said]), from Google's transcripts. */
         fun onWords(heard: String, said: String) {}
-        /** Slice 4: a turn finished: his words and Ada's answer with the pages she looked up, for Ask to show. */
+        /** Slice 4: a turn finished: his words and Obi's answer with the pages he looked up, for Ask to show. */
         fun onTurn(question: String, answer: os.meka.core.domain.AskOutcome) {}
     }
 
@@ -99,9 +99,9 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private val heardNow = StringBuilder()
     private val saidNow = StringBuilder()
     private val pagesNow = mutableListOf<Pair<String, String>>()
-    /** Slice 5: the cards Ada offered this turn (Ask's own, through the policy gate), shown with her words. */
+    /** Slice 5: the cards Obi offered this turn (Ask's own, through the policy gate), shown with his words. */
     private val cardsNow = mutableListOf<os.meka.core.domain.AskCard>()
-    /** Slice 5b: Money was locked when Ada looked this turn, so Ask shows its Unlock under her words. */
+    /** Slice 5b: Money was locked when Obi looked this turn, so Ask shows its Unlock under his words. */
     private var unlockNow = false
 
     // Slice 2c: the connection to Google now (bumped by each fresh window, so the old one's close ends nothing), the
@@ -182,7 +182,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             open(gen, s!!, null)
             jobs += scope.launch {
                 // The token's window: a little before it closes, carry on into a fresh one or end, never mid-word.
-                // Meanwhile, Ada's speaking state.
+                // Meanwhile, Obi's speaking state.
                 while (gen == generation) {
                     val now = SystemClock.elapsedRealtime()
                     if (setUp && !resuming && now >= endAt) carryOn(gen)
@@ -311,7 +311,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 queue.offer(pcm)
             }
             LiveProtocol.Event.Interrupted -> {
-                // He talked over her: drop what's queued and what the speaker still holds.
+                // Meka talked over him: drop what's queued and what the speaker still holds.
                 queue.clear()
                 playUntil = 0
                 track?.let { t -> runCatching { t.pause(); t.flush(); t.play() } }
@@ -338,7 +338,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     }
 
     /**
-     * Slice 4: Ada asked Navilife to search the web. The core checks the query (never his own life: refused on the
+     * Slice 4: Obi asked Navilife to search the web. The core checks the query (never his own life: refused on the
      * phone) and Navilife's server searches it; the results go back to Google as data, and their pages become the
      * turn's sources in Ask. Anything else is answered with a refusal the model can act on.
      */
@@ -385,7 +385,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         if (gen == generation) outgoing?.trySend(reply)
     }
 
-    /** Slice 4: the turn as Ask shows it (her words and sources), then a clean slate for the next. Main thread. */
+    /** Slice 4: the turn as Ask shows it (his words and sources), then a clean slate for the next. Main thread. */
     private fun finishTurn() {
         val sources = os.meka.core.domain.LiveFactsRules.sources(pagesNow)
         LiveToolRules.turnAnswer(saidNow.toString(), sources, cardsNow.toList(), unlockNow)?.let { listener.onTurn(LiveTalkRules.turnQuestion(heardNow.toString()), it) }
@@ -470,7 +470,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             while (gen == generation) {
                 val pcm = try { queue.poll(TICK_MS, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { null } ?: continue
                 if (gen != generation) break
-                // Her level for the orb, from the chunk about to play.
+                // Obi's level for the orb, from the chunk about to play.
                 val samples = ShortArray(pcm.size / 2) { i -> ((pcm[2 * i].toInt() and 0xff) or (pcm[2 * i + 1].toInt() shl 8)).toShort() }
                 val level = LiveTalkRules.level(BargeInRules.dbfs(samples, samples.size))
                 main.post { if (gen == generation) listener.onLevel(level) }
@@ -502,7 +502,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         track = null
         playUntil = 0
         speakingNow = false
-        // Slice 4: a turn cut short by the end still shows what Ada said.
+        // Slice 4: a turn cut short by the end still shows what Obi said.
         finishTurn()
         // The seconds heard and spoken (nothing of what was said), so the month's count drops from the reserve.
         reportUsage()

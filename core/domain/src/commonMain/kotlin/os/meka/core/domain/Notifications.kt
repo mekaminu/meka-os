@@ -265,7 +265,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     PROTECTED_MAIL("Work mail that waited (protected time)", NoticeTier.HEADS_UP),
     /**
      * Speaking up, slice 3 ([SpeakUpRules.pressureNotice]): at 19:30 the evening before a day stacking up,
-     * "Tomorrow is stacking up" · "Trip form, Council tax and Gym · Move “Gym” to Fri", said by Ada when she may.
+     * "Tomorrow is stacking up" · "Trip form, Council tax and Gym · Move “Gym” to Fri", said by Obi when he may.
      */
     PRESSURE("Tomorrow stacking up (the evening before)", NoticeTier.HEADS_UP),
     /**
@@ -337,9 +337,9 @@ data class Notice(
     val postAs: String? = null,
     /** The web page [NoticeAction.PAY] opens (Bills due: where Meka pays it); http(s) only, null for most. */
     val link: String? = null,
-    /** Speaking up, slice 1: the moment Ada may say this out loud ([SpeakUpRules]); null for a silent notice. */
+    /** Speaking up, slice 1: the moment Obi may say this out loud ([SpeakUpRules]); null for a silent notice. */
     val speak: SpeakMoment? = null,
-    /** What she says after his name ("your 07:42 is cancelled. …"); null when [speak] is. */
+    /** What Obi says after his name ("your 07:42 is cancelled. …"); null when [speak] is. */
     val spoken: String? = null,
 ) {
     /** The platform notification's identity: [postAs], else [key]. */
@@ -1018,9 +1018,9 @@ object NoticeSources {
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         out += KidsRules.notices(kids, kidRecords, nowMs, cal)
         out += BalanceRules.notices(balance, nowMs, cal)
-        // Speaking up, slice 3: tomorrow stacking up, once in the evening (Ada says it when she may).
+        // Speaking up, slice 3: tomorrow stacking up, once in the evening (Obi says it when he may).
         SpeakUpRules.pressureNotice(pressure, nowMs, cal)?.let { out += it }
-        // Speaking up, slice 4: a reply he was waiting for (Ada says it only if he turned that moment on).
+        // Speaking up, slice 4: a reply he was waiting for (Obi says it only if he turned that moment on).
         out += SpeakUpRules.replyNotices(mailFinds, lists.waiting, nowMs)
         if (workSchedule != null) ProtectedMailRules.morningNotice(mail, protectedTime, nowMs, workSchedule, holidays, cal)?.let { out += it }
         // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.

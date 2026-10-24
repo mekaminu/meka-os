@@ -89,12 +89,12 @@ object AskCodec {
          */
         val name: String? = null,
         /**
-         * The companion is called Ada, slice 1: the first conversation of the day on this device, when she may
-         * introduce herself once ("Ada here"). Left out of the JSON when false; an older server ignores it.
+         * The companion is called Obi, slice 1: the first conversation of the day on this device, when he may
+         * introduce himself once ("Obi here"). Left out of the JSON when false; an older server ignores it.
          */
         val introduce: Boolean = false,
         /**
-         * Talking to Ada like a conversation, slice 7: a device that reads [StreamLine.Next] lines on the stream asks for
+         * Talking to Obi like a conversation, slice 7: a device that reads [StreamLine.Next] lines on the stream asks for
          * the rest of a spoken answer's pieces to be said ahead too. Only with [speak]; left out of the JSON when false,
          * so an older device is never sent a line it can't read, and an older server ignores it.
          */
@@ -318,7 +318,7 @@ object AskCodec {
         data class First(val text: String, val audio: String, val voice: String?, val visemes: String? = null) : StreamLine
         data class Final(val response: Response) : StreamLine
         /**
-         * Talking to Ada like a conversation, slice 7: a later piece of Navilife's own words (one the device will say
+         * Talking to Obi like a conversation, slice 7: a later piece of Navilife's own words (one the device will say
          * after the first), said ahead while the model was still writing, and its clip. Sent only to a device that asked
          * ([Request.speakNext]), always before the [Final] line.
          */
@@ -388,7 +388,7 @@ object AskCodec {
     }
 
     /**
-     * Talking to Ada like a conversation, slice 4: a spoken turn's answer is her words first, as plain text, so the
+     * Talking to Obi like a conversation, slice 4: a spoken turn's answer is his words first, as plain text, so the
      * first sentence can be said the moment it is written, then (only when there are any) one tagged block after them:
      * `<after>{"actions":[…],"sources":[…],"note":"…"}</after>`. Never said.
      */

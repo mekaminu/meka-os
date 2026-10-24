@@ -87,7 +87,7 @@ enum class MoreItem(
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
     SPEAK_UP(os.meka.core.domain.SpeakUpRules.TITLE, os.meka.core.domain.SpeakUpRules.ROW_LINE, null, MoreGroup.SETTINGS),
     APPEARANCE("Appearance", "Dark, Light or Auto", null, MoreGroup.SETTINGS),
-    VOICE("Ada's voice", "How Ada sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
+    VOICE("Obi's voice", "How Obi sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
     TALK("Talk", "The side button and your headphones", null, MoreGroup.SETTINGS),
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
     MAIL(os.meka.core.domain.MailAccountRules.TITLE, os.meka.core.domain.MailAccountRules.ROW_LINE, null, MoreGroup.SETTINGS),

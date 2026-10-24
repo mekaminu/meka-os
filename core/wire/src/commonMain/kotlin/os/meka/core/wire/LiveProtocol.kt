@@ -13,12 +13,12 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /**
- * Ada's Live mode, slice 2: the device ↔ Google messages of a Gemini Live session (the Live API's WebSocket,
+ * Obi's Live mode, slice 2: the device ↔ Google messages of a Gemini Live session (the Live API's WebSocket,
  * `BidiGenerateContent`), built and read here so the Fold and the Mac speak it the same way.
  *
  * The device opens the URL Navilife's server gave it with the one-session token ([connectUrl]: never the key), sends
- * [setup] first, then the microphone as [audio] chunks; Google answers with [Event]s: set up, audio to play, Ada was
- * interrupted (stop playing at once), her turn is complete, the session is going away, and a handle to resume with.
+ * [setup] first, then the microphone as [audio] chunks; Google answers with [Event]s: set up, audio to play, Obi was
+ * interrupted (stop playing at once), his turn is complete, the session is going away, and a handle to resume with.
  */
 object LiveProtocol {
     /** The microphone's audio as Google expects it. */
@@ -27,11 +27,11 @@ object LiveProtocol {
     sealed interface Event {
         /** Google accepted the setup: the conversation can start. */
         data object SetupComplete : Event
-        /** Audio of Ada speaking, each chunk base64 PCM at 24 kHz. */
+        /** Audio of Obi speaking, each chunk base64 PCM at 24 kHz. */
         data class Audio(val chunks: List<String>) : Event
-        /** He talked over Ada: whatever is still queued to play is dropped. */
+        /** He talked over Obi: whatever is still queued to play is dropped. */
         data object Interrupted : Event
-        /** Ada finished her turn. */
+        /** Obi finished his turn. */
         data object TurnComplete : Event
         /** Google will close the session in about [leftMs] (null: soon). */
         data class GoAway(val leftMs: Long?) : Event
@@ -39,9 +39,9 @@ object LiveProtocol {
         data class Resumable(val handle: String) : Event
         /** Slice 4: more of his words as Google heard them (the input transcription, in pieces). */
         data class Heard(val text: String) : Event
-        /** Slice 4: more of Ada's words as she says them (the output transcription, in pieces). */
+        /** Slice 4: more of Obi's words as he says them (the output transcription, in pieces). */
         data class Said(val text: String) : Event
-        /** Slice 4: Ada calls one of Navilife's tools ([name]) with its [query] argument; [id] goes back with the answer. */
+        /** Slice 4: Obi calls one of Navilife's tools ([name]) with its [query] argument; [id] goes back with the answer. */
         data class ToolCall(
             val id: String, val name: String, val query: String,
             /** Slice 5: every plain argument as text (numbers as written), for Navilife's own tools. */

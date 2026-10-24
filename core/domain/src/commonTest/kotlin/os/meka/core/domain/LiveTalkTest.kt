@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 2: the synced switch and voice, the fallback, the meter lines and the counted seconds. */
+/** Obi's Live mode, slice 2: the synced switch and voice, the fallback, the meter lines and the counted seconds. */
 class LiveTalkTest {
     @Test
     fun liveIsOffUntilTurnedOnAndFollowsToTheOtherDevice() {
@@ -23,7 +23,7 @@ class LiveTalkTest {
         assertTrue(voice.chooseLiveVoice("sulafat"))
         assertFalse(voice.chooseLiveVoice("Robot")) // not a voice the picker offers
         assertEquals("Sulafat", voice.liveVoice())
-        assertEquals("Brian", voice.chosen()) // normal Ada's voice stays as it was
+        assertEquals("Brian", voice.chosen()) // normal Obi's voice stays as it was
         a.syncWithRetry(); m.syncWithRetry()
         val mac = MekaVoiceStore(m.replica)
         assertTrue(mac.liveOn())
@@ -54,12 +54,12 @@ class LiveTalkTest {
         assertEquals(0f, LiveTalkRules.level(-90f))
         assertEquals(1f, LiveTalkRules.level(0f))
         assertEquals(0.5f, LiveTalkRules.level(-30f))
-        // 48,000 bytes at 24 kHz is one second of Ada; a chunk arriving while the last still plays queues behind it.
+        // 48,000 bytes at 24 kHz is one second of Obi; a chunk arriving while the last still plays queues behind it.
         assertEquals(2_000, LiveTalkRules.playUntil(0, 1_000, 48_000))
         assertEquals(3_000, LiveTalkRules.playUntil(2_000, 1_500, 48_000))
         assertTrue(LiveTalkRules.speaking(2_000, 2_200))
         assertFalse(LiveTalkRules.speaking(2_000, 2_300))
-        // On the speaker only his voice clearly over hers goes up while she speaks; with headphones everything.
+        // On the speaker only Meka's voice clearly over Obi's goes up while Obi speaks; with headphones everything.
         assertFalse(LiveTalkRules.sendWhileSpeaking(BargeInOutput.SPEAKER, -40f))
         assertTrue(LiveTalkRules.sendWhileSpeaking(BargeInOutput.SPEAKER, -20f))
         assertTrue(LiveTalkRules.sendWhileSpeaking(BargeInOutput.HEADPHONES, -60f))
@@ -91,14 +91,14 @@ class LiveTalkTest {
         // Slice 2b.
         val r = LiveTalkRules
         assertNull(r.activityLine(false, "2026-10", 0, 0, "ok", 0, 1_500)) // no key, nothing used: nothing to say
-        assertEquals("Ada's Live · no talks yet in October · up to £15", r.activityLine(true, "2026-10", 0, 0, "ok", 0, 1_500))
-        assertEquals("Ada's Live · 3 talks · 13 min · £0.42 of £15 in October", r.activityLine(true, "2026-10", 3, 754, "ok", 42, 1_500))
-        assertEquals("Ada's Live · 1 talk · £0.19 of £15 this month", r.activityLine(true, null, 1, 0, "ok", 19, 1_500)) // not reported yet
+        assertEquals("Obi's Live · no talks yet in October · up to £15", r.activityLine(true, "2026-10", 0, 0, "ok", 0, 1_500))
+        assertEquals("Obi's Live · 3 talks · 13 min · £0.42 of £15 in October", r.activityLine(true, "2026-10", 3, 754, "ok", 42, 1_500))
+        assertEquals("Obi's Live · 1 talk · £0.19 of £15 this month", r.activityLine(true, null, 1, 0, "ok", 19, 1_500)) // not reported yet
         assertEquals(
-            "Ada's Live · 40 talks · 300 min · £15 of £15 in December · off until 1 Jan",
+            "Obi's Live · 40 talks · 300 min · £15 of £15 in December · off until 1 Jan",
             r.activityLine(true, "2026-12", 40, 18_000, "over", 1_500, 1_500),
         )
-        assertEquals("Ada's Live · 2 talks · 1 min · £0.05 of £15 this month · off until the 1st", r.activityLine(false, "bad", 2, 1, "over", 5, 1_500))
+        assertEquals("Obi's Live · 2 talks · 1 min · £0.05 of £15 this month · off until the 1st", r.activityLine(false, "bad", 2, 1, "over", 5, 1_500))
     }
 
     @Test

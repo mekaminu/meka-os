@@ -500,7 +500,7 @@ class SpeechTest {
 
     @Test
     fun pollyIsSentSsmlAndAnEngineThatRefusesItGetsThePlainWordsFromThenOn() {
-        // Talking to Ada like a conversation, slice 7: a small pause after a reaction, a touch quicker.
+        // Talking to Obi like a conversation, slice 7: a small pause after a reaction, a touch quicker.
         val calls = mutableListOf<Pair<String, String>>()
         val plainOnly = mutableSetOf<String>()
         val ok = PollySpeech.sayMarkedUp("Oh nice. What sort?", "generative", plainOnly) { w, t -> calls += w to t; byteArrayOf(1) }

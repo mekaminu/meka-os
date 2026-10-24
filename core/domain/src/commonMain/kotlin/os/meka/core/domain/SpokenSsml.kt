@@ -1,7 +1,7 @@
 package os.meka.core.domain
 
 /**
- * Talking to Ada like a conversation, slice 7 (speech that sounds alive): how a piece of Ada's own words is marked up
+ * Talking to Obi like a conversation, slice 7 (speech that sounds alive): how a piece of Obi's own words is marked up
  * for Amazon Polly. A short reaction at the start ("Oh nice.", "Ha, fair.", "Honestly?") gets a small natural pause
  * after it, and the whole piece is said a little quicker than Polly's default ([RATE]), as a person chatting does.
  * Only Navilife's own words are ever marked up; every `&`, `<`, `>`, `"` and `'` is escaped, so nothing in the words

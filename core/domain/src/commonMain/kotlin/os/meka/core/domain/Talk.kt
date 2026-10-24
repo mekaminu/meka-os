@@ -75,9 +75,8 @@ object TalkRules {
     /** Words that carry no meaning on their own and are ignored around the rest. */
     private val FILLERS = setOf(
         "meka", "navilife", "hey", "um", "umm", "uh", "er", "erm", "oh", "well", "so", "right", "then", "just", "and",
-        // Conversation mode (slice 6): "thanks, Ada" ends it; the name as the recogniser writes it ([HelloWakeRules]).
-        "ada", "adah", "ayda", "aida", "adda", "adar",
-    )
+        // Conversation mode (slice 6): "thanks, Obi" ends it; the name as the recogniser writes it ([HelloWakeRules]).
+    ) + HelloWakeRules.OBI_WORDS
 
     private val ENDINGS = phrases(
         "that's all", "thats all", "that is all", "that's it", "thats it", "that is it", "that's everything",
@@ -431,7 +430,7 @@ sealed interface TalkEffect {
     /** Stop speaking at once (Meka talked over MEKA). */
     data object StopSpeaking : TalkEffect
     /**
-     * Speaking up, slice 2: "shh" / "not now" said to Ada: mute speaking up for 2 hours on every device
+     * Speaking up, slice 2: "shh" / "not now" said to Obi: mute speaking up for 2 hours on every device
      * (`MekaCore.muteSpeakUp`). Comes before the line that says so; the conversation ends after that line.
      */
     data object MuteSpeakingUp : TalkEffect
@@ -501,13 +500,13 @@ object TalkFlow {
         val link = s.help
         // Take me there is offered for the answer it came with; anything said next moves on from it.
         val t = s.copy(help = null)
-        // Speaking up, slice 2: "shh" to Ada mutes her speaking up for 2 hours, says so, and the conversation ends.
+        // Speaking up, slice 2: "shh" to Obi mutes his speaking up for 2 hours, says so, and the conversation ends.
         val justGreeted = t.conversation.turns.lastOrNull()?.question == HelloRules.ASKED
         if (SpeakUpRules.mutesInTalk(utterance, t.pending.isNotEmpty() || justGreeted)) return TalkStep(
             t.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), endAfterSpeaking = true),
             listOf(TalkEffect.MuteSpeakingUp, TalkEffect.Speak(SpeakUpRules.MUTED_REPLY)),
         )
-        // The orb says hello like a person, slice 3: "good thanks, you?" straight after the hello gets Ada's own answer.
+        // The orb says hello like a person, slice 3: "good thanks, you?" straight after the hello gets Obi's own answer.
         afterHello(t, utterance)?.let { return it }
         return when (val r = TalkRules.reply(utterance, t.pending.size, places, help = link != null)) {
             TalkReply.Silence -> silence(t)

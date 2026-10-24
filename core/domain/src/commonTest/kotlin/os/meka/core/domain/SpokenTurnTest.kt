@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Talking to Ada like a conversation, slice 5: spoken turns are talk, not written answers. */
+/** Talking to Obi like a conversation, slice 5: spoken turns are talk, not written answers. */
 class SpokenTurnTest {
     @Test
     fun aChattyTurnIsLeftAsItIs() {

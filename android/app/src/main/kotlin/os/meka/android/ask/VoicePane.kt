@@ -120,7 +120,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         remembers = runCatching { core.companionRemembers() }.getOrDefault(true)
         memoryRows = runCatching { core.companionMemoryRows() }.getOrDefault(emptyList())
     }
-    // Ada's Live mode, slice 2: the Live switch, its month's meter, what goes to Google and the Live voice (synced).
+    // Obi's Live mode, slice 2: the Live switch, its month's meter, what goes to Google and the Live voice (synced).
     var live by remember { mutableStateOf<os.meka.core.domain.LiveSettingsView?>(null) }
     LaunchedEffect(Unit) { live = runCatching { core.liveSettings() }.getOrNull() }
     LaunchedEffect(Unit) {
@@ -132,7 +132,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
     // The orb speed pass, slice 2: the last 20 hellos and answers, how long each took to start (this phone only).
     var speed by remember { mutableStateOf<os.meka.core.domain.TurnSpeedView?>(null) }
     LaunchedEffect(Unit) { speed = runCatching { core.turnSpeed("phone") }.getOrNull() }
-    // Talking to Ada like a conversation, slice 2: the server's own timings of the last day's answers.
+    // Talking to Obi like a conversation, slice 2: the server's own timings of the last day's answers.
     var serverSpeed by remember { mutableStateOf<os.meka.core.domain.ServerSpeedView?>(null) }
     LaunchedEffect(Unit) { serverSpeed = runCatching { core.serverSpeed() }.getOrNull() }
     val reduced = Meka.reducedMotion
@@ -266,8 +266,8 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionRules.CALL_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Ada calls you by name") { callSir(false) }
-                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Ada calls you sir") { callSir(true) }
+                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Obi calls you by name") { callSir(false) }
+                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Obi calls you sir") { callSir(true) }
                 }
                 Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
                     Text(CompanionRules.callLine(now), style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -308,7 +308,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         live?.let { lv ->
-            // Ada's Live mode, slice 2: real-time conversation on Gemini Live, off until he turns it on.
+            // Obi's Live mode, slice 2: real-time conversation on Gemini Live, off until he turns it on.
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(lv.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Text(lv.intro, style = MekaType.caption, color = Meka.colors.textTertiary)

@@ -370,7 +370,7 @@ private struct ShellSheetsD: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
                 NotificationsSheet(palette: palette)
             }
-            // Speaking up (the JARVIS step, slice 1): which moments Ada says out loud, how often, Mute.
+            // Speaking up (the JARVIS step, slice 1): which moments Obi says out loud, how often, Mute.
             .sheet(isPresented: Binding(get: { model.showSpeakUp }, set: { model.showSpeakUp = $0 })) {
                 SpeakUpSheet(palette: palette)
             }

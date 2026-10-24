@@ -64,7 +64,7 @@ class GroupDigestCodecTest {
                 {"lane":"action","from":"Femi","summary":"Bring the ball","proposals":[{"kind":"task","title":"Bring the ball","words":"Saturday"},{"kind":"transfer","title":"x"}]},
                 {"lane":"fyi","from":"Obi","summary":"Nothing"}
               ]},
-              {"name":"Family","gist":"Pizza at Obi's","asks":[{"lane":"needs_reply","from":"Mum","summary":"Coming?"},{"lane":"needs_reply","from":"Ada","summary":"And you?"}]},
+              {"name":"Family","gist":"Pizza at Obi's","asks":[{"lane":"needs_reply","from":"Mum","summary":"Coming?"},{"lane":"needs_reply","from":"Obi","summary":"And you?"}]},
               {"gist":"no name"}
             ]}
             ```

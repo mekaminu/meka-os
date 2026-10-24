@@ -116,7 +116,7 @@ object SetupRules {
             SetupSection("Calendars", calendars(f)),
             SetupSection("Call assistant", calls(f)),
             SetupSection("Messages", messages(f)),
-            SetupSection("Ada's voice", voice(f)),
+            SetupSection("Obi's voice", voice(f)),
             SetupSection("Weather and travel", listOfNotNull(commute?.let(::commuteStep)) + places(f)),
             // Inbox autopilot, slice 1b: the facade puts MailAccountRules.setupStep in place of this one (same key).
             SetupSection("Mail", listOf(SetupStep(MailAccountRules.SETUP_KEY, MailAccountRules.SETUP_TITLE, "Connect this device to Navilife's server first", SetupState.LATER))),

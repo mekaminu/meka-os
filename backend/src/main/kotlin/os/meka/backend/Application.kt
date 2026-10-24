@@ -145,7 +145,7 @@ fun Application.mekaSync(
     updateFailures: UpdateFailures? = null,
     /** The Fold's posture changes (bedside clock, slice 2); null leaves the routes out. */
     foldPostures: FoldPostures? = null,
-    /** The server's timing of each answer (talking to Ada like a conversation, slice 2); null keeps none and leaves its route out. */
+    /** The server's timing of each answer (talking to Obi like a conversation, slice 2); null keeps none and leaves its route out. */
     talkSpeed: TalkSpeed? = null,
     /** The phone's notification trace (notifications never seen, slice 2); null leaves the routes out. */
     notifyReports: NotifyReports? = null,
@@ -157,7 +157,7 @@ fun Application.mekaSync(
     vaultFiles: VaultFiles? = null,
     /** Obi's face (slice 1): the face's seven files from the private bucket; null leaves the routes out. */
     faceFiles: FaceFiles? = null,
-    /** Ada's Live mode (slice 1): Gemini Live session tokens and their meter; null leaves the routes out. */
+    /** Obi's Live mode (slice 1): Gemini Live session tokens and their meter; null leaves the routes out. */
     live: LiveSessions? = null,
 ) {
     val sync = SyncService(opStore)
@@ -875,7 +875,7 @@ fun Application.mekaSync(
         }
 
         if (live != null) {
-            // Ada's Live mode, slice 1: the month's Live meter; a token for one Gemini Live session (Google's, never the
+            // Obi's Live mode, slice 1: the month's Live meter; a token for one Gemini Live session (Google's, never the
             // key); and how many seconds a session heard and spoke. Keyed devices only. Nothing said passes through here.
             post(LiveCodec.STATUS_PATH) {
                 val body = call.boundedBody()
@@ -891,7 +891,7 @@ fun Application.mekaSync(
                 val session = withContext(Dispatchers.IO) { live.session(caller.householdId, request) }
                 call.respondText(LiveCodec.encodeSession(session), ContentType.Application.Json)
             }
-            // Slice 4: a web search Ada asked for in a Live session (its query only; nothing kept or logged).
+            // Slice 4: a web search Obi asked for in a Live session (its query only; nothing kept or logged).
             post(LiveCodec.SEARCH_PATH) {
                 val body = call.boundedBody()
                 val caller = call.device(devices, verifier, body, requireKey = true)
@@ -909,7 +909,7 @@ fun Application.mekaSync(
         }
 
         if (talkSpeed != null) {
-            // Talking to Ada like a conversation, slice 2: the household's last day of answer timings (times only), for
+            // Talking to Obi like a conversation, slice 2: the household's last day of answer timings (times only), for
             // Speed on the devices and the deploy report (the publisher may read it too).
             post(ServerSpeedCodec.PATH) {
                 val body = call.boundedBody()
@@ -1368,7 +1368,7 @@ fun main(args: Array<String>) {
                 PostgresFamilyInviteStore(ds), opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, verifier,
                 onWritten = { hh -> push?.serverChanged(hh) },
             )
-            // Ada's Live mode, slice 1: Gemini Live tokens and their £15 meter; "off" until the Gemini key is in.
+            // Obi's Live mode, slice 1: Gemini Live tokens and their £15 meter; "off" until the Gemini key is in.
             val live = liveFromEnv(ds, liveFacts)
             embeddedServer(Netty, port = port) {
                 mekaSync(

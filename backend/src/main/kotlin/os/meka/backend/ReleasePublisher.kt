@@ -197,7 +197,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
         return FoldPostureCodec.decodeLatest(body)
     }
 
-    /** Talking to Ada like a conversation, slice 2: the last day's answer timings; null from a server without the route. */
+    /** Talking to Obi like a conversation, slice 2: the last day's answer timings; null from a server without the route. */
     suspend fun talkSpeed(): List<ServerSpeedCodec.Turn>? {
         val (status, body) = send(ServerSpeedCodec.PATH, ServerSpeedCodec.encodeRequest())
         if (status == 404) return null
@@ -265,7 +265,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  *    Always exits 0: reading them never fails the publish job.
  *  - `publisher-postures <url>`: prints the Fold's last posture changes (bedside clock, slice 2) as GitHub notices,
  *    newest first, so a build run reads what the Fold 8 reports. Always exits 0.
- *  - `publisher-speed <url>`: prints the server's answer timings over the last day (talking to Ada like a
+ *  - `publisher-speed <url>`: prints the server's answer timings over the last day (talking to Obi like a
  *    conversation, slice 2): the middle of each step for quick look-ups and for conversation. Always exits 0.
  *  - `publisher-notifications <url>`: prints the phone's notification report (notifications never seen, slice 2): one
  *    summary notice (allowed, MEKA's phone setting, channels off, the server's last push) and one per trace entry.
@@ -489,7 +489,7 @@ object ReleasePublisherCli {
     }
 
     /**
-     * Talking to Ada like a conversation, slice 2: the server's answer timings over the last day as notices, one for
+     * Talking to Obi like a conversation, slice 2: the server's answer timings over the last day as notices, one for
      * quick look-ups and one for conversation (the middle of each step), else one saying there were none.
      */
     fun speedLines(turns: List<ServerSpeedCodec.Turn>?, nowMs: Long): List<String> {

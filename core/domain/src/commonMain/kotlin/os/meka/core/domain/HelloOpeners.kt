@@ -7,7 +7,7 @@ import kotlin.random.Random
  *
  * A tap on the orb opens with one of 70+ hand-written openers chosen on the device (no AI wait, instant): by part of
  * the day, Monday morning, Friday, the weekend, a second tap ("Back again, Alex?"), the Mac's welcome back, and the
- * first hello of the day, where Ada introduces herself ("Morning, Alex. It's Ada."). Every opener says his name when
+ * first hello of the day, where Obi introduces himself ("Morning, Alex. It's Obi."). Every opener says his name when
  * About you has one (even with "sir" on: sir is for the rest of the conversation) and ends with a question so Talk
  * listens straight after. None repeats within the last [RECENT] hellos. Openers never name anyone else or anything
  * private: the one touch from his day (if any) is [HelloRules]' own point, said between the opener and its question.
@@ -28,7 +28,7 @@ data class HelloMoment(
     val welcome: Boolean = false,
     /** The moments around him ([HelloMoments]); none by default. */
     val moments: HelloMoments = HelloMoments(),
-    /** Hello slice 4: this part of the day's fresh openers Ada wrote ([HelloFreshRules]), joining its plain pool. */
+    /** Hello slice 4: this part of the day's fresh openers Obi wrote ([HelloFreshRules]), joining its plain pool. */
     val fresh: List<HelloOpener> = emptyList(),
 )
 
@@ -171,30 +171,30 @@ object HelloOpeners {
         "Good to have you back, $N." to "How can I help?",
     )
 
-    /** The first hello of the day: Ada says who she is (and then not again that day, [AdaRules]). */
+    /** The first hello of the day: Obi says who he is (and then not again that day, [ObiRules]). */
     val FIRST_MORNING = pool(
         "im",
-        "Morning, $N. It's Ada." to "What can I do for you?",
-        "Good morning, $N. Ada here." to "How are you doing?",
-        "Hi $N, it's Ada. Morning." to "What's first?",
+        "Morning, $N. It's Obi." to "What can I do for you?",
+        "Good morning, $N. Obi here." to "How are you doing?",
+        "Hi $N, it's Obi. Morning." to "What's first?",
     )
     val FIRST_AFTERNOON = pool(
         "ia",
-        "Afternoon, $N. It's Ada." to "How's the day going?",
-        "Hi $N, Ada here." to "Anything I can help with?",
-        "Good afternoon, $N. It's Ada." to "What can I do for you?",
+        "Afternoon, $N. It's Obi." to "How's the day going?",
+        "Hi $N, Obi here." to "Anything I can help with?",
+        "Good afternoon, $N. It's Obi." to "What can I do for you?",
     )
     val FIRST_EVENING = pool(
         "ie",
-        "Evening, $N. Ada here." to "How are you doing?",
-        "Hi $N, it's Ada." to "Anything I can help with?",
-        "Good evening, $N. It's Ada." to "How was today?",
+        "Evening, $N. Obi here." to "How are you doing?",
+        "Hi $N, it's Obi." to "Anything I can help with?",
+        "Good evening, $N. It's Obi." to "How was today?",
     )
     val FIRST_LATE = pool(
         "il",
-        "Hi $N, it's Ada. Still up?" to "What can I do for you?",
-        "Evening, $N. Ada here." to "Anything before you turn in?",
-        "Hey $N, it's Ada. Late one?" to "How can I help?",
+        "Hi $N, it's Obi. Still up?" to "What can I do for you?",
+        "Evening, $N. Obi here." to "Anything before you turn in?",
+        "Hey $N, it's Obi. Late one?" to "How can I help?",
     )
 
     /** Back from work on an office day ([HelloMoments.home]): asked, never assumed. */
@@ -277,7 +277,7 @@ object HelloOpeners {
 
     /**
      * The opener for [m]: the fitting ones in an order shuffled by [day] (so each day runs differently, and the same
-     * on a re-check, which lets the next one be made ahead in Ada's voice), the first not among [recent] (the last
+     * on a re-check, which lets the next one be made ahead in Obi's voice), the first not among [recent] (the last
      * [RECENT] said). If every one was said lately, the one said longest ago.
      */
     fun pick(m: HelloMoment, recent: List<String>, day: Long): HelloOpener {
@@ -296,7 +296,7 @@ object HelloOpeners {
         else -> 0
     }
 
-    /** The moment of a hello at [nowMs] ([day], [minuteOfDay] his local ones) after [memory]; [introduced] Ada already did today. */
+    /** The moment of a hello at [nowMs] ([day], [minuteOfDay] his local ones) after [memory]; [introduced] Obi already did today. */
     fun moment(
         minuteOfDay: Int, day: Long, nowMs: Long, memory: HelloOpenerMemory, introduced: Boolean, welcome: Boolean,
         moments: HelloMoments = HelloMoments(), fresh: HelloFreshSet = HelloFreshSet(),
@@ -347,7 +347,7 @@ object HelloOpeners {
         .filter { it.isNotEmpty() && it.length <= 8 && it.all { c -> c in 'a'..'z' || c in '0'..'9' } }.distinct().take(RECENT)
 
     /**
-     * The pieces of the next hellos worth having in Ada's voice before a tap ([SpeechRules.pieces] of opener + question,
+     * The pieces of the next hellos worth having in Obi's voice before a tap ([SpeechRules.pieces] of opener + question,
      * the clear-day form): the one a tap now would say, the one an hour on, and a quick second tap's.
      */
     fun warm(

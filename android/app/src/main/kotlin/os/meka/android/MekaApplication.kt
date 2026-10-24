@@ -59,7 +59,7 @@ open class MekaApplication : Application() {
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
     /** Notification governor: tiers, quiet hours and the two digests, posted on this phone. */
     val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
-    /** Speaking up: Ada says the moments that matter out loud, privately (after the governor posts). */
+    /** Speaking up: Obi says the moments that matter out loud, privately (after the governor posts). */
     val speakUp: os.meka.android.notify.SpeakUpVoice by lazy { os.meka.android.notify.SpeakUpVoice(this, this) }
     /** Ongoing notifications: the next event's countdown and a running fast. */
     val ongoing: OngoingNotifier by lazy { OngoingNotifier(this, this) }
@@ -85,7 +85,7 @@ open class MekaApplication : Application() {
     /** "Shut down the day" said to Talk (Done for the day, completeness 2): Today opens Shut down, then clears it. */
     val openShutdown = MutableStateFlow(false)
     /**
-     * Week board item (6) part 2: "plan my week" said to Ada, or Plan now on Sunday's Needs you card: Calendar opens on
+     * Week board item (6) part 2: "plan my week" said to Obi, or Plan now on Sunday's Needs you card: Calendar opens on
      * the Board with Plan your week up, then clears it.
      */
     val openPlanWeek = MutableStateFlow(false)

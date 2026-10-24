@@ -6,7 +6,7 @@ import os.meka.core.sync.fv
 
 /**
  * Plan your week, part 2 (Week board item (6); Meka 2026-10-19 20:36): the Sunday nudge and "plan my week" said or
- * typed to Ada. Non-AI and pure.
+ * typed to Obi. Non-AI and pure.
  *
  * - **When:** Sunday from the week ahead's time (18:00 unless he changed it in Week ahead) until Monday 12:00, for the
  *   week starting that Monday; none when the week ahead is off.
@@ -29,7 +29,7 @@ object PlanWeekNudgeRules {
     const val END_MIN = 12 * 60
     const val ABOUT = "about 5 minutes"
 
-    /** What Ada says before the flow opens (Talk and the hello). */
+    /** What Obi says before the flow opens (Talk and the hello). */
     const val OPENING = "Here's your week. Nothing moves till you accept the plan."
 
     /** What the conversation remembers. */

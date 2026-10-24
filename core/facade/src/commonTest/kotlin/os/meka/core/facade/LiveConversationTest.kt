@@ -19,7 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Ada's Live mode, slice 3: the conversation the Mac runs in the core, against a fake Google and a fake core. */
+/** Obi's Live mode, slice 3: the conversation the Mac runs in the core, against a fake Google and a fake core. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LiveConversationTest {
     private class FakeSocket : LiveSocket {
@@ -154,7 +154,7 @@ class LiveConversationTest {
         c.start()
         runCurrent()
         socket.incoming.trySend("""{"setupComplete":{}}""")
-        // A second of her voice queued.
+        // A second of his voice queued.
         socket.incoming.trySend("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"${"A".repeat(64_000)}"}}]}}}""")
         runCurrent()
         c.sendAudio("ZZZZ", 3, -45f, headphones = false)
@@ -162,7 +162,7 @@ class LiveConversationTest {
         assertTrue(!socket.sent.last().contains("ZZZZ") && socket.sent.last().contains("AAAA"), "quiet: silence goes up")
         c.sendAudio("YYYY", 3, -10f, headphones = false)
         runCurrent()
-        assertTrue(socket.sent.last().contains("YYYY"), "him over her goes up")
+        assertTrue(socket.sent.last().contains("YYYY"), "Meka over Obi goes up")
         c.sendAudio("XXXX", 3, -45f, headphones = true)
         runCurrent()
         assertTrue(socket.sent.last().contains("XXXX"), "headphones: everything goes up")

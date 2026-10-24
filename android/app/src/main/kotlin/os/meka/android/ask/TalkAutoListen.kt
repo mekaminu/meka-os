@@ -134,7 +134,7 @@ object TalkAutoListen {
     }
 
     /**
-     * Talking to Ada like a conversation, slice 1: the one soft, breath-like tone when an answer is slow
+     * Talking to Obi like a conversation, slice 1: the one soft, breath-like tone when an answer is slow
      * ([os.meka.core.domain.AnswerWaitRules.cues], past 2.5 s): a low sine that swells and fades over about 0.6 s,
      * much quieter than [chime]; never a word.
      */

@@ -36,7 +36,7 @@ object CompanionMemoryRules {
     const val MAX_NOTE = 140
 
     /** Settings → Navilife's voice. */
-    const val TITLE = "What Ada remembers"
+    const val TITLE = "What Obi remembers"
     const val ON_LABEL = "Remember"
     const val OFF_LABEL = "Don't remember"
     const val FORGET_ALL = "Forget all"

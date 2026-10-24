@@ -2,16 +2,16 @@
 import AVFoundation
 import os
 
-/// Ada's Live mode on the Mac (slice 3): one real-time Gemini Live conversation, like the Fold's `LiveTalk`.
+/// Obi's Live mode on the Mac (slice 3): one real-time Gemini Live conversation, like the Fold's `LiveTalk`.
 ///
 /// The conversation itself runs in the core (`LiveConversation`, from `CoreModel.newLiveConversation`): the session
-/// token from Navilife's server (the Gemini key never reaches the Mac), Google's WebSocket, Ada's tools (the web
+/// token from Navilife's server (the Gemini key never reaches the Mac), Google's WebSocket, Obi's tools (the web
 /// search, his days, Ask's cards through the policy gate, his mail, his money while unlocked), each turn's words and
-/// sources for Ask, the seconds reported, a fresh window carrying the talk on while he is still talking, and normal Ada
+/// sources for Ask, the seconds reported, a fresh window carrying the talk on while he is still talking, and normal Obi
 /// taking over when Live isn't set up within 2 s. Here only sound moves: the microphone through the Mac's voice
-/// processing (its echo canceller takes Ada's voice out of what the microphone hears), turned into 16 kHz chunks of
-/// 40 ms (base64, with each chunk's loudness), and Ada's 24 kHz voice played as it comes, dropped at once when he
-/// talks over her. Nothing is recorded or kept.
+/// processing (its echo canceller takes Obi's voice out of what the microphone hears), turned into 16 kHz chunks of
+/// 40 ms (base64, with each chunk's loudness), and Obi's 24 kHz voice played as it comes, dropped at once when Meka
+/// talks over him. Nothing is recorded or kept.
 ///
 /// Main actor throughout, and the conversation is only ever called here. The microphone's tap runs on the audio thread
 /// and hands back plain values (a String, an Int, a Float) in a main-actor task.
@@ -19,15 +19,15 @@ import os
 final class MacLiveTalk {
     /// Google set the session up: he can talk.
     var onReady: () -> Void = {}
-    /// Ada started or stopped speaking.
+    /// Obi started or stopped speaking.
     var onSpeaking: (Bool) -> Void = { _ in }
-    /// The orb's level, 0 … 1: his voice while he talks, hers while she speaks.
+    /// The orb's level, 0 … 1: his voice while he talks, Obi's while Obi speaks.
     var onLevel: (Float) -> Void = { _ in }
-    /// This turn's words so far, his and Ada's.
+    /// This turn's words so far, his and Obi's.
     var onWords: (String, String) -> Void = { _, _ in }
-    /// A turn finished: his words and Ada's answer for Ask.
+    /// A turn finished: his words and Obi's answer for Ask.
     var onTurn: (String, AskOutcome) -> Void = { _, _ in }
-    /// The conversation ended; `true` when Live never opened and normal Ada should answer instead.
+    /// The conversation ended; `true` when Live never opened and normal Obi should answer instead.
     var onEnded: (Bool) -> Void = { _ in }
 
     private(set) var running = false
@@ -40,7 +40,7 @@ final class MacLiveTalk {
                                             channels: 1, interleaved: false)
 
     /// Starts a Live conversation with `model`'s core (the microphone is already allowed). False when the core isn't
-    /// open yet: normal Ada answers.
+    /// open yet: normal Obi answers.
     func start(_ model: CoreModel) -> Bool {
         guard !running else { return true }
         guard ensure(model) != nil else { return false }
@@ -51,7 +51,7 @@ final class MacLiveTalk {
     }
 
     /// Slice 3b: the hello is playing (`greeted` is what it says): the session is asked for now, so `start` opens at
-    /// once when the hello ends and Ada doesn't greet him twice. Only a String crosses into the core.
+    /// once when the hello ends and Obi doesn't greet him twice. Only a String crosses into the core.
     func prepare(_ model: CoreModel, greeted: String) {
         guard !running, let c = ensure(model) else { return }
         c.prepare(greeted: greeted)
@@ -95,7 +95,7 @@ final class MacLiveTalk {
         case .audio(let a):
             play(a.base64)
         case .interrupted:
-            // He talked over her: what is queued goes at once.
+            // Meka talked over him: what is queued goes at once.
             player?.stop()
             player?.play()
         case .words(let w):
@@ -113,14 +113,14 @@ final class MacLiveTalk {
 
     // MARK: Sound
 
-    /// The microphone (voice processing on, so Ada's own voice is taken out of it) and Ada's voice, one engine.
+    /// The microphone (voice processing on, so Obi's own voice is taken out of it) and Obi's voice, one engine.
     private func openAudio() -> Bool {
         closeAudio()
         guard let voiceFormat else { return false }
         let engine = AVAudioEngine()
         let input = engine.inputNode
         // The echo canceller: without it (an older Mac's input), the core still sends only his voice clearly over
-        // hers while she speaks on the speakers.
+        // Obi's while Obi speaks on the speakers.
         try? input.setVoiceProcessingEnabled(true)
         let player = AVAudioPlayerNode()
         engine.attach(player)
@@ -150,15 +150,15 @@ final class MacLiveTalk {
         engine = nil
     }
 
-    /// One 40 ms chunk of his microphone: up to the core (which sends her echo as silence on the speakers), and his
-    /// level to the orb while she is quiet.
+    /// One 40 ms chunk of his microphone: up to the core (which sends Obi's echo as silence on the speakers), and his
+    /// level to the orb while he is quiet.
     private func sendMic(_ base64: String, bytes: Int, dbfs: Float) {
         guard running, engine != nil else { return }
         conversation?.sendAudio(base64: base64, bytes: Int32(bytes), dbfs: dbfs, headphones: MacAudioOut.headphones)
         if !herVoice { onLevel(LiveTalkRules.shared.level(dbfs: dbfs)) }
     }
 
-    /// Ada's voice: base64 16-bit PCM at 24 kHz, queued on the player; her level to the orb.
+    /// Obi's voice: base64 16-bit PCM at 24 kHz, queued on the player; his level to the orb.
     private func play(_ base64: String) {
         guard running, let player, let voiceFormat, let data = Data(base64Encoded: base64), data.count >= 2 else { return }
         let frames = data.count / 2

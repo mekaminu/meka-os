@@ -85,7 +85,7 @@ class MekaCallScreeningService : CallScreeningService() {
                 else -> allow(details)
             }
             // Scam call fix, slice 2: an unknown caller ringing through (or one claiming to be the police, a bank…)
-            // gets the warning over the call screen and on the lock screen, and Ada's line in his earbuds.
+            // gets the warning over the call screen and on the lock screen, and Obi's line in his earbuds.
             decision?.let { s ->
                 runCatching {
                     val key = s.number?.let { People.key(it) }

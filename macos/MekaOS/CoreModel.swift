@@ -945,7 +945,7 @@ final class CoreModel {
         showShutdown = true
     }
 
-    /// "Plan my week" said to Ada, or Plan now on Sunday's Needs you card (Week board item (6) part 2): Calendar opens
+    /// "Plan my week" said to Obi, or Plan now on Sunday's Needs you card (Week board item (6) part 2): Calendar opens
     /// on the Board with Plan your week up; nothing moves until Accept plan there.
     func openPlanWeek() {
         go(to: .calendar, reduced: MotionSetting.reduced)
@@ -1463,13 +1463,13 @@ final class CoreModel {
 
     // MARK: Speaking up (the JARVIS step, slice 1)
 
-    /// A Talk or Hello conversation is running (TalkController sets it): Ada never speaks up over it.
+    /// A Talk or Hello conversation is running (TalkController sets it): Obi never speaks up over it.
     var talkActive = false
-    /// Ada is saying a moment on her own: the sidebar's orb shows Speaking.
+    /// Obi is saying a moment on his own: the sidebar's orb shows Speaking.
     private(set) var speakingUp = false
     @ObservationIgnored private var speakUpSpeaker: MekaSpeaker?
 
-    /// A soft chime, then the line in Ada's voice.
+    /// A soft chime, then the line in Obi's voice.
     private func speakUpNow(_ line: String) {
         let speaker = speakUpSpeaker ?? MekaSpeaker()
         if speakUpSpeaker == nil { speaker.attach(self); speakUpSpeaker = speaker }
@@ -1483,13 +1483,13 @@ final class CoreModel {
         }
     }
 
-    /// A click on the orb while she speaks up: stop her.
+    /// A click on the orb while he speaks up: stop him.
     func stopSpeakingUp() {
         speakUpSpeaker?.stop()
         speakingUp = false
     }
 
-    /// "shh" said to Ada in Talk (slice 2): nothing said out loud on any device for 2 hours; stops her if she's speaking up.
+    /// "shh" said to Obi in Talk (slice 2): nothing said out loud on any device for 2 hours; stops him if he's speaking up.
     func muteSpeakUp() async {
         stopSpeakingUp()
         guard let core else { return }
@@ -2474,7 +2474,7 @@ final class CoreModel {
     /// asked today or the server can't say. Only a String crosses back.
     private(set) var aiTodayLine: String?
 
-    /// Ada's Live mode, slice 2b: Live this month ("Ada's Live · 3 talks · 13 min · £0.42 of £15 in October"); nil
+    /// Obi's Live mode, slice 2b: Live this month ("Obi's Live · 3 talks · 13 min · £0.42 of £15 in October"); nil
     /// when there is nothing to say or the server can't say. Only a String crosses back.
     private(set) var liveActivityLine: String?
 
@@ -2503,7 +2503,7 @@ final class CoreModel {
     private(set) var speedSummary: String?
     private(set) var speedRows: [String] = []
 
-    /// Talking to Ada like a conversation, slice 2: Speed's "On the server" part (the server's own timings of the last
+    /// Talking to Obi like a conversation, slice 2: Speed's "On the server" part (the server's own timings of the last
     /// day's answers, times only); empty when not connected or the server is older.
     private(set) var serverSpeedLines: [String] = []
     private(set) var serverSpeedEmpty: String?
@@ -2562,9 +2562,9 @@ final class CoreModel {
         await refreshSpeed()
     }
 
-    // MARK: Ada's Live mode, slice 3 (the Mac)
+    // MARK: Obi's Live mode, slice 3 (the Mac)
 
-    /// The Live block in Ada's voice settings: the switch, its line (the month's meter or why Live can't run), what goes
+    /// The Live block in Obi's voice settings: the switch, its line (the month's meter or why Live can't run), what goes
     /// to Google and the Live voices; nil until read.
     private(set) var liveSettings: LiveSettingsView?
 
@@ -2586,7 +2586,7 @@ final class CoreModel {
         }
     }
 
-    /// Picks Ada's Live voice on every device, lit at once; a tick haptic. Only the name crosses.
+    /// Picks Obi's Live voice on every device, lit at once; a tick haptic. Only the name crosses.
     func setLiveVoice(_ name: String) {
         guard let core, let now = liveSettings else { return }
         MekaHaptics.tick()

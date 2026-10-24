@@ -100,7 +100,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .notifications: "Notifications"
         case .speakUp: SpeakUpRules.shared.TITLE
         case .appearance: "Appearance"
-        case .voice: "Ada's voice"
+        case .voice: "Obi's voice"
         case .talk: "Talk"
         case .calendars: "Calendars"
         case .mail: MailAccountRules.shared.TITLE
@@ -153,7 +153,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .notifications: "Quiet hours, digests and what reaches you"
         case .speakUp: SpeakUpRules.shared.ROW_LINE
         case .appearance: "Dark, Light or Auto"
-        case .voice: "How Ada sounds in Talk, the brief and calls"
+        case .voice: "How Obi sounds in Talk, the brief and calls"
         case .talk: "⌥Space and the mic"
         case .calendars: "Connected accounts and feeds"
         case .mail: MailAccountRules.shared.ROW_LINE

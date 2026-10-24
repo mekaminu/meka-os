@@ -72,7 +72,7 @@ class TalkController(
     var talkOver by mutableStateOf(BargeInRules.DEFAULT_ON)
         private set
     /**
-     * Conversation mode (slice 6, [os.meka.core.domain.ConversationModeRules]): listening in the window after Ada's line
+     * Conversation mode (slice 6, [os.meka.core.domain.ConversationModeRules]): listening in the window after Obi's line
      * with nothing of his heard yet; the orb says "Go on, I'm listening".
      */
     var followOn by mutableStateOf(false)
@@ -118,8 +118,8 @@ class TalkController(
     val active: Boolean get() = phase != TalkPhase.ENDED
 
     /**
-     * Starts a conversation (the mic permission is already granted). Ada's Live mode, slice 2: with Live on, a Gemini
-     * Live conversation ([LiveTalk]); if it isn't open within 2 s, normal Ada starts listening instead.
+     * Starts a conversation (the mic permission is already granted). Obi's Live mode, slice 2: with Live on, a Gemini
+     * Live conversation ([LiveTalk]); if it isn't open within 2 s, normal Obi starts listening instead.
      */
     fun start() {
         if (active) return
@@ -131,7 +131,7 @@ class TalkController(
         }
     }
 
-    // Ada's Live mode, slice 2: the Live conversation, while one runs.
+    // Obi's Live mode, slice 2: the Live conversation, while one runs.
     private val liveTalk = LiveTalk(context, core, scope, object : LiveTalk.Listener {
         override fun onReady() {
             if (liveRunning) phase = TalkPhase.LISTENING
@@ -148,10 +148,10 @@ class TalkController(
             phase = TalkPhase.ENDED
             this@TalkController.level = 0f
             PhoneListen.latch.sessionOpen = false
-            // Live didn't open in time: normal Ada listens instead, so he is never left with a dead orb.
+            // Live didn't open in time: normal Obi listens instead, so he is never left with a dead orb.
             if (fellBack) begin(TalkFlow.start())
         }
-        // Slice 4: his words and Ada's under the orb as Google transcribes them, and each turn shown in Ask with its sources.
+        // Slice 4: his words and Obi's under the orb as Google transcribes them, and each turn shown in Ask with its sources.
         override fun onWords(heard: String, said: String) {
             if (!liveRunning) return
             this@TalkController.heard = heard
@@ -189,7 +189,7 @@ class TalkController(
         said = ""
         liveRunning = true
         phase = TalkPhase.THINKING // the orb thinks while the session opens
-        scope.launch { core.warmTalk() } // normal Ada's server is ready too, should Live fall back
+        scope.launch { core.warmTalk() } // normal Obi's server is ready too, should Live fall back
         liveTalk.start()
     }
 
@@ -208,8 +208,8 @@ class TalkController(
             val live = runCatching { core.liveOn() }.getOrDefault(false)
             val greeting = runCatching { core.hello() }.getOrNull() ?: return@launch
             if (gen != generation || active) return@launch
-            // Ada's Live mode, slice 2c: with Live on, the hello is still said at once from memory, and the Live session
-            // is asked for while it plays, so when it ends (or he talks over it) Ada carries on live.
+            // Obi's Live mode, slice 2c: with Live on, the hello is still said at once from memory, and the Live session
+            // is asked for while it plays, so when it ends (or he talks over it) Obi carries on live.
             liveAfterHello = live
             if (live) liveTalk.prepare(greeting.spoken)
             // Slice 8: the stage raises the greeting's cards round its orb as each sentence starts.
@@ -249,10 +249,10 @@ class TalkController(
     /** While set (elapsed ms), listening after the brief: the recogniser giving up on silence listens again. */
     private var afterBriefAt: Long? = null
 
-    /** Conversation mode (slice 6): when Ada's last line ended and the microphone opened on its own (elapsed ms). */
+    /** Conversation mode (slice 6): when Obi's last line ended and the microphone opened on its own (elapsed ms). */
     private var followOnAt: Long? = null
 
-    /** Opens conversation mode's window as Ada's line ends ([finishedSaying]); closed by his words or the end. */
+    /** Opens conversation mode's window as Obi's line ends ([finishedSaying]); closed by his words or the end. */
     private fun openFollowOn() {
         followOnAt = android.os.SystemClock.elapsedRealtime()
         followOn = true
@@ -316,7 +316,7 @@ class TalkController(
             TalkAutoListen.chime()
             delay(CHIME_GAP_MS) // so the recogniser doesn't hear the chime
             if (gen != generation || active) return@launch
-            begin(TalkFlow.start()) // listening on open stays with normal Ada (its window below)
+            begin(TalkFlow.start()) // listening on open stays with normal Obi (its window below)
             val started = generation
             val at = System.currentTimeMillis()
             delay(TalkOnOpenRules.WINDOW_MS)
@@ -331,7 +331,7 @@ class TalkController(
 
     /** The orb tapped: while MEKA speaks, stop and listen; otherwise end. */
     fun tapOrb() {
-        if (liveRunning) { liveTalk.stop(); return } // Live: he talks over her by voice; a tap ends it
+        if (liveRunning) { liveTalk.stop(); return } // Live: Meka talks over Obi by voice; a tap ends it
         when (phase) {
             TalkPhase.SPEAKING -> apply(TalkFlow.bargeIn(session))
             TalkPhase.ENDED -> start()
@@ -509,7 +509,7 @@ class TalkController(
                     os.meka.android.shell.OpenItem(os.meka.core.domain.SearchTarget.HELP, "help:" + effect.link.entryId)
             }
             TalkEffect.StopSpeaking -> stopSaying()
-            // Speaking up, slice 2: "shh" to Ada mutes her speaking up for 2 hours on every device.
+            // Speaking up, slice 2: "shh" to Obi mutes his speaking up for 2 hours on every device.
             TalkEffect.MuteSpeakingUp -> {
                 scope.launch { runCatching { core.muteSpeakUp() } }
                 (context.applicationContext as? os.meka.android.MekaApplication)?.speakUp?.stop()
@@ -588,9 +588,9 @@ class TalkController(
     }
 
     /**
-     * Talking to Ada like a conversation, slice 1: while the answer to the question of conversation [gen] is on its way
+     * Talking to Obi like a conversation, slice 1: while the answer to the question of conversation [gen] is on its way
      * the orb shows Thinking, and only past [os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS] with nothing started does
-     * one soft breath-like tone play. Ada never says a holding line ("One sec, Meka…" is gone). Nothing once the answer
+     * one soft breath-like tone play. Obi never says a holding line ("One sec, Meka…" is gone). Nothing once the answer
      * has begun.
      */
     private fun waitCue(gen: Int) {
@@ -650,7 +650,7 @@ class TalkController(
                 if (micOverHello) continue // slice 7: the hello is still speaking; the silence timer starts when it ends
                 if (phase != TalkPhase.LISTENING) return@launch
                 val t = android.os.SystemClock.elapsedRealtime()
-                // Slice 6: Ada's line ended 8 s ago and he has said nothing: the conversation ends quietly.
+                // Slice 6: Obi's line ended 8 s ago and he has said nothing: the conversation ends quietly.
                 if (os.meka.core.domain.ConversationModeRules.lapsed(followOnAt, t, heard.isNotBlank())) {
                     runCatching { recognizer?.cancel() }
                     apply(TalkFlow.silence(session))
@@ -768,7 +768,7 @@ class TalkController(
                     val at = afterBriefAt
                     val now = android.os.SystemClock.elapsedRealtime()
                     if (at != null && BriefFollowOnRules.listenAgain(at, now, speechBegan)) listen()
-                    // Slice 6: after Ada's line the window is the whole 8 s too (conversation mode).
+                    // Slice 6: after Obi's line the window is the whole 8 s too (conversation mode).
                     else if (os.meka.core.domain.ConversationModeRules.listenAgain(followOnAt, now, heard = false)) listen()
                     else apply(TalkFlow.silence(session))
                 }
@@ -796,7 +796,7 @@ class TalkController(
         helloSaying = hello != null
         speaker.say(text) { finishedSaying(id) }
         // Slice 7: with headphones the recogniser opens with the hello, so he can just start talking.
-        // Slice 2c: not when Live takes over after the hello (Live listens itself, and hears him over Ada).
+        // Slice 2c: not when Live takes over after the hello (Live listens itself, and hears him over Obi).
         if (hello != null && !liveAfterHello && os.meka.core.domain.HelloListenRules.opensMic(talkOver, TalkBargeIn.output(context))) listenOverHello(hello)
         else listenOver()
     }

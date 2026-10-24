@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** Talking to Ada like a conversation, slice 6: the microphone stays open after she speaks. */
+/** Talking to Obi like a conversation, slice 6: the microphone stays open after he speaks. */
 class ConversationModeTest {
     @Test
     fun theMicStaysOpenEightSecondsAfterHerLine() {
@@ -17,7 +17,7 @@ class ConversationModeTest {
         assertFalse(ConversationModeRules.listenAgain(at, at + 8_000, heard = false))
         // Once he has said something, it's his turn, not a window.
         assertFalse(ConversationModeRules.listenAgain(at, at + 3_000, heard = true))
-        // Not after one of her lines (he tapped the mic): the recogniser's own end stands.
+        // Not after one of his lines (he tapped the mic): the recogniser's own end stands.
         assertFalse(ConversationModeRules.listenAgain(null, at, heard = false))
 
         assertFalse(ConversationModeRules.lapsed(at, at + 7_999, heard = false))
@@ -42,14 +42,14 @@ class ConversationModeTest {
 
     @Test
     fun thanksAdaEndsTheConversation() {
-        for (bye in listOf("Thanks, Ada", "thank you Ada", "cheers Ada", "that's all Ada", "bye Ada", "thanks Aida", "OK thanks Ada")) {
+        for (bye in listOf("Thanks, Obi", "thank you Obi", "cheers Obi", "that's all Obi", "bye Obi", "thanks Obie", "OK thanks Obi")) {
             assertTrue(TalkRules.isEnding(bye), bye)
             assertIs<TalkReply.End>(TalkRules.reply(bye, pendingCards = 0), bye)
         }
-        // A question with her name in it is still a question.
-        assertIs<TalkReply.Ask>(TalkRules.reply("Ada, what's on tomorrow?", pendingCards = 0))
-        // "Yes please, Ada" with a card on offer confirms it.
-        assertIs<TalkReply.Confirm>(TalkRules.reply("yes please Ada", pendingCards = 1))
+        // A question with his name in it is still a question.
+        assertIs<TalkReply.Ask>(TalkRules.reply("Obi, what's on tomorrow?", pendingCards = 0))
+        // "Yes please, Obi" with a card on offer confirms it.
+        assertIs<TalkReply.Confirm>(TalkRules.reply("yes please Obi", pendingCards = 1))
     }
 
     @Test

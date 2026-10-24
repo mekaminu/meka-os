@@ -158,7 +158,7 @@ class AiAskTest {
         assertTrue(last.startsWith("Since then he did: Moved “Book dentist” to Tomorrow · 09:00\n<today"), last)
         assertTrue(last.endsWith("Question: and the CR to Friday"), last)
         assertEquals(1, sent.turns.count { "<today" in it.text })
-        assertEquals(4, sent.cacheTurns) // slice 3 of the conversation item: the earlier turns end at Ada's last answer
+        assertEquals(4, sent.cacheTurns) // slice 3 of the conversation item: the earlier turns end at Obi's last answer
         assertTrue("answer will be spoken" in sent.system)
         assertEquals(AskService.FEATURE_TALK, sent.feature) // Talk is counted on its own for Activity's day
         // A one-off question is the single turn it always was, without the voice line.
@@ -228,25 +228,25 @@ class AiAskTest {
 
     @Test
     fun theCompanionIsAdaAndIntroducesHerselfOnlyInTheDaysFirstConversation() {
-        // The companion is called Ada, slice 1.
+        // The companion is called Obi, slice 1.
         val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
         AskService(model).ask(request.copy(question = "Any ideas for half term?", introduce = true))
         val first = model.asked.last().system
-        assertTrue(first.startsWith("You are Ada, the personal assistant inside Navilife"), first.take(80))
+        assertTrue(first.startsWith("You are Obi, the personal assistant inside Navilife"), first.take(80))
         assertTrue("you may say who you are once" in first)
         assertFalse("Don't say your own name" in first)
         AskService(model).ask(request.copy(question = "Any ideas for half term?"))
         val later = model.asked.last().system
         assertTrue("Don't say your own name" in later)
         assertFalse("you may say who you are once" in later)
-        // A quick look-up is Ada too.
+        // A quick look-up is Obi too.
         AskService(model).ask(request)
-        assertTrue(model.asked.last().system.startsWith("You are Ada"))
+        assertTrue(model.asked.last().system.startsWith("You are Obi"))
     }
 
     @Test
     fun spokenTurnsAreOnTheQuickModelAndTheFixedInstructionsAndEarlierTurnsAreCached() {
-        // Talking to Ada like a conversation, slice 3: aloud, even an open question goes to the small, quick model.
+        // Talking to Obi like a conversation, slice 3: aloud, even an open question goes to the small, quick model.
         val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
         AskService(model, budgetLevel = { AiBudget.Level.OK }).ask(request.copy(question = "Any ideas for half term?", voice = true))
         val spoken = model.asked.last()
@@ -268,7 +268,7 @@ class AiAskTest {
 
     @Test
     fun aSpokenTurnIsAskedToTalkLikeAPersonAndAListOrALectureIsTidiedToTalk() {
-        // Talking to Ada like a conversation, slice 5: the spoken-conversation prompt, cached with the fixed instructions.
+        // Talking to Obi like a conversation, slice 5: the spoken-conversation prompt, cached with the fixed instructions.
         val model = FakeModel(answered("Here are some options:\n- Fajitas\n- Chilli from the freezer"))
         val r = AskService(model).ask(request.copy(question = "what should I cook tonight?", voice = true, name = "Alex"))
         val sent = model.asked.last()
@@ -459,7 +459,7 @@ class AiAskTest {
 
     @Test
     fun theRestOfASpokenAnswerIsSaidAheadPieceByPieceForADeviceThatAsked() {
-        // Talking to Ada like a conversation, slice 7: the rest said sentence by sentence as it is written.
+        // Talking to Obi like a conversation, slice 7: the rest said sentence by sentence as it is written.
         val model = StreamingModel(listOf("Oh nice. ", "Heat pumps suit a well", "-insulated house. Is ", "yours?", "\n<after>{\"actions\":[]}</after>"))
         val said = java.util.Collections.synchronizedList(mutableListOf<String>())
         val service = AskService(model, { text, voice -> said += text; AskService.FirstClip(byteArrayOf(7), voice ?: "Amy") })
@@ -485,7 +485,7 @@ class AiAskTest {
 
     @Test
     fun aSpokenTurnIsAskedForItsWordsFirstAndWhatComesAfterIsCheckedAsBefore() {
-        // Talking to Ada like a conversation, slice 4: one tag on both ends.
+        // Talking to Obi like a conversation, slice 4: one tag on both ends.
         assertEquals(os.meka.core.domain.StreamedSpeechRules.AFTER_OPEN, AskCodec.AFTER_OPEN)
         assertEquals(os.meka.core.domain.StreamedSpeechRules.AFTER_CLOSE, AskCodec.AFTER_CLOSE)
         val model = FakeModel(answered("Sure, I'll put it in. Anything else?\n<after>{\"actions\":[{\"kind\":\"move_task\",\"ref\":\"t1\",\"date\":\"2026-10-09\"},{\"kind\":\"send_email\",\"title\":\"x\"},{\"kind\":\"complete_task\",\"ref\":\"t9\"}],\"answer\":\"not this\"}</after>"))

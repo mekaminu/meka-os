@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Ada's Live mode, slice 1: the device asks for a session token and reports seconds, never failing. */
+/** Obi's Live mode, slice 1: the device asks for a session token and reports seconds, never failing. */
 class LiveFacadeTest {
     private val meter = LiveCodec.Meter(true, "ok", 40, 1_500)
 
@@ -122,7 +122,7 @@ class LiveFacadeTest {
         voiced.answerVoice = "Amy" // Google's voices off: Polly would stand in, so no sample
         assertNull(c.liveVoiceSample("Kore"))
         assertNull(core(server).liveVoiceSample("Kore")) // no voice on this server
-        assertEquals("Ada's Live · 2 talks · 5 min · £0.40 of £15 in October", c.liveActivityLine())
+        assertEquals("Obi's Live · 2 talks · 5 min · £0.40 of £15 in October", c.liveActivityLine())
         server.down = true
         assertNull(core(server).liveActivityLine())
     }

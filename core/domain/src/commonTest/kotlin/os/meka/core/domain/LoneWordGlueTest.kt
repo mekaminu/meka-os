@@ -10,7 +10,7 @@ class LoneWordGlueTest {
 
     @Test
     fun theLastTwoWordsGoDownTogether() {
-        assertEquals("When Ada says something out loud on her${nb}own", LoneWordGlue.kept(SpeakUpRules.ROW_LINE))
+        assertEquals("When Obi says something out loud on his${nb}own", LoneWordGlue.kept(SpeakUpRules.ROW_LINE))
         assertEquals("Gmail and Outlook${nb}·${nb}read, tidied, sent only on your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
     }
 
@@ -60,7 +60,7 @@ class LoneWordGlueTest {
     @Test
     fun aloneIsOneWordOnItsLine() {
         assertTrue(LoneWordGlue.alone("own"))
-        assertFalse(LoneWordGlue.alone("her${nb}own"))
+        assertFalse(LoneWordGlue.alone("his${nb}own"))
         assertFalse(LoneWordGlue.alone("your tap"))
     }
 }

@@ -6,7 +6,7 @@ import os.meka.core.wire.ServerSpeedCodec
 import javax.sql.DataSource
 
 /**
- * Talking to Ada like a conversation, slice 2 (`POST /v1/talk/speed`): the server's own timing of each answer it
+ * Talking to Obi like a conversation, slice 2 (`POST /v1/talk/speed`): the server's own timing of each answer it
  * wrote ([AskService.askStream] and [AskService.ask]), kept per household (the newest [ServerSpeedRules.KEPT]), read
  * by Speed on the devices and by GitHub's release publisher for the deploy report. Times only: nothing of what was
  * asked or answered is in a timing, and none is logged.

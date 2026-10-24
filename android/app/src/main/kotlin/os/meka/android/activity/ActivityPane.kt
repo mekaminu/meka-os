@@ -84,7 +84,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
     var heardLine by remember { mutableStateOf<String?>(null) }
     // MEKA's AI today ("MEKA's AI today · Talk 6 · Ask 2 · 3¢"); null: nothing asked today or the server can't say.
     var aiLine by remember { mutableStateOf<String?>(null) }
-    // Ada's Live mode, slice 2b: Live this month ("Ada's Live · 3 talks · 13 min · £0.42 of £15 in October"); null: nothing to say.
+    // Obi's Live mode, slice 2b: Live this month ("Obi's Live · 3 talks · 13 min · £0.42 of £15 in October"); null: nothing to say.
     var liveLine by remember { mutableStateOf<String?>(null) }
     // Completeness: how long entries are kept and shown, and what Export saves; null while the log is empty.
     var keptLine by remember { mutableStateOf<String?>(null) }

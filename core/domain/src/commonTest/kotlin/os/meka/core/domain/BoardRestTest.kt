@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Week board, item (11) part 2: "I'm shattered" to Ada, and Stretched holding the alerts that can wait for a day. */
+/** Week board, item (11) part 2: "I'm shattered" to Obi, and Stretched holding the alerts that can wait for a day. */
 class BoardRestTest {
     private val dayMs = CivilDate.DAY_MS
     private val cal = LocalCalendar.UTC
@@ -21,7 +21,7 @@ class BoardRestTest {
 
     @Test
     fun saysHowHeFeelsOnlyAsAWholeRemark() {
-        listOf("I'm shattered", "im knackered", "Hey Ada, I'm absolutely exhausted today", "feeling so drained", "It's been a long day")
+        listOf("I'm shattered", "im knackered", "Hey Obi, I'm absolutely exhausted today", "feeling so drained", "It's been a long day")
             .forEach { assertEquals(Feeling.TIRED, FeelingAskRules.request(it), it) }
         listOf("I'm swamped", "I've got too much on", "I'm really stressed at the moment", "it's all too much", "I'm stretched thin")
             .forEach { assertEquals(Feeling.STRETCHED, FeelingAskRules.request(it), it) }

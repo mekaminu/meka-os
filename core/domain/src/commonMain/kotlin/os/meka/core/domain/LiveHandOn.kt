@@ -1,19 +1,19 @@
 package os.meka.core.domain
 
 /**
- * Ada's Live mode, slice 2c (non-AI, pure): Live after the hello, and a conversation that carries on past one
+ * Obi's Live mode, slice 2c (non-AI, pure): Live after the hello, and a conversation that carries on past one
  * session's window.
  *
  * **After the hello.** With Live on, "Hello, Navilife" (the orb tapped, the phrase, the bedside clock's orb) still
  * says the greeting at once in Navilife's own voice from memory, and while it plays the Live session is asked for, so
- * when the hello ends (or he talks over it) Ada carries on live instead of normal listening. The session is told what
- * she just said ([greeted]) so she doesn't greet him twice. A session asked for but never used (he said "thanks" or
+ * when the hello ends (or he talks over it) Obi carries on live instead of normal listening. The session is told what
+ * he just said ([greeted]) so he doesn't greet Meka twice. A session asked for but never used (he said "thanks" or
  * tapped the orb during the hello) is reported as 0 seconds, so it costs nothing.
  *
  * **Past the window.** Google ends a Live connection after about ten minutes and Navilife's token is for one
  * [LiveModeRules.TOKEN_MS] window. Google keeps a resumption handle for the conversation; when the window is closing
  * (or Google says it is going away) the device asks the server for a fresh token carrying that handle and carries on
- * where it was, the microphone and her voice never closed. It does so only while he is still talking ([IDLE_MS]) and
+ * where it was, the microphone and his voice never closed. It does so only while he is still talking ([IDLE_MS]) and
  * at most [MAX_RESUMES] times (about an hour), so an open microphone left on a table never runs up the month; each
  * window is metered against the £15 cap like any session, and at the cap Live ends as before.
  */

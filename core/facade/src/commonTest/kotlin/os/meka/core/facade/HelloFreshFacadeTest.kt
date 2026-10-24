@@ -22,7 +22,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
-/** The orb says hello like a person, slice 4: fresh openers Ada writes in the background, through the facade. */
+/** The orb says hello like a person, slice 4: fresh openers Obi writes in the background, through the facade. */
 class HelloFreshFacadeTest {
     private companion object { val SLOW_RUNNER = 5.minutes }
 
@@ -70,7 +70,7 @@ class HelloFreshFacadeTest {
         val evening = now
         repeat(5) { d ->
             now = evening + d * 24 * 60 * 60_000L
-            c.hello() // the day's first: Ada introduces herself
+            c.hello() // the day's first: Obi introduces himself
             repeat(8) {
                 now += HelloOpeners.AGAIN_WITHIN_MS + 60_000
                 said += c.hello().opening

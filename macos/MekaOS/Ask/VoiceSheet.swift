@@ -45,8 +45,8 @@ struct VoiceSheet: View {
         .task { await model.refreshLive() }
     }
 
-    /// Ada's Live mode, slice 3: Live Off · On (synced, off until he turns it on), the line under it (the month's meter
-    /// or why Live can't run), what goes to Google, and while on Ada's Live voices, each with ▶ Sample in Google's
+    /// Obi's Live mode, slice 3: Live Off · On (synced, off until he turns it on), the line under it (the month's meter
+    /// or why Live can't run), what goes to Google, and while on Obi's Live voices, each with ▶ Sample in Google's
     /// studio voice of that name (never another voice standing in). The voices unfold on the expand spring; lines
     /// cross-fade; Reduce Motion: cross-fades.
     private func liveBlock(_ lv: LiveSettingsView) -> some View {
@@ -62,7 +62,7 @@ struct VoiceSheet: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(maxWidth: 220)
-            .accessibilityLabel("Ada's Live mode")
+            .accessibilityLabel("Obi's Live mode")
             Text(lv.line).font(MekaType.caption).foregroundStyle(lv.on ? palette.accent : palette.textTertiary)
                 .id(lv.line)
                 .transition(.opacity)
@@ -230,7 +230,7 @@ struct VoiceSheet: View {
                     .buttonStyle(.link)
             }
             if model.serverSpeedShown {
-                // Talking to Ada like a conversation, slice 2: the server's own timings of the last day's answers.
+                // Talking to Obi like a conversation, slice 2: the server's own timings of the last day's answers.
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(ServerSpeedRules.shared.TITLE).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     Text(ServerSpeedRules.shared.INTRO).font(MekaType.caption).foregroundStyle(palette.textTertiary)

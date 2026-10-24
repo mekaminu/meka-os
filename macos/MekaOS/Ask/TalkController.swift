@@ -30,7 +30,7 @@ import Speech
 @Observable
 final class TalkController {
     private(set) var phase: TalkPhase = .ended {
-        // Speaking up: Ada never speaks up over a conversation.
+        // Speaking up: Obi never speaks up over a conversation.
         didSet { model?.talkActive = phase != .ended }
     }
     /// Meka's voice level, 0 … 1, smoothed (`TalkOrb.smooth`).
@@ -49,10 +49,10 @@ final class TalkController {
     private(set) var problem: TalkProblem?
     /// "Talk over MEKA" is on for this conversation (read from the Mac's setting at each start; the orb's line).
     private(set) var talkOver = true
-    /// Conversation mode (slice 6, `ConversationModeRules`): listening in the window after Ada's line with nothing of
+    /// Conversation mode (slice 6, `ConversationModeRules`): listening in the window after Obi's line with nothing of
     /// his heard yet; the orb says "Go on, I'm listening".
     private(set) var followOn = false
-    /// When Ada's last line ended and the microphone opened on its own (ms since 1970).
+    /// When Obi's last line ended and the microphone opened on its own (ms since 1970).
     @ObservationIgnored private var followOnAt: Int64?
 
     private func openFollowOn() {
@@ -174,9 +174,9 @@ final class TalkController {
             guard gen == generation, let hello = await model?.hello() else { return }
             guard gen == generation, !active else { return }
             let words = hello.words
-            // Ada's Live mode, slice 3b (the Fold's 2c): with Live on, the hello is still said at once from memory and
+            // Obi's Live mode, slice 3b (the Fold's 2c): with Live on, the hello is still said at once from memory and
             // the Live session is asked for while it plays, so when it ends (or he talks over it, or clicks the orb)
-            // Ada carries on live, told what she just said so she doesn't greet him twice.
+            // Obi carries on live, told what he just said so he doesn't greet Meka twice.
             liveAfterHello = liveOn
             if liveOn, let model { live.prepare(model, greeted: words) }
             helloCards = hello.cards
@@ -211,7 +211,7 @@ final class TalkController {
                 return
             }
             guard gen == generation else { return }
-            // Ada's Live mode, slice 3: with Live on, a Gemini Live conversation; normal Ada if it isn't open in 2 s.
+            // Obi's Live mode, slice 3: with Live on, a Gemini Live conversation; normal Obi if it isn't open in 2 s.
             if !afterBrief, await model?.liveIsOn() == true {
                 guard gen == generation, !active else { return }
                 return startLive()
@@ -288,7 +288,7 @@ final class TalkController {
                 return
             }
         }
-        if liveRunning { return stop() } // Live: he talks over her by voice; a click ends it
+        if liveRunning { return stop() } // Live: Meka talks over Obi by voice; a click ends it
         switch phase {
         case .speaking: apply(TalkFlow.shared.bargeIn(s: session))
         case .ended: start()
@@ -315,7 +315,7 @@ final class TalkController {
         apply(TalkFlow.shared.stop(s: session))
     }
 
-    // MARK: Ada's Live mode, slice 3
+    // MARK: Obi's Live mode, slice 3
 
     /// The Live conversation (sound here, the conversation in the core), while one runs.
     @ObservationIgnored private let live = MacLiveTalk()
@@ -352,7 +352,7 @@ final class TalkController {
             guard let self, self.liveRunning, self.phase != .ended else { return }
             self.level = VoiceOut.shared.follow(shown: self.level, target: l)
         }
-        // His words and Ada's under the orb as Google transcribes them; each turn in Ask with its sources and cards.
+        // His words and Obi's under the orb as Google transcribes them; each turn in Ask with its sources and cards.
         live.onWords = { [weak self] heard, said in
             guard let self, self.liveRunning else { return }
             self.heard = heard
@@ -368,7 +368,7 @@ final class TalkController {
             self.liveRunning = false
             self.level = 0
             self.phase = .ended
-            // Live didn't open in time: normal Ada listens instead, so he is never left with a dead orb.
+            // Live didn't open in time: normal Obi listens instead, so he is never left with a dead orb.
             if fellBack { self.apply(TalkFlow.shared.start()) }
         }
     }
@@ -380,7 +380,7 @@ final class TalkController {
         heard = ""
         said = ""
         phase = .thinking
-        Task { await model.warmTalk() } // normal Ada's server is ready too, should Live fall back
+        Task { await model.warmTalk() } // normal Obi's server is ready too, should Live fall back
         if !live.start(model) {
             liveRunning = false
             apply(TalkFlow.shared.start())
@@ -511,7 +511,7 @@ final class TalkController {
             // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.
             model?.openHelpFromTalk(openHelp.link.place)
         } else if effect is TalkEffectMuteSpeakingUp {
-            // Speaking up, slice 2: "shh" to Ada mutes her speaking up for 2 hours on every device.
+            // Speaking up, slice 2: "shh" to Obi mutes his speaking up for 2 hours on every device.
             Task { await model?.muteSpeakUp() }
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
@@ -533,9 +533,9 @@ final class TalkController {
     /// The soft thinking tone (kept while it plays).
     @ObservationIgnored private var tickSound: NSSound?
 
-    /// Talking to Ada like a conversation, slice 1: while the answer to conversation `gen`'s question is on its way the
+    /// Talking to Obi like a conversation, slice 1: while the answer to conversation `gen`'s question is on its way the
     /// orb shows Thinking, and only past `AnswerWaitRules.CUE_AFTER_MS` with nothing started does one soft,
-    /// breath-like tone play. Ada never says a holding line ("One sec, Meka…" is gone). Nothing once the answer has
+    /// breath-like tone play. Obi never says a holding line ("One sec, Meka…" is gone). Nothing once the answer has
     /// begun.
     private func waitCue(_ gen: Int) {
         waitTask?.cancel()
@@ -737,7 +737,7 @@ final class TalkController {
                 return
             }
         }
-        // Slice 6: Ada's line ended 8 s ago and he has said nothing: the conversation ends quietly.
+        // Slice 6: Obi's line ended 8 s ago and he has said nothing: the conversation ends quietly.
         if ConversationModeRules.shared.lapsed(openedAtMs: followOnAt.map { KotlinLong(value: $0) },
                                                nowMs: Int64(now.timeIntervalSince1970 * 1000), heard: heardAnything) {
             stopListening()
@@ -803,7 +803,7 @@ final class TalkController {
                 return listen(onDevice: true)
             }
             // The recogniser gave up: what was heard is the question, nothing heard is silence, except inside
-            // conversation mode's window after Ada's line (slice 6), where it opens again.
+            // conversation mode's window after Obi's line (slice 6), where it opens again.
             if !heardAnything, ConversationModeRules.shared.listenAgain(
                 openedAtMs: followOnAt.map { KotlinLong(value: $0) },
                 nowMs: Int64(Date().timeIntervalSince1970 * 1000), heard: false) {
@@ -852,7 +852,7 @@ final class TalkController {
         helloSaying = hello != nil
         speaker.say(text) { [weak self] in self?.finishedSaying(id) }
         // Slice 7: with headphones the recogniser opens with the hello, so he can just start talking.
-        // Slice 3b: not when Live takes over after the hello (Live listens itself, and hears him over Ada).
+        // Slice 3b: not when Live takes over after the hello (Live listens itself, and hears him over Obi).
         if let hello, talkOver, !liveAfterHello, MacAudioOut.headphones { listenOverHello(hello) } else { listenOver() }
     }
 

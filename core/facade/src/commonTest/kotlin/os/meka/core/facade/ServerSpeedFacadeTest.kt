@@ -16,7 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Talking to Ada like a conversation, slice 2: Speed shows the server's own timings, never failing. */
+/** Talking to Obi like a conversation, slice 2: Speed shows the server's own timings, never failing. */
 class ServerSpeedFacadeTest {
     private val now = 1_791_476_100_000L
 

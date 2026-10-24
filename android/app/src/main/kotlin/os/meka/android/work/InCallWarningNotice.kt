@@ -20,7 +20,7 @@ import os.meka.core.domain.InCallWarningRules
  * through, a heads-up notification lies across the top of the incoming-call screen, in full on the lock screen (public
  * visibility): who ("Unknown number", or "Says it's the police · unknown number") and the
  * advice. It makes no sound of its own (the ringtone is playing) and goes when the after-call look finds the call over
- * ([UnknownCallWorker]) or after [InCallWarningRules.SHOW_FOR_MS]. Ada says one line in his earbuds when they're in.
+ * ([UnknownCallWorker]) or after [InCallWarningRules.SHOW_FOR_MS]. Obi says one line in his earbuds when they're in.
  *
  * Android lets only the phone app draw on the call screen itself, so the warning is the system's heads-up, which shows
  * over it.
@@ -43,7 +43,7 @@ object InCallWarningNotice {
         )
     }
 
-    /** Posts the warning and has Ada say it into his earbuds. Never throws: a warning must not disturb the call. */
+    /** Posts the warning and has Obi say it into his earbuds. Never throws: a warning must not disturb the call. */
     @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
     fun show(context: Context, number: String?, warning: InCallWarning) {
         runCatching { (context.applicationContext as MekaApplication).speakUp.sayCallWarning(warning.spoken) }

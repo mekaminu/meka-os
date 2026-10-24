@@ -127,7 +127,7 @@ class SpeechAheadFacadeTest {
     }
 }
 
-/** Talking to Ada like a conversation, slice 1: the hello made ahead no longer makes any holding line. */
+/** Talking to Obi like a conversation, slice 1: the hello made ahead no longer makes any holding line. */
 class AnswerHoldFacadeTest {
     private val now = 1_791_476_100_000L
 

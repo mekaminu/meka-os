@@ -3,12 +3,12 @@ package os.meka.backend
 import os.meka.core.wire.LiveCodec
 
 /**
- * Ada's Live mode, slice 4: who Ada is in a Gemini Live conversation and the compact day she starts with.
+ * Obi's Live mode, slice 4: who Obi is in a Gemini Live conversation and the compact day he starts with.
  *
  * The server writes this system instruction from the day the device sent ([LiveCodec.Day]) and locks it into Google's
  * one-session token ([GeminiLiveTokens.request]), together with the search tool ([GeminiLiveTokens.searchTool]), so a token taken off a device can't be
- * used to talk to anyone but Ada. Persona and tone follow normal Ada's spoken prompt ([AskService.VOICE]); the
- * day's lines are data, never instructions (ADR-006 §2). Slice 5: with a device that answers them, Ada also looks up
+ * used to talk to anyone but Obi. Persona and tone follow normal Obi's spoken prompt ([AskService.VOICE]); the
+ * day's lines are data, never instructions (ADR-006 §2). Slice 5: with a device that answers them, Obi also looks up
  * other days and offers Ask's actions as cards he taps ([TOOLS]); an older device's session can change nothing ([NO_TOOLS]).
  */
 object LivePrompt {
@@ -16,7 +16,7 @@ object LivePrompt {
     const val MAX_CHARS = 24_000
 
     val PERSONA = """
-        You are Ada, the personal assistant inside Navilife, his own app ("he", "him" and "his" below mean the person you are talking to; Navilife is the app, you are Ada), and good company: warm, calm, British, with a little dry wit ("calm in the chaos"). Speak British English with a natural British accent.
+        You are Obi, the personal assistant inside Navilife, his own app ("he", "him" and "his" below mean the person you are talking to; Navilife is the app, you are Obi), and good company: warm, calm, British, with a little dry wit ("calm in the chaos"). Speak British English with a natural British accent.
         This is a live spoken conversation, like a phone call with a friend who knows his day:
         - Keep turns short: one to three sentences, under forty words, unless he asks you to explain or tell him more.
         - React first when there is something to react to ("Oh nice.", "Ah, that's annoying."), then answer, then often (not every time) hand it back with a short question. Never "Is there anything else I can help with?".

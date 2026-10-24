@@ -50,7 +50,7 @@ import kotlin.test.fail
 /**
  * The quality gate, slice 27 (build plan: "Talk's and Activity's shots"): Ask → More → Talk (as it comes, and with
  * When I open Navilife on and Talk over off) and Activity (nothing yet, one thing done for you, and a full day: things
- * Ada added with Undo, a shopping add, reminders and a digest that reached you, a scam number blocked twice), each on
+ * Obi added with Undo, a shopping add, reminders and a digest that reached you, a scam number blocked twice), each on
  * the Fold's cover and inner screens, Dark (and the full one in Light). Saved under `talk/` and `activity/` and read for
  * nonsense, cut lines, broken words, split dates, times and numbers, and lines leaving a word alone. "Works by hand":
  * Talk over's Turn off changes its line (slice 28), Activity's filter chip narrows the days and Undo takes a change back.
@@ -194,7 +194,7 @@ class TalkActivityScreensTest {
             Fill.ONE -> if (rows.size != 1) fail("$name: ${rows.size} rows for one thing done: $rows")
             Fill.MANY -> {
                 if (rows.size < 5) fail("$name: only ${rows.size} rows for a full day: $rows")
-                if (rows.none { it.canUndo }) fail("$name: nothing Ada did can be undone")
+                if (rows.none { it.canUndo }) fail("$name: nothing Obi did can be undone")
                 val stopped = core.blockedCallers.value.stopped
                 if (stopped.singleOrNull()?.count != 2L) fail("$name: the blocked number's two calls aren't counted as two: $stopped")
                 // Slice 28: "add book the boiler service on friday" is Friday's task, never a book on Reading.

@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Speaking up, slice 1: which moments Ada says out loud, where, and never when. */
+/** Speaking up, slice 1: which moments Obi says out loud, where, and never when. */
 class SpeakUpTest {
     private val cal = LocalCalendar.fixedOffset(0)
     private val now = cal.toEpochMs(20_000, 7 * 60 + 20)
@@ -70,7 +70,7 @@ class SpeakUpTest {
         assertNull(check(s = SpeakUpSettings(mutedUntilMs = now)))
         assertTrue(SpeakUpRules.isMute("Shh"))
         assertTrue(SpeakUpRules.isMute("shhh"))
-        assertTrue(SpeakUpRules.isMute("not now, Ada"))
+        assertTrue(SpeakUpRules.isMute("not now, Obi"))
         assertTrue(SpeakUpRules.isMute("Quiet please"))
         assertFalse(SpeakUpRules.isMute("not now but remind me later"))
         assertFalse(SpeakUpRules.isMute("what's on now"))
@@ -144,7 +144,7 @@ class SpeakUpTest {
         assertTrue(step.session.endAfterSpeaking)
         assertEquals(listOf(TalkEffect.End), TalkFlow.spoke(step.session).effects)
         // "Not now" turning down cards on offer, or answering the hello, stays that answer; "shh" still mutes there.
-        assertTrue(SpeakUpRules.mutesInTalk("not now, Ada", answersSomething = false))
+        assertTrue(SpeakUpRules.mutesInTalk("not now, Obi", answersSomething = false))
         assertFalse(SpeakUpRules.mutesInTalk("not now", answersSomething = true))
         assertTrue(SpeakUpRules.mutesInTalk("shh", answersSomething = true))
         val hello = TalkFlow.spoke(TalkFlow.greet("Morning. What should I call you?").session).session
@@ -183,7 +183,7 @@ class SpeakUpTest {
         assertEquals(SpeakMoment.PRESSURE.label, SpeakUpRules.view(SpeakUpSettings(), 0, now, cal).sections[SpeakMoment.entries.size - 2].label)
     }
 
-    /** Slice 4: a reply to an email he put on Waiting for is a heads-up; Ada says it only fresh and only if he turned it on. */
+    /** Slice 4: a reply to an email he put on Waiting for is a heads-up; Obi says it only fresh and only if he turned it on. */
     @Test
     fun aReplyHeWasWaitingForIsANoticeAndSaidOnlyWhenOn() {
         val sentDay = cal.epochDayOf(now) - 5
@@ -203,7 +203,7 @@ class SpeakUpTest {
         val on = SpeakUpSettings(choices = mapOf(SpeakMoment.REPLY to true))
         val pick = SpeakUpRules.pick(listOf(n), on, ctx, false, false, 0, now, "Alex") { false }
         assertEquals("Alex, Sam Taylor replied to your email about Quote for the kitchen.", pick!!.line)
-        // Off to start: the notice posts, Ada stays quiet until he turns the moment on.
+        // Off to start: the notice posts, Obi stays quiet until he turns the moment on.
         assertFalse(SpeakUpSettings().isOn(SpeakMoment.REPLY))
         assertEquals(SpeakHold.OFF, check(n))
         assertNull(check(n, s = on))

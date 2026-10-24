@@ -3,10 +3,10 @@ package os.meka.core.domain
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Replica
 
-// ---- Ada speaks up on her own when it really matters (the JARVIS step, slice 1; non-AI, pure) ----
+// ---- Obi speaks up on his own when it really matters (the JARVIS step, slice 1; non-AI, pure) ----
 
 /**
- * The moments Ada says out loud on her own (Meka 2026-10-20 19:49), each its own switch in Ask → Settings → Speaking up.
+ * The moments Obi says out loud on his own (Meka 2026-10-20 19:49), each its own switch in Ask → Settings → Speaking up.
  * A notice carries its moment ([Notice.speak]) and the words to say after his name ([Notice.spoken]) when it is one;
  * everything else stays a silent notification. Slice 1 has the train and time to leave; slice 2 an urgent message from
  * family or Always notify; slice 3 tomorrow stacking up, once in the evening; slice 4 a reply he was waiting for (off
@@ -42,7 +42,7 @@ data class SpeakUpSettings(
     /** Only the switches he has changed; the rest follow [SpeakMoment.defaultOn]. */
     val choices: Map<SpeakMoment, Boolean> = emptyMap(),
     val often: SpeakOften = SpeakOften.MORE,
-    /** "Mute for 2 hours" (or "shh" to Ada): nothing is said before this. */
+    /** "Mute for 2 hours" (or "shh" to Obi): nothing is said before this. */
     val mutedUntilMs: Long? = null,
 ) {
     fun isOn(m: SpeakMoment): Boolean = choices[m] ?: m.defaultOn
@@ -70,7 +70,7 @@ data class SpeakContext(
     val place: SpeakPlace,
     /** He is on a phone or video call on this device. */
     val onCall: Boolean = false,
-    /** A Talk or Hello conversation is running: Ada never talks over herself. */
+    /** A Talk or Hello conversation is running: Obi never talks over himself. */
     val talking: Boolean = false,
 )
 
@@ -81,10 +81,10 @@ object SpeakUpRules {
     const val FIELD_MUTED = "muted_until"
 
     const val TITLE = "Speaking up"
-    const val ROW_LINE = "When Ada says something out loud on her own"
-    const val INTRO = "For a few moments that really matter, Ada lights the orb, plays a soft chime and says it in a sentence or two, starting with your name. Only through headphones or the car, on the bedside clock in the evening, or on the Mac while you're using it; never out of the phone's speaker. Never in quiet hours, in a meeting or on a call. It only tells you: anything to do is the usual card."
+    const val ROW_LINE = "When Obi says something out loud on his own"
+    const val INTRO = "For a few moments that really matter, Obi lights the orb, plays a soft chime and says it in a sentence or two, starting with your name. Only through headphones or the car, on the bedside clock in the evening, or on the Mac while you're using it; never out of the phone's speaker. Never in quiet hours, in a meeting or on a call. It only tells you: anything to do is the usual card."
     /** Quality gate slice 55: the intro said short (the full [INTRO] was ten lines on the cover screen). */
-    const val INTRO_SHORT = "Ada says what really matters out loud, starting with your name, only where just you can hear."
+    const val INTRO_SHORT = "Obi says what really matters out loud, starting with your name, only where just you can hear."
     const val OFTEN_LABEL = "How often"
     const val MUTE_LABEL = "Mute"
     const val MUTE_ACTION = "Mute for 2 hours"
@@ -179,7 +179,7 @@ object SpeakUpRules {
         else "$address, " + if (keepCase) words else words.replaceFirstChar { it.lowercaseChar() }
     }
 
-    /** How Ada addresses him: "Sir" when chosen, else his first name from About you, else none. */
+    /** How Obi addresses him: "Sir" when chosen, else his first name from About you, else none. */
     fun address(shownName: String?, sir: Boolean): String? = if (sir) "Sir" else HelloRules.firstName(shownName)
 
     // ---- The spoken words, written where each notice is made ----
@@ -239,7 +239,7 @@ object SpeakUpRules {
             if (muted) "Muted till ${LocalClock.formatMinute(cal.minuteOfDay(s.mutedUntilMs!!))}" else "Not muted", muted,
             listOf("Nothing is said out loud on any of your devices until then; notifications still arrive."),
             if (muted) UNMUTE_ACTION else MUTE_ACTION)
-        return SpeakUpView(TITLE, INTRO, moments + often + mute, "Everything Ada says on her own is in Activity.", INTRO_SHORT)
+        return SpeakUpView(TITLE, INTRO, moments + often + mute, "Everything Obi says on his own is in Activity.", INTRO_SHORT)
     }
 
     /** Activity's line for a moment said: "Said: Meka, your 07:42 is cancelled. …". */
@@ -306,7 +306,7 @@ object SpeakUpRules {
     /**
      * The evening heads-up for tomorrow stacking up ([PressureRules], Week board item (10)): one notice at
      * [PRESSURE_AT_MIN] the evening before, standing till [PRESSURE_UNTIL_MIN], once per day (its key is tomorrow's
-     * day), Ada saying it when she may ([SpeakMoment.PRESSURE]). "Tomorrow is stacking up" · "Trip form, Council tax
+     * day), Obi saying it when he may ([SpeakMoment.PRESSURE]). "Tomorrow is stacking up" · "Trip form, Council tax
      * and Gym · Move “Gym” to Fri". Null when [tomorrow] isn't tomorrow's or it is too late in the evening.
      */
     fun pressureNotice(tomorrow: DayPressure?, nowMs: Long, cal: LocalCalendar): Notice? {
@@ -329,7 +329,7 @@ object SpeakUpRules {
 
     /** The notification stands this long after the reply was seen (or until Got it / Not yet on Time to chase). */
     const val REPLY_STANDS_MS = 12 * 60 * 60_000L
-    /** Ada says it only while the reply is this fresh: one seen overnight is a notification in the morning, not a line. */
+    /** Obi says it only while the reply is this fresh: one seen overnight is a notification in the morning, not a line. */
     const val REPLY_FRESH_MS = 60 * 60_000L
 
     /** "Sam Taylor replied to your email about Quote for the kitchen." (their name and his subject, nothing they wrote). */
@@ -340,7 +340,7 @@ object SpeakUpRules {
      * Follow-up radar's replies ([MailChaseRules.repliedOpen]) as notices: an email of his he put on Waiting for (Add
      * on "No reply yet") that someone has now answered, the Waiting for item still open and Got it / Not yet not yet
      * tapped. One heads-up per reply ("Sam Taylor replied" · "Quote for the kitchen · Personal · Got it in Time to chase
-     * if that settles it"), standing [REPLY_STANDS_MS]; Ada says it ([SpeakMoment.REPLY], off to start) only while it is
+     * if that settles it"), standing [REPLY_STANDS_MS]; Obi says it ([SpeakMoment.REPLY], off to start) only while it is
      * [REPLY_FRESH_MS] fresh. Their name and his own subject only: nothing they wrote is said or acted on (ADR-006).
      */
     fun replyNotices(finds: List<MailFind>, waiting: List<WaitingItem>, nowMs: Long): List<Notice> {
@@ -366,9 +366,9 @@ object SpeakUpRules {
         }
     }
 
-    // ---- Slice 2: "shh" said to Ada in Talk ----
+    // ---- Slice 2: "shh" said to Obi in Talk ----
 
-    /** What Ada says when told "shh" in a conversation; the conversation ends after it. */
+    /** What Obi says when told "shh" in a conversation; the conversation ends after it. */
     const val MUTED_REPLY = "Okay. I'll keep quiet for two hours. Notifications still come through."
 
     /**
@@ -381,8 +381,8 @@ object SpeakUpRules {
     /** "shh", "not now", "quiet please", "stop talking": mutes speaking up for [MUTE_MS]. */
     fun isMute(words: String): Boolean {
         val w = words.lowercase().replace(Regex("[^a-z ]"), " ").replace(Regex("\\s+"), " ").trim()
-            .removePrefix("ada ").removePrefix("hey ada ").trim()
-        return w.matches(Regex("(s+h+|shush|hush|not now( ada)?|quiet( please)?|be quiet|stop talking|not now thanks)"))
+            .removePrefix("obi ").removePrefix("hey obi ").trim()
+        return w.matches(Regex("(s+h+|shush|hush|not now( obi)?|quiet( please)?|be quiet|stop talking|not now thanks)"))
     }
 }
 
