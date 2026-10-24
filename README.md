@@ -63,6 +63,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/bins/inner-dark-many.png](docs/screens/fold/bins/inner-dark-many.png)
 - [fold/board/cover-dark-empty.png](docs/screens/fold/board/cover-dark-empty.png)
 - [fold/board/cover-dark-many.png](docs/screens/fold/board/cover-dark-many.png)
+- [fold/board/cover-dark-nudge.png](docs/screens/fold/board/cover-dark-nudge.png)
 - [fold/board/cover-dark-one.png](docs/screens/fold/board/cover-dark-one.png)
 - [fold/board/cover-dark-timeline.png](docs/screens/fold/board/cover-dark-timeline.png)
 - [fold/board/cover-light-many.png](docs/screens/fold/board/cover-light-many.png)
