@@ -45,6 +45,8 @@ struct WeekBoardScreen: View {
     @State private var target: Int64?
     /// By hand, slice 4: the past days he opened (the rest fold narrow).
     @State private var openedPast: Set<Int64> = []
+    /// Option B slice 5 (refinement 2): today's timeline beside the week; open unless he hides it.
+    @AppStorage("board.timeline") private var showTimeline = true
 
     var body: some View {
         let w = board.weeks[min(week, board.weeks.count - 1)]
@@ -63,6 +65,13 @@ struct WeekBoardScreen: View {
                         .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
                         .help("Review this week: planned against done, and what kept slipping")
                 }
+                // Option B slice 5: Timeline / Hide timeline opens or shuts today's timeline beside the week.
+                Button(showTimeline ? BoardTimelineRules.shared.HIDE : BoardTimelineRules.shared.SHOW) {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.replan(reduced: reduceMotion)) { showTimeline.toggle() }
+                }
+                .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
+                .help(showTimeline ? "Hide today's timeline" : "Show today's timeline beside the week")
                 // Item (6): Plan your week opens the guided sheet.
                 Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
                     .foregroundStyle(palette.accent).font(MekaType.itemMeta)
@@ -91,6 +100,7 @@ struct WeekBoardScreen: View {
             // Option B slice 2 (the layout; Meka's refinement 1): Monday to Friday as five columns across, the weekend
             // as two shorter columns underneath, then No day yet and Someday as lists, each a place to drop a card.
             let layout = BoardWeekLayoutRules.shared
+            HStack(alignment: .top, spacing: MekaSpace.m) {
             VStack(alignment: .leading, spacing: MekaSpace.m) {
                 dayRow(layout.weekdays(week: w), minHeight: CGFloat(layout.MIN_WEEKDAYS_DP))
                 let weekend = layout.weekend(week: w)
@@ -111,6 +121,13 @@ struct WeekBoardScreen: View {
             .id(w.startEpochDay)
             .transition(weekTransition)
             .animation(MekaMotion.replan(reduced: reduceMotion), value: w.days.map { $0.cards.map(\.id) })
+                // Option B slice 5: today's timeline beside the week (the mockup's panel), sliding in from the right.
+                if showTimeline, let timeline = model.boardTimeline(board, epochDay: board.todayEpochDay) {
+                    BoardTimelineView(timeline: timeline, palette: palette)
+                        .frame(width: CGFloat(BoardTimelineRules.shared.PANEL_DP))
+                        .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+                }
+            }
         }
         .background(keyboard)
     }
@@ -218,6 +235,99 @@ private struct ObiNudgeLine: View {
                 .help("Move it there (Undo on the bar)")
         } else {
             pill
+        }
+    }
+}
+
+/// Option B slice 5: a day as an hour-by-hour timeline, matching android/.../calendar/BoardTimelineView.kt: "Today" over
+/// its date, all-day events as one quiet line, the hours 07–22 down the side with their hairlines, and the day's blocks
+/// over them (events in their calendar's tone, timed tasks in gold, a done one faded, the commute in orange; overlapping
+/// blocks share the width), a gold line at now. A click on an event opens it. Blocks fade in (appear); Reduce Motion: at once.
+private struct BoardTimelineView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let timeline: BoardTimeline
+    let palette: MekaPalette
+    private let labelWidth: CGFloat = 36
+
+    var body: some View {
+        let hour = CGFloat(BoardTimelineRules.shared.HOUR_DP)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(timeline.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Spacer(minLength: MekaSpace.xs)
+                if timeline.dateLabel != timeline.title {
+                    Text(timeline.dateLabel).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(timeline.spoken)
+            .accessibilityAddTraits(.isHeader)
+            if let line = timeline.allDayLine {
+                Text(line).font(MekaType.micro).foregroundStyle(palette.textSecondary).lineLimit(2).accessibilityHidden(true)
+            }
+            if let empty = timeline.emptyLine {
+                Text(empty).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+            }
+            ZStack(alignment: .topLeading) {
+                VStack(spacing: 0) {
+                    ForEach(Array(timeline.hours.enumerated()), id: \.offset) { _, label in
+                        HStack(alignment: .top, spacing: 0) {
+                            Text(label).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                                .frame(width: labelWidth, alignment: .leading).padding(.top, MekaSpace.xxs)
+                            Rectangle().fill(palette.hairline).frame(height: 1)
+                        }
+                        .frame(height: hour, alignment: .top)
+                    }
+                }
+                .accessibilityHidden(true)
+                GeometryReader { geo in
+                    let area = max(geo.size.width - labelWidth, 0)
+                    let first = timeline.firstHour
+                    ForEach(timeline.blocks, id: \.key) { b in
+                        let colW = area / CGFloat(max(b.columns, 1))
+                        block(b)
+                            .frame(width: max(colW - 2, 0), height: CGFloat(b.heightDp))
+                            .offset(x: labelWidth + colW * CGFloat(b.column), y: CGFloat(b.topDp(firstHour: first)))
+                    }
+                    if let top = timeline.nowTopDp {
+                        Rectangle().fill(palette.accent).frame(width: area, height: 2)
+                            .offset(x: labelWidth, y: CGFloat(top.floatValue) - 1)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+            .frame(height: CGFloat(timeline.heightDp))
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: timeline.blocks.map(\.key))
+        }
+    }
+
+    @ViewBuilder
+    private func block(_ b: DayBlock) -> some View {
+        let tone: Color = b.kind == DayBlockKind.event ? palette.calendarTone(b.tone)
+            : (b.kind == DayBlockKind.task ? palette.accent : palette.calendar3)
+        let face = HStack(spacing: 0) {
+            Rectangle().fill(tone).frame(width: 3)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(b.title).font(MekaType.micro).foregroundStyle(palette.textPrimary).lineLimit(b.oneLine ? 1 : 2)
+                if !b.oneLine {
+                    Text(b.label).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                }
+            }
+            .padding(.horizontal, MekaSpace.xs).padding(.vertical, b.oneLine ? 1 : MekaSpace.xxs)
+            Spacer(minLength: 0)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(tone.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .opacity(b.done ? Double(BoardPlannerRules.shared.DONE_ALPHA) : 1)
+        .transition(.opacity)
+        if let event = b.event {
+            Button { model.openEvent = event } label: { face }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityLabel(b.spoken)
+        } else {
+            face.accessibilityElement(children: .ignore).accessibilityLabel(b.spoken)
         }
     }
 }

@@ -1646,6 +1646,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(over.warns)
         XCTAssertEqual(over.fixTaskId, "t")
         XCTAssertEqual(over.fixDay, 9)
+        // Option B, slice 5: the day timeline beside the week.
+        let tl = BoardTimelineRules.shared
+        XCTAssertEqual(tl.panelDp(boardDp: 1280), 260, accuracy: 0.01)
+        XCTAssertTrue(tl.opensByDefault(boardDp: 1280, spareDp: 48))
+        XCTAssertEqual(tl.HIDE, "Hide timeline")
+        let block = DayBlock(key: "t:a", title: "Send the quote", startMinute: 750, endMinute: 795, kind: DayBlockKind.task,
+                             done: false, taskId: "a", event: nil, tone: 0, column: 0, columns: 1)
+        XCTAssertEqual(block.label, "12:30–13:15")
+        XCTAssertEqual(block.topDp(firstHour: 7), Float(242), accuracy: 0.01)
+        XCTAssertEqual(tl.columns(blocks: [block]).first?.columns, 1)
         // Slice 4: the week's lane and the Someday tray.
         XCTAssertEqual(WeekBoardRules.shared.NO_DAY, "No day yet")
         XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")

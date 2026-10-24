@@ -24,6 +24,9 @@ import org.junit.Assert.fail
 import os.meka.android.calendar.AREA_DOT_TAG
 import os.meka.android.calendar.BUDGET_TAG
 import os.meka.android.calendar.NUDGE_TAG
+import os.meka.android.calendar.TIMELINE_TAB_TAG
+import os.meka.android.calendar.TIMELINE_TAG
+import os.meka.android.calendar.TIMELINE_TOGGLE_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
@@ -306,6 +309,75 @@ class BoardScreensTest {
         assertEquals(expected.spoken, nudge.first().config[SemanticsProperties.ContentDescription].joinToString())
         compose.onNodeWithTag(NUDGE_TAG).performClick()
         awaitCore("nudge") { core.weekBoard.value.dayOf(fix.taskId)?.epochDay == fix.toDay }
+    }
+
+    /**
+     * Option B slice 5 (the day timeline, refinement 2): unfolded, Timeline in the header opens today's timeline beside
+     * the week (on the Fold's 829 dp it starts closed, so the five days keep their width); a task planned at 19:00 for
+     * 45 minutes is a block there, read out as the core says.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun unfoldedTheTimelineOpensBesideTheWeekWithTodaysTimedTask() {
+        val (core, spoken) = timedCore()
+        show(core)
+        assertTrue("no Timeline in the header", compose.onAllNodesWithTag(TIMELINE_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("open before it was asked", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-timeline"))
+        ScreenShots.assertSensible(compose, "inner-dark-timeline")
+        assertTrue("no timeline beside the week", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
+        // Hide timeline shuts it again.
+        compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
+        settle()
+        assertTrue("still open", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
+    }
+
+    /** Option B slice 5: folded, the Cards · Timeline tab shows the day in view as a timeline, and back. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun foldedTheTimelineTabShowsTheDayInView() {
+        val (core, spoken) = timedCore()
+        show(core)
+        assertTrue("no tabs on the cover screen", compose.onAllNodesWithTag(TIMELINE_TAB_TAG).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText(os.meka.core.domain.BoardTimelineRules.TAB_TIMELINE).performClick()
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-timeline"))
+        ScreenShots.assertSensible(compose, "cover-dark-timeline")
+        assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText(os.meka.core.domain.BoardTimelineRules.TAB_CARDS).performClick()
+        settle()
+        assertTrue("the timeline stayed", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
+        assertTrue("the cards didn't come back", compose.onAllNodesWithText("Send the quote").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /** A core with "Send the quote" planned today at 19:00 for 45 minutes, and its block's spoken label from the core. */
+    private fun timedCore(): Pair<MekaCore, String> {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            val id = core.addOnBoardSized("Send the quote", today, 45) ?: throw AssertionError("not added")
+            core.setWhen(id, today, 19 * 60)
+        }
+        val board = core.weekBoard.value
+        val tl = core.boardTimeline(board, board.todayEpochDay) ?: throw AssertionError("no timeline for today")
+        val block = tl.blocks.firstOrNull { it.title == "Send the quote" } ?: throw AssertionError("no block: ${tl.blocks}")
+        assertEquals("19:00–19:45", block.label)
+        return core to block.spoken
+    }
+
+    private fun show(core: MekaCore) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        settle()
     }
 
     private fun cardBounds(title: String): androidx.compose.ui.geometry.Rect {

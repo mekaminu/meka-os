@@ -548,4 +548,24 @@ class WeekBoardFacadeTest {
         assertTrue(fold.needsYouStack.value.cards.none { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK })
     }
 
+
+    @Test
+    fun theTimelineShowsATaskPlannedAtATimeForItsEstimateOnBothApps() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val quote = fold.addTask("Send the quote")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        fold.setWhen(quote, today, 19 * 60)
+        fold.setEstimate(quote, 45)
+        val tl = fold.boardTimeline(fold.weekBoard.value, today)!!
+        assertEquals("Today", tl.title)
+        assertEquals(listOf("Send the quote 19:00–19:45"), tl.blocks.map { "${it.title} ${it.label}" })
+        assertEquals(17 * 60 + 15, tl.nowMinute)
+        fold.syncNow(); mac.syncNow()
+        val onMac = mac.boardTimeline(mac.weekBoard.value, today)!!
+        assertEquals(tl.blocks.map { it.label }, onMac.blocks.map { it.label })
+        // Tomorrow has nothing timed; a day off the board has no timeline.
+        assertEquals(os.meka.core.domain.BoardTimelineRules.EMPTY, fold.boardTimeline(fold.weekBoard.value, today + 1)!!.emptyLine)
+        assertNull(fold.boardTimeline(fold.weekBoard.value, today - 400))
+    }
 }

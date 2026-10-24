@@ -2156,6 +2156,29 @@ class MekaCore(
         return os.meka.core.domain.BoardNudgeRules.of(board, week, ZoneCalendar(timeZone))
     }
 
+    /**
+     * Option B slice 5: the day timeline for local [epochDay] on [board] (the board the screen is drawing): its timed
+     * events, the tasks planned at a time and the commute as blocks ([os.meka.core.domain.BoardTimelineRules]), or null
+     * for a day not on the board. Unfolded and on the Mac the panel beside the week shows today; folded it is the
+     * Timeline tab for the day in view.
+     */
+    fun boardTimeline(board: os.meka.core.domain.WeekBoard, epochDay: Long): os.meka.core.domain.BoardTimeline? {
+        val day = board.day(epochDay) ?: return null
+        val src = timelineSource
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        return os.meka.core.domain.BoardTimelineRules.of(day, src.events, src.work, cal.epochDayOf(now), now, cal, src.toneOf)
+    }
+
+    /** What the Board's timeline reads (set with the board itself, read from the screen's thread). */
+    private class TimelineSource(
+        val events: List<os.meka.core.domain.CalendarEvent>,
+        val work: os.meka.core.domain.WorkHours?,
+        val toneOf: (os.meka.core.domain.CalendarEvent) -> Int,
+    )
+    @kotlin.concurrent.Volatile
+    private var timelineSource = TimelineSource(emptyList(), null) { 1 }
+
     // ---- Week board, item (5) part 3: an overdue or due-today card in Needs you to a later day ----
 
     /** The chips To a day… offers under an overdue or due-today card in Needs you (tomorrow on). */
@@ -11916,6 +11939,11 @@ class MekaCore(
         boardEvents = marks.forCalendarTab(allEvents)
         boardWork = hoursOf(workState, todayEpochDay())
         boardHidden = marks.hidden
+        // Option B slice 5: the timeline's events as the board shows them (duplicates folded, hidden calendars out).
+        timelineSource = TimelineSource(
+            os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) },
+            boardWork, _calendar.value::toneOf,
+        )
         _board.value = os.meka.core.domain.WeekBoardRules.build(
             all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
             marks.hidden, _calendar.value::toneOf,

@@ -157,6 +157,9 @@ import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
 import os.meka.core.domain.BoardListColumn
 import os.meka.core.domain.BoardWeekLayoutRules
+import os.meka.core.domain.BoardTimelineRules
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.wrapContentWidth
 import os.meka.core.facade.MekaCore
 
 /**
@@ -251,6 +254,10 @@ fun WeekBoardView(
     var wideWeek by rememberSaveable { mutableStateOf(0) }
     var wideDir by remember { mutableStateOf(0) }
     val wideScroll = rememberScrollState()
+    // Option B slice 5 (refinement 2): unfolded, today's timeline beside the week (null: open by itself when the columns
+    // keep their width); folded, the Cards · Timeline tab for the day in view.
+    var timelineOpen by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var foldTimeline by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(landed) { if (landed != null) { delay(LAND_MS); landed = null } }
     // Slice 2: the free-time drop targets only show while a card is held, so their places are forgotten when it lands.
     LaunchedEffect(drag == null) { if (drag == null) freeSlots.clear() }
@@ -328,7 +335,14 @@ fun WeekBoardView(
         // Option B slice 2: unfolded, a week's rows share the width between them (BoardWeekLayoutRules.rowWidths).
         val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / BoardWeekLayoutRules.WEEKDAYS else maxWidth - MekaSpace.xs * 2
         val colPx = with(density) { colWidth.toPx() }
-        val rowWidth = maxWidth - MekaSpace.gutter * 2
+        val panelDp = BoardTimelineRules.panelDp(maxWidth.value).dp
+        val showTimeline = wide && (timelineOpen ?: BoardTimelineRules.opensByDefault(maxWidth.value, (MekaSpace.gutter * 3).value))
+        // The panel glides open or shut on the replan spring and the week's columns share what is left as it does.
+        val panelNow by androidx.compose.animation.core.animateDpAsState(
+            if (showTimeline) panelDp else 0.dp, MekaMotion.replan(reduced), label = "timeline-panel",
+        )
+        val panelGap = MekaSpace.gutter * (panelNow / panelDp).coerceIn(0f, 1f)
+        val rowWidth = maxWidth - MekaSpace.gutter * 2 - panelNow - panelGap
         val weekStartPx: (Int) -> Int = { w -> (w * 7 * colPx).toInt() }
         val scroll = rememberScrollState()
         val dayCount = board.days.size
@@ -465,7 +479,11 @@ fun WeekBoardView(
         }
 
         Column(Modifier.fillMaxSize()) {
-            WeekHeader(board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview)
+            WeekHeader(
+                board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview,
+                timeline = if (wide) showTimeline else null,
+                onTimeline = { timelineOpen = !showTimeline },
+            )
             // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a tap, with Undo.
             val nudge = remember(board, weekIndex) { board.weeks.getOrNull(weekIndex)?.let { core.boardNudge(board, it.startEpochDay) } }
             if (nudge != null) {
@@ -508,6 +526,10 @@ fun WeekBoardView(
                         onTap = { day -> haptics.tick(); turnTo(board.days.indexOfFirst { it.epochDay == day }) },
                         modifier = Modifier.padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xs).appear(rememberAppearance(3)),
                     )
+                    // Option B slice 5: the cover screen's Cards · Timeline tab, for the day in view.
+                    BoardFoldTabs(
+                        foldTimeline, Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).appear(rememberAppearance(3)),
+                    ) { foldTimeline = it }
                 }
             }
             // One day's column, folded or unfolded; a column that leaves (another week shown) is forgotten as a target.
@@ -594,10 +616,11 @@ fun WeekBoardView(
                     )
             }
             if (wide) {
+                Row(Modifier.fillMaxSize()) {
                 WideWeek(
                     board = board, week = weekIndex, dir = wideDir, scroll = wideScroll, dragging = drag != null,
                     rowWidth = rowWidth, openedPast = openedPast,
-                    modifier = Modifier.fillMaxSize().appear(rememberAppearance(4)),
+                    modifier = Modifier.weight(1f).fillMaxHeight().appear(rememberAppearance(4)),
                     day = { day, width -> dayColumn(day, width) },
                     list = { week, column, mod ->
                         BoardList(
@@ -609,6 +632,30 @@ fun WeekBoardView(
                         )
                     },
                 )
+                // Option B slice 5: today's timeline beside the week (the mockup's panel), gliding open or shut.
+                if (panelNow > 0.dp) {
+                    val tl = remember(board) { core.boardTimeline(board, board.todayEpochDay) }
+                    if (tl != null) {
+                        Box(Modifier.width(panelNow + panelGap).fillMaxHeight().clipToBounds()) {
+                            DayTimelineView(
+                                tl, onEvent,
+                                Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(panelDp + MekaSpace.gutter)
+                                    .fillMaxHeight().padding(end = MekaSpace.gutter, bottom = MekaSpace.m).appear(rememberAppearance(4)),
+                            )
+                        }
+                    }
+                }
+                }
+            } else if (foldTimeline) {
+                // Folded, the Timeline tab: the day in view (the strip's pills and a swipe across step the day).
+                val shownDay = focusDay ?: board.todayEpochDay
+                val tl = remember(board, shownDay) { core.boardTimeline(board, shownDay) }
+                if (tl != null) {
+                    DayTimelineView(
+                        tl, onEvent, Modifier.fillMaxSize().padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.m).appear(rememberAppearance(4)),
+                        onSwipe = { step -> turnTo(board.days.indexOfFirst { it.epochDay == shownDay }.coerceAtLeast(0) + step) },
+                    )
+                }
             } else {
                 Row(
                     Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null, flingBehavior = daySnap)
@@ -787,6 +834,7 @@ private const val GOAL_KEY = -10L
 @Composable
 private fun WeekHeader(
     board: WeekBoard, week: Int, onGo: (Int) -> Unit, modifier: Modifier, onPlanWeek: (() -> Unit)?, onReview: () -> Unit,
+    timeline: Boolean? = null, onTimeline: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val w = board.weeks[week]
@@ -808,6 +856,17 @@ private fun WeekHeader(
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) { haptics.tick(); onReview() }
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+            )
+        }
+        // Option B slice 5: unfolded, Timeline / Hide timeline opens or shuts today's timeline beside the week.
+        if (timeline != null) {
+            Text(
+                if (timeline) BoardTimelineRules.HIDE else BoardTimelineRules.SHOW, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { haptics.tick(); onTimeline() }
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs)
+                    .testTag(TIMELINE_TOGGLE_TAG),
             )
         }
         // Item (6): Plan your week opens the guided flow (tick haptic; the pane springs up).
@@ -866,6 +925,9 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
 
 /** A lighter tint of a colour for the orb's highlight. */
 private fun Color.compositeOverWhite(): Color = Color(red + (1f - red) * 0.6f, green + (1f - green) * 0.6f, blue + (1f - blue) * 0.6f, 1f)
+
+/** Timeline / Hide timeline in the header (Option B slice 5, UI tests). */
+internal const val TIMELINE_TOGGLE_TAG = "board-timeline-toggle"
 
 /** Obi's nudge line in the header (Option B slice 4, UI tests). */
 internal const val NUDGE_TAG = "board-nudge"

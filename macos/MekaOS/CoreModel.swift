@@ -3455,6 +3455,11 @@ final class CoreModel {
         core?.boardNudge(board: board, weekStart: weekStart)
     }
 
+    /// Option B slice 5: the day timeline for local `epochDay` on `board` (the board being drawn), or nil off the board.
+    func boardTimeline(_ board: WeekBoard, epochDay: Int64) -> BoardTimeline? {
+        core?.boardTimeline(board: board, epochDay: epochDay)
+    }
+
     /// ⌘← ⌘→ (a day earlier or later) and ⌘↑ ⌘↓ (a place up or down) on the selected card, and its menu.
     func nudgeOnBoard(_ id: String, days: Int, places: Int) {
         guard let core else { return }
