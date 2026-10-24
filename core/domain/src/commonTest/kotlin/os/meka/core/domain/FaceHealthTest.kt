@@ -131,4 +131,16 @@ class FaceHealthTest {
         assertNull(HealthRules.place("messages", mac = true))
         assertEquals(HealthPlace.SYSTEM_LISTENER, HealthRules.place("messages", mac = false))
     }
+
+    /** Meka 2026-10-24 19:29: Health names the voice Obi speaks in, and old clips in another voice are dropped. */
+    @Test
+    fun oneVoiceEverywhere() {
+        assertEquals("Speaking as Brian", HealthRules.voiceInUseLine(" Brian "))
+        assertNull(HealthRules.voiceInUseLine(null))
+        assertNull(HealthRules.voiceInUseLine(""))
+        val by = mapOf("|Morning, Meka." to "Amy", "|Here's the gist" to "Brian", "Arthur|Morning, Meka." to "Arthur", "|Old" to null)
+        assertEquals(setOf("|Morning, Meka."), SpeechRules.stale(by, null, "brian"))
+        assertEquals(emptySet(), SpeechRules.stale(by, null, null), "an older server that doesn't say: nothing dropped")
+        assertEquals(emptySet(), SpeechRules.stale(by, "Arthur", "Arthur"))
+    }
 }

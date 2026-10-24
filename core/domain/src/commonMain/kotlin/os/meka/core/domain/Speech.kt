@@ -299,6 +299,20 @@ object SpeechRules {
     /** The cache's key: the voice (or the server's default) and the exact words. */
     fun cacheKey(voice: String?, text: String): String = "${voice ?: ""}|$text"
 
+    /**
+     * Meka 2026-10-24 19:29: Obi spoke in a woman's voice when the orb was tapped, a man's on Ask. The cache is keyed by
+     * the voice *asked for*, and "the server's default" (no choice) is one key whatever the default is: the hello's
+     * openers, made ahead while the default was a woman's voice, kept playing after it became Brian, because a phone
+     * that keeps Navilife in memory never restarts. So each clip remembers the voice that actually spoke, and when the
+     * server says a newer clip for the same choice came in another voice, every older clip for that choice in a
+     * different voice is dropped ([stale]) and made again on its next use. [spoke] null (an older server) drops nothing.
+     */
+    fun stale(spokeBy: Map<String, String?>, asked: String?, spoke: String?): Set<String> {
+        val now = spoke?.trim()?.takeIf { it.isNotEmpty() } ?: return emptySet()
+        val prefix = "${asked ?: ""}|"
+        return spokeBy.filter { (key, by) -> key.startsWith(prefix) && by != null && !by.equals(now, ignoreCase = true) }.keys
+    }
+
     const val OFF = "off"
     const val OVER = "over"
     const val FAILED = "failed"

@@ -2190,7 +2190,7 @@ final class CoreModel {
                                   lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false,
                                   updateHidden: false, installedCode: nil, updateFailure: nil, sizeBytes: nil, previousSizeBytes: nil,
                                   notifications: notifications, callerLookups: nil, face: MacFaceStore.shared.health(),
-                                  stageClosed: MacStageLog.last())
+                                  stageClosed: MacStageLog.last(), voiceInUse: core.speechVoiceInUse())
         _ = try? await core.refreshHealth(device: device, force: force)
     }
 

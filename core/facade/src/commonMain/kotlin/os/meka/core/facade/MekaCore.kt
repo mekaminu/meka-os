@@ -313,6 +313,10 @@ class MekaCore(
     /** The companion, slice 5: notes of earlier chats (Settings → Navilife's voice → What Navilife remembers). */
     private val companionMemory = os.meka.core.domain.CompanionMemoryStore(replica)
     private val speechClips = LinkedHashMap<String, String>()
+    /** One voice everywhere (Meka 2026-10-24 19:29): the voice that actually spoke each clip in [speechClips] (same keys). */
+    private val speechClipVoice = HashMap<String, String?>()
+    /** The voice the server last said spoke a clip, for Health → Obi's voice ("Voice · Brian"); null before the first. */
+    @kotlin.concurrent.Volatile private var speechLastVoice: String? = null
     /** Obi's face, slice 3b: the mouth sounds that came with clips in [speechClips] (same keys), while the face is drawn. */
     private val speechMarkTexts = HashMap<String, String>()
     /** Obi's face, slice 3b: this device draws the face, so clips are asked for with their mouth sounds. */
@@ -9404,19 +9408,19 @@ class MekaCore(
             // The companion, slice 9: the first sentence comes ahead, said, while the model writes the rest.
             if (speakVoice != null && onEarly != null) api.askStreamedMarkedIf(
                 marked, q, context, history.map(::sendable), speakVoice.name,
-                onFirst = { text, audio, _, marks ->
+                onFirst = { text, audio, spoke, marks ->
                     if (text.isNotBlank() && audio.isNotEmpty() && talkEarly == null) {
                         onCore {
                             openTurn()?.firstPiece(nowMs())
-                            speechWithAnswer(speakVoice.name, text, audio, marks)
+                            speechWithAnswer(speakVoice.name, text, audio, marks, spoke)
                         }
                         talkEarly = text
                         onEarly(text)
                     }
                 },
                 // Talking to Obi like a conversation, slice 7: the rest's pieces, said ahead, wait in memory for the speaker.
-                onNext = { text, audio, _, marks ->
-                    if (text.isNotBlank() && audio.isNotEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio, marks) }
+                onNext = { text, audio, spoke, marks ->
+                    if (text.isNotBlank() && audio.isNotEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio, marks, spoke) }
                 },
             )
             else if (speakVoice != null && marked) api.askSpokenMarked(q, context, history.map(::sendable), speakVoice.name)
@@ -9885,11 +9889,14 @@ class MekaCore(
                 speechUnreachable = false
                 speechOfflineSaid = false
                 val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)
+                speechSpokeBy(voice.name, r.voice)
                 speechClips[key] = audio
+                speechClipVoice[key] = r.voice
                 val marks = r.visemes
                 if (marked && !marks.isNullOrBlank()) speechMarkTexts[key] = marks else speechMarkTexts.remove(key)
                 while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
                 speechMarkTexts.keys.retainAll(speechClips.keys)
+                speechClipVoice.keys.retainAll(speechClips.keys)
                 audio
             } else {
                 speechTimed(started, nowMs() - started, os.meka.core.domain.SpeechTiming.Outcome.FAILED)
@@ -11108,6 +11115,7 @@ class MekaCore(
         // Hello slice 4: once a week at most, Obi writes a few fresh openers first, so they're made ahead too.
         try { freshenHelloOpeners() } catch (e: CancellationException) { throw e } catch (e: Exception) {}
         if (speechApi == null) return
+        helloVoiceCheck()
         val lines = onCore {
             val name = aboutYou.profile().shownName
             warmedName = os.meka.core.domain.CallNameRules.called(name) ?: ""
@@ -11129,6 +11137,21 @@ class MekaCore(
         // The orb says hello like a person, slice 3: Obi's answers to "good thanks, you?" are ready too (no name in them).
         os.meka.core.domain.HelloReplyRules.warmLines().forEach { if (!speechPrefetchPiece(it)) return }
         // Talking to Obi like a conversation, slice 1: no holding lines are made any more (Obi never says "One sec").
+    }
+
+    /**
+     * One voice everywhere (Meka 2026-10-24 19:29): with no voice chosen, the hello's clips made ahead are checked against
+     * the server's default voice before more are made, so openers kept from an older default (Ada's Amy) are dropped and
+     * made again in today's (Brian) before the next tap; one look at the voice list per warm (every 15 minutes). A
+     * chosen voice is left alone (a Google voice may be spoken by the Polly default when Google is over its month).
+     */
+    private suspend fun helloVoiceCheck() {
+        val api = speechApi ?: return
+        val asked = onCore { speechVoiceNow() } ?: return
+        if (asked.name != null) return
+        val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) { return }
+        val default = v.defaultVoice?.takeIf { it.isNotBlank() } ?: return
+        onCore { speechSpokeBy(null, default) }
     }
 
     /**
@@ -11308,17 +11331,35 @@ class MekaCore(
      * with its mouth sounds ([marks], Obi's face slice 3c) when the face is drawn and they read cleanly (else none: the
      * loudness mouth; a bad list never stops the clip).
      */
-    private fun speechWithAnswer(voice: String?, words: String, audio: String, marks: String? = null) {
+    private fun speechWithAnswer(voice: String?, words: String, audio: String, marks: String? = null, spoke: String? = null) {
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words.trim())
+        speechSpokeBy(voice, spoke)
         speechClips.remove(key)
         speechMarkTexts.remove(key)
         speechClips[key] = audio
+        speechClipVoice[key] = spoke
         if (speechWantsMarks && !marks.isNullOrBlank() && os.meka.core.wire.SpeechCodec.decodeMarks(marks).isNotEmpty()) speechMarkTexts[key] = marks
         speechAnswerClips += key
         while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechClips.keys.first().also { speechClips.remove(it) })
         while (speechAnswerClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechAnswerClips.first())
         speechMarkTexts.keys.retainAll(speechClips.keys)
+        speechClipVoice.keys.retainAll(speechClips.keys)
     }
+
+    /**
+     * A clip asked for in [asked] came back in [spoke]: older clips for the same choice in another voice are dropped
+     * ([os.meka.core.domain.SpeechRules.stale]), so the next hello is made again in the voice Ask uses.
+     */
+    private fun speechSpokeBy(asked: String?, spoke: String?) {
+        if (!spoke.isNullOrBlank()) speechLastVoice = spoke.trim()
+        val stale = os.meka.core.domain.SpeechRules.stale(speechClipVoice, asked, spoke)
+        if (stale.isEmpty()) return
+        stale.forEach { speechClips.remove(it); speechMarkTexts.remove(it); speechAnswerClips.remove(it); speechClipVoice.remove(it) }
+        speechWarmed = false
+    }
+
+    /** The voice Navilife's server last spoke in ("Brian"), or null before the first clip; for Health → Obi's voice. */
+    fun speechVoiceInUse(): String? = speechLastVoice
 
     private fun speechCached(voice: String?, words: String): String? {
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words)

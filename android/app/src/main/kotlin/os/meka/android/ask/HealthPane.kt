@@ -113,6 +113,7 @@ object HealthDevice {
             callerLookups = os.meka.android.work.CallerLookup.allowed(context),
             face = runCatching { ObiFaceStore.health(context) }.getOrNull(),
             stageClosed = StageCloseLog.last(context),
+            voiceInUse = app?.let { a -> runCatching { a.core.speechVoiceInUse() }.getOrNull() },
         )
     }
 }

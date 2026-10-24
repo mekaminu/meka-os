@@ -132,6 +132,8 @@ data class DeviceHealth(
     val face: FaceHealth? = null,
     /** Why the hello's stage last closed on this device (Meka 2026-10-24 14:34, [StageRules]); null leaves it out. */
     val stageClosed: StageClosed? = null,
+    /** The voice Navilife's server last spoke in on this device ("Brian"), Meka 2026-10-24 19:29; null leaves it out. */
+    val voiceInUse: String? = null,
 )
 
 data class HealthFacts(
@@ -364,7 +366,8 @@ object HealthRules {
             true -> HealthRow("voice", "Obi's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
             false -> HealthRow("voice", "Obi's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
         }
-        val closed = StageRules.healthLine(f.device.stageClosed, f.nowMs, cal)
+        val speaking = voiceInUseLine(f.device.voiceInUse)
+        val closed = listOfNotNull(speaking, StageRules.healthLine(f.device.stageClosed, f.nowMs, cal)).joinToString("\n").ifEmpty { null }
         val face = f.device.face ?: return if (closed == null) row else row.copy(detail = closed)
         val detail = listOfNotNull(FaceHealthRules.line(face, f.device.mac, f.nowMs, cal), closed).joinToString("\n")
         val withFace = row.copy(detail = detail)
@@ -395,6 +398,10 @@ object HealthRules {
      * flagged: Amazon Polly already said those words, so nothing needs a look. Since the session latch (2026-10-19) it
      * says how long Polly stood in: "· used Polly for 15 min", or "· on Polly for 4 min so far" while it still does.
      */
+    /** "Speaking as Brian": the voice the last clip here came in, so the hello and Ask can be seen to match. */
+    fun voiceInUseLine(voice: String?): String? =
+        voice?.trim()?.takeIf { it.isNotEmpty() && it.length <= 40 }?.let { "Speaking as $it" }
+
     fun voiceLine(s: ServerHealth, nowMs: Long, cal: LocalCalendar): String {
         val polly = s.speechGooglePollyForMs?.let { EngineLatchRules.duration(it) }?.let {
             if (s.speechGooglePollyNow) "on Polly for $it so far" else "used Polly for $it"
