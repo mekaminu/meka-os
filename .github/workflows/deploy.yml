@@ -225,7 +225,7 @@ jobs:
           BUCKET=$(aws cloudformation describe-stack-resources --stack-name "MekaOs-$ENV_NAME" \
             --query "StackResources[?ResourceType=='AWS::S3::Bucket' && starts_with(LogicalResourceId, 'Blobs')].PhysicalResourceId | [0]" --output text)
           if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then echo "::warning title=Obi's face::couldn't find the Blobs bucket"; exit 0; fi
-          echo "The service reads the face from ${BUCKET:0:25}…"
+          echo "The service reads the face from ${BUCKET:0:32}…"
           if LISTING=$(aws s3api list-objects-v2 --bucket "$BUCKET" --max-items 20000 \
               --query "Contents[].{Key:Key,Size:Size}" --output json 2>"$RUNNER_TEMP/face.err"); then
             printf '%s' "$LISTING" | $CLI face-report
@@ -238,7 +238,25 @@ jobs:
             N=$(aws s3api list-objects-v2 --bucket "$B" --max-items 20000 --query "Contents[].Key" --output text 2>/dev/null \
               | tr '\t' '\n' | grep -ciE '(^|/)(face-loop\.mp4|mouth-(rest|m|f|ee|oh|ah)\.png)$' || true)
             if [ "${N:-0}" -gt 0 ]; then
-              echo "::warning title=Obi's face::another bucket, ${B:0:25}…, holds $N of the face's files; the service reads ${BUCKET:0:25}…"
+              echo "::warning title=Obi's face::another bucket, ${B:0:32}…, holds $N of the face's files; the service reads ${BUCKET:0:32}…"
+              # Deploy 1223 (2026-10-24): Meka's upload went to an older bucket with the same name start. Copy the seven
+              # (only those names, never anything else) into the service's face/, server-side; nothing is deleted.
+              KEYS=$(aws s3api list-objects-v2 --bucket "$B" --max-items 20000 --query "Contents[].Key" --output text 2>/dev/null | tr '\t' '\n')
+              COPIED=0; FAILED=0
+              for NAME in face-loop.mp4 mouth-rest.png mouth-m.png mouth-f.png mouth-ee.png mouth-oh.png mouth-ah.png; do
+                if printf '%s' "$LISTING" | grep -q "\"face/$NAME\""; then continue; fi
+                RX=$(printf '%s' "$NAME" | sed 's/\./\\./g')
+                SRC=$(printf '%s\n' "$KEYS" | grep -iE "(^|/)$RX\$" | grep -vE '__MACOSX|(^|/)\._' | awk '{ print length($0) "\t" $0 }' | sort -n | head -1 | cut -f2-)
+                [ -z "$SRC" ] && continue
+                if aws s3 cp "s3://$B/$SRC" "s3://$BUCKET/face/$NAME" --only-show-errors 2>"$RUNNER_TEMP/face-cp.err"; then
+                  COPIED=$((COPIED+1))
+                else
+                  FAILED=$((FAILED+1)); ERR=$(grep -oE '\(([A-Za-z]+)\)' "$RUNNER_TEMP/face-cp.err" | head -1)
+                fi
+              done
+              if [ "$COPIED" -gt 0 ] || [ "$FAILED" -gt 0 ]; then
+                echo "::warning title=Obi's face::copied $COPIED of the face's files into the service's face/ ($FAILED failed${ERR:+: $ERR}); the phone picks them up on its next look"
+              fi
             fi
           done
 
