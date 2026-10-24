@@ -3,14 +3,16 @@ package os.meka.core.domain
 /**
  * Obi's face, slice 3: how a device keeps the face's seven files (the film loop and six mouth patches) in its own
  * storage. It asks the server's list at most about weekly ([RECHECK_MS]; after a failed or empty look, again in
- * [RETRY_MS]), fetches only the files whose tag changed, lets go of any the server no longer has, and draws the face only
+ * [RETRY_MS], ten minutes), fetches only the files whose tag changed, lets go of any the server no longer has, and draws the face only
  * when all seven are kept. Until then (or with Face off) the orb stays, with no error shown. The names here are the
  * wire's allow-list ([os.meka.core.wire.FaceCodec.FILES]); this file holds nothing personal.
  */
 object FaceFileRules {
     const val RECHECK_MS = 7L * 24 * 60 * 60 * 1000
-    /** A look that failed, or found the folder empty or half there (he may be uploading): look again sooner. */
-    const val RETRY_MS = 6L * 60 * 60 * 1000
+    /** A look that failed, or found the folder empty or half there (he may be uploading): look again soon, from the next app open after [RETRY_MS]. */
+    // Meka 2026-10-24 09:40: he uploaded the files after the app had already looked, and the face then waited six
+    // hours; a missing or half-uploaded face is now looked for again at the next app open after ten minutes.
+    const val RETRY_MS = 10L * 60 * 1000
 
     /**
      * Slice 4: the seven names for the Mac (Swift sees the domain, not the wire): the same list as
