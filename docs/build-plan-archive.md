@@ -3217,6 +3217,7 @@ docs/screens/fold/shutdown/.
   last words and dots together (LoneWordGlue), so the refused key's "…into Secrets Manager" or a fallback's last word
   never sits alone.
 - Design check: no design file covers Navilife's AI. No server change, no migration, Mac checked nightly.
+- a8f7c16, CI run 1178 (40065628683) green first try; shots published fb99788 (the shot reads cleanly: every line whole, no word alone).
 
 ### Quality gate — slice 59 (2026-10-24): Obi's voice's shots and its first hand tests
 
