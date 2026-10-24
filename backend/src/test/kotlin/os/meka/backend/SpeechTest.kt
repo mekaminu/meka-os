@@ -475,7 +475,7 @@ class SpeechTest {
         assertTrue(line.startsWith("Google voice on · 3 Chirp 3 HD voices (2 British) · probe clip 1 KB in "), line)
         assertTrue(line.contains(" ms · 1k of 1M characters in 2026-10 · "), line)
         assertTrue(line.endsWith("Polly ${SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }).offered().size} voices"), line)
-        assertEquals(Triple(SpeechService.PROBE_LINE, "Aoede", "chirp3hd"), google.said.single())
+        assertEquals(Triple(SpeechService.PROBE_LINE, "Charon", "chirp3hd"), google.said.single()) // the first British voice, Obi's
         assertEquals(SpeechService.PROBE_LINE.length.toLong(), googleUsage.used("2026-10"))
         // No key: says so, nothing sent to Google.
         val noKey = object : SpeechEngine by FakePolly(chirp) { override fun configured() = false }
