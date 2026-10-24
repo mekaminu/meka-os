@@ -1,6 +1,6 @@
 package os.meka.android.calendar
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -97,7 +97,14 @@ internal fun DayTimelineView(
                 } else Modifier,
             ),
     ) {
-        Crossfade(timeline, animationSpec = MekaMotion.appear(reduced), label = "timeline-day", contentKey = { it.epochDay }) { timeline ->
+        androidx.compose.animation.AnimatedContent(
+            targetState = timeline,
+            contentKey = { it.epochDay },
+            transitionSpec = {
+                androidx.compose.animation.fadeIn(MekaMotion.appear(reduced)) togetherWith androidx.compose.animation.fadeOut(MekaMotion.appear(reduced))
+            },
+            label = "timeline-day",
+        ) { timeline ->
             Column(Modifier.fillMaxSize()) {
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).semantics(mergeDescendants = true) {
