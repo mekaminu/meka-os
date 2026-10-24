@@ -31,6 +31,10 @@ import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.android.calendar.ADD_TAG
 import os.meka.android.calendar.LIST_TITLE_TAG
 import os.meka.android.calendar.LISTS_RULE_TAG
+import os.meka.android.calendar.AREA_LABEL_TAG
+import os.meka.android.calendar.BUDGET_VALUE_TAG
+import os.meka.android.calendar.STEP_TAG
+import os.meka.android.calendar.PAST_EMPTY_TAG
 import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage

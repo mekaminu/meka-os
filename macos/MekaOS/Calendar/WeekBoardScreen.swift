@@ -945,7 +945,7 @@ private struct RoundStep: View {
 
     var body: some View {
         let size = CGFloat(BoardMatchRules.shared.BUTTON)
-        Image(systemName: systemName).font(.system(size: 13, weight: .semibold)).foregroundStyle(palette.textPrimary)
+        Image(systemName: systemName).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
             .frame(width: size, height: size)
             .background(Circle().fill(palette.surface))
             .overlay(Circle().strokeBorder(palette.hairline, lineWidth: 1))
