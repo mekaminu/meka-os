@@ -14,6 +14,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -205,7 +206,11 @@ class ReviewScreensTest {
         val plain = SemanticsMatcher("shows \"$text\"") { n ->
             n.config.getOrNull(SemanticsProperties.Text)?.any { DateGlue.plain(it.text).contains(text) } == true
         }
+        // The clock runs while it scrolls: a lazy list's scroll waits for a frame (as in BriefScreensTest).
+        compose.mainClock.autoAdvance = true
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(plain)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
         turns()
     }
 
@@ -292,8 +297,11 @@ class ReviewScreensTest {
             fail("$name: › can be tapped on this week")
         }
         scrollTo("What went well")
-        compose.onNode(hasContentDescription(winsView(Fill.MANY).hint)).performTextInput("Led the planning session")
-        compose.onNode(hasContentDescription(winsView(Fill.MANY).hint)).performImeAction()
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasContentDescription(winsView(Fill.MANY).hint) and hasSetTextAction()).performTextInput("Led the planning session")
+        compose.onNode(hasContentDescription(winsView(Fill.MANY).hint) and hasSetTextAction()).performImeAction()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
         turns()
         if (taps.added != listOf("Led the planning session")) fail("$name: the field didn't keep the win (${taps.added})")
         clickNode(hasContentDescription("Remove Calm handover with the new starter"), "$name: a win's Remove")
