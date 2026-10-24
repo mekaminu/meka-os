@@ -881,7 +881,7 @@ fun Application.mekaSync(
                 val body = call.boundedBody()
                 call.device(devices, verifier, body, requireKey = true)
                 LiveCodec.decodeStatusRequest(body)
-                val meter = withContext(Dispatchers.IO) { live.meter() }
+                val meter = withContext(Dispatchers.IO) { live.status() }
                 call.respondText(LiveCodec.encodeMeter(meter), ContentType.Application.Json)
             }
             post(LiveCodec.SESSION_PATH) {

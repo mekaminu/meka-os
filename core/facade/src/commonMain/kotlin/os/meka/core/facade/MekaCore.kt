@@ -8766,18 +8766,23 @@ class MekaCore(
         val ai: os.meka.core.domain.AiStatusView?, val atMs: Long,
         /** The mail accounts (Inbox autopilot, slice 1b: Setup's Mail step); null when they couldn't be read. */
         val mail: List<os.meka.core.domain.MailAccountFacts>? = null,
+        /** 2026-10-24: Live's meter with the key's state, when Live is on; null when off or it couldn't be asked. */
+        val live: os.meka.core.wire.LiveCodec.Meter? = null,
     )
     private var lastHealthServer: HealthServerFacts? = null
 
     /** The server's three answers (household health, the calendar list, the AI's status), asked together; kept for Health and Setup. */
     private suspend fun fetchHealthServer(): HealthServerFacts {
         var mail: List<os.meka.core.domain.MailAccountFacts>? = null
+        var live: os.meka.core.wire.LiveCodec.Meter? = null
         val (server, accounts, ai) = kotlinx.coroutines.coroutineScope {
             val s = async { runCatchingNotCancel { healthApi?.householdHealth() } }
             val a = async { runCatchingNotCancel { accountsApi?.accounts() } }
             val i = async { if (aiApi == null) null else aiStatus().takeIf { it != os.meka.core.domain.AskRules.STATUS_UNKNOWN } }
             val m = async { runCatchingNotCancel { accountsApi?.mailAccounts() } }
+            val l = async { if (liveApi != null && onCore { mekaVoice.liveOn() }) liveStatus() else null }
             mail = m.await()
+            live = l.await()
             Triple(s.await(), a.await(), i.await())
         }
         accounts?.let(::rememberEditing)
@@ -8785,7 +8790,7 @@ class MekaCore(
         val facts = HealthServerFacts(
             server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult, it.speechGoogle, it.speechGoogleFailedAtMs, it.speechGooglePollyForMs, it.speechGooglePollyNow) },
             accounts?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) }?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
-            ai, nowMs(), mail,
+            ai, nowMs(), mail, live,
         )
         onCore { lastHealthServer = facts }
         return facts
@@ -8820,6 +8825,22 @@ class MekaCore(
             mail = mail,
             mailBacklogs = if (mail == null) emptyList() else activity.mailBacklogs(),
             mailTidies = if (mail == null) emptyList() else activity.mailTidyBatches(),
+            live = liveHealth(),
+        )
+    }
+
+    /** 2026-10-24: Health's Live facts: the switch, the key as the server last found it, the last talk here. Core only. */
+    private fun liveHealth(): os.meka.core.domain.LiveHealth? {
+        if (liveApi == null) return null
+        val on = runCatching { mekaVoice.liveOn() }.getOrDefault(false)
+        if (!on) return null
+        val m = lastHealthServer?.live
+        return os.meka.core.domain.LiveHealth(
+            on = true,
+            keyState = m?.let { os.meka.core.domain.LiveDiagnosisRules.KeyState.of(it.keyState).let { k -> if (k == os.meka.core.domain.LiveDiagnosisRules.KeyState.UNCHECKED && !it.configured) os.meka.core.domain.LiveDiagnosisRules.KeyState.NO_KEY else k } },
+            keyCode = m?.keyCode,
+            keyDetail = os.meka.core.domain.LiveDiagnosisRules.redact(m?.keyDetail),
+            last = liveOutcome(),
         )
     }
 
@@ -10945,6 +10966,35 @@ class MekaCore(
             .distinct()
     }
 
+    /**
+     * 2026-10-24 (Live On but each turn ~10 s): how a talk with Live on went on this device, Live or why normal Obi
+     * answered ([os.meka.core.domain.LiveDiagnosisRules.LiveFallback], Google's or the server's words with anything
+     * key-shaped cut out). Kept on this device only (reasons and times, never words) for Health → Obi's voice. Never throws.
+     */
+    suspend fun noteLiveOutcome(live: Boolean, fallback: os.meka.core.domain.LiveDiagnosisRules.LiveFallback?, detail: String?) {
+        try {
+            onCore {
+                val o = os.meka.core.domain.LiveDiagnosisRules.LiveOutcome(nowMs(), live, if (live) null else fallback, if (live) null else os.meka.core.domain.LiveDiagnosisRules.redact(detail))
+                lastLiveOutcome = o
+                runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.LiveDiagnosisRules.KEY, os.meka.core.domain.LiveDiagnosisRules.encode(o)) } }
+            }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { }
+    }
+
+    /** The last talk with Live on (this device). Core only. */
+    private var lastLiveOutcome: os.meka.core.domain.LiveDiagnosisRules.LiveOutcome? = null
+    private var lastLiveOutcomeRead = false
+
+    private fun liveOutcome(): os.meka.core.domain.LiveDiagnosisRules.LiveOutcome? {
+        if (!lastLiveOutcomeRead) {
+            lastLiveOutcomeRead = true
+            if (lastLiveOutcome == null) lastLiveOutcome = os.meka.core.domain.LiveDiagnosisRules.decode(
+                runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.LiveDiagnosisRules.KEY) } }.getOrNull(),
+            )
+        }
+        return lastLiveOutcome
+    }
+
     /** How many seconds a Live session heard and spoke (nothing of what was said), so the month's count is true. Never throws. */
     suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): os.meka.core.wire.LiveCodec.Usage? {
         val api = liveApi ?: return null
@@ -11002,10 +11052,15 @@ class MekaCore(
     suspend fun liveSettings(): os.meka.core.domain.LiveSettingsView {
         val (on, voice) = onCore { mekaVoice.liveOn() to mekaVoice.liveVoice() }
         val m = liveStatus()
-        return os.meka.core.domain.LiveTalkRules.view(
+        val v = os.meka.core.domain.LiveTalkRules.view(
             on, voice, meterKnown = m != null, configured = m?.configured == true,
             level = m?.level ?: "ok", spentPence = m?.spentPence ?: 0, capPence = m?.capPence ?: 0,
         )
+        // 2026-10-24: when the server found Google refusing the key (or no usable key), the line says so in Google's words.
+        val meter = m ?: return v
+        val key = meter.keyState?.let { os.meka.core.domain.LiveDiagnosisRules.KeyState.of(it) } ?: return v
+        val why = os.meka.core.domain.LiveDiagnosisRules.settingsLine(key, meter.keyCode, os.meka.core.domain.LiveDiagnosisRules.redact(meter.keyDetail)) ?: return v
+        return if (on) v.copy(line = why) else v
     }
 
     suspend fun clearTurnSpeed(): Unit = onCore {

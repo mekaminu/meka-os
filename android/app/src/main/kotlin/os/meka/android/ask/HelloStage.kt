@@ -130,6 +130,8 @@ fun HelloStage(
     onOpenSettings: () -> Unit = {},
     /** Why it closed, once, as it starts to close (kept on the device for Health → Obi's voice). */
     onWhy: (StageClose) -> Unit = {},
+    /** 2026-10-24: Live is on but normal Obi answered this talk, and why ([os.meka.core.domain.LiveDiagnosisRules.stageLine]). */
+    liveNote: String? = null,
 ) {
     val reduced = Meka.reducedMotion || calm
     val theme = Meka.theme
@@ -329,6 +331,12 @@ fun HelloStage(
             }
             shownCards.forEachIndexed { i, (item, rise) ->
                 if (slots.getOrNull(i) == CardSlot.BELOW) StageCard(item, rise, Modifier)
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = settled && liveNote != null,
+                enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced)),
+            ) {
+                Text(liveNote.orEmpty(), style = MekaType.caption, color = MekaDarkColors.textTertiary, textAlign = TextAlign.Center, maxLines = 2)
             }
             StageRules.button(note, problem)?.let { label ->
                 // The whole 48 dp answers the tap, not just the pill's words.

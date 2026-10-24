@@ -59,6 +59,8 @@ final class TalkController {
     private(set) var helloSpokeAt: Date?
     /// Why MEKA couldn't listen, shown under the orb until the next start.
     private(set) var problem: TalkProblem?
+    /// 2026-10-24: Live is on but normal Obi answered this conversation, and why, under the orb until the next start.
+    private(set) var liveNote: String?
     /// "Talk over MEKA" is on for this conversation (read from the Mac's setting at each start; the orb's line).
     private(set) var talkOver = true
     /// Conversation mode (slice 6, `ConversationModeRules`): listening in the window after Obi's line with nothing of
@@ -169,6 +171,7 @@ final class TalkController {
         guard !active else { return }
         generation += 1
         problem = nil
+        liveNote = nil
         heard = ""
         said = ""
         talkOver = MacTalkOver.enabled
@@ -220,6 +223,7 @@ final class TalkController {
         guard !active else { return }
         generation += 1
         problem = nil
+        liveNote = nil
         heard = ""
         said = ""
         talkOver = MacTalkOver.enabled
@@ -383,9 +387,10 @@ final class TalkController {
             self.helloCards = []
             self.onAnswer(question, answer)
         }
-        live.onEnded = { [weak self] fellBack in
+        live.onEnded = { [weak self] fellBack, note in
             guard let self, self.liveRunning else { return }
             self.liveRunning = false
+            self.liveNote = fellBack ? note : nil
             self.level = 0
             self.phase = .ended
             // Live didn't open in time: normal Obi listens instead, so he is never left with a dead orb.
@@ -397,6 +402,7 @@ final class TalkController {
     private func startLive() {
         guard let model else { return apply(TalkFlow.shared.start()) }
         liveRunning = true
+        liveNote = nil
         heard = ""
         said = ""
         phase = .thinking

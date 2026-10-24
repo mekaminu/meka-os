@@ -28,7 +28,8 @@ final class MacLiveTalk {
     /// A turn finished: his words and Obi's answer for Ask.
     var onTurn: (String, AskOutcome) -> Void = { _, _ in }
     /// The conversation ended; `true` when Live never opened and normal Obi should answer instead.
-    var onEnded: (Bool) -> Void = { _ in }
+    /// The conversation ended: fell back (normal Obi answers instead) and, if so, why (2026-10-24: never quietly).
+    var onEnded: (Bool, String?) -> Void = { _, _ in }
 
     private(set) var running = false
     private var conversation: LiveConversation?
@@ -107,7 +108,7 @@ final class MacLiveTalk {
             let was = running
             running = false
             herVoice = false
-            if was { onEnded(end.fellBack) }
+            if was { onEnded(end.fellBack, end.fallbackLine) }
         }
     }
 

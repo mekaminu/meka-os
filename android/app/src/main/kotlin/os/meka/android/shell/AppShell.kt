@@ -267,6 +267,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
             val cardsDone by app.talkCardsDone.collectAsState()
             val needsAsk by app.talkNeedsAsk.collectAsState()
             val talkProblem by app.talkProblem.collectAsState()
+            val liveNote by app.talkLiveNote.collectAsState()
             key(kind) {
                 HelloStage(
                     kind, dockAt, talkPhase, level, heard, said, needsYou,
@@ -289,6 +290,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
                     onRetry = { app.talkListenNow.value = true },
                     onOpenSettings = { os.meka.android.ask.StageCloseLog.openMicSettings(shellContext) },
                     onWhy = { os.meka.android.ask.StageCloseLog.record(shellContext, it) },
+                    liveNote = liveNote,
                 )
             }
         }

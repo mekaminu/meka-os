@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import os.meka.core.domain.AskOutcome
+import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveMoney
 import os.meka.core.domain.LiveOffer
 import os.meka.core.domain.LiveTalkRules
@@ -26,21 +27,27 @@ class LiveConversationTest {
         val sent = mutableListOf<String>()
         val incoming = Channel<String>(Channel.UNLIMITED)
         var url: String? = null
-        override suspend fun run(url: String, outgoing: ReceiveChannel<String>, onText: suspend (String) -> Unit) = coroutineScope {
+        /** What Google's close said, once [incoming] is closed. */
+        var closeWith: String? = null
+        override suspend fun run(url: String, outgoing: ReceiveChannel<String>, onText: suspend (String) -> Unit): String? = coroutineScope {
             this@FakeSocket.url = url
             val s = launch { for (m in outgoing) sent += m }
             for (t in incoming) onText(t)
             s.cancel()
+            closeWith
         }
     }
 
-    private class FakeCore(var ready: Boolean = true) : LiveConversation.Core {
+    private class FakeCore(var ready: Boolean = true, val refused: String? = null) : LiveConversation.Core {
         val usage = mutableListOf<Triple<String, Long, Long>>()
+        val outcomes = mutableListOf<Triple<Boolean, LiveDiagnosisRules.LiveFallback?, String?>>()
+        override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?) { outcomes += Triple(live, fallback, detail) }
         val searches = mutableListOf<String>()
         val asked = mutableListOf<String?>()
         override suspend fun voice(): String? = "Kore"
         override suspend fun session(voice: String?, greeted: String?, resume: String?): LiveCodec.Session? {
             asked += greeted
+            if (refused != null) return LiveCodec.Session(LiveCodec.Session.FAILED, LiveCodec.Meter(true, "ok", 0, 1_500), reason = refused)
             return if (!ready) LiveCodec.Session(LiveCodec.Session.OVER, LiveCodec.Meter(true, "over", 1_500, 1_500))
             else LiveCodec.Session(LiveCodec.Session.READY, LiveCodec.Meter(true, "ok", 0, 1_500), "ls_1", "tok", "gemini-live", "wss://g", voice, expiresAtMs = 600_000)
         }
@@ -97,6 +104,7 @@ class LiveConversationTest {
         runCurrent()
         assertEquals(LiveEvent.Ended(false), events.last())
         assertEquals(Triple("ls_1", 1L, 1L), core.usage.single())
+        assertEquals(Triple(true, null, null), core.outcomes.single(), "Health hears this talk ran in Live")
     }
 
     @Test
@@ -127,24 +135,54 @@ class LiveConversationTest {
     }
 
     @Test
-    fun noSessionFallsBackToNormalAda() = runTest {
-        val (c, events) = conversation(FakeCore(ready = false), FakeSocket())
+    fun noSessionFallsBackToNormalAdaAndSaysWhy() = runTest {
+        val core = FakeCore(ready = false)
+        val (c, events) = conversation(core, FakeSocket())
         c.start()
         runCurrent()
-        assertEquals(listOf<LiveEvent>(LiveEvent.Ended(true)), events)
+        assertEquals(listOf<LiveEvent>(LiveEvent.Ended(true, "Normal Obi · Live unavailable: this month's Live allowance is used up")), events)
+        assertEquals(Triple(false, LiveDiagnosisRules.LiveFallback.OVER, null), core.outcomes.single())
     }
 
     @Test
-    fun aSetupThatNeverComesFallsBackAfterTwoSeconds() = runTest {
-        val socket = FakeSocket()
-        val (c, events) = conversation(FakeCore(), socket)
+    fun googleRefusingTheTokenIsQuotedOnTheStage() = runTest {
+        // 2026-10-24: Live On but normal Obi answering is never silent: the server's reason (Google's own words) shows.
+        val core = FakeCore(refused = "Google said 403: PERMISSION_DENIED: Requests are blocked.")
+        val (c, events) = conversation(core, FakeSocket())
         c.start()
-        advanceTimeBy(LiveTalkRules.FALLBACK_MS - 100)
         runCurrent()
-        assertTrue(events.isEmpty())
-        advanceTimeBy(200)
+        assertEquals(LiveEvent.Ended(true, "Normal Obi · Live unavailable: Google said 403: PERMISSION_DENIED: Requests are blocked."), events.single())
+        assertEquals(LiveDiagnosisRules.LiveFallback.REFUSED, core.outcomes.single().second)
+        assertEquals("Normal Obi · Live unavailable: Google said 403: PERMISSION_DENIED: Requests are blocked.", c.fallbackLine)
+    }
+
+    @Test
+    fun withATokenInHandGoogleGetsSixSecondsToSetUp() = runTest {
+        // 2026-10-24: the token came at once; Google's set-up is given up to 6 s from asking, not 2.
+        val socket = FakeSocket()
+        val core = FakeCore()
+        val (c, events) = conversation(core, socket)
+        c.start()
+        advanceTimeBy(LiveTalkRules.FALLBACK_MS + 1_000)
         runCurrent()
-        assertEquals(LiveEvent.Ended(true), events.single())
+        assertTrue(events.isEmpty(), "still waiting for Google past 2 s")
+        advanceTimeBy(LiveDiagnosisRules.CONNECT_MS - LiveTalkRules.FALLBACK_MS)
+        runCurrent()
+        assertEquals(LiveEvent.Ended(true, "Normal Obi · Live unavailable: Google took over 6 s to open the session"), events.single())
+        assertEquals(LiveDiagnosisRules.LiveFallback.SLOW_GOOGLE, core.outcomes.single().second)
+    }
+
+    @Test
+    fun googleClosingBeforeSetUpIsQuoted() = runTest {
+        val socket = FakeSocket().apply { closeWith = "closed 1008: models/gemini-x is not found" }
+        val core = FakeCore()
+        val (c, events) = conversation(core, socket)
+        c.start()
+        runCurrent()
+        socket.incoming.close()
+        runCurrent()
+        assertEquals(LiveEvent.Ended(true, "Normal Obi · Live unavailable: closed 1008: models/gemini-x is not found"), events.single())
+        assertEquals(Triple(false, LiveDiagnosisRules.LiveFallback.CLOSED, "closed 1008: models/gemini-x is not found"), core.outcomes.single())
     }
 
     @Test

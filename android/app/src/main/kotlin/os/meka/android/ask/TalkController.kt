@@ -77,6 +77,12 @@ class TalkController(
      */
     var followOn by mutableStateOf(false)
         private set
+    /**
+     * 2026-10-24: Live is on but normal Obi is answering this conversation, and why ("Normal Obi · Live unavailable:
+     * Google said 403: …"), under the orb until the next start: never quietly.
+     */
+    var liveNote by mutableStateOf<String?>(null)
+        private set
     /** Why MEKA couldn't listen, shown under the orb until the next start. */
     var problem by mutableStateOf<TalkProblem?>(null)
         private set
@@ -127,7 +133,7 @@ class TalkController(
         scope.launch {
             val live = runCatching { core.liveOn() }.getOrDefault(false)
             if (gen != generation || active) return@launch
-            if (live) startLive() else begin(TalkFlow.start())
+            if (live) startLive() else { liveNote = null; begin(TalkFlow.start()) }
         }
     }
 
@@ -142,8 +148,9 @@ class TalkController(
         override fun onLevel(level: Float) {
             if (liveRunning) this@TalkController.level = os.meka.core.domain.VoiceOut.follow(this@TalkController.level, level)
         }
-        override fun onEnded(fellBack: Boolean) {
+        override fun onEnded(fellBack: Boolean, fallbackLine: String?) {
             if (!liveRunning) return
+            liveNote = if (fellBack) fallbackLine else null
             liveRunning = false
             phase = TalkPhase.ENDED
             this@TalkController.level = 0f
@@ -185,6 +192,7 @@ class TalkController(
     private fun startLive() {
         generation++
         problem = null
+        liveNote = null
         heard = ""
         said = ""
         liveRunning = true

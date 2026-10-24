@@ -18,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import os.meka.core.domain.LiveDiagnosisRules
 
 /** Obi's Live mode, slice 1: tokens for Gemini Live minted on the server, metered against Meka's £15. */
 class LiveSessionsTest {
@@ -319,5 +320,89 @@ class LiveSessionsTest {
         // A full day with the mail and money lines still fits whole.
         val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
         assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
+    }
+
+    // ---- 2026-10-24: why Live does or doesn't engage ----
+
+    private val boundKey = "AQ.Ab8RN6Jx2kQpZt0vYw3sLmN4oPqRsTuV" // Google's service-account-bound "auth key" shape
+
+    @Test
+    fun aBoundAuthKeyIsReadAndSentInTheHeader() {
+        assertEquals(boundKey, GeminiLiveTokens.secret("""{"api_key": "$boundKey"}""").key)
+        assertEquals(boundKey, GeminiLiveTokens.secret("""{"GEMINI_API_KEY": "$boundKey"}""").key)
+        assertEquals(boundKey, GeminiLiveTokens.secret("""{"name": "$boundKey"}""").key, "one key-shaped value")
+        assertEquals(boundKey, GeminiLiveTokens.secret(" $boundKey\n").key, "pasted bare")
+        assertEquals(boundKey, GeminiLiveTokens.secret("\"$boundKey\"").key)
+        assertEquals(LiveDiagnosisRules.KeyState.NO_KEY, GeminiLiveTokens.secret(null).state)
+        assertEquals(LiveDiagnosisRules.KeyState.NO_KEY, GeminiLiveTokens.secret("{}").state)
+        assertEquals(LiveDiagnosisRules.KeyState.NO_KEY, GeminiLiveTokens.secret("""{"api_key": ""}""").state)
+        assertEquals(LiveDiagnosisRules.KeyState.BAD_SECRET, GeminiLiveTokens.secret("""{"api_key": "short"}""").state)
+        assertEquals(LiveDiagnosisRules.KeyState.BAD_SECRET, GeminiLiveTokens.secret("not a key at all").state)
+        assertFalse(boundKey in GeminiLiveTokens.secret(boundKey).toString(), "never printed")
+
+        val headers = mutableListOf<Map<String, String>>()
+        val g = GeminiLiveTokens({ boundKey }, { _, _, h, _ -> headers += h; 200 to """{"name":"auth_tokens/a"}""" }, nowMs = { now })
+        assertEquals(LiveKeyCheck(LiveDiagnosisRules.KeyState.READY, 200, null, now), g.check("gemini-3.8-live", now))
+        assertEquals(boundKey, headers.single()["x-goog-api-key"])
+        assertFalse(headers.single().values.any { "key=" in it })
+    }
+
+    @Test
+    fun googlesRefusalIsKeptInItsOwnWordsWithoutTheKey() {
+        var rejected = 0
+        val body = """{"error":{"code":403,"message":"Requests from key $boundKey are blocked.","status":"PERMISSION_DENIED","details":[{"@type":"x","reason":"API_KEY_SERVICE_BLOCKED"}]}}"""
+        val g = GeminiLiveTokens({ boundKey }, { _, _, _, _ -> 403 to body }, rejected = { rejected++ }, nowMs = { now })
+        assertNull(g.mint("gemini-3.8-live", "Charon", "", now))
+        val c = g.keyCheck()!!
+        assertEquals(LiveDiagnosisRules.KeyState.REFUSED, c.state)
+        assertEquals(403, c.code)
+        assertEquals("PERMISSION_DENIED (API_KEY_SERVICE_BLOCKED): Requests from key … are blocked.", c.detail)
+        assertEquals(1, rejected, "the secret is read again at once")
+
+        // The device sees Google's words on the meter and as the session's reason, never the key.
+        val s = LiveSessions(g, InMemoryLiveSessionStore(), capPence = 1_500, model = "gemini-3.8-live", gbpPerUsd = { 800_000 }, nowMs = { now })
+        val session = s.session("hh", LiveCodec.SessionRequest())
+        assertEquals(LiveCodec.Session.FAILED, session.state)
+        assertEquals("Google said 403: PERMISSION_DENIED (API_KEY_SERVICE_BLOCKED): Requests from key … are blocked.", session.reason)
+        assertEquals("refused", session.meter.keyState)
+        assertEquals(403, session.meter.keyCode)
+        assertFalse(boundKey in LiveCodec.encodeSession(session))
+
+        // Google down is "couldn't reach", not a refusal; a thrown error is too.
+        val down = GeminiLiveTokens({ boundKey }, { _, _, _, _ -> 503 to "<html>unavailable</html>" }, nowMs = { now })
+        down.mint("m", "Charon", "", now)
+        assertEquals(LiveDiagnosisRules.KeyState.UNREACHABLE, down.keyCheck()!!.state)
+        val off = GeminiLiveTokens({ boundKey }, { _, _, _, _ -> throw java.net.ConnectException("refused") }, nowMs = { now })
+        assertNull(off.mint("m", "Charon", "", now))
+        assertEquals(LiveDiagnosisRules.KeyState.UNREACHABLE, off.keyCheck()!!.state)
+    }
+
+    @Test
+    fun noKeyAndAnUnusableSecretAreToldApart() {
+        val none = GeminiLiveTokens({ null }, { _, _, _, _ -> error("never sent") }, secret = { GeminiLiveTokens.secret("{}") }, nowMs = { now })
+        assertEquals(LiveDiagnosisRules.KeyState.NO_KEY, none.keyCheck()!!.state)
+        val bad = GeminiLiveTokens({ null }, { _, _, _, _ -> error("never sent") }, secret = { GeminiLiveTokens.secret("""{"api_key": "x"}""") }, nowMs = { now })
+        assertEquals(LiveDiagnosisRules.KeyState.BAD_SECRET, bad.keyCheck()!!.state)
+        val s = LiveSessions(bad, InMemoryLiveSessionStore(), capPence = 1_500, model = "gemini-3.8-live", gbpPerUsd = { 800_000 }, nowMs = { now })
+        val session = s.session("hh", LiveCodec.SessionRequest())
+        assertEquals(LiveCodec.Session.OFF, session.state)
+        assertEquals("meka-os-dev/ai/gemini holds no usable key: it should read {\"api_key\": \"…\"}", session.reason)
+    }
+
+    @Test
+    fun theStatusTriesTheKeyWhenItHasntOrItFailedAMinuteAgo() {
+        var clock = now
+        var calls = 0
+        var answer = 403
+        val g = GeminiLiveTokens({ boundKey }, { _, _, _, _ -> calls++; answer to """{"error":{"status":"PERMISSION_DENIED","message":"no"}}""" }, nowMs = { clock })
+        val s = LiveSessions(g, InMemoryLiveSessionStore(), capPence = 1_500, model = "gemini-3.8-live", gbpPerUsd = { 800_000 }, nowMs = { clock })
+        assertEquals("refused", s.status().keyState)
+        assertEquals(1, calls)
+        s.status()
+        assertEquals(1, calls, "a refusal is tried again after a minute, not on every ask")
+        clock += LiveSessions.RECHECK_FAILED_MS
+        answer = 200
+        assertEquals("unreachable", s.status().keyState, "a 200 without a token isn't ready")
+        assertEquals(2, calls)
     }
 }

@@ -28,8 +28,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.core.domain.BargeInOutput
 import os.meka.core.domain.BargeInRules
+import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveHandOnRules
 import os.meka.core.domain.LiveTalkRules
 import os.meka.core.domain.LiveToolRules
@@ -65,8 +67,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         fun onSpeaking(speaking: Boolean)
         /** The orb's level, 0 … 1: his voice while he talks, Obi's while Obi speaks. */
         fun onLevel(level: Float)
-        /** The conversation ended; [fellBack] when Live never opened and normal Obi should answer instead. */
-        fun onEnded(fellBack: Boolean)
+        /**
+         * The conversation ended; [fellBack] when Live never opened and normal Obi should answer instead, with
+         * [fallbackLine] saying why under the orb (2026-10-24: never quietly).
+         */
+        fun onEnded(fellBack: Boolean, fallbackLine: String?)
         /** Slice 4: this turn's words so far, his ([heard]) and Obi's ([said]), from Google's transcripts. */
         fun onWords(heard: String, said: String) {}
         /** Slice 4: a turn finished: his words and Obi's answer with the pages he looked up, for Ask to show. */
@@ -114,6 +119,10 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     @Volatile private var resuming = false
     private var resumingFrom = 0
     private var connectJob: Job? = null
+    /** 2026-10-24: the server's ready session has arrived (Google then gets [LiveDiagnosisRules.CONNECT_MS]). */
+    @Volatile private var tokenIn = false
+    /** Why this talk fell back, once known; the timer's own reason otherwise. Main thread. */
+    @Volatile private var why: Pair<LiveDiagnosisRules.LiveFallback, String?>? = null
 
     /** Slice 2c: a session asked for ahead (during the hello), and when (elapsed ms). */
     private class Prepared(val session: Deferred<LiveCodec.Session?>, val at: Long)
@@ -156,6 +165,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         lastHeardAt = null
         endAt = Long.MAX_VALUE
         resuming = false
+        tokenIn = false
+        why = null
         output = TalkBargeIn.output(context)
         val askedAt = SystemClock.elapsedRealtime()
         // Slice 2c: the session asked for during the hello, while its token can still open one.
@@ -163,8 +174,17 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         if (ahead == null) discardPrepared()
         prepared = null
         jobs += scope.launch {
+            // 2026-10-24: 2 s for Navilife's server to hand over a token, then up to 6 s from asking for Google to set
+            // the session up (normal Obi takes about ten seconds a turn, so a slower Live is still the quicker answer).
             delay(LiveTalkRules.FALLBACK_MS)
-            if (gen == generation && LiveTalkRules.fallBack(askedAt, SystemClock.elapsedRealtime(), setUp)) end(gen, fellBack = true)
+            while (gen == generation && !setUp) {
+                if (LiveDiagnosisRules.fallBack(askedAt, SystemClock.elapsedRealtime(), setUp, tokenIn)) {
+                    if (why == null) why = (if (tokenIn) LiveDiagnosisRules.LiveFallback.SLOW_GOOGLE else LiveDiagnosisRules.LiveFallback.SLOW_SERVER) to null
+                    end(gen, fellBack = true)
+                    break
+                }
+                delay(TICK_MS)
+            }
         }
         jobs += scope.launch {
             val s = if (ahead != null) runCatching { ahead.session.await() }.getOrNull() else {
@@ -176,9 +196,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 return@launch
             }
             if (!ready(s)) {
+                why = (LiveDiagnosisRules.fromSession(s?.state, s?.reason) ?: LiveDiagnosisRules.LiveFallback.NO_ANSWER) to LiveDiagnosisRules.detail(s?.reason)
                 end(gen, fellBack = true)
                 return@launch
             }
+            tokenIn = true
             open(gen, s!!, null)
             jobs += scope.launch {
                 // The token's window: a little before it closes, carry on into a fresh one or end, never mid-word.
@@ -263,7 +285,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     }
 
     private suspend fun connect(gen: Int, l: Int, s: LiveCodec.Session, out: Channel<String>, resumeHandle: String?) {
-        runCatching {
+        var closed: String? = null
+        val ran = runCatching {
             client.webSocket(LiveProtocol.connectUrl(s.url!!, s.token!!)) {
                 send(Frame.Text(LiveProtocol.setup(s.model!!, s.voice ?: LiveTalkRules.voice(null), resumeHandle = resumeHandle)))
                 val sender = launch {
@@ -282,12 +305,19 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 } finally {
                     sender.cancel()
                 }
+                // 2026-10-24: Google's close code and reason ("closed 1008: …"), for the stage and Health.
+                closed = withTimeoutOrNull(500) { runCatching { closeReason.await() }.getOrNull() }
+                    ?.let { r -> LiveDiagnosisRules.closeLine(r.code.toInt(), r.message) }
             }
         }
+        ran.exceptionOrNull()?.let { e -> if (closed == null) closed = LiveDiagnosisRules.redact(e.message?.let { m -> "${e.javaClass.simpleName}: $m" } ?: e.javaClass.simpleName, s.token) }
         // The socket closed: Google ended the session, the signal went, or it never opened. Slice 2c: an earlier
         // window's connection closing while a fresh one opens ends nothing.
         main.post {
-            if (gen == generation && l == link && !(resuming && l == resumingFrom)) end(gen, fellBack = !setUp)
+            if (gen == generation && l == link && !(resuming && l == resumingFrom)) {
+                if (!setUp && why == null) why = LiveDiagnosisRules.LiveFallback.CLOSED to LiveDiagnosisRules.redact(closed, s.token)
+                end(gen, fellBack = !setUp)
+            }
         }
     }
 
@@ -407,6 +437,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         }.getOrNull()
         if (rec == null || rec.state != AudioRecord.STATE_INITIALIZED) {
             rec?.release()
+            why = LiveDiagnosisRules.LiveFallback.MIC to null
             end(gen, fellBack = true)
             return
         }
@@ -416,6 +447,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         }
         if (runCatching { rec.startRecording() }.isFailure) {
             rec.release()
+            why = LiveDiagnosisRules.LiveFallback.MIC to null
             end(gen, fellBack = true)
             return
         }
@@ -510,7 +542,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         connectJob = null
         resuming = false
         heldHandle = null
-        listener.onEnded(fellBack)
+        // 2026-10-24: never quietly: how this talk went, under the orb and in Health (reasons only, never words).
+        val reason = if (fellBack) why ?: (LiveDiagnosisRules.LiveFallback.NO_ANSWER to null) else null
+        val wasLive = setUp
+        if (fellBack || wasLive) scope.launch { runCatching { core.noteLiveOutcome(!fellBack && wasLive, reason?.first, reason?.second) } }
+        listener.onEnded(fellBack, reason?.let { LiveDiagnosisRules.stageLine(it.first, it.second) })
     }
 
     private companion object {

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveModeRules
 import os.meka.core.wire.LiveCodec
 import java.security.SecureRandom
@@ -37,6 +38,20 @@ interface LiveTokens {
      * [mailMoney] (and [tools]), the mail and money look-ups too.
      */
     fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean = false, resume: String? = null, mailMoney: Boolean = false): String?
+
+    /** Why Live does or doesn't engage (2026-10-24): the key as Google last answered it; null: never tried. */
+    fun keyCheck(): LiveKeyCheck? = null
+
+    /** Tries the key now with a bare one-use token for [model] (nothing else in it, never used) and keeps Google's answer. */
+    fun check(model: String, nowMs: Long): LiveKeyCheck? = null
+}
+
+/**
+ * Google's last answer to the key (2026-10-24): [state], Google's HTTP [code] and its own message ([detail], anything
+ * key-shaped cut out by [LiveDiagnosisRules.redact]), at [atMs]. Never the key.
+ */
+data class LiveKeyCheck(val state: LiveDiagnosisRules.KeyState, val code: Int? = null, val detail: String? = null, val atMs: Long = 0) {
+    val line: String get() = LiveDiagnosisRules.keyLine(state, code, detail)
 }
 
 /** One minted session as the meter keeps it: the reserve until [reported], then what it used. */
@@ -86,13 +101,33 @@ class LiveSessions(
         val month = month()
         val spent = LiveModeRules.pence(store.monthMicroUsd(month), rate())
         val use = runCatching { store.monthUse(month) }.getOrDefault(LiveUse(0, 0))
-        return LiveCodec.Meter(configured, LiveModeRules.level(spent, capPence).wire, spent, capPence, month, use.sessions, use.seconds)
+        val key = runCatching { tokens.keyCheck() }.getOrNull()
+        return LiveCodec.Meter(
+            configured, LiveModeRules.level(spent, capPence).wire, spent, capPence, month, use.sessions, use.seconds,
+            keyState = key?.state?.wire, keyCode = key?.code, keyDetail = key?.detail,
+        )
+    }
+
+    /**
+     * The meter a device asks for (Settings, Health): first tries the key again when it has never been tried, last
+     * failed over [RECHECK_FAILED_MS] ago, or last worked over [RECHECK_READY_MS] ago, so the line says what Google
+     * says now. Never throws.
+     */
+    fun status(): LiveCodec.Meter {
+        val last = runCatching { tokens.keyCheck() }.getOrNull()
+        val now = nowMs()
+        val stale = last == null || now - last.atMs >= (if (last.state == LiveDiagnosisRules.KeyState.READY) RECHECK_READY_MS else RECHECK_FAILED_MS)
+        if (stale) runCatching { tokens.check(model, now) }
+        return meter()
     }
 
     /** A token for one session in [voice] (his pick, else the default), or why not. */
     fun session(householdId: String, request: LiveCodec.SessionRequest): LiveCodec.Session {
         val before = meter()
-        if (!before.configured) return LiveCodec.Session(LiveCodec.Session.OFF, before, reason = "Live needs the Gemini key on Navilife's server")
+        if (!before.configured) {
+            val why = LiveDiagnosisRules.KeyState.of(before.keyState).takeIf { it == LiveDiagnosisRules.KeyState.BAD_SECRET }
+            return LiveCodec.Session(LiveCodec.Session.OFF, before, reason = why?.let { LiveDiagnosisRules.keyLine(it, null, null).removePrefix("Live · ") } ?: "Live needs the Gemini key on Navilife's server")
+        }
         if (before.level == LiveModeRules.Level.OVER.wire) {
             return LiveCodec.Session(LiveCodec.Session.OVER, before, reason = LiveModeRules.line(LiveModeRules.Level.OVER, before.spentPence, before.capPence))
         }
@@ -102,7 +137,10 @@ class LiveSessions(
         // session here (metered and capped like any other), and the handle is passed through, never kept.
         val resume = os.meka.core.domain.LiveHandOnRules.handle(request.resume)
         val token = runCatching { tokens.mint(model, voice, LivePrompt.instruction(request.day), now, request.day?.tools == true, resume, request.day?.let { it.tools && it.mailMoney } == true) }.getOrNull()
-            ?: return LiveCodec.Session(LiveCodec.Session.FAILED, before, reason = "Google didn't open a Live session just now")
+            ?: return meter().let { m ->
+                val why = runCatching { tokens.keyCheck() }.getOrNull()?.takeIf { it.state != LiveDiagnosisRules.KeyState.READY }
+                LiveCodec.Session(LiveCodec.Session.FAILED, m, reason = why?.line?.removePrefix("Live · ") ?: "Google didn't open a Live session just now")
+            }
         val id = "ls_" + ByteArray(12).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         store.add(LiveSessionRow(id, householdId, month(), now, LiveModeRules.reserveMicroUsd(), reported = false))
         val after = meter().also(::tell)
@@ -146,6 +184,12 @@ class LiveSessions(
     }
 
     companion object {
+        /** A key that worked is tried again on a status ask after this long. */
+        const val RECHECK_READY_MS = 30 * 60_000L
+
+        /** A key that didn't work (or no key) is tried again on a status ask after this long. */
+        const val RECHECK_FAILED_MS = 60_000L
+
         /** A search may come a little after the token's window (the turn that asked is still finishing). */
         const val SEARCH_GRACE_MS = 60_000L
 
@@ -160,17 +204,56 @@ class LiveSessions(
  * token taken off a device can't be spent on anything else. The key is read at use time through [key] (Secrets
  * Manager via SecretCache) and is never logged or returned.
  */
-class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExchange = HttpExchange.jdk(java.time.Duration.ofSeconds(10))) : LiveTokens {
+class GeminiLiveTokens(
+    private val key: () -> String?,
+    private val http: HttpExchange = HttpExchange.jdk(java.time.Duration.ofSeconds(10)),
+    /** 2026-10-24: the secret as read, so "no key" and "a secret with no usable key" can be told apart; null: [key] alone. */
+    private val secret: (() -> GeminiSecret?)? = null,
+    /** Google refused the key (401/403): the secret is read again at once (at most every 15 minutes). */
+    private val rejected: () -> Unit = {},
+    private val nowMs: () -> Long = System::currentTimeMillis,
+) : LiveTokens {
+    @Volatile private var last: LiveKeyCheck? = null
+
     override fun configured(): Boolean = key() != null
 
+    override fun keyCheck(): LiveKeyCheck? = last ?: missing()?.copy(atMs = nowMs())
+
+    override fun check(model: String, nowMs: Long): LiveKeyCheck? {
+        mint(model, LiveModeRules.DEFAULT_VOICE, "", nowMs)
+        return last
+    }
+
     override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean): String? {
-        val k = key() ?: return null
-        val (code, body) = http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction, tools, resume, mailMoney))
-        if (code !in 200..299) {
-            System.err.println("live: Google refused a token (HTTP $code)")
+        val k = key() ?: run {
+            last = (missing() ?: LiveKeyCheck(LiveDiagnosisRules.KeyState.NO_KEY)).copy(atMs = nowMs)
             return null
         }
-        return parse(body)
+        val (code, body) = try {
+            http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction, tools, resume, mailMoney))
+        } catch (e: Exception) {
+            last = LiveKeyCheck(LiveDiagnosisRules.KeyState.UNREACHABLE, null, LiveDiagnosisRules.redact(e.javaClass.simpleName, k), nowMs)
+            System.err.println("live: couldn't reach Google for a token (${e.javaClass.simpleName})")
+            return null
+        }
+        if (code !in 200..299) {
+            val detail = googleMessage(body, k)
+            last = LiveKeyCheck(if (code in 400..499) LiveDiagnosisRules.KeyState.REFUSED else LiveDiagnosisRules.KeyState.UNREACHABLE, code, detail, nowMs)
+            if (code == 401 || code == 403) runCatching { rejected() }
+            System.err.println("live: Google refused a token (HTTP $code${detail?.let { ": $it" } ?: ""})")
+            return null
+        }
+        val token = parse(body)
+        last = if (token != null) LiveKeyCheck(LiveDiagnosisRules.KeyState.READY, code, null, nowMs)
+        else LiveKeyCheck(LiveDiagnosisRules.KeyState.UNREACHABLE, code, "Google's answer had no token", nowMs)
+        return token
+    }
+
+    /** What's wrong with the secret before Google is asked (no key, or one that isn't usable); null when a key is in. */
+    private fun missing(): LiveKeyCheck? {
+        if (key() != null) return null
+        val s = secret?.let { runCatching { it() }.getOrNull() }
+        return LiveKeyCheck(if (s?.state == LiveDiagnosisRules.KeyState.BAD_SECRET) LiveDiagnosisRules.KeyState.BAD_SECRET else LiveDiagnosisRules.KeyState.NO_KEY)
     }
 
     companion object {
@@ -316,10 +399,65 @@ class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExc
             Json.parseToJsonElement(body).jsonObject["name"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotEmpty() && it.length <= 2_000 }
         }.getOrNull()
 
-        /** The key from `{"api_key": "…"}`, read through SecretCache (unset or `{}`: Live stays off). */
-        fun fromSecret(secretId: String): GeminiLiveTokens =
-            GeminiLiveTokens(os.meka.backend.integrations.SecretCache.shared.reader(secretId) { os.meka.backend.integrations.GoogleMapsKey.parse(it) })
+        /**
+         * Google's own words from an error body (`{"error": {"code", "message", "status", "details": [{"reason"}]}}`):
+         * "PERMISSION_DENIED (API_KEY_SERVICE_BLOCKED): Requests to this API … are blocked.", with [key] and anything
+         * key-shaped cut out; the first 200 characters of a body that isn't Google's JSON; null when empty.
+         */
+        fun googleMessage(body: String?, key: String? = null): String? {
+            val text = body?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val error = runCatching { Json.parseToJsonElement(text).jsonObject["error"]?.jsonObject }.getOrNull()
+                ?: return LiveDiagnosisRules.redact(text, key)
+            val message = runCatching { error["message"]?.jsonPrimitive?.content }.getOrNull()
+            val status = runCatching { error["status"]?.jsonPrimitive?.content }.getOrNull()?.takeIf { it.isNotBlank() }
+            val reason = runCatching {
+                (error["details"] as? kotlinx.serialization.json.JsonArray)?.firstNotNullOfOrNull { d ->
+                    (d as? kotlinx.serialization.json.JsonObject)?.get("reason")?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                }
+            }.getOrNull()
+            val head = listOfNotNull(status, reason?.let { "($it)" }).joinToString(" ").ifEmpty { null }
+            return LiveDiagnosisRules.redact(listOfNotNull(head, message).joinToString(": ").ifEmpty { null }, key)
+        }
+
+        /**
+         * The secret's key, leniently (2026-10-24): `{"api_key": "…"}` as documented, or the same under `apiKey`,
+         * `key`, `GEMINI_API_KEY` or `gemini_api_key`, or a JSON object with one key-shaped value, or the key pasted
+         * bare. Absent, blank or `{}`: [LiveDiagnosisRules.KeyState.NO_KEY]; anything else without a key:
+         * [LiveDiagnosisRules.KeyState.BAD_SECRET]. Never logged.
+         */
+        fun secret(raw: String?): GeminiSecret {
+            val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return GeminiSecret(null, LiveDiagnosisRules.KeyState.NO_KEY)
+            val el = runCatching { Json.parseToJsonElement(text) }.getOrNull()
+            if (el == null) return keyShaped(text)?.let { GeminiSecret(it, LiveDiagnosisRules.KeyState.READY) } ?: GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
+            (el as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.let { p ->
+                return keyShaped(p.content)?.let { GeminiSecret(it, LiveDiagnosisRules.KeyState.READY) } ?: GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
+            }
+            val o = el as? kotlinx.serialization.json.JsonObject ?: return GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
+            fun field(name: String) = (o[name] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+            val values = o.values.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim() }
+            if (values.all { it.isEmpty() }) return GeminiSecret(null, LiveDiagnosisRules.KeyState.NO_KEY)
+            val named = KEY_FIELDS.firstNotNullOfOrNull { field(it)?.let(::keyShaped) }
+            val only = values.mapNotNull(::keyShaped).singleOrNull()
+            val k = named ?: only
+            return if (k != null) GeminiSecret(k, LiveDiagnosisRules.KeyState.READY) else GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
+        }
+
+        private val KEY_FIELDS = listOf("api_key", "apiKey", "key", "GEMINI_API_KEY", "gemini_api_key")
+
+        /** A key's shape: 20–200 characters, none of them space, quote or brace. */
+        private fun keyShaped(s: String): String? = s.trim().takeIf { k -> k.length in 20..200 && k.none { it.isWhitespace() || it in "\"'{}[]," } }
+
+        /** The key from the secret ([secret]), read through SecretCache (unset or `{}`: Live stays off). */
+        fun fromSecret(secretId: String): GeminiLiveTokens {
+            val reader = os.meka.backend.integrations.SecretCache.shared.reader(secretId, ::secret) { it.key != null }
+            return GeminiLiveTokens({ reader()?.key }, secret = reader, rejected = { reader.rejected() })
+        }
     }
+}
+
+/** The Gemini secret as read: the key when there is one, else whether it was empty or held something unusable. */
+data class GeminiSecret(val key: String?, val state: LiveDiagnosisRules.KeyState) {
+    override fun toString(): String = "GeminiSecret(${if (key == null) "no key" else "key"}, $state)" // never the key
 }
 
 class InMemoryLiveSessionStore : LiveSessionStore {
@@ -385,8 +523,16 @@ class PostgresLiveSessionStore(private val ds: DataSource) : LiveSessionStore {
 fun liveFromEnv(ds: DataSource, liveFacts: LiveFacts? = null): LiveSessions? {
     val secret = System.getenv("MEKA_GEMINI_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val rate = os.meka.backend.integrations.EcbDollarRate.network()
+    val tokens = GeminiLiveTokens.fromSecret(secret)
+    // 2026-10-24: the key is tried once shortly after start-up, so the first device to ask sees Google's answer and the
+    // log says it ("live: key check: Live ready" or Google's refusal; never the key).
+    Thread({
+        runCatching { Thread.sleep(5_000) }
+        val c = runCatching { tokens.check(LiveModeRules.model(System.getenv("MEKA_LIVE_MODEL")), System.currentTimeMillis()) }.getOrNull()
+        System.err.println("live: key check: ${c?.line ?: "couldn't run"}")
+    }, "live-key-check").apply { isDaemon = true }.start()
     return LiveSessions(
-        GeminiLiveTokens.fromSecret(secret), PostgresLiveSessionStore(ds), gbpPerUsd = { rate.read()?.gbpPerUsdMicros },
+        tokens, PostgresLiveSessionStore(ds), gbpPerUsd = { rate.read()?.gbpPerUsdMicros },
         webSearch = liveFacts?.let { lf -> { q: String -> lf.lookQuery(q) } },
         onLevel = { level, month ->
             System.err.println("live: ${if (level == LiveModeRules.Level.OVER) "this month's cap is used up, Live off until the 1st" else "80 % of this month's cap used"} ($month)")

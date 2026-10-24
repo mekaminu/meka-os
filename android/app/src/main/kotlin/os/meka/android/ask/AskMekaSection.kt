@@ -181,9 +181,10 @@ fun AskMekaSection(
     // "Hello, Navilife" slice 5: the docked orb in the bar follows this conversation (ENDED again once it's gone).
     val phaseApp = context.applicationContext as? os.meka.android.MekaApplication
     LaunchedEffect(talk.phase) { phaseApp?.talkPhase?.value = talk.phase }
-    DisposableEffect(talk) { onDispose { phaseApp?.talkPhase?.value = TalkPhase.ENDED; phaseApp?.talkProblem?.value = null } }
+    DisposableEffect(talk) { onDispose { phaseApp?.talkPhase?.value = TalkPhase.ENDED; phaseApp?.talkProblem?.value = null; phaseApp?.talkLiveNote?.value = null } }
     // Meka 2026-10-24 14:34: the stage says why it can't listen rather than closing.
     LaunchedEffect(talk.problem) { phaseApp?.talkProblem?.value = talk.problem }
+    LaunchedEffect(talk.liveNote) { phaseApp?.talkLiveNote?.value = talk.liveNote }
     // Meka 2026-10-24 14:34: Ask's list scrolled this field out of view, which took the conversation with it (the
     // stage then closed with nothing listening). Pinned, it stays composed while a pane or a scroll hides it.
     val pinnable = androidx.compose.ui.layout.LocalPinnableContainer.current
@@ -633,6 +634,7 @@ private fun TalkPanel(talk: TalkController, needsYou: Int, onOrb: () -> Unit) {
         ) { line ->
             Text(line, style = MekaType.caption, color = if (talk.problem != null) Meka.colors.accent else Meka.colors.textTertiary)
         }
+        talk.liveNote?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }
         if (talk.heard.isNotBlank() && talk.problem == null) {
             Text(talk.heard, style = MekaType.body, color = if (talk.phase == TalkPhase.LISTENING) Meka.colors.textSecondary else Meka.colors.textPrimary,
                 maxLines = 3, modifier = Modifier.animateContentSize(MekaMotion.expand(reduced)))

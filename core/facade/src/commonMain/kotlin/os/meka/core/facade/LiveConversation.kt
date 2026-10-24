@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
+import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveFactsRules
 import os.meka.core.domain.LiveHandOnRules
 import os.meka.core.domain.LiveMoney
@@ -57,6 +58,8 @@ class LiveConversation internal constructor(
         suspend fun propose(args: Map<String, String>): LiveOffer
         suspend fun mail(about: String): String
         suspend fun money(question: String): LiveMoney
+        /** 2026-10-24: how this talk went (Live, or why normal Obi answered), for Health; reasons only, never words. */
+        suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?) {}
     }
 
     private val out = Channel<LiveEvent>(Channel.UNLIMITED)
@@ -90,6 +93,13 @@ class LiveConversation internal constructor(
     private var resuming = false
     private var resumingFrom = 0
     private var connectJob: Job? = null
+    /** 2026-10-24: the server's ready session has arrived (Google then gets [LiveDiagnosisRules.CONNECT_MS]). */
+    private var tokenIn = false
+    /** Why this talk fell back, once known (the server's answer, Google's close); the timer's own reason otherwise. */
+    private var why: Pair<LiveDiagnosisRules.LiveFallback, String?>? = null
+    /** Under the orb for this talk when normal Obi answered instead ([LiveDiagnosisRules.stageLine]); null while Live runs. */
+    var fallbackLine: String? = null
+        private set
 
     private class Prepared(val session: Deferred<LiveCodec.Session?>, val at: Long)
     private var prepared: Prepared? = null
@@ -125,13 +135,25 @@ class LiveConversation internal constructor(
         lastHeardAt = null
         endAt = Long.MAX_VALUE
         resuming = false
+        tokenIn = false
+        why = null
+        fallbackLine = null
         val askedAt = elapsedMs()
         val ahead = prepared?.takeIf { LiveHandOnRules.preparedUsable(it.at, askedAt) }
         if (ahead == null) discardPrepared()
         prepared = null
         jobs += scope.launch {
+            // 2026-10-24: 2 s for Navilife's server to hand over a token, then up to 6 s from asking for Google to set
+            // the session up (normal Obi takes about ten seconds a turn, so a slower Live is still the quicker answer).
             delay(LiveTalkRules.FALLBACK_MS)
-            if (gen == generation && LiveTalkRules.fallBack(askedAt, elapsedMs(), setUp)) end(gen, fellBack = true)
+            while (gen == generation && !setUp) {
+                if (LiveDiagnosisRules.fallBack(askedAt, elapsedMs(), setUp, tokenIn)) {
+                    if (why == null) why = (if (tokenIn) LiveDiagnosisRules.LiveFallback.SLOW_GOOGLE else LiveDiagnosisRules.LiveFallback.SLOW_SERVER) to null
+                    end(gen, fellBack = true)
+                    break
+                }
+                delay(TICK_MS)
+            }
         }
         jobs += scope.launch {
             val s = if (ahead != null) runCatching { ahead.session.await() }.getOrNull()
@@ -141,9 +163,11 @@ class LiveConversation internal constructor(
                 return@launch
             }
             if (!ready(s)) {
+                why = (LiveDiagnosisRules.fromSession(s?.state, s?.reason) ?: LiveDiagnosisRules.LiveFallback.NO_ANSWER) to LiveDiagnosisRules.detail(s?.reason)
                 end(gen, fellBack = true)
                 return@launch
             }
+            tokenIn = true
             open(gen, s!!, null)
             jobs += scope.launch {
                 while (gen == generation) {
@@ -199,15 +223,18 @@ class LiveConversation internal constructor(
         endAt = LiveTalkRules.endAtElapsed(elapsedMs(), wallMs(), s.expiresAtMs ?: 0L)
         chan.trySend(LiveProtocol.setup(s.model!!, s.voice ?: LiveTalkRules.voice(null), resumeHandle = resumeHandle))
         connectJob = scope.launch {
+            var closed: String? = null
             try {
-                socket.run(LiveProtocol.connectUrl(s.url!!, s.token!!), chan) { text ->
+                closed = socket.run(LiveProtocol.connectUrl(s.url!!, s.token!!), chan) { text ->
                     if (gen == generation && l == link) LiveProtocol.decode(text).forEach { handle(gen, l, it) }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Closed below.
+                // Closed below; why, in a word (the handshake refused, no signal), never the token.
+                closed = LiveDiagnosisRules.redact(e.message?.let { m -> "${e::class.simpleName}: $m" } ?: e::class.simpleName, s.token)
             }
+            if (!setUp && gen == generation && l == link && why == null) why = LiveDiagnosisRules.LiveFallback.CLOSED to LiveDiagnosisRules.redact(closed, s.token)
             // Google ended the session, the signal went, or it never opened. An earlier window's connection closing
             // while a fresh one opens ends nothing.
             if (gen == generation && l == link && !(resuming && l == resumingFrom)) end(gen, fellBack = !setUp)
@@ -354,7 +381,12 @@ class LiveConversation internal constructor(
         connectJob = null
         resuming = false
         heldHandle = null
-        out.trySend(LiveEvent.Ended(fellBack))
+        // 2026-10-24: never quietly: how this talk went, for the stage and for Health.
+        val reason = if (fellBack) why ?: (LiveDiagnosisRules.LiveFallback.NO_ANSWER to null) else null
+        fallbackLine = reason?.let { LiveDiagnosisRules.stageLine(it.first, it.second) }
+        val wasLive = setUp
+        if (fellBack || wasLive) scope.launch { runCatching { core.outcome(!fellBack && wasLive, reason?.first, reason?.second) } }
+        out.trySend(LiveEvent.Ended(fellBack, fallbackLine))
     }
 
     private var silenceFor: Pair<Int, String>? = null
@@ -398,18 +430,22 @@ sealed interface LiveEvent {
     /** A turn finished: his words and Obi's answer (sources, cards, Unlock) for Ask. */
     data class Turn(val question: String, val answer: AskOutcome) : LiveEvent
     /** The conversation ended; [fellBack] when Live never opened and normal Obi should answer instead. */
-    data class Ended(val fellBack: Boolean) : LiveEvent
+    data class Ended(val fellBack: Boolean, val fallbackLine: String? = null) : LiveEvent
 }
 
 /** The WebSocket to Google, behind an interface so the conversation can be tested without one. */
 internal interface LiveSocket {
-    /** Opens [url], sends what [outgoing] yields in order, calls [onText] for each message; returns when it closes. */
-    suspend fun run(url: String, outgoing: ReceiveChannel<String>, onText: suspend (String) -> Unit)
+    /**
+     * Opens [url], sends what [outgoing] yields in order, calls [onText] for each message; returns when it closes, with
+     * Google's close code and reason when it gave one ("1008 · …", 2026-10-24), else null.
+     */
+    suspend fun run(url: String, outgoing: ReceiveChannel<String>, onText: suspend (String) -> Unit): String?
 }
 
 /** The real one: Ktor's WebSocket client ([client] has the WebSockets plugin). */
 internal class KtorLiveSocket(private val client: HttpClient) : LiveSocket {
-    override suspend fun run(url: String, outgoing: ReceiveChannel<String>, onText: suspend (String) -> Unit) {
+    override suspend fun run(url: String, outgoing: ReceiveChannel<String>, onText: suspend (String) -> Unit): String? {
+        var closed: String? = null
         client.webSocket(url) {
             val sender = launch { for (msg in outgoing) send(Frame.Text(msg)) }
             try {
@@ -424,7 +460,10 @@ internal class KtorLiveSocket(private val client: HttpClient) : LiveSocket {
             } finally {
                 sender.cancel()
             }
+            closed = kotlinx.coroutines.withTimeoutOrNull(500) { runCatching { closeReason.await() }.getOrNull() }
+                ?.let { r -> LiveDiagnosisRules.closeLine(r.code.toInt(), r.message) }
         }
+        return closed
     }
 }
 
@@ -438,4 +477,5 @@ internal class MekaLiveCore(private val core: MekaCore) : LiveConversation.Core 
     override suspend fun propose(args: Map<String, String>) = core.livePropose(args)
     override suspend fun mail(about: String) = core.liveMail(about)
     override suspend fun money(question: String) = core.liveMoney(question)
+    override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?) { core.noteLiveOutcome(live, fallback, detail) }
 }

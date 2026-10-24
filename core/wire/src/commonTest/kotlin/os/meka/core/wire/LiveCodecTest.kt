@@ -142,4 +142,18 @@ class LiveCodecTest {
         assertEquals(false, LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[],"mailMoney":true}}""").day!!.mailMoney)
         assertEquals(false, LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[],"tools":true,"mailMoney":"true"}}""").day!!.mailMoney)
     }
+
+    @Test
+    fun theKeysStateRidesTheMeterAndAnOlderServerSendsNone() {
+        // 2026-10-24: Google's answer to the key (never the key) for Health and Live's settings line.
+        val m = meter.copy(keyState = "refused", keyCode = 403, keyDetail = "PERMISSION_DENIED: blocked")
+        assertEquals(m, LiveCodec.decodeMeter(LiveCodec.encodeMeter(m)))
+        val older = LiveCodec.decodeMeter("""{"w":${WireCodec.VERSION},"configured":true,"level":"ok","spentPence":40,"capPence":1500}""")
+        assertEquals(null, older.keyState)
+        assertEquals(null, older.keyCode)
+        val odd = LiveCodec.decodeMeter("""{"w":${WireCodec.VERSION},"keyState":"Not A State!","keyCode":42,"keyDetail":"${"x".repeat(500)}"}""")
+        assertEquals(null, odd.keyState)
+        assertEquals(null, odd.keyCode)
+        assertEquals(LiveCodec.MAX_KEY_DETAIL, odd.keyDetail!!.length)
+    }
 }

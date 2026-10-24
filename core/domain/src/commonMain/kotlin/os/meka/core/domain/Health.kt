@@ -167,6 +167,8 @@ data class HealthFacts(
     val mail: List<MailAccountFacts>? = null,
     val mailBacklogs: List<MailBacklog> = emptyList(),
     val mailTidies: List<MailTidyBatch> = emptyList(),
+    /** 2026-10-24: Live's key and the last talk here ([LiveDiagnosisRules.health]); null while Live is off. */
+    val live: LiveHealth? = null,
 )
 
 object HealthRules {
@@ -367,13 +369,18 @@ object HealthRules {
             false -> HealthRow("voice", "Obi's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
         }
         val speaking = voiceInUseLine(f.device.voiceInUse)
-        val closed = listOfNotNull(speaking, StageRules.healthLine(f.device.stageClosed, f.nowMs, cal)).joinToString("\n").ifEmpty { null }
-        val face = f.device.face ?: return if (closed == null) row else row.copy(detail = closed)
+        val live = LiveDiagnosisRules.health(f.live, f.nowMs, cal)
+        val closed = listOfNotNull(speaking, live, StageRules.healthLine(f.device.stageClosed, f.nowMs, cal)).joinToString("\n").ifEmpty { null }
+        // 2026-10-24: Live on with a key Google refuses (or none) is worth a look.
+        val liveFault = f.live?.keyState?.let(LiveDiagnosisRules::keyFault) == true
+        val face = f.device.face ?: return (if (closed == null) row else row.copy(detail = closed)).let { r ->
+            if (liveFault && r.state == HealthState.OK) r.copy(state = HealthState.WARN) else r
+        }
         val detail = listOfNotNull(FaceHealthRules.line(face, f.device.mac, f.nowMs, cal), closed).joinToString("\n")
         val withFace = row.copy(detail = detail)
         val fixed = if (FaceHealthRules.lookAgain(face)) withFace.copy(fix = HealthFix.FACE_LOOK_AGAIN, fixLabel = FaceHealthRules.LOOK_AGAIN) else withFace
         // The server has all seven but this device didn't keep them: worth a look (waiting for an upload isn't).
-        return if (FaceHealthRules.fault(face) && fixed.state == HealthState.OK) fixed.copy(state = HealthState.WARN) else fixed
+        return if ((FaceHealthRules.fault(face) || liveFault) && fixed.state == HealthState.OK) fixed.copy(state = HealthState.WARN) else fixed
     }
 
     /**

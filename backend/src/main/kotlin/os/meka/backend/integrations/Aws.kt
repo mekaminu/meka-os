@@ -106,7 +106,14 @@ class SecretCache(
 
     /** The secret's text, parsed by [parse]; null while absent or unusable. */
     @Synchronized
-    fun <T> read(secretId: String, parse: (String?) -> T?): T? {
+    fun <T> read(secretId: String, parse: (String?) -> T?): T? = read(secretId, parse) { true }
+
+    /**
+     * As [read], with [usable] deciding whether a parsed value counts as set (kept [ttlMs]) or not yet (re-read after
+     * [emptyTtlMs]): for a parser that also describes an unusable secret (Live's key check, 2026-10-24).
+     */
+    @Synchronized
+    fun <T> read(secretId: String, parse: (String?) -> T?, usable: (T) -> Boolean): T? {
         val t = now()
         entries[secretId]?.let { e ->
             if (t - e.atMs < (if (e.usable) ttlMs else emptyTtlMs)) return runCatching { parse(e.raw) }.getOrNull()
@@ -114,7 +121,7 @@ class SecretCache(
         onRead()
         val raw = runCatching { fetch(secretId) }.getOrNull()
         val v = runCatching { parse(raw) }.getOrNull()
-        entries[secretId] = Entry(t, raw, v != null)
+        entries[secretId] = Entry(t, raw, v != null && usable(v))
         return v
     }
 
@@ -131,6 +138,8 @@ class SecretCache(
 
     fun <T> reader(secretId: String, parse: (String?) -> T?): SecretReader<T> = SecretReader(this, secretId, parse)
 
+    fun <T> reader(secretId: String, parse: (String?) -> T?, usable: (T) -> Boolean): SecretReader<T> = SecretReader(this, secretId, parse, usable)
+
     companion object {
         /** The server's one cache over Secrets Manager (one client for every reader). */
         val shared: SecretCache by lazy {
@@ -141,8 +150,13 @@ class SecretCache(
 }
 
 /** A secret as its reader sees it: call it for the value (cached); [rejected] when the provider refused it. */
-class SecretReader<T>(private val cache: SecretCache, val secretId: String, private val parse: (String?) -> T?) : () -> T? {
-    override fun invoke(): T? = cache.read(secretId, parse)
+class SecretReader<T>(
+    private val cache: SecretCache,
+    val secretId: String,
+    private val parse: (String?) -> T?,
+    private val usable: (T) -> Boolean = { true },
+) : () -> T? {
+    override fun invoke(): T? = cache.read(secretId, parse, usable)
     fun rejected(): Boolean = cache.rejected(secretId)
 }
 

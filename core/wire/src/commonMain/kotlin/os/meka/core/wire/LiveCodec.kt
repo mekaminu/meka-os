@@ -44,6 +44,14 @@ object LiveCodec {
         val month: String? = null,
         val sessions: Long = 0,
         val seconds: Long = 0,
+        /**
+         * Why Live does or doesn't engage (2026-10-24, additive; an older server leaves them out): the key as the server
+         * last found it ([os.meka.core.domain.LiveDiagnosisRules.KeyState]'s wire value), Google's HTTP status and its
+         * own message with anything key-shaped cut out. Never the key.
+         */
+        val keyState: String? = null,
+        val keyCode: Int? = null,
+        val keyDetail: String? = null,
     )
 
     /**
@@ -173,6 +181,9 @@ object LiveCodec {
 
     /** [counted]: false when the server didn't know the session or had already counted it. */
     data class Usage(val counted: Boolean, val meter: Meter)
+
+    /** The longest Google message a meter carries (the server cuts it to 200 first). */
+    const val MAX_KEY_DETAIL = 240
 
     /** The longest session id accepted. */
     const val MAX_ID = 64
@@ -319,6 +330,9 @@ object LiveCodec {
         m.month?.let { put("month", it) }
         put("sessions", m.sessions)
         put("seconds", m.seconds)
+        m.keyState?.let { put("keyState", it) }
+        m.keyCode?.let { put("keyCode", it) }
+        m.keyDetail?.let { put("keyDetail", it) }
     }
 
     private fun meter(o: JsonObject) = Meter(
@@ -329,6 +343,9 @@ object LiveCodec {
         month = str(o, "month")?.takeIf { MONTH.matches(it) },
         sessions = (long(o, "sessions") ?: 0).coerceAtLeast(0),
         seconds = (long(o, "seconds") ?: 0).coerceAtLeast(0),
+        keyState = str(o, "keyState")?.takeIf { it.length <= 20 && it.all { c -> c in 'a'..'z' || c == '_' } },
+        keyCode = long(o, "keyCode")?.takeIf { it in 100..599 }?.toInt(),
+        keyDetail = str(o, "keyDetail")?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_KEY_DETAIL),
     )
 
     private val MONTH = Regex("\\d{4}-\\d{2}")

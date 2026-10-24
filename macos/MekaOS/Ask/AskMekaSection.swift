@@ -490,6 +490,14 @@ private struct TalkPanel: View {
                 .multilineTextAlignment(.center)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+            if let note = talk.liveNote {
+                Text(note)
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .transition(.opacity)
+            }
             if !talk.heard.isEmpty && talk.problem == nil {
                 Text(talk.heard)
                     .font(MekaType.body)
