@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -194,12 +195,31 @@ private fun SetupRow(row: MessagesSetupRow, onPrivate: (Boolean) -> Unit, onMode
     }
 }
 
-/** A pill whose colour blends to the accent when on, with the caller's tick haptic (motion catalogue: Messages setup). */
+/**
+ * A pill whose colour blends to the accent when on, with the caller's tick haptic (motion catalogue: Messages setup).
+ * [touch] (quality gate slice 59, Obi's voice): the pill drawn the same size inside a 48 dp touch, for panes whose
+ * chips stand on their own row.
+ */
 @Composable
-internal fun SettingChip(label: String, on: Boolean, spoken: String, onClick: () -> Unit) {
+internal fun SettingChip(label: String, on: Boolean, spoken: String, touch: Boolean = false, onClick: () -> Unit) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "setup-chip-bg")
     val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "setup-chip-fg")
+    if (touch) {
+        androidx.compose.foundation.layout.Box(
+            Modifier.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
+                .clickable(role = Role.Switch) { onClick() }
+                .semantics { contentDescription = spoken; stateDescription = if (on) "On" else "Off" },
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
+            Text(
+                label, style = MekaType.caption, color = fg, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+            )
+        }
+        return
+    }
     Text(
         label, style = MekaType.caption, color = fg,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)

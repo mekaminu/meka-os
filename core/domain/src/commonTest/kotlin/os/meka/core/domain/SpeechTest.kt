@@ -318,4 +318,25 @@ class SpeechTest {
         )
         assertEquals("Time to Navilife's voice · 1.0 s", SpeechRules.timingLine(listOf(SpeechTiming(1, 1_000, SpeechTiming.Outcome.SPOKEN))))
     }
+
+    @Test
+    fun obisVoicePageNamesHimAndReadsSensiblyInEveryState() {
+        // Quality gate slice 59: the page's title said "Obi's voice" while its intro said "How Navilife sounds".
+        assertTrue(VoicePickerRules.INTRO.startsWith("How Obi sounds"))
+        assertFalse(VoicePickerRules.INTRO.contains("Navilife sounds"))
+        val views = listOf(
+            VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false),
+            VoicePickerRules.view(SpeechRules.OFF, emptyList(), null, null, null, mac = false),
+            VoicePickerRules.view(SpeechRules.ON, emptyList(), null, "Brian", null, mac = false),
+            VoicePickerRules.view(SpeechRules.ON, polly, "Brian", "Arthur", "Navilife's voice · Arthur · 12 of 1,000,000 characters in October", mac = false),
+        )
+        views.forEach { v ->
+            val texts = listOf(v.intro, v.help) + listOfNotNull(v.statusLine, v.usageLine) + v.choices.flatMap { listOf(it.label, it.detail) }
+            assertEquals(emptyList(), ScreenSenseRules.problems(texts), v.statusLine ?: v.choices.joinToString { it.id })
+        }
+        val live = LiveTalkRules.view(on = true, voice = null, meterKnown = true, configured = true, level = "ok", spentPence = 120, capPence = 500)
+        assertEquals(emptyList(), ScreenSenseRules.problems(listOf(live.intro, live.line, live.sharing) + live.voices.map { it.detail }))
+        val off = LiveTalkRules.view(on = false, voice = null, meterKnown = false, configured = false, level = "ok", spentPence = 0, capPence = 500)
+        assertEquals(emptyList(), ScreenSenseRules.problems(listOfNotNull(off.line, off.meterLine, off.sharing)))
+    }
 }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -72,6 +74,7 @@ import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRow
 import os.meka.core.domain.DeviceVoiceRules
 import os.meka.core.domain.DeviceVoiceSettings
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.VoiceChoice
 import os.meka.core.domain.VoicePickerRules
 import os.meka.core.domain.VoicePickerView
@@ -135,7 +138,6 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
     // Talking to Obi like a conversation, slice 2: the server's own timings of the last day's answers.
     var serverSpeed by remember { mutableStateOf<os.meka.core.domain.ServerSpeedView?>(null) }
     LaunchedEffect(Unit) { serverSpeed = runCatching { core.serverSpeed() }.getOrNull() }
-    val reduced = Meka.reducedMotion
 
     fun choose(c: VoiceChoice) {
         if (c.selected) return
@@ -252,25 +254,105 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         speaker.sampleOnDevice(r.id) { playing = null }
     }
 
+    VoiceList(
+        VoiceScreen(
+            sir = sir, faceOn = faceOn, faceReady = faceReady, remembers = remembers, memoryRows = memoryRows,
+            live = live, liveSampleFailed = liveSampleFailed, view = view, deviceVoices = deviceVoices,
+            deviceSettings = deviceSettings, showAll = showAll, speed = speed, serverSpeed = serverSpeed,
+        ),
+        // A Live sample plays from its own clip, so its row reads "playing" until it ends; the others while speaking.
+        playing = { key -> playing == key && (key.startsWith("live:") || speaker.speaking) },
+        a = VoiceActions(
+            close = { speaker.stop(); onClose() },
+            callSir = { callSir(it) },
+            setFace = { setFace(it) },
+            remember = { remember(it) },
+            forgetAll = { forgetAll() },
+            setLive = { setLive(it) },
+            liveVoice = { liveVoice(it) },
+            sampleLive = { sampleLive(it) },
+            choose = { choose(it) },
+            sample = { sample(it) },
+            chooseDevice = { chooseDevice(it) },
+            sampleDevice = { sampleDevice(it) },
+            showAll = { haptics.light(); showAll = true },
+            saveDevice = { saveDevice(it) },
+            step = { haptics.tick() },
+            clearSpeed = {
+                haptics.medium()
+                scope.launch {
+                    runCatching { core.clearTurnSpeed() }
+                    speed = runCatching { core.turnSpeed("phone") }.getOrNull()
+                }
+            },
+        ),
+    )
+}
+
+/** What Obi's voice page shows (quality gate slice 59: [VoicePane] loads it, [VoiceList] draws it; null: still loading). */
+internal data class VoiceScreen(
+    val sir: Boolean?,
+    val faceOn: Boolean,
+    val faceReady: Boolean,
+    val remembers: Boolean?,
+    val memoryRows: List<String>,
+    val live: os.meka.core.domain.LiveSettingsView?,
+    val liveSampleFailed: Boolean,
+    val view: VoicePickerView?,
+    val deviceVoices: List<DeviceVoice>?,
+    val deviceSettings: DeviceVoiceSettings,
+    val showAll: Boolean,
+    val speed: os.meka.core.domain.TurnSpeedView?,
+    val serverSpeed: os.meka.core.domain.ServerSpeedView?,
+)
+
+/** What each control on Obi's voice page does (the pane's haptics, saving and sampling). */
+internal class VoiceActions(
+    val close: () -> Unit,
+    val callSir: (Boolean) -> Unit,
+    val setFace: (Boolean) -> Unit,
+    val remember: (Boolean) -> Unit,
+    val forgetAll: () -> Unit,
+    val setLive: (Boolean) -> Unit,
+    val liveVoice: (String) -> Unit,
+    val sampleLive: (String) -> Unit,
+    val choose: (VoiceChoice) -> Unit,
+    val sample: (VoiceChoice) -> Unit,
+    val chooseDevice: (DeviceVoiceRow) -> Unit,
+    val sampleDevice: (DeviceVoiceRow) -> Unit,
+    val showAll: () -> Unit,
+    val saveDevice: (DeviceVoiceSettings) -> Unit,
+    val step: () -> Unit,
+    val clearSpeed: () -> Unit,
+)
+
+/**
+ * Obi's voice page drawn from [s] (quality gate slice 59: split from [VoicePane] so the shots draw it from invented
+ * views). The chips answer a 48 dp touch around the same small pill, ▶ Sample is a slim pill inside a 48 dp touch, and
+ * the grey lines keep their last words and dots together ([LoneWordGlue]).
+ */
+@Composable
+internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceActions) {
+    val reduced = Meka.reducedMotion
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        Modifier.fillMaxSize().testTag("voice-pane").verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { speaker.stop(); onClose() }.minTouch())
+            modifier = Modifier.clickable(role = Role.Button) { a.close() }.minTouch())
         Text(VoicePickerRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.VOICE)).appear(rememberAppearance(0)))
-        Text(VoicePickerRules.INTRO, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
-        sir?.let { on ->
+        Text(LoneWordGlue.kept(VoicePickerRules.INTRO), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+        s.sir?.let { on ->
             // The companion, slice 3: how Navilife addresses him in Ask, Talk and Hello.
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionRules.CALL_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Obi calls you by name") { callSir(false) }
-                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Obi calls you sir") { callSir(true) }
+                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Obi calls you by name", touch = true) { a.callSir(false) }
+                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Obi calls you sir", touch = true) { a.callSir(true) }
                 }
                 Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
-                    Text(CompanionRules.callLine(now), style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(LoneWordGlue.kept(CompanionRules.callLine(now)), style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
         }
@@ -278,51 +360,51 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(os.meka.core.domain.FaceLook.SETTING_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                SettingChip(os.meka.core.domain.FaceLook.ON, on = faceOn, spoken = "Show the face when talking") { setFace(true) }
-                SettingChip(os.meka.core.domain.FaceLook.OFF, on = !faceOn, spoken = "Show the orb when talking") { setFace(false) }
+                SettingChip(os.meka.core.domain.FaceLook.ON, on = s.faceOn, spoken = "Show the face when talking", touch = true) { a.setFace(true) }
+                SettingChip(os.meka.core.domain.FaceLook.OFF, on = !s.faceOn, spoken = "Show the orb when talking", touch = true) { a.setFace(false) }
             }
-            if (!faceReady) Text(os.meka.core.domain.FaceLook.WAITING_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+            if (!s.faceReady) Text(LoneWordGlue.kept(os.meka.core.domain.FaceLook.WAITING_LINE), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
-        remembers?.let { on ->
+        s.remembers?.let { on ->
             // The companion, slice 5: what Navilife remembers of earlier chats, viewable and clearable.
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionMemoryRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionMemoryRules.ON_LABEL, on = on, spoken = "Navilife remembers your chats") { remember(true) }
-                    SettingChip(CompanionMemoryRules.OFF_LABEL, on = !on, spoken = "Navilife doesn't remember your chats") { remember(false) }
+                    SettingChip(CompanionMemoryRules.ON_LABEL, on = on, spoken = "Obi remembers your chats", touch = true) { a.remember(true) }
+                    SettingChip(CompanionMemoryRules.OFF_LABEL, on = !on, spoken = "Obi doesn't remember your chats", touch = true) { a.remember(false) }
                 }
-                Crossfade(on to memoryRows, animationSpec = MekaMotion.appear(reduced), label = "memory") { (now, rows) ->
+                Crossfade(on to s.memoryRows, animationSpec = MekaMotion.appear(reduced), label = "memory") { (now, rows) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text(
-                            if (!now) CompanionMemoryRules.OFF_LINE else CompanionMemoryRules.onLine(rows.size),
+                            LoneWordGlue.kept(if (!now) CompanionMemoryRules.OFF_LINE else CompanionMemoryRules.onLine(rows.size)),
                             style = MekaType.caption, color = Meka.colors.textTertiary,
                         )
                         if (now && rows.isEmpty()) Text(CompanionMemoryRules.EMPTY, style = MekaType.caption, color = Meka.colors.textTertiary)
                         rows.forEach { row -> Text(row, style = MekaType.body, color = Meka.colors.textPrimary) }
                         if (rows.isNotEmpty()) {
                             Text(CompanionMemoryRules.FORGET_ALL, style = MekaType.itemMeta, color = Meka.colors.accent,
-                                modifier = Modifier.clickable(role = Role.Button) { forgetAll() }.minTouch())
+                                modifier = Modifier.clickable(role = Role.Button) { a.forgetAll() }.minTouch())
                         }
                     }
                 }
             }
         }
-        live?.let { lv ->
+        s.live?.let { lv ->
             // Obi's Live mode, slice 2: real-time conversation on Gemini Live, off until he turns it on.
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(lv.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
-                Text(lv.intro, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(lv.intro), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off") { setLive(false) }
-                    SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on") { setLive(true) }
+                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off", touch = true) { a.setLive(false) }
+                    SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on", touch = true) { a.setLive(true) }
                 }
                 Crossfade(lv.line to lv.meterLine, animationSpec = MekaMotion.appear(reduced), label = "live-line") { (line, meter) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        Text(line, style = MekaType.caption, color = if (lv.on) Meka.colors.accent else Meka.colors.textTertiary)
-                        meter?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                        Text(LoneWordGlue.kept(line), style = MekaType.caption, color = if (lv.on) Meka.colors.accent else Meka.colors.textTertiary)
+                        meter?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                     }
                 }
-                Text(lv.sharing, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(lv.sharing), style = MekaType.caption, color = Meka.colors.textTertiary)
                 androidx.compose.animation.AnimatedVisibility(
                     visible = lv.showVoices,
                     enter = fadeIn(MekaMotion.appear(reduced)) + androidx.compose.animation.expandVertically(),
@@ -332,24 +414,24 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                         Text(os.meka.core.domain.LiveTalkRules.VOICE_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xs))
                         // Slice 2b: a row per voice like the picker below, each with ▶ Sample in Google's studio voice of that name.
-                        Text(os.meka.core.domain.LiveTalkRules.SAMPLE_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        Text(LoneWordGlue.kept(os.meka.core.domain.LiveTalkRules.SAMPLE_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
                         lv.voices.forEachIndexed { i, voice ->
                             VoiceRow(
                                 VoiceChoice("live:${voice.name}", voice.name, voice.detail, voice.selected),
-                                playing = playing == "live:${voice.name}",
+                                playing = playing("live:${voice.name}"),
                                 modifier = Modifier.appear(rememberAppearance(i)),
-                                choose = { liveVoice(voice.name) },
-                                sample = { sampleLive(voice.name) },
+                                choose = { a.liveVoice(voice.name) },
+                                sample = { a.sampleLive(voice.name) },
                             )
                         }
-                        Crossfade(liveSampleFailed, animationSpec = MekaMotion.appear(reduced), label = "live-sample-failed") { failed ->
-                            if (failed) Text(os.meka.core.domain.LiveTalkRules.SAMPLE_FAILED, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Crossfade(s.liveSampleFailed, animationSpec = MekaMotion.appear(reduced), label = "live-sample-failed") { failed ->
+                            if (failed) Text(LoneWordGlue.kept(os.meka.core.domain.LiveTalkRules.SAMPLE_FAILED), style = MekaType.caption, color = Meka.colors.textSecondary)
                         }
                     }
                 }
             }
         }
-        val v = view
+        val v = s.view
         if (v == null) {
             SkeletonRows(count = 4, rowHeight = 56.dp)
         } else {
@@ -360,8 +442,8 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                     Text(group.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary,
                         modifier = Modifier.padding(top = if (i == 0) MekaSpace.xs else MekaSpace.m).appear(rememberAppearance(i + 1)))
                 }
-                VoiceRow(c, playing = playing == c.id && speaker.speaking, modifier = Modifier.appear(rememberAppearance(i + 1)),
-                    choose = { choose(c) }, sample = { sample(c) })
+                VoiceRow(c, playing = playing(c.id), modifier = Modifier.appear(rememberAppearance(i + 1)),
+                    choose = { a.choose(c) }, sample = { a.sample(c) })
             }
             val after = v.choices.size + 1
             AnimatedContent(
@@ -372,7 +454,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             ) { lines ->
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     lines.forEachIndexed { i, line ->
-                        Text(line, style = MekaType.caption,
+                        Text(LoneWordGlue.kept(line), style = MekaType.caption,
                             color = when {
                                 i == 0 && v.statusLine != null -> Meka.colors.accent
                                 line == v.googleLine -> Meka.colors.textSecondary
@@ -381,61 +463,55 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            val voices = deviceVoices
+            val voices = s.deviceVoices
             if (voices == null) {
                 SkeletonRows(count = 2, rowHeight = 48.dp)
             } else {
-                val d = DeviceVoiceRules.view(voices, deviceSettings, mac = false, expanded = showAll)
+                val d = DeviceVoiceRules.view(voices, s.deviceSettings, mac = false, expanded = s.showAll)
                 Spacer(Modifier.height(MekaSpace.m))
                 Text(d.title, style = MekaType.sectionLabel, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 1)))
                 d.rows.forEachIndexed { i, r ->
-                    DeviceRow(r, playing = playing == "device:" + r.id && speaker.speaking,
+                    DeviceRow(r, playing = playing("device:" + r.id),
                         modifier = Modifier.appear(rememberAppearance(after + 2 + i)),
-                        choose = { chooseDevice(r) }, sample = { sampleDevice(r) })
+                        choose = { a.chooseDevice(r) }, sample = { a.sampleDevice(r) })
                 }
                 d.moreLabel?.let { more ->
                     Text(more, style = MekaType.itemMeta, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Show the other voices") { haptics.light(); showAll = true }
-                            .padding(vertical = MekaSpace.xs))
+                        modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Show the other voices") { a.showAll() }
+                            .minTouch())
                 }
-                d.emptyLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+                d.emptyLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent) }
                 val base = after + 2 + d.rows.size
-                VoiceSlider(d.rateLine, deviceSettings.rate, DeviceVoiceRules.RATE_MIN, DeviceVoiceRules.RATE_MAX, DeviceVoiceRules::rate,
-                    Modifier.appear(rememberAppearance(base)), onStep = { haptics.tick() }) { saveDevice(deviceSettings.copy(rate = DeviceVoiceRules.rate(it))) }
-                VoiceSlider(d.pitchLine, deviceSettings.pitch, DeviceVoiceRules.PITCH_MIN, DeviceVoiceRules.PITCH_MAX, DeviceVoiceRules::pitch,
-                    Modifier.appear(rememberAppearance(base + 1)), onStep = { haptics.tick() }) { saveDevice(deviceSettings.copy(pitch = DeviceVoiceRules.pitch(it))) }
-                Text(d.note, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(base + 2)))
+                VoiceSlider(d.rateLine, s.deviceSettings.rate, DeviceVoiceRules.RATE_MIN, DeviceVoiceRules.RATE_MAX, DeviceVoiceRules::rate,
+                    Modifier.appear(rememberAppearance(base)), onStep = a.step) { a.saveDevice(s.deviceSettings.copy(rate = DeviceVoiceRules.rate(it))) }
+                VoiceSlider(d.pitchLine, s.deviceSettings.pitch, DeviceVoiceRules.PITCH_MIN, DeviceVoiceRules.PITCH_MAX, DeviceVoiceRules::pitch,
+                    Modifier.appear(rememberAppearance(base + 1)), onStep = a.step) { a.saveDevice(s.deviceSettings.copy(pitch = DeviceVoiceRules.pitch(it))) }
+                Text(LoneWordGlue.kept(d.note), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(base + 2)))
             }
             Spacer(Modifier.height(MekaSpace.m))
-            Text(v.help, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 4)))
+            Text(LoneWordGlue.kept(v.help), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 4)))
         }
-        speed?.let { sp ->
+        s.speed?.let { sp ->
             // The orb speed pass, slice 2: where the wait goes, turn by turn (times only, nothing said).
             Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(5)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(sp.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
-                Text(sp.intro, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(sp.intro), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Crossfade(sp, animationSpec = MekaMotion.appear(reduced), label = "speed") { now ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        now.summary?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
+                        now.summary?.let { Text(LoneWordGlue.kept(it), style = MekaType.body, color = Meka.colors.textPrimary) }
                         now.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-                        now.rows.forEach { row -> Text(row, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                        now.rows.forEach { row -> Text(LoneWordGlue.kept(row), style = MekaType.caption, color = Meka.colors.textSecondary) }
                         now.clear?.let { label ->
                             Text(label, style = MekaType.itemMeta, color = Meka.colors.accent,
-                                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Clear the speed log") {
-                                    haptics.medium()
-                                    scope.launch {
-                                        runCatching { core.clearTurnSpeed() }
-                                        speed = runCatching { core.turnSpeed("phone") }.getOrNull()
-                                    }
-                                }.minTouch())
+                                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Clear the speed log") { a.clearSpeed() }.minTouch())
                         }
                     }
                 }
-                serverSpeed?.let { sv ->
+                s.serverSpeed?.let { sv ->
                     Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(6)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         Text(sv.title, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-                        Text(sv.intro, style = MekaType.caption, color = Meka.colors.textTertiary)
-                        sv.lines.forEach { line -> Text(line, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                        Text(LoneWordGlue.kept(sv.intro), style = MekaType.caption, color = Meka.colors.textTertiary)
+                        sv.lines.forEach { line -> Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary) }
                         sv.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
                     }
                 }
@@ -468,20 +544,29 @@ private fun VoiceRow(c: VoiceChoice, playing: Boolean, modifier: Modifier, choos
             Text(c.detail, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2)
         }
         if (c.sample) {
+            // Quality gate slice 59: a slim 32 dp pill inside a 48 dp touch (it was a ~36 dp tap), its label spoken.
             Box(
-                Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                Modifier.padding(start = MekaSpace.xs).sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
+                    .clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button, onClickLabel = if (playing) "Stop the sample" else "Hear ${c.label}") { sample() }
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    .semantics { contentDescription = (if (playing) "Stop · " else "Sample · ") + c.label },
+                contentAlignment = Alignment.Center,
             ) {
+              Box(
+                Modifier.testTag("touch-pill").height(os.meka.core.domain.DonePillSpec.HEIGHT_DP.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.m),
+                contentAlignment = Alignment.Center,
+              ) {
                 Crossfade(targetState = playing, animationSpec = MekaMotion.appear(reduced), label = "voice-sample") { on ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (on) {
                             SamplePulse()
                             Spacer(Modifier.width(MekaSpace.xs))
                         }
-                        Text(if (on) "■  Stop" else "▶  Sample", style = MekaType.itemMeta, color = Meka.colors.accent)
+                        Text(if (on) "■  Stop" else "▶  Sample", style = MekaType.itemMeta, color = Meka.colors.accent, maxLines = 1)
                     }
                 }
+              }
             }
         }
     }

@@ -29,6 +29,10 @@ class ScreenSenseRulesTest {
         assertTrue(whys("3 h 30 of 2 h").isEmpty())
         assertTrue(whys("45 of 30 min").isEmpty())
         assertEquals(listOf("more done than there are (“5 of 3”)"), whys("1 h 30 free · 5 of 3 done"))
+        // Grouped numbers read whole (quality gate slice 59, Obi's voice's month line).
+        assertTrue(whys("Navilife's voice · Brian · 12 of 1,000,000 characters in October").isEmpty())
+        assertTrue(whys("1,240 of 1,000,000 characters").isEmpty())
+        assertEquals(listOf("more done than there are (“2,000 of 1,000”)"), whys("2,000 of 1,000 done"))
     }
 
     @Test

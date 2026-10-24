@@ -572,7 +572,7 @@ object VoicePickerRules {
         text.substring(start).trim().takeIf { it.isNotEmpty() }?.let { out += it }
         return out
     }
-    const val INTRO = "How Navilife sounds in Talk, the spoken brief and when it answers calls. The choice follows you to every device."
+    const val INTRO = "How Obi sounds in Talk, the spoken brief and when he answers calls. The choice follows you to every device."
 
     const val POLLY = "polly"
     const val GOOGLE = "google"

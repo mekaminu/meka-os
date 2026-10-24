@@ -3202,6 +3202,31 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 59 (2026-10-24): Obi's voice's shots and its first hand tests
+
+- VoiceScreensTest (8, Robolectric + Roborazzi) draws Ask → Settings → Obi's voice from invented views: not connected
+  (only the phone's own voice, no English voice installed, nothing timed), a first look (Polly's British voices with
+  Brian the default, Live off with its month, one phone voice, one hello timed) and set up (Google's British and
+  American voices and Polly's, Live on with its voices and a failed sample, three kept notes, eight phone voices folded to
+  six with "+2 more", Speed and the server's timings), on the cover and inner sizes, Dark and Light, under
+  docs/screens/fold/voice/; read for nonsense, cut lines, broken words, split times and numbers, a grey line leaving a
+  word alone or starting with a dot, the chips and ▶ Sample whole on one line, the Sample pill slim (32 dp) inside the
+  pane, and every button, chip and voice row answering a 48 dp touch.
+- By hand: Sir, a voice row (Arthur), Brian's ▶ Sample, Live's On, Don't remember and Close each reach their own action;
+  on the set-up page "+2 more" unfolds and Forget all forgets.
+- Fixed first (Fold): VoicePane split into VoicePane (loads, saves, samples, haptics) and VoiceList (draws a VoiceScreen
+  through VoiceActions); ▶ Sample was a ~36 dp tap, now a slim 32 dp pill inside a 48 dp touch, spoken "Sample · Brian";
+  the page's chips (Calls you, Face, What Obi remembers, Live) were ~24 dp taps, now the same pill inside a 48 dp touch
+  (SettingChip(touch = true); other panes unchanged); "+N more" answers a 48 dp touch; every grey line, the Speed rows
+  and the server's lines keep their numbers, times and last words together (LoneWordGlue); the memory chips say "Obi
+  remembers your chats".
+- Core: the page's intro said "How Navilife sounds…" under the title "Obi's voice"; now "How Obi sounds in Talk, the spoken
+  brief and when he answers calls." (both apps); What Obi remembers' line says "so Obi can pick up where you left off".
+  ScreenSenseRules read "12 of 1,000,000 characters" as "12 of 1" (more done than there are), so the month line would
+  have failed every shot; grouped numbers now read whole (ScreenSenseRulesTest); SpeechTest reads the picker's and Live's
+  words in every state.
+- Design check: no design file covers Obi's voice. No server change, no wire change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 58 (2026-10-23): Setup's shots and its first hand test
 
 - SetupScreensTest (7, Robolectric + Roborazzi) draws Ask → More → Setup from invented checks: nothing reachable (every

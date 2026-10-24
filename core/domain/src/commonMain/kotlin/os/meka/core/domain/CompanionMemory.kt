@@ -44,7 +44,7 @@ object CompanionMemoryRules {
     const val OFF_LINE = "Off: each conversation starts fresh, and nothing about it is kept."
 
     fun onLine(count: Int): String =
-        "A line about each proper chat, kept 30 days in your own data, so Navilife can pick up where you left off" +
+        "A line about each proper chat, kept 30 days in your own data, so Obi can pick up where you left off" +
             if (count > 0) " · ${plural(count, "note")}" else ""
 
     private val BLOCKED = Regex("""\b(password|passcode|pin|sort code|account number|card number|cvv)\b""")
