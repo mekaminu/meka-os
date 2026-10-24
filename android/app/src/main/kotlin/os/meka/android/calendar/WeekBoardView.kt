@@ -308,6 +308,7 @@ fun WeekBoardView(
         // Option B slice 2: unfolded, a week's rows share the width between them (BoardWeekLayoutRules.rowWidths).
         val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / BoardWeekLayoutRules.WEEKDAYS else maxWidth - MekaSpace.xs * 2
         val colPx = with(density) { colWidth.toPx() }
+        val rowWidth = maxWidth - MekaSpace.gutter * 2
         val weekStartPx: (Int) -> Int = { w -> (w * 7 * colPx).toInt() }
         val scroll = rememberScrollState()
         val dayCount = board.days.size
@@ -565,7 +566,7 @@ fun WeekBoardView(
             if (wide) {
                 WideWeek(
                     board = board, week = weekIndex, dir = wideDir, scroll = wideScroll, dragging = drag != null,
-                    rowWidth = maxWidth - MekaSpace.gutter * 2, openedPast = openedPast,
+                    rowWidth = rowWidth, openedPast = openedPast,
                     modifier = Modifier.fillMaxSize().appear(rememberAppearance(4)),
                     day = { day, width -> dayColumn(day, width) },
                     list = { week, column, mod ->
