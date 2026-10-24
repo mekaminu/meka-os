@@ -133,6 +133,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BoardCapacity
 import os.meka.core.domain.BoardNudge
 import os.meka.core.domain.BoardNudgeRules
+import os.meka.core.domain.BoardNudgePlace
 import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
 import os.meka.core.domain.BoardGoal
@@ -483,6 +484,13 @@ fun WeekBoardView(
         }
 
         Column(Modifier.fillMaxSize()) {
+            // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a tap, with Undo.
+            // Match slice 3: the pill sits in the header as the mockup draws it (beside Today unfolded, under the month
+            // on the cover screen), never a row of its own under the whole header.
+            val nudge = remember(board, weekIndex) { board.weeks.getOrNull(weekIndex)?.let { core.boardNudge(board, it.startEpochDay) } }
+            val nudgePill: (@Composable (Modifier) -> Unit)? = if (nudge == null) null else { m ->
+                ObiNudgeLine(nudge, m) { fix -> scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) } }
+            }
             WeekHeader(
                 board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview,
                 timeline = if (wide) showTimeline else null,
@@ -491,14 +499,8 @@ fun WeekBoardView(
                 onToday = {
                     if (wide) goWeek(0) else turnTo(board.days.indexOfFirst { it.isToday }.coerceAtLeast(0))
                 },
+                nudge = nudgePill,
             )
-            // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a tap, with Undo.
-            val nudge = remember(board, weekIndex) { board.weeks.getOrNull(weekIndex)?.let { core.boardNudge(board, it.startEpochDay) } }
-            if (nudge != null) {
-                ObiNudgeLine(
-                    nudge, Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).appear(rememberAppearance(2)),
-                ) { fix -> scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) } }
-            }
             board.weeks.getOrNull(weekIndex)?.let { week ->
                 // By hand, slice 4: the week's goals as small gold pills and the two trays as chips (unfolded on one
                 // row, folded on two); an open tray's cards unfolded in a lane under them.
@@ -846,6 +848,7 @@ private const val GOAL_KEY = -10L
 private fun WeekHeader(
     board: WeekBoard, week: Int, onGo: (Int) -> Unit, modifier: Modifier, onPlanWeek: (() -> Unit)?, onReview: () -> Unit,
     timeline: Boolean? = null, onTimeline: () -> Unit = {}, wide: Boolean = true, onToday: () -> Unit = {},
+    nudge: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val haptics = rememberMekaHaptics()
     val w = board.weeks[week]
@@ -910,21 +913,32 @@ private fun WeekHeader(
         StepButton("›", "Next week", week < board.weeks.size - 1) { go(week + 1) }
     }
     if (wide) {
+        // Match slice 3: "October 2026 W44" on the left; Obi's pill, Today and ‹ › on the right (the pill takes what's
+        // left of the row, up to its widest, so the month and the buttons keep their room).
         Row(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-            title(Modifier.weight(1f))
+            if (nudge != null && BoardMatchRules.nudgePlace(wide) == BoardNudgePlace.BESIDE_TODAY) {
+                title(Modifier)
+                Box(Modifier.weight(1f).padding(horizontal = MekaSpace.xs), contentAlignment = Alignment.CenterEnd) {
+                    nudge(Modifier.widthIn(max = BoardMatchRules.NUDGE_MAX_WIDTH.dp))
+                }
+            } else {
+                title(Modifier.weight(1f))
+            }
             buttons()
         }
     } else {
-        // The cover screen: the month on its own line so "Oct 2026 W43" is never cut, the buttons under it on the right.
+        // The cover screen: the month on its own line so "Oct 2026 W43" is never cut, then Obi's pill across the width
+        // (the mockup at 390 wide), the buttons under it on the right.
         Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs)) {
             title(Modifier.fillMaxWidth())
+            if (nudge != null) nudge(Modifier.fillMaxWidth().padding(top = MekaSpace.xs))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { buttons() }
         }
     }
 }
 
 /**
- * Option B slice 4: Obi's one-line nudge under the week's title, the mockup's pill: a small gold orb, "Obi" and the
+ * Option B slice 4: Obi's one-line nudge in the header (match slice 3: beside Today, or under the month folded), the mockup's pill: a small gold orb, "Obi" and the
  * line ("Mon is 1h over · move “Gym” to Fri?"), amber when a day is over or stacking up. A line with a fix is a button:
  * a tap moves that card (light haptic, Undo on the bar). A new line cross-fades in (Reduced motion: a plain fade).
  */
@@ -937,6 +951,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
     val fix = n.fix
     Row(
         modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+            .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
             .then(if (fix != null) Modifier.clickable(role = Role.Button) { onFix(fix) } else Modifier)
             .heightIn(min = MekaSpace.touch)
             .padding(start = MekaSpace.xs, end = MekaSpace.m)
@@ -948,7 +963,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(20.dp).clip(CircleShape).background(
+            Modifier.size(BoardMatchRules.NUDGE_ORB.dp).clip(CircleShape).background(
                 androidx.compose.ui.graphics.Brush.radialGradient(
                     0f to accent.copy(alpha = 0.45f).compositeOverWhite(), 0.4f to accent, 1f to accent.copy(alpha = 0.35f),
                 ),
@@ -958,7 +973,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
         Text(BoardNudgeRules.SPEAKER, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
         Spacer(Modifier.width(MekaSpace.xs))
         androidx.compose.animation.Crossfade(n.line, animationSpec = MekaMotion.appear(reduced), label = "nudge-line") { line ->
-            Text(line, style = MekaType.caption, color = tone, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(line, style = MekaType.caption, color = tone, maxLines = BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
         }
     }
 }

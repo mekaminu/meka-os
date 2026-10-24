@@ -157,4 +157,12 @@ class BoardMatchTest {
         assertNull(BoardMatchRules.blockArea(block(null, DayBlockKind.EVENT), board))
         assertNull(BoardMatchRules.blockArea(block(null, DayBlockKind.COMMUTE), board))
     }
+
+    @Test
+    fun obisNudgeSitsBesideTodayWithRoomAndUnderTheMonthOnTheCoverScreen() {
+        assertEquals(BoardNudgePlace.BESIDE_TODAY, BoardMatchRules.nudgePlace(wide = true))
+        assertEquals(BoardNudgePlace.UNDER_TITLE, BoardMatchRules.nudgePlace(wide = false))
+        assertTrue(BoardMatchRules.NUDGE_MAX_WIDTH in 300..480)
+        assertTrue(BoardMatchRules.NUDGE_LINES >= 1)
+    }
 }

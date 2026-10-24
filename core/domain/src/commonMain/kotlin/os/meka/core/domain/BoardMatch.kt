@@ -1,5 +1,8 @@
 package os.meka.core.domain
 
+/** Where Obi's nudge pill sits in the Week board's header ([BoardMatchRules.nudgePlace]). */
+enum class BoardNudgePlace { BESIDE_TODAY, UNDER_TITLE }
+
 /** The week's big header (the mockup's "October 2026  W44"): the month and year in serif, the ISO week number in mono. */
 data class BoardWeekHead(
     val month: String,
@@ -173,4 +176,23 @@ object BoardMatchRules {
             ?: return null
         return BoardAreaRules.of(card)
     }
+
+    // ---- Slice 3 (2026-10-24): Obi's nudge pill in the header, beside Today ----
+
+    /**
+     * Where Obi's nudge pill sits (the mockup's header: "October 2026 W44" on the left, then the pill, Today and ‹ › on
+     * the right). With room for it (the unfolded Fold, a wide Mac window) it is [BESIDE_TODAY], in the header's row just
+     * before Today; on the cover screen (the mockup at 390 wide) it is [UNDER_TITLE], its own full line between the
+     * month and the buttons. Never a separate row under the whole header any more.
+     */
+    fun nudgePlace(wide: Boolean): BoardNudgePlace = if (wide) BoardNudgePlace.BESIDE_TODAY else BoardNudgePlace.UNDER_TITLE
+
+    /** The widest the pill grows beside Today, in dp/pt, so the month and the buttons keep their room. */
+    const val NUDGE_MAX_WIDTH = 420
+
+    /** Lines the pill's words may take: two beside Today (the row is tight on the unfolded Fold), two under the title. */
+    const val NUDGE_LINES = 2
+
+    /** The orb's size in the pill (the mockup's 30 px at 1280, scaled to the app's header). */
+    const val NUDGE_ORB = 24
 }

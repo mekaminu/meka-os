@@ -310,8 +310,50 @@ class BoardScreensTest {
         val nudge = compose.onAllNodesWithTag(NUDGE_TAG).fetchSemanticsNodes()
         if (nudge.isEmpty()) fail("no nudge in the header")
         assertEquals(expected.spoken, nudge.first().config[SemanticsProperties.ContentDescription].joinToString())
+        // Match slice 3: unfolded, the pill sits in the header's row just before Today, as the mockup draws it.
+        val pill = nudge.first().boundsInRoot
+        val today = compose.onAllNodesWithText(os.meka.core.domain.BoardMatchRules.TODAY).fetchSemanticsNodes()
+            .map { it.boundsInRoot }.minByOrNull { it.top } ?: throw AssertionError("no Today in the header")
+        assertTrue("the pill sits in Today's row ($pill vs $today)", pill.top < today.bottom && pill.bottom > today.top)
+        assertTrue("the pill sits before Today ($pill vs $today)", pill.right <= today.left + 1f)
+        val month = compose.onAllNodesWithTag(os.meka.android.calendar.MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .single().boundsInRoot
+        assertTrue("the pill sits after the month ($pill vs $month)", pill.left >= month.right - 1f)
         compose.onNodeWithTag(NUDGE_TAG).performClick()
         awaitCore("nudge") { core.weekBoard.value.dayOf(fix.taskId)?.epochDay == fix.toDay }
+    }
+
+    /**
+     * Option B match slice 3: on the cover screen Obi's pill is its own line between the month and the week's buttons
+     * (the mockup at 390 wide), never under the whole header.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun foldedObisNudgeSitsUnderTheMonthAboveTheButtons() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            listOf("Fix the gate latch", "Batch cook for the week", "Paint the fence", "Order new bins", "Sort the loft")
+                .forEach { core.addOnBoardSized(it, today, 60) }
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-nudge"))
+        ScreenShots.assertSensible(compose, "cover-dark-nudge")
+        val pill = compose.onAllNodesWithTag(NUDGE_TAG).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+            ?: throw AssertionError("no nudge on the cover screen")
+        val month = compose.onAllNodesWithTag(os.meka.android.calendar.MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .single().boundsInRoot
+        val next = compose.onAllNodesWithContentDescription("Next week").fetchSemanticsNodes().map { it.boundsInRoot }
+            .minByOrNull { it.top } ?: throw AssertionError("no Next week button")
+        assertTrue("the pill sits under the month ($pill vs $month)", pill.top >= month.bottom - 1f)
+        assertTrue("the pill sits above the buttons ($pill vs $next)", pill.bottom <= next.top + 1f)
+        // (9) The folded day is the same column as unfolded: the serif date, the budget pill, the "+ add" at its foot.
+        if (compose.onAllNodesWithTag(os.meka.android.calendar.DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("no serif date on the cover screen's day")
+        }
+        if (compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes().isEmpty()) fail("no budget pill on the cover screen's day")
+        if (compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no + add on the cover screen's day")
     }
 
     /**

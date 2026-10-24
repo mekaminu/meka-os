@@ -1642,6 +1642,10 @@ final class MekaCoreBridgeTests: XCTestCase {
                                  board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))
         XCTAssertEqual(lists.map(\.title), ["No day yet", "Someday", "Side hustle", "House"])
         XCTAssertEqual(lists.last?.area, BoardArea.house)
+        // Option B match, slice 3: Obi's pill beside Today with room, under the month when narrow.
+        XCTAssertEqual(match.nudgePlace(wide: true), BoardNudgePlace.besideToday)
+        XCTAssertEqual(match.nudgePlace(wide: false), BoardNudgePlace.underTitle)
+        XCTAssertEqual(match.NUDGE_MAX_WIDTH, 420)
         // Option B match, slice 2: the lists in the mockup's order with the name apart from the count; the timeline's colours.
         let matchLists = match.lists(week: BoardWeek(startEpochDay: 0, title: "This week", range: "", days: [], lane: [], goals: []),
                                      board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))

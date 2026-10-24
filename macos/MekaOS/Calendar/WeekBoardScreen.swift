@@ -50,57 +50,79 @@ struct WeekBoardScreen: View {
     /// Option B slice 5 (refinement 2): today's timeline beside the week; open unless he hides it.
     @AppStorage("board.timeline") private var showTimeline = true
 
+    /// Option B match: "October 2026  W44", the month in serif, the ISO week in mono.
+    @ViewBuilder private func weekTitle(_ w: BoardWeek) -> some View {
+        let head = BoardMatchRules.shared.weekHead(startEpochDay: w.startEpochDay)
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+            Text(head.month).font(MekaType.greeting).fontDesign(.serif).foregroundStyle(palette.textPrimary).lineLimit(1)
+            Text(head.week).font(MekaType.itemTitle).fontDesign(.monospaced).foregroundStyle(palette.textTertiary).lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(head.spoken + ", " + w.title)
+    }
+
+    /// Today, Review, Timeline, Plan your week and ‹ › on the header's right.
+    @ViewBuilder private var weekButtons: some View {
+        Button(BoardMatchRules.shared.TODAY) { MekaHaptics.tick(); goTo(0) }
+            .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
+            .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
+            .help("Back to this week")
+        // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
+        if board.offersReview && week == 0 {
+            Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
+                .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
+                .help("Review this week: planned against done, and what kept slipping")
+        }
+        // Option B slice 5: Timeline / Hide timeline opens or shuts today's timeline beside the week.
+        Button(showTimeline ? BoardTimelineRules.shared.HIDE : BoardTimelineRules.shared.SHOW) {
+            MekaHaptics.tick()
+            withAnimation(MekaMotion.replan(reduced: reduceMotion)) { showTimeline.toggle() }
+        }
+        .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
+        .help(showTimeline ? "Hide today's timeline" : "Show today's timeline beside the week")
+        // Item (6): Plan your week opens the guided sheet.
+        Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
+            .foregroundStyle(palette.accent).font(MekaType.itemMeta)
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .help("Plan your week (⇧⌘P)")
+        Button { step(-1) } label: { Image(systemName: "chevron.left") }
+            .disabled(week == 0)
+            .keyboardShortcut("[", modifiers: .command)
+            .help("Previous week")
+        Button { step(1) } label: { Image(systemName: "chevron.right") }
+            .disabled(week >= board.weeks.count - 1)
+            .keyboardShortcut("]", modifiers: .command)
+            .help("Next week")
+    }
+
     var body: some View {
         let w = board.weeks[min(week, board.weeks.count - 1)]
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            HStack {
-                // Option B match: "October 2026  W44", the month in serif, the ISO week in mono.
-                let head = BoardMatchRules.shared.weekHead(startEpochDay: w.startEpochDay)
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-                    Text(head.month).font(MekaType.greeting).fontDesign(.serif).foregroundStyle(palette.textPrimary).lineLimit(1)
-                    Text(head.week).font(MekaType.itemTitle).fontDesign(.monospaced).foregroundStyle(palette.textTertiary).lineLimit(1)
+            // Match slice 3: Obi's pill sits in the header's row just before Today when the window has room (the mockup
+            // at 1280 wide), else on its own line under the month (the mockup at 390 wide).
+            let nudge = model.boardNudge(board, weekStart: w.startEpochDay)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    weekTitle(w)
+                    Spacer(minLength: MekaSpace.xs)
+                    if let nudge {
+                        ObiNudgeLine(nudge: nudge, palette: palette)
+                            .frame(maxWidth: CGFloat(BoardMatchRules.shared.NUDGE_MAX_WIDTH))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    weekButtons
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(head.spoken + ", " + w.title)
-                Spacer()
-                Button(BoardMatchRules.shared.TODAY) { MekaHaptics.tick(); goTo(0) }
-                    .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
-                    .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
-                    .help("Back to this week")
-                // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
-                if board.offersReview && week == 0 {
-                    Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
-                        .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
-                        .help("Review this week: planned against done, and what kept slipping")
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    HStack {
+                        weekTitle(w)
+                        Spacer(minLength: MekaSpace.xs)
+                        weekButtons
+                    }
+                    if let nudge { ObiNudgeLine(nudge: nudge, palette: palette) }
                 }
-                // Option B slice 5: Timeline / Hide timeline opens or shuts today's timeline beside the week.
-                Button(showTimeline ? BoardTimelineRules.shared.HIDE : BoardTimelineRules.shared.SHOW) {
-                    MekaHaptics.tick()
-                    withAnimation(MekaMotion.replan(reduced: reduceMotion)) { showTimeline.toggle() }
-                }
-                .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
-                .help(showTimeline ? "Hide today's timeline" : "Show today's timeline beside the week")
-                // Item (6): Plan your week opens the guided sheet.
-                Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
-                    .foregroundStyle(palette.accent).font(MekaType.itemMeta)
-                    .keyboardShortcut("p", modifiers: [.command, .shift])
-                    .help("Plan your week (⇧⌘P)")
-                Button { step(-1) } label: { Image(systemName: "chevron.left") }
-                    .disabled(week == 0)
-                    .keyboardShortcut("[", modifiers: .command)
-                    .help("Previous week")
-                Button { step(1) } label: { Image(systemName: "chevron.right") }
-                    .disabled(week >= board.weeks.count - 1)
-                    .keyboardShortcut("]", modifiers: .command)
-                    .help("Next week")
             }
             .buttonStyle(.borderless)
-
-            // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a click, with Undo.
-            if let nudge = model.boardNudge(board, weekStart: w.startEpochDay) {
-                ObiNudgeLine(nudge: nudge, palette: palette)
-            }
 
             // The week's goals as small gold pills across the top (Option B slice 2: the trays are lists below now).
             BoardGoalsView(week: w, palette: palette, target: $target)
@@ -215,7 +237,7 @@ struct WeekBoardScreen: View {
     }
 }
 
-/// Option B slice 4: Obi's one-line nudge under the week's title, the mockup's pill: a small gold orb, "Obi" and the
+/// Option B slice 4: Obi's one-line nudge in the header (match slice 3: beside Today, or under the month when narrow), the mockup's pill: a small gold orb, "Obi" and the
 /// line ("Mon is 1h over · move “Gym” to Fri?"), amber when a day is over or stacking up. A line with a fix is a button
 /// (press style, light haptic, Undo on the bar). A new line cross-fades in (Reduce Motion: a plain fade).
 private struct ObiNudgeLine: View {
@@ -230,18 +252,19 @@ private struct ObiNudgeLine: View {
             Circle()
                 .fill(RadialGradient(
                     colors: [palette.accent.opacity(0.45), palette.accent, palette.accent.opacity(0.35)],
-                    center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: 12
+                    center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: CGFloat(BoardMatchRules.shared.NUDGE_ORB) / 2
                 ))
-                .frame(width: 20, height: 20)
+                .frame(width: CGFloat(BoardMatchRules.shared.NUDGE_ORB), height: CGFloat(BoardMatchRules.shared.NUDGE_ORB))
                 .accessibilityHidden(true)
             Text(BoardNudgeRules.shared.SPEAKER).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-            Text(nudge.line).font(MekaType.caption).foregroundStyle(tone).lineLimit(2)
+            Text(nudge.line).font(MekaType.caption).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.NUDGE_LINES))
                 .id(nudge.line)
                 .transition(.opacity)
         }
         .padding(.leading, MekaSpace.xs).padding(.trailing, MekaSpace.m)
         .frame(minHeight: 32)
         .background(Capsule().fill(palette.surface))
+        .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: nudge.line)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(nudge.spoken)
