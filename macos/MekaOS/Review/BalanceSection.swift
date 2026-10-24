@@ -235,7 +235,7 @@ private struct BalanceRowView: View {
 
 /// Slice 2: the last four weeks as four small bars (oldest first), the met ones (work: over) in the accent, a hairline
 /// at the target and each week's Monday under its bar. Bars rise one after another on appear and glide to a new week;
-/// Reduce Motion sets them.
+/// Reduce Motion sets them. Quality gate slice 64: a week with any time keeps a 2 pt sliver, as on the Fold.
 private struct BalanceTrendView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let row: BalanceRow
@@ -254,7 +254,7 @@ private struct BalanceTrendView: View {
                             .offset(y: -barHeight * CGFloat(row.trendTargetPct) / 100)
                         RoundedRectangle(cornerRadius: 2)
                             .fill(w.met ? palette.accent : palette.textTertiary)
-                            .frame(width: 18, height: risen ? barHeight * CGFloat(w.pct) / 100 : 0)
+                            .frame(width: 18, height: risen ? max(barHeight * CGFloat(w.pct) / 100, w.pct > 0 ? 2 : 0) : 0)
                             .animation(
                                 reduceMotion ? nil : MekaMotion.replan(reduced: false).delay(0.04 * Double(i)),
                                 value: risen

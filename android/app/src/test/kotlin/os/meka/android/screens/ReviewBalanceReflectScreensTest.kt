@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -286,6 +287,26 @@ class ReviewBalanceReflectScreensTest {
         if (small.isNotEmpty()) fail("$name: controls under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
+    /** Quality gate slice 64: the trend's bars are slim 18 dp bars, and a week with any time shows at least a sliver. */
+    private fun assertTrendBars(name: String) {
+        val d = compose.density.density
+        val bars = compose.onAllNodesWithTag("trend-bar", useUnmergedTree = true).fetchSemanticsNodes()
+        if (bars.isEmpty()) return
+        val wide = bars.filter { it.size.width / d > 18.5f }
+        if (wide.isNotEmpty()) fail("$name: trend bars drawn wider than 18 dp (${wide.map { (it.size.width / d).toInt() }})")
+        val slivers = bars.filter { it.size.height > 0 && it.size.height / d < 1.5f }
+        if (slivers.isNotEmpty()) fail("$name: a trend bar under 2 dp tall (${slivers.map { it.size.height / d }})")
+    }
+
+    /** Quality gate slice 64: the suggestions' rows touch (each chip's 48 dp touch is the gap), no spacing added. */
+    private fun assertHintRowsTight(name: String) {
+        val d = compose.density.density
+        val rows = compose.onAllNodesWithTag("reflect-hint", useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.boundsInRoot }.groupBy { it.top }.toSortedMap().values.map { r -> r.first().top / d to r.maxOf { it.bottom } / d }
+        val gaps = rows.zipWithNext { a, b -> b.first - a.second }.filter { it > 0.5f && it < 60f }
+        if (gaps.isNotEmpty()) fail("$name: ${gaps.map { it.toInt() }} dp added between suggestion rows (their 48 dp touch is enough)")
+    }
+
     private fun assertLines(name: String, fill: Fill) {
         val b = balance(fill)
         val r = reflection(fill)
@@ -302,6 +323,8 @@ class ReviewBalanceReflectScreensTest {
         // An event to count reads its days and hours on one line beside its title; a row's status on one line.
         ScreenShots.assertEachOneLine(compose, name, b.unclear.map { it.line } + b.rows.mapNotNull { it.status })
         assertTouchTargets(name)
+        assertTrendBars(name)
+        assertHintRowsTight(name)
     }
 
     private fun shoot(name: String) = compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("review", name))

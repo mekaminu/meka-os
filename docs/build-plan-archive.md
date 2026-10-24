@@ -3202,6 +3202,13 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 64 (2026-10-24): Review's trend bars and suggestion rows
+
+- From slice 63's look at the review shots: the trend's bars were half a lane wide (~35 dp) with 10 dp top corners on a 24 dp lane, so the short ones drew as domes. Fold: an 18 dp bar with 2 dp corners (the Mac's shape), tagged `trend-bar`; a week with any time keeps a 2 dp sliver once it has risen. Mac: the same 2 pt sliver.
+- The reflection's suggestion chips (one per line on the cover screen, each a 48 dp touch) had 8 dp more between rows; the FlowRow's rows now touch (Arrangement.Top), the touch's own ~16 dp the only gap between the pills. Chips tagged `reflect-hint`.
+- ReviewBalanceReflectScreensTest: every shot fails on a trend bar wider than 18 dp or under 2 dp tall, and on any space added between suggestion rows.
+- No core change, no server change, no migration. core-verify (3309) passed; Gradle can't download here, so the Android tests ran on CI.
+
 ### Quality gate — slice 63 (2026-10-24): the bedside clock's shots and its hand tests
 
 - BedsideScreensTest (android test, Robolectric native graphics): the bedside clock on the inner screen standing half folded (w829dp landscape, a FoldState TABLETOP with the hinge across the middle), at 07:40 with the brief unread, 13:00 with what's next, 20:30 with tomorrow and the phone's alarm set (Robolectric's AlarmManager, Thu 06:30), 23:30 in quiet hours (dimmed), and nothing on at 13:00; Dark, plus Light for the day and the evening; and the charging screen saver (BedsideDream) on the cover screen (quiet, Light day) and the inner (evening). Saved under docs/screens/fold/bedside/.

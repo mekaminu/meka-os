@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -133,6 +135,10 @@ private fun BalanceLine(r: BalanceRow, modifier: Modifier) {
     }
 }
 
+internal val TREND_BAR_WIDTH = 18.dp
+internal val TREND_BAR_CORNER = 2.dp
+internal val TREND_BAR_MIN = 2.dp
+
 /**
  * Slice 2: the last four weeks as four small bars (oldest first), the met ones (work: over) in the accent, a hairline at
  * the target, each week's Monday under its bar. Bars rise one after another on appear and glide to a new week; reduced
@@ -159,9 +165,13 @@ private fun TrendBars(r: BalanceRow) {
                             .padding(bottom = barHeight * (r.trendTargetPct.coerceAtMost(95) / 100f)).height(1.dp)
                             .background(Meka.colors.textTertiary.copy(alpha = 0.5f)),
                     )
+                    // Quality gate slice 64: a slim 18 dp bar with 2 dp corners (as the Mac's); the 10 dp corners on a
+                    // half-lane-wide bar drew the short ones as domes. A week with any time keeps a 2 dp sliver.
+                    val shown = barHeight * rise.value.coerceIn(0f, 1f)
                     Box(
-                        Modifier.fillMaxWidth(0.5f).height(barHeight * rise.value.coerceIn(0f, 1f))
-                            .clip(RoundedCornerShape(topStart = MekaRadius.s, topEnd = MekaRadius.s)).background(color),
+                        Modifier.testTag("trend-bar").width(TREND_BAR_WIDTH)
+                            .height(if (w.pct > 0 && shown > 0.dp) maxOf(shown, TREND_BAR_MIN) else shown)
+                            .clip(RoundedCornerShape(topStart = TREND_BAR_CORNER, topEnd = TREND_BAR_CORNER)).background(color),
                     )
                 }
                 Text(if (w.current) "So far" else w.label, style = MekaType.caption, color = Meka.colors.textTertiary)

@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -241,10 +242,12 @@ private fun Prompt(label: String, value: String, onValue: (String) -> Unit, hint
             )
         }
         if (hints.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            // Quality gate slice 64: the suggestions' rows touch (each chip's 48 dp touch already leaves ~16 dp between
+            // the pills), so a long list no longer adds 8 dp more per line on the cover screen.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.Top) {
                 hints.forEach { h ->
                     val added = value.lines().any { os.meka.core.domain.WinRules.key(it) == os.meka.core.domain.WinRules.key(h.text) }
-                    ReflectChip((if (added) "✓ " else "+ ") + h.text, added) { if (!added) onHint(h) }
+                    ReflectChip((if (added) "✓ " else "+ ") + h.text, added, Modifier.testTag("reflect-hint")) { if (!added) onHint(h) }
                 }
             }
         }
@@ -324,11 +327,11 @@ private fun Journal(r: ReflectionView, removed: ReflectionEntry?, modifier: Modi
  * answering a 48 dp touch (quality gate slice 62; Lists' Chip is ~32 dp to tap); a long suggestion takes two lines.
  */
 @Composable
-private fun ReflectChip(label: String, lit: Boolean, onClick: () -> Unit) {
+private fun ReflectChip(label: String, lit: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "reflect-chip")
     Text(
         label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 2,
-        modifier = Modifier.semantics { selected = lit }.clip(RoundedCornerShape(MekaRadius.pill))
+        modifier = modifier.semantics { selected = lit }.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Button) { onClick() }.minTouch()
             .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
