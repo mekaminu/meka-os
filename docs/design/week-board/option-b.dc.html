@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Navilife Week board — planner cards with timeline</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=Instrument+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0b0a08;font-family:"Instrument Sans",system-ui,sans-serif;color:#ece5d4}
+a{color:#d8c08a}a:hover{color:#f0dba6}
+.day{display:flex;flex-direction:column;gap:10px;min-width:0}
+.hd{display:flex;flex-direction:column;gap:2px;padding-bottom:8px}
+.hd .d{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:22px;letter-spacing:-.01em;display:flex;justify-content:space-between;align-items:baseline}
+.hd .w{font-size:14px;color:#6f6858;font-weight:500}
+.budget{display:flex;justify-content:space-between;align-items:center;height:30px;padding:0 10px;border-radius:8px;background:#14120e;border:1px solid #2a251b;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:#9a907a;font-variant-numeric:tabular-nums}
+.budget b{font-weight:500;color:#ece5d4}
+.today .budget{border-color:#d8c08a}
+.today .hd .d{color:#d8c08a}
+.card{display:flex;flex-direction:column;gap:8px;padding:12px 12px 10px;border-radius:12px;background:#14120e;border:1px solid #2a251b}
+.card.done{opacity:.55}
+.card .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tm{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;padding:3px 7px;border-radius:6px;background:#2a2416;color:#d8c08a;font-variant-numeric:tabular-nums}
+.tm.ev{background:#1c2a3a;color:#9cc2ee}
+.dur{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:#6f6858;font-variant-numeric:tabular-nums}
+.ttl{font-size:15px;line-height:1.3}
+.card.done .ttl{text-decoration:line-through;text-decoration-color:#3a3328}
+.foot{display:flex;align-items:center;gap:10px}
+.ck{width:18px;height:18px;border-radius:50%;border:1.5px solid #6f6858;display:inline-flex;align-items:center;justify-content:center}
+.ck.on{background:#82c391;border-color:#82c391}
+.ch{font-size:12px;color:#9a907a;display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+.dot{width:8px;height:8px;border-radius:50%}
+.fam{background:#e3a463}.work{background:#7fa7d6}.hustle{background:#d8c08a}.money{background:#82c391}.home{background:#c9a0dc}
+.add{height:34px;border-radius:10px;border:1px dashed #2a251b;color:#6f6858;display:flex;align-items:center;justify-content:center;font-size:13px;background:transparent;cursor:pointer}
+.btn{height:40px;min-width:40px;border-radius:999px;border:1px solid #2a251b;background:#14120e;color:#ece5d4;display:inline-flex;align-items:center;justify-content:center;padding:0 14px;font:500 14px "Instrument Sans",system-ui,sans-serif;cursor:pointer}
+.btn:hover{border-color:#d8c08a}
+.orb{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f3e2b4 0%,#d8c08a 35%,#876a28 75%,#3b2d10 100%);box-shadow:0 0 18px rgba(216,192,138,.45)}
+.tl{position:relative;display:grid;grid-template-columns:44px 1fr;row-gap:0}
+.hr{height:44px;border-top:1px solid #1e1a13;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:#6f6858;padding-top:4px}
+.slot{height:44px;border-top:1px solid #1e1a13;position:relative}
+.blk{position:absolute;left:0;right:0;border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.b1{background:#1c2a3a;color:#cfe3fa;border-left:3px solid #7fa7d6}
+.b2{background:#2a2416;color:#f1e3bf;border-left:3px solid #d8c08a}
+.b3{background:#2d1f10;color:#f3d6b4;border-left:3px solid #e3a463}
+@media (max-width:1100px){.cols{grid-template-columns:1fr !important}.timeline{display:none !important}.grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
+</style>
+</helmet>
+<div style="box-sizing:border-box;max-width:1440px;margin:0 auto;padding:36px 40px 56px;display:flex;flex-direction:column;gap:30px;min-height:1040px">
+
+  <header style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:baseline;gap:14px">
+      <h1 style="margin:0;font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:44px;letter-spacing:-.02em;line-height:1">October 2026</h1>
+      <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:18px;color:#3f3929;font-weight:500">W44</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:999px;background:#14120e;border:1px solid #2a251b">
+        <span class="orb" aria-hidden="true"></span>
+        <span style="font-size:14px;font-weight:500">Obi</span>
+        <span style="font-size:13px;color:#9a907a">Mon is 1h over — move something?</span>
+      </div>
+      <button class="btn" type="button">Today</button>
+      <button class="btn" type="button" aria-label="Previous week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <button class="btn" type="button" aria-label="Next week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+    </div>
+  </header>
+
+  <div class="cols" style="display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:32px;align-items:start">
+
+    <section class="grid" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px">
+
+      <div class="day today">
+        <div class="hd"><span class="d">27 Oct <span class="w">Mon</span></span></div>
+        <div class="budget"><span>planned</span><span><b>4h 05</b> / 3h</span></div>
+        <div class="card"><div class="top"><span class="tm ev">09:30</span><span class="dur">0:30</span></div><div class="ttl">Team stand-up</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Work</span></div></div>
+        <div class="card done"><div class="top"><span class="tm">08:10</span><span class="dur">0:10</span></div><div class="ttl">Season ticket renewal</div><div class="foot"><span class="ck on" aria-hidden="true"></span><span class="ch"><span class="dot home" aria-hidden="true"></span>House</span></div></div>
+        <div class="card"><div class="top"><span class="tm">12:30</span><span class="dur">0:45</span></div><div class="ttl">Send the client a quote</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot hustle" aria-hidden="true"></span>Side hustle</span></div></div>
+        <div class="card"><div class="top"><span class="tm">18:40</span><span class="dur">0:10</span></div><div class="ttl">Move £ to savings pot</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot money" aria-hidden="true"></span>Money</span></div></div>
+        <div class="card"><div class="top"><span class="tm">20:00</span><span class="dur">2:30</span></div><div class="ttl">Navilife build review</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Build</span></div></div>
+        <button class="add" type="button">+ add</button>
+      </div>
+
+      <div class="day">
+        <div class="hd"><span class="d">28 Oct <span class="w">Tue</span></span></div>
+        <div class="budget"><span>planned</span><span><b>1h 20</b> / 3h</span></div>
+        <div class="card"><div class="top"><span class="tm ev">10:00</span><span class="dur">1:00</span></div><div class="ttl">Tiger-team review</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Work</span></div></div>
+        <div class="card"><div class="top"><span class="tm">—</span><span class="dur">0:00</span></div><div class="ttl">Book MOT — Obi can ring</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot home" aria-hidden="true"></span>House</span></div></div>
+        <div class="card"><div class="top"><span class="tm">18:30</span><span class="dur">0:20</span></div><div class="ttl">Clear personal inbox</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Admin</span></div></div>
+        <button class="add" type="button">+ add</button>
+      </div>
+
+      <div class="day">
+        <div class="hd"><span class="d">29 Oct <span class="w">Wed</span></span></div>
+        <div class="budget"><span>planned</span><span><b>1h 15</b> / 3h</span></div>
+        <div class="card"><div class="top"><span class="tm">07:45</span><span class="dur">0:15</span></div><div class="ttl">Reading book back to school</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot fam" aria-hidden="true"></span>Family</span></div></div>
+        <div class="card"><div class="top"><span class="tm">13:00</span><span class="dur">1:00</span></div><div class="ttl">Draft op-model one-pager</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Work</span></div></div>
+        <button class="add" type="button">+ add</button>
+      </div>
+
+      <div class="day">
+        <div class="hd"><span class="d">30 Oct <span class="w">Thu</span></span></div>
+        <div class="budget"><span>planned</span><span><b>0h 45</b> / 3h</span></div>
+        <div class="card"><div class="top"><span class="tm ev">15:30</span><span class="dur">—</span></div><div class="ttl">Leave early — the early train</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Commute</span></div></div>
+        <div class="card"><div class="top"><span class="tm">19:30</span><span class="dur">0:45</span></div><div class="ttl">Half-term plan together</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot fam" aria-hidden="true"></span>Family</span></div></div>
+        <button class="add" type="button">+ add</button>
+      </div>
+
+      <div class="day">
+        <div class="hd"><span class="d">31 Oct <span class="w">Fri</span></span></div>
+        <div class="budget"><span>planned</span><span><b>1h 30</b> / 3h</span></div>
+        <div class="card"><div class="top"><span class="tm">09:00</span><span class="dur">0:30</span></div><div class="ttl">Invoice #0142 — chase</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot hustle" aria-hidden="true"></span>Side hustle</span></div></div>
+        <div class="card"><div class="top"><span class="tm">20:00</span><span class="dur">1:00</span></div><div class="ttl">Navilife 31 Oct check</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot work" aria-hidden="true"></span>Build</span></div></div>
+        <button class="add" type="button">+ add</button>
+      </div>
+    </section>
+
+    <aside class="timeline" style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:20px">Today</span>
+        <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#6f6858">Mon 27 Oct</span>
+      </div>
+      <div class="tl">
+        <div class="hr">07</div><div class="slot"></div>
+        <div class="hr">08</div><div class="slot"><div class="blk b2" style="top:6px;height:30px">Season ticket renewal</div></div>
+        <div class="hr">09</div><div class="slot"><div class="blk b1" style="top:22px;height:40px">Team stand-up</div></div>
+        <div class="hr">10</div><div class="slot"></div>
+        <div class="hr">11</div><div class="slot"></div>
+        <div class="hr">12</div><div class="slot"><div class="blk b2" style="top:22px;height:34px">Send the client a quote</div></div>
+        <div class="hr">13</div><div class="slot"></div>
+        <div class="hr">14</div><div class="slot"></div>
+        <div class="hr">15</div><div class="slot"></div>
+        <div class="hr">16</div><div class="slot"></div>
+        <div class="hr">17</div><div class="slot"><div class="blk b3" style="top:8px;height:60px">Train home</div></div>
+        <div class="hr">18</div><div class="slot"><div class="blk b2" style="top:28px;height:16px;padding:1px 10px">Savings pot</div></div>
+        <div class="hr">19</div><div class="slot"></div>
+        <div class="hr">20</div><div class="slot"><div class="blk b1" style="top:0;height:100px">Navilife build review</div></div>
+        <div class="hr">21</div><div class="slot"></div>
+        <div class="hr">22</div><div class="slot"></div>
+      </div>
+    </aside>
+  </div>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding-top:4px;border-top:1px solid #2a251b">
+    <div class="day"><div class="hd"><span class="d" style="font-size:20px">Someday</span></div>
+      <div class="card"><div class="ttl">Garden office quotes</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot home" aria-hidden="true"></span>House</span></div></div>
+    </div>
+    <div class="day"><div class="hd"><span class="d" style="font-size:20px">Side hustle</span></div>
+      <div class="card"><div class="ttl">Update rate card</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot hustle" aria-hidden="true"></span>Side hustle</span></div></div>
+    </div>
+    <div class="day"><div class="hd"><span class="d" style="font-size:20px">House</span></div>
+      <div class="card"><div class="ttl">Boiler service before December</div><div class="foot"><span class="ck" aria-hidden="true"></span><span class="ch"><span class="dot home" aria-hidden="true"></span>House</span></div></div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
