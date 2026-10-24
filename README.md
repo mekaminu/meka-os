@@ -71,6 +71,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/board/inner-dark-empty.png](docs/screens/fold/board/inner-dark-empty.png)
 - [fold/board/inner-dark-lists.png](docs/screens/fold/board/inner-dark-lists.png)
 - [fold/board/inner-dark-many.png](docs/screens/fold/board/inner-dark-many.png)
+- [fold/board/inner-dark-match-gaps.png](docs/screens/fold/board/inner-dark-match-gaps.png)
 - [fold/board/inner-dark-nudge.png](docs/screens/fold/board/inner-dark-nudge.png)
 - [fold/board/inner-dark-one.png](docs/screens/fold/board/inner-dark-one.png)
 - [fold/board/inner-dark-option-b.png](docs/screens/fold/board/inner-dark-option-b.png)
