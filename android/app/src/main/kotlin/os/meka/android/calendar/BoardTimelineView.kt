@@ -130,7 +130,7 @@ internal fun DayTimelineView(
                 timeline.emptyLine?.let {
                     Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
-                Hours(timeline, onEvent, Modifier.fillMaxWidth().weight(1f), reduced)
+                Hours(timeline, onEvent, Modifier.fillMaxWidth().weight(1f), reduced, areaOf)
             }
         }
     }
@@ -139,7 +139,13 @@ internal fun DayTimelineView(
 private val LABEL_W = 36.dp
 
 @Composable
-private fun Hours(timeline: BoardTimeline, onEvent: (CalendarEvent) -> Unit, modifier: Modifier, reduced: Boolean) {
+private fun Hours(
+    timeline: BoardTimeline,
+    onEvent: (CalendarEvent) -> Unit,
+    modifier: Modifier,
+    reduced: Boolean,
+    areaOf: (DayBlock) -> os.meka.core.domain.BoardArea? = { null },
+) {
     val scroll = rememberScrollState()
     val density = LocalDensity.current
     val hourPx = with(density) { BoardTimelineRules.HOUR_DP.dp.toPx() }
