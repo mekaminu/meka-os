@@ -3202,6 +3202,13 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 63 (2026-10-24): the bedside clock's shots and its hand tests
+
+- BedsideScreensTest (android test, Robolectric native graphics): the bedside clock on the inner screen standing half folded (w829dp landscape, a FoldState TABLETOP with the hinge across the middle), at 07:40 with the brief unread, 13:00 with what's next, 20:30 with tomorrow and the phone's alarm set (Robolectric's AlarmManager, Thu 06:30), 23:30 in quiet hours (dimmed), and nothing on at 13:00; Dark, plus Light for the day and the evening; and the charging screen saver (BedsideDream) on the cover screen (quiet, Light day) and the inner (evening). Saved under docs/screens/fold/bedside/.
+- Each shot is read for nonsense, cut lines, broken words, split dates, times and numbers, a word left alone and a dot starting a line; the clock's time, date, alarm line, heading and lines must show, the alarm and date on one line, ‹ Back a 48 dp touch, the watch face beside the time; the screen saver tells the screen to dim exactly in quiet hours and has nothing to tap.
+- By hand: ‹ Back leaves the clock; the morning's section opens the brief ("Good morning"); the evening's opens Shut down the day; the watch face springs up the whole day and ‹ Clock drops it away.
+- Test only: no app change, no core change, no server change, no migration.
+
 ### Quality gate — slice 62 (2026-10-24): Review's Balance and Reflect shots and their hand tests
 
 - ReviewBalanceReflectScreensTest (8, Robolectric + Roborazzi) draws the review's Balance section and Reflect card
