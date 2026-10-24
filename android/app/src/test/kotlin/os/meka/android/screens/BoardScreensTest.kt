@@ -458,7 +458,10 @@ class BoardScreensTest {
         val labels = compose.onAllNodesWithTag(AREA_LABEL_TAG, useUnmergedTree = true).fetchSemanticsNodes()
         val house = labels.firstOrNull { it.boundsInRoot.top >= card.top && it.boundsInRoot.bottom <= card.bottom }
             ?: throw AssertionError("no area name on today's card")
-        assertEquals("House", house.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text })
+        // The words are silent on screen (the card's own label says the area), so check the card's label carries it.
+        val said = compose.onAllNodesWithContentDescription("Fix the gate latch", substring = true).fetchSemanticsNodes()
+            .flatMap { it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+        assertTrue("the card's label says house ($said)", said.any { it.contains("house", ignoreCase = true) })
         assertTrue("the area name has its width", house.boundsInRoot.width > 0f)
         if (compose.onAllNodesWithText("planned", useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no \"planned\" in the pills")
         // The narrow weekday lanes stack "planned" over the figures (the value's own tag only exists in that layout).

@@ -116,6 +116,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1447,7 +1448,8 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                             Spacer(Modifier.width(MekaSpace.xxs))
                             Text(
                                 words, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.clearAndSetSemantics {}.testTag(AREA_LABEL_TAG),
+                                // Silent (the card's label says it); only the tag, for the UI tests.
+                                modifier = Modifier.clearAndSetSemantics { testTag = AREA_LABEL_TAG },
                             )
                         }
                     }
