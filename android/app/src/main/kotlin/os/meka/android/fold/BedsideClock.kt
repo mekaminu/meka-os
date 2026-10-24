@@ -92,6 +92,7 @@ import os.meka.core.domain.WatchFace
 import os.meka.core.domain.WatchFaceRules
 import os.meka.core.domain.FoldMode
 import os.meka.core.domain.FoldModeRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NewsTicker
 import os.meka.core.domain.TickerMode
 import os.meka.core.domain.TickerRules
@@ -242,7 +243,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
             modifier = Modifier.align(Alignment.TopStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .padding(MekaSpace.m).alpha(if (v.dim) 0.5f else 1f)
-                .minTouch().clickable(role = Role.Button, onClickLabel = "Leave the bedside clock") { onBack() },
+                // The click before minTouch, so the whole 48 dp answers (quality gate slice 63: it was 17 dp).
+                .clickable(role = Role.Button, onClickLabel = "Leave the bedside clock") { onBack() }.minTouch(),
         )
         MekaPane(visible = open == BedsideOpens.BRIEF) { BriefPane(core, onClose = { open = null }) }
         MekaPane(visible = open == BedsideOpens.SHUTDOWN) { ShutdownPane(core, onClose = { open = null }) }
@@ -353,7 +355,7 @@ private fun DayHalf(
     )
     Column(modifier.padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
         Row(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
-            Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.weight(1f))
+            Text(LoneWordGlue.kept(v.alarmLine), style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.weight(1f))
             // "Hello, Navilife" slice 2: the Hello orb where the mic was; a tap greets him, then listens.
             os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim, onPlaced = onOrbPlaced, speaking = speaking)
         }
@@ -374,7 +376,7 @@ private fun DayHalf(
             ) { lines ->
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     lines.forEachIndexed { i, line ->
-                        Text(line, style = if (i == 0) MekaType.body else MekaType.itemMeta, color = if (i == 0) text else Meka.colors.textTertiary)
+                        Text(LoneWordGlue.kept(line), style = if (i == 0) MekaType.body else MekaType.itemMeta, color = if (i == 0) text else Meka.colors.textTertiary)
                     }
                 }
             }
@@ -536,7 +538,7 @@ fun BedsideDream(core: MekaCore, onDim: (Boolean) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
             ) {
-                Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor)
+                Text(LoneWordGlue.kept(v.alarmLine), style = MekaType.itemMeta, color = alarmColor)
                 Spacer(Modifier.height(MekaSpace.xs))
                 Text(v.heading.uppercase(), style = MekaType.sectionLabel, color = secondary)
                 AnimatedContent(
@@ -547,7 +549,7 @@ fun BedsideDream(core: MekaCore, onDim: (Boolean) -> Unit) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         lines.forEachIndexed { i, line ->
                             Text(
-                                line, style = if (i == 0) MekaType.body else MekaType.itemMeta,
+                                LoneWordGlue.kept(line), style = if (i == 0) MekaType.body else MekaType.itemMeta,
                                 color = if (i == 0) primary else Meka.colors.textTertiary, textAlign = TextAlign.Center,
                             )
                         }

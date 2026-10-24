@@ -47,6 +47,7 @@ import os.meka.core.domain.EventFields
 import os.meka.core.domain.FoldModeRules
 import os.meka.core.domain.FoldPosture
 import os.meka.core.domain.HeadlineFields
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.WatchFaceRules
 import os.meka.core.facade.MekaCore
@@ -237,10 +238,11 @@ class BedsideScreensTest {
         // The time is drawn digit by digit (each rolls on its own); its words are the clock's description.
         ScreenShots.assertShows(compose, name, v.time)
         ScreenShots.assertShows(compose, name, v.dateLabel)
-        ScreenShots.assertShows(compose, name, v.alarmLine)
+        // The lines are drawn with their last words, dots and times kept together (LoneWordGlue).
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.alarmLine))
         ScreenShots.assertShows(compose, name, v.heading.uppercase())
-        v.lines.forEach { ScreenShots.assertShows(compose, name, it) }
-        ScreenShots.assertEachOneLine(compose, name, listOf(v.alarmLine, v.dateLabel))
+        v.lines.forEach { ScreenShots.assertShows(compose, name, LoneWordGlue.kept(it)) }
+        ScreenShots.assertEachOneLine(compose, name, listOf(LoneWordGlue.kept(v.alarmLine), v.dateLabel))
         // ‹ Back is a real button: 48 dp to tap.
         compose.onAllNodes(hasText("‹ Back") and hasClickAction()).fetchSemanticsNodes().firstOrNull()?.let { back ->
             val touchDp = back.boundsInRoot.height / compose.density.density
@@ -294,8 +296,8 @@ class BedsideScreensTest {
         val v = core.bedsideDream(if (scene.alarm) at(6, 30, day = 22) else null)
         readAll(name, v.lines + v.alarmLine + v.heading)
         ScreenShots.assertShows(compose, name, v.dateLabel)
-        ScreenShots.assertShows(compose, name, v.alarmLine)
-        ScreenShots.assertEachOneLine(compose, name, listOf(v.alarmLine, v.dateLabel))
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.alarmLine))
+        ScreenShots.assertEachOneLine(compose, name, listOf(LoneWordGlue.kept(v.alarmLine), v.dateLabel))
         if (dimmed != v.dim) fail("$name: the screen saver told the screen dim = $dimmed, but quiet hours say ${v.dim}")
         // Nothing to press on the screen saver: a touch ends it.
         if (compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().isNotEmpty()) fail("$name: the screen saver has something to tap")
