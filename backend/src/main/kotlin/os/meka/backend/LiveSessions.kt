@@ -432,7 +432,9 @@ class GeminiLiveTokens(
             (el as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.let { p ->
                 return keyShaped(p.content)?.let { GeminiSecret(it, LiveDiagnosisRules.KeyState.READY) } ?: GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
             }
-            val o = el as? kotlinx.serialization.json.JsonObject ?: return GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
+            // kotlinx reads a bare word as an unquoted literal rather than failing: a pasted key, checked as text.
+            val o = el as? kotlinx.serialization.json.JsonObject
+                ?: return keyShaped(text)?.let { GeminiSecret(it, LiveDiagnosisRules.KeyState.READY) } ?: GeminiSecret(null, LiveDiagnosisRules.KeyState.BAD_SECRET)
             fun field(name: String) = (o[name] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
             val values = o.values.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim() }
             if (values.all { it.isEmpty() }) return GeminiSecret(null, LiveDiagnosisRules.KeyState.NO_KEY)
