@@ -2275,10 +2275,12 @@ private fun BoardList(
         ) {
             Text(
                 head.name, style = BoardType.date, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false).testTag(LIST_TITLE_TAG),
+                modifier = Modifier.weight(1f).testTag(LIST_TITLE_TAG),
             )
-            Spacer(Modifier.weight(1f))
-            head.count?.let { Text(it, style = BoardType.mono, color = Meka.colors.textTertiary, maxLines = 1) }
+            head.count?.let {
+                Spacer(Modifier.width(MekaSpace.xs))
+                Text(it, style = BoardType.mono, color = Meka.colors.textTertiary, maxLines = 1)
+            }
         }
         if (column.count == 0) {
             Text(if (lit) WeekBoardRules.DROP_HERE else column.empty, style = MekaType.caption, color = if (lit) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 2)

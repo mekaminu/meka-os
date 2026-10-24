@@ -402,7 +402,7 @@ class BoardScreensTest {
         val core = core()
         runBlocking {
             core.tick()
-            val id = core.addOnBoardSized("Garden office quotes", core.weekBoard.value.todayEpochDay, null)!!
+            val id = core.addOnBoardSized("Learn to juggle", core.weekBoard.value.todayEpochDay, null)!!
             core.somedayOnBoard(id)
         }
         show(core)
@@ -415,7 +415,7 @@ class BoardScreensTest {
         assertEquals(listOf("Someday", "Side hustle", "House", "No day yet"), names)
         val rule = compose.onAllNodesWithTag(LISTS_RULE_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
             ?: throw AssertionError("no hairline above the lists")
-        val card = cardBounds("Garden office quotes")
+        val card = cardBounds("Learn to juggle")
         assertTrue("the Someday card sits under the hairline ($card vs $rule)", card.top >= rule.bottom)
         val anyTime = compose.onAllNodesWithText(os.meka.core.domain.BoardMatchRules.ANY_TIME, useUnmergedTree = true).fetchSemanticsNodes()
         assertTrue("a list card wears no \"Any time\" chip", anyTime.none { it.boundsInRoot.top >= rule.bottom })
