@@ -44,13 +44,15 @@ import os.meka.android.shell.MoreItem
 import os.meka.core.domain.AiFallbackLine
 import os.meka.core.domain.AiSpendLine
 import os.meka.core.domain.AiStatusView
+import os.meka.core.domain.LoneWordGlue
 
 /**
  * Settings → Navilife's AI (AI layer completeness slice 2): the status line as before ("On · $2.05 of $20 this month",
  * or "Key refused by Anthropic · …" in the accent), and once the server has metered something this month a tap unfolds
  * "This month by feature" with a row per kind of use ("Talk · 40 calls · $1.20") and a thin accent bar for its share.
  * The rows stagger in under the heading and each bar grows from the left; the chevron turns. Reduced motion: the rows
- * appear at once and the bars are drawn full. While the AI can't answer (slice 3) a list under the line says what each
+ * appear at once and the bars are drawn full. Its grey lines keep their last words and dots together ([LoneWordGlue],
+ * quality gate slice 60). While the AI can't answer (slice 3) a list under the line says what each
  * AI feature does instead ("While it's off · Morning brief · read from your day as it is…"), fading in.
  */
 @Composable
@@ -82,7 +84,7 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
                     targetState = line,
                     transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                     label = "ai-row-line",
-                ) { l -> Text(l, style = MekaType.caption, color = lineColor, maxLines = 3) }
+                ) { l -> Text(LoneWordGlue.kept(l), style = MekaType.caption, color = lineColor, maxLines = 3) }
             }
             if (canOpen) {
                 val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.appear(reduced), label = "ai-chevron")
@@ -97,7 +99,7 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
                 Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                ai?.fallbackHeading?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                ai?.fallbackHeading?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
                 fallbacks.forEach { f -> FallbackLine(f) }
             }
         }
@@ -106,7 +108,7 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
                 Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                ai.spendHeading?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                ai.spendHeading?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
                 ai.spend.forEachIndexed { i, s -> SpendLine(s, i, reduced) }
             }
         }
@@ -117,7 +119,7 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
 private fun FallbackLine(f: AiFallbackLine) {
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
         Text(f.label, style = MekaType.caption, color = Meka.colors.textPrimary)
-        Text(f.detail, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(LoneWordGlue.kept(f.detail), style = MekaType.caption, color = Meka.colors.textSecondary)
     }
 }
 

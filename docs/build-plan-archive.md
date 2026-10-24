@@ -3202,6 +3202,22 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 60 (2026-10-24): Navilife's AI's shots and its first hand test
+
+- AiScreensTest (7, Robolectric + Roborazzi) draws Ask → Settings → Navilife's AI (AiSpendRow) from invented statuses:
+  not connected (the row and "Until this device is connected" with what each of the eight AI features does instead),
+  on at "$2.05 of $20 this month" with the month by feature unfolded (Talk, Mail), and Anthropic refusing the key (the
+  long lit line, "Until it answers again" with the eight fallbacks, seven spend rows unfolded, Voice in clips), on the
+  cover and inner sizes, Dark and Light, under docs/screens/fold/ai/; read for nonsense, cut lines, broken words, split
+  numbers, a grey line leaving a word alone or starting with a dot, and each spend row's label and cost and each
+  fallback's name on one line.
+- By hand: a tap on the row unfolds "This month by feature" and TalkBack hears "expanded"; a second tap folds it; a row
+  with nothing metered is not a button.
+- Fixed first (both apps): the row's line, the fallbacks' heading, each fallback's line and the spend heading keep their
+  last words and dots together (LoneWordGlue), so the refused key's "…into Secrets Manager" or a fallback's last word
+  never sits alone.
+- Design check: no design file covers Navilife's AI. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 59 (2026-10-24): Obi's voice's shots and its first hand tests
 
 - VoiceScreensTest (8, Robolectric + Roborazzi) draws Ask → Settings → Obi's voice from invented views: not connected
@@ -3227,6 +3243,7 @@ docs/screens/fold/shutdown/.
   words in every state.
 - Design check: no design file covers Obi's voice. No server change, no wire change, no migration, Mac checked nightly.
 - 6af88aa, CI run 1177 (40063741529) green first try; shots published 8b5345e.
+
 
 ### Quality gate — slice 58 (2026-10-23): Setup's shots and its first hand test
 

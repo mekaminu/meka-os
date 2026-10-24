@@ -237,7 +237,7 @@ private struct AiSpendRow: View {
                 HStack {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(MoreItem.ai.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                        Text(ai?.line ?? "Checking…")
+                        Text(LoneWordGlue.shared.kept(line: ai?.line ?? "Checking…"))
                             .font(MekaType.caption)
                             .foregroundStyle(ai?.lit == true ? palette.accent : palette.textSecondary)
                             .contentTransition(.opacity)
@@ -258,12 +258,12 @@ private struct AiSpendRow: View {
             if let fallbacks = ai?.fallbacks, !fallbacks.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if let heading = ai?.fallbackHeading {
-                        Text(heading).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: heading)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     }
                     ForEach(Array(fallbacks.enumerated()), id: \.offset) { _, f in
                         VStack(alignment: .leading, spacing: 0) {
                             Text(f.label).font(MekaType.caption).foregroundStyle(palette.textPrimary)
-                            Text(f.detail).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            Text(LoneWordGlue.shared.kept(line: f.detail)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .accessibilityElement(children: .combine)
@@ -274,7 +274,7 @@ private struct AiSpendRow: View {
             if open && !lines.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if let heading = ai?.spendHeading {
-                        Text(heading).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: heading)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     }
                     ForEach(Array(lines.enumerated()), id: \.offset) { i, s in
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
