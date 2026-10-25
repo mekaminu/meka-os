@@ -12148,18 +12148,26 @@ class MekaCore(
         _emergency.value = emergency.view()
         _aboutYou.value = aboutYou.view(cal)
         rewarmHelloIfRenamed(_aboutYou.value.callName)
-        val kidsChildren = aboutYou.profile().children
-        val kidRecords = kids.records()
-        // Kids' admin, slice 5: each child's chores and pocket money this week.
-        val kidMoney = kidsChildren.mapNotNull { c ->
-            os.meka.core.domain.KidsRules.idFor(c.name)?.let { id -> id to kidChores.money(id, kidRecords[id], todayDay) }
-        }.toMap()
-        _kids.value = os.meka.core.domain.KidsRules.view(kidsChildren, kidRecords, todayDay, cal, listsNow.renewals.all, kidMoney).let { v ->
-            // Kids' admin, slice 3: what they need in the next 7 days, from School, club sessions and their fees.
-            if (kidsChildren.isEmpty()) v else v.copy(week = os.meka.core.domain.KidsWeekRules.week(
-                kidsChildren, schoolItems, dayEvents, marks.clubChildren, listsNow.renewals.all, nowMs(), cal, holidays,
-            ))
-        }
+        // Taps feel instant, slice 11: Kids (sizes, fees, chores, the week ahead) is kept while what's handed in, the
+        // minute and every record type it reads (About you's children, the kids' records, chores) are unchanged.
+        val kidsRenewals = listsNow.renewals.all
+        val kidsClubs = marks.clubChildren
+        _kids.value = timed("Kids") { viewMemo.keepReading(
+            "Kids", replica, listOf(kidsRenewals, schoolItems, dayEvents, kidsClubs, holidays, minuteNow(), timeZone()),
+        ) {
+            val kidsChildren = aboutYou.profile().children
+            val kidRecords = kids.records()
+            // Kids' admin, slice 5: each child's chores and pocket money this week.
+            val kidMoney = kidsChildren.mapNotNull { c ->
+                os.meka.core.domain.KidsRules.idFor(c.name)?.let { id -> id to kidChores.money(id, kidRecords[id], todayDay) }
+            }.toMap()
+            os.meka.core.domain.KidsRules.view(kidsChildren, kidRecords, todayDay, cal, kidsRenewals, kidMoney).let { v ->
+                // Kids' admin, slice 3: what they need in the next 7 days, from School, club sessions and their fees.
+                if (kidsChildren.isEmpty()) v else v.copy(week = os.meka.core.domain.KidsWeekRules.week(
+                    kidsChildren, schoolItems, dayEvents, kidsClubs, kidsRenewals, nowMs(), cal, holidays,
+                ))
+            }
+        } }
         _facts.value = lifeFacts.view()
         if (moneyOpen) timed("Money view") { refreshMoney() }
         _queue.value = trainQueue.view()
@@ -12404,31 +12412,52 @@ class MekaCore(
         _documents.value = os.meka.core.domain.DocumentRules.view(docItems, todayDay, cal, vaultName())
         vaultKeyNow()
         val heldNow = _afterWork.value
-        _people.value = os.meka.core.domain.PeopleRules.view(
-            listsNow.promised, listsNow.waiting, occasionItems,
-            triageCards.contacts() + os.meka.core.domain.PeopleRules.heldContacts(heldNow), todayDay, nowMs(), cal,
-            listedPeople,
-        )
+        // Slice 11: People is kept while the promises, waiting, occasions, held messages, the minute and every record
+        // type it reads (the chats' contacts) are unchanged; a new email or a task tick no longer rebuilds it.
+        val peopleListed = listedPeople
+        _people.value = timed("People") { viewMemo.keepReading(
+            "People", replica,
+            listOf(listsNow.promised, listsNow.waiting, occasionItems, heldNow, peopleListed, minuteNow(), timeZone()),
+        ) {
+            os.meka.core.domain.PeopleRules.view(
+                listsNow.promised, listsNow.waiting, occasionItems,
+                triageCards.contacts() + os.meka.core.domain.PeopleRules.heldContacts(heldNow), todayDay, nowMs(), cal,
+                peopleListed,
+            )
+        } }
         _cars.value = os.meka.core.domain.CarRules.views(car.cars(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _car.value = _cars.value.first
         _parkingTimers.value = os.meka.core.domain.ParkingTimerRules.view(parkingTimers.all(), _cars.value, nowMs(), cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
-        _lifeLines.value = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileRules.inputs(
-            todayDay, _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
+        // Slice 11: the Life grid's lines are kept while the views they're read from, Money's accounts and cards (Money
+        // keeps its own copy, so they're handed in), the minute and every record type read here are unchanged.
+        val lifeViews = listOf(
+            _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
             _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
-            _people.value,
-        ).copy(
-            // Kids' admin, slice 1: a due size check (lit), else the first child's shoe size.
-            kidsLine = _kids.value.tile,
-            // Money manager, slice 1: the accounts and the last import, never an amount.
-            moneyLine = os.meka.core.domain.MoneyRules.tile(money.accounts(), ZoneCalendar(timeZone), money.cards(), todayDay),
-            // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
-            // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
-            // Two cars (2026-10-14): each car on its own line, its timer or next date.
-            carLine = os.meka.core.domain.ParkingRules.carsLine(_cars.value, _parkingTimers.value, emptyList(), nowMs())
-                ?: _parkingTimers.value.tile ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
-        ))
+            _people.value, _kids.value, _cars.value, _parkingTimers.value,
+        )
+        val lifeAccounts = money.accounts()
+        val lifeCards = money.cards()
+        _lifeLines.value = timed("Life grid") { viewMemo.keepReading(
+            "Life grid", replica, listOf(lifeViews, lifeAccounts, lifeCards, listsNow.renewals.all, minuteNow(), timeZone()),
+        ) {
+            os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileRules.inputs(
+                todayDay, _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
+                _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
+                _people.value,
+            ).copy(
+                // Kids' admin, slice 1: a due size check (lit), else the first child's shoe size.
+                kidsLine = _kids.value.tile,
+                // Money manager, slice 1: the accounts and the last import, never an amount.
+                moneyLine = os.meka.core.domain.MoneyRules.tile(lifeAccounts, ZoneCalendar(timeZone), lifeCards, todayDay),
+                // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
+                // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
+                // Two cars (2026-10-14): each car on its own line, its timer or next date.
+                carLine = os.meka.core.domain.ParkingRules.carsLine(_cars.value, _parkingTimers.value, emptyList(), nowMs())
+                    ?: _parkingTimers.value.tile ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
+            ))
+        } }
         // Ask polish, item 3: Daily's rows say what they hold now ("Tomorrow 06:40 · 5 things", "2 left", "2 saved").
         val fixtureNow = os.meka.core.domain.DailyRules.fixture(dayEvents, nowMs(), cal)
         val briefNow = _brief.value
@@ -12465,7 +12494,18 @@ class MekaCore(
         _heldCalls.value = held.calls().map { if (it.item.id in recordingDeleting) it.copy(recordingDeleted = true) else it }
         _callLog.value = os.meka.core.domain.CallLogRules.view(_heldCalls.value, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone))
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
-        _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
+        // Slice 11: the notices' preview (every notice worked out from every view, the emails included) is kept while
+        // the views and in-memory values it's worked out from, Money's (its own copy, handed in), the minute and every
+        // record type it reads are unchanged.
+        val noticeInputs = listOf(
+            all, _lists.value, _fasting.value, _shutdown.value, _today.value, _brief.value, _review.value.card, _eventMarks.value,
+            _sessions.value, _school.value.covers, _goals.value, _weekAhead.value, _lifeAdmin.value, _cars.value, _wake.value,
+            _workMode.value, _board.value, balanceNudge, workoutsInBackground, keptMailWaiting(),
+            moneyLookItems(), moneyMonthReady(), moneyYearReady(), money.cards(), notifySettings, minuteNow(), timeZone(),
+        )
+        _notifyPreview.value = timed("Notices") { viewMemo.keepReading("Notices", replica, noticeInputs) {
+            Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
+        } }
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
                 taskId = c.key.entityId,
