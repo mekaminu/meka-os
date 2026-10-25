@@ -283,6 +283,10 @@ final class CoreModel {
     private(set) var calendar: CalendarView?
     /// Calendar's Board view (Week board, slice 2): a column per day for five weeks, each day's tasks in his order.
     private(set) var board: WeekBoard?
+    /// Taps feel instant, slice 13: the core's own board, and the Board taps waiting for it (card id → tap), drawn over
+    /// it in the same frame ([InstantBoardRules]); a tap is forgotten when its call returns.
+    @ObservationIgnored private var coreBoard: WeekBoard?
+    @ObservationIgnored private var boardTaps: [String: BoardTap] = [:]
     /// Which view the Calendar section shows: the agenda (false) or the Board; kept while the app runs.
     var calendarShowsBoard = false
     /// Plan your week's sheet (Week board item (6)): from the Board's header, Sunday's Needs you card or "plan my week".
@@ -708,7 +712,7 @@ final class CoreModel {
             for await c in core.calendarView { self?.calendar = c }
         })
         observers.append(Task { [weak self] in
-            for await b in core.weekBoard { self?.board = b }
+            for await b in core.weekBoard { self?.coreBoard = b; self?.showBoard() }
         })
         observers.append(Task { [weak self] in
             for await m in core.eventMarks { self?.eventMarks = m }
@@ -3401,11 +3405,36 @@ final class CoreModel {
     func moveOnBoard(_ id: String, day: Int64, index: Int) {
         guard let core else { return }
         let place = Int32(clamping: index)
+        tapBoard(InstantBoardRules.shared.toDay(taps: boardTaps, id: id, day: day, index: place))
         Task {
-            guard let line = try? await core.moveOnBoard(taskId: id, day: day, toIndex: place) else { return }
-            MekaHaptics.light()
-            offerEventUndo(line, .boardMove)
+            do {
+                let line = try await core.moveOnBoard(taskId: id, day: day, toIndex: place)
+                landBoardTap(id)
+                guard let line else { return }
+                MekaHaptics.light()
+                offerEventUndo(line, .boardMove)
+            } catch {
+                landBoardTap(id)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: "Move", reason: error.localizedDescription), nil)
+            }
         }
+    }
+
+    /// The Board as drawn: the core's board with the taps still on their way (taps feel instant, slice 13).
+    private func showBoard() {
+        guard let coreBoard else { board = nil; return }
+        board = boardTaps.isEmpty ? coreBoard : InstantBoardRules.shared.shown(board: coreBoard, taps: boardTaps)
+    }
+
+    private func tapBoard(_ taps: [String: BoardTap]) {
+        boardTaps = taps
+        showBoard()
+    }
+
+    /// A Board call returned (done or failed): the core's board is the truth again for that card.
+    private func landBoardTap(_ id: String) {
+        guard boardTaps[id] != nil else { return }
+        tapBoard(InstantBoardRules.shared.forget(taps: boardTaps, id: id))
     }
 
     /// Week board item (5) part 3: the days To a day… offers under an overdue or due-today card (tomorrow on).
@@ -3495,10 +3524,18 @@ final class CoreModel {
     func parkOnBoard(_ id: String, week: Int64, index: Int) {
         guard let core else { return }
         let place = Int32(clamping: index)
+        tapBoard(InstantBoardRules.shared.toWeek(taps: boardTaps, id: id, weekStart: week, index: place))
         Task {
-            guard let line = try? await core.parkOnBoard(taskId: id, weekStart: week, toIndex: place) else { return }
-            MekaHaptics.light()
-            offerEventUndo(line, .boardMove)
+            do {
+                let line = try await core.parkOnBoard(taskId: id, weekStart: week, toIndex: place)
+                landBoardTap(id)
+                guard let line else { return }
+                MekaHaptics.light()
+                offerEventUndo(line, .boardMove)
+            } catch {
+                landBoardTap(id)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: "Move", reason: error.localizedDescription), nil)
+            }
         }
     }
 
@@ -3640,9 +3677,19 @@ final class CoreModel {
 
     /// By hand, slice 1: a second click on a done card's tick un-ticks it, with Undo (ticked off again).
     func reopenOnBoard(_ id: String, title: String) {
+        guard let core else { return }
         MekaHaptics.tick()
-        run { try await $0.reopen(taskId: id) }
-        offerEventUndo("Not done “\(title)”", .complete(id))
+        tapBoard(InstantBoardRules.shared.done(taps: boardTaps, id: id, done: false))
+        Task {
+            do {
+                _ = try await core.reopen(taskId: id)
+                landBoardTap(id)
+                offerEventUndo("Not done “\(title)”", .complete(id))
+            } catch {
+                landBoardTap(id)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: "Not done", reason: error.localizedDescription), nil)
+            }
+        }
     }
 
     /// "How long?" on a Board card (Week board, slice 3): the estimate in minutes, or nil to clear it; the undo bar
@@ -3740,10 +3787,20 @@ final class CoreModel {
 
     /// The ring on a Board card: ticked off, with Undo.
     func completeOnBoard(_ id: String, title: String) {
+        guard let core else { return }
         MekaHaptics.light()
         if boardSelectedID == id { boardSelectedID = nil }
-        run { try await $0.complete(taskId: id) }
+        tapBoard(InstantBoardRules.shared.done(taps: boardTaps, id: id, done: true))
         offerEventUndo("Done “\(title)”", .reopen(id))
+        Task {
+            do {
+                _ = try await core.complete(taskId: id)
+                landBoardTap(id)
+            } catch {
+                landBoardTap(id)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: "Done", reason: error.localizedDescription), nil)
+            }
+        }
     }
 
     /// "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3): re-planned to the first free

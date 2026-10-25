@@ -216,7 +216,11 @@ import androidx.compose.ui.text.font.FontFamily
 fun WeekBoardView(
     core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> Unit, modifier: Modifier = Modifier, onPlanWeek: (() -> Unit)? = null,
 ) {
-    val board by core.weekBoard.collectAsState()
+    val coreBoard by core.weekBoard.collectAsState()
+    // Taps feel instant, slice 13: Done, Not done and a drop show in the next frame over the core's board
+    // (InstantBoardRules); each tap is forgotten when its call returns, the core's board having caught up by then.
+    var taps by remember { mutableStateOf(emptyMap<String, os.meka.core.domain.BoardTap>()) }
+    val board = remember(coreBoard, taps) { os.meka.core.domain.InstantBoardRules.shown(coreBoard, taps) }
     if (board.weeks.isEmpty()) return
     // Item (8), the Friday review: from Friday "Review the week" opens Review on this week with its reflection open.
     val reviewApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
@@ -302,7 +306,23 @@ fun WeekBoardView(
     LaunchedEffect(hoveredPill) { if (drag != null && hoveredPill != null) haptics.tick() }
     LaunchedEffect(hoveredFree) { if (drag != null && hoveredFree != null) haptics.tick() }
     fun showLine(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } } }
-    val onPark: (BoardCard, Long) -> Unit = { card, week -> scope.launch { showLine(runCatching { core.parkOnBoard(card.id, week, Int.MAX_VALUE) }.getOrNull()) } }
+    // The tap shows at once; the core's line (or why it didn't go through) follows when the call returns.
+    fun landTap(id: String, what: String, work: suspend () -> String?) {
+        scope.launch {
+            val r = runCatching { work() }
+            taps = os.meka.core.domain.InstantBoardRules.forget(taps, id)
+            r.exceptionOrNull()?.let { e -> undo.show(os.meka.core.domain.InstantTapRules.failedLine(what, e.message), null) } ?: showLine(r.getOrNull())
+        }
+    }
+    fun moveTo(id: String, day: Long, index: Int) {
+        taps = os.meka.core.domain.InstantBoardRules.toDay(taps, id, day, index)
+        landTap(id, "Move") { core.moveOnBoard(id, day, index) }
+    }
+    fun parkIn(id: String, week: Long, index: Int) {
+        taps = os.meka.core.domain.InstantBoardRules.toWeek(taps, id, week, index)
+        landTap(id, "Move") { core.parkOnBoard(id, week, index) }
+    }
+    val onPark: (BoardCard, Long) -> Unit = { card, week -> parkIn(card.id, week, Int.MAX_VALUE) }
     val onSomeday: (BoardCard) -> Unit = { card -> scope.launch { showLine(runCatching { core.somedayOnBoard(card.id) }.getOrNull()) } }
     // Option B slice 3: a drop on one of the lists that keep Someday (Someday, Side hustle, House) files it there; the
     // card menu's AREA files it under one of the five.
@@ -448,7 +468,7 @@ fun WeekBoardView(
                 board.day(pill)?.takeIf { it.canDrop }?.let { target ->
                     landed = d.card.id
                     turnTo(board.days.indexOfFirst { it.epochDay == target.epochDay })
-                    scope.launch { showLine(runCatching { core.moveOnBoard(d.card.id, target.epochDay, Int.MAX_VALUE) }.getOrNull()) }
+                    moveTo(d.card.id, target.epochDay, Int.MAX_VALUE)
                 }
                 return@drop
             }
@@ -474,7 +494,7 @@ fun WeekBoardView(
                         val at = cards[c.id]?.center ?: Offset.Zero
                         if (wide) at.y < d.pointer.y else at.x < d.pointer.x
                     }
-                    scope.launch { showLine(runCatching { core.parkOnBoard(d.card.id, week.startEpochDay, index) }.getOrNull()) }
+                    parkIn(d.card.id, week.startEpochDay, index)
                 }
                 at == TRAY && wide -> onList(d.card, null)
                 at == TRAY -> onSomeday(d.card)
@@ -483,7 +503,7 @@ fun WeekBoardView(
                 else -> board.day(at)?.takeIf { it.canDrop }?.let { target ->
                     val index = place?.takeIf { it.first == target.epochDay }?.second
                         ?: BoardHandRules.insertIndex(target.openCards.filter { it.id != d.card.id }.map { c -> cards[c.id]?.center?.y ?: 0f }, d.pointer.y)
-                    scope.launch { showLine(runCatching { core.moveOnBoard(d.card.id, target.epochDay, index) }.getOrNull()) }
+                    moveTo(d.card.id, target.epochDay, index)
                 }
             }
         }
@@ -593,7 +613,7 @@ fun WeekBoardView(
                             scope.launch { showLine(runCatching { core.nudgeOnBoard(card.id, days, places) }.getOrNull()) }
                         },
                         onMoveTo = { card, to ->
-                            scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) }
+                            moveTo(card.id, to, Int.MAX_VALUE)
                         },
                         onPark = onPark,
                         onSomeday = onSomeday,
@@ -601,8 +621,16 @@ fun WeekBoardView(
                             haptics.light()
                             // It keeps its place a moment, then settles below the open ones (Sunsama-style).
                             settling[card.id] = day.epochDay to day.cards.indexOfFirst { it.id == card.id }.coerceAtLeast(0)
+                            taps = os.meka.core.domain.InstantBoardRules.done(taps, card.id, true)
                             scope.launch {
-                                runCatching { core.complete(card.id) }
+                                val r = runCatching { core.complete(card.id) }
+                                taps = os.meka.core.domain.InstantBoardRules.forget(taps, card.id)
+                                val e = r.exceptionOrNull()
+                                if (e != null) {
+                                    settling.remove(card.id)
+                                    undo.show(os.meka.core.domain.InstantTapRules.failedLine("Done", e.message), null)
+                                    return@launch
+                                }
                                 undo.show("Done “${card.title}”") { core.reopen(card.id) }
                                 delay(BoardHandRules.SETTLE_MS)
                                 settling.remove(card.id)
@@ -610,9 +638,12 @@ fun WeekBoardView(
                         },
                         onUndone = { card ->
                             haptics.tick()
+                            taps = os.meka.core.domain.InstantBoardRules.done(taps, card.id, false)
                             scope.launch {
-                                runCatching { core.reopen(card.id) }
-                                undo.show("Not done “${card.title}”") { core.complete(card.id) }
+                                val r = runCatching { core.reopen(card.id) }
+                                taps = os.meka.core.domain.InstantBoardRules.forget(taps, card.id)
+                                r.exceptionOrNull()?.let { e -> undo.show(os.meka.core.domain.InstantTapRules.failedLine("Not done", e.message), null) }
+                                    ?: undo.show("Not done “${card.title}”") { core.complete(card.id) }
                             }
                         },
                         onAdd = { text, minutes ->
@@ -652,7 +683,7 @@ fun WeekBoardView(
                             column, week, board, hovered = if (drag != null) hovered else null, dragging = drag?.card?.id,
                             onBounds = { key, r -> columns[key] = r }, onGone = { key -> columns.remove(key) },
                             onCardBounds = { id, r -> cards[id] = r }, onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
-                            onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
+                            onMoveTo = { card, to -> moveTo(card.id, to, Int.MAX_VALUE) },
                             onPark = onPark, onSomeday = onSomeday, onTag = onTag, modifier = mod,
                         )
                     },
@@ -710,7 +741,7 @@ fun WeekBoardView(
                     TrayCards(
                         sheetTray, week, board, stacked = true, cardWidth = colWidth, dragging = drag?.card?.id,
                         onCardBounds = { id, r -> cards[id] = r }, onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
-                        onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
+                        onMoveTo = { card, to -> moveTo(card.id, to, Int.MAX_VALUE) },
                         onPark = onPark, onSomeday = onSomeday, onTag = onTag, modifier = Modifier.fillMaxWidth(),
                     )
                 }
