@@ -41,6 +41,10 @@ final class SidebarUITests: XCTestCase {
             row.click()
             if !app.descendants(matching: .any)["screen-" + name].waitForExistence(timeout: 10) {
                 // Nightly run 2026-10-25 (Review): say what the window holds instead, on one line for the annotation.
+                if app.state == .notRunning {
+                    XCTFail("Navilife quit when \(name) was clicked in the sidebar (the next step shows its crash report)")
+                    return
+                }
                 let shot = XCTAttachment(screenshot: app.screenshot())
                 shot.name = "no-screen-\(name)"
                 shot.lifetime = .keepAlways

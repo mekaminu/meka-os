@@ -177,6 +177,34 @@ jobs:
         run: >-
           tools/ci-run.sh xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOSUI -destination 'platform=macOS,arch=arm64'
           -resultBundlePath build/mac-ui.xcresult CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= ENABLE_HARDENED_RUNTIME=NO test
+      # The app quit under a UI check (nightly run 40165552092, 2026-10-25: Review's click left no app to photograph):
+      # show the newest Navilife crash report's reason and crashing thread so the cause is readable through the API.
+      - name: Mac app crash (only when the UI checks failed)
+        if: failure()
+        run: |
+          sleep 5
+          report=$(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i -E 'MekaOS|Navilife' | head -1)
+          [ -n "$report" ] || { echo "no crash report"; ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head; exit 0; }
+          out=$(python3 - "$HOME/Library/Logs/DiagnosticReports/$report" <<'PY' 2>&1 || head -c 6000 "$HOME/Library/Logs/DiagnosticReports/$report"
+          import json, sys
+          raw = open(sys.argv[1]).read()
+          body = json.loads(raw[raw.index('\n') + 1:])
+          print("exception:", body.get("exception"), "termination:", body.get("termination", {}).get("indicator"))
+          asi = body.get("asi")
+          if asi: print("asi:", json.dumps(asi)[:1500])
+          imgs = body.get("usedImages", [])
+          for t in body.get("threads", []):
+              if not t.get("triggered"):
+                  continue
+              frames = t.get("frames", [])
+              print("crashed thread:", t.get("name") or t.get("queue") or "?", "frames:", len(frames))
+              for f in frames[:45]:
+                  img = imgs[f["imageIndex"]].get("name", "?") if f.get("imageIndex") is not None and f["imageIndex"] < len(imgs) else "?"
+                  print("  ", img, (f.get("symbol") or "?")[:160], f.get("sourceFile", ""), f.get("sourceLine", ""))
+          PY
+          )
+          echo "$out"
+          printf '::error title=Mac app crash: %s::%s\n' "$report" "$(printf '%s' "$out" | head -60 | awk '{gsub(/%/,"%25"); printf "%s%s", (NR>1 ? "%0A" : ""), $0}')"
       - name: Export the screenshots
         if: always()
         run: mkdir -p build/mac-screenshots && (xcrun xcresulttool export attachments --path build/mac-ui.xcresult --output-path build/mac-screenshots || true)
