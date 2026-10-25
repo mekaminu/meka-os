@@ -11947,7 +11947,6 @@ class MekaCore(
         _lifeAdmin.value = lifeAdminViewNow
         val fastingNow = fasting.view()
         val goalsNow = goals.view(all).withSessions(_sessions.value).copy(money = moneyStreaks(), reading = reading.goalView(cal))
-        val projected = project(all, dayEvents, marks.clubChildren)
         val today = dayWindow(nowMs())
         // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.
         val forecast = weather.forecast()
@@ -12018,51 +12017,78 @@ class MekaCore(
         // A running fast also shows as the Day ring's inner arc (Living Today, slice 3); once the day is shut down the
         // ring looks ahead to tomorrow's first commitment (Living Today, item 1).
         val rideNow = trainRideNow(office, cal)
-        _today.value = projected.copy(
-            dayRing = projected.dayRing.copy(
-                fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal),
-                tomorrow = os.meka.core.domain.DayRingRules.tomorrow(shutdownNow),
-                rain = os.meka.core.domain.WeatherRules.rainBands(os.meka.core.domain.PlacesRules.whereYouAre(forecast, workForecast, office), nowMs(), cal),
-            ),
-            dayTiles = os.meka.core.domain.DayTileRules.build(
-                projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
-            ),
-            // The watch face (Fold review 2026-10-09 07:26, item 2): the next 12 hours, across midnight.
-            watchFace = watchFaceNow(all, dayEvents, cal),
-            school = schoolToday,
-            dinner = mealPlan.tonight(),
-            dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
-            lifeAdmin = os.meka.core.domain.LifeAdminRules.todayLine(lifeAdminViewNow, todayDay, nowMs(), cal)
-                // Slice 2: once it's over, how it went ("✓ Life admin hour done · 3 jobs ticked").
-                ?: os.meka.core.domain.LifeAdminRules.closeLine(lifeAdminNow, adminThis, all, lifeAdminViewNow.jobCount, todayDay, nowMs()),
-            // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
-            // Train-time queue (4) and Reading's commute slots (2026-10-18): on the train, how long until he gets off
-            // and what's on the go to read ("On the 07:42 · 15 min to … · 2 articles · Dune at 37%").
-            trainQueue = os.meka.core.domain.QueueRules.trainLine(
-                trainQueue.items(), office, nowMs(), cal, rideNow,
-                os.meka.core.domain.ReadingRules.trainPart(reading.items()),
-            ),
-            weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
-            bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
-            gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
-            trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
-            // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
-            // Deliveries completeness: lit with "you're at the office" on an office day, and yesterday's that didn't show.
-            parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay, officeDay = office != null),
-            // Inbox fixes, slice 7: each account's unread mail and how much of it Navilife can tidy, counted by the server.
-            mailUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs(), lastHealthServer?.mail ?: lastMailFacts),
+        // Taps feel instant, slice 9: Today is kept while what's handed in (the tasks, events, sessions, lists, the
+        // forecast, the minute …) and every record type it reads (the emails for its replies and meeting prep, parcels,
+        // the train queue …) are unchanged; a chat's Done or a clean-up no longer rebuilds it.
+        val sessionsNow = _sessions.value
+        // The lines Today and the brief draw from the 12,000 emails and the clean-ups are worked out first, each kept
+        // over the emails it reads, and handed in: a new email that changes none of them leaves Today and the brief kept.
+        val mailItemsNow = activity.mailItems()
+        val todayReplies = viewMemo.keep("Today replies", listOf(mailItemsNow, minuteNow(), timeZone())) {
             // Drafted replies, slice 2: the emails from people waiting on his reply, and how many Navilife has drafted.
-            mailReplies = os.meka.core.domain.MailAutoDraftRules.todayLine(activity.mailItems(), nowMs()),
-            // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
-            reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs()), review.startMinute()),
-            comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
+            os.meka.core.domain.MailAutoDraftRules.todayLine(mailItemsNow, nowMs())
+        }
+        val prepLead = meetingPrepLead()
+        val todayPrep = viewMemo.keep(
+            "Meeting prep", listOf(dayEvents, marks, mailItemsNow, listsNow.promised, listsNow.waiting, prepLead, minuteNow(), timeZone()),
+        ) {
             // Meeting prep, slice 1: from 15 min before a meeting with other people, who's coming and what's open.
-            meetingPrep = os.meka.core.domain.MeetingPrepRules.card(
-                dayEvents, marks, activity.mailItems(), listsNow.promised, listsNow.waiting, nowMs(), cal, meetingPrepLead().minutes,
+            os.meka.core.domain.MeetingPrepRules.card(
+                dayEvents, marks, mailItemsNow, listsNow.promised, listsNow.waiting, nowMs(), cal, prepLead.minutes,
+            )
+        }
+        // Inbox fixes, slice 7: each account's unread mail and how much of it Navilife can tidy, counted by the server.
+        val todayUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs(), lastHealthServer?.mail ?: lastMailFacts)
+        _today.value = timed("Today") { viewMemo.keepReading(
+            "Today", replica,
+            listOf(
+                all, dayEvents, marks.clubChildren, sessionsNow, fastingNow, goalsNow, listsNow, shutdownNow, forecast, workForecast,
+                office, rideNow, weekAheadNow, schoolToday, binItems, occasionItems, tripItems, lifeAdminNow, lifeAdminViewNow,
+                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, minuteNow(), timeZone(),
             ),
-            // Trading tracker, slice 6: up or down today and how many positions are open, never an amount.
-            trading = os.meka.core.domain.TradingTodayRules.todayLine(trading.wallets(), tradingAlertSetting(), nowMs()),
-        )
+        ) {
+            val projected = project(all, dayEvents, marks.clubChildren)
+            projected.copy(
+                dayRing = projected.dayRing.copy(
+                    fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal),
+                    tomorrow = os.meka.core.domain.DayRingRules.tomorrow(shutdownNow),
+                    rain = os.meka.core.domain.WeatherRules.rainBands(os.meka.core.domain.PlacesRules.whereYouAre(forecast, workForecast, office), nowMs(), cal),
+                ),
+                dayTiles = os.meka.core.domain.DayTileRules.build(
+                    projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
+                ),
+                // The watch face (Fold review 2026-10-09 07:26, item 2): the next 12 hours, across midnight.
+                watchFace = watchFaceNow(all, dayEvents, cal),
+                school = schoolToday,
+                dinner = mealPlan.tonight(),
+                dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
+                lifeAdmin = os.meka.core.domain.LifeAdminRules.todayLine(lifeAdminViewNow, todayDay, nowMs(), cal)
+                    // Slice 2: once it's over, how it went ("✓ Life admin hour done · 3 jobs ticked").
+                    ?: os.meka.core.domain.LifeAdminRules.closeLine(lifeAdminNow, adminThis, all, lifeAdminViewNow.jobCount, todayDay, nowMs()),
+                // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
+                // Train-time queue (4) and Reading's commute slots (2026-10-18): on the train, how long until he gets off
+                // and what's on the go to read ("On the 07:42 · 15 min to … · 2 articles · Dune at 37%").
+                trainQueue = os.meka.core.domain.QueueRules.trainLine(
+                    trainQueue.items(), office, nowMs(), cal, rideNow,
+                    os.meka.core.domain.ReadingRules.trainPart(reading.items()),
+                ),
+                weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
+                bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
+                gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
+                trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
+                // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
+                // Deliveries completeness: lit with "you're at the office" on an office day, and yesterday's that didn't show.
+                parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay, officeDay = office != null),
+                mailUnread = todayUnread,
+                mailReplies = todayReplies,
+                // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
+                reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs()), review.startMinute()),
+                comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
+                meetingPrep = todayPrep,
+                // Trading tracker, slice 6: up or down today and how many positions are open, never an amount.
+                trading = os.meka.core.domain.TradingTodayRules.todayLine(trading.wallets(), tradingAlertSetting(), nowMs()),
+            )
+        } }
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(
             protectedTime.setting(), todayDay, workState.schedule, holidays,
@@ -12114,52 +12140,68 @@ class MekaCore(
         _quickAlarms.value = alarms.quickItems()
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
-        _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
-            upNextId = _today.value.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
-            newsFollows = news.follows(), newsRead = news.readKeys().toHashSet()).let {
-                // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
-                val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
-                val t = _today.value
-                val awayDays = trips.awayDays()
-                // Travel mode completeness, slice 3: the destination's weather while away there, and the day before.
-                val tripSky = os.meka.core.domain.TripWeatherRules.brief(tripWeather.forecast(), awayDays[todayDay], awayDays[todayDay + 1], todayDay, tripClocks)
-                it.copy(
-                    weatherLine = tripSky.paneLine ?: os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal),
-                    workLine = workLine,
-                    // A morning brief worth listening to, slice 1: the commute, both places and home and family.
-                    story = it.story.copy(
-                        officeDay = office != null && workLine?.startsWith("Work ") == true,
-                        // Travel mode completeness: a trip day says where he is with the kind of day.
-                        away = awayDays[todayDay],
-                        awayWeather = tripSky.today,
-                        tripTomorrowWeather = tripSky.tomorrow,
-                        placesLine = placesLine,
-                        route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.brief,
-                        // A morning brief worth listening to: the train to leave for, from the live board.
-                        leaveBy = os.meka.core.domain.RouteRules.briefLeave(lineStatus.snapshot(), office, nowMs(), cal),
-                        needsYou = _needsYouStack.value.cards.count {
-                            it.kind == os.meka.core.domain.DecisionKind.CONFLICT || it.kind == os.meka.core.domain.DecisionKind.CREDIT
-                        },
-                        // Deliveries completeness: today's parcels (and yesterday's that didn't show) with home and family.
-                        family = listOfNotNull(t.bins?.spoken, t.parcels?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
-                        // Slice 4: urgent voice messages and requests from watched people, waiting on you.
-                        asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
-                        // Inbox autopilot, slice 9a: how many emails need him and who from.
-                        mail = os.meka.core.domain.MailAskRules.brief(activity.mailItems(), nowMs()),
-                        // Weekly reflection, slice 2: the one thing that matters this week.
-                        weekMatters = os.meka.core.domain.ReflectionRules.briefSentence(t.reflection, it.story.length, todayDay),
-                        // Barça match day, slice 3: last night's result and scorers, and where today's match is on.
-                        barca = os.meka.core.domain.BarcaBriefRules.briefSentences(allEvents, marks, nowMs(), ZoneCalendar(timeZone)),
-                        // Trading tracker, slice 6: up or down on Hyperliquid, no amounts (Short: only when lit).
-                        trading = os.meka.core.domain.TradingTodayRules.briefSentence(t.trading, it.story.length),
-                        // Protected time, slice 5: "Your evening is protected from 7 o'clock."
-                        protectedTime = os.meka.core.domain.ProtectedRules.briefSentence(protectedTime.setting(), todayDay, workState.schedule, holidays),
-                    ),
-                    // Protected time, slice 5: "Protected from 19:00 tonight" under the date.
-                    protectedLine = os.meka.core.domain.ProtectedRules.briefLine(protectedTime.setting(), todayDay, workState.schedule, holidays),
-                )
-            }
+        // Taps feel instant, slice 9: the morning brief is kept while what's handed in (Today, the lists, the forecast,
+        // the minute …) and every record type it reads (the news, the emails, waiting requests …) are unchanged.
+        val briefNeedsYou = _needsYouStack.value.cards.count {
+            it.kind == os.meka.core.domain.DecisionKind.CONFLICT || it.kind == os.meka.core.domain.DecisionKind.CREDIT
+        }
+        val briefToday = _today.value
+        val briefMail = viewMemo.keep("Brief mail", listOf(mailItemsNow, minuteNow(), timeZone())) {
+            // Inbox autopilot, slice 9a: how many emails need him and who from.
+            os.meka.core.domain.MailAskRules.brief(mailItemsNow, nowMs())
+        }
+        _brief.value = timed("Brief") { viewMemo.keepReading(
+            "Brief", replica,
+            listOf(
+                all, dayEvents, allEvents, marks, workState, notifySettings, _lists.value, _goals.value, _fasting.value, today,
+                forecast, placesLine, schoolToday, holidays, workHolidays, leaveDays, leaveHours, office, briefToday, briefNeedsYou, briefMail,
+                minuteNow(), timeZone(),
+            ),
+        ) {
+            brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
+                news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
+                upNextId = briefToday.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
+                newsFollows = news.follows(), newsRead = news.readKeys().toHashSet()).let {
+                    // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
+                    val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
+                    val t = briefToday
+                    val awayDays = trips.awayDays()
+                    // Travel mode completeness, slice 3: the destination's weather while away there, and the day before.
+                    val tripSky = os.meka.core.domain.TripWeatherRules.brief(tripWeather.forecast(), awayDays[todayDay], awayDays[todayDay + 1], todayDay, tripClocks)
+                    it.copy(
+                        weatherLine = tripSky.paneLine ?: os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal),
+                        workLine = workLine,
+                        // A morning brief worth listening to, slice 1: the commute, both places and home and family.
+                        story = it.story.copy(
+                            officeDay = office != null && workLine?.startsWith("Work ") == true,
+                            // Travel mode completeness: a trip day says where he is with the kind of day.
+                            away = awayDays[todayDay],
+                            awayWeather = tripSky.today,
+                            tripTomorrowWeather = tripSky.tomorrow,
+                            placesLine = placesLine,
+                            route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.brief,
+                            // A morning brief worth listening to: the train to leave for, from the live board.
+                            leaveBy = os.meka.core.domain.RouteRules.briefLeave(lineStatus.snapshot(), office, nowMs(), cal),
+                            needsYou = briefNeedsYou,
+                            // Deliveries completeness: today's parcels (and yesterday's that didn't show) with home and family.
+                            family = listOfNotNull(t.bins?.spoken, t.parcels?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
+                            // Slice 4: urgent voice messages and requests from watched people, waiting on you.
+                            asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
+                            mail = briefMail,
+                            // Weekly reflection, slice 2: the one thing that matters this week.
+                            weekMatters = os.meka.core.domain.ReflectionRules.briefSentence(t.reflection, it.story.length, todayDay),
+                            // Barça match day, slice 3: last night's result and scorers, and where today's match is on.
+                            barca = os.meka.core.domain.BarcaBriefRules.briefSentences(allEvents, marks, nowMs(), ZoneCalendar(timeZone)),
+                            // Trading tracker, slice 6: up or down on Hyperliquid, no amounts (Short: only when lit).
+                            trading = os.meka.core.domain.TradingTodayRules.briefSentence(t.trading, it.story.length),
+                            // Protected time, slice 5: "Your evening is protected from 7 o'clock."
+                            protectedTime = os.meka.core.domain.ProtectedRules.briefSentence(protectedTime.setting(), todayDay, workState.schedule, holidays),
+                        ),
+                        // Protected time, slice 5: "Protected from 19:00 tonight" under the date.
+                        protectedLine = os.meka.core.domain.ProtectedRules.briefLine(protectedTime.setting(), todayDay, workState.schedule, holidays),
+                    )
+                }
+        } }
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone), trainQueue.items(), newsDown)
         val lineSnap = lineStatus.snapshot()
         val routeNow = os.meka.core.domain.RouteRules.todayLine(lineSnap, office, nowMs(), cal)
