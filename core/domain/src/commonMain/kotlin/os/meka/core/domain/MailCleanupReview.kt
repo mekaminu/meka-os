@@ -34,7 +34,7 @@ object MailCleanupReviewRules {
 
     const val READ_HINT = "Take the tick off a sender to leave their mail unread. Nothing moves; nothing is deleted."
     const val READ_WAITING = "Navilife lists who these are from at its next count (within the hour). Nothing is marked until you tap."
-    const val READ_NOTE = "They stay where they are, just marked read · people, banks and schools are never touched"
+    const val READ_NOTE = "They stay where they are, just marked read · people, banks, schools and anything needing you stay unread"
     const val READ_KEPT_BAR = "Left unread · Navilife won't mark their mail read"
     const val READ_UNKEPT_BAR = "Marked read with the rest"
 
@@ -118,7 +118,7 @@ object MailCleanupReviewRules {
     fun planReview(b: MailBacklog): JunkReview? {
         val card = MailBacklogRules.planCard(b)
         if (card == null && !MailBacklogRules.canApprove(b)) return null
-        val title = "Clean up ${b.account}"
+        val title = "Clean up ${b.shownName}"
         val list = plan(b)
         val stays = b.counts[MailBacklogKind.KEEP] ?: 0
         val staysLine = stays.takeIf { it > 0 }?.let { "${emails(it)} ${if (it == 1) "stays" else "stay"} in your inbox: they may need you" }

@@ -55,15 +55,35 @@ object MailHealthRules {
             b.putBack > 0 -> "clean-up undone · ${n(b.putBack)} put back"
             b.toMove == 0 && b.applied == 0 -> null
             b.finishedAtMs != null -> "clean-up ${n(b.applied)} done"
+            MailBacklogRules.unseen(b) -> "clean-up approved · not seen by Navilife yet"
             b.approved -> "clean-up ${n(b.applied)} of ${n(b.toMove)} done · ${n((b.toMove - b.applied).coerceAtLeast(0))} left"
             else -> "clean-up waiting for your Approve (${n(b.toMove)})"
         }
     }
 
-    /** "marked 1,071 read" once Mark read was approved (with "so far" while it's still going); null before. */
+    /**
+     * Approve must land (2026-10-25): Mark read's state in a few words: "mark read running · 500 so far" · "mark read
+     * finished · 1,071 marked" · "mark read asked · not seen by Navilife yet" · "mark read not asked (380 could be)";
+     * null when there's nothing to say.
+     */
     fun markReadState(b: MailBacklog?): String? {
-        b?.markReadApprovedAtMs ?: return null
-        return "marked ${n(b.markedRead)} read" + if (b.markReadFinishedAtMs == null) " so far" else ""
+        b ?: return null
+        if (b.markReadApprovedAtMs == null) return if (b.tidyUnread >= MailMarkReadRules.MIN) "mark read not asked (${n(b.tidyUnread)} could be)" else null
+        return when {
+            MailMarkReadRules.unseen(b) -> "mark read asked · not seen by Navilife yet"
+            MailMarkReadRules.running(b) -> "mark read running · ${n(b.markedRead)} so far"
+            else -> "mark read finished · ${n(b.markedRead)} marked"
+        }
+    }
+
+    /**
+     * The account's own backlog: by the server's account key; one written before the key existed by its label, and
+     * only for the account [mine] says reads that label.
+     */
+    fun backlogFor(a: MailAccountFacts, backlogs: List<MailBacklog>, mine: Boolean): MailBacklog? {
+        val key = MailAccountRules.key(a.provider, a.email)
+        return backlogs.filter { it.accountKey == key }.maxByOrNull { it.startedAtMs }
+            ?: if (mine) backlogs.filter { it.accountKey == null && it.account == labelOf(a) }.maxByOrNull { it.startedAtMs } else null
     }
 
     /** How many emails Autopilot tidied for [label] since [sinceMs] (new mail only: not the clean-up, not undone). */
@@ -110,14 +130,16 @@ object MailHealthRules {
                     HealthRow(key, title, never + why, HealthState.BAD)
                 }
                 else -> {
-                    val backlog = if (mine) backlogs.firstOrNull { it.account == label } else null
+                    val backlog = backlogFor(a, backlogs, mine)
                     val unread = a.inboxUnread ?: backlog?.inboxUnread?.toLong()
                     val tidiedToday = if (mine) tidies.filter { it.account == label && !it.backlog && it.undoneAtMs == null && cal.epochDayOf(it.atMs) == today }.sumOf { it.count } else 0
                     val parts = listOfNotNull(
                         a.inboxTotal?.let { "Inbox ${n(it)}" },
-                        unread?.let { "${n(it)} unread" },
+                        // Approve must land, (5): the inbox's own unread (a provider's app may count every folder).
+                        unread?.let { "${n(it)} inbox unread" },
                         "tidied today ${n(tidiedToday)}",
                         backlogState(backlog),
+                        markReadState(backlog),
                         a.lastSyncAtMs?.let { "checked ${MailAccountRules.ago(it, nowMs)}" },
                     )
                     val stale = a.lastSyncAtMs != null && nowMs - a.lastSyncAtMs > STALE_MS

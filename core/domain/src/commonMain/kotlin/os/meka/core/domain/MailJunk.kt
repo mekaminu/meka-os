@@ -267,7 +267,7 @@ object MailJunkClearRules {
             "nothing moves until you approve",
         ).joinToString(" · ")
         return DecisionCard(
-            id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Empty Junk · ${b.account}", why = why, taskId = null,
+            id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Empty Junk · ${b.shownName}", why = why, taskId = null,
             yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
             yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_REVIEW,
             urgent = false,

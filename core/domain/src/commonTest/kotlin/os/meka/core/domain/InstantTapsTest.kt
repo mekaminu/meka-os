@@ -67,6 +67,9 @@ class InstantTapsTest {
         assertTrue(b.approved)
         assertFalse(MailBacklogRules.canApprove(b))
         assertNull(MailBacklogRules.row(b).approveId)
-        assertEquals(MailBacklogRules.APPROVED_LINE, MailBacklogRules.row(b).line)
+        assertEquals(MailBacklogRules.SENDING_LINE, MailBacklogRules.row(b).line)
+        // Approve must land (2026-10-25): once the server echoed it, "Navilife has it".
+        val echoed = assertNotNull(MailBacklogRules.read("mb1", next + MailBacklogRules.seenFields(b)!!))
+        assertEquals(MailBacklogRules.APPROVED_LINE, MailBacklogRules.row(echoed).line)
     }
 }

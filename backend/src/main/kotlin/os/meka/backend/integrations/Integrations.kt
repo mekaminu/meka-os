@@ -744,6 +744,8 @@ class Integrations(
         // Slice 3c: the daily Junk review (same switch and dry-run day as Autopilot).
         stage(a, "junkReview") { junkReview(a, m, token, ms) }
         // Slice 8a: the backlog clean-up's plan (read-only: nothing in the mailbox moves).
+        // Approve must land (2026-10-25): echo each Approve / Mark read the server has read, before anything that may fail.
+        stage(a, "approvalEcho") { approvalEcho(a) }
         stage(a, "backlog") { backlog(a, m, token, ms) }
         // Inbox fixes, slice 7: the inbox's unread count and how many of those Navilife can tidy, for Today's line.
         stage(a, "unreadCounts") { unreadCounts(a, ms) }
@@ -1266,6 +1268,17 @@ class Integrations(
         // Slice 8b: once Meka approved the final plan, apply it (or put it back after an Undo).
         val plan = reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
         if (plan.approved || plan.applied > 0) applyBacklog(a, m, token, ms, plan, items, account)
+    }
+
+    /**
+     * Approve must land (Meka 2026-10-25 15:10): the approvals on the account's `mail_backlog` entity as the server read
+     * them, written back ([MailBacklogRules.seenFields]) so the apps say "Navilife has it", and offer Approve again with
+     * the reason when an approval never arrived ([MailBacklogRules.lost]).
+     */
+    internal fun approvalEcho(a: AccountRow) {
+        val entityId = MailBacklogRules.entityId(a.id)
+        val b = reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
+        MailBacklogRules.seenFields(b)?.let { writeMail(a, entityId, it, EntityTypes.MAIL_BACKLOG) }
     }
 
     /**
@@ -3135,7 +3148,13 @@ class Integrations(
         // shows each account only its own even when two accounts share a label.
         val keyed = if ((entityType == EntityTypes.MAIL_TIDY || entityType == EntityTypes.MAIL_SENDER) && asked.isNotEmpty() &&
             asked[DELETED_FIELD] != FieldValue.Bool(true)
-        ) asked + (MailTidyBatchFields.ACCOUNT_KEY to FieldValue.Text(MailAccountRules.key(a.provider, a.email))) else asked
+        ) asked + (MailTidyBatchFields.ACCOUNT_KEY to FieldValue.Text(MailAccountRules.key(a.provider, a.email)))
+        // Approve must land (2026-10-25): each account's backlog carries its key and its name ("Personal Gmail"), so two
+        // accounts sharing a label each get their own clean-up and Mark read cards.
+        else if (entityType == EntityTypes.MAIL_BACKLOG && asked.isNotEmpty() && asked[DELETED_FIELD] != FieldValue.Bool(true)) asked + mapOf(
+            MailBacklogFields.ACCOUNT_KEY to FieldValue.Text(MailAccountRules.key(a.provider, a.email)),
+            MailBacklogFields.ACCOUNT_NAME to FieldValue.Text(MailHealthRules.name(MailLabel.of(a.label)?.label ?: MailProviders.name(a.provider), a.provider)),
+        ) else asked
         // Delete mail data: an entity the server deleted comes back when it's written again.
         val desired = if (prev?.fieldOps?.get(DELETED_FIELD)?.second == valueKey(FieldValue.Bool(true)) && DELETED_FIELD !in keyed)
             keyed + (DELETED_FIELD to FieldValue.Bool(false)) else keyed

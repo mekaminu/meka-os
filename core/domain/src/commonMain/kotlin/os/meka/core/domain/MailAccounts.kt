@@ -262,7 +262,10 @@ object MailAccountRules {
                 ),
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
                 senders = MailSenderPanelRules.rows(ownSenders, label, nowMs, cal),
-                backlog = MailBacklogRules.rowFor(backlogs, label, own, paused, nowMs),
+                // Approve must land (2026-10-25): this account's own clean-up (by key), read as this card's label.
+                backlog = MailBacklogRules.rowFor(
+                    backlogs.filter { belongs(it.accountKey, it.account, r, base.rows) }.map { it.copy(account = label) }, label, own, paused, nowMs,
+                ),
             ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders)) }
         }
         val rules = sharedRules(shared, many = rows.size > 1)

@@ -34,6 +34,8 @@ object MailMarkReadRules {
     const val CARD_OPEN = "Review"
     const val ALREADY_STARTED = "Already started · they stay in the inbox, marked read"
     const val UNAPPROVED_BAR = "Cancelled · nothing marked"
+    /** Approve must land, (4): what Mark read leaves, so the inbox's number isn't expected to reach zero. */
+    const val KEEPS_UNREAD = "people, banks, schools and anything needing you stay unread"
 
     private fun n(v: Int) = SpeechRules.grouped(v.toLong())
 
@@ -56,6 +58,24 @@ object MailMarkReadRules {
         val finished = b.markReadFinishedAtMs ?: return b.markReadApprovedAtMs == null
         return (if (nowMs > 0) nowMs else counted) - finished >= OFFER_AGAIN_AFTER_MS && counted > finished
     }
+
+    /**
+     * Approve must land (2026-10-25): his Mark read the server hasn't echoed ([MailBacklog.markReadSeen]) for
+     * [MailBacklogRules.NOT_REACHED_MS] with nothing marked yet: the card comes back with the reason (0 [nowMs]: never).
+     */
+    fun lost(b: MailBacklog, nowMs: Long): Boolean {
+        val asked = b.markReadApprovedAtMs ?: return false
+        return nowMs > 0 && running(b) && b.markedRead == 0 && b.markReadSeen != asked && nowMs - asked > MailBacklogRules.NOT_REACHED_MS
+    }
+
+    /** His tap went through, but the server hasn't echoed it yet. */
+    fun unseen(b: MailBacklog): Boolean = running(b) && b.markedRead == 0 && b.markReadSeen != b.markReadApprovedAtMs
+
+    /**
+     * What his tap may write: the card's own rule without the count's age (the card was on screen, and the server marks
+     * only what is still unread then), or an approval that never reached the server.
+     */
+    fun canApproveTap(b: MailBacklog, nowMs: Long): Boolean = canApprove(b, 0L) || lost(b, nowMs)
 
     /** The bar's Undo only stands while nothing has been marked. */
     fun canUnapprove(b: MailBacklog): Boolean = running(b) && b.markedRead == 0
@@ -82,20 +102,21 @@ object MailMarkReadRules {
 
     /**
      * "Mark 380 read · Personal" · "380 unread newsletters, promos and receipts in your inbox · they stay where they
-     * are, just marked read · people, banks and schools are never touched".
+     * are, just marked read · people, banks, schools and anything needing you stay unread".
      */
     fun card(b: MailBacklog, nowMs: Long = 0L): DecisionCard? {
-        if (!canApprove(b, nowMs)) return null
+        val lost = lost(b, nowMs)
+        if (!canApprove(b, nowMs) && !lost) return null
         // Review opens its own list, slice 4: senders he kept unread aren't counted.
         val c = MailCleanupReviewRules.readMarking(b)
         if (c < MIN) return null
         val why = listOf(
             "${n(c)} unread ${if (c == 1) "newsletter, promo or receipt" else "newsletters, promos and receipts"} in your inbox",
             "they stay where they are, just marked read",
-            "people, banks and schools are never touched",
-        ).joinToString(" · ")
+            KEEPS_UNREAD,
+        ).let { if (lost) listOf(MailBacklogRules.NOT_REACHED_WHY_READ) + it else it }.joinToString(" · ")
         return DecisionCard(
-            id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Mark ${n(c)} read · ${b.account}", why = why, taskId = null,
+            id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Mark ${n(c)} read · ${b.shownName}", why = why, taskId = null,
             yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
             yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_REVIEW,
             urgent = false,
@@ -104,7 +125,9 @@ object MailMarkReadRules {
 
     /** Mail's line under the account's clean-up: "Marking read · 120 so far…" / "Marked 380 newsletters and promos read"; null when never asked. */
     fun line(b: MailBacklog): String? = when {
-        running(b) -> if (b.markedRead > 0) "Marking newsletters and promos read · ${n(b.markedRead)} so far…" else "Marking newsletters and promos read from Navilife's next check…"
+        running(b) && b.markedRead > 0 -> "Marking newsletters and promos read · ${n(b.markedRead)} so far…"
+        running(b) && unseen(b) -> "Mark read · on its way to Navilife…"
+        running(b) -> "Mark read · Navilife has it · marking from its next check…"
         b.markReadFinishedAtMs != null && b.markReadApprovedAtMs != null ->
             if (b.markedRead > 0) "Marked ${n(b.markedRead)} ${if (b.markedRead == 1) "newsletter or promo" else "newsletters and promos"} read · they stay in the inbox"
             else "Nothing left to mark read"

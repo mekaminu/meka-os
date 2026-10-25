@@ -6779,7 +6779,14 @@ final class CoreModel {
             Task {
                 do {
                     let r = try await core.approveMailBacklog(id: id)
-                    offerEventUndo(r.line, .unapproveBacklog(id))
+                    // Approve must land (2026-10-25): nothing written → the card comes back with the reason.
+                    if r.refused {
+                        decidedHere.subtract([id])
+                        triage = InstantTapRules.shared.triage(cards: allTriage, hidden: decidedHere)
+                        offerEventUndo(r.line, nil)
+                    } else {
+                        offerEventUndo(r.line, .unapproveBacklog(id))
+                    }
                 } catch { restoreDecided([id], what: what, error: error) }
             }
         case .allowDevice, .refuseDevice:

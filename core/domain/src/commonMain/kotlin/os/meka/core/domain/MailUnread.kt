@@ -20,6 +20,8 @@ object MailUnreadRules {
     /** A smaller change waits until this long after the last count. */
     const val REWRITE_EVERY_MS = 30 * 60_000L
     const val STEP = 10
+    /** An unchanged count is written again this long after the last, well inside [STALE_MS]. */
+    const val RESTAMP_MS = 2 * 3_600_000L
     /** A count older than this is left off Today (the account hasn't been checked for a while). */
     const val STALE_MS = 6 * 3_600_000L
 
@@ -35,7 +37,9 @@ object MailUnreadRules {
     fun writeDue(prev: MailBacklog?, unread: Int, tidyUnread: Int, nowMs: Long): Boolean {
         val was = prev?.inboxUnread ?: return true
         val at = prev.unreadCountedAtMs ?: return true
-        if (was == unread && prev.tidyUnread == tidyUnread) return false
+        // Approve must land (2026-10-25): an unchanged count is still stamped again now and then, so it never goes stale
+        // ([STALE_MS]) while the account is being checked (a stale count took Mark read's card away and refused his tap).
+        if (was == unread && prev.tidyUnread == tidyUnread) return nowMs - at >= RESTAMP_MS
         if (kotlin.math.abs(was - unread) >= STEP || kotlin.math.abs(prev.tidyUnread - tidyUnread) >= STEP) return true
         // Down to nothing unread (or from it) shows at once: "nothing unread ✓" is worth the sync.
         if ((was == 0) != (unread == 0)) return true

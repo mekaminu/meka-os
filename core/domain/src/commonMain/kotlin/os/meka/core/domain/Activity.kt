@@ -677,8 +677,11 @@ class ActivityLog(
         if (MailMarkReadRules.isCard(id)) {
             val entity = MailMarkReadRules.backlogIdOf(id)
             val b = mailBacklogs().firstOrNull { it.id == entity } ?: return MailBacklogRules.NOT_APPROVED
-            if (MailMarkReadRules.running(b)) return MailMarkReadRules.approvedBar(b)
-            if (!MailMarkReadRules.canApprove(b, nowMs())) return MailBacklogRules.NOT_APPROVED
+            // Approve must land (2026-10-25): an approval the server never echoed is written again; the count's age
+            // no longer refuses a tap on a card that was on screen.
+            val lost = MailMarkReadRules.lost(b, nowMs())
+            if (MailMarkReadRules.running(b) && !lost) return MailMarkReadRules.approvedBar(b)
+            if (!MailMarkReadRules.canApproveTap(b, nowMs())) return MailBacklogRules.NOT_APPROVED
             replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailMarkReadRules.approveFields(nowMs()))
             return MailMarkReadRules.approvedBar(b)
         }
@@ -691,7 +694,8 @@ class ActivityLog(
             return MailBacklogRules.APPROVED_BAR
         }
         val b = mailBacklogs().firstOrNull { it.id == id } ?: return MailBacklogRules.NOT_APPROVED
-        if (!MailBacklogRules.canApprove(b)) return if (b.approved) MailBacklogRules.APPROVED_BAR else MailBacklogRules.NOT_APPROVED
+        if (!MailBacklogRules.canApprove(b) && !MailBacklogRules.lost(b, nowMs()))
+            return if (b.approved) MailBacklogRules.APPROVED_BAR else MailBacklogRules.NOT_APPROVED
         replica.commitLocal(EntityTypes.MAIL_BACKLOG, id, MailBacklogRules.approveFields(nowMs()))
         return MailBacklogRules.APPROVED_BAR
     }

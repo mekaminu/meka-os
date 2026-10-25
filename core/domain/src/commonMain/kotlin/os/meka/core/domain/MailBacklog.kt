@@ -130,6 +130,18 @@ object MailBacklogFields {
     const val READ_SENDERS = "readSenders"
     const val READ_KEEP_SENDERS = "readKeepSenders"
 
+    /**
+     * Approve must land (Meka 2026-10-25 15:10: "I approved marking emails as read but my count hasn't changed"): the
+     * account's key ([MailAccountRules.key], a hash, never the address) and its name as Health says it ("Personal Gmail"),
+     * so two accounts sharing a label each get their own cards; and the server's echo of each approval it has seen (the
+     * [APPROVED_AT] / [MARK_READ_APPROVED_AT] value it read), so the apps can tell "Navilife has it" from "not reached
+     * Navilife yet". Written by the server only.
+     */
+    const val ACCOUNT_KEY = "accountKey"
+    const val ACCOUNT_NAME = "accountName"
+    const val APPROVAL_SEEN = "approvalSeen"
+    const val MARK_READ_SEEN = "markReadSeen"
+
     fun countField(k: MailBacklogKind): String = when (k) {
         MailBacklogKind.KEEP -> KEPT
         MailBacklogKind.NEWSLETTER -> NEWSLETTERS
@@ -184,7 +196,14 @@ data class MailBacklog(
     val planKeepSenders: Set<String> = emptySet(),
     val readSenders: String? = null,
     val readKeepSenders: Set<String> = emptySet(),
+    /** Approve must land: the account's key and name (null before the server wrote them), and the approvals it has seen. */
+    val accountKey: String? = null,
+    val accountName: String? = null,
+    val approvalSeen: Long? = null,
+    val markReadSeen: Long? = null,
 ) {
+    /** "Personal Gmail" once the server named it, else the label ("Personal"). */
+    val shownName: String get() = accountName ?: account
     val ready: Boolean get() = readyAtMs != null
     val approved: Boolean get() = approvedAtMs != null
     /** Everything the plan would move (archived plus Trash). */
@@ -233,7 +252,7 @@ object MailBacklogRules {
     const val APPROVE = "Approve"
     const val UNDO = "Undo"
     const val CANCEL = "Cancel"
-    const val APPROVED_LINE = "Approved · cleaning up from Navilife's next check…"
+    const val APPROVED_LINE = "Approved · Navilife has it · cleaning up from its next check…"
     const val APPROVED_NOTE = "A few hundred emails a check · Undo puts it all back for 30 days"
     const val PAUSED_NOTE = "Paused with everything Navilife does on its own · Resume in What Navilife may do"
     const val PUTTING_BACK = "Putting everything back in the inbox, a few hundred a check…"
@@ -266,6 +285,38 @@ object MailBacklogRules {
 
     /** Approve is offered once the plan is final, has something to move, and nothing has moved yet. */
     fun canApprove(b: MailBacklog): Boolean = b.ready && b.toMove > 0 && !b.approved && b.applied == 0
+
+    /**
+     * Approve must land: an Approve the server hasn't echoed after this long (a few of its checks) is treated as lost,
+     * and offered again with the reason.
+     */
+    const val NOT_REACHED_MS = 20 * 60_000L
+    const val NOT_REACHED_WHY = "Your Approve hasn't reached Navilife yet · tap Approve to send it again"
+    const val SENDING_LINE = "Approved · on its way to Navilife…"
+    const val NOT_REACHED_WHY_READ = "Your Mark read hasn't reached Navilife yet · tap Mark read to send it again"
+
+    /** Approved on a device, nothing moved, and the server has not echoed this approval. */
+    fun unseen(b: MailBacklog): Boolean =
+        b.approvedAtMs != null && b.applied == 0 && b.applyStartedAtMs == null && b.approvalSeen != b.approvedAtMs
+
+    /** [unseen] for longer than [NOT_REACHED_MS] at [nowMs] (0: never): Approve is offered again. */
+    fun lost(b: MailBacklog, nowMs: Long): Boolean =
+        nowMs > 0 && unseen(b) && b.ready && b.toMove > 0 && nowMs - (b.approvedAtMs ?: nowMs) > NOT_REACHED_MS
+
+    /** What the server writes when its echo differs from the approval it read (null: nothing to write). */
+    fun seenFields(b: MailBacklog): Map<String, FieldValue>? {
+        val fields = mutableMapOf<String, FieldValue>()
+        if ((b.approvedAtMs ?: 0L) != (b.approvalSeen ?: 0L)) fields[MailBacklogFields.APPROVAL_SEEN] = (b.approvedAtMs ?: 0L).fv()
+        if ((b.markReadApprovedAtMs ?: 0L) != (b.markReadSeen ?: 0L)) fields[MailBacklogFields.MARK_READ_SEEN] = (b.markReadApprovedAtMs ?: 0L).fv()
+        return fields.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Approve must land: two accounts sharing a label ("Personal" on both Outlook and Gmail) are kept apart by the
+     * server's account key; a backlog written before the key existed falls back to its label.
+     */
+    fun newestPerAccount(backlogs: List<MailBacklog>): List<MailBacklog> =
+        backlogs.groupBy { it.accountKey ?: ("label:" + it.account) }.values.mapNotNull { list -> list.maxByOrNull { it.startedAtMs } }
 
     /** The bar's Undo after Approve only stands while the server hasn't started. */
     fun canUnapprove(b: MailBacklog): Boolean = b.approved && b.applied == 0 && b.applyStartedAtMs == null
@@ -383,6 +434,10 @@ object MailBacklogRules {
             planKeepSenders = MailJunkReviewRules.decodeKept(text(MailBacklogFields.PLAN_KEEP_SENDERS)),
             readSenders = text(MailBacklogFields.READ_SENDERS),
             readKeepSenders = MailJunkReviewRules.decodeKept(text(MailBacklogFields.READ_KEEP_SENDERS)),
+            accountKey = text(MailBacklogFields.ACCOUNT_KEY),
+            accountName = text(MailBacklogFields.ACCOUNT_NAME),
+            approvalSeen = long(MailBacklogFields.APPROVAL_SEEN)?.takeIf { it > 0 },
+            markReadSeen = long(MailBacklogFields.MARK_READ_SEEN)?.takeIf { it > 0 },
         )
     }
 
@@ -455,6 +510,11 @@ object MailBacklogRules {
                     if (undoId != null) "Undo puts them all back in the inbox · for 30 days" else "New mail is Autopilot's", ready = true, undoId = undoId)
             }
             b.readyAtMs == null || (b.approvedAtMs ?: 0) < b.readyAtMs -> null
+            b.applied == 0 && batch == null && unseen(b) && nowMs > 0 && nowMs - (b.approvedAtMs ?: nowMs) > NOT_REACHED_MS ->
+                MailBacklogRow(TITLE, NOT_REACHED_WHY, null, APPROVED_NOTE, ready = true, approveId = b.id)
+            b.applied == 0 && batch == null && unseen(b) ->
+                MailBacklogRow(TITLE, SENDING_LINE, null, if (paused) PAUSED_NOTE else APPROVED_NOTE, ready = true, working = !paused,
+                    cancelId = b.id.takeIf { canUnapprove(b) })
             b.applied == 0 && batch == null ->
                 MailBacklogRow(TITLE, APPROVED_LINE, null, if (paused) PAUSED_NOTE else APPROVED_NOTE, ready = true, working = !paused,
                     cancelId = b.id.takeIf { canUnapprove(b) })
@@ -483,15 +543,16 @@ object MailBacklogRules {
      */
     fun cards(backlogs: List<MailBacklog>, paused: Boolean = false, nowMs: Long = 0L): List<DecisionCard> {
         if (paused) return emptyList()
-        val newest = backlogs.groupBy { it.account }.values.mapNotNull { list -> list.maxByOrNull { it.startedAtMs } }
+        val newest = newestPerAccount(backlogs)
         // Inbox fixes, slice 3: each account's "Empty Junk" follows its clean-up card.
         // Inbox fixes, slice 8: then "Mark N read" for the unread newsletters and promos still in the inbox.
-        return newest.flatMap { b -> listOfNotNull(planCard(b), MailMarkReadRules.card(b, nowMs), MailJunkClearRules.card(b)) }
+        return newest.flatMap { b -> listOfNotNull(planCard(b, nowMs), MailMarkReadRules.card(b, nowMs), MailJunkClearRules.card(b)) }
     }
 
     /** Review opens its own list, slice 4: the Needs you card (null when there's nothing to approve). */
-    fun planCard(b: MailBacklog): DecisionCard? {
-        if (!canApprove(b)) return null
+    fun planCard(b: MailBacklog, nowMs: Long = 0L): DecisionCard? {
+        val lost = lost(b, nowMs)
+        if (!canApprove(b) && !lost) return null
         val (archive, junk) = MailCleanupReviewRules.planMoving(b)
         if (archive + junk == 0) return null
         val kept = (b.counts[MailBacklogKind.KEEP] ?: 0) + MailCleanupReviewRules.planKeptCount(b)
@@ -499,11 +560,11 @@ object MailBacklogRules {
             archive.takeIf { it > 0 }?.let { "Archive ${n(it)} ${if (it == 1) "newsletter or promo" else "newsletters and promos"} older than a week" },
             junk.takeIf { it > 0 }?.let { "Trash ${n(it)} junk" },
             kept.takeIf { it > 0 }?.let { "keep ${n(it)} that may need you" },
-            "nothing moves until you approve",
+            if (lost) NOT_REACHED_WHY else "nothing moves until you approve",
         ).joinToString(" · ")
         // Review opens its own list, slice 4: ↑ Review opens the list of who'd move, not Mail.
         return DecisionCard(
-            id = b.id, kind = DecisionKind.MAIL_CLEANUP, title = "Clean up ${b.account}", why = why, taskId = null,
+            id = b.id, kind = DecisionKind.MAIL_CLEANUP, title = "Clean up ${b.shownName}", why = why, taskId = null,
             yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
             yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_REVIEW,
             urgent = false,

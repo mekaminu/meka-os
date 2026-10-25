@@ -238,6 +238,12 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                             undo.show(InstantTapRules.failedLine(card.yesLabel, e.message), null)
                             return@launch
                         }
+                        // Approve must land (2026-10-25): nothing written → the card comes back with the reason.
+                        if (r.refused) {
+                            restore(listOf(card.id))
+                            undo.show(r.line, null)
+                            return@launch
+                        }
                         undo.show(r.line) { restore(listOf(card.id)); core.unapproveMailBacklog(card.id); Unit }
                     }
                 }

@@ -53,7 +53,7 @@ class MailHealthTest {
         val rows = MailHealthRules.healthRows(listOf(business, outlook, gmail), listOf(backlog("Personal", 1_075, applied = 3_505, approved = true, finished = true)), tidies, now, cal)
         assertEquals(listOf("Mail · Personal Gmail", "Mail · Personal Outlook", "Mail · Business Gmail"), rows.map { it.title })
         val o = rows[1]
-        assertEquals("Inbox 12,437 · 136 unread · tidied today 14 · clean-up 3,505 done · checked 3 min ago", o.line)
+        assertEquals("Inbox 12,437 · 136 inbox unread · tidied today 14 · clean-up 3,505 done · checked 3 min ago", o.line)
         assertEquals(HealthState.OK, o.state)
         val g = rows[0]
         assertEquals(HealthState.BAD, g.state)

@@ -57,6 +57,7 @@ import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.ActionableFields
 import os.meka.core.domain.ObligationFields
 import os.meka.core.domain.MailAccountRules
+import os.meka.core.domain.MailUnreadRules
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.MailMoved
@@ -1030,6 +1031,13 @@ class MailSyncTest {
         gmail.unreadInInbox = 380
         i.syncAccount(id)
         assertEquals(380, backlog().inboxUnread)
+        // Approve must land (2026-10-25): an unchanged count is stamped again before it goes stale.
+        val counted = backlog().unreadCountedAtMs
+        now += MailUnreadRules.RESTAMP_MS
+        i.syncAccount(id)
+        assertEquals(380, backlog().inboxUnread)
+        assertEquals(now, backlog().unreadCountedAtMs)
+        assertTrue(now > counted!!)
     }
 
     @Test
@@ -1053,8 +1061,13 @@ class MailSyncTest {
         // The card (and the server) read the entity as a backlog plan, which this world never starts: stand one in.
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.STARTED_AT, FieldValue.Int64(1L))
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.MARK_READ_APPROVED_AT, FieldValue.Int64(now))
+        val asked = now
         gmail.markReadRefusedAfter = 1
         i.syncAccount(id)
+        // Approve must land (2026-10-25): the server echoes the tap it read, and names the account by key and name.
+        assertEquals(asked, backlog().markReadSeen)
+        assertEquals(MailAccountRules.key("gmail", "alex@example.com"), backlog().accountKey)
+        assertTrue(backlog().accountName!!.endsWith("Gmail"), backlog().accountName)
         // The provider took one; only that one is counted, and the person's email is never in the list.
         assertEquals(1, gmail.markedDone.size)
         assertEquals(1, gmail.markedDone.single().size)

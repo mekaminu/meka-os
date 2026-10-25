@@ -8767,7 +8767,7 @@ class MekaCore(
      */
     suspend fun approveMailBacklog(id: String): MailSwitched {
         val line = onCore { activity.approveBacklog(id).also { refresh() } }
-        return MailSwitched(line, lastMailFacts?.let { mailView(it) })
+        return MailSwitched(line, lastMailFacts?.let { mailView(it) }, refused = line == os.meka.core.domain.MailBacklogRules.NOT_APPROVED)
     }
 
     /**
@@ -12749,7 +12749,11 @@ internal class ZoneCalendar(private val timeZone: () -> TimeZone) : LocalCalenda
  * Inbox autopilot, slice 3b-2: what Mail's switch or a tidy's Undo said ([line]) and the Mail pane as it is now
  * ([view], null when this device hasn't listed the accounts yet: the pane reads them again).
  */
-data class MailSwitched(val line: String, val view: os.meka.core.domain.MailAccountsView?)
+/**
+ * What Mail's bar says and the pane now. [refused]: Approve must land (2026-10-25): nothing was written (there was
+ * nothing to approve), so the apps bring the card back with [line] rather than show it as approved.
+ */
+data class MailSwitched(val line: String, val view: os.meka.core.domain.MailAccountsView?, val refused: Boolean = false)
 
 /** Review opens its own list, slice 1: what a tick in the Empty Junk review said ([line] null: nothing changed) and the sheet now. */
 data class JunkReviewChange(val line: String?, val review: os.meka.core.domain.JunkReview?)

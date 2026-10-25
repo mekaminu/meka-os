@@ -22,7 +22,7 @@ class MailMarkReadTest {
         val card = MailMarkReadRules.card(b(380), now)!!
         assertEquals("read:mbP", card.id)
         assertEquals("Mark 380 read · Personal", card.title)
-        assertEquals("380 unread newsletters, promos and receipts in your inbox · they stay where they are, just marked read · people, banks and schools are never touched", card.why)
+        assertEquals("380 unread newsletters, promos and receipts in your inbox · they stay where they are, just marked read · people, banks, schools and anything needing you stay unread", card.why)
         assertEquals("Mark read", card.yesLabel)
         assertEquals(DecisionEffect.APPROVE_BACKLOG, card.yes)
         assertEquals(DecisionEffect.OPEN_REVIEW, card.open)
@@ -69,7 +69,8 @@ class MailMarkReadTest {
     fun mailSaysWhatItDidUnderTheCleanUp() {
         assertNull(MailMarkReadRules.line(b(380)))
         val asked = b(380).copy(markReadApprovedAtMs = now)
-        assertEquals("Marking newsletters and promos read from Navilife's next check…", MailMarkReadRules.line(asked))
+        assertEquals("Mark read · on its way to Navilife…", MailMarkReadRules.line(asked))
+        assertEquals("Mark read · Navilife has it · marking from its next check…", MailMarkReadRules.line(asked.copy(markReadSeen = now)))
         assertEquals("Marking newsletters and promos read · 120 so far…", MailMarkReadRules.line(asked.copy(markedRead = 120)))
         val done = asked.copy(markedRead = 1380, markReadFinishedAtMs = now + min)
         assertEquals("Marked 1,380 newsletters and promos read · they stay in the inbox", MailMarkReadRules.line(done))
