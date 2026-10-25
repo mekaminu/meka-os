@@ -7219,6 +7219,25 @@ class MekaCore(
         if (hold) os.meka.core.domain.ProtectedMailRules.ON else os.meka.core.domain.ProtectedMailRules.OFF
     }
 
+    /**
+     * Taps feel instant, slice 10: how many emails are held by protected time, and how many wait on the card (the
+     * notices' preview), each kept over the emails, the hold and the minute instead of re-worked over every email on
+     * every refresh.
+     */
+    private fun mailHoldInputs(): List<Any?> = listOf(activity.mailItems(), protectedTime.setting(), mailHeldUntil(), minuteNow(), timeZone())
+
+    @Suppress("UNCHECKED_CAST")
+    private fun keptMailHeldCount(): Int = mailHoldInputs().let { k -> viewMemo.keep("Mail held", k) { mailHeldCount(k[0] as List<os.meka.core.domain.MailItem>) } }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun keptMailWaiting(): Int = mailHoldInputs().let { k ->
+        val items = k[0] as List<os.meka.core.domain.MailItem>
+        val shown = viewMemo.keep("Mail shown", k) { mailShown(items) }
+        viewMemo.keep("Mail waiting", listOf(shown, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailNeedsRules.allRows(shown, nowMs(), ZoneCalendar(timeZone)).size
+        }
+    }
+
     private fun mailNeedsChanged() {
         val all = activity.mailItems()
         val cal = ZoneCalendar(timeZone)
@@ -11938,7 +11957,11 @@ class MekaCore(
                     os.meka.core.domain.LifeAdminRules.keptSlot(lifeAdminNow, adminNext, day),
                 )
         }
-        val listsNow = lists.view(all, renewals.view(), shopping.view())
+        // Taps feel instant, slice 10: Lists (tasks' lists, renewals, shopping) are kept while the tasks, the minute and
+        // every record type they read are unchanged (a new email or a chat's Done no longer rebuilds them).
+        val listsNow = timed("Lists") {
+            viewMemo.keepReading("Lists", replica, listOf(all, minuteNow(), timeZone())) { lists.view(all, renewals.view(), shopping.view()) }
+        }
         val lifeAdminViewNow = os.meka.core.domain.LifeAdminRules.view(
             lifeAdminNow, adminThis, adminNext,
             os.meka.core.domain.LifeAdminRules.jobs(all, listsNow.renewals.attention, todayEpochDay(), adminThis, cal),
@@ -11946,7 +11969,15 @@ class MekaCore(
         )
         _lifeAdmin.value = lifeAdminViewNow
         val fastingNow = fasting.view()
-        val goalsNow = goals.view(all).withSessions(_sessions.value).copy(money = moneyStreaks(), reading = reading.goalView(cal))
+        // Slice 10: Goals (and the money challenges' streaks over every payment) are kept the same way. Money keeps its
+        // own copy of the payments, so that list is handed in (the same list until a payment or account is written).
+        val goalSessions = _sessions.value
+        val goalTxns = money.txns()
+        val goalsNow = timed("Goals") {
+            viewMemo.keepReading("Goals", replica, listOf(all, goalSessions, goalTxns, minuteNow(), timeZone())) {
+                goals.view(all).withSessions(goalSessions).copy(money = moneyStreaks(), reading = reading.goalView(cal))
+            }
+        }
         val today = dayWindow(nowMs())
         // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.
         val forecast = weather.forecast()
@@ -11996,10 +12027,22 @@ class MekaCore(
             os.meka.core.domain.WeekAheadRules.view(weekAheadInputs, nowMs(), cal, ::dayWindowOf)
         }
         _weekAhead.value = weekAheadNow
-        val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays, onLeave = today.epochDay in leaveDays)
+        // Slice 10: Done for the day and its receipt are kept while what's handed in, the minute and every record type
+        // they read are unchanged.
+        val tomorrowWindow = dayWindow(today.endMs)
+        val onLeaveToday = today.epochDay in leaveDays
+        val shutdownRaw = timed("Shutdown") {
+            viewMemo.keepReading(
+                "Shutdown", replica,
+                listOf(all, dayEvents, workState.schedule, workState.atWork, today, tomorrowWindow, workHolidays, onLeaveToday, minuteNow(), timeZone()),
+            ) { shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, tomorrowWindow, workHolidays, onLeave = onLeaveToday) }
+        }
+        val receiptNow = viewMemo.keepReading("Receipt", replica, listOf(minuteNow(), timeZone())) {
+            os.meka.core.domain.ReceiptRules.receipt(activity.items(), nowMs(), cal)
+        }
         val shutdownNow = shutdownRaw.copy(
             // Daily receipt: what MEKA handled today, from the activity log (Today's evening line opens Activity).
-            receipt = os.meka.core.domain.ReceiptRules.receipt(activity.items(), nowMs(), cal),
+            receipt = receiptNow,
             tomorrow = shutdownRaw.tomorrow.copy(
                 weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
                 school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
@@ -12092,7 +12135,7 @@ class MekaCore(
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(
             protectedTime.setting(), todayDay, workState.schedule, holidays,
-            os.meka.core.domain.ProtectedMailRules.paneLine(mailHeldCount(), mailHeldUntil(), nowMs(), cal),
+            os.meka.core.domain.ProtectedMailRules.paneLine(keptMailHeldCount(), mailHeldUntil(), nowMs(), cal),
         )
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
@@ -12482,7 +12525,7 @@ class MekaCore(
             trainWake = currentTrainWake(),
             trainWakeAlarmMinute = alarms.alarm(os.meka.core.domain.AlarmRules.wakeId(todayEpochDay()))?.minute,
             mailMoment = mailMomentSetting(),
-            mailWaiting = os.meka.core.domain.MailNeedsRules.allRows(mailShown(), nowMs(), ZoneCalendar(timeZone)).size,
+            mailWaiting = keptMailWaiting(),
             protectedFromMin = protectedFromToday(),
             // Deliveries, slice 2: "Parcel out for delivery · Amazon" when a shipping email says so.
             parcels = activity.parcels(),
