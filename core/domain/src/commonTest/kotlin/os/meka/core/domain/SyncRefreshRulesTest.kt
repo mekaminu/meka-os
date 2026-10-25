@@ -15,7 +15,9 @@ class SyncRefreshRulesTest {
 
     @Test
     fun anEmptyRoundAddsNoRebuild() {
-        assertFalse(SyncRefreshRules.endOfRound(deviceValuesChanged = false))
-        assertTrue(SyncRefreshRules.endOfRound(deviceValuesChanged = true))
+        val t = 1_792_144_800_000L // 11:00:00
+        assertFalse(SyncRefreshRules.endOfRound(false, lastBuiltMs = t, nowMs = t + 900), "a tap's push round, the same minute")
+        assertTrue(SyncRefreshRules.endOfRound(true, lastBuiltMs = t, nowMs = t))
+        assertTrue(SyncRefreshRules.endOfRound(false, lastBuiltMs = t + 59_000, nowMs = t + 61_000), "the minute moved on")
     }
 }

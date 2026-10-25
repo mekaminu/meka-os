@@ -15,9 +15,14 @@ object SyncRefreshRules {
     fun putOff(roundRunning: Boolean, remote: Boolean): Boolean = roundRunning && remote
 
     /**
-     * Whether the end of a round needs a rebuild of its own: only when the round's own steps changed something the
-     * views read that isn't a synced change (the Vault values kept on this device). Pulled changes were already shown,
-     * and the round's synced commits refreshed as they were made.
+     * Whether the end of a round needs a rebuild of its own: when the round's own steps changed something the views
+     * read that isn't a synced change (the Vault values kept on this device), or when the minute has moved on since
+     * the views were last built (a round is also how a long-open app's views catch up with the time: a snooze ending,
+     * a parcel's day passing). A tap's own push round, a moment after the tap's rebuild, needs none. Pulled changes
+     * were already shown, and the round's synced commits refreshed as they were made.
      */
-    fun endOfRound(deviceValuesChanged: Boolean): Boolean = deviceValuesChanged
+    fun endOfRound(deviceValuesChanged: Boolean, lastBuiltMs: Long, nowMs: Long): Boolean =
+        deviceValuesChanged || nowMs / MINUTE_MS != lastBuiltMs / MINUTE_MS
+
+    const val MINUTE_MS = 60_000L
 }

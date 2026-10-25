@@ -130,6 +130,10 @@ class MekaCore(
      * before anything that refreshes (the init block's first refresh is timed). */
     private val speedLog = os.meka.core.domain.SpeedLog()
 
+    /** When the views were last built (a sync round with nothing new rebuilds only once the minute moves on). Declared
+     * before the init block's first refresh sets it. */
+    private var lastRefreshAtMs = 0L
+
     /**
      * Background work never takes the app down (nightly Mac build 2026-10-18, ci run 871: on Kotlin/Native an exception
      * escaping a `scope.launch` ends the process — the Mac app, and the native test run). It is kept as
@@ -11743,8 +11747,8 @@ class MekaCore(
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
             // Taps feel instant, slice 4: the round used to end with one more whole-app rebuild even when it pulled
-            // nothing (every tap's own push round did); now only what the vault steps kept on this device needs one.
-            if (os.meka.core.domain.SyncRefreshRules.endOfRound(vaultLocalTouched)) refresh()
+            // nothing (every tap's own push round did); now only a new minute or what the vault steps kept here needs one.
+            if (os.meka.core.domain.SyncRefreshRules.endOfRound(vaultLocalTouched, lastRefreshAtMs, nowMs())) refresh()
             catchUpBlocks()
             null
         } catch (e: CancellationException) {
@@ -11840,6 +11844,7 @@ class MekaCore(
 
     private fun refreshOnce() {
         refreshPasses++
+        lastRefreshAtMs = nowMs()
         // Week board (11) part 2: the Stretched hold is read once, so the Fold's call notes can ask from any thread.
         if (!alertHoldLoaded) loadAlertHold()
         // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
