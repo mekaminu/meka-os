@@ -2153,8 +2153,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.fraction(positionMs: 20_000, durationMs: 40_000), 0.5)
         XCTAssertTrue(rules.isHeldId(id: "h0123456789abcdef"))
         XCTAssertFalse(rules.isHeldId(id: "../x"))
-        XCTAssertEqual(rules.KEEP_MS, 30 * 24 * 60 * 60_000)
-        XCTAssertTrue(rules.PRIVACY.contains("30 days"))
+        XCTAssertEqual(rules.KEEP_MS, 7 * 24 * 60 * 60_000)
+        XCTAssertTrue(rules.PRIVACY.contains("7 days"))
     }
 
     func testPlayMyMessagesReachesSwift() {
