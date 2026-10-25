@@ -31,7 +31,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.core.domain.BargeInOutput
 import os.meka.core.domain.BargeInRules
+import os.meka.core.domain.LiveAudioRules
 import os.meka.core.domain.LiveDiagnosisRules
+import os.meka.core.domain.LiveEchoGate
+import os.meka.core.domain.LiveJitter
 import os.meka.core.domain.LiveHandOnRules
 import os.meka.core.domain.LiveTalkRules
 import os.meka.core.domain.LiveToolRules
@@ -48,7 +51,7 @@ import java.util.concurrent.TimeUnit
  * phone talks to Google's Live WebSocket with it: the microphone goes up in 40 ms chunks (16 kHz, through the voice-call
  * path with the echo canceller and noise suppressor where the phone has them), Obi's voice comes back at 24 kHz and
  * plays as it arrives; when Meka talks over him Google says so and what is still queued is dropped at once. On the
- * phone's own speaker, while Obi speaks only Meka's voice clearly over his goes up ([LiveTalkRules.sendWhileSpeaking]).
+ * phone's own speaker, while Obi speaks only Meka's voice clearly over his goes up ([LiveEchoGate]), and his voice is held a moment so a network gap never stutters ([LiveJitter]).
  * Nothing is recorded or kept; only the seconds heard and spoken are reported back ([MekaCore.liveUsage]).
  *
  * If the session isn't set up within [LiveTalkRules.FALLBACK_MS] (no key, the month's cap, Google refusing, no
@@ -100,6 +103,15 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private var track: AudioTrack? = null
     private var player: Thread? = null
     private val queue = LinkedBlockingQueue<ByteArray>()
+    /**
+     * 2026-10-25 ("it breaks when speaking and skips too"): on the speaker Obi's echo is kept out of the microphone
+     * ([LiveEchoGate]: only his voice clearly over Obi's for a quarter second goes up), and Obi's voice is held a moment
+     * before it plays and waits again on a network gap rather than stuttering ([LiveJitter]). Both guarded by [audioLock]
+     * (the socket, the microphone and the clock each touch them on their own thread).
+     */
+    private val audioLock = Any()
+    private var gate = LiveEchoGate()
+    private var jitter = LiveJitter<ByteArray>()
     // Slice 4: the turn's transcripts and the pages its searches found (main thread only).
     private val heardNow = StringBuilder()
     private val saidNow = StringBuilder()
@@ -167,6 +179,10 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         resuming = false
         tokenIn = false
         why = null
+        synchronized(audioLock) {
+            gate = LiveEchoGate()
+            jitter = LiveJitter()
+        }
         output = TalkBargeIn.output(context)
         val askedAt = SystemClock.elapsedRealtime()
         // Slice 2c: the session asked for during the hello, while its token can still open one.
@@ -208,6 +224,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 while (gen == generation) {
                     val now = SystemClock.elapsedRealtime()
                     if (setUp && !resuming && now >= endAt) carryOn(gen)
+                    synchronized(audioLock) { letThrough(jitter.tick(now)) }
                     val speaking = LiveTalkRules.speaking(playUntil, now)
                     if (speaking != speakingNow) {
                         speakingNow = speaking
@@ -337,16 +354,22 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 val pcm = runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull() ?: return@forEach
                 if (gen != generation) return
                 outBytes += pcm.size
-                playUntil = LiveTalkRules.playUntil(playUntil, SystemClock.elapsedRealtime(), pcm.size)
-                queue.offer(pcm)
+                synchronized(audioLock) { letThrough(jitter.arrive(pcm, pcm.size, SystemClock.elapsedRealtime())) }
             }
             LiveProtocol.Event.Interrupted -> {
-                // Meka talked over him: drop what's queued and what the speaker still holds.
+                // Meka talked over him: drop what's held, queued and what the speaker still holds.
+                synchronized(audioLock) {
+                    jitter.interrupted()
+                    gate.clear()
+                }
                 queue.clear()
                 playUntil = 0
                 track?.let { t -> runCatching { t.pause(); t.flush(); t.play() } }
             }
-            LiveProtocol.Event.TurnComplete -> main.post { if (gen == generation) finishTurn() }
+            LiveProtocol.Event.TurnComplete -> {
+                synchronized(audioLock) { letThrough(jitter.turnComplete(SystemClock.elapsedRealtime())) }
+                main.post { if (gen == generation) finishTurn() }
+            }
             is LiveProtocol.Event.Heard -> main.post {
                 if (gen != generation) return@post
                 heardNow.append(e.text)
@@ -365,6 +388,25 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 if (gen == generation && l == link) LiveHandOnRules.handle(e.handle)?.let { heldHandle = it }
             }
         }
+    }
+
+    /** What the jitter let through: to the speaker's queue in order, each chunk's span and level to the gate. Under [audioLock]. */
+    private fun letThrough(chunks: List<ByteArray>) {
+        if (chunks.isEmpty()) return
+        var at = jitter.lastFrom
+        for (pcm in chunks) {
+            val to = at + LiveAudioRules.ms(pcm.size)
+            gate.played(at, to, levelOf(pcm))
+            at = to
+            queue.offer(pcm)
+        }
+        playUntil = jitter.until
+    }
+
+    private fun levelOf(pcm: ByteArray): Float {
+        val n = pcm.size / 2
+        val samples = ShortArray(n) { i -> ((pcm[2 * i].toInt() and 0xff) or (pcm[2 * i + 1].toInt() shl 8)).toShort() }
+        return BargeInRules.dbfs(samples, n)
     }
 
     /**
@@ -461,7 +503,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 if (n <= 0) break
                 val db = BargeInRules.dbfs(buf, n)
                 val speaking = LiveTalkRules.speaking(playUntil, SystemClock.elapsedRealtime())
-                val send = !speaking || LiveTalkRules.sendWhileSpeaking(output, db)
+                val send = synchronized(audioLock) { gate.send(output, db, speaking, SystemClock.elapsedRealtime()) }
                 val len = n * 2
                 if (send) {
                     for (i in 0 until n) {
@@ -493,7 +535,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build(),
                 )
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(maxOf(min, rate / 5 * 2))
+                .setBufferSizeInBytes(LiveAudioRules.trackBytes(rate, min))
                 .build()
         }.getOrNull() ?: return
         runCatching { t.play() }

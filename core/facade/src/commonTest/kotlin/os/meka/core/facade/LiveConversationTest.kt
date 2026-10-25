@@ -198,12 +198,49 @@ class LiveConversationTest {
         c.sendAudio("ZZZZ", 3, -45f, headphones = false)
         runCurrent()
         assertTrue(!socket.sent.last().contains("ZZZZ") && socket.sent.last().contains("AAAA"), "quiet: silence goes up")
-        c.sendAudio("YYYY", 3, -10f, headphones = false)
-        runCurrent()
-        assertTrue(socket.sent.last().contains("YYYY"), "Meka over Obi goes up")
+        // 2026-10-25: Meka over Obi goes up once his voice has lasted a quarter second (a clatter doesn't cut Obi off).
+        val passed = (0 until 8).map {
+            advanceTimeBy(40)
+            c.sendAudio("YYYY", 3, -10f, headphones = false)
+            runCurrent()
+            socket.sent.last().contains("YYYY")
+        }
+        assertEquals(listOf(false, false, false, false, false, false, true, true), passed, "Meka over Obi goes up")
         c.sendAudio("XXXX", 3, -45f, headphones = true)
         runCurrent()
         assertTrue(socket.sent.last().contains("XXXX"), "headphones: everything goes up")
+        c.stop()
+    }
+
+    @Test
+    fun obisVoiceIsHeldAMomentThenPlaysAsOneStreamAndTalkingOverDropsWhatIsHeld() = runTest {
+        val socket = FakeSocket()
+        val (c, events) = conversation(FakeCore(), socket)
+        c.start()
+        runCurrent()
+        socket.incoming.trySend("""{"setupComplete":{}}""")
+        runCurrent()
+        // 40 ms of his voice (2,560 base64 characters = 1,920 bytes): held, nothing plays yet.
+        val forty = "A".repeat(2_560)
+        socket.incoming.trySend("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$forty"}}]}}}""")
+        runCurrent()
+        assertTrue(events.none { it is LiveEvent.Audio }, "held until a little is queued")
+        // Seven chunks (280 ms) queued: all of them go to the speaker at once.
+        repeat(6) { socket.incoming.trySend("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$forty"}}]}}}""") }
+        runCurrent()
+        assertEquals(7, events.count { it is LiveEvent.Audio })
+        advanceTimeBy(150)
+        runCurrent()
+        assertTrue(LiveEvent.Speaking(true) in events)
+        // A new chunk after he talked over Obi is held afresh; the turn's end plays what's held.
+        socket.incoming.trySend("""{"serverContent":{"interrupted":true}}""")
+        socket.incoming.trySend("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$forty"}}]}}}""")
+        runCurrent()
+        assertEquals(7, events.count { it is LiveEvent.Audio })
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        runCurrent()
+        assertEquals(8, events.count { it is LiveEvent.Audio })
+        assertEquals(0, c.underruns)
         c.stop()
     }
 

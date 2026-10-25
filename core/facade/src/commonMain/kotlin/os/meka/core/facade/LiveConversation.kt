@@ -17,7 +17,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
+import os.meka.core.domain.BargeInRules
+import os.meka.core.domain.LiveAudioRules
 import os.meka.core.domain.LiveDiagnosisRules
+import os.meka.core.domain.LiveEchoGate
+import os.meka.core.domain.LiveJitter
 import os.meka.core.domain.LiveFactsRules
 import os.meka.core.domain.LiveHandOnRules
 import os.meka.core.domain.LiveMoney
@@ -75,6 +79,10 @@ class LiveConversation internal constructor(
     private var playUntil = 0L
     private var speakingNow = false
     private var headphones = false
+    /** 2026-10-25: Obi's echo kept out of the microphone on the speakers, and his voice held a moment so it never stutters. */
+    private var gate = LiveEchoGate()
+    private var jitter = LiveJitter<Held>()
+    private class Held(val b64: String, val bytes: Int, val dbfs: Float)
     private var session: LiveCodec.Session? = null
     private val jobs = mutableListOf<Job>()
     private var outgoing: Channel<String>? = null
@@ -130,6 +138,8 @@ class LiveConversation internal constructor(
         outBytes = 0
         playUntil = 0
         speakingNow = false
+        gate = LiveEchoGate()
+        jitter = LiveJitter()
         heldHandle = null
         resumes = 0
         lastHeardAt = null
@@ -173,6 +183,7 @@ class LiveConversation internal constructor(
                 while (gen == generation) {
                     val now = elapsedMs()
                     if (setUp && !resuming && now >= endAt) carryOn(gen)
+                    play(jitter.tick(now))
                     val speaking = herVoice(now)
                     if (speaking != speakingNow && gen == generation) {
                         speakingNow = speaking
@@ -186,14 +197,14 @@ class LiveConversation internal constructor(
 
     /**
      * One microphone chunk: [base64] 16 kHz PCM of [bytes] bytes, at [dbfs]. While Obi speaks on the speaker, only his
-     * voice clearly over Obi's goes up ([LiveTalkRules.sendWhileSpeaking]); the rest goes as silence of the same length.
+     * voice clearly over Obi's echo for a quarter second goes up ([LiveEchoGate]); the rest goes as silence of the same length.
      */
     fun sendAudio(base64: String, bytes: Int, dbfs: Float, headphones: Boolean) {
         if (!running || !setUp) return
         this.headphones = headphones
         val speaking = herVoice(elapsedMs())
         val output = if (headphones) os.meka.core.domain.BargeInOutput.HEADPHONES else os.meka.core.domain.BargeInOutput.SPEAKER
-        val send = !speaking || LiveTalkRules.sendWhileSpeaking(output, dbfs)
+        val send = gate.send(output, dbfs, speaking, elapsedMs())
         inBytes += bytes.coerceAtLeast(0)
         outgoing?.trySend(LiveProtocol.audio(if (send) base64 else silence(bytes)))
     }
@@ -279,14 +290,18 @@ class LiveConversation internal constructor(
                 val bytes = decodedBytes(b64)
                 if (bytes <= 0) return@forEach
                 outBytes += bytes
-                playUntil = LiveTalkRules.playUntil(playUntil, elapsedMs(), bytes)
-                out.trySend(LiveEvent.Audio(b64))
+                play(jitter.arrive(Held(b64, bytes, levelOf(b64)), bytes, elapsedMs()))
             }
             LiveProtocol.Event.Interrupted -> {
+                jitter.interrupted()
+                gate.clear()
                 playUntil = 0
                 out.trySend(LiveEvent.Interrupted)
             }
-            LiveProtocol.Event.TurnComplete -> finishTurn()
+            LiveProtocol.Event.TurnComplete -> {
+                play(jitter.turnComplete(elapsedMs()))
+                finishTurn()
+            }
             is LiveProtocol.Event.Heard -> {
                 heardNow.append(e.text)
                 if (e.text.isNotBlank()) lastHeardAt = elapsedMs()
@@ -389,6 +404,22 @@ class LiveConversation internal constructor(
         out.trySend(LiveEvent.Ended(fellBack, fallbackLine))
     }
 
+    /** What the jitter let through: to the speaker in order, each chunk's span and level to the gate, the speaking clock on. */
+    private fun play(chunks: List<Held>) {
+        if (chunks.isEmpty()) return
+        var at = jitter.lastFrom
+        for (c in chunks) {
+            val to = at + LiveAudioRules.ms(c.bytes)
+            gate.played(at, to, c.dbfs)
+            at = to
+            out.trySend(LiveEvent.Audio(c.b64))
+        }
+        playUntil = jitter.until
+    }
+
+    /** Times the speaker ran dry mid-turn this talk (Obi waited for more rather than stuttering). */
+    val underruns: Int get() = jitter.underruns
+
     private var silenceFor: Pair<Int, String>? = null
 
     /** Base64 silence of [bytes] bytes, kept for the usual chunk size. */
@@ -404,6 +435,16 @@ class LiveConversation internal constructor(
         const val TICK_MS = 100L
         const val MAX_CHUNK = 64_000
         const val NO_TOOL = "Navilife has no such tool."
+
+        /** The loudness (dBFS) of base64 16-bit PCM [b64]; -160 when it can't be read. */
+        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+        fun levelOf(b64: String): Float {
+            val pcm = runCatching { kotlin.io.encoding.Base64.decode(b64.trim()) }.getOrNull() ?: return -160f
+            val n = pcm.size / 2
+            if (n == 0) return -160f
+            val samples = ShortArray(n) { i -> ((pcm[2 * i].toInt() and 0xff) or (pcm[2 * i + 1].toInt() shl 8)).toShort() }
+            return BargeInRules.dbfs(samples, n)
+        }
 
         /** The decoded length of base64 [b64] (what the usage count and the speaking clock go by). */
         fun decodedBytes(b64: String): Int {
