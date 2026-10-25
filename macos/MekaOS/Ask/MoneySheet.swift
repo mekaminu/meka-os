@@ -60,12 +60,18 @@ struct MoneySheet: View {
         let v = model.money ?? MoneyView.companion.LOCKED
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(MoneyRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.locked ? MoneyRules.shared.LOCKED_MAC : v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(v.locked && v.summary == MoneyRules.shared.LOCKED ? MoneyRules.shared.LOCKED_MAC : v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
-            if v.locked {
+            // Speed (4c): while the fresh view is built, the last one shows with "bringing it up to date…" under the title.
+            if let line = v.opening, !v.skeleton {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
+            }
+            if v.skeleton {
+                Spacer(minLength: 0)
+            } else if v.locked {
                 Button(MoneyRules.shared.UNLOCK) { unlock() }
                     .keyboardShortcut(.defaultAction)
                     .staggeredAppear(2)
@@ -109,7 +115,7 @@ struct MoneySheet: View {
     private func unlock() {
         let model = self.model // the observable model (main actor), not the view, crosses into the callback
         MacBiometric.unlock(reason: MoneyRules.shared.UNLOCK_REASON) { ok in
-            if ok { MekaHaptics.light(); model.openMoney() } else { MekaHaptics.tick() }
+            if ok { MekaHaptics.light(); model.openMoney() } else { model.moneyUnlockRefused(); MekaHaptics.tick() }
         }
     }
 

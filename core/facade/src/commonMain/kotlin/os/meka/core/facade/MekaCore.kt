@@ -743,8 +743,35 @@ class MekaCore(
     // Slice 4: the forecast's what-ifs, on this device only, dropped when Money locks.
     private var moneyWhatIf = os.meka.core.domain.MoneyWhatIf()
 
-    /** After the app's own biometric yes: the Money screen for this month. */
-    suspend fun openMoney() = onCore { moneyOpen = true; moneyOffset = 0; syncMoneyGoals(); refreshMoney() }
+    // Speed (4c): the last view of this month built this session, in memory only (never stored or synced), shown the
+    // moment the fingerprint says yes while the fresh one is built. A StateFlow so the app's thread can read it.
+    private val moneyLast = MutableStateFlow<os.meka.core.domain.MoneyView?>(null)
+
+    /**
+     * After the app's own biometric yes: the Money screen for this month. In the same frame (before the core's queue)
+     * the screen shows the last view of this session marked "bringing it up to date…", or "Opening your money…" the
+     * first time ([os.meka.core.domain.MoneyOpenRules]); the fresh view replaces it when built. If building fails,
+     * Money locks again saying so (nothing is thrown).
+     */
+    suspend fun openMoney() {
+        if (_money.value.locked) _money.value = os.meka.core.domain.MoneyOpenRules.instant(moneyLast.value)
+        onCore {
+            moneyOpen = true; moneyOffset = 0
+            try { syncMoneyGoals(); refreshMoney() } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                moneyOpen = false
+                _money.value = os.meka.core.domain.MoneyOpenRules.failed()
+            }
+        }
+    }
+
+    /** The app's fingerprint (Touch ID on the [mac]) said no: the locked page says so instead of staying silent. */
+    fun moneyUnlockRefused(mac: Boolean = false) {
+        if (_money.value.locked) _money.value = os.meka.core.domain.MoneyOpenRules.refused(mac)
+    }
+
+    /** Test hook: runs [block] on the core's one thread (to hold the queue while a test looks at what shows meanwhile). */
+    internal suspend fun <T> onCoreForTest(block: () -> T): T = onCore(block)
 
     /** Locks Money again (the pane closed or the app went away). */
     suspend fun closeMoney() = onCore { moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
@@ -945,6 +972,7 @@ class MekaCore(
                 else os.meka.core.domain.MoneyGoals.view(goals.goals(tasks.all()).first, money.accounts(), money.cards().map { it.id }.toSet()),
             )
         }
+        if (os.meka.core.domain.MoneyOpenRules.keep(_money.value, moneyOffset, moneyWhatIf)) moneyLast.value = _money.value
     }
 
     /** Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's invoice finds against every statement line. Caller is on the core. */

@@ -452,6 +452,10 @@ data class MoneyView(
     val review: MoneyMonthReviewView? = null,
     /** Money manager (6): MONEY GOALS — his £ goals and the account each follows ([MoneyGoals]); shown with this month. */
     val goals: MoneyGoalsView? = null,
+    /** Speed: while the fresh view is being built after an open, the line under the title ([MoneyOpenRules]); null once it's fresh. */
+    val opening: String? = null,
+    /** Speed: the first open of a session before any view is built — the title and [opening] only, nothing to tap. */
+    val skeleton: Boolean = false,
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its

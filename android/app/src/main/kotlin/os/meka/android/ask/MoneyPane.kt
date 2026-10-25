@@ -172,7 +172,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
 
     val unlock: () -> Unit = {
         FoldBiometric.unlock(context, MoneyRules.UNLOCK_REASON, "Your spending, read-only") { ok ->
-            if (ok) scope.launch { runCatching { core.openMoney() }; haptics.light() } else haptics.tick()
+            // Speed (4c): the screen fills in the same frame (the last view, or "Opening your money…"); a no is said on the page.
+            if (ok) { haptics.light(); scope.launch { runCatching { core.openMoney() } } } else { core.moneyUnlockRefused(); haptics.tick() }
         }
     }
     LaunchedEffect(Unit) { if (core.moneyView.value.locked) unlock() }
@@ -269,6 +270,13 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
+        // Speed (4c): while the fresh view is built, the last one shows with "bringing it up to date…" under the title.
+        v.opening?.takeIf { !v.skeleton }?.let { line ->
+            item(key = "opening") {
+                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+            }
+        }
+        if (v.skeleton) return@LazyColumn
         if (v.locked) {
             item(key = "unlock") {
                 Text(MoneyRules.UNLOCK, style = MekaType.itemMeta, color = Meka.colors.accent,

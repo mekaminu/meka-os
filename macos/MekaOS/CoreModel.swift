@@ -4233,6 +4233,9 @@ final class CoreModel {
     /// After Touch ID's yes (MoneySheet asks): the core works out this month's figures. Nothing but the call crosses.
     func openMoney() { run { try await $0.openMoney() } }
 
+    /// Touch ID said no: the locked sheet says so (Speed 4c). Synchronous; nothing but the call crosses.
+    func moneyUnlockRefused() { core?.moneyUnlockRefused(mac: true) }
+
     /// Locks Money again (the sheet closed or the app went to the background).
     func closeMoney() { run { try await $0.closeMoney() } }
 
