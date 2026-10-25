@@ -11968,33 +11968,34 @@ class MekaCore(
         // Travel mode, slice 1: the trips with their bookings.
         val tripItems = trips.items()
         // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
-        val weekAheadNow = os.meka.core.domain.WeekAheadRules.view(
-            os.meka.core.domain.WeekAheadInputs(
-                // Appointment nudges, slice 2c: a booked visit is said once, as its Google event when it has one.
-                events = dayEvents.filterNot { os.meka.core.domain.AppointmentCalendarRules.isAppointment(it) },
-                work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays,
-                    commute = workState.commute, away = trips.awayDays()),
-                holidays = holidays,
-                school = schoolItems,
-                dateNight = dateNightNow,
-                renewals = listsNow.renewals.all,
-                appointments = os.meka.core.domain.AppointmentCalendarRules.notInCalendar(appointments.items(), dayEvents, cal),
-                forecast = forecast,
-                goals = goalsNow.goals,
-                bins = binItems,
-                occasions = occasionItems,
-                trips = tripItems,
-                children = marks.clubChildren,
-                // Inbox autopilot, slice 9b: the sorted mail and the chases of emails made into Waiting for.
-                mail = activity.mailItems(),
-                waiting = lists.waitingItems(),
-                // Deliveries, slice 2: each parcel on the day it's due (lit on an office day).
-                parcels = activity.parcels(),
-                // Protected time, slice 5: each day's protected time and the week's line.
-                protectedSetting = protectedTime.setting(),
-            ),
-            nowMs(), cal, ::dayWindowOf,
+        val weekAheadInputs = os.meka.core.domain.WeekAheadInputs(
+            // Appointment nudges, slice 2c: a booked visit is said once, as its Google event when it has one.
+            events = dayEvents.filterNot { os.meka.core.domain.AppointmentCalendarRules.isAppointment(it) },
+            work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays,
+                commute = workState.commute, away = trips.awayDays()),
+            holidays = holidays,
+            school = schoolItems,
+            dateNight = dateNightNow,
+            renewals = listsNow.renewals.all,
+            appointments = os.meka.core.domain.AppointmentCalendarRules.notInCalendar(appointments.items(), dayEvents, cal),
+            forecast = forecast,
+            goals = goalsNow.goals,
+            bins = binItems,
+            occasions = occasionItems,
+            trips = tripItems,
+            children = marks.clubChildren,
+            // Inbox autopilot, slice 9b: the sorted mail and the chases of emails made into Waiting for.
+            mail = activity.mailItems(),
+            waiting = lists.waitingItems(),
+            // Deliveries, slice 2: each parcel on the day it's due (lit on an office day).
+            parcels = activity.parcels(),
+            // Protected time, slice 5: each day's protected time and the week's line.
+            protectedSetting = protectedTime.setting(),
         )
+        // Taps feel instant, slice 7: the week ahead is kept while everything it reads and the minute are unchanged.
+        val weekAheadNow = viewMemo.keep("Week ahead", listOf(weekAheadInputs, minuteNow(), timeZone())) {
+            os.meka.core.domain.WeekAheadRules.view(weekAheadInputs, nowMs(), cal, ::dayWindowOf)
+        }
         _weekAhead.value = weekAheadNow
         val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays, onLeave = today.epochDay in leaveDays)
         val shutdownNow = shutdownRaw.copy(
@@ -12246,13 +12247,26 @@ class MekaCore(
             os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) },
             boardWork, _calendar.value::toneOf,
         )
-        _board.value = timed("Week board") { os.meka.core.domain.WeekBoardRules.build(
-            all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
-            marks.hidden, _calendar.value::toneOf,
-            goals = _goals.value.goals, weekGoals = _goals.value.week,
-            // Week board item (10): bills and renewals due count towards a day stacking up.
-            bills = os.meka.core.domain.PressureRules.bills(renewals.items()),
-        ) }
+        // Week board item (10): bills and renewals due count towards a day stacking up.
+        val boardBills = os.meka.core.domain.PressureRules.bills(renewals.items())
+        val boardAgenda = _calendar.value
+        val boardGoals = _goals.value.goals
+        val boardWeekGoals = _goals.value.week
+        _board.value = timed("Week board") {
+            // Taps feel instant, slice 7: the board is kept until a task, an event, a mark, work, a goal, a bill, the
+            // calendars' colours or the minute changes (a new email or a chat's Done no longer rebuilds eight weeks).
+            viewMemo.keep(
+                "Week board",
+                listOf(all, boardEvents, boardWork, marks.hidden, boardAgenda, boardGoals, boardWeekGoals, boardBills, minuteNow(), timeZone()),
+            ) {
+                os.meka.core.domain.WeekBoardRules.build(
+                    all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
+                    marks.hidden, boardAgenda::toneOf,
+                    goals = boardGoals, weekGoals = boardWeekGoals,
+                    bills = boardBills,
+                )
+            }
+        }
         // Item (10): the first day stacking up within two days, as a line on Today and in the morning brief.
         run {
             val soon = os.meka.core.domain.PressureRules.soonest(
