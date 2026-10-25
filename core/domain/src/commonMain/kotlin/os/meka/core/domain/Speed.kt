@@ -122,8 +122,31 @@ class ViewMemo {
         return v
     }
 
+    private class KeptReading(val inputs: List<Any?>, val types: Set<String>, val stamp: List<Long>, val value: Any?)
+
+    private val keptReadings = HashMap<String, KeptReading>()
+
+    /**
+     * Taps feel instant, slice 8: [build] kept while [inputs] are equal and nothing it read through [replica] has been
+     * written since (the replica tells which types it read). For parts that read many record types themselves (Review,
+     * Balance, the reflection): no list of their inputs to keep in step by hand. [inputs] holds what isn't in the
+     * replica (the minute, the time zone, choices kept in memory, the lists handed in).
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> keepReading(name: String, replica: os.meka.core.sync.Replica, inputs: List<Any?>, build: () -> T): T {
+        val k = keptReadings[name]
+        if (k != null && k.inputs == inputs && replica.readStamp(k.types) == k.stamp) {
+            replica.noteReads(k.types)
+            return k.value as T
+        }
+        val (v, types) = replica.tracking(build)
+        keptReadings[name] = KeptReading(inputs, types, replica.readStamp(types), v)
+        builds[name] = (builds[name] ?: 0) + 1
+        return v
+    }
+
     /** Forget every kept part (the next [keep] of each builds afresh). */
-    fun clear() = kept.clear()
+    fun clear() { kept.clear(); keptReadings.clear() }
 
     companion object {
         const val MINUTE_MS = 60_000L

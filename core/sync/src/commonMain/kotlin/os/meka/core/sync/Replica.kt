@@ -110,6 +110,7 @@ class Replica(
     fun commitLocal(entityType: String, entityId: String, changes: Map<String, FieldValue>): List<Op> {
         require(changes.isNotEmpty()) { "no changes" }
         val rec = recorder
+        var unchanged = false
         val ops = try { store.transaction {
             val out = mutableListOf<Op>()
             val created = rec != null && store.fieldHeads(EntityRef(entityType, entityId)).isEmpty()
@@ -141,10 +142,12 @@ class Replica(
             }
             if (out.isNotEmpty()) store.setClockHighWater(clock.latest)
             rec?.addAll(recorded)
+            unchanged = out.isEmpty()
             out
         } } finally {
-            // Written, or rolled back half way: either way this type is read afresh next time.
-            forget(entityType)
+            // Written, or rolled back half way: either way this type is read afresh next time. A commit that changed
+            // nothing leaves the type's generation alone, so views kept over it stay kept.
+            forget(entityType, bump = !unchanged)
         }
         val batch = batchRefs
         if (ops.isNotEmpty() && batch != null) {
@@ -161,6 +164,7 @@ class Replica(
 
     fun applyRemoteBatch(batch: List<Op>): List<ApplyResult> {
         val changed = mutableSetOf<EntityRef>()
+        var applied = false
         val results = try { store.transaction {
             batch.map { op ->
                 val existing = store.op(op.opId)
@@ -179,9 +183,11 @@ class Replica(
                         ApplyResult.REJECTED_CLOCK
                     }
                 }
-            }.also { store.setClockHighWater(clock.latest) }
+            }.also { store.setClockHighWater(clock.latest); applied = true }
         } } finally {
-            batch.mapTo(HashSet()) { it.entityType }.forEach { forget(it) }
+            // Duplicates change nothing: only the types something was applied to move on (all of them on a failure).
+            val moved = if (applied) changed.mapTo(HashSet()) { it.entityType } else null
+            batch.mapTo(HashSet()) { it.entityType }.forEach { forget(it, bump = moved == null || it in moved) }
         }
         if (changed.isNotEmpty()) {
             notifyingRemote = true
@@ -198,6 +204,7 @@ class Replica(
         private set
 
     fun entity(entityType: String, entityId: String): EntitySnapshot? {
+        reads?.add(entityType)
         val ref = EntityRef(entityType, entityId)
         val fieldHeads = store.fieldHeads(ref)
         if (fieldHeads.isEmpty()) return null
@@ -223,14 +230,45 @@ class Replica(
         var decoded: Map<String, Any?> = emptyMap()
     }
 
-    private fun forget(entityType: String) {
+    private fun forget(entityType: String, bump: Boolean = true) {
+        if (bump) generations = generations + (entityType to ((generations[entityType] ?: 0L) + 1))
         val k = kept
         if (entityType in k) kept = k - entityType
     }
 
-    private fun forgetAll() { kept = emptyMap() }
+    private fun forgetAll() { kept = emptyMap(); generation++ }
+
+    /**
+     * Taps feel instant, slice 8: how many writes each type has seen (and [generation], every rolled-back batch), so a
+     * view kept over what it read ([readStamp] of the types [tracking] saw) is rebuilt after any write to one of them.
+     */
+    private var generations: Map<String, Long> = emptyMap()
+    private var generation = 0L
+
+    /** While [tracking] runs: the types read through this replica. */
+    private var reads: MutableSet<String>? = null
+
+    /** Runs [block] and returns the entity types it read through this replica (nested calls tell the outer one too). */
+    fun <T> tracking(block: () -> T): Pair<T, Set<String>> {
+        val outer = reads
+        val mine = HashSet<String>()
+        reads = mine
+        try {
+            return block() to mine
+        } finally {
+            reads = outer
+            outer?.addAll(mine)
+        }
+    }
+
+    /** Tells an enclosing [tracking] that [types] were read (a kept view handed back without reading them again). */
+    fun noteReads(types: Set<String>) { reads?.addAll(types) }
+
+    /** The write stamp of [types]: equal to an earlier stamp of the same types only if none of them was written since. */
+    fun readStamp(types: Set<String>): List<Long> = listOf(generation) + types.sorted().map { generations[it] ?: 0L }
 
     private fun keptType(entityType: String): KeptType {
+        reads?.add(entityType)
         kept[entityType]?.let { return it }
         val all = store.entityIds(entityType).mapNotNull { entity(entityType, it) }
         val t = KeptType(all, all.filter { !it.deleted })
@@ -263,10 +301,12 @@ class Replica(
     fun conflicts(vararg entityTypes: String): List<Conflict> =
         entityTypes.flatMap { t -> store.entityIds(t).flatMap { conflictsFor(t, it) } }
 
-    fun conflictsFor(entityType: String, entityId: String): List<Conflict> =
-        store.fieldHeads(EntityRef(entityType, entityId)).mapNotNull { (field, heads) ->
+    fun conflictsFor(entityType: String, entityId: String): List<Conflict> {
+        reads?.add(entityType)
+        return store.fieldHeads(EntityRef(entityType, entityId)).mapNotNull { (field, heads) ->
             Merge.conflict(heads, schema.policyFor(entityType, field))
         }
+    }
 
     fun pendingPushCount(): Int = store.pendingCount()
     internal fun pendingPush(limit: Int) = store.pendingPush(limit)

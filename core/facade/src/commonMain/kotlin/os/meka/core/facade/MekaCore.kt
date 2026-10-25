@@ -12181,50 +12181,69 @@ class MekaCore(
         _signIn.value = listOfNotNull(os.meka.core.domain.SignInRules.line(signIns.all(), nowMs(), cal))
         _weather.value = if (hereLine == null) weatherNow
         else weatherNow.copy(nowLine = hereLine, nowSpoken = hereLine.replace("°", " degrees"))
-        _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
-            dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
+        // Taps feel instant, slice 8: Review, the wins, Balance and the reflection are kept while the minute, the lists
+        // handed in and every record type they read are unchanged (a new email or a chat's Done no longer rebuilds them).
+        val reviewFasts = fasting.ended()
+        _review.value = timed("Review") {
+            viewMemo.keepReading("Review", replica, listOf(reviewOffset, all, dayEvents, _goals.value, reviewFasts, minuteNow(), timeZone())) {
+                review.view(reviewOffset, all, dayEvents, _goals.value, reviewFasts) { day ->
+                    dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
+                }
+            }
         }
-        _wins.value = wins.view(_review.value.weekStart)
+        _wins.value = viewMemo.keepReading("Wins", replica, listOf(_review.value.weekStart, minuteNow(), timeZone())) {
+            wins.view(_review.value.weekStart)
+        }
         // Balance view, slice 1: the reviewed week's time across work, family, health and self.
         run {
-            val balanceHours = hoursOf(workState, todayEpochDay())
-            val childOf: (os.meka.core.domain.CalendarEvent) -> String? = { e ->
-                os.meka.core.domain.ClubChildRules.child(e, marks.clubChildren, ZoneCalendar(timeZone)) ?: os.meka.core.domain.FootballRules.child(e)
-            }
-            // Slice 2: the reviewed week and the three before it, counted the same way, for each area's trend.
-            // Slice 5: his "Count as …" choices, by title.
-            val chosen = balanceTargets.choices()
-            val trendWeeks = os.meka.core.domain.BalanceRules.trendMinutes(
-                _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents, review::habitDays, childOf, chosen,
-            )
-            _balance.value = os.meka.core.domain.BalanceRules.view(
-                _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents,
-                _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks, chosen,
-            )
-            // Slice 4: this week as planned, for Thursday evening's one nudge.
-            val thisWeek = os.meka.core.domain.GoalRules.weekStart(todayEpochDay())
-            balanceNudge = os.meka.core.domain.BalanceRules.nudge(
-                thisWeek, ZoneCalendar(timeZone), hoursOf(workState, thisWeek), dayEvents, review.habitDays(thisWeek),
-                balanceTargets.targets(), childOf, chosen,
-            )
-            // Slice 3: the week ahead's balance line, the week it shows counted as planned.
             val ahead = _weekAhead.value
-            if (ahead.weekStart > 0) {
-                _weekAhead.value = ahead.withBalance(
-                    os.meka.core.domain.BalanceRules.weekAheadLine(
-                        ahead.weekStart, ahead.title == "Next week", ZoneCalendar(timeZone), hoursOf(workState, ahead.weekStart),
-                        dayEvents, review.habitDays(ahead.weekStart), balanceTargets.targets(), childOf, chosen,
-                    ),
+            val kept = timed("Balance") { viewMemo.keepReading(
+                "Balance", replica,
+                listOf(_review.value, workState, dayEvents, marks.clubChildren, ahead.weekStart, ahead.title, minuteNow(), timeZone()),
+            ) {
+                val balanceHours = hoursOf(workState, todayEpochDay())
+                val childOf: (os.meka.core.domain.CalendarEvent) -> String? = { e ->
+                    os.meka.core.domain.ClubChildRules.child(e, marks.clubChildren, ZoneCalendar(timeZone)) ?: os.meka.core.domain.FootballRules.child(e)
+                }
+                // Slice 2: the reviewed week and the three before it, counted the same way, for each area's trend.
+                // Slice 5: his "Count as …" choices, by title.
+                val chosen = balanceTargets.choices()
+                val trendWeeks = os.meka.core.domain.BalanceRules.trendMinutes(
+                    _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents, review::habitDays, childOf, chosen,
                 )
-            }
+                val view = os.meka.core.domain.BalanceRules.view(
+                    _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents,
+                    _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks, chosen,
+                )
+                // Slice 4: this week as planned, for Thursday evening's one nudge.
+                val thisWeek = os.meka.core.domain.GoalRules.weekStart(todayEpochDay())
+                val nudge = os.meka.core.domain.BalanceRules.nudge(
+                    thisWeek, ZoneCalendar(timeZone), hoursOf(workState, thisWeek), dayEvents, review.habitDays(thisWeek),
+                    balanceTargets.targets(), childOf, chosen,
+                )
+                // Slice 3: the week ahead's balance line, the week it shows counted as planned.
+                val aheadLine = if (ahead.weekStart > 0) os.meka.core.domain.BalanceRules.weekAheadLine(
+                    ahead.weekStart, ahead.title == "Next week", ZoneCalendar(timeZone), hoursOf(workState, ahead.weekStart),
+                    dayEvents, review.habitDays(ahead.weekStart), balanceTargets.targets(), childOf, chosen,
+                ) else null
+                Triple(view, nudge, aheadLine)
+            } }
+            _balance.value = kept.first
+            balanceNudge = kept.second
+            if (ahead.weekStart > 0) _weekAhead.value = ahead.withBalance(kept.third)
         }
         _reflection.value = ZoneCalendar(timeZone).let { cal ->
-            os.meka.core.domain.ReflectionRules.view(
-                _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,
-                cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs()), cal, reflectRequestedWeek,
-                // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
-                board = os.meka.core.domain.BoardReviewRules.review(all, _review.value.weekStart, cal.epochDayOf(nowMs()), cal),
-            )
+            viewMemo.keepReading(
+                "Reflection", replica,
+                listOf(_review.value, _wins.value, _goals.value.goals, all, reflectRequestedWeek, minuteNow(), timeZone()),
+            ) {
+                os.meka.core.domain.ReflectionRules.view(
+                    _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,
+                    cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs()), cal, reflectRequestedWeek,
+                    // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
+                    board = os.meka.core.domain.BoardReviewRules.review(all, _review.value.weekStart, cal.epochDayOf(nowMs()), cal),
+                )
+            }
         }
         _search.value = timed("Search") { runSearch(all) }
         _activity.value = timed("Activity") { activity.view() }
