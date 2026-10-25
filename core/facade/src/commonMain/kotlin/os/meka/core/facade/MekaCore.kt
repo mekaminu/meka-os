@@ -11870,6 +11870,9 @@ class MekaCore(
     /** The slowest work on this device in the last hour, slowest first (Health → Speed; tests). */
     suspend fun speedWorst(): List<os.meka.core.domain.SpeedEntry> = onCore { speedLog.worst() }
 
+    /** Every part timed in the window, slowest first (tests: each refresh area is timed, whether or not it makes the worst ten). */
+    internal suspend fun speedAll(): List<os.meka.core.domain.SpeedEntry> = onCore { speedLog.worst(os.meka.core.domain.SpeedRules.MAX_NAMES) }
+
     private var refreshing = false
     private var refreshAgain = false
 

@@ -73,12 +73,13 @@ class SpeedFacadeTest {
         c.importMoneyStatement("Current account", statement(500))
         c.addTask("Ring the garage")
         val worst = c.speedWorst()
-        val names = worst.map { it.name }
+        // Every refresh area is timed; Health lists the worst ten of them (the fast ones may fall below the ten).
+        val names = c.speedAll().map { it.name }
         assertTrue("Whole-app refresh" in names, names.toString())
         assertTrue("Money view" in names, names.toString())
         assertTrue("Search" in names, names.toString())
         assertTrue(worst.size <= 10)
         assertEquals(worst.sortedByDescending { it.worstMs }.map { it.worstMs }, worst.map { it.worstMs })
-        assertTrue(worst.first { it.name == "Whole-app refresh" }.count >= 2)
+        assertTrue(c.speedAll().first { it.name == "Whole-app refresh" }.count >= 2)
     }
 }
