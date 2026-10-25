@@ -5520,7 +5520,7 @@ class MekaCore(
     /** Searches everything for [query] ("" clears it); results arrive on [searchView] and follow later edits. */
     suspend fun search(query: String) = onCore {
         searchQuery = query.take(os.meka.core.domain.SearchRules.MAX_QUERY)
-        _search.value = runSearch(tasks.all())
+        _search.value = timed("Search") { searchKept(tasks.all()) }
     }
 
     // ---- Notification governor ----
@@ -12341,7 +12341,7 @@ class MekaCore(
                 )
             }
         }
-        _search.value = timed("Search") { runSearch(all) }
+        _search.value = timed("Search") { searchKept(all) }
         _activity.value = timed("Activity") { activity.view() }
         _calendar.value = timed("Calendar") {
             // Taps feel instant, slice 6: the agenda is kept until a task, an event, a mark, work or the minute changes.
@@ -12399,17 +12399,31 @@ class MekaCore(
         _afterWork.value = held.summary().without(afterWorkHiding)
         _requests.value = requestCards.open()
         _approvals.value = approvalStore.cards()
-        _school.value = school.view(hoursOf(workState, todayDay))
-            .copy(inset = os.meka.core.domain.SchoolTerms.insetLink(aboutYou.profile().schoolWebsite))
+        // Taps feel instant, slice 12: School is kept while his work hours, the minute and every record type it reads
+        // (school dates, About you's school website) are unchanged.
+        val schoolHours = hoursOf(workState, todayDay)
+        _school.value = timed("School") { viewMemo.keepReading("School", replica, listOf(schoolHours, minuteNow(), timeZone())) {
+            school.view(schoolHours)
+                .copy(inset = os.meka.core.domain.SchoolTerms.insetLink(aboutYou.profile().schoolWebsite))
+        } }
         val binRemind = bins.remindMinute()
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays, binRemind)
         // Bin days, completeness: tonight's bins on the watch, lit from his reminder's time.
         watchBinsNow = os.meka.core.domain.BinRules.watch(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays, binRemind)
         watchBinRemind = binRemind
-        _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
+        // Slice 12: Gifts, Trips and Documents are kept while what they're built from (the occasions, trips and
+        // documents, which the replica hands out unchanged until written), the day and the time zone are unchanged.
+        _gifts.value = timed("Gifts") { viewMemo.keep("Gifts", listOf(occasionItems, todayDay)) {
+            os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
+        } }
         val docItems = documents.items()
-        _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
-        _documents.value = os.meka.core.domain.DocumentRules.view(docItems, todayDay, cal, vaultName())
+        _trips.value = timed("Trips") { viewMemo.keep("Trips", listOf(tripItems, todayDay, docItems, timeZone())) {
+            os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
+        } }
+        val docVault = vaultName()
+        _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {
+            os.meka.core.domain.DocumentRules.view(docItems, todayDay, cal, docVault)
+        } }
         vaultKeyNow()
         val heldNow = _afterWork.value
         // Slice 11: People is kept while the promises, waiting, occasions, held messages, the minute and every record
@@ -12492,7 +12506,12 @@ class MekaCore(
         _chatSummaries.value = chatSummaryStore.all()
         _blockedCallers.value = blockList.view()
         _heldCalls.value = held.calls().map { if (it.item.id in recordingDeleting) it.copy(recordingDeleted = true) else it }
-        _callLog.value = os.meka.core.domain.CallLogRules.view(_heldCalls.value, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone))
+        // Slice 12: the call log is kept while the held calls, the blocked callers, the minute and the zone are unchanged.
+        val logCalls = _heldCalls.value
+        val logBlocked = _blockedCallers.value
+        _callLog.value = timed("Call log") { viewMemo.keep("Call log", listOf(logCalls, logBlocked, minuteNow(), timeZone())) {
+            os.meka.core.domain.CallLogRules.view(logCalls, logBlocked, nowMs(), ZoneCalendar(timeZone))
+        } }
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         // Slice 11: the notices' preview (every notice worked out from every view, the emails included) is kept while
         // the views and in-memory values it's worked out from, Money's (its own copy, handed in), the minute and every
@@ -12517,6 +12536,15 @@ class MekaCore(
     }
 
     /** Search over the views as they stand (call after the lists and goals views are fresh). */
+    /**
+     * Taps feel instant, slice 12: Search's results are kept while the query, the tasks, Lists, Goals, the minute and
+     * every record type the search reads (events, decisions, errands, appointments) are unchanged, so a new email or a
+     * chat's Done no longer searches everything again while a search is open.
+     */
+    private fun searchKept(all: List<os.meka.core.domain.Task>): SearchView = viewMemo.keepReading(
+        "Search", replica, listOf(searchQuery, all, _lists.value, _goals.value, helpOnMac, minuteNow(), timeZone()),
+    ) { runSearch(all) }
+
     private fun runSearch(all: List<os.meka.core.domain.Task>): SearchView {
         if (os.meka.core.domain.SearchRules.tokens(searchQuery).isEmpty()) return SearchView(searchQuery, emptyList(), 0)
         val sources = SearchSources(
