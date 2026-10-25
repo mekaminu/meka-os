@@ -490,6 +490,10 @@ internal fun NeedsYouColumn(
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     val tickHabit: (HabitItem) -> Unit = { h -> haptics.light(); os.meka.android.goals.HabitTaps.tick(scope, core, h.id, !h.doneToday) }
+    val openMail: () -> Unit = {
+        summaryApp.openMail.value = true
+        summaryApp.openDestination.value = os.meka.android.shell.ShellDestination.ASK
+    }
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
         modifier.footFade(),
@@ -695,6 +699,8 @@ internal fun NeedsYouColumn(
                     }
                 }
             }
+            // Approve must land: what Navilife is doing with his mail since his Approve, counting up.
+            workingItems(stack.working, play, index = 2, open = openMail)
             // Then what's coming for Meka instead of a blank page: today's habits (ticked inline), Waiting on and the
             // next renewals (NeedsYouMeanwhile; Fold reviews 2026-10-09, 00:10 item 6 and 07:26 item 10).
             meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
@@ -703,6 +709,7 @@ internal fun NeedsYouColumn(
                 DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
                     toDays = { core.needsYouFeedDays() }, onToDay = moves.onToDay)
             }
+            workingItems(stack.working, play, index = 2, open = openMail)
             // Under the stack, the next reminders (the gate's Needs you re-shot: the page below the stack was blank).
             meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         }

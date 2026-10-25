@@ -76,7 +76,11 @@ data class DecisionCard(
     }
 }
 
-data class NeedsYouStack(val cards: List<DecisionCard>) {
+data class NeedsYouStack(
+    val cards: List<DecisionCard>,
+    /** Approve must land: what Navilife is doing with his mail after an Approve ([MailWorkingRules]); not cards. */
+    val working: List<MeanwhileLine> = emptyList(),
+) {
     val isEmpty: Boolean get() = cards.isEmpty()
 
     companion object {
@@ -112,6 +116,7 @@ object NeedsYouStackRules {
         today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar, credit: DecisionCard? = null,
         mail: List<DecisionCard> = emptyList(),
         devices: List<DecisionCard> = emptyList(),
+        working: List<MeanwhileLine> = emptyList(),
     ): NeedsYouStack {
         val todayDay = calendar.epochDayOf(nowMs)
         val cards = today.needsYou.map { card(it, todayDay, calendar) }.toMutableList()
@@ -128,7 +133,7 @@ object NeedsYouStackRules {
                 urgent = false,
             )
         }
-        return NeedsYouStack(cards)
+        return NeedsYouStack(cards, working)
     }
 
     /**
@@ -137,9 +142,9 @@ object NeedsYouStackRules {
      */
     fun withPlanWeek(stack: NeedsYouStack, card: DecisionCard?): NeedsYouStack {
         val rest = stack.cards.filter { it.kind != DecisionKind.PLAN_WEEK }
-        if (card == null) return if (rest.size == stack.cards.size) stack else NeedsYouStack(rest)
+        if (card == null) return if (rest.size == stack.cards.size) stack else stack.copy(cards = rest)
         val at = rest.indexOfFirst { it.kind == DecisionKind.MAIL_CLEANUP || it.kind == DecisionKind.LISTS }.let { if (it < 0) rest.size else it }
-        return NeedsYouStack(rest.take(at) + card + rest.drop(at))
+        return stack.copy(cards = rest.take(at) + card + rest.drop(at))
     }
 
     private fun card(item: NeedsYouItem, todayDay: Long, calendar: LocalCalendar): DecisionCard {

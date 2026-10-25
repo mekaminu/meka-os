@@ -31,6 +31,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
+import os.meka.core.domain.MailWorkingRules
 import os.meka.core.domain.MeanwhileLine
 import os.meka.core.domain.NeedsYouMeanwhile
 import os.meka.core.domain.NeedsYouMeanwhileRules
@@ -79,6 +80,21 @@ internal fun LazyListScope.meanwhileItems(
         }
         items(m.renewals, key = { "mw-r-${it.id}" }) { l -> MeanwhileRow(l, open, Modifier.animateItem().appear(rememberAppearance(i, play))) }
         m.renewalsMore?.let { more -> item(key = "mw-r-more") { MeanwhileMore(more, open, Modifier.animateItem()) } }
+    }
+}
+
+/**
+ * Approve must land: "Working on it", what Navilife is doing with his mail since his Approve ("Marking read · Personal
+ * Gmail" over "500 so far · …"), counting up as the server reports. Context in the body weight; a tap opens Mail. The
+ * section staggers in like the others and its rows glide as their counts change (`animateItem`).
+ */
+internal fun LazyListScope.workingItems(lines: List<MeanwhileLine>, play: Boolean, index: Int, open: () -> Unit) {
+    if (lines.isEmpty()) return
+    item(key = "working") {
+        MeanwhileLabel(MailWorkingRules.LABEL, null, Modifier.animateItem().appear(rememberAppearance(index, play)))
+    }
+    items(lines, key = { it.id }) { l ->
+        MeanwhileRow(l, open, Modifier.animateItem().appear(rememberAppearance(index, play)), MailWorkingRules.OPEN_LABEL)
     }
 }
 

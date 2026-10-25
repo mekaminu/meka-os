@@ -12220,6 +12220,8 @@ class MekaCore(
             mail = os.meka.core.domain.MailBacklogRules.cards(activity.mailBacklogs(), autonomy.paused(), nowMs()),
             // Clean-ups: a new phone or Mac asking to join, on top with Allow and Not this one.
             devices = os.meka.core.domain.DeviceJoinRules.cards(deviceJoins.all(), nowMs()),
+            // Approve must land, last slice: after his Approve, what Navilife is doing with each account's mail.
+            working = os.meka.core.domain.MailWorkingRules.lines(activity.mailBacklogs(), activity.mailTidyBatches(), autonomy.paused(), nowMs()),
         )
         _fasting.value = fastingNow
         _goals.value = goalsNow

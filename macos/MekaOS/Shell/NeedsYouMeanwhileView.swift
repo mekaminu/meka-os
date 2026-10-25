@@ -113,3 +113,38 @@ struct NeedsYouMeanwhileView: View {
         .buttonStyle(MekaPressStyle())
     }
 }
+
+/// Approve must land: "Working on it", what Navilife is doing with his mail since his Approve ("Marking read · Personal
+/// Gmail" over "500 so far · …"), from the core's `MailWorkingRules` on the Needs you stack. Context in the body
+/// weight; a click opens Mail. Staggers in after the stack or the empty line; rows glide as their counts change.
+struct MailWorkingView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    var firstIndex: Int = 2
+
+    var body: some View {
+        let lines = model.needsYouStack?.working ?? []
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                SectionLabel(MailWorkingRules.shared.LABEL, palette).padding(.top, MekaSpace.l)
+                ForEach(lines, id: \.id) { l in
+                    Button { model.showMail = true } label: {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text(l.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
+                            Text(l.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                                .contentTransition(.opacity)
+                        }
+                        .padding(.vertical, MekaSpace.xxs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityHint(MailWorkingRules.shared.OPEN_LABEL)
+                }
+            }
+            .staggeredAppear(firstIndex)
+            .animation(MekaMotion.replan(reduced: reduceMotion), value: lines.map(\.meta))
+        }
+    }
+}

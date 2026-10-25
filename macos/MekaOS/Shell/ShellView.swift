@@ -230,10 +230,13 @@ struct NeedsYouView: View {
                         }
                         .accessibilityElement(children: .combine)
                         .staggeredAppear(1)
+                        // Approve must land: what Navilife is doing with his mail since his Approve.
+                        MailWorkingView(palette: palette)
                         // Then what's coming: today's habits, Waiting on, the next renewals.
                         NeedsYouMeanwhileView(palette: palette)
                     } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
+                        MailWorkingView(palette: palette)
                         // Under the stack, the next reminders (the gate's Needs you re-shot).
                         NeedsYouMeanwhileView(palette: palette, underStack: true)
                     }

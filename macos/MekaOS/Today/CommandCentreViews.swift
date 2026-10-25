@@ -82,9 +82,11 @@ struct CommandNeedsYouView: View {
                         }
                         .accessibilityElement(children: .combine)
                         .staggeredAppear(1)
+                        MailWorkingView(palette: palette)
                         NeedsYouMeanwhileView(palette: palette)
                     } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
+                        MailWorkingView(palette: palette)
                         NeedsYouMeanwhileView(palette: palette, underStack: true)
                     }
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
