@@ -10,6 +10,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Taps feel instant, slice 4, through the facade: a sync round that pulls many pages of the other device's changes
@@ -17,6 +18,9 @@ import kotlin.test.assertTrue
  * The pulled changes still show as soon as the round returns.
  */
 class SyncRefreshFacadeTest {
+    /** 300 tasks are 300 whole-app rebuilds on the Fold side: past runTest's minute on the Mac's native runner (nightly ci 1266). */
+    private companion object { val SLOW_RUNNER = 5.minutes }
+
     private var now = 1_792_144_800_000L // Fri 16 Oct 2026, 11:00 in London
     private val ops = InMemoryServerOpStore()
 
@@ -30,7 +34,7 @@ class SyncRefreshFacadeTest {
         (listOfNotNull(today.value.upNext) + today.value.yourDay + today.value.needsYou.map { it.task }).map { it.title }.toSet()
 
     @Test
-    fun aRoundOfManyPagesIsOneRebuildAndAnEmptyRoundIsNone() = runTest {
+    fun aRoundOfManyPagesIsOneRebuildAndAnEmptyRoundIsNone() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")
         // Enough of the Fold's changes for several pages of the server's pull.
@@ -68,7 +72,7 @@ class SyncRefreshFacadeTest {
     }
 
     @Test
-    fun aTapQueuedWhileTheRoundWaitedGoesFirstAndTheRoundAddsNoRebuild() = runTest {
+    fun aTapQueuedWhileTheRoundWaitedGoesFirstAndTheRoundAddsNoRebuild() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         repeat(5) { fold.addTask("Job $it") }
         fold.syncNow()
