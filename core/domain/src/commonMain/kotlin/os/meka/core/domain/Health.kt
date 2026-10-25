@@ -169,6 +169,8 @@ data class HealthFacts(
     val mailTidies: List<MailTidyBatch> = emptyList(),
     /** 2026-10-24: Live's key and the last talk here ([LiveDiagnosisRules.health]); null while Live is off. */
     val live: LiveHealth? = null,
+    /** Taps feel instant, slice 3: the slowest work on this device in the last hour ([SpeedLog.worst]); null leaves the row out. */
+    val speed: List<SpeedEntry>? = null,
 )
 
 object HealthRules {
@@ -227,6 +229,7 @@ object HealthRules {
             MoneyBank.healthRow(f.bankSync, f.nowMs, cal)?.let(::add)
             f.trains?.let { RouteRules.healthRow(it, f.nowMs, cal) }?.let(::add)
             f.mail?.let { addAll(MailHealthRules.healthRows(it, f.mailBacklogs, f.mailTidies, f.nowMs, cal)) }
+            SpeedRules.healthRow(f.speed)?.let(::add)
         }.map { r -> if (r.place != null) r else r.copy(place = place(r.key, f.device.mac)) }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }

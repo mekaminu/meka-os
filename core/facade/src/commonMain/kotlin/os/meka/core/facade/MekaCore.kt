@@ -105,6 +105,7 @@ import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import kotlin.time.TimeSource
 
 /** UI-facing description of a conflict: what each device said, in plain values. */
 data class ConflictChoice(val taskId: String, val field: String, val options: List<String>, internal val conflict: Conflict)
@@ -124,6 +125,11 @@ class MekaCore(
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
     private val confined = Dispatchers.Default.limitedParallelism(1)
+
+    /** The Speed log (taps feel instant, slice 3): in memory on this device, written on the core's thread only. Declared
+     * before anything that refreshes (the init block's first refresh is timed). */
+    private val speedLog = os.meka.core.domain.SpeedLog()
+
     /**
      * Background work never takes the app down (nightly Mac build 2026-10-18, ci run 871: on Kotlin/Native an exception
      * escaping a `scope.launch` ends the process — the Mac app, and the native test run). It is kept as
@@ -950,30 +956,65 @@ class MekaCore(
         os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyForecast.extraSaid(p))
     }
 
+    /**
+     * Taps feel instant, slice 5a (2026-10-25): what the last money view was built from, and that view. A refresh that
+     * finds every input equal (and the screen still showing that view) keeps it instead of re-working 3,000 payments:
+     * every other tap in the app (Done on a chat, Got it, a task tick) used to rebuild Money too while it was open.
+     */
+    private var moneyBuiltFrom: List<Any?>? = null
+    private var moneyBuilt: os.meka.core.domain.MoneyView? = null
+
     private fun refreshMoney() {
         if (!moneyOpen) return
         val wallets = trading.wallets()
+        val now = nowMs()
+        val today = todayEpochDay()
+        val accounts = money.accounts()
+        val cards = money.cards()
+        val tidies = activity.mailTidyBatches()
+        val tripItems = trips.items()
+        val alerts = tradingAlertSetting()
+        val goalList = if (moneyOffset != 0) null else goals.goals(tasks.all()).first
+        val businessFinds = activity.mailFinds()
+        val inputs = listOf(
+            accounts, money.txns(), money.rules(), today, timeZone(), moneyOffset, money.hiddenTips(), money.fineAlerts(),
+            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), cards, money.worthItems(),
+            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(),
+            // The view says "synced 5 min ago" and the like: a new minute is a new view.
+            now / os.meka.core.domain.MoneyViewMemo.MINUTE_MS, wallets,
+            money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
+            money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
+            money.challenges(), moneyAbroadNow(), tripItems, tidies, alerts, goalList, businessFinds,
+        )
+        if (os.meka.core.domain.MoneyViewMemo.same(moneyBuiltFrom, inputs, moneyBuilt, _money.value)) return
         _money.value = os.meka.core.domain.MoneyRules.view(
-            money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
-            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(), wallets,
+            accounts, money.txns(), money.rules(), today, ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
+            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), cards, money.worthItems(),
+            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), now, wallets,
             money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
             money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
             money.challenges(),
-            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), todayEpochDay()),
+            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(tripItems, today),
             // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
-            receipts = os.meka.core.domain.MoneyReceipts.fromTidies(activity.mailTidyBatches(), ZoneCalendar(timeZone)),
+            receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, ZoneCalendar(timeZone)),
         ).let { v ->
             v.copy(
-                trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()),
+                trading = os.meka.core.domain.TradingTracker.view(wallets, now, ZoneCalendar(timeZone), alerts),
                 // Slice 13c: the side hustle's money in his Business mail, checked against the statements.
                 business = v.business?.let { b -> b.copy(mail = moneyBusinessMail()) },
-                goals = if (v.locked || moneyOffset != 0) null
-                else os.meka.core.domain.MoneyGoals.view(goals.goals(tasks.all()).first, money.accounts(), money.cards().map { it.id }.toSet()),
+                goals = if (v.locked || goalList == null) null
+                else os.meka.core.domain.MoneyGoals.view(goalList, accounts, cards.map { it.id }.toSet()),
             )
         }
+        moneyBuiltFrom = inputs
+        moneyBuilt = _money.value
+        moneyViewBuilds++
         if (os.meka.core.domain.MoneyOpenRules.keep(_money.value, moneyOffset, moneyWhatIf)) moneyLast.value = _money.value
     }
+
+    /** How many times the money view was really built (slice 5a): tests check a tap elsewhere doesn't rebuild it. */
+    internal var moneyViewBuilds = 0
+        private set
 
     /** Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's invoice finds against every statement line. Caller is on the core. */
     private fun moneyBusinessMail(): os.meka.core.domain.MoneyBusinessMailView? {
@@ -6717,6 +6758,10 @@ class MekaCore(
     companion object {
         /** Passes [refresh] makes at most when commits keep arriving while it runs (each pass sees them all). */
         private const val MAX_REFRESH_PASSES = 4
+        /** Speed log names (slice 3): plain words, they show in Health → Speed. */
+        private const val SPEED_REFRESH = "Whole-app refresh"
+        private const val SPEED_WAIT = "A tap waiting for the core"
+        private const val SPEED_WORK = "One piece of core work"
         /** Fresh tasks To a day… may make for one school date or birthday after Undo removed earlier ones. */
         private const val MAX_DATE_TASKS = 20
         const val FOREGROUND_SYNC_MS: Long = 30_000L
@@ -8859,6 +8904,7 @@ class MekaCore(
             mailBacklogs = if (mail == null) emptyList() else activity.mailBacklogs(),
             mailTidies = if (mail == null) emptyList() else activity.mailTidyBatches(),
             live = liveHealth(),
+            speed = speedLog.worst(),
         )
     }
 
@@ -11702,7 +11748,37 @@ class MekaCore(
         }
     }
 
-    private suspend fun <T> onCore(block: () -> T): T = withContext(confined) { block() }
+    /**
+     * Taps feel instant, slice 3: every call onto the core's one thread is timed; a wait in its queue or a piece of
+     * work over [os.meka.core.domain.SpeedRules.LOG_MS] goes into the Speed log (Health → Speed). Times only.
+     */
+    private suspend fun <T> onCore(block: () -> T): T {
+        val asked = TimeSource.Monotonic.markNow()
+        return withContext(confined) {
+            val waited = asked.elapsedNow().inWholeMilliseconds
+            if (waited > os.meka.core.domain.SpeedRules.LOG_MS) speedLog.record(SPEED_WAIT, waited, nowMs())
+            val started = TimeSource.Monotonic.markNow()
+            try {
+                block()
+            } finally {
+                val took = started.elapsedNow().inWholeMilliseconds
+                if (took > os.meka.core.domain.SpeedRules.LOG_MS) speedLog.record(SPEED_WORK, took, nowMs())
+            }
+        }
+    }
+
+    /** Times [block] into the Speed log as [name] (every run counted, so Health can say "12 times, 3 slow"). Core only. */
+    private inline fun <T> timed(name: String, block: () -> T): T {
+        val started = TimeSource.Monotonic.markNow()
+        try {
+            return block()
+        } finally {
+            speedLog.record(name, started.elapsedNow().inWholeMilliseconds, nowMs())
+        }
+    }
+
+    /** The slowest work on this device in the last hour, slowest first (Health → Speed; tests). */
+    suspend fun speedWorst(): List<os.meka.core.domain.SpeedEntry> = onCore { speedLog.worst() }
 
     private var refreshing = false
     private var refreshAgain = false
@@ -11720,7 +11796,7 @@ class MekaCore(
             var passes = 0
             do {
                 refreshAgain = false
-                refreshOnce()
+                timed(SPEED_REFRESH) { refreshOnce() }
             } while (refreshAgain && ++passes < MAX_REFRESH_PASSES)
         } finally {
             refreshing = false
@@ -11739,15 +11815,17 @@ class MekaCore(
         // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
         if (os.meka.core.domain.Household.use(aboutYou.profile()) && _family.value != null) familyNow(_family.value?.problem)
         // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.
-        autoAddMailFinds()
-        // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
-        archivedChanged()
-        // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
-        unopenedChanged()
-        // Slice 6a: "From your mail" follows the synced emails, Done/Snooze on either app and the minute (a snooze ending).
-        mailNeedsChanged()
-        // Discord channel watch: the cards follow the Fold's kept posts, Done on either app and the channels he follows.
-        discordChanged()
+        timed("Mail lists") {
+            autoAddMailFinds()
+            // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
+            archivedChanged()
+            // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
+            unopenedChanged()
+            // Slice 6a: "From your mail" follows the synced emails, Done/Snooze on either app and the minute (a snooze ending).
+            mailNeedsChanged()
+            // Discord channel watch: the cards follow the Fold's kept posts, Done on either app and the channels he follows.
+            discordChanged()
+        }
         val all = tasks.all()
         val marks = eventActions.marks(all)
         _eventMarks.value = marks
@@ -11938,7 +12016,7 @@ class MekaCore(
             ))
         }
         _facts.value = lifeFacts.view()
-        refreshMoney()
+        if (moneyOpen) timed("Money view") { refreshMoney() }
         _queue.value = trainQueue.view()
         _reading.value = reading.view(ZoneCalendar(timeZone))
         _errands.value = errands.view()
@@ -12075,12 +12153,12 @@ class MekaCore(
                 board = os.meka.core.domain.BoardReviewRules.review(all, _review.value.weekStart, cal.epochDayOf(nowMs()), cal),
             )
         }
-        _search.value = runSearch(all)
-        _activity.value = activity.view()
-        _calendar.value = CalendarAgenda.build(
+        _search.value = timed("Search") { runSearch(all) }
+        _activity.value = timed("Activity") { activity.view() }
+        _calendar.value = timed("Calendar") { CalendarAgenda.build(
             all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
             work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
-        )
+        ) }
         boardEvents = marks.forCalendarTab(allEvents)
         boardWork = hoursOf(workState, todayEpochDay())
         boardHidden = marks.hidden
@@ -12089,13 +12167,13 @@ class MekaCore(
             os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) },
             boardWork, _calendar.value::toneOf,
         )
-        _board.value = os.meka.core.domain.WeekBoardRules.build(
+        _board.value = timed("Week board") { os.meka.core.domain.WeekBoardRules.build(
             all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
             marks.hidden, _calendar.value::toneOf,
             goals = _goals.value.goals, weekGoals = _goals.value.week,
             // Week board item (10): bills and renewals due count towards a day stacking up.
             bills = os.meka.core.domain.PressureRules.bills(renewals.items()),
-        )
+        ) }
         // Item (10): the first day stacking up within two days, as a line on Today and in the morning brief.
         run {
             val soon = os.meka.core.domain.PressureRules.soonest(
