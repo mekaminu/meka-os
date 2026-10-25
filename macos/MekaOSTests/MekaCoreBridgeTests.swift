@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+@testable import MekaOS
 import XCTest
 
 /// Proves the Kotlin facade is usable from Swift: commands are async, flows are AsyncSequences.
@@ -1731,9 +1732,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(FeelingRules.shared.QUESTION, "How are you feeling?")
         XCTAssertEqual(FeelingRules.shared.CHOICES.map { $0.label }, ["Good", "Tired", "Stretched"])
         XCTAssertEqual(FeelingRules.shared.pickedLine(f: .tired), "Tired · kept on this device for a week")
-        let move = FeelingMove(taskId: "t", title: "Gym", toDay: KotlinLong(value: 12), dayLabel: "Sat")
-        XCTAssertEqual(FeelingRules.shared.lightenedLine(moves: [move]), "Tomorrow's lighter · “Gym” to Sat")
-        XCTAssertEqual(FeelingOffer(feeling: .tired, line: "x", moves: [move], drop: nil, holdLabel: nil, holdLine: nil).lightenLabel, "Lighten tomorrow")
+        let feelingMove = FeelingMove(taskId: "t", title: "Gym", toDay: KotlinLong(value: 12), dayLabel: "Sat")
+        XCTAssertEqual(FeelingRules.shared.lightenedLine(moves: [feelingMove]), "Tomorrow's lighter · “Gym” to Sat")
+        XCTAssertEqual(FeelingOffer(feeling: .tired, line: "x", moves: [feelingMove], drop: nil, holdLabel: nil, holdLine: nil).lightenLabel, "Lighten tomorrow")
         // Item (11) part 2: "I'm shattered" to Obi, and Stretched's hold.
         XCTAssertEqual(FeelingAskRules.shared.request(q: "I'm shattered"), .tired)
         XCTAssertEqual(FeelingAskRules.shared.request(q: "I've got too much on"), .stretched)
@@ -1812,7 +1813,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         )
         let status = try await core.aiStatus()
         XCTAssertFalse(status.canAsk)
-        XCTAssertEqual(AskRules.shared.statusView(state: "on", reason: nil, spentCents: 120, budgetCents: 2000, level: "ok").line, "On · $1.20 of $20 this month")
+        XCTAssertEqual(AskRules.shared.statusView(state: "on", reason: nil, spentCents: 120, budgetCents: 2000, level: "ok", month: [], keyRefused: false).line, "On · $1.20 of $20 this month")
         XCTAssertEqual(AskRules.shared.answerLines(text: "One.\n\nTwo."), ["One.", "Two."])
         let card = AskRules.shared.cardOf(p: AskProposalAddTask(title: "Milk", day: nil, minute: nil), today: 0)
         XCTAssertEqual(card.line, "Add “Milk”")
@@ -1903,7 +1904,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /** Places item 4: the commute's train line reaches Today on the Mac through the weather view. */
     func testRouteReachesSwift() {
         XCTAssertNil(WeatherView.companion.EMPTY.route)
-        let line = RouteLine(text: "South Rail · Metro line · good service", lit: false, spoken: "Trains: South Rail, Metro line, good service")
+        let line = RouteLine(text: "South Rail · Metro line · good service", lit: false, spoken: "Trains: South Rail, Metro line, good service", brief: "South Rail, Metro line, good service")
         XCTAssertFalse(line.lit)
         // Rule 13, release 2 slice 6: the route is About you's Train route (an invented one here).
         _ = Household.shared.useRoute(typed: "South Rail to Oakfield Junction, then Metro line; or North Rail to Riverside")
@@ -3597,11 +3598,12 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     /// Speaking up, slice 1: the Mac speaks only while in use, and the line starts with his name.
+    @MainActor
     func testSpeakingUpOnlyWhileTheMacIsInUse() {
         let rules = SpeakUpRules.shared
         XCTAssertEqual(rules.macPlace(idleMs: 30_000), SpeakPlace.mac)
         XCTAssertEqual(rules.macPlace(idleMs: 600_000), SpeakPlace.speaker)
-        XCTAssertEqual(rules.line(spoken: "your 07:42 is cancelled.", address: "Alex"), "Alex, your 07:42 is cancelled.")
+        XCTAssertEqual(rules.line(spoken: "your 07:42 is cancelled.", address: "Alex", keepCase: false), "Alex, your 07:42 is cancelled.")
         XCTAssertEqual(MoreItem.speakUp.label, "Speaking up")
         // Slice 3: tomorrow stacking up, its own switch and its own row in Notifications.
         XCTAssertEqual(SpeakMoment.pressure.label, "Tomorrow stacking up")
