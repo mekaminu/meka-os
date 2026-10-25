@@ -170,12 +170,12 @@ class ReviewBalanceReflectScreensTest {
         Fill.ONE -> BalanceRules.view(ws - 7, nowMs, cal, work, events(Fill.ONE), emptyList(), emptyMap())
         Fill.MANY -> {
             val trend = listOf(
-                ws - 21 to mapOf(BalanceArea.WORK to 41 * 60, BalanceArea.FAMILY to 7 * 60, BalanceArea.HEALTH to 4 * 60, BalanceArea.SELF to 90),
-                ws - 14 to mapOf(BalanceArea.WORK to 44 * 60, BalanceArea.FAMILY to 11 * 60, BalanceArea.HEALTH to 2 * 60, BalanceArea.SELF to 3 * 60),
-                ws - 7 to mapOf(BalanceArea.WORK to 39 * 60, BalanceArea.FAMILY to 9 * 60 + 30, BalanceArea.HEALTH to 3 * 60, BalanceArea.SELF to 2 * 60),
+                ws - 21 to mapOf(BalanceArea.WORK to 41 * 60, BalanceArea.FAMILY to 7 * 60, BalanceArea.HEALTH to 4 * 60, BalanceArea.YOURSELF to 90),
+                ws - 14 to mapOf(BalanceArea.WORK to 44 * 60, BalanceArea.FAMILY to 11 * 60, BalanceArea.HEALTH to 2 * 60, BalanceArea.YOURSELF to 3 * 60),
+                ws - 7 to mapOf(BalanceArea.WORK to 39 * 60, BalanceArea.FAMILY to 9 * 60 + 30, BalanceArea.HEALTH to 3 * 60, BalanceArea.YOURSELF to 2 * 60),
                 ws to emptyMap(),
             )
-            val chosen = BalanceChoices(mapOf("quiz night" to BalanceArea.SELF), mapOf("quiz night" to "Quiz night"))
+            val chosen = BalanceChoices(mapOf("quiz night" to BalanceArea.YOURSELF), mapOf("quiz night" to "Quiz night"))
             BalanceRules.view(ws, nowMs, cal, work, events(Fill.MANY), habits, mapOf(BalanceArea.FAMILY to 10 * 60), trendWeeks = trend, chosen = chosen)
         }
     }
@@ -382,7 +382,7 @@ class ReviewBalanceReflectScreensTest {
     private fun byHand() {
         val name = "review-balance-by-hand"
         val taps = Taps()
-        draw(ThemeChoice.DARK, Fill.MANY, taps, countSaid = BalanceRules.countAsLine("Choir", BalanceArea.SELF, false))
+        draw(ThemeChoice.DARK, Fill.MANY, taps, countSaid = BalanceRules.countAsLine("Choir", BalanceArea.YOURSELF, false))
         scrollTo("Targets")
         if (onScreen("Family · a week")) fail("$name: the targets show before a tap")
         clickNode(hasText("Targets"), "$name: Targets")

@@ -5370,18 +5370,18 @@ class MekaCore(
     suspend fun showReviewWeek(offset: Int) = onCore { reviewOffset = offset; refresh() }
 
     /**
-     * Balance view, slice 1: sets [area]'s weekly target ("WORK", "FAMILY", "HEALTH", "SELF") to [minutes] (one of its
+     * Balance view, slice 1: sets [area]'s weekly target ("WORK", "FAMILY", "HEALTH", "YOURSELF") to [minutes] (one of its
      * choices; 0 for work's "your own hours", or the default, clears it). Returns the line to show, or null when nothing
      * changed. Synced.
      */
     suspend fun setBalanceTarget(area: String, minutes: Int): String? = onCore {
-        val a = os.meka.core.domain.BalanceArea.entries.firstOrNull { it.name == area } ?: return@onCore null
+        val a = os.meka.core.domain.BalanceArea.named(area) ?: return@onCore null
         balanceTargets.set(a, minutes)?.also { refresh() }
     }
 
     /**
      * Balance view, slice 5: "Count as …" for an event with no clear area: every event titled like [title] counts as
-     * [area] ("FAMILY", "HEALTH", "SELF", "WORK"; "NONE" = never counted; "CLEAR" forgets the choice), past weeks too.
+     * [area] ("FAMILY", "HEALTH", "YOURSELF", "WORK"; "NONE" = never counted; "CLEAR" forgets the choice), past weeks too.
      * Synced. Returns the line to show ("“Swim club” counts as health from now on · on both devices"), or null when
      * nothing changed; [balanceUndoCountAs] puts it back.
      */

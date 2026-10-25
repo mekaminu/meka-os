@@ -5122,7 +5122,7 @@ final class CoreModel {
         }
     }
 
-    /// Balance view (slice 5): "Count as …" for events titled like `title` ("FAMILY", "HEALTH", "SELF", "WORK",
+    /// Balance view (slice 5): "Count as …" for events titled like `title` ("FAMILY", "HEALTH", "YOURSELF", "WORK",
     /// "NONE" = don't count, "CLEAR" = forget); only Strings cross. Returns the line to show, or nil when nothing changed.
     func balanceCountAs(_ title: String, area: String) async -> String? {
         guard let core else { return nil }

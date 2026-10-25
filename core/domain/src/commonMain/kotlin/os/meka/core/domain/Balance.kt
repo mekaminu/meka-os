@@ -44,7 +44,15 @@ enum class BalanceArea(val label: String, val field: String, val defaultMin: Int
     WORK("Work", "workMin", null, listOf(35, 40, 45, 50).map { it * 60 }),
     FAMILY("Family", "familyMin", 8 * 60, listOf(4, 6, 8, 10, 14).map { it * 60 }),
     HEALTH("Health", "healthMin", 3 * 60, listOf(2, 3, 4, 5, 7).map { it * 60 }),
-    SELF("Self", "selfMin", 2 * 60, listOf(1, 2, 3, 5).map { it * 60 }),
+    // Not SELF (nightly Mac run 2026-10-25): exported to Objective-C, an entry named SELF became the class method
+    // +self, which the runtime calls while making the class, so the Mac app recursed until it crashed on Review.
+    YOURSELF("Self", "selfMin", 2 * 60, listOf(1, 2, 3, 5).map { it * 60 }),
+    ;
+
+    companion object {
+        /** An area by its name; "SELF" (the old name, still sent by older builds) is [YOURSELF]. */
+        fun named(name: String): BalanceArea? = entries.firstOrNull { it.name == name } ?: if (name == "SELF") YOURSELF else null
+    }
 }
 
 /**
@@ -79,11 +87,11 @@ data class BalanceChoices(val map: Map<String, BalanceArea?> = emptyMap(), val t
     companion object {
         val NONE = BalanceChoices()
         private fun code(a: BalanceArea?): String = when (a) {
-            BalanceArea.WORK -> "w"; BalanceArea.FAMILY -> "f"; BalanceArea.HEALTH -> "h"; BalanceArea.SELF -> "s"; null -> "n"
+            BalanceArea.WORK -> "w"; BalanceArea.FAMILY -> "f"; BalanceArea.HEALTH -> "h"; BalanceArea.YOURSELF -> "s"; null -> "n"
         }
         private fun area(code: String): Pair<Boolean, BalanceArea?> = when (code) {
             "w" -> true to BalanceArea.WORK; "f" -> true to BalanceArea.FAMILY; "h" -> true to BalanceArea.HEALTH
-            "s" -> true to BalanceArea.SELF; "n" -> true to null; else -> false to null
+            "s" -> true to BalanceArea.YOURSELF; "n" -> true to null; else -> false to null
         }
 
         /** Reads the stored text; anything malformed is skipped. Entries keep their order (newest first). */
@@ -176,7 +184,7 @@ object BalanceRules {
     /** The "Count as" chips: the areas, then [DONT_COUNT]. */
     const val DONT_COUNT = "NONE"
     val COUNT_AS: List<Pair<String, String>> = listOf(
-        "FAMILY" to "Family", "HEALTH" to "Health", "SELF" to "Self", "WORK" to "Work", DONT_COUNT to "Don't count",
+        "FAMILY" to "Family", "HEALTH" to "Health", "YOURSELF" to "Self", "WORK" to "Work", DONT_COUNT to "Don't count",
     )
     /** The "Count as" codes in order, and a code's chip label (for the Mac, which can't read [COUNT_AS]'s pairs). */
     fun countAsCodes(): List<String> = COUNT_AS.map { it.first }
@@ -240,7 +248,7 @@ object BalanceRules {
     /** The area a habit's title names (health or self only), or null. */
     fun habitArea(title: String): BalanceArea? = when {
         has(title, HEALTH, HEALTH_PHRASES) -> BalanceArea.HEALTH
-        has(title, SELF, SELF_PHRASES) -> BalanceArea.SELF
+        has(title, SELF, SELF_PHRASES) -> BalanceArea.YOURSELF
         else -> null
     }
 
@@ -254,7 +262,7 @@ object BalanceRules {
             childOf(e) != null -> BalanceArea.FAMILY
             WeekAheadRules.isFamilyEvent(e) || has(text, FAMILY, FAMILY_PHRASES) -> BalanceArea.FAMILY
             has(e.title, HEALTH, HEALTH_PHRASES) -> BalanceArea.HEALTH
-            has(e.title, SELF, SELF_PHRASES) -> BalanceArea.SELF
+            has(e.title, SELF, SELF_PHRASES) -> BalanceArea.YOURSELF
             has(e.title, WORK, WORK_PHRASES) -> BalanceArea.WORK
             else -> null
         }
@@ -360,7 +368,7 @@ object BalanceRules {
         val blockMin = covered(blocks).toInt()
         val outsideWork = covered(spans.getValue(BalanceArea.WORK)) - covered(spans.getValue(BalanceArea.WORK).flatMap { s -> blocks.mapNotNull { overlap(it, s) } })
         minutes[BalanceArea.WORK] = (blockMin - covered(nonWorkInBlocks).toInt() + outsideWork.toInt()).coerceAtLeast(0)
-        for (a in listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF)) minutes[a] = covered(spans.getValue(a)).toInt()
+        for (a in listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.YOURSELF)) minutes[a] = covered(spans.getValue(a)).toInt()
         // Habits ticked on days with no event in their area.
         val today = cal.epochDayOf(nowMs)
         for ((title, days) in habits) {
@@ -561,7 +569,7 @@ object BalanceRules {
         val minutes = count(weekStart, endMs, cal, work, events, habits, childOf, chosen).first
         if (minutes.values.all { it <= 0 }) return null
         val parts = mutableListOf<String>()
-        for (a in listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF)) {
+        for (a in listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.YOURSELF)) {
             val target = targets[a] ?: a.defaultMin ?: continue
             val n = minutes.getValue(a)
             if (n < target) parts += "${a.label.lowercase()} ${hours(n)} of ${hours(target)}"
@@ -586,7 +594,7 @@ object BalanceRules {
     private fun nudgeName(a: BalanceArea): String = when (a) {
         BalanceArea.FAMILY -> "Family time"
         BalanceArea.HEALTH -> "Time for your health"
-        BalanceArea.SELF -> "Time for yourself"
+        BalanceArea.YOURSELF -> "Time for yourself"
         BalanceArea.WORK -> "Work"
     }
 
@@ -607,7 +615,7 @@ object BalanceRules {
     ): BalanceNudge? {
         val endMs = cal.toEpochMs(weekStart + 7, 0)
         val minutes = count(weekStart, endMs, cal, work, events, habits, childOf, chosen).first
-        val short = listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF).mapNotNull { a ->
+        val short = listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.YOURSELF).mapNotNull { a ->
             val target = targets[a] ?: a.defaultMin ?: return@mapNotNull null
             val n = minutes.getValue(a)
             if (target <= 0 || target - n < NUDGE_SHORT_MIN || n * 100 >= target * NUDGE_BELOW_PCT) null
@@ -666,7 +674,7 @@ class BalanceTargets(private val replica: Replica) {
         val key = BalanceRules.key(title)
         if (key.isEmpty()) return null
         val forget = area == "CLEAR"
-        val a = BalanceArea.entries.firstOrNull { it.name == area }
+        val a = BalanceArea.named(area)
         if (!forget && a == null && area != BalanceRules.DONT_COUNT) return null
         val now = choices().map
         if (forget && key !in now) return null

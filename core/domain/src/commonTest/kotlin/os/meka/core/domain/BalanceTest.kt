@@ -70,7 +70,7 @@ class BalanceTest {
         assertTrue(h.lit)
         assertEquals(100, h.pct)
         // Self: the cinema and two reading ticks; Floss names no area.
-        val s = row(v, BalanceArea.SELF)
+        val s = row(v, BalanceArea.YOURSELF)
         assertEquals(150 + 60, s.minutes)
         assertEquals("3 h 30 of 2 h", s.line)
         assertEquals("2 of 3 targets met", v.line)
@@ -120,7 +120,7 @@ class BalanceTest {
     @Test
     fun areasAreReadFromWholeWords() {
         assertEquals(BalanceArea.HEALTH, BalanceRules.area(ev("Parkrun", mon, 9, 0, 10), childOf))
-        assertEquals(BalanceArea.SELF, BalanceRules.area(ev("Drinks with the lads", mon, 19, 0, 21), childOf))
+        assertEquals(BalanceArea.YOURSELF, BalanceRules.area(ev("Drinks with the lads", mon, 19, 0, 21), childOf))
         assertEquals(BalanceArea.FAMILY, BalanceRules.area(ev("Swimming · Felix", mon, 17, 0, 18), childOf))
         assertEquals(BalanceArea.WORK, BalanceRules.area(ev("1:1 with Sam", mon, 9, 0, 10), childOf))
         assertNull(BalanceRules.area(ev("Runway planning", mon, 9, 0, 10), childOf))
@@ -164,7 +164,7 @@ class BalanceTest {
     fun aTrendWithNothingInItHasNoLine() {
         val weeks = BalanceRules.trendMinutes(mon, at(mon + 2, 9), cal, work, emptyList(), { emptyList() }, childOf)
         val v = BalanceRules.view(mon, at(mon + 2, 9), cal, work, emptyList(), emptyList(), emptyMap(), childOf, weeks)
-        val s = row(v, BalanceArea.SELF)
+        val s = row(v, BalanceArea.YOURSELF)
         assertEquals(4, s.trend.size)
         assertTrue(s.trend.last().current)
         assertNull(s.trendLine)
@@ -220,7 +220,7 @@ class BalanceTest {
         assertEquals("Time for your health is short this week", h.title)
         assertEquals("3 h of 5 h with what's planned · 2 h to find by Sunday", h.text)
         // Under an hour short is never named, even well under the share.
-        assertNull(BalanceRules.nudge(mon, cal, work, week, habits, mapOf(BalanceArea.SELF to 4 * 60), childOf))
+        assertNull(BalanceRules.nudge(mon, cal, work, week, habits, mapOf(BalanceArea.YOURSELF to 4 * 60), childOf))
 
         val notices = BalanceRules.notices(n, at(mon, 9), cal)
         assertEquals(1, notices.size)
@@ -259,7 +259,7 @@ class BalanceTest {
         // A choice wins over the word rules, and "don't count" leaves an event out entirely.
         val over = BalanceChoices.decode("cinema=n|pick up parcel=h")
         val o = BalanceRules.view(mon, end, cal, work, week, habits, emptyMap(), childOf, chosen = over)
-        assertEquals(60, row(o, BalanceArea.SELF).minutes)
+        assertEquals(60, row(o, BalanceArea.YOURSELF).minutes)
         assertEquals(75 + 60 + 45 + 60, row(o, BalanceArea.HEALTH).minutes)
         assertEquals("Not counted", o.choices.first().label)
         // The same title next week counts as planned too, and the trend counts it in every week.
@@ -280,7 +280,18 @@ class BalanceTest {
         assertEquals("swim club=h|team lunch=n", BalanceChoices.encode(c.map))
         assertEquals("swim club", BalanceRules.key("  Swim   CLUB! "))
         assertEquals(BalanceChoices.NONE, BalanceChoices.decode(null))
-        val many = (1..80).associate { "e$it" to BalanceArea.SELF as BalanceArea? }
+        val many = (1..80).associate { "e$it" to BalanceArea.YOURSELF as BalanceArea? }
         assertEquals(BalanceRules.MAX_CHOICES, BalanceChoices.decode(BalanceChoices.encode(many)).map.size)
+    }
+
+    /** Nightly Mac run 2026-10-25: no entry may be named SELF (Objective-C's +self); the old name still finds it. */
+    @Test
+    fun noAreaIsNamedSelfAndTheOldNameStillFindsYourself() {
+        assertTrue(BalanceArea.entries.none { it.name == "SELF" })
+        assertEquals(BalanceArea.YOURSELF, BalanceArea.named("SELF"))
+        assertEquals(BalanceArea.YOURSELF, BalanceArea.named("YOURSELF"))
+        assertEquals(BalanceArea.WORK, BalanceArea.named("WORK"))
+        assertNull(BalanceArea.named("NONE"))
+        assertEquals("Self", BalanceRules.countAsLabel("YOURSELF"))
     }
 }
