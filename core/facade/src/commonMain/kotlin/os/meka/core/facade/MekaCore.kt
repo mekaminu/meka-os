@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -790,6 +791,9 @@ class MekaCore(
 
     /** Test hook: runs [block] on the core's one thread (to hold the queue while a test looks at what shows meanwhile). */
     internal suspend fun <T> onCoreForTest(block: () -> T): T = onCore(block)
+
+    /** Tests: queues [block] on the core thread behind whatever is queued now (slice 19's ordering test). */
+    internal fun launchOnCoreForTest(block: suspend () -> Unit) { scope.launch { block() } }
 
     /** Locks Money again (the pane closed or the app went away). */
     suspend fun closeMoney() = onCore { moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
@@ -6770,6 +6774,12 @@ class MekaCore(
                 }
                 // Unsupported or failed, or an empty answer that came back implausibly fast: fall back to polling.
                 if (changed == null || (!changed && nowMs() - started < 1_000)) delay(periodMs)
+                // Taps feel instant, slice 19: another device's burst of edits is pulled and shown together, at most
+                // one rebuild every half second, rather than one rebuild per edit.
+                else if (changed) {
+                    val settle = os.meka.core.domain.SyncRefreshRules.settleMs(lastRefreshAtMs, nowMs())
+                    if (settle > 0) delay(settle)
+                }
             }
         }
     }
@@ -11786,6 +11796,9 @@ class MekaCore(
         vaultLocalTouched = false
         return try {
             val report = client.syncOnce()
+            // Slice 19: taps queued while the round waited on the network go first; their own rebuild shows what was
+            // pulled too, so the round makes none of its own after them.
+            if (os.meka.core.domain.SyncRefreshRules.stepAside(remoteRefreshOwed)) yield()
             showPulled()
             failures = 0
             lastSyncedMs = nowMs()
@@ -11913,6 +11926,8 @@ class MekaCore(
             var passes = 0
             do {
                 refreshAgain = false
+                // Every view is rebuilt from the replica as it is now, other devices' pulled changes included.
+                remoteRefreshOwed = false
                 timed(SPEED_REFRESH) { refreshOnce() }
             } while (refreshAgain && ++passes < MAX_REFRESH_PASSES)
         } finally {

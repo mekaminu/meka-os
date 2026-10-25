@@ -24,5 +24,20 @@ object SyncRefreshRules {
     fun endOfRound(deviceValuesChanged: Boolean, lastBuiltMs: Long, nowMs: Long): Boolean =
         deviceValuesChanged || nowMs / MINUTE_MS != lastBuiltMs / MINUTE_MS
 
+    /**
+     * Taps feel instant, slice 19: how long the live long-poll waits, after it says another device changed something,
+     * before pulling it: what's left of [SETTLE_MS] since the views were last built (none when that was longer ago).
+     * A burst of the other device's edits (the Mac ticking five tasks) is then pulled and shown with one rebuild
+     * instead of one per edit, and still shows within about half a second.
+     */
+    fun settleMs(lastBuiltMs: Long, nowMs: Long): Long = (SETTLE_MS - (nowMs - lastBuiltMs)).coerceIn(0L, SETTLE_MS)
+
+    /**
+     * Slice 19: whether the round should step aside before showing what it pulled, so taps queued while it waited
+     * on the network run first (and their own rebuild shows the pulled changes too, leaving the round none to make).
+     */
+    fun stepAside(pulledOwed: Boolean): Boolean = pulledOwed
+
     const val MINUTE_MS = 60_000L
+    const val SETTLE_MS = 500L
 }

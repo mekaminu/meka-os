@@ -23,7 +23,7 @@ MAIN_SRC=$(find "$ROOT/core"/{sync,domain,policy,wire,testing}/src/commonMain -n
 TEST_SRC=$(find "$ROOT/core"/{sync,domain,policy,wire}/src/commonTest -name '*.kt')
 
 echo "Kotlin $KV — compiling $(echo "$MAIN_SRC" | wc -l) main + $(echo "$TEST_SRC" | wc -l) test files"
-java -cp "$COMPILER_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
+java -Xmx4g -cp "$COMPILER_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -no-reflect -Xallow-kotlin-package -Xmulti-platform -opt-in=kotlin.ExperimentalStdlibApi \
   -Xcommon-sources="$(echo $MAIN_SRC | tr ' ' ',')" \
   -cp "$RUNTIME_CP" -d "$OUT" \

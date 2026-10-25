@@ -3951,3 +3951,16 @@ new screen's next frame and, once per process, `Process.getStartRequestedUptimeM
 `onAppear` time a sidebar switch, the first `today` after launch (from `MacLaunchClock`, read in the app's init) times
 the cold start, `openMoney` to the first unlocked view times Money; only a Swift `FeelKind` crosses into the deferred
 task. Tests: FeelTest, FeelFacadeTest. No server change, no migration. Mac checked nightly.
+
+## Taps feel instant — slice 19 (2026-10-25): the other devices' changes wait their turn (part 5c)
+
+Two orderings on the core thread. (1) When the live long-poll says another device changed something, `startSync` now
+waits `SyncRefreshRules.settleMs(lastRefreshAtMs, now)` (what's left of 500 ms since the last rebuild, never more)
+before the next round, so a burst of the Mac's edits is pulled and shown with one rebuild rather than one per edit.
+(2) After `SyncClient.syncOnce` returns with pulled changes owed a rebuild, `runSyncOnce` yields
+(`SyncRefreshRules.stepAside`) so taps queued while the round waited on the network run first; `refresh()` now clears
+`remoteRefreshOwed` (every view is rebuilt from the replica as it is, pulled changes included), so the tap's own
+rebuild shows both and `showPulled` adds none. Tests: SyncRefreshRulesTest (+2) under tools/core-verify.sh (3,427
+OK; the script now gives the compiler 4 GB, it ran out of memory at the default), SyncRefreshFacadeTest (+1, a gated pull with a tap
+queued behind its answer: the tap runs before the round ends and the whole round costs only the tap's rebuild).
+No server or app change, no migration. Mac checked nightly.
