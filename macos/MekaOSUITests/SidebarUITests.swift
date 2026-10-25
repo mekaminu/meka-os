@@ -39,8 +39,18 @@ final class SidebarUITests: XCTestCase {
             let row = app.descendants(matching: .any)["sidebar-" + name]
             XCTAssertTrue(row.waitForExistence(timeout: 5), "No sidebar row \(name)")
             row.click()
-            XCTAssertTrue(app.descendants(matching: .any)["screen-" + name].waitForExistence(timeout: 5),
-                          "Clicking \(name) in the sidebar didn't switch to it")
+            if !app.descendants(matching: .any)["screen-" + name].waitForExistence(timeout: 10) {
+                // Nightly run 2026-10-25 (Review): say what the window holds instead, on one line for the annotation.
+                let shot = XCTAttachment(screenshot: app.screenshot())
+                shot.name = "no-screen-\(name)"
+                shot.lifetime = .keepAlways
+                add(shot)
+                let screens = app.descendants(matching: .any)
+                    .matching(NSPredicate(format: "identifier BEGINSWITH 'screen-'")).allElementsBoundByIndex.map(\.identifier)
+                let texts = app.windows.firstMatch.staticTexts.allElementsBoundByIndex.prefix(30)
+                    .map { $0.label.isEmpty ? $0.identifier : $0.label }.filter { !$0.isEmpty }
+                XCTFail("Clicking \(name) in the sidebar didn't switch to it; screens: \(screens); texts: \(texts.joined(separator: " | "))")
+            }
         }
         // ⌘3 (Go → Calendar) still switches, and a sidebar click after it still works.
         app.typeKey("3", modifierFlags: .command)
