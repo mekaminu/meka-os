@@ -323,20 +323,29 @@ fun WeekBoardView(
         landTap(id, "Move") { core.parkOnBoard(id, week, index) }
     }
     val onPark: (BoardCard, Long) -> Unit = { card, week -> parkIn(card.id, week, Int.MAX_VALUE) }
-    val onSomeday: (BoardCard) -> Unit = { card -> scope.launch { showLine(runCatching { core.somedayOnBoard(card.id) }.getOrNull()) } }
+    // Slice 17: Someday, a drop on a list, the card menu's Area and the nudges show at once too.
+    val onSomeday: (BoardCard) -> Unit = { card ->
+        val next = os.meka.core.domain.InstantBoardRules.someday(coreBoard, taps, card.id)
+        if (next !== taps) { taps = next; landTap(card.id, "Someday") { core.somedayOnBoard(card.id) } }
+    }
     // Option B slice 3: a drop on one of the lists that keep Someday (Someday, Side hustle, House) files it there; the
     // card menu's AREA files it under one of the five.
-    val onList: (BoardCard, BoardArea?) -> Unit = { card, list ->
+    fun landWith(id: String, what: String, work: suspend () -> String?, undoIt: suspend () -> Unit) {
         scope.launch {
-            val line = runCatching { core.listOnBoard(card.id, list) }.getOrNull()
-            if (line != null) { haptics.light(); undo.show(line) { core.undoBoardList() } }
+            val r = runCatching { work() }
+            taps = os.meka.core.domain.InstantBoardRules.forget(taps, id)
+            val e = r.exceptionOrNull()
+            if (e != null) { undo.show(os.meka.core.domain.InstantTapRules.failedLine(what, e.message), null); return@launch }
+            r.getOrNull()?.let { line -> haptics.light(); undo.show(line) { undoIt() } }
         }
     }
+    val onList: (BoardCard, BoardArea?) -> Unit = { card, list ->
+        val next = os.meka.core.domain.InstantBoardRules.toList(coreBoard, taps, card.id, list)
+        if (next !== taps) { taps = next; landWith(card.id, "Move", { core.listOnBoard(card.id, list) }) { core.undoBoardList() } }
+    }
     val onArea: (BoardCard, BoardArea?) -> Unit = { card, area ->
-        scope.launch {
-            val line = runCatching { core.areaOnBoard(card.id, area) }.getOrNull()
-            if (line != null) { haptics.light(); undo.show(line) { core.undoBoardArea() } }
-        }
+        val next = os.meka.core.domain.InstantBoardRules.area(coreBoard, taps, card.id, area)
+        if (next !== taps) { taps = next; landWith(card.id, "Area", { core.areaOnBoard(card.id, area) }) { core.undoBoardArea() } }
     }
     val onTag: (BoardCard, String?) -> Unit = { card, goal ->
         scope.launch {
@@ -610,7 +619,8 @@ fun WeekBoardView(
                         onDrop = dropCard,
                         onCancel = { drag = null },
                         onMove = { card, days, places ->
-                            scope.launch { showLine(runCatching { core.nudgeOnBoard(card.id, days, places) }.getOrNull()) }
+                            val next = os.meka.core.domain.InstantBoardRules.nudge(coreBoard, taps, card.id, days, places)
+                            if (next !== taps) { taps = next; landTap(card.id, "Move") { core.nudgeOnBoard(card.id, days, places) } }
                         },
                         onMoveTo = { card, to ->
                             moveTo(card.id, to, Int.MAX_VALUE)

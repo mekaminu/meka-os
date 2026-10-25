@@ -3596,13 +3596,30 @@ final class CoreModel {
     }
 
     /// ⌘← ⌘→ (a day earlier or later) and ⌘↑ ⌘↓ (a place up or down) on the selected card, and its menu.
+    /// Slice 17: the card moves in the same frame (InstantBoardRules.nudge), the core's line follows.
     func nudgeOnBoard(_ id: String, days: Int, places: Int) {
-        guard let core else { return }
+        guard let core, let coreBoard else { return }
         let d = Int32(clamping: days), p = Int32(clamping: places)
+        let next = InstantBoardRules.shared.nudge(board: coreBoard, taps: boardTaps, id: id, days: d, places: p)
+        guard next != boardTaps else { return }
+        tapBoard(next)
+        landBoard(id, what: "Move", undo: .boardMove, tick: true) { try await core.nudgeOnBoard(taskId: id, days: d, places: p) }
+    }
+
+    /// Slice 17: runs a Board call whose tap is already drawn; forgets the tap when it returns, then offers the core's
+    /// line with Undo, or brings the card back with why it didn't go through.
+    private func landBoard(_ id: String, what: String, undo: EventUndoOffer.Action, tick: Bool = false, _ work: @escaping @MainActor () async throws -> String?) {
         Task {
-            guard let line = try? await core.nudgeOnBoard(taskId: id, days: d, places: p) else { return }
-            MekaHaptics.tick()
-            offerEventUndo(line, .boardMove)
+            do {
+                let line = try await work()
+                landBoardTap(id)
+                guard let line else { return }
+                if tick { MekaHaptics.tick() } else { MekaHaptics.light() }
+                offerEventUndo(line, undo)
+            } catch {
+                landBoardTap(id)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: what, reason: error.localizedDescription), nil)
+            }
         }
     }
 
@@ -3630,6 +3647,15 @@ final class CoreModel {
     func somedayOnBoard(_ id: String) {
         guard let core else { return }
         if boardSelectedID == id { boardSelectedID = nil }
+        // Slice 17: on the Board it leaves for the tray in the same frame; elsewhere (the shutdown) the call alone.
+        if let coreBoard {
+            let next = InstantBoardRules.shared.someday(board: coreBoard, taps: boardTaps, id: id)
+            if next != boardTaps {
+                tapBoard(next)
+                landBoard(id, what: "Someday", undo: .boardMove) { try await core.somedayOnBoard(taskId: id) }
+                return
+            }
+        }
         Task {
             guard let line = try? await core.somedayOnBoard(taskId: id) else { return }
             MekaHaptics.light()
@@ -3655,6 +3681,15 @@ final class CoreModel {
     /// The card menu's Area: files the task under the area named ("HOUSE"), or nil for No area; Undo on the bar.
     func areaOnBoard(_ id: String, area: String?) {
         guard let core else { return }
+        // Slice 17: the dot changes in the same frame.
+        if let coreBoard {
+            let next = InstantBoardRules.shared.area(board: coreBoard, taps: boardTaps, id: id, area: Self.area(area))
+            if next != boardTaps {
+                tapBoard(next)
+                landBoard(id, what: "Area", undo: .boardArea) { try await core.areaOnBoard(taskId: id, area: Self.area(area)) }
+                return
+            }
+        }
         Task {
             guard let line = try? await core.areaOnBoard(taskId: id, area: Self.area(area)) else { return }
             MekaHaptics.light()
@@ -3666,6 +3701,15 @@ final class CoreModel {
     func listOnBoard(_ id: String, list: String?) {
         guard let core else { return }
         if boardSelectedID == id { boardSelectedID = nil }
+        // Slice 17: it goes to the list in the same frame.
+        if let coreBoard {
+            let next = InstantBoardRules.shared.toList(board: coreBoard, taps: boardTaps, id: id, list: Self.area(list))
+            if next != boardTaps {
+                tapBoard(next)
+                landBoard(id, what: "Move", undo: .boardList) { try await core.listOnBoard(taskId: id, list: Self.area(list)) }
+                return
+            }
+        }
         Task {
             guard let line = try? await core.listOnBoard(taskId: id, list: Self.area(list)) else { return }
             MekaHaptics.light()

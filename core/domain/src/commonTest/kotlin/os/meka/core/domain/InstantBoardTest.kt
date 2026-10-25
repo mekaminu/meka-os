@@ -94,4 +94,86 @@ class InstantBoardTest {
         assertEquals(BoardTap(done = false, toDay = mon, index = 0), both["c"])
         assertTrue(taps === InstantBoardRules.forget(taps, "zzz"))
     }
+
+    // ---- Slice 17: the nudges, Someday, the lists and the area show at once too ----
+
+    @Test
+    fun aNudgeMovesTheCardADayOnToTheEndOrAPlaceUpOrDown() {
+        val b = board()
+        val later = InstantBoardRules.shown(b, InstantBoardRules.nudge(b, emptyMap(), "a", 1, 0))
+        assertEquals(listOf("c", "a"), ids(later.day(mon + 1)))
+        assertEquals(listOf("b", "x"), ids(later.day(mon)))
+        val down = InstantBoardRules.shown(b, InstantBoardRules.nudge(b, emptyMap(), "a", 0, 1))
+        assertEquals(listOf("b", "a", "x"), ids(down.day(mon)))
+        val up = InstantBoardRules.shown(b, InstantBoardRules.nudge(b, emptyMap(), "b", 0, -1))
+        assertEquals(listOf("b", "a", "x"), ids(up.day(mon)))
+        // Two quick nudges add up: a day on, then another.
+        val twice = InstantBoardRules.nudge(b, InstantBoardRules.nudge(b, emptyMap(), "a", 1, 0), "a", 1, 0)
+        assertEquals(listOf("a"), ids(InstantBoardRules.shown(b, twice).day(mon + 2)))
+    }
+
+    @Test
+    fun aNudgeTheCoreWouldRefuseLeavesTheTapsAlone() {
+        val b = board()
+        val none = emptyMap<String, BoardTap>()
+        assertTrue(none === InstantBoardRules.nudge(b, none, "a", 0, -1)) // already first
+        assertTrue(none === InstantBoardRules.nudge(b, none, "b", 0, 1)) // already last open
+        assertTrue(none === InstantBoardRules.nudge(b, none, "a", -1, 0)) // no day before Monday on the board
+        assertTrue(none === InstantBoardRules.nudge(b, none, "l1", 1, 0)) // in the lane, not on a day
+        assertTrue(none === InstantBoardRules.nudge(b, none, "x", 1, 0)) // done
+    }
+
+    @Test
+    fun somedayTakesTheCardOffItsDayOrLaneAndPutsItFirstInTheTray() {
+        val b = board()
+        val fromDay = InstantBoardRules.shown(b, InstantBoardRules.someday(b, emptyMap(), "b"))
+        assertEquals(listOf("b", "s1"), fromDay.someday.map { it.id })
+        assertEquals(listOf("a", "x"), ids(fromDay.day(mon)))
+        val fromLane = InstantBoardRules.shown(b, InstantBoardRules.someday(b, emptyMap(), "l1"))
+        assertEquals(listOf("l1", "s1"), fromLane.someday.map { it.id })
+        assertEquals(emptyList(), fromLane.weeks[0].lane)
+        // Already on Someday, done or a repeat: left to the core.
+        val none = emptyMap<String, BoardTap>()
+        assertTrue(none === InstantBoardRules.someday(b, none, "s1"))
+        assertTrue(none === InstantBoardRules.someday(b, none, "x"))
+        // A drop back on a day after Someday wins.
+        val back = InstantBoardRules.toDay(InstantBoardRules.someday(b, none, "b"), "b", mon + 1, 0)
+        assertEquals(listOf("b", "c"), ids(InstantBoardRules.shown(b, back).day(mon + 1)))
+    }
+
+    @Test
+    fun aDropOnAListGoesToSomedayWithTheListsArea() {
+        val b = board()
+        val taps = InstantBoardRules.toList(b, emptyMap(), "a", BoardArea.HOUSE)
+        val shown = InstantBoardRules.shown(b, taps)
+        val moved = shown.someday.first()
+        assertEquals("a", moved.id)
+        assertEquals(BoardArea.HOUSE, BoardAreaRules.listOf(moved))
+        assertEquals(listOf("b", "x"), ids(shown.day(mon)))
+        // From Someday to Side hustle: it stays in the tray and only its list changes.
+        val within = InstantBoardRules.shown(b, InstantBoardRules.toList(b, emptyMap(), "s1", BoardArea.SIDE_HUSTLE))
+        assertEquals(listOf("s1"), within.someday.map { it.id })
+        assertEquals(BoardArea.SIDE_HUSTLE, BoardAreaRules.listOf(within.someday.first()))
+        // Back to Someday itself takes the list off; already on plain Someday, or not a list: nothing to show.
+        val houseThenSomeday = InstantBoardRules.toList(b, taps, "a", null)
+        assertEquals(null, BoardAreaRules.listOf(InstantBoardRules.shown(b, houseThenSomeday).someday.first()))
+        val none = emptyMap<String, BoardTap>()
+        assertTrue(none === InstantBoardRules.toList(b, none, "s1", null))
+        assertTrue(none === InstantBoardRules.toList(b, none, "a", BoardArea.WORK))
+        assertTrue(none === InstantBoardRules.toList(b, none, "x", BoardArea.HOUSE))
+    }
+
+    @Test
+    fun theCardMenusAreaChangesTheDotAtOnceAndKeepsItsPlace() {
+        val b = board()
+        val shown = InstantBoardRules.shown(b, InstantBoardRules.area(b, emptyMap(), "c", BoardArea.MONEY))
+        assertEquals(listOf("c"), ids(shown.day(mon + 1)))
+        assertEquals(BoardArea.MONEY, BoardAreaRules.of(shown.day(mon + 1)!!.cards.first()))
+        val off = InstantBoardRules.area(b, emptyMap(), "c", null)
+        assertEquals(null, BoardAreaRules.of(InstantBoardRules.shown(b, off).day(mon + 1)!!.cards.first()))
+        // The same area again: nothing to show.
+        val none = emptyMap<String, BoardTap>()
+        val money = InstantBoardRules.shown(b, InstantBoardRules.area(b, none, "c", BoardArea.MONEY))
+        assertTrue(none === InstantBoardRules.area(money, none, "c", BoardArea.MONEY))
+    }
 }
