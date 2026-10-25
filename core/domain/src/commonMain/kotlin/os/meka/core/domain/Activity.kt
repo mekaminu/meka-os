@@ -606,20 +606,24 @@ class ActivityLog(
     private fun unsubscribes(): List<ActivityItem> = mailSenders().mapNotNull { ActivityRules.unsubscribeItem(it) }
 
     /** The newsletter and promo senders as Mail reads them. */
-    fun mailSenders(): List<MailSender> = replica.entities(EntityTypes.MAIL_SENDER)
-        .mapNotNull { s -> MailUnsubscribeRules.read(s.ref.entityId, s.fields) }
+    fun mailSenders(): List<MailSender> = replica.decoded(EntityTypes.MAIL_SENDER, "mailSenders") { l ->
+        l.mapNotNull { s -> MailUnsubscribeRules.read(s.ref.entityId, s.fields) }
+    }
 
     /** Inbox autopilot (slice 6a): the emails the server published as needing Meka, read from the synced `mail_item` entity. */
-    fun mailItems(): List<MailItem> = replica.entities(EntityTypes.MAIL_ITEM)
-        .mapNotNull { i -> MailNeedsRules.read(i.ref.entityId, i.fields) }
+    fun mailItems(): List<MailItem> = replica.decoded(EntityTypes.MAIL_ITEM, "mailItems") { l ->
+        l.mapNotNull { i -> MailNeedsRules.read(i.ref.entityId, i.fields) }
+    }
 
     /** Promises, receipts and renewals from email, slice 1: the finds the server read from the mail (renewals to add). */
-    fun mailFinds(): List<MailFind> = replica.entities(EntityTypes.MAIL_FIND)
-        .mapNotNull { i -> MailRenewalRules.read(i.ref.entityId, i.fields) }
+    fun mailFinds(): List<MailFind> = replica.decoded(EntityTypes.MAIL_FIND, "mailFinds") { l ->
+        l.mapNotNull { i -> MailRenewalRules.read(i.ref.entityId, i.fields) }
+    }
 
     /** Inbox autopilot, slice 3g: the parcels the server read from shipping emails (Today's "arriving today" line). */
-    fun parcels(): List<Parcel> = replica.entities(EntityTypes.PARCEL)
-        .mapNotNull { i -> ParcelRules.read(i.ref.entityId, i.fields) }
+    fun parcels(): List<Parcel> = replica.decoded(EntityTypes.PARCEL, "parcels") { l ->
+        l.mapNotNull { i -> ParcelRules.read(i.ref.entityId, i.fields) }
+    }
 
     /**
      * Unsubscribe on one sender (Mail): asks the server to do it at its next check. The line Mail shows: asked, already
@@ -646,18 +650,18 @@ class ActivityLog(
     /** Inbox autopilot (slice 3b-2): each tidy the server did, read from the synced `mail_tidy` entity itself. */
     private fun mailTidies(): List<ActivityItem> {
         val now = nowMs()
-        return replica.entities(EntityTypes.MAIL_TIDY)
-            .mapNotNull { s -> MailAutopilotRules.readBatch(s.ref.entityId, s.fields) }
-            .map { ActivityRules.mailTidyItem(it, now) }
+        return mailTidyBatches().map { ActivityRules.mailTidyItem(it, now) }
     }
 
     /** The tidies as Mail reads them. */
-    fun mailTidyBatches(): List<MailTidyBatch> = replica.entities(EntityTypes.MAIL_TIDY)
-        .mapNotNull { s -> MailAutopilotRules.readBatch(s.ref.entityId, s.fields) }
+    fun mailTidyBatches(): List<MailTidyBatch> = replica.decoded(EntityTypes.MAIL_TIDY, "mailTidyBatches") { l ->
+        l.mapNotNull { s -> MailAutopilotRules.readBatch(s.ref.entityId, s.fields) }
+    }
 
     /** Slice 8a: each account's backlog clean-up plan, as the server published it. */
-    fun mailBacklogs(): List<MailBacklog> = replica.entities(EntityTypes.MAIL_BACKLOG)
-        .mapNotNull { s -> MailBacklogRules.read(s.ref.entityId, s.fields) }
+    fun mailBacklogs(): List<MailBacklog> = replica.decoded(EntityTypes.MAIL_BACKLOG, "mailBacklogs") { l ->
+        l.mapNotNull { s -> MailBacklogRules.read(s.ref.entityId, s.fields) }
+    }
 
     /**
      * Slice 8b: **Approve** on an account's backlog clean-up (Mail): the server applies the plan from its next check, a

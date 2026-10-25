@@ -84,6 +84,10 @@ class Replica(
         batchRefs = refs
         val result = try {
             store.transaction { block() }
+        } catch (t: Throwable) {
+            // The store rolled the whole batch back: nothing read inside it may be kept.
+            forgetAll()
+            throw t
         } finally {
             batchRefs = null
         }
@@ -106,7 +110,7 @@ class Replica(
     fun commitLocal(entityType: String, entityId: String, changes: Map<String, FieldValue>): List<Op> {
         require(changes.isNotEmpty()) { "no changes" }
         val rec = recorder
-        val ops = store.transaction {
+        val ops = try { store.transaction {
             val out = mutableListOf<Op>()
             val created = rec != null && store.fieldHeads(EntityRef(entityType, entityId)).isEmpty()
             val recorded = mutableListOf<RecordedChange>()
@@ -138,6 +142,9 @@ class Replica(
             if (out.isNotEmpty()) store.setClockHighWater(clock.latest)
             rec?.addAll(recorded)
             out
+        } } finally {
+            // Written, or rolled back half way: either way this type is read afresh next time.
+            forget(entityType)
         }
         val batch = batchRefs
         if (ops.isNotEmpty() && batch != null) {
@@ -154,7 +161,7 @@ class Replica(
 
     fun applyRemoteBatch(batch: List<Op>): List<ApplyResult> {
         val changed = mutableSetOf<EntityRef>()
-        val results = store.transaction {
+        val results = try { store.transaction {
             batch.map { op ->
                 val existing = store.op(op.opId)
                 when {
@@ -173,6 +180,8 @@ class Replica(
                     }
                 }
             }.also { store.setClockHighWater(clock.latest) }
+        } } finally {
+            batch.mapTo(HashSet()) { it.entityType }.forEach { forget(it) }
         }
         if (changed.isNotEmpty()) {
             notifyingRemote = true
@@ -201,9 +210,53 @@ class Replica(
         return EntitySnapshot(ref, householdId, fields, updated)
     }
 
-    /** Non-deleted entities of a type. */
+    /**
+     * Taps feel instant (2026-10-25): each type's entities as last read, kept until a write to that type (local or
+     * remote, or a rolled-back batch). The views read the same types many times a refresh (the 12,000 emails eight
+     * times or so), and a tap on a task used to make every one of those reads merge every email's fields again. The
+     * store is only ever written through this replica, so nothing else can change what is kept. Maps are replaced,
+     * never changed in place, so a reader on another thread sees an old map or a new one, never a broken one.
+     */
+    private var kept: Map<String, KeptType> = emptyMap()
+
+    private class KeptType(val all: List<EntitySnapshot>, val live: List<EntitySnapshot>) {
+        var decoded: Map<String, Any?> = emptyMap()
+    }
+
+    private fun forget(entityType: String) {
+        val k = kept
+        if (entityType in k) kept = k - entityType
+    }
+
+    private fun forgetAll() { kept = emptyMap() }
+
+    private fun keptType(entityType: String): KeptType {
+        kept[entityType]?.let { return it }
+        val all = store.entityIds(entityType).mapNotNull { entity(entityType, it) }
+        val t = KeptType(all, all.filter { !it.deleted })
+        kept = kept + (entityType to t)
+        return t
+    }
+
+    /** Non-deleted entities of a type (the same list, unchanged, until a write to the type). */
     fun entities(entityType: String, includeDeleted: Boolean = false): List<EntitySnapshot> =
-        store.entityIds(entityType).mapNotNull { entity(entityType, it) }.filter { includeDeleted || !it.deleted }
+        keptType(entityType).let { if (includeDeleted) it.all else it.live }
+
+    /**
+     * [decode] of a type's non-deleted entities, kept with them under [key] until a write to the type, so the same
+     * reading (emails into the mail list) is done once per change, not once per call. [decode] must depend on the
+     * entities alone (no clock, no other type).
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> decoded(entityType: String, key: String, decode: (List<EntitySnapshot>) -> T): T {
+        val t = keptType(entityType)
+        val d = t.decoded
+        if (key in d) return d[key] as T
+        val v = decode(t.live)
+        // Only kept if the type wasn't written while decoding (a decode never writes, but be sure).
+        if (kept[entityType] === t) t.decoded = d + (key to v)
+        return v
+    }
 
     /** Unresolved user-visible conflicts across the given entity types. */
     fun conflicts(vararg entityTypes: String): List<Conflict> =
