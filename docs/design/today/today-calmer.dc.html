@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes fadeup{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.pop{animation:pop .25s cubic-bezier(.2,.8,.2,1) both}
+.row{transition:opacity .25s}
+button{cursor:pointer}
+@media (prefers-reduced-motion:reduce){.in,.pop{animation:none}.row{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1180px;box-sizing:border-box;padding:18px 18px 110px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:18px;position:relative">
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+<div style="display:flex;flex-direction:column;gap:3px">
+<div style="font-size:28px;font-weight:700;letter-spacing:-.01em;line-height:1.15">Good afternoon, Meka</div>
+<div style="font-size:13.5px;color:#a8a29a">Sunday 25 October · 12° partly cloudy, dry</div>
+<div style="font-size:13px;color:#8f897f">Unread · Personal 156 · Gmail 1,050 · 1,022 Navilife can tidy</div>
+</div>
+<div style="width:52px;height:52px;border-radius:26px;border:1.5px solid #6b5a36;flex-shrink:0;position:relative" aria-hidden="true">
+<span style="position:absolute;left:25px;top:9px;width:2px;height:17px;background:#c9b37e;border-radius:1px"></span>
+<span style="position:absolute;left:25px;top:25px;width:14px;height:2px;background:#c9b37e;border-radius:1px"></span>
+</div>
+</div>
+
+<div style="display:flex;gap:16px;margin-top:-6px"><a href="#" style="font-size:14px;text-decoration:none">Search</a><a href="#" style="font-size:14px;text-decoration:none">Plan my day</a></div>
+
+<sc-if value="{{showUpdate}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;align-items:center;gap:10px;background:#121214;border-radius:12px;padding:8px 8px 8px 14px">
+<span style="flex:1;font-size:13.5px;color:#d8d2c6">Update ready · build 2221</span>
+<button type="button" onClick="{{hideUpdate}}" style="border:0;background:transparent;color:#a8a29a;padding:8px 10px;font:500 13px DM Sans,sans-serif">Later</button>
+<button type="button" style="border:0;background:#c9b37e;color:#111;border-radius:999px;padding:8px 14px;font:600 13px DM Sans,sans-serif">Install</button>
+</div>
+</sc-if>
+
+<div style="display:flex;gap:8px;overflow:hidden">
+<div style="flex:0 0 250px;background:#121214;border-radius:14px;padding:10px 12px;display:flex;gap:10px;align-items:center"><span style="width:32px;height:32px;border-radius:9px;background:#2a1f26;color:#d38aa5;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">M</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:13.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Barcelona v Real Madrid: how to watch</span><span style="font-size:11.5px;color:#8f897f">Mashable · 13 min ago</span></span></div>
+<div style="flex:0 0 250px;background:#121214;border-radius:14px;padding:10px 12px;display:flex;gap:10px;align-items:center"><span style="width:32px;height:32px;border-radius:9px;background:#24231b;color:#c9b37e;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">TC</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:13.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">The hottest AI wearables</span><span style="font-size:11.5px;color:#8f897f">TechCrunch · 51 min ago</span></span></div>
+</div>
+
+<sc-if value="{{up}}" hint-placeholder-val="{{true}}">
+<div class="in" style="background:#121214;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Up next</span><span style="font-size:12px;color:#8f897f">{{up.age}}</span></div>
+<div style="font-size:17px;font-weight:600;line-height:1.3">{{up.title}}</div>
+<div style="display:flex;gap:8px">
+<button type="button" onClick="{{upDone}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font:600 13.5px DM Sans,sans-serif">Done</button>
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:36px;padding:0 14px;font:500 13.5px DM Sans,sans-serif">Break it down</button>
+<button type="button" onClick="{{upLater}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:36px;padding:0 14px;font:500 13.5px DM Sans,sans-serif">Tomorrow</button>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{upLine}}" hint-placeholder-val="{{false}}"><div class="in" style="font-size:13px;color:#8fbf8f;margin-top:-8px">{{upLine}}</div></sc-if>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a;padding-bottom:4px">Today · 1 all day · 1 event</div>
+<div style="display:flex;gap:12px;align-items:baseline;min-height:28px"><span style="width:52px;font-size:12.5px;color:#8f897f;flex-shrink:0">All day</span><span style="font-size:15px">Set up a call with two contacts <span style="font-size:12px;color:#7fb3a8">· Todoist</span></span></div>
+<div style="display:flex;gap:12px;align-items:center;min-height:28px"><span style="width:52px;font-size:12.5px;color:#c9b37e;flex-shrink:0">15:01</span><span style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#c9b37e"><span style="width:6px;height:6px;border-radius:3px;background:#c9b37e"></span>4 h 59 free<span style="flex:1;height:1px;background:#3a3428"></span></span></div>
+<div style="display:flex;gap:12px;align-items:baseline;min-height:28px"><span style="width:52px;font-size:12.5px;color:#8f897f;flex-shrink:0">20:00</span><span style="font-size:15px">Barça v Real Madrid <span style="font-size:12px;color:#d18a6b">· LaLiga</span></span></div>
+</div>
+
+<div style="display:flex;flex-direction:column">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a;padding-bottom:4px">Anytime today · {{openCount}}</div>
+<sc-for list="{{open}}" as="t" hint-placeholder-count="4">
+<button type="button" class="row" onClick="{{t.tick}}" style="border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:12px;min-height:48px;padding:0;text-align:left;font-family:DM Sans,sans-serif;width:100%;border-bottom:1px solid #141416">
+<span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;margin-left:-11px;margin-right:-11px;flex-shrink:0"><span style="width:20px;height:20px;border-radius:11px;border:1.5px solid #5a5650;box-sizing:border-box"></span></span>
+<span style="flex:1;font-size:16px;line-height:1.3">{{t.title}}</span>
+</button>
+</sc-for>
+<button type="button" onClick="{{toggleDone}}" style="border:0;background:transparent;color:#a8a29a;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;text-align:left;font:500 13.5px DM Sans,sans-serif">
+<span style="width:20px;height:20px;border-radius:10px;background:#c9b37e;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+{{doneLabel}}
+</button>
+<sc-if value="{{showDone}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column">
+<sc-for list="{{done}}" as="t" hint-placeholder-count="2">
+<button type="button" onClick="{{t.untick}}" style="border:0;background:transparent;color:#8f897f;display:flex;align-items:center;gap:12px;min-height:40px;padding:0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<span class="pop" style="width:20px;height:20px;border-radius:10px;background:#c9b37e;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:.7"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+<span style="flex:1;font-size:15px;text-decoration:line-through">{{t.title}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="position:absolute;left:18px;right:18px;bottom:24px;display:flex;align-items:center;gap:8px;background:#151517;border-radius:999px;padding:6px 6px 6px 18px">
+<span style="flex:1;font-size:15px;color:#8f897f">Capture anything…</span>
+<button type="button" aria-label="Speak" style="width:40px;height:40px;border-radius:20px;border:1.5px solid #c9b37e;background:transparent;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1180}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={done:{'Reply to audit':1,'Send the follow-up email':1},showDone:false,up:'shown',upd:true};}
+renderVals(){
+var s=this.state,self=this;
+var all=['Do feedback for all','Review plan for DL','Complete eval','Clean up work email inbox','Reply to audit','Send the follow-up email'];
+var setDone=function(t,v){var d=Object.assign({},s.done);if(v)d[t]=1;else delete d[t];self.setState({done:d});};
+var open=all.filter(function(t){return !s.done[t];}).map(function(t){return {title:t,tick:function(){setDone(t,true);}};});
+var done=all.filter(function(t){return s.done[t];}).map(function(t){return {title:t,untick:function(){setDone(t,false);}};});
+return {
+showUpdate:s.upd,hideUpdate:function(){self.setState({upd:false});},
+up:s.up==='shown'?{title:'Cancel the art lessons',age:'Carried over 5 days'}:null,
+upLine:s.up==='done'?'Done · nice, that one had waited 5 days':(s.up==='later'?'Moved to tomorrow':''),
+upDone:function(){self.setState({up:'done'});},upLater:function(){self.setState({up:'later'});},
+open:open,openCount:open.length,done:done,
+doneLabel:done.length+' done today'+(s.showDone?' · hide':' ›'),showDone:s.showDone,toggleDone:function(){self.setState({showDone:!s.showDone});}
+};
+}
+}
+</script>
+</body>
+</html>
