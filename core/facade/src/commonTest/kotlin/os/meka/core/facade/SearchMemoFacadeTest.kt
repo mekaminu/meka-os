@@ -101,7 +101,7 @@ class SearchMemoFacadeTest {
         before = builds(c)
         c.addTrip("Barcelona 20–24 Nov")
         assertTrue(c.viewBuilds("Trips") > before.getValue("Trips"), "a trip rebuilds Trips")
-        assertEquals(before.getValue("School"), c.viewBuilds("School"), "a trip doesn't rebuild School")
+        assertEquals(before.getValue("Gifts"), c.viewBuilds("Gifts"), "a trip doesn't rebuild Gifts")
 
         before = builds(c)
         c.addDocument("Passport expires 3 Mar 2029")
