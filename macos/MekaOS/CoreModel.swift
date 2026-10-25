@@ -83,6 +83,10 @@ final class CoreModel {
     var showKids = false
     /// Money manager (slice 1): locked until Touch ID opens it; the month's spending by category. Synced.
     private(set) var money: MoneyView?
+    /// Taps feel instant for Money's payment chips: the core's own view, and the taps on their way, drawn over it in the
+    /// same frame ([InstantPaymentRules]); a tap is forgotten when its call returns.
+    @ObservationIgnored private var coreMoney: MoneyView?
+    @ObservationIgnored private var paymentTaps: [PaymentTap] = []
     var showMoney = false
     /// About you (rule 13, slice 1): the household profile, synced with the Fold; kept in his data, not in code.
     private(set) var aboutYou: AboutYouView?
@@ -609,7 +613,7 @@ final class CoreModel {
             for await k in core.kidsView { self?.kids = k }
         })
         observers.append(Task { [weak self] in
-            for await m in core.moneyView { self?.money = m }
+            for await m in core.moneyView { self?.coreMoney = m; self?.showMoneyView() }
         })
         observers.append(Task { [weak self] in
             for await a in core.aboutYouView { self?.aboutYou = a }
@@ -4422,12 +4426,35 @@ final class CoreModel {
     /// Puts every payment to that line's shop in another category from now on (Undo with `undoMoneyCategory`).
     func setMoneyCategory(txnId: String, category: String) async -> MoneySaid? {
         guard let core else { return nil }
+        let tap = InstantPaymentRules.shared.categoryTap(txnId: txnId, key: category)
+        holdPaymentTap(tap)
         do {
-            return moneySaid(try await core.setMoneyCategory(txnId: txnId, category: category))
+            let said = moneySaid(try await core.setMoneyCategory(txnId: txnId, category: category))
+            landPaymentTap(tap)
+            return said
         } catch {
-            lastError = error.localizedDescription
+            landPaymentTap(tap)
+            lastError = InstantPaymentRules.shared.failedLine(tap: tap, reason: error.localizedDescription)
             return nil
         }
+    }
+
+    /// Money as drawn: the core's view with the payment chips still on their way (taps feel instant).
+    private func showMoneyView() {
+        guard let coreMoney else { money = nil; return }
+        money = paymentTaps.isEmpty ? coreMoney : InstantPaymentRules.shared.shown(view: coreMoney, taps: paymentTaps)
+    }
+
+    /// A payment chip shows in the same frame; the core's write follows.
+    private func holdPaymentTap(_ tap: PaymentTap) {
+        paymentTaps = InstantPaymentRules.shared.add(taps: paymentTaps, tap: tap)
+        showMoneyView()
+    }
+
+    /// Its call returned: the core's view (with any newer tap) shows; a refused or failed one puts the payment back.
+    private func landPaymentTap(_ tap: PaymentTap) {
+        paymentTaps = InstantPaymentRules.shared.forget(taps: paymentTaps, tap: tap)
+        showMoneyView()
     }
 
     /// Slice 2: hides every tip of that kind ("habit", "over", "rise") on both devices; Undo with `undoMoneyCategory`.
@@ -4593,10 +4620,15 @@ final class CoreModel {
     /// Money slice 13: Business on a payment's payer, on every account (synced; Undo through undoMoneyCategory).
     func moneyBusinessMerchant(txnId: String, on: Bool) async -> MoneySaid? {
         guard let core else { return nil }
+        let tap = InstantPaymentRules.shared.businessTap(txnId: txnId, on: on)
+        holdPaymentTap(tap)
         do {
-            return moneySaid(try await core.moneyBusinessMerchant(txnId: txnId, on: on))
+            let said = moneySaid(try await core.moneyBusinessMerchant(txnId: txnId, on: on))
+            landPaymentTap(tap)
+            return said
         } catch {
-            lastError = error.localizedDescription
+            landPaymentTap(tap)
+            lastError = InstantPaymentRules.shared.failedLine(tap: tap, reason: error.localizedDescription)
             return nil
         }
     }
@@ -4659,10 +4691,15 @@ final class CoreModel {
     /// Money slice 14: Shared on one payment (synced; Undo through undoMoneyCategory).
     func moneySharedTxn(txnId: String, on: Bool) async -> MoneySaid? {
         guard let core else { return nil }
+        let tap = InstantPaymentRules.shared.sharedTap(txnId: txnId, on: on)
+        holdPaymentTap(tap)
         do {
-            return moneySaid(try await core.moneySharedTxn(txnId: txnId, on: on))
+            let said = moneySaid(try await core.moneySharedTxn(txnId: txnId, on: on))
+            landPaymentTap(tap)
+            return said
         } catch {
-            lastError = error.localizedDescription
+            landPaymentTap(tap)
+            lastError = InstantPaymentRules.shared.failedLine(tap: tap, reason: error.localizedDescription)
             return nil
         }
     }
@@ -4670,10 +4707,15 @@ final class CoreModel {
     /// Money slice 14: Always shared on a payment's payer, on every account.
     func moneySharedMerchant(txnId: String, on: Bool) async -> MoneySaid? {
         guard let core else { return nil }
+        let tap = InstantPaymentRules.shared.alwaysTap(txnId: txnId, on: on)
+        holdPaymentTap(tap)
         do {
-            return moneySaid(try await core.moneySharedMerchant(txnId: txnId, on: on))
+            let said = moneySaid(try await core.moneySharedMerchant(txnId: txnId, on: on))
+            landPaymentTap(tap)
+            return said
         } catch {
-            lastError = error.localizedDescription
+            landPaymentTap(tap)
+            lastError = InstantPaymentRules.shared.failedLine(tap: tap, reason: error.localizedDescription)
             return nil
         }
     }

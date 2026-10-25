@@ -86,6 +86,8 @@ import os.meka.core.domain.MoneyRefunds
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneySaved
+import os.meka.core.domain.InstantPaymentRules
+import os.meka.core.domain.PaymentTap
 import os.meka.core.domain.MoneyTip
 import os.meka.core.domain.MoneyTips
 import os.meka.core.domain.MoneyTxnRow
@@ -163,7 +165,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val context = LocalContext.current
-    val v by core.moneyView.collectAsState()
+    // Taps feel instant: a payment's category, Shared, Always shared or Business shows in the same frame, drawn over
+    // the core's view while the write runs (InstantPaymentRules); a refused or failed one puts the payment back.
+    val coreView by core.moneyView.collectAsState()
+    var payTaps by remember { mutableStateOf(emptyList<PaymentTap>()) }
+    val v = remember(coreView, payTaps) { InstantPaymentRules.shown(coreView, payTaps) }
     var account by rememberSaveable { mutableStateOf("") }
     var said by remember { mutableStateOf<MoneySaved?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }
@@ -185,6 +191,21 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     DisposableEffect(Unit) { onDispose { kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate).launch { runCatching { core.closeMoney() } } } }
 
     val say: (MoneySaved) -> Unit = { r -> if (r.refused) haptics.tick() else haptics.light(); said = r }
+    val payTap: (PaymentTap, suspend () -> MoneySaved) -> Unit = { tap, call ->
+        payTaps = InstantPaymentRules.add(payTaps, tap)
+        scope.launch {
+            try {
+                val r = runCatching { call() }
+                r.exceptionOrNull()?.let { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    haptics.tick(); said = MoneySaved(InstantPaymentRules.failedLine(tap, e.message), refused = true)
+                }
+                r.getOrNull()?.let(say)
+            } finally {
+                payTaps = InstantPaymentRules.forget(payTaps, tap)
+            }
+        }
+    }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val name = account
@@ -544,10 +565,10 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
                         TxnRow(t, Modifier.animateItem(),
-                            onBusiness = { on -> scope.launch { runCatching { core.moneyBusinessMerchant(t.id, on) }.getOrNull()?.let(say) } },
-                            onShared = { on -> scope.launch { runCatching { core.moneySharedTxn(t.id, on) }.getOrNull()?.let(say) } },
-                            onAlways = { on -> scope.launch { runCatching { core.moneySharedMerchant(t.id, on) }.getOrNull()?.let(say) } }) { key ->
-                            scope.launch { runCatching { core.setMoneyCategory(t.id, key) }.getOrNull()?.let(say) }
+                            onBusiness = { on -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) } },
+                            onShared = { on -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) } },
+                            onAlways = { on -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) } }) { key ->
+                            payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) }
                         }
                     }
                 }
