@@ -7,7 +7,7 @@ final class HealthSheetTests: XCTestCase {
     @MainActor
     func testTheMacDoesItsOwnFixesAndLeavesThePhonesToThePhone() {
         func row(_ fix: HealthFix) -> HealthRow {
-            HealthRow(key: "k", title: "t", line: "l", state: .warn, fix: fix, fixLabel: "Fix", provider: nil, account: nil, editing: false)
+            HealthRow(key: "k", title: "t", line: "l", state: .warn, fix: fix, fixLabel: "Fix", provider: nil, account: nil, editing: false, detail: nil, place: nil)
         }
         XCTAssertTrue(HealthSheet.fixHere(row(.reconnect)))
         XCTAssertTrue(HealthSheet.fixHere(row(.syncNow)))

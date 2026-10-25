@@ -1555,7 +1555,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(CalendarAccessRules.shared.action(provider: "fixtures", canEdit: false, needsReconnect: false))
         XCTAssertEqual(CalendarAccessRules.shared.line(provider: "google", canEdit: false, needsReconnect: false), "Read-only · Navilife only reads this calendar")
         XCTAssertTrue(CalendarAccessRules.shared.reconnectAsksEditing(canEdit: true))
-        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true, title: "Personal", eventsLine: nil, newsDown: [])
+        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true, title: "Personal", eventsLine: nil, newsDown: [], syncedAt: nil)
         XCTAssertEqual(a.editingAction, .stopEditing)
     }
 
@@ -1565,7 +1565,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CalendarAccountRules.shared.title(provider: "microsoft", email: "me@hotmail.co.uk", names: [:]), "Hotmail")
         let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: false,
                                  title: CalendarAccountRules.shared.title(provider: "google", email: "me@gmail.com", names: [:]),
-                                 eventsLine: "No events in the next 30 days", newsDown: [])
+                                 eventsLine: "No events in the next 30 days", newsDown: [], syncedAt: nil)
         XCTAssertEqual(a.title, "Personal")
         XCTAssertEqual(a.statusLine(syncedAt: "08:29"), "Google · me@gmail.com · synced 08:29")
         XCTAssertEqual(a.eventsLine, "No events in the next 30 days")
@@ -3236,11 +3236,11 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testHealthReachesSwift() {
         // Reliability first, item 3: a row as the core makes it (the Mac's fixes: HealthSheetTests).
         let reconnect = HealthRow(key: "calendar:google:meka@gmail.com", title: "Calendar · Personal", line: "Google sign-in expired",
-                                  state: .bad, fix: .reconnect, fixLabel: "Reconnect", provider: "google", account: "meka@gmail.com", editing: true)
+                                  state: .bad, fix: .reconnect, fixLabel: "Reconnect", provider: "google", account: "meka@gmail.com", editing: true, detail: nil, place: nil)
         XCTAssertTrue(reconnect.needsLook)
         XCTAssertEqual(reconnect.fix, .reconnect)
         let battery = HealthRow(key: "battery", title: "Battery", line: "Samsung may put Navilife to sleep",
-                                state: .warn, fix: .battery, fixLabel: "Keep Navilife awake", provider: nil, account: nil, editing: false)
+                                state: .warn, fix: .battery, fixLabel: "Keep Navilife awake", provider: nil, account: nil, editing: false, detail: nil, place: nil)
         XCTAssertTrue(battery.needsLook)
         XCTAssertEqual(HealthRules.shared.TODAY_REFRESH_MS, 15 * 60_000)
     }
@@ -3314,7 +3314,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.disconnectAsk(row: v.rows[1]).hasPrefix("Disconnect Business · Gmail"))
         XCTAssertTrue(MailProviders.shared.isMail(provider: "outlook_mail"))
         // Slice 3b-2: Autopilot's switch (its panel from the core) and the switch and Undo offline.
-        let panel = MailAutopilotPanelRules.shared.panel(setting: MailAutopilotSetting(on: true, changedAtMs: nil, markRead: true), paused: false)
+        let panel = MailAutopilotPanelRules.shared.panel(setting: MailAutopilotSetting(on: true, changedAtMs: nil, markRead: true, readerMarksRead: false), paused: false)
         XCTAssertEqual(panel.action, MailAutopilotPanelRules.shared.TURN_OFF)
         // Quality gate slice 32: the short line on the card, the full one behind How it works; narrow stacks the button.
         XCTAssertEqual(panel.shortLine, MailAutopilotPanelRules.shared.ON_SHORT)
