@@ -268,23 +268,27 @@ class GeminiLiveTokens(
             put("uses", 1)
             put("expireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.TOKEN_MS).toString())
             put("newSessionExpireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.START_MS).toString())
-            putJsonObject("liveConnectConstraints") {
+            // Google's REST name for the locked Live setup is bidiGenerateContentSetup (a BidiGenerateContentSetup:
+            // generationConfig holds the modalities and voice; the rest sits beside it). "liveConnectConstraints" is
+            // only the SDKs' name for it: sent raw, Google answers 400 "Unknown name liveConnectConstraints" (Meka's
+            // Fold, 2026-10-25 01:32).
+            putJsonObject("bidiGenerateContentSetup") {
                 put("model", "models/$model")
-                putJsonObject("config") {
-                    // Slice 2c: a fresh window for a conversation already running carries on from Google's handle.
-                    putJsonObject("sessionResumption") { resume?.let { put("handle", it) } }
+                putJsonObject("generationConfig") {
                     putJsonArray("responseModalities") { add("AUDIO") }
                     putJsonObject("speechConfig") {
                         putJsonObject("voiceConfig") { putJsonObject("prebuiltVoiceConfig") { put("voiceName", voice) } }
                     }
-                    if (instruction.isNotBlank()) {
-                        putJsonObject("systemInstruction") {
-                            putJsonArray("parts") { add(buildJsonObject { put("text", instruction) }) }
-                        }
-                        putJsonArray("tools") { add(if (tools) searchTool(navilifeTools(mailMoney)) else searchTool()) }
-                        putJsonObject("inputAudioTranscription") {}
-                        putJsonObject("outputAudioTranscription") {}
+                }
+                // Slice 2c: a fresh window for a conversation already running carries on from Google's handle.
+                putJsonObject("sessionResumption") { resume?.let { put("handle", it) } }
+                if (instruction.isNotBlank()) {
+                    putJsonObject("systemInstruction") {
+                        putJsonArray("parts") { add(buildJsonObject { put("text", instruction) }) }
                     }
+                    putJsonArray("tools") { add(if (tools) searchTool(navilifeTools(mailMoney)) else searchTool()) }
+                    putJsonObject("inputAudioTranscription") {}
+                    putJsonObject("outputAudioTranscription") {}
                 }
             }
         }.toString()

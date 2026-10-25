@@ -60,9 +60,11 @@ class LiveSessionsTest {
         assertEquals("1", o["uses"]!!.jsonPrimitive.content)
         assertEquals("2026-10-22T01:30:00Z", o["expireTime"]!!.jsonPrimitive.content)
         assertEquals("2026-10-22T01:21:00Z", o["newSessionExpireTime"]!!.jsonPrimitive.content)
-        val c = o["liveConnectConstraints"]!!.jsonObject
+        assertFalse("liveConnectConstraints" in o) // the SDKs' name; Google's REST API refuses it (400, Meka's Fold 2026-10-25)
+        val c = o["bidiGenerateContentSetup"]!!.jsonObject
         assertEquals("models/gemini-3.8-live", c["model"]!!.jsonPrimitive.content)
-        assertEquals("AUDIO", c["config"]!!.jsonObject["responseModalities"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals("AUDIO", c["generationConfig"]!!.jsonObject["responseModalities"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals("Kore", c["generationConfig"]!!.jsonObject["speechConfig"]!!.jsonObject["voiceConfig"]!!.jsonObject["prebuiltVoiceConfig"]!!.jsonObject["voiceName"]!!.jsonPrimitive.content)
 
         // What reaches the device: Google's token, never the key.
         val s = service(Tokens(key, token)).session("hh", LiveCodec.SessionRequest("Kore"))
@@ -180,14 +182,14 @@ class LiveSessionsTest {
     @Test
     fun slice4AdaAndHisDayAreLockedIntoTheTokenWithGoogleSearch() {
         val body = GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "You are Obi.")
-        val config = Json.parseToJsonElement(body).jsonObject["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject
+        val config = Json.parseToJsonElement(body).jsonObject["bidiGenerateContentSetup"]!!.jsonObject
         assertEquals("You are Obi.", config["systemInstruction"]!!.jsonObject["parts"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content)
         val fn = config["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.single().jsonObject
         assertEquals("search_the_web", fn["name"]!!.jsonPrimitive.content)
         assertFalse("googleSearch" in config["tools"]!!.jsonArray.single().jsonObject)
         assertTrue("inputAudioTranscription" in config && "outputAudioTranscription" in config)
         // Without an instruction (an older caller) the token is as before.
-        assertFalse("tools" in Json.parseToJsonElement(GeminiLiveTokens.request("m", "Kore", now)).jsonObject["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject)
+        assertFalse("tools" in Json.parseToJsonElement(GeminiLiveTokens.request("m", "Kore", now)).jsonObject["bidiGenerateContentSetup"]!!.jsonObject)
 
         val tokens = Tokens(key)
         val day = LiveCodec.Day(
@@ -257,7 +259,7 @@ class LiveSessionsTest {
         assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
         // The token's tools: Navilife's two and the search; the proposal's kinds are Ask's alone.
         val req = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, sent, tools = true)).jsonObject
-        val decls = req["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray
+        val decls = req["bidiGenerateContentSetup"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray
         assertEquals(listOf("look_up_my_days", "propose_action", "search_the_web"), decls.map { it.jsonObject["name"]!!.jsonPrimitive.content })
         val kinds = decls[1].jsonObject["parameters"]!!.jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
         assertEquals(os.meka.core.domain.AskRules.KINDS, kinds)
@@ -267,7 +269,7 @@ class LiveSessionsTest {
         assertEquals(listOf(true, false), tokens.tooled)
         assertTrue("You can't do anything yourself in this live conversation" in tokens.instructions.last())
         val plain = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x")).jsonObject
-        assertEquals(1, plain["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
+        assertEquals(1, plain["bidiGenerateContentSetup"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
     }
 
     @Test
@@ -293,8 +295,8 @@ class LiveSessionsTest {
         live.session("hh", LiveCodec.SessionRequest("Kore", resume = "not a handle"))
         assertNull(tokens.resumed.last())
         val req = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = true, resume = "h2")).jsonObject
-        assertEquals("h2", req["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["sessionResumption"]!!.jsonObject["handle"]!!.jsonPrimitive.content)
-        assertFalse("handle" in Json.parseToJsonElement(GeminiLiveTokens.request("m", "Kore", now, "x")).jsonObject["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["sessionResumption"]!!.jsonObject)
+        assertEquals("h2", req["bidiGenerateContentSetup"]!!.jsonObject["sessionResumption"]!!.jsonObject["handle"]!!.jsonPrimitive.content)
+        assertFalse("handle" in Json.parseToJsonElement(GeminiLiveTokens.request("m", "Kore", now, "x")).jsonObject["bidiGenerateContentSetup"]!!.jsonObject["sessionResumption"]!!.jsonObject)
         // The meter at the cap refuses a fresh window too, so a long talk never passes it.
         val full = service(Tokens(key), store, cap = 1)
         assertEquals(LiveCodec.Session.OVER, full.session("hh", LiveCodec.SessionRequest("Kore", resume = "h3")).state)
@@ -310,13 +312,12 @@ class LiveSessionsTest {
         assertTrue("look_up_my_mail" in tokens.instructions[0] && "look_up_my_money" in tokens.instructions[0])
         assertTrue("look_up_my_mail" !in tokens.instructions[1])
         // The token's tools: the three look-ups, the cards, then the search.
-        fun names(mailMoney: Boolean) = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = true, mailMoney = mailMoney)).jsonObject["liveConnectConstraints"]!!
-            .jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+        fun names(mailMoney: Boolean) = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = true, mailMoney = mailMoney)).jsonObject["bidiGenerateContentSetup"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
         assertEquals(listOf("look_up_my_days", "propose_action", "look_up_my_mail", "look_up_my_money", "search_the_web"), names(true))
         assertEquals(listOf("look_up_my_days", "propose_action", "search_the_web"), names(false))
         // Without the tools a stray flag adds nothing.
         val plain = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = false, mailMoney = true)).jsonObject
-        assertEquals(1, plain["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
+        assertEquals(1, plain["bidiGenerateContentSetup"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
         // A full day with the mail and money lines still fits whole.
         val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
         assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
