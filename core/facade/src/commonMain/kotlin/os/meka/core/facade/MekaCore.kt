@@ -11118,11 +11118,20 @@ class MekaCore(
      * answered ([os.meka.core.domain.LiveDiagnosisRules.LiveFallback], Google's or the server's words with anything
      * key-shaped cut out). Kept on this device only (reasons and times, never words) for Health → Obi's voice. Never throws.
      */
-    suspend fun noteLiveOutcome(live: Boolean, fallback: os.meka.core.domain.LiveDiagnosisRules.LiveFallback?, detail: String?) {
+    suspend fun noteLiveOutcome(
+        live: Boolean,
+        fallback: os.meka.core.domain.LiveDiagnosisRules.LiveFallback?,
+        detail: String?,
+        audio: os.meka.core.domain.LiveAudioStats? = null,
+    ) {
         try {
             onCore {
-                val o = os.meka.core.domain.LiveDiagnosisRules.LiveOutcome(nowMs(), live, if (live) null else fallback, if (live) null else os.meka.core.domain.LiveDiagnosisRules.redact(detail))
+                val now = nowMs()
+                val o = os.meka.core.domain.LiveDiagnosisRules.LiveOutcome(now, live, if (live) null else fallback, if (live) null else os.meka.core.domain.LiveDiagnosisRules.redact(detail), if (live) audio else null)
                 lastLiveOutcome = o
+                lastLiveOutcomeRead = true
+                // 2026-10-25: a talk where Obi waited for the network shows in Health → Speed with its longest wait.
+                if (live && audio != null && audio.waits > 0) speedLog.record(os.meka.core.domain.LiveAudioLines.SPEED_WAIT, audio.longestWaitMs, now)
                 runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.LiveDiagnosisRules.KEY, os.meka.core.domain.LiveDiagnosisRules.encode(o)) } }
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { }

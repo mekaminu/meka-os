@@ -86,6 +86,14 @@ class LiveDiagnosisTest {
         assertEquals("Last talk 21:40 · Live", LiveDiagnosisRules.healthLine(LiveOutcome(at, true, null, null), now, cal))
         assertEquals(fell, LiveDiagnosisRules.decode(LiveDiagnosisRules.encode(fell)))
         assertEquals(LiveOutcome(at, true, null, null), LiveDiagnosisRules.decode(LiveDiagnosisRules.encode(LiveOutcome(at, true, null, null))))
+        // 2026-10-25: a talk in Live keeps how it sounded; an older stored talk (three fields) still reads.
+        val sounded = LiveOutcome(at, true, null, null, LiveAudioStats(BargeInOutput.SPEAKER, cutOffs = 2, waits = 0, lastMicDbfs = -22f, lastPlayedDbfs = -30f, lastLetThrough = true))
+        assertEquals(sounded, LiveDiagnosisRules.decode(LiveDiagnosisRules.encode(sounded)))
+        assertEquals(
+            "Last talk 21:40 · Live\nSpeaker: the mic waits while Obi talks · stopped twice when he heard you (last: mic -22 dB, Obi -30 dB)",
+            LiveDiagnosisRules.healthLine(sounded, now, cal),
+        )
+        assertEquals(LiveOutcome(at, true, null, null), LiveDiagnosisRules.decode("${at}\tLIVE\t"))
         assertNull(LiveDiagnosisRules.decode("rubbish"))
         assertNull(LiveDiagnosisRules.decode("12\tNOPE\t"))
         val h = LiveHealth(true, KeyState.REFUSED, 403, "PERMISSION_DENIED: blocked", fell)

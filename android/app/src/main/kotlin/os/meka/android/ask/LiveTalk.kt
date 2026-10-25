@@ -32,6 +32,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.core.domain.BargeInOutput
 import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.LiveAudioRules
+import os.meka.core.domain.LiveCutOffs
 import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveEchoGate
 import os.meka.core.domain.LiveJitter
@@ -112,6 +113,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private val audioLock = Any()
     private var gate = LiveEchoGate()
     private var jitter = LiveJitter<ByteArray>()
+    /** 2026-10-25: each time Google stopped Obi for Meka's voice, with the gate's levels (Health → Obi's voice). Under [audioLock]. */
+    private var cuts = LiveCutOffs()
     // Slice 4: the turn's transcripts and the pages its searches found (main thread only).
     private val heardNow = StringBuilder()
     private val saidNow = StringBuilder()
@@ -182,6 +185,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         synchronized(audioLock) {
             gate = LiveEchoGate()
             jitter = LiveJitter()
+            cuts = LiveCutOffs()
         }
         output = TalkBargeIn.output(context)
         val askedAt = SystemClock.elapsedRealtime()
@@ -359,6 +363,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             LiveProtocol.Event.Interrupted -> {
                 // Meka talked over him: drop what's held, queued and what the speaker still holds.
                 synchronized(audioLock) {
+                    cuts.record(gate)
                     jitter.interrupted()
                     gate.clear()
                 }
@@ -587,7 +592,9 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         // 2026-10-24: never quietly: how this talk went, under the orb and in Health (reasons only, never words).
         val reason = if (fellBack) why ?: (LiveDiagnosisRules.LiveFallback.NO_ANSWER to null) else null
         val wasLive = setUp
-        if (fellBack || wasLive) scope.launch { runCatching { core.noteLiveOutcome(!fellBack && wasLive, reason?.first, reason?.second) } }
+        // 2026-10-25: how it sounded (speaker or headphones, cut-offs with their levels, waits for the network), numbers only.
+        val audio = if (!fellBack && wasLive) synchronized(audioLock) { cuts.stats(output, jitter) } else null
+        if (fellBack || wasLive) scope.launch { runCatching { core.noteLiveOutcome(!fellBack && wasLive, reason?.first, reason?.second, audio) } }
         listener.onEnded(fellBack, reason?.let { LiveDiagnosisRules.stageLine(it.first, it.second) })
     }
 

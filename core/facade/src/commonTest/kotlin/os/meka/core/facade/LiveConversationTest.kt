@@ -10,6 +10,8 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import os.meka.core.domain.AskOutcome
+import os.meka.core.domain.BargeInOutput
+import os.meka.core.domain.LiveAudioStats
 import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveMoney
 import os.meka.core.domain.LiveOffer
@@ -41,7 +43,11 @@ class LiveConversationTest {
     private class FakeCore(var ready: Boolean = true, val refused: String? = null) : LiveConversation.Core {
         val usage = mutableListOf<Triple<String, Long, Long>>()
         val outcomes = mutableListOf<Triple<Boolean, LiveDiagnosisRules.LiveFallback?, String?>>()
-        override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?) { outcomes += Triple(live, fallback, detail) }
+        val audio = mutableListOf<LiveAudioStats?>()
+        override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?) {
+            outcomes += Triple(live, fallback, detail)
+            this.audio += audio
+        }
         val searches = mutableListOf<String>()
         val asked = mutableListOf<String?>()
         override suspend fun voice(): String? = "Kore"
@@ -215,7 +221,8 @@ class LiveConversationTest {
     @Test
     fun obisVoiceIsHeldAMomentThenPlaysAsOneStreamAndTalkingOverDropsWhatIsHeld() = runTest {
         val socket = FakeSocket()
-        val (c, events) = conversation(FakeCore(), socket)
+        val core = FakeCore()
+        val (c, events) = conversation(core, socket)
         c.start()
         runCurrent()
         socket.incoming.trySend("""{"setupComplete":{}}""")
@@ -241,7 +248,14 @@ class LiveConversationTest {
         runCurrent()
         assertEquals(8, events.count { it is LiveEvent.Audio })
         assertEquals(0, c.underruns)
+        assertEquals(1, c.cutOffs)
         c.stop()
+        runCurrent()
+        // 2026-10-25: Health hears how the talk sounded: the speaker, one cut-off (no microphone yet: nothing went up), no waits.
+        val a = core.audio.single()!!
+        assertEquals(BargeInOutput.SPEAKER, a.output)
+        assertEquals(1, a.cutOffs)
+        assertEquals(0, a.waits)
     }
 
     @Test

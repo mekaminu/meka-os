@@ -79,6 +79,9 @@ class LiveEchoGate {
         private set
     var lastPlayedDbfs: Float = -160f
         private set
+    /** Whether the last chunk went up as his voice (false: it went as silence). */
+    var lastSent: Boolean = true
+        private set
 
     /** A chunk of Obi's voice at [dbfs] plays from [startMs] to [endMs] (the device's elapsed clock). */
     fun played(startMs: Long, endMs: Long, dbfs: Float) {
@@ -109,6 +112,7 @@ class LiveEchoGate {
         if (output == BargeInOutput.HEADPHONES || !speaking) {
             overSince = -1
             lastPlayedDbfs = -160f
+            lastSent = true
             return true
         }
         val played = playedAt(nowMs)
@@ -119,10 +123,12 @@ class LiveEchoGate {
                 echoDb = (echoDb + LiveAudioRules.ECHO_ALPHA * ((micDbfs - played) - echoDb))
                     .coerceIn(LiveAudioRules.MIN_ECHO_DB, LiveAudioRules.MAX_ECHO_DB)
             }
+            lastSent = false
             return false
         }
         if (overSince < 0) overSince = nowMs
-        return nowMs - overSince + chunkMs >= LiveAudioRules.HOLD_MS
+        lastSent = nowMs - overSince + chunkMs >= LiveAudioRules.HOLD_MS
+        return lastSent
     }
 
     /** He talked over Obi (or the turn ended): nothing is playing any more; the echo learnt so far is kept. */
@@ -154,6 +160,11 @@ class LiveJitter<T>(private val rate: Int = LiveTalkRules.OUT_RATE) {
     /** Times the network fell behind mid-turn and Obi waited for more rather than stuttering. */
     var underruns: Int = 0
         private set
+    /** The longest Obi went quiet mid-turn this talk, from the speaker running dry to playing again (ms). */
+    var longestGapMs: Long = 0L
+        private set
+    /** When the speaker ran dry mid-turn (elapsed ms); -1 while it hasn't. */
+    private var dryAt = -1L
     /** What [arrive] or [tick] let through last, for the gate: from, to (elapsed ms). */
     var lastFrom: Long = 0L
         private set
@@ -165,6 +176,7 @@ class LiveJitter<T>(private val rate: Int = LiveTalkRules.OUT_RATE) {
             // Mid-turn, the speaker ran dry before this arrived: wait for a little again instead of stuttering.
             playing = false
             underruns++
+            dryAt = until
         }
         if (playing) {
             lastFrom = maxOf(until, nowMs)
@@ -197,11 +209,16 @@ class LiveJitter<T>(private val rate: Int = LiveTalkRules.OUT_RATE) {
         playing = false
         turnDone = false
         until = 0
+        dryAt = -1
     }
 
     private fun release(nowMs: Long): List<T> {
         if (held.isEmpty() || !LiveAudioRules.start(heldMs, if (firstAt < 0) 0 else nowMs - firstAt, turnDone)) return emptyList()
         val out = held.toList()
+        if (dryAt >= 0) {
+            longestGapMs = maxOf(longestGapMs, nowMs - dryAt)
+            dryAt = -1
+        }
         lastFrom = maxOf(until, nowMs)
         until = lastFrom + heldMs
         held.clear()
@@ -209,5 +226,94 @@ class LiveJitter<T>(private val rate: Int = LiveTalkRules.OUT_RATE) {
         firstAt = -1
         playing = true
         return out
+    }
+}
+
+/**
+ * How a Live talk sounded on this device (2026-10-25, the Live item's (3)): whether the speaker or headphones played
+ * Obi, how often he stopped because Google heard Meka talk over him ([cutOffs]) with the levels at the last one, and how
+ * often the network fell behind and Obi waited rather than stuttered ([waits], [longestWaitMs]). Numbers only, never
+ * words; kept on this device for Health → Obi's voice and the Speed list.
+ */
+data class LiveAudioStats(
+    val output: BargeInOutput,
+    val cutOffs: Int = 0,
+    val waits: Int = 0,
+    val longestWaitMs: Long = 0,
+    /** At the last cut-off: what the microphone heard and what Obi was playing (dBFS); null without a cut-off. */
+    val lastMicDbfs: Float? = null,
+    val lastPlayedDbfs: Float? = null,
+    /** At the last cut-off: whether his voice was going up (false: only silence was, so Google stopped on its own). */
+    val lastLetThrough: Boolean? = null,
+)
+
+/** The cut-offs of one Live talk ([LiveEchoGate]'s levels at each). One per conversation, beside the gate. */
+class LiveCutOffs {
+    var count = 0
+        private set
+    private var mic: Float? = null
+    private var played: Float? = null
+    private var letThrough: Boolean? = null
+
+    /** Google said Obi was talked over: what the gate last saw. */
+    fun record(gate: LiveEchoGate) {
+        count++
+        mic = gate.lastMicDbfs
+        played = gate.lastPlayedDbfs
+        letThrough = gate.lastSent
+    }
+
+    /** The talk's numbers with [output] and the jitter's waits. */
+    fun stats(output: BargeInOutput, jitter: LiveJitter<*>): LiveAudioStats =
+        LiveAudioStats(output, count, jitter.underruns, jitter.longestGapMs, mic, played, letThrough)
+}
+
+/** Health's words for [LiveAudioStats] (pure). */
+object LiveAudioLines {
+    /** The Speed list's name for a wait for Obi's voice. */
+    const val SPEED_WAIT = "Live · Obi waited for the network"
+
+    /** "Speaker: the mic waits while Obi talks · stopped twice when he heard you (mic -22 dB, Obi -30 dB) · waited once for the network (0.4 s)". */
+    fun line(a: LiveAudioStats): String {
+        val mode = if (a.output == BargeInOutput.HEADPHONES) "Headphones: you can talk over Obi" else "Speaker: the mic waits while Obi talks"
+        val parts = mutableListOf(mode)
+        if (a.cutOffs > 0) {
+            val levels = if (a.lastMicDbfs != null && a.lastPlayedDbfs != null) {
+                val obi = if (a.lastPlayedDbfs <= -159f) "quiet" else "${db(a.lastPlayedDbfs)} dB"
+                " (last: mic ${db(a.lastMicDbfs)} dB, Obi $obi" + (if (a.lastLetThrough == false) ", only silence was going up" else "") + ")"
+            } else ""
+            parts += "stopped ${times(a.cutOffs)} when he heard you$levels"
+        }
+        if (a.waits > 0) parts += "waited ${times(a.waits)} for the network (longest ${SpeedRules.said(a.longestWaitMs)})"
+        if (a.cutOffs == 0 && a.waits == 0) parts += "no cut-offs or waits"
+        return parts.joinToString(" · ")
+    }
+
+    private fun db(v: Float): Int = kotlin.math.round(v).toInt()
+
+    private fun times(n: Int): String = when (n) {
+        1 -> "once"
+        2 -> "twice"
+        else -> "$n times"
+    }
+
+    /** As stored with the talk: output, cut-offs, waits, longest, mic, played, let through (tab-free numbers). */
+    fun encode(a: LiveAudioStats): List<String> = listOf(
+        a.output.name, a.cutOffs.toString(), a.waits.toString(), a.longestWaitMs.toString(),
+        a.lastMicDbfs?.toString().orEmpty(), a.lastPlayedDbfs?.toString().orEmpty(), a.lastLetThrough?.toString().orEmpty(),
+    )
+
+    fun decode(parts: List<String>): LiveAudioStats? {
+        if (parts.size < 4) return null
+        val output = BargeInOutput.entries.firstOrNull { it.name == parts[0] } ?: return null
+        return LiveAudioStats(
+            output = output,
+            cutOffs = parts[1].toIntOrNull() ?: 0,
+            waits = parts[2].toIntOrNull() ?: 0,
+            longestWaitMs = parts[3].toLongOrNull() ?: 0,
+            lastMicDbfs = parts.getOrNull(4)?.toFloatOrNull(),
+            lastPlayedDbfs = parts.getOrNull(5)?.toFloatOrNull(),
+            lastLetThrough = parts.getOrNull(6)?.toBooleanStrictOrNull(),
+        )
     }
 }

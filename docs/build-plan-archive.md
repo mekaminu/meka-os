@@ -3922,3 +3922,17 @@ drops what is held. Fold `ask/LiveTalk.kt` uses both under one lock (socket, mic
 (`LiveAudioRules.trackBytes`); the Mac gets both through `LiveConversation` (Swift unchanged). Tests: LiveAudioTest
 (echo at -20 dBFS stays muted, his voice over it passes after ~250 ms, a clatter doesn't, jitter start/underrun/turn
 end/interrupt), LiveConversationTest (sustained voice passes, audio held then released as one stream).
+
+### Live breaks and skips — slice 2 (2026-10-25): Health shows the mode, the cut-offs and the waits
+Each Live talk now keeps how it sounded, numbers only: `core/domain/LiveAudio.kt` adds `LiveAudioStats` (speaker or
+headphones, cut-offs, waits, longest wait, and at the last cut-off the mic and played dBFS and whether his voice was
+going up), `LiveCutOffs` (recorded from the gate on every Google `Interrupted`), `LiveEchoGate.lastSent`,
+`LiveJitter.longestGapMs` (from the speaker running dry to playing again) and `LiveAudioLines` (Health's words and the
+stored form). `LiveDiagnosisRules.LiveOutcome.audio` (optional; older three-field records still read) is stored with
+the last talk; Health → Obi's voice adds e.g. "Speaker: the mic waits while Obi talks · stopped twice when he heard
+you (last: mic -22 dB, Obi -30 dB) · waited once for the network (longest 200 ms)". `MekaCore.noteLiveOutcome` takes
+the stats and records a talk's longest wait in Health → Speed ("Live · Obi waited for the network"). Fold
+`ask/LiveTalk.kt` and the Mac (through `LiveConversation`) both report it. Tests: LiveAudioTest (+1), LiveDiagnosisTest
+(stored and read back, the Health line, an older record), LiveConversationTest (a cut-off reaches the outcome),
+LiveSoundFacadeTest (kept, Speed). No server change, no migration. The daily report's count waits on the devices
+sending speed lines (Needs Meka, optional "daily speed line").

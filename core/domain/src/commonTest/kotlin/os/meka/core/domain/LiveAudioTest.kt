@@ -87,6 +87,8 @@ class LiveAudioTest {
         // A held short answer starts after the longest wait even if the turn's end is slow.
         assertEquals(emptyList(), j.tick(600))
         assertEquals(listOf(2), j.tick(500 + LiveAudioRules.MAX_WAIT_MS))
+        // Quiet from when the speaker ran dry (300) until it played again (950): what Health shows as the longest wait.
+        assertEquals(650L, j.longestGapMs)
     }
 
     @Test
@@ -106,5 +108,41 @@ class LiveAudioTest {
         assertTrue(LiveAudioRules.start(0, 0, true), "even a sliver plays at the turn's end")
         assertEquals(48_000, LiveAudioRules.trackBytes(24_000, 4_000))
         assertEquals(9_600, LiveAudioRules.trackBytes(4_800, 9_600))
+    }
+
+    @Test
+    fun aCutOffKeepsTheLevelsTheGateSawAndHealthSaysTheModeCutOffsAndWaits() {
+        val gate = LiveEchoGate()
+        obiPlaying(gate, 0, 2_000, -18f)
+        val j = LiveJitter<Int>()
+        val ms300 = 24_000 * 2 * 300 / 1_000
+        j.arrive(1, ms300, 0)
+        // Dry from 300 ms; 300 ms more arrives at 500 and plays at once (enough is queued): 200 ms quiet.
+        j.arrive(2, ms300, 500)
+        val cuts = LiveCutOffs()
+        // Google stopped Obi while only silence was going up (the echo stayed muted): it stopped on its own.
+        assertFalse(gate.send(BargeInOutput.SPEAKER, -24f, true, 100))
+        assertFalse(gate.lastSent)
+        cuts.record(gate)
+        val a = cuts.stats(BargeInOutput.SPEAKER, j)
+        assertEquals(LiveAudioStats(BargeInOutput.SPEAKER, 1, 1, 200, -24f, -18f, false), a)
+        assertEquals(
+            "Speaker: the mic waits while Obi talks · stopped once when he heard you (last: mic -24 dB, Obi -18 dB, only silence was going up) · waited once for the network (longest 200 ms)",
+            LiveAudioLines.line(a),
+        )
+        assertEquals("Headphones: you can talk over Obi · no cut-offs or waits", LiveAudioLines.line(LiveAudioStats(BargeInOutput.HEADPHONES)))
+        assertEquals(
+            "Speaker: the mic waits while Obi talks · stopped 3 times when he heard you (last: mic -9 dB, Obi quiet)",
+            LiveAudioLines.line(LiveAudioStats(BargeInOutput.SPEAKER, cutOffs = 3, lastMicDbfs = -9.4f, lastPlayedDbfs = -160f, lastLetThrough = true)),
+        )
+        assertEquals(a, LiveAudioLines.decode(LiveAudioLines.encode(a)))
+        assertEquals(LiveAudioStats(BargeInOutput.HEADPHONES, 2), LiveAudioLines.decode(LiveAudioLines.encode(LiveAudioStats(BargeInOutput.HEADPHONES, 2))))
+        assertEquals(null, LiveAudioLines.decode(listOf("NOPE", "1", "2", "3")))
+        // Talking over Obi mid-wait drops the wait (nothing more to play).
+        val k = LiveJitter<Int>()
+        k.arrive(1, ms300, 0)
+        k.arrive(2, 24_000 * 2 * 40 / 1_000, 500)
+        k.interrupted()
+        assertEquals(0L, k.longestGapMs)
     }
 }

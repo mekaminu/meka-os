@@ -19,6 +19,8 @@ import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.LiveAudioRules
+import os.meka.core.domain.LiveAudioStats
+import os.meka.core.domain.LiveCutOffs
 import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveEchoGate
 import os.meka.core.domain.LiveJitter
@@ -63,7 +65,7 @@ class LiveConversation internal constructor(
         suspend fun mail(about: String): String
         suspend fun money(question: String): LiveMoney
         /** 2026-10-24: how this talk went (Live, or why normal Obi answered), for Health; reasons only, never words. */
-        suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?) {}
+        suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats? = null) {}
     }
 
     private val out = Channel<LiveEvent>(Channel.UNLIMITED)
@@ -82,6 +84,8 @@ class LiveConversation internal constructor(
     /** 2026-10-25: Obi's echo kept out of the microphone on the speakers, and his voice held a moment so it never stutters. */
     private var gate = LiveEchoGate()
     private var jitter = LiveJitter<Held>()
+    /** 2026-10-25: each time Google stopped Obi for Meka's voice, with the levels the gate saw (for Health). */
+    private var cuts = LiveCutOffs()
     private class Held(val b64: String, val bytes: Int, val dbfs: Float)
     private var session: LiveCodec.Session? = null
     private val jobs = mutableListOf<Job>()
@@ -140,6 +144,7 @@ class LiveConversation internal constructor(
         speakingNow = false
         gate = LiveEchoGate()
         jitter = LiveJitter()
+        cuts = LiveCutOffs()
         heldHandle = null
         resumes = 0
         lastHeardAt = null
@@ -293,6 +298,7 @@ class LiveConversation internal constructor(
                 play(jitter.arrive(Held(b64, bytes, levelOf(b64)), bytes, elapsedMs()))
             }
             LiveProtocol.Event.Interrupted -> {
+                cuts.record(gate)
                 jitter.interrupted()
                 gate.clear()
                 playUntil = 0
@@ -400,7 +406,8 @@ class LiveConversation internal constructor(
         val reason = if (fellBack) why ?: (LiveDiagnosisRules.LiveFallback.NO_ANSWER to null) else null
         fallbackLine = reason?.let { LiveDiagnosisRules.stageLine(it.first, it.second) }
         val wasLive = setUp
-        if (fellBack || wasLive) scope.launch { runCatching { core.outcome(!fellBack && wasLive, reason?.first, reason?.second) } }
+        val audio = if (!fellBack && wasLive) cuts.stats(if (headphones) os.meka.core.domain.BargeInOutput.HEADPHONES else os.meka.core.domain.BargeInOutput.SPEAKER, jitter) else null
+        if (fellBack || wasLive) scope.launch { runCatching { core.outcome(!fellBack && wasLive, reason?.first, reason?.second, audio) } }
         out.trySend(LiveEvent.Ended(fellBack, fallbackLine))
     }
 
@@ -419,6 +426,9 @@ class LiveConversation internal constructor(
 
     /** Times the speaker ran dry mid-turn this talk (Obi waited for more rather than stuttering). */
     val underruns: Int get() = jitter.underruns
+
+    /** Times Google stopped Obi for Meka's voice this talk. */
+    val cutOffs: Int get() = cuts.count
 
     private var silenceFor: Pair<Int, String>? = null
 
@@ -518,5 +528,5 @@ internal class MekaLiveCore(private val core: MekaCore) : LiveConversation.Core 
     override suspend fun propose(args: Map<String, String>) = core.livePropose(args)
     override suspend fun mail(about: String) = core.liveMail(about)
     override suspend fun money(question: String) = core.liveMoney(question)
-    override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?) { core.noteLiveOutcome(live, fallback, detail) }
+    override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?) { core.noteLiveOutcome(live, fallback, detail, audio) }
 }

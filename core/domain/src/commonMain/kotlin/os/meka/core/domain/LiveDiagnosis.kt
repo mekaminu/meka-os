@@ -130,7 +130,14 @@ object LiveDiagnosisRules {
     }
 
     /** One talk with Live on: it opened ([live]) or why not ([fallback], with Google's or the server's [detail]). */
-    data class LiveOutcome(val atMs: Long, val live: Boolean, val fallback: LiveFallback?, val detail: String?)
+    data class LiveOutcome(
+        val atMs: Long,
+        val live: Boolean,
+        val fallback: LiveFallback?,
+        val detail: String?,
+        /** 2026-10-25: how a talk that ran in Live sounded (the mode, cut-offs, waits); null for an older one or a fallback. */
+        val audio: LiveAudioStats? = null,
+    )
 
     /** The server's session answer as a reason: [state] is the session's wire state, [reason] its reason line. */
     fun fromSession(state: String?, reason: String?): LiveFallback? = when (state) {
@@ -158,19 +165,20 @@ object LiveDiagnosisRules {
     /** Health's line for the last talk: "Last talk 21:40 · Live" / "Last talk 21:40 · normal Obi: Google took over 6 s …". */
     fun healthLine(o: LiveOutcome?, nowMs: Long, cal: LocalCalendar): String? = o?.let {
         val at = HealthRules.at(it.atMs, nowMs, cal)
-        if (it.live || it.fallback == null) "Last talk $at · Live"
+        if (it.live || it.fallback == null) "Last talk $at · Live" + (it.audio?.let { a -> "\n" + LiveAudioLines.line(a) } ?: "")
         else "Last talk $at · normal Obi: ${it.fallback.line}" + (it.detail?.let { d -> " ($d)" } ?: "")
     }
 
     /** A talk as text for the device's storage: the time, Live or the reason's name, and the redacted detail. */
-    fun encode(o: LiveOutcome): String = listOf(o.atMs.toString(), if (o.live) "LIVE" else (o.fallback?.name ?: "LIVE"), redact(o.detail).orEmpty().replace('\n', ' ')).joinToString("\t")
+    fun encode(o: LiveOutcome): String = (listOf(o.atMs.toString(), if (o.live) "LIVE" else (o.fallback?.name ?: "LIVE"), redact(o.detail).orEmpty().replace('\n', ' ').replace('\t', ' ')) +
+        (o.audio?.let { LiveAudioLines.encode(it) } ?: emptyList())).joinToString("\t")
 
     fun decode(text: String?): LiveOutcome? {
         val parts = text?.split('\t') ?: return null
         if (parts.size < 2) return null
         val at = parts[0].toLongOrNull() ?: return null
         val detail = parts.getOrNull(2)?.takeIf { it.isNotBlank() }
-        if (parts[1] == "LIVE") return LiveOutcome(at, true, null, null)
+        if (parts[1] == "LIVE") return LiveOutcome(at, true, null, null, LiveAudioLines.decode(parts.drop(3)))
         val f = LiveFallback.entries.firstOrNull { it.name == parts[1] } ?: return null
         return LiveOutcome(at, false, f, detail)
     }
