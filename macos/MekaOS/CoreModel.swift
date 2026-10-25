@@ -483,6 +483,9 @@ final class CoreModel {
             }
         }
         self.core = core
+        // Part (4): times taken before the core opened (none yet, usually) go in now.
+        for f in feelWaiting { core.noteFeel(moment: f.moment, ms: f.ms, place: f.place) }
+        feelWaiting = []
         // Ask knows how Navilife itself works: help answers give the Mac's paths and open the Mac's sheets.
         core.helpOnMac = true
         // The Vault, slice 2a: the Secure Enclave agreement key and CryptoKit hold the household's Vault key.
@@ -493,7 +496,7 @@ final class CoreModel {
             run { _ = try await $0.registerApprovalKey(publicKeyBase64: approvalKey, label: MacApprovalKey.label) }
         }
         observers.append(Task { [weak self] in
-            for await t in core.today { self?.today = t }
+            for await t in core.today { self?.today = t; self?.todayFirstShown() }
         })
         observers.append(Task { [weak self] in
             for await s in core.syncStatus { self?.syncLine = Self.describe(s) }
@@ -613,7 +616,7 @@ final class CoreModel {
             for await k in core.kidsView { self?.kids = k }
         })
         observers.append(Task { [weak self] in
-            for await m in core.moneyView { self?.coreMoney = m; self?.showMoneyView() }
+            for await m in core.moneyView { self?.coreMoney = m; self?.showMoneyView(); self?.moneyFirstShown() }
         })
         observers.append(Task { [weak self] in
             for await a in core.aboutYouView { self?.aboutYou = a }
@@ -925,9 +928,59 @@ final class CoreModel {
 
     func go(to d: ShellDestination, reduced: Bool) {
         guard d != destination else { return }
+        switchAt = ProcessInfo.processInfo.systemUptime
         lastDirection = ShellNav.direction(from: destination, to: d)
         MekaHaptics.tick()
         withAnimation(MekaMotion.replan(reduced: reduced)) { destination = d }
+    }
+
+    // MARK: How it feels (taps feel instant, part 4)
+
+    /// When a sidebar row (or ⌘1–⌘8) asked for a screen, until that screen appears.
+    @ObservationIgnored private var switchAt: TimeInterval?
+    @ObservationIgnored private var coldStartNoted = false
+    @ObservationIgnored private var feelWaiting: [(moment: FeelMoment, ms: Int64, place: String?)] = []
+
+    /// A time for Health → Speed (times only, kept in memory on this Mac). Before the core opens it waits here.
+    func noteFeel(_ moment: FeelMoment, ms: Int64, place: String?) {
+        guard let core else { feelWaiting.append((moment, ms, place)); return }
+        core.noteFeel(moment: moment, ms: ms, place: place)
+    }
+
+    /// The moments as a Swift value, so only plain values cross into the deferred task (never a Kotlin object).
+    private enum FeelKind: Sendable {
+        case coldStart, tab, screen
+        var moment: FeelMoment {
+            switch self {
+            case .coldStart: .coldStart
+            case .tab: .tab
+            case .screen: .screen
+            }
+        }
+    }
+
+    /// [kind] since [since] (system uptime), measured once the current frame has gone to the screen.
+    private func noteFeelAfterFrame(_ kind: FeelKind, since: TimeInterval, place: String?) {
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            let ms = Int64(max(ProcessInfo.processInfo.systemUptime - since, 0) * 1000)
+            self?.noteFeel(kind.moment, ms: ms, place: place)
+        }
+    }
+
+    /// The shell's screen [d] appeared: a switch asked for is timed against its aim (150 ms).
+    func switchShown(_ d: ShellDestination) {
+        guard let at = switchAt, d == destination else { return }
+        switchAt = nil
+        noteFeelAfterFrame(.tab, since: at, place: d.label)
+    }
+
+    /// Today's first content after launch: the cold start, timed once (aim 1.5 s). Only when Today is the screen.
+    private func todayFirstShown() {
+        guard !coldStartNoted else { return }
+        coldStartNoted = true
+        guard destination == .today else { return }
+        noteFeelAfterFrame(.coldStart, since: MacLaunchClock.launchedAt, place: nil)
     }
 
     /// Appearance → Play the opening: back to Today, which replays its opening.
@@ -4419,7 +4472,19 @@ final class CoreModel {
     }
 
     /// After Touch ID's yes (MoneySheet asks): the core works out this month's figures. Nothing but the call crosses.
-    func openMoney() { run { try await $0.openMoney() } }
+    func openMoney() {
+        moneyYesAt = ProcessInfo.processInfo.systemUptime
+        run { try await $0.openMoney() }
+    }
+
+    /// Part (4): when Touch ID said yes, until the sheet's first content shows (aim 300 ms).
+    @ObservationIgnored private var moneyYesAt: TimeInterval?
+
+    private func moneyFirstShown() {
+        guard let at = moneyYesAt, let m = coreMoney, !m.locked else { return }
+        moneyYesAt = nil
+        noteFeelAfterFrame(.screen, since: at, place: MoneyRules.shared.TITLE)
+    }
 
     /// Touch ID said no: the locked sheet says so (Speed 4c). Synchronous; nothing but the call crosses.
     func moneyUnlockRefused() { core?.moneyUnlockRefused(mac: true) }

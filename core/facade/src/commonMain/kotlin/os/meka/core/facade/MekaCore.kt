@@ -129,6 +129,8 @@ class MekaCore(
     /** The Speed log (taps feel instant, slice 3): in memory on this device, written on the core's thread only. Declared
      * before anything that refreshes (the init block's first refresh is timed). */
     private val speedLog = os.meka.core.domain.SpeedLog()
+    /** Taps feel instant, part (4): cold start, tab switches and first content as the apps timed them. Core thread only. */
+    private val feelLog = os.meka.core.domain.FeelLog()
     /**
      * Taps feel instant, slice 6 (2026-10-25): the parts of the views kept while what they're built from is unchanged
      * (the mail cards over every email, Calendar's agenda), so a tap on a task doesn't rebuild them. Core thread only.
@@ -8972,6 +8974,7 @@ class MekaCore(
             mailTidies = if (mail == null) emptyList() else activity.mailTidyBatches(),
             live = liveHealth(),
             speed = speedLog.worst(),
+            feel = feelLog.all(),
         )
     }
 
@@ -11875,6 +11878,18 @@ class MekaCore(
             speedLog.record(name, started.elapsedNow().inWholeMilliseconds, nowMs())
         }
     }
+
+    /**
+     * Taps feel instant, part (4): the app timed [moment] at [ms] ([place]: which tab, "Money"). Returns at once (a tab
+     * switch must never wait on the core); recorded on the core thread. Times only, kept in memory on this device.
+     */
+    fun noteFeel(moment: os.meka.core.domain.FeelMoment, ms: Long, place: String? = null) {
+        val at = nowMs()
+        scope.launch { feelLog.record(moment, ms, place, at) }
+    }
+
+    /** How the app felt in the last day, cold start first (Health → Speed; tests). */
+    suspend fun feelAll(): List<os.meka.core.domain.FeelEntry> = onCore { feelLog.all() }
 
     /** The slowest work on this device in the last hour, slowest first (Health → Speed; tests). */
     suspend fun speedWorst(): List<os.meka.core.domain.SpeedEntry> = onCore { speedLog.worst() }

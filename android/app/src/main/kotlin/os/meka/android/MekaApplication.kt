@@ -74,6 +74,8 @@ open class MekaApplication : Application() {
     val openItem = MutableStateFlow<os.meka.android.shell.OpenItem?>(null)
     /** MainActivity is visible (set in onStart/onStop): Meka is looking, so no nudge. */
     @Volatile var isOnScreen: Boolean = false
+    /** Taps feel instant, part (4): this process's cold start to Today has been timed (once per process). */
+    @Volatile var coldStartNoted: Boolean = false
     /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */
     val openAfterWork = MutableStateFlow(false)
     /** ▶ Play on an urgent voice-message alert: the summary opens on that caller and plays it, then clears it. */

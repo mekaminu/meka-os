@@ -3936,3 +3936,18 @@ the stats and records a talk's longest wait in Health → Speed ("Live · Obi wa
 (stored and read back, the Health line, an older record), LiveConversationTest (a cut-off reaches the outcome),
 LiveSoundFacadeTest (kept, Speed). No server change, no migration. The daily report's count waits on the devices
 sending speed lines (Needs Meka, optional "daily speed line").
+
+## Taps feel instant — slice 18 (2026-10-25): Health → Speed says how the app feels (part 4)
+
+The apps now time what Meka feels and hand the numbers to the core (`MekaCore.noteFeel`, returns at once, recorded on
+the core thread; `feelAll` for tests). Core `FeelMoment` (cold start to Today 1.5 s, tab switch 150 ms, first content
+300 ms), `FeelLog` (per moment over the last day: worst with where, last, count, how many over the aim; times over a
+minute, and a "cold start" over 20 s because the process was already up for a notification or sync, are dropped) and
+`FeelRules` (lines, the one furthest over its aim). `SpeedRules.healthRow` takes the feel entries: the Speed line leads
+with "Slower than it should be: Tab switch · 320 ms (aim 150 ms)" when one is over, the detail lists "How it feels ·
+last day" above "Slowest work · last hour"; still information only. Fold: `AppShell` times a tab or More row tap to the
+new screen's next frame and, once per process, `Process.getStartRequestedUptimeMillis()` to Today's first frame;
+`MoneyPane` times the fingerprint's yes to the first unlocked view. Mac: `CoreModel.go(to:)` + `ShellView`'s
+`onAppear` time a sidebar switch, the first `today` after launch (from `MacLaunchClock`, read in the app's init) times
+the cold start, `openMoney` to the first unlocked view times Money; only a Swift `FeelKind` crosses into the deferred
+task. Tests: FeelTest, FeelFacadeTest. No server change, no migration. Mac checked nightly.

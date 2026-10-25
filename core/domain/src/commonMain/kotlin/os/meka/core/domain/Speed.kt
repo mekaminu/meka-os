@@ -71,16 +71,31 @@ object SpeedRules {
         }
 
     /**
-     * Health's Speed row: the slowest part in the last hour on its line, the worst ten under it. Information only
+     * Health's Speed row: the slowest part in the last hour on its line, the worst ten under it; with [feel] (part 4,
+     * the apps' own cold start / tab / screen times), a moment over its aim leads and the moments list first. Information only
      * (always a tick: a slow part is for Meka and the build to see, not a fault to nag about on Today). Null until
      * anything was timed.
      */
-    fun healthRow(entries: List<SpeedEntry>?): HealthRow? {
-        if (entries.isNullOrEmpty()) return null
-        val top = entries.first()
-        val head = if (top.worstMs <= SLOW_MS) "Quick · nothing over ${said(SLOW_MS)} in the last hour"
-        else "Slowest in the last hour: ${top.name} · ${said(top.worstMs)}"
-        return HealthRow(HEALTH_KEY, "Speed", head, HealthState.OK, detail = entries.take(WORST).joinToString("\n") { line(it) })
+    fun healthRow(entries: List<SpeedEntry>?, feel: List<FeelEntry>? = null): HealthRow? {
+        val work = entries.orEmpty()
+        val felt = feel.orEmpty()
+        if (work.isEmpty() && felt.isEmpty()) return null
+        val top = work.firstOrNull()
+        val over = FeelRules.worstOver(felt)
+        val head = when {
+            // Part (4): what he feels comes first; a moment over its aim is what to look at.
+            over != null -> FeelRules.overLine(over)
+            top != null && top.worstMs > SLOW_MS -> "Slowest in the last hour: ${top.name} · ${said(top.worstMs)}"
+            top == null -> "Quick · everything within its aim today"
+            else -> "Quick · nothing over ${said(SLOW_MS)} in the last hour"
+        }
+        val workLines = work.take(WORST).joinToString("\n") { line(it) }
+        val detail = if (felt.isEmpty()) workLines else buildString {
+            append(FeelRules.FEEL_HEADER).append('\n')
+            append(felt.joinToString("\n") { FeelRules.line(it) })
+            if (workLines.isNotEmpty()) append("\n\n").append(FeelRules.WORK_HEADER).append('\n').append(workLines)
+        }
+        return HealthRow(HEALTH_KEY, "Speed", head, HealthState.OK, detail = detail)
     }
 }
 

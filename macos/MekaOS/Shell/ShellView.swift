@@ -53,6 +53,8 @@ struct ShellView: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier(ShellView.screenID(model.destination))
                     .id(model.destination)
+                    // Part (4): the click to this screen appearing, into Health → Speed (aim 150 ms).
+                    .onAppear { model.switchShown(model.destination) }
                     .transition(transition)
             }
             .clipped()

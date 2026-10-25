@@ -11,6 +11,8 @@ struct MekaOSApp: App {
     @AppStorage(FloatingTicker.enabledKey) private var floatingTicker = false
 
     init() {
+        // Taps feel instant, part (4): the launch's moment, for the cold start to Today in Health → Speed.
+        _ = MacLaunchClock.launchedAt
         // View → Text Size: the stored size before the first window draws.
         TextSizeSetting.apply()
     }
@@ -168,4 +170,9 @@ enum MekaAppearance: String, CaseIterable, Identifiable {
     /// nil follows macOS.
     var scheme: ColorScheme? { switch self { case .dark: .dark; case .light: .light; case .system: nil } }
     var next: MekaAppearance { let all = Self.allCases; return all[(all.firstIndex(of: self)! + 1) % all.count] }
+}
+
+/// Taps feel instant, part (4): when this launch began (system uptime), read first thing in the app's init.
+enum MacLaunchClock {
+    static let launchedAt: TimeInterval = ProcessInfo.processInfo.systemUptime
 }

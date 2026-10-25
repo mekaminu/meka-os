@@ -50,6 +50,10 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.withFrameNanos
+import os.meka.core.domain.FeelMoment
 import kotlinx.coroutines.withContext
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -159,6 +163,9 @@ import os.meka.core.facade.MekaCore
  * stagger in 40 ms apart, each bar grows to its share (snaps with reduced motion), a refused line blends to the accent
  * with a tick haptic; a save gives a light haptic.
  */
+/** Part (4): longer than this after the yes and Money's open went wrong (it says so on the page); not timed. */
+private const val MONEY_FEEL_WAIT_MS = 10_000L
+
 @Composable
 fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -179,7 +186,17 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val unlock: () -> Unit = {
         FoldBiometric.unlock(context, MoneyRules.UNLOCK_REASON, "Your spending, read-only") { ok ->
             // Speed (4c): the screen fills in the same frame (the last view, or "Opening your money…"); a no is said on the page.
-            if (ok) { haptics.light(); scope.launch { runCatching { core.openMoney() } } } else { core.moneyUnlockRefused(); haptics.tick() }
+            if (ok) {
+                haptics.light()
+                // Part (4): the yes to the screen's first content (the last view or "Opening your money…"), aim 300 ms.
+                val yes = android.os.SystemClock.uptimeMillis()
+                scope.launch {
+                    withTimeoutOrNull(MONEY_FEEL_WAIT_MS) { core.moneyView.first { !it.locked } } ?: return@launch
+                    withFrameNanos { }
+                    core.noteFeel(FeelMoment.SCREEN, android.os.SystemClock.uptimeMillis() - yes, MoneyRules.TITLE)
+                }
+                scope.launch { runCatching { core.openMoney() } }
+            } else { core.moneyUnlockRefused(); haptics.tick() }
         }
     }
     LaunchedEffect(Unit) { if (core.moneyView.value.locked) unlock() }

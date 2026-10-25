@@ -1,6 +1,11 @@
 package os.meka.android.shell
 
+import android.os.Build
+import android.os.Process
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.withFrameNanos
+import os.meka.core.domain.FeelMoment
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -123,11 +128,13 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val haptics = rememberMekaHaptics()
     // How the current place behind Ask was opened (a More row, a Today card): its title travels from there and back.
     var arrival by rememberSaveable { mutableStateOf<String?>(null) }
+    // Taps feel instant, part (4): when a tab or a More row was tapped (uptime ms), so its first frame can be timed.
+    val switchAt = remember { longArrayOf(0L) }
     val go: (ShellDestination) -> Unit = { d ->
-        if (d != current) { haptics.tick(); arrival = SharedMotion.arrivalAfterGo(d, arrival); current = d }
+        if (d != current) { switchAt[0] = SystemClock.uptimeMillis(); haptics.tick(); arrival = SharedMotion.arrivalAfterGo(d, arrival); current = d }
     }
     val openPlace: (ShellDestination, PlaceVia) -> Unit = { d, via ->
-        if (d != current) { haptics.tick(); arrival = SharedMotion.placeKey(d, via); current = d }
+        if (d != current) { switchAt[0] = SystemClock.uptimeMillis(); haptics.tick(); arrival = SharedMotion.placeKey(d, via); current = d }
     }
     val states = rememberSaveableStateHolder()
     // Work mode and Today move with the clock: re-evaluate every half minute while the app is on screen.
@@ -137,6 +144,24 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     // Tapping the after-work nudge lands on Needs you, which then opens the summary.
     val app = LocalContext.current.applicationContext as MekaApplication
     val openAfterWork by app.openAfterWork.collectAsState()
+    // Taps feel instant, part (4): the tap to the new screen's first frame, and this process's start to Today's first
+    // frame, go to Health → Speed against their aims (150 ms, 1.5 s). Times only; the core never makes these wait.
+    LaunchedEffect(current) {
+        val asked = switchAt[0]
+        if (asked > 0L) {
+            switchAt[0] = 0L
+            withFrameNanos { }
+            core.noteFeel(FeelMoment.TAB, SystemClock.uptimeMillis() - asked, current.label)
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (!app.coldStartNoted && current == ShellDestination.TODAY) {
+            app.coldStartNoted = true
+            withFrameNanos { }
+            val started = if (Build.VERSION.SDK_INT >= 33) Process.getStartRequestedUptimeMillis() else Process.getStartUptimeMillis()
+            core.noteFeel(FeelMoment.COLD_START, SystemClock.uptimeMillis() - started, null)
+        }
+    }
     LaunchedEffect(openAfterWork) { if (openAfterWork) current = ShellDestination.NEEDS_YOU }
     // The News widget's tap lands on Today, which then opens News on the story.
     val openNewsStory by app.openNewsStory.collectAsState()
