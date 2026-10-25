@@ -184,6 +184,11 @@ final class CoreModel {
     /// Messages the Fold triaged (V1, messages slice 3): Needs a reply (with MEKA's draft) and FYI, synced. The Mac
     /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
     private(set) var triage: [TriageCard] = []
+    /// Every triaged message as the core holds it; `triage` is these less the ones just decided on this Mac.
+    private var allTriage: [TriageCard] = []
+    /// Taps feel instant (Meka 2026-10-25 01:45): message and card ids decided on this Mac, hidden at once while the
+    /// core's write follows; forgotten once the views no longer hold them, back with a line if the work fails.
+    private(set) var decidedHere: Set<String> = []
     /// The same cards, one per conversation (messages grouped per chat, slice 1).
     /// A person's requests ride inside their chat's card (messages grouped per chat, slice 3).
     /// A group's digest chatter rides in its chat's card, shown once (slice 3b).
@@ -625,7 +630,11 @@ final class CoreModel {
             for await r in core.reflectionView { self?.reflection = r }
         })
         observers.append(Task { [weak self] in
-            for await t in core.triage { self?.triage = t }
+            for await t in core.triage {
+                guard let self else { return }
+                self.allTriage = t
+                self.settleDecided()
+            }
         })
         observers.append(Task { [weak self] in
             for await g in core.groupGists { self?.groupGists = g }
@@ -637,7 +646,11 @@ final class CoreModel {
             for await l in core.listsView { self?.lists = l }
         })
         observers.append(Task { [weak self] in
-            for await n in core.needsYouStack { self?.needsYouStack = n }
+            for await n in core.needsYouStack {
+                guard let self else { return }
+                self.needsYouStack = n
+                self.settleDecided()
+            }
         })
         observers.append(Task { [weak self] in
             for await g in core.goalsView { self?.goals = g }
@@ -4110,7 +4123,9 @@ final class CoreModel {
         case .unqueue(let id): run { _ = try await $0.removeFromQueue(id: id) }
         case .resumeFast(let id): run { _ = try await $0.resumeFast(id: id) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
-        case .unapproveBacklog(let id): run { _ = try await $0.unapproveMailBacklog(id: id) }
+        case .unapproveBacklog(let id):
+            decidedHere.remove(id)
+            run { _ = try await $0.unapproveMailBacklog(id: id) }
         case .junkKeep(let cardId, let key, let keep):
             Task {
                 guard let core else { return }
@@ -5930,12 +5945,14 @@ final class CoreModel {
         // The group's digest chatter rode in this card (slice 3b): Done catches the group up too, here and on the Fold.
         // Only the keys (Strings) cross to the core.
         let groupKeys = TriageChatRules.shared.gistsInside(chat: chat, gists: groupGists).map(\.groupKey)
+        // Taps feel instant (Meka 2026-10-25 01:45): the chat's card leaves in this frame; one batched write follows.
+        hideDecided(ids)
         Task {
             do {
                 let seen = try await core.seenTriageChat(messageIds: ids).int32Value
                 if !groupKeys.isEmpty { _ = try await core.catchUpGroupDigest(groupKeys: groupKeys) }
                 if seen > 0 { offerEventUndo(line, nil) }
-            } catch { lastError = error.localizedDescription }
+            } catch { restoreDecided(ids, what: "Done", error: error) }
         }
     }
 
@@ -6694,7 +6711,31 @@ final class CoreModel {
     /// The stack as shown: set-aside cards at the back, in the order they were set aside.
     var needsYouCards: [DecisionCard] {
         guard let stack = needsYouStack else { return [] }
-        return NeedsYouStackRules.shared.ordered(stack: stack, setAside: needsYouSetAside)
+        let shown = decidedHere.isEmpty ? stack : NeedsYouStack(cards: InstantTapRules.shared.stack(cards: stack.cards, hidden: decidedHere))
+        return NeedsYouStackRules.shared.ordered(stack: shown, setAside: needsYouSetAside)
+    }
+
+    /// Taps feel instant: [ids] leave the screen in this frame.
+    func hideDecided(_ ids: [String]) {
+        decidedHere.formUnion(ids)
+        triage = InstantTapRules.shared.triage(cards: allTriage, hidden: decidedHere)
+    }
+
+    /// The work behind a tap failed: [ids] come back, with the bar saying why.
+    func restoreDecided(_ ids: [String], what: String, error: Error) {
+        decidedHere.subtract(ids)
+        triage = InstantTapRules.shared.triage(cards: allTriage, hidden: decidedHere)
+        offerEventUndo(InstantTapRules.shared.failedLine(what: what, reason: error.localizedDescription), nil)
+    }
+
+    /// The views changed: the decided ids they no longer hold are forgotten (their writes landed).
+    private func settleDecided() {
+        if !decidedHere.isEmpty {
+            var present = Set(allTriage.map(\.id))
+            if let stack = needsYouStack { present.formUnion(stack.cards.map(\.id)) }
+            decidedHere = decidedHere.filter { present.contains($0) }
+        }
+        triage = InstantTapRules.shared.triage(cards: allTriage, hidden: decidedHere)
     }
 
     /// A move on a card (→ yes, ← later, ↑ open): Done and Tomorrow go to the core with an undo bar; Choose/Open
@@ -6707,12 +6748,14 @@ final class CoreModel {
             guard let id = card.taskId, let core else { return }
             MekaHaptics.light()
             if selectedID == id { selectedID = nil }
+            let cardId = card.id, what = card.yesLabel
+            hideDecided([cardId])
             Task {
                 do {
                     if let undo = try await core.decide(taskId: id, effect: effect) {
                         offerEventUndo(message, .decision(undo))
                     }
-                } catch { lastError = error.localizedDescription }
+                } catch { restoreDecided([cardId], what: what, error: error) }
             }
         case .openTask:
             if let id = card.taskId { select(id, reduced: reduced) }
@@ -6726,10 +6769,15 @@ final class CoreModel {
             // Inbox fixes, slice 2: Approve on an account's clean-up (synced); Undo withdraws it while nothing moved.
             guard let core else { return }
             MekaHaptics.medium()
-            let id = card.id
+            let id = card.id, what = card.yesLabel
+            // Taps feel instant (4b, Meka 2026-10-25 01:50): the card leaves at once and never comes back while the
+            // write catches up; a failure brings it back with the reason.
+            hideDecided([id])
             Task {
-                guard let r = try? await core.approveMailBacklog(id: id) else { return }
-                offerEventUndo(r.line, .unapproveBacklog(id))
+                do {
+                    let r = try await core.approveMailBacklog(id: id)
+                    offerEventUndo(r.line, .unapproveBacklog(id))
+                } catch { restoreDecided([id], what: what, error: error) }
             }
         case .allowDevice, .refuseDevice:
             // Clean-ups (2026-10-19): Allow or Not this one on a new phone or Mac asking to join; the card leaves on

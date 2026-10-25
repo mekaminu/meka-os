@@ -182,6 +182,23 @@ class MessageTriageFacadeTest {
         assertEquals(calls, server.sent.size)
     }
 
+    /**
+     * Taps feel instant (Meka 2026-10-25 01:45: Done on a 130-message chat took 4 s): the chat's messages resolve in one
+     * write, so the app's views are rebuilt once, not once per message.
+     */
+    @Test
+    fun doneOnAHundredAndThirtyMessageChatIsOneRebuild() = runTest {
+        val c = core()
+        server.reply = MessageTriageCodec.Response("answered", lane = "fyi", summary = "Testing")
+        repeat(130) { i -> assertIs<TriageRead.Read>(c.triageMessage(msg("Alex", "@Meka test $i", group = "Five-a-side", at = now - 60_000 - i))) }
+        val chat = os.meka.core.domain.TriageChatRules.chats(c.triage.value).single()
+        assertEquals(130, chat.ids.size)
+        val before = c.refreshPasses
+        assertEquals(130, c.seenTriageChat(chat.ids))
+        assertTrue(c.refreshPasses - before <= 4, "rebuilt ${c.refreshPasses - before} times")
+        assertTrue(c.triage.value.isEmpty())
+    }
+
     @Test
     fun aDraftCarryingALinkIsDroppedAndAGroupMentionSendsTheGroupsName() = runTest {
         val c = core()

@@ -48,6 +48,7 @@ import os.meka.core.domain.CardFinish
 import os.meka.core.domain.ChatFinishTap
 import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageChat
+import os.meka.core.domain.InstantTapRules
 import os.meka.core.domain.ChatSummaryRules
 import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
@@ -166,8 +167,21 @@ internal class DecisionMoves(
     val junkReview: MutableState<String?> = mutableStateOf(null),
     /** Week board item (5) part 3: To a day… on an overdue or due-today card; Undo on the bar. */
     val onToDay: (DecisionCard, Long) -> Unit = { _, _ -> },
+    /**
+     * Taps feel instant (Meka 2026-10-25): the message and card ids decided on this screen, hidden in the next frame
+     * while the core's write follows ([InstantTapRules]); a failure brings them back with a line saying why.
+     */
+    val decided: MutableState<Set<String>> = mutableStateOf(emptySet()),
 ) {
     val setAside: List<String> get() = aside.value
+    val hidden: Set<String> get() = decided.value
+    fun hide(ids: Collection<String>) { decided.value = InstantTapRules.hide(decided.value, ids) }
+    fun restore(ids: Collection<String>) { decided.value = InstantTapRules.restore(decided.value, ids) }
+    /** The views changed: forget the decided ids they no longer hold (their writes landed). */
+    fun settle(present: Collection<String>) {
+        val next = InstantTapRules.settle(decided.value, present)
+        if (next != decided.value) decided.value = next
+    }
 }
 
 /**
@@ -181,6 +195,9 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
     val aside = remember { mutableStateOf(listOf<String>()) }
     val changed = remember { mutableStateOf<RequestChange?>(null) }
     val junkReview = remember { mutableStateOf<String?>(null) }
+    val decided = remember { mutableStateOf(emptySet<String>()) }
+    fun hide(ids: Collection<String>) { decided.value = InstantTapRules.hide(decided.value, ids) }
+    fun restore(ids: Collection<String>) { decided.value = InstantTapRules.restore(decided.value, ids) }
     val latestOpenTask by rememberUpdatedState(openTask)
     val latestOpenLists by rememberUpdatedState(openLists)
     val context = LocalContext.current.applicationContext
@@ -189,9 +206,15 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
             when (val effect = card.effect(move)) {
                 DecisionEffect.COMPLETE_TASK, DecisionEffect.SNOOZE_TASK -> {
                     val id = card.taskId
+                    // Taps feel instant: the card leaves in the next frame; the write follows.
+                    if (id != null) hide(listOf(card.id))
                     if (id != null) scope.launch {
-                        val done = runCatching { core.decide(id, effect) }.getOrNull()
-                        if (done != null) undo.show(NeedsYouStackRules.message(card, move)) { core.undoDecision(done) }
+                        val done = runCatching { core.decide(id, effect) }.getOrElse { e ->
+                            restore(listOf(card.id))
+                            undo.show(InstantTapRules.failedLine(card.yesLabel, e.message), null)
+                            return@launch
+                        }
+                        if (done != null) undo.show(NeedsYouStackRules.message(card, move)) { restore(listOf(card.id)); core.undoDecision(done) }
                     }
                 }
                 DecisionEffect.OPEN_TASK -> latestOpenTask(card.taskId)
@@ -205,9 +228,18 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 // Inbox fixes, slice 2: Approve on an account's clean-up (synced; the server moves it from its next
                 // check); Undo withdraws it while nothing has moved.
-                DecisionEffect.APPROVE_BACKLOG -> scope.launch {
-                    val r = runCatching { core.approveMailBacklog(card.id) }.getOrNull() ?: return@launch
-                    undo.show(r.line) { core.unapproveMailBacklog(card.id); Unit }
+                // Taps feel instant (4b, Meka 2026-10-25 01:50): the card leaves at once and never comes back while the
+                // write catches up; a failure brings it back with the reason.
+                DecisionEffect.APPROVE_BACKLOG -> {
+                    hide(listOf(card.id))
+                    scope.launch {
+                        val r = runCatching { core.approveMailBacklog(card.id) }.getOrElse { e ->
+                            restore(listOf(card.id))
+                            undo.show(InstantTapRules.failedLine(card.yesLabel, e.message), null)
+                            return@launch
+                        }
+                        undo.show(r.line) { restore(listOf(card.id)); core.unapproveMailBacklog(card.id); Unit }
+                    }
                 }
                 // Clean-ups (2026-10-19): Allow or Not this one on a new phone or Mac asking to join; the server answers,
                 // the card leaves on every device as the ask's state syncs. Nothing to undo (revoke from the server).
@@ -289,11 +321,19 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                         CardFinish.OPENED
                     }
                     TriageChoice.NotNow -> {
-                        if (runCatching { core.dismissTriage(card.id) }.getOrDefault(false)) undo.show(rules.notNowLine(card), null)
+                        hide(listOf(card.id))
+                        runCatching { core.dismissTriage(card.id) }.fold(
+                            { if (it) undo.show(rules.notNowLine(card), null) },
+                            { e -> restore(listOf(card.id)); undo.show(InstantTapRules.failedLine("Not now", e.message), null) },
+                        )
                         CardFinish.NOT_NOW
                     }
                     TriageChoice.Seen -> {
-                        if (runCatching { core.seenTriage(card.id) }.getOrDefault(false)) undo.show(rules.seenLine(card), null)
+                        hide(listOf(card.id))
+                        runCatching { core.seenTriage(card.id) }.fold(
+                            { if (it) undo.show(rules.seenLine(card), null) },
+                            { e -> restore(listOf(card.id)); undo.show(InstantTapRules.failedLine("Seen", e.message), null) },
+                        )
                         CardFinish.SEEN
                     }
                 }
@@ -302,6 +342,9 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 Unit
             }
         }, onTriageChat = { chat, tap ->
+            // Taps feel instant (Meka 2026-10-25 01:45: "When I click on Done it takes at least 4 seconds"): the chat's
+            // card leaves in this frame; Mark read, the shade and the one batched write follow.
+            hide(chat.ids)
             scope.launch {
                 val markable = ChatShadeRules.markable(chat, LiveReplies.markable.value)
                 val onDone = (context as? MekaApplication)?.captures?.triageSettings?.value?.markReadOnDone == true
@@ -314,7 +357,11 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 if (finish.openChat) LiveReplies.open(context, chat.cards.last().id, chat.app, null)
                 // Hidden from the shade only, after any Mark read (its action goes with the notification).
                 if (finish.clear) os.meka.android.work.WorkCaptureService.clear(keys)
-                val seen = runCatching { core.seenTriageChat(chat.ids) }.getOrDefault(0)
+                val seen = runCatching { core.seenTriageChat(chat.ids) }.getOrElse { e ->
+                    restore(chat.ids)
+                    undo.show(InstantTapRules.failedLine("Done", e.message), null)
+                    return@launch
+                }
                 // The group's digest chatter rode in this card (slice 3b): finishing the chat catches the group up too,
                 // here and in the Mac's digest.
                 chat.groupKey?.takeIf { chat.chatter > 0 }?.let { k ->
@@ -360,7 +407,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 val line = runCatching { core.needsYouToDay(id, day) }.getOrNull() ?: return@launch
                 if (line != BoardFeedRules.CANT_MOVE) undo.show(line) { core.undoBoardMove(); Unit } else undo.show(line, null)
             }
-        })
+        }, decided = decided)
     }
 }
 
@@ -373,10 +420,14 @@ internal fun NeedsYouColumn(
     core: MekaCore, stack: NeedsYouStack, moves: DecisionMoves, modifier: Modifier, openAfterWork: () -> Unit,
     compact: Boolean = false, play: Boolean = true,
 ) {
-    val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
+    // Taps feel instant (2026-10-25): what was just decided here is hidden at once, until the views no longer hold it.
+    val hidden = moves.hidden
+    val cards = NeedsYouStackRules.ordered(NeedsYouStack(InstantTapRules.stack(stack.cards, hidden)), moves.setAside)
     val requests by core.requests.collectAsState()
     val approvals by core.approvals.collectAsState()
-    val triage by core.triage.collectAsState()
+    val allTriage by core.triage.collectAsState()
+    val triage = remember(allTriage, hidden) { InstantTapRules.triage(allTriage, hidden) }
+    LaunchedEffect(allTriage, stack) { moves.settle(allTriage.map { it.id } + stack.cards.map { it.id }) }
     val school by core.schoolView.collectAsState()
     val covers = school.covers
     // Date night's week-before card (slice 2) sits with the school's questions: Meka's own plans to make.

@@ -3524,7 +3524,8 @@ class MekaCore(
      * Caught up with these digest groups (V1, messages slice 4b): their synced cards leave Needs you on both devices. Returns
      * what to hand [undoCatchUpGroupDigest] for the undo bar.
      */
-    suspend fun catchUpGroupDigest(groupKeys: List<String>): GroupDigestUndo = onCore { GroupDigestUndo(gistStore.caughtUp(groupKeys)) }
+    suspend fun catchUpGroupDigest(groupKeys: List<String>): GroupDigestUndo =
+        onCore { replica.batched { GroupDigestUndo(gistStore.caughtUp(groupKeys)) } }
 
     /** Takes back a Caught up: the cards come back on both devices. */
     suspend fun undoCatchUpGroupDigest(undo: GroupDigestUndo) = onCore { gistStore.undo(undo.before) }
@@ -3549,15 +3550,19 @@ class MekaCore(
      * Done on a chat's card (V1, messages grouped per chat, slice 1): every message card of that chat
      * ([os.meka.core.domain.TriageChat.ids]) leaves Needs you on every device as seen, in one go. Nothing is sent or
      * marked read anywhere. Returns how many were still open.
+     *
+     * Taps feel instant (Meka 2026-10-25 01:45: "When I click on Done it takes at least 4 seconds"): the messages are
+     * resolved in **one** store transaction with one rebuild of the views at its end. Before, each message's write told
+     * the views on its own, so a 130-message chat rebuilt every view in the app 130 times on the core's one thread.
      */
     suspend fun seenTriageChat(messageIds: List<String>): Int =
-        onCore { messageIds.count { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) } }
+        onCore { replica.batched { messageIds.count { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) } } }
 
     /**
      * WhatsApp replies, slice 2 (the Fold): which open reply cards the phone can still send itself ([live]: the message
      * ids whose notification Reply it holds), synced so the Mac offers Send (via your phone). Writes only changes.
      */
-    suspend fun notePhoneLive(live: Set<String>): Int = onCore { triageCards.markPhoneLive(live) }
+    suspend fun notePhoneLive(live: Set<String>): Int = onCore { replica.batched { triageCards.markPhoneLive(live) } }
 
     /**
      * Send (via your phone) on the Mac (WhatsApp replies, slice 2), Meka's tap: asks the Fold to send [text] as the
@@ -11695,7 +11700,12 @@ class MekaCore(
         }
     }
 
+    /** How many times every view has been rebuilt (taps feel instant, 2026-10-25): tests check one tap is one rebuild. */
+    internal var refreshPasses = 0
+        private set
+
     private fun refreshOnce() {
+        refreshPasses++
         // Week board (11) part 2: the Stretched hold is read once, so the Fold's call notes can ask from any thread.
         if (!alertHoldLoaded) loadAlertHold()
         // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
