@@ -642,15 +642,16 @@ object TalkFlow {
     }
 
     /** Meka started talking while MEKA spoke: stop and listen (a closing line is cut short and the conversation ends). */
-    fun bargeIn(s0: TalkSession): TalkStep {
-        if (s0.phase != TalkPhase.SPEAKING) return TalkStep(s0, emptyList())
+    fun bargeIn(s: TalkSession): TalkStep {
+        // The parameter stays `s`: Swift calls it bargeIn(s:) (nightly Mac run 2026-10-25).
+        if (s.phase != TalkPhase.SPEAKING) return TalkStep(s, emptyList())
         // Talking over an early piece drops the rest of that answer (slice 9): it arrives to a listening Talk and is left.
-        val s = s0.copy(early = null)
-        if (s.endAfterSpeaking) return TalkStep(
-            s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null),
-            listOfNotNull(TalkEffect.StopSpeaking, TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }, s.openHelpAfter?.let { TalkEffect.OpenHelp(it) }),
+        val t = s.copy(early = null)
+        if (t.endAfterSpeaking) return TalkStep(
+            t.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null),
+            listOfNotNull(TalkEffect.StopSpeaking, TalkEffect.End, t.openAfter?.let { TalkEffect.Open(it) }, t.openHelpAfter?.let { TalkEffect.OpenHelp(it) }),
         )
-        return TalkStep(s.copy(phase = TalkPhase.LISTENING), listOf(TalkEffect.StopSpeaking, TalkEffect.Listen))
+        return TalkStep(t.copy(phase = TalkPhase.LISTENING), listOf(TalkEffect.StopSpeaking, TalkEffect.Listen))
     }
 
     /** The orb tapped, the screen left, a call coming in: everything stops at once. */
