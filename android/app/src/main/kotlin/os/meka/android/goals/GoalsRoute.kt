@@ -105,7 +105,8 @@ import os.meka.android.designsystem.sharedPlace
  */
 @Composable
 fun GoalsRoute(core: MekaCore) {
-    val view by core.goalsView.collectAsState()
+    // Taps feel instant: a habit's tick shows in the same frame, drawn over the core's view ([HabitTaps]).
+    val view = shownGoals(core.goalsView)
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -151,7 +152,7 @@ fun GoalsRoute(core: MekaCore) {
         items(view.habits, key = { "h-${it.id}" }) { h ->
             HabitRow(
                 h, view.goals, open == h.id, { toggle(h.id) }, Modifier.animateItem(),
-                tick = { haptics.light(); act { core.setHabitDone(h.id, !h.doneToday) } },
+                tick = { haptics.light(); HabitTaps.tick(scope, core, h.id, !h.doneToday) },
                 edit = { perWeek, timing, minutes ->
                     act {
                         perWeek?.let { core.setHabitTarget(h.id, it) }

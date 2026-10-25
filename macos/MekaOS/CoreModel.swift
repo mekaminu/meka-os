@@ -249,6 +249,10 @@ final class CoreModel {
     private(set) var needsYouSetAside: [String] = []
     /// Habits (pace, streaks) and goals (progress). Synced with the Fold.
     private(set) var goals: GoalsView?
+    /// Taps feel instant for habits: the core's own goals, and the ticks on their way (habit id → done), drawn over it
+    /// in the same frame ([InstantHabitRules]); a tick is forgotten when its call returns.
+    @ObservationIgnored private var coreGoals: GoalsView?
+    @ObservationIgnored private var habitTaps: [String: KotlinBoolean] = [:]
     /// The Gym (booked habits): the week's sessions booked around the calendar and work, and today's card.
     private(set) var sessions: SessionsView?
     /// The running fast, the eating window and the last seven days. Synced with the Fold.
@@ -657,7 +661,7 @@ final class CoreModel {
             }
         })
         observers.append(Task { [weak self] in
-            for await g in core.goalsView { self?.goals = g }
+            for await g in core.goalsView { self?.coreGoals = g; self?.showGoals() }
         })
         observers.append(Task { [weak self] in
             for await f in core.fastingView { self?.fasting = f }
@@ -2776,7 +2780,39 @@ final class CoreModel {
     }
 
     /// Ticks or unticks a habit for today (light haptic; the circle pops).
-    func setHabitDone(_ id: String, _ done: Bool) { MekaHaptics.light(); run { try await $0.setHabitDone(id: id, done: done) } }
+    func setHabitDone(_ id: String, _ done: Bool) {
+        MekaHaptics.light()
+        tickHabit(id, done)
+    }
+
+    /// The tick shows in the same frame on the dots, chips, Goals and Needs you; the core's write follows, and a failed
+    /// one puts the habit back with the reason on the bar (taps feel instant).
+    private func tickHabit(_ id: String, _ done: Bool) {
+        guard let core else { return }
+        habitTaps = InstantHabitRules.shared.tick(taps: habitTaps, id: id, done: done)
+        showGoals()
+        Task {
+            do {
+                _ = try await core.setHabitDone(id: id, done: done)
+                landHabitTap(id, done)
+            } catch {
+                landHabitTap(id, done)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: done ? "Tick" : "Untick", reason: error.localizedDescription), nil)
+            }
+        }
+    }
+
+    /// Goals as drawn: the core's goals with the habit ticks still on their way.
+    private func showGoals() {
+        guard let coreGoals else { goals = nil; return }
+        goals = habitTaps.isEmpty ? coreGoals : InstantHabitRules.shared.shown(goals: coreGoals, taps: habitTaps)
+    }
+
+    private func landHabitTap(_ id: String, _ done: Bool) {
+        guard habitTaps[id] != nil else { return }
+        habitTaps = InstantHabitRules.shared.forget(taps: habitTaps, id: id, done: done)
+        showGoals()
+    }
     /// A habit's dot on the watch face (Calm Today, slice 2): ticks or unticks it, and the undo bar says which habit.
     func tickHabitDot(_ dot: HabitDot) {
         let id = dot.id
@@ -4135,7 +4171,7 @@ final class CoreModel {
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .lastLeaveBy(let id): run { try await $0.undoLastLeaveBy(eventId: id) }
-        case .habit(let id, let done): run { try await $0.setHabitDone(id: id, done: done) }
+        case .habit(let id, let done): tickHabit(id, done)
         case .matchResult(let saved): run { try await $0.undoMatchResult(saved: saved) }
         case .clubChild(let saved): run { try await $0.undoClubChild(saved: saved) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }

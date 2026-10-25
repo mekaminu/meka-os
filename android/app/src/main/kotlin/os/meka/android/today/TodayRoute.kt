@@ -805,7 +805,8 @@ private fun TodayPane(
     val motionCard = if (now == null) motion.card else null
     val pull = rememberPullToSync { core?.syncNow() }
     // Today's habits as chips under the ticker (Fold review 2026-10-09 07:26, item 3); the tiles strip drops its habits tile.
-    val goalsNow by actions.goals.collectAsState()
+    // Taps feel instant: a habit's tick on the dots or chips shows in the same frame ([HabitTaps]).
+    val goalsNow = os.meka.android.goals.shownGoals(actions.goals)
     val habitChips = remember(goalsNow) { HabitChipRules.build(goalsNow) }
     // Calm Today, slice 2: they sit on the watch face as dots; the chips only when the face is hidden or they don't fit.
     val faceShown = today.timeline.dateLabel.isNotEmpty()
@@ -848,8 +849,8 @@ private fun TodayPane(
         val habitTick: (HabitDot) -> Unit = { dot ->
             chipHaptics.light()
             val was = dot.done
-            chipScope.launch { runCatching { core?.setHabitDone(dot.id, !was) } }
-            undo?.show(HabitDotRules.tickedLine(dot, !was)) { core?.setHabitDone(dot.id, was) }
+            os.meka.android.goals.HabitTaps.tick(chipScope, core, dot.id, !was) { line -> undo?.show(line, null) }
+            undo?.show(HabitDotRules.tickedLine(dot, !was)) { os.meka.android.goals.HabitTaps.tick(chipScope, core, dot.id, was) }
         }
         // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
@@ -1129,7 +1130,7 @@ private fun TodayPane(
                             habitChips, play,
                             tick = { chip ->
                                 chipHaptics.light()
-                                chipScope.launch { runCatching { core.setHabitDone(chip.id, !chip.done) } }
+                                os.meka.android.goals.HabitTaps.tick(chipScope, core, chip.id, !chip.done) { line -> undo?.show(line, null) }
                             },
                             modifier = Modifier.padding(top = MekaSpace.xs),
                         )

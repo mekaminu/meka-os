@@ -479,7 +479,8 @@ internal fun NeedsYouColumn(
     LaunchedEffect(grouped.map { it.key to it.cards.size }) { ChatSummarise.run(summaryApp) }
     val triageSettings by captures.triageSettings.collectAsState()
     val peopleLists by captures.lists.collectAsState()
-    val goals by core.goalsView.collectAsState()
+    // Taps feel instant: a habit's tick shows in the same frame ([HabitTaps]).
+    val goals = os.meka.android.goals.shownGoals(core.goalsView)
     val lists by core.listsView.collectAsState()
     // Coming up (Fold review 2026-10-12 17:56, item 3): the next two reminders, worked out by the core from every task.
     val comingUp = core.today.collectAsState().value.comingUp
@@ -488,7 +489,7 @@ internal fun NeedsYouColumn(
     val afterWork by core.afterWork.collectAsState()
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
-    val tickHabit: (HabitItem) -> Unit = { h -> haptics.light(); scope.launch { runCatching { core.setHabitDone(h.id, !h.doneToday) } } }
+    val tickHabit: (HabitItem) -> Unit = { h -> haptics.light(); os.meka.android.goals.HabitTaps.tick(scope, core, h.id, !h.doneToday) }
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
         modifier.footFade(),

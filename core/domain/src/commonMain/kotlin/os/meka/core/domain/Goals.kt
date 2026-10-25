@@ -147,6 +147,8 @@ data class GoalsView(
     val money: MoneyStreaksView? = null,
     /** Reading and learning (slice 4): his reading goal for the year and its pace ([ReadingGoalRules.view]); null with none. */
     val reading: ReadingGoalView? = null,
+    /** The local epoch day it was worked out for (0 for the empty view): an instant tick marks today's slot ([InstantHabitRules]). */
+    val today: Long = 0,
 ) {
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }
@@ -1128,7 +1130,7 @@ class Goals(
         val today = today()
         return GoalsView(
             h, sets.open, sets.finished, GoalWeekRules.build(sets.open, sets.finishedThisWeek, today),
-            GoalRhythmRules.month(sets.open, sets.finishedRecently, today),
+            GoalRhythmRules.month(sets.open, sets.finishedRecently, today), today = today,
         )
     }
 
