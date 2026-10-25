@@ -259,6 +259,10 @@ final class CoreModel {
     private(set) var fasting: FastingView?
     /// Evening shutdown: done today, left from today, tomorrow at a glance. Synced with the Fold.
     private(set) var shutdown: ShutdownView?
+    /// Taps feel instant for task moves (InstantTaskRules): the core's own shutdown, and the moves on their way
+    /// (task id → move), drawn over it and over the brief's rows in the same frame; a move is forgotten when its call returns.
+    @ObservationIgnored private var coreShutdown: ShutdownView?
+    private(set) var taskTaps: [String: TaskMove] = [:]
     var showShutdown = false
     /// The smart wake alarm (Alarms, slice 1): the next morning's suggested time and the alarm if set. Synced with the Fold.
     private(set) var wake: WakeView?
@@ -670,7 +674,7 @@ final class CoreModel {
             for await s in core.sessionsView { self?.sessions = s }
         })
         observers.append(Task { [weak self] in
-            for await s in core.shutdownView { self?.shutdown = s }
+            for await s in core.shutdownView { self?.coreShutdown = s; self?.showShutdownView() }
         })
         observers.append(Task { [weak self] in
             for await w in core.wakeView { self?.wake = w }
@@ -1715,7 +1719,7 @@ final class CoreModel {
     /// Moves a one-off task out of Today into Someday (from the task detail).
     func moveToSomeday(_ id: String) {
         if selectedID == id { selectedID = nil }
-        run { try await $0.moveToSomeday(taskId: id, kind: .idea) }
+        moveTask([id], .someday) { try await $0.moveToSomeday(taskId: id, kind: .idea) }
     }
 
     func recordDecision(_ statement: String, why: String?, reviewInDays: Int?) {
@@ -1987,11 +1991,54 @@ final class CoreModel {
     func carryOver(_ id: String) {
         if selectedID == id { selectedID = nil }
         MekaHaptics.tick()
-        run { try await $0.carryOver(taskId: id) }
+        moveTask([id], .tomorrow) { try await $0.carryOver(taskId: id) }
     }
 
-    /// "Move the rest to tomorrow".
-    func carryAllToTomorrow() { MekaHaptics.tick(); run { try await $0.carryAllToTomorrow() } }
+    /// "Move the rest to tomorrow": every row left leaves at once.
+    func carryAllToTomorrow() {
+        MekaHaptics.tick()
+        guard let v = coreShutdown else { run { try await $0.carryAllToTomorrow() }; return }
+        let ids = InstantTaskRules.shared.carried(taps: taskTaps, v: v)
+        taskTaps = InstantTaskRules.shared.carryAll(taps: taskTaps, v: v)
+        landTaskMove(ids, .tomorrow) { try await $0.carryAllToTomorrow() }
+    }
+
+    /// The brief's Focus and Today rows as drawn: a task ticked here leaves at once.
+    func briefLines(_ lines: [BriefDayLine]) -> [BriefDayLine] {
+        taskTaps.isEmpty ? lines : InstantTaskRules.shared.lines(lines: lines, taps: taskTaps)
+    }
+
+    /// A task move (Done, Tomorrow, Skip, Someday) shows in the same frame in the shutdown and the brief; the core's
+    /// write follows, and a failed one puts the task back with the reason on the bar (taps feel instant).
+    private func moveTask(_ ids: [String], _ move: TaskMove, _ body: @escaping (MekaCore) async throws -> Void) {
+        for id in ids { taskTaps = InstantTaskRules.shared.move(taps: taskTaps, id: id, move: move) }
+        landTaskMove(ids, move, body)
+    }
+
+    private func landTaskMove(_ ids: [String], _ move: TaskMove, _ body: @escaping (MekaCore) async throws -> Void) {
+        showShutdownView()
+        guard let core else { forgetTaskMove(ids, move); return }
+        Task {
+            do {
+                try await body(core)
+                forgetTaskMove(ids, move)
+            } catch {
+                forgetTaskMove(ids, move)
+                offerEventUndo(InstantTapRules.shared.failedLine(what: InstantTaskRules.shared.what(move: move), reason: error.localizedDescription), nil)
+            }
+        }
+    }
+
+    private func forgetTaskMove(_ ids: [String], _ move: TaskMove) {
+        taskTaps = InstantTaskRules.shared.forgetAll(taps: taskTaps, ids: ids, move: move)
+        showShutdownView()
+    }
+
+    /// The shutdown as drawn: the core's with the task moves still on their way.
+    private func showShutdownView() {
+        guard let coreShutdown else { shutdown = nil; return }
+        shutdown = taskTaps.isEmpty ? coreShutdown : InstantTaskRules.shared.shutdown(v: coreShutdown, taps: taskTaps, time: InstantTaskRules.shared.JUST_NOW)
+    }
 
     /// Done for the day, completeness: "Later" on Today's evening card: it leaves and comes back an hour on (both apps).
     func shutdownLater() {
@@ -3366,7 +3413,7 @@ final class CoreModel {
 
     func complete(_ id: String) {
         if selectedID == id { selectedID = nil }
-        run { try await $0.complete(taskId: id) }
+        moveTask([id], .done) { try await $0.complete(taskId: id) }
     }
 
     func rename(_ id: String, to title: String) { run { try await $0.rename(taskId: id, title: title) } }
@@ -3415,7 +3462,7 @@ final class CoreModel {
     /// Skip this occurrence (the next one is queued for its day) or move just this one to tomorrow.
     func skip(_ id: String) {
         if selectedID == id { selectedID = nil }
-        run { try await $0.skipOccurrence(taskId: id) }
+        moveTask([id], .skip) { try await $0.skipOccurrence(taskId: id) }
     }
 
     func snooze(_ id: String) {

@@ -75,9 +75,9 @@ struct BriefSheet: View {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         // Slice 3: the focus the spoken brief names, with why, the smaller ones counted, Needs you.
                         let focusMore = [v.focusMore, v.needsYouLine].compactMap { $0 }
-                        if !v.focusLines.isEmpty || !focusMore.isEmpty {
+                        if !model.briefLines(v.focusLines).isEmpty || !focusMore.isEmpty {
                             SectionLabel("Focus", palette).staggeredAppear(1)
-                            ForEach(v.focusLines, id: \.id) { r in
+                            ForEach(model.briefLines(v.focusLines), id: \.id) { r in
                                 BriefDayRow(line: r, palette: palette).staggeredAppear(1)
                             }
                             ForEach(focusMore, id: \.self) { line in
@@ -116,7 +116,7 @@ struct BriefSheet: View {
                         }
                         // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a
                         // tick circle for a task (completes it like Today's rows), a dot for an event.
-                        ForEach(v.dayLines, id: \.id) { r in
+                        ForEach(model.briefLines(v.dayLines), id: \.id) { r in
                             BriefDayRow(line: r, palette: palette).staggeredAppear(1)
                         }
 
@@ -188,8 +188,8 @@ struct BriefSheet: View {
                             .padding(.top, MekaSpace.l).staggeredAppear(6)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.dayLines.map(\.id))
-                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.focusLines.map(\.id))
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: model.briefLines(v.dayLines).map(\.id))
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: model.briefLines(v.focusLines).map(\.id))
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.asks.map(\.id))
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.headlines.map(\.id))
                 }

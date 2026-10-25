@@ -74,8 +74,10 @@ import os.meka.core.domain.BriefFollowOnRules
 import os.meka.core.domain.BriefHeadline
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
+import os.meka.core.domain.InstantTaskRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MorningBriefView
+import os.meka.core.domain.TaskMove
 import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
@@ -102,6 +104,13 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
     val about by core.aboutYouView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
+    // Taps feel instant (InstantTaskRules): a ticked task leaves Focus and Today in the same frame; a failed write puts
+    // it back and the Today section says why.
+    val taps by TaskTaps.taps.collectAsState()
+    val focusLines = remember(v, taps) { InstantTaskRules.lines(v.focusLines, taps) }
+    val dayLines = remember(v, taps) { InstantTaskRules.lines(v.dayLines, taps) }
+    var failed by remember { mutableStateOf<String?>(null) }
+    val tick: (String) -> Unit = { id -> failed = null; TaskTaps.move(scope, id, TaskMove.DONE, { failed = it }) { core.complete(id) } }
     val context = LocalContext.current
     // Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the phone's own.
     val speaker = remember { MekaSpeaker(context, core, scope) }
@@ -191,12 +200,12 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
         }
 
         // Slice 3: the focus the spoken brief names, with why, then the smaller ones counted and Needs you.
-        if (v.focusLines.isNotEmpty() || v.focusMore != null || v.needsYouLine != null) {
+        if (focusLines.isNotEmpty() || v.focusMore != null || v.needsYouLine != null) {
             item(key = "h-focus") {
                 SectionLabel("Focus", Modifier.animateItem().appear(rememberAppearance(1)))
             }
-            items(v.focusLines, key = { it.id }) { r ->
-                BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1))) { id -> scope.launch { runCatching { core.complete(id) } } }
+            items(focusLines, key = { it.id }) { r ->
+                BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1)), tick)
             }
             val more = listOfNotNull(v.focusMore, v.needsYouLine)
             if (more.isNotEmpty()) {
@@ -241,8 +250,14 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
         }
         // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a tick circle for a
         // task (completes it like Today's rows: ring, check, light haptic, then the row leaves), a dot for an event.
-        items(v.dayLines, key = { "d-" + it.id }) { r ->
-            BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1))) { id -> scope.launch { runCatching { core.complete(id) } } }
+        failed?.let { line ->
+            item(key = "d-failed") {
+                Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.critical,
+                    modifier = Modifier.animateItem().appear(rememberAppearance(1)))
+            }
+        }
+        items(dayLines, key = { "d-" + it.id }) { r ->
+            BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1)), tick)
         }
 
         val waitingLine = v.waitingLine

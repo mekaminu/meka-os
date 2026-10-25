@@ -64,11 +64,13 @@ import os.meka.core.domain.AlertHoldRules
 import os.meka.core.domain.Feeling
 import os.meka.core.domain.FeelingOffer
 import os.meka.core.domain.FeelingRules
+import os.meka.core.domain.InstantTaskRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ShutdownItem
 import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
+import os.meka.core.domain.TaskMove
 import os.meka.core.domain.TomorrowRow
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
@@ -87,14 +89,18 @@ private const val SHUT_DOWN_HOLD_MS = 700L
  */
 @Composable
 fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
-    val v by core.shutdownView.collectAsState()
+    val coreView by core.shutdownView.collectAsState()
+    // Taps feel instant (InstantTaskRules): a tick, Tomorrow, Skip, Someday or Move the rest shows in the same frame.
+    val taps by TaskTaps.taps.collectAsState()
+    val v = remember(coreView, taps) { InstantTaskRules.shutdown(coreView, taps) }
+    var failed by remember { mutableStateOf<String?>(null) }
+    val onFail: (String) -> Unit = { failed = it }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     var closing by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
-    val act: (suspend () -> Unit) -> Unit = { block -> scope.launch { runCatching { block() } } }
     // Ticks reuse Today's complete button, which plays the ring and haptic before calling back.
-    val tick: (String) -> Unit = { id -> act { core.complete(id) } }
+    val tick: (String) -> Unit = { id -> failed = null; TaskTaps.move(scope, id, TaskMove.DONE, onFail) { core.complete(id) } }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -131,6 +137,13 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
         }
 
         item(key = "h-left") { SectionLabel("Left from today", Modifier.animateItem().appear(rememberAppearance(1))) }
+        // A move whose write failed: the task is back, and this says why (fades in like any new row).
+        failed?.let { line ->
+            item(key = "failed") {
+                Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.critical,
+                    modifier = Modifier.animateItem().appear(rememberAppearance(1)))
+            }
+        }
         if (v.left.isEmpty()) {
             item(key = "none-left") {
                 Text("Nothing left from today.", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
@@ -140,16 +153,16 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
         items(v.left, key = { "l-" + it.task.id }) { item ->
             LeftRow(
                 item, tick,
-                tomorrow = { haptics.tick(); act { core.carryOver(item.task.id) } },
-                skip = { haptics.tick(); act { core.skipOccurrence(item.task.id) } },
-                someday = { haptics.tick(); act { core.moveToSomeday(item.task.id, SomedayKind.IDEA) } },
+                tomorrow = { haptics.tick(); failed = null; TaskTaps.move(scope, item.task.id, TaskMove.TOMORROW, onFail) { core.carryOver(item.task.id) } },
+                skip = { haptics.tick(); failed = null; TaskTaps.move(scope, item.task.id, TaskMove.SKIP, onFail) { core.skipOccurrence(item.task.id) } },
+                someday = { haptics.tick(); failed = null; TaskTaps.move(scope, item.task.id, TaskMove.SOMEDAY, onFail) { core.moveToSomeday(item.task.id, SomedayKind.IDEA) } },
                 modifier = Modifier.animateItem().appear(rememberAppearance(1)),
             )
         }
         if (v.left.size > 1) {
             item(key = "carry-all") {
                 ShutdownButton("Move the rest to tomorrow", filled = false, Modifier.padding(top = MekaSpace.xs).animateItem().appear(rememberAppearance(1))) {
-                    haptics.tick(); act { core.carryAllToTomorrow() }
+                    haptics.tick(); failed = null; TaskTaps.carryAll(scope, v, onFail) { core.carryAllToTomorrow() }
                 }
             }
         }
