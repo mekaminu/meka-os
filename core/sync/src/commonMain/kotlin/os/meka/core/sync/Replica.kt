@@ -254,7 +254,8 @@ class Replica(
         if (key in d) return d[key] as T
         val v = decode(t.live)
         // Only kept if the type wasn't written while decoding (a decode never writes, but be sure).
-        if (kept[entityType] === t) t.decoded = d + (key to v)
+        // t.decoded again, not d: a decode may itself read another kept reading of the same type (kept too).
+        if (kept[entityType] === t) t.decoded = t.decoded + (key to v)
         return v
     }
 

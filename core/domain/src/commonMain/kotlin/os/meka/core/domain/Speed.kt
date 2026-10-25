@@ -95,3 +95,40 @@ object MoneyViewMemo {
     fun same(lastInputs: List<Any?>?, inputs: List<Any?>, lastBuilt: Any?, showing: Any?): Boolean =
         lastInputs != null && lastBuilt != null && showing === lastBuilt && lastInputs == inputs
 }
+
+/**
+ * Taps feel instant, slice 6 (2026-10-25): any part of a view kept while what it is built from is unchanged. Each
+ * [keep] names a part ("Mail needs you") and hands in everything that part reads, the minute included when it shows
+ * the time; the last result comes back when every input equals the last call's, otherwise [keep] builds afresh. The
+ * replica hands out the same lists until a write to their type (slice 5), so comparing 12,000 emails is 12,000
+ * identity checks, not a rebuild. Inputs must be values that are never changed in place afterwards (copy a mutable
+ * set before handing it in). Not thread-safe: the facade keeps one on its core thread.
+ */
+class ViewMemo {
+    private class Kept(val inputs: List<Any?>, val value: Any?)
+
+    private val kept = HashMap<String, Kept>()
+
+    /** How many times each part was really built (tests: a tap on a task doesn't rebuild the mail cards). */
+    val builds = HashMap<String, Int>()
+
+    @Suppress("UNCHECKED_CAST")
+    fun <T> keep(name: String, inputs: List<Any?>, build: () -> T): T {
+        val k = kept[name]
+        if (k != null && k.inputs == inputs) return k.value as T
+        val v = build()
+        kept[name] = Kept(inputs, v)
+        builds[name] = (builds[name] ?: 0) + 1
+        return v
+    }
+
+    /** Forget every kept part (the next [keep] of each builds afresh). */
+    fun clear() = kept.clear()
+
+    companion object {
+        const val MINUTE_MS = 60_000L
+
+        /** The minute [nowMs] falls in: the input for a part that shows the time to the minute. */
+        fun minute(nowMs: Long): Long = nowMs / MINUTE_MS
+    }
+}

@@ -1,6 +1,7 @@
 package os.meka.core.domain
 
 import os.meka.core.sync.DELETED_FIELD
+import os.meka.core.sync.EntitySnapshot
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Op
 import os.meka.core.sync.Replica
@@ -600,10 +601,14 @@ class ActivityLog(
     fun items(): List<ActivityItem> = stored() + calendarEdits() + mailTidies() + unsubscribes() + mailReplies()
 
     /** Drafted replies, slice 3: each reply he tapped Send on, read from the synced `mail_item` itself. */
-    private fun mailReplies(): List<ActivityItem> = mailItems().mapNotNull { MailSentActivityRules.item(it) }
+    private fun mailReplies(): List<ActivityItem> = replica.decoded(EntityTypes.MAIL_ITEM, "activityMailReplies") { _ ->
+        mailItems().mapNotNull { MailSentActivityRules.item(it) }
+    }
 
     /** Inbox autopilot (slice 5a): each Unsubscribe the server tried, read from the synced `mail_sender` entity. */
-    private fun unsubscribes(): List<ActivityItem> = mailSenders().mapNotNull { ActivityRules.unsubscribeItem(it) }
+    private fun unsubscribes(): List<ActivityItem> = replica.decoded(EntityTypes.MAIL_SENDER, "activityUnsubscribes") { _ ->
+        mailSenders().mapNotNull { ActivityRules.unsubscribeItem(it) }
+    }
 
     /** The newsletter and promo senders as Mail reads them. */
     fun mailSenders(): List<MailSender> = replica.decoded(EntityTypes.MAIL_SENDER, "mailSenders") { l ->
@@ -762,7 +767,10 @@ class ActivityLog(
             .mapNotNull { ActivityRules.calendarEditItem(it, now, calendar) }
     }
 
-    private fun stored(): List<ActivityItem> = replica.entities(EntityTypes.AGENT_ACTION).mapNotNull { s ->
+    /** Taps feel instant, slice 6: read once per change to the log, not on every refresh. */
+    private fun stored(): List<ActivityItem> = replica.decoded(EntityTypes.AGENT_ACTION, "activityStored") { l -> storedFrom(l) }
+
+    private fun storedFrom(entities: List<EntitySnapshot>): List<ActivityItem> = entities.mapNotNull { s ->
         val kind = s[ActivityFields.KIND].textOrNull?.let { k -> ActivityKind.entries.firstOrNull { it.name == k } } ?: return@mapNotNull null
         ActivityItem(
             id = s.ref.entityId,

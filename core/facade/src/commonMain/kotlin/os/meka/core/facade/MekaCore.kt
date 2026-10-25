@@ -129,6 +129,12 @@ class MekaCore(
     /** The Speed log (taps feel instant, slice 3): in memory on this device, written on the core's thread only. Declared
      * before anything that refreshes (the init block's first refresh is timed). */
     private val speedLog = os.meka.core.domain.SpeedLog()
+    /**
+     * Taps feel instant, slice 6 (2026-10-25): the parts of the views kept while what they're built from is unchanged
+     * (the mail cards over every email, Calendar's agenda), so a tap on a task doesn't rebuild them. Core thread only.
+     * Declared up here: the init block's first refresh uses it.
+     */
+    private val viewMemo = os.meka.core.domain.ViewMemo()
 
     /** When the views were last built (a sync round with nothing new rebuilds only once the minute moves on). Declared
      * before the init block's first refresh sets it. */
@@ -6884,10 +6890,17 @@ class MekaCore(
 
     private fun archivedChanged() {
         _archivedTick.value = _archivedTick.value + 1
-        _archivedForYou.value = os.meka.core.domain.ArchivedForYouRules.card(
-            activity.mailTidyBatches(), archivedSeen(), nowMs(), ZoneCalendar(timeZone),
-        )
+        val tidies = activity.mailTidyBatches()
+        val seen = archivedSeen()
+        _archivedForYou.value = viewMemo.keep("Archived for you", listOf(tidies, seen, minuteNow(), timeZone())) {
+            os.meka.core.domain.ArchivedForYouRules.card(tidies, seen, nowMs(), ZoneCalendar(timeZone))
+        }
     }
+
+    /** How many times [part] was really built (tests). */
+    internal fun viewBuilds(part: String): Int = viewMemo.builds[part] ?: 0
+
+    private fun minuteNow(): Long = os.meka.core.domain.ViewMemo.minute(nowMs())
 
     /** Got it on "Archived for you": folds it away on both apps (synced) until the next digest finds new tidies. */
     suspend fun seenArchivedForYou(): String = onCore {
@@ -7118,7 +7131,11 @@ class MekaCore(
     )
 
     private fun unopenedChanged() {
-        _mailUnopened.value = os.meka.core.domain.MailUnopenedRules.card(activity.mailSenders(), unopenedSeen(), nowMs(), ZoneCalendar(timeZone))
+        val senders = activity.mailSenders()
+        val seen = unopenedSeen()
+        _mailUnopened.value = viewMemo.keep("Not opened", listOf(senders, seen, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailUnopenedRules.card(senders, seen, nowMs(), ZoneCalendar(timeZone))
+        }
     }
 
     private fun writeUnopenedSeen(atMs: Long) = replica.commitLocal(
@@ -7204,18 +7221,29 @@ class MekaCore(
 
     private fun mailNeedsChanged() {
         val all = activity.mailItems()
-        val items = mailShown(all)
         val cal = ZoneCalendar(timeZone)
-        _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), cal)?.copy(
-            heldLine = os.meka.core.domain.ProtectedMailRules.cardLine(mailHeldCount(all), mailHeldUntil(), nowMs(), cal),
-        )
+        // Taps feel instant, slice 6: which emails show (protected time may hold the business ones) and the card over
+        // them are kept until the emails, the hold or the minute change.
+        val heldUntil = mailHeldUntil()
+        val hold = listOf(all, protectedTime.setting(), heldUntil, minuteNow(), timeZone())
+        val items = viewMemo.keep("Mail shown", hold) { mailShown(all) }
+        _mailNeeds.value = viewMemo.keep("Mail needs you", hold) {
+            os.meka.core.domain.MailNeedsRules.card(items, nowMs(), cal)?.copy(
+                heldLine = os.meka.core.domain.ProtectedMailRules.cardLine(mailHeldCount(all), heldUntil, nowMs(), cal),
+            )
+        }
         // Drafted replies, slice 2: Today's count follows Send, Not needed, Done and Snooze at once on this app.
-        val replies = os.meka.core.domain.MailAutoDraftRules.todayLine(items, nowMs())
+        val replies = viewMemo.keep("Mail replies", listOf(items, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailAutoDraftRules.todayLine(items, nowMs())
+        }
         if (_today.value.mailReplies != replies) _today.value = _today.value.copy(mailReplies = replies)
         mailMomentChanged(items)
-        _mailChases.value = os.meka.core.domain.MailChaseRules.card(
-            items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone), activity.mailFinds(),
-        )
+        val waiting = lists.waitingItems()
+        val shownName = aboutYou.profile().shownName
+        val finds = activity.mailFinds()
+        _mailChases.value = viewMemo.keep("Time to chase", listOf(items, waiting, shownName, finds, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailChaseRules.card(items, waiting, shownName, nowMs(), ZoneCalendar(timeZone), finds)
+        }
         mailFindsChanged()
         // Drafted replies, slice 3: a reply sent or taken back shows in Activity at once.
         activityChanged()
@@ -7225,10 +7253,14 @@ class MekaCore(
         replica.entities(os.meka.core.domain.EntityTypes.OBLIGATION).map { it.fields }
 
     private fun mailFindsChanged() {
-        _mailFinds.value = os.meka.core.domain.MailRenewalRules.card(
-            activity.mailFinds(), radarFields(), nowMs(), ZoneCalendar(timeZone), lists.waitingItems(), followUpWaits(),
-            school.items(),
-        )
+        val finds = activity.mailFinds()
+        val radar = radarFields()
+        val waiting = lists.waitingItems()
+        val waits = followUpWaits()
+        val schoolItems = school.items()
+        _mailFinds.value = viewMemo.keep("From your mail finds", listOf(finds, radar, waiting, waits, schoolItems, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailRenewalRules.card(finds, radar, nowMs(), ZoneCalendar(timeZone), waiting, waits, schoolItems)
+        }
     }
 
     /** Follow-up radar, slice 3: his own waits per person (absent = the default 3 days). */
@@ -8105,9 +8137,14 @@ class MekaCore(
     private fun mailMomentChanged(items: List<os.meka.core.domain.MailItem> = mailShown()) {
         val cal = ZoneCalendar(timeZone)
         val setting = mailMomentSetting()
-        val rows = os.meka.core.domain.MailNeedsRules.allRows(items, nowMs(), cal)
+        // Taps feel instant, slice 6: kept until the emails or the minute change.
+        val rows = viewMemo.keep("Mail rows", listOf(items, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailNeedsRules.allRows(items, nowMs(), cal)
+        }
         mailWaitingRows = rows.size
-        watchDraftNow = os.meka.core.domain.WatchDraftRules.view(items, nowMs())
+        watchDraftNow = viewMemo.keep("Watch draft", listOf(items, minuteNow())) {
+            os.meka.core.domain.WatchDraftRules.view(items, nowMs())
+        }
         _mailMoment.value = if (mailMomentRunning) null else os.meka.core.domain.MailMomentRules.card(setting, rows.size, nowMs(), cal)
         _mailMomentSession.value = if (!mailMomentRunning) null else
             os.meka.core.domain.MailMomentRules.session(rows, mailMomentSkipped, mailMomentStarted, setting, cal.epochDayOf(nowMs()))
@@ -12190,10 +12227,17 @@ class MekaCore(
         }
         _search.value = timed("Search") { runSearch(all) }
         _activity.value = timed("Activity") { activity.view() }
-        _calendar.value = timed("Calendar") { CalendarAgenda.build(
-            all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
-            work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
-        ) }
+        _calendar.value = timed("Calendar") {
+            // Taps feel instant, slice 6: the agenda is kept until a task, an event, a mark, work or the minute changes.
+            val tabEvents = marks.forCalendarTab(allEvents)
+            val agendaWork = hoursOf(workState, todayEpochDay())
+            viewMemo.keep("Calendar agenda", listOf(all, tabEvents, marks.hidden, agendaWork, marks.clubChildren, minuteNow(), timeZone())) {
+                CalendarAgenda.build(
+                    all, tabEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
+                    work = agendaWork, children = marks.clubChildren,
+                )
+            }
+        }
         boardEvents = marks.forCalendarTab(allEvents)
         boardWork = hoursOf(workState, todayEpochDay())
         boardHidden = marks.hidden
