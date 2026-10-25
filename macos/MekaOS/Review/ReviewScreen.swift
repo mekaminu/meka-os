@@ -22,6 +22,15 @@ struct ReviewScreen: View {
                 week(v)
                     .id(v.weekStart)
                     .transition(transition)
+            } else {
+                // Before the core's first review (nightly UI check 2026-10-25: a blank screen had nothing to find):
+                // the heading, where the week will be.
+                Text("Review")
+                    .font(MekaType.greeting).tracking(MekaType.greetingTracking)
+                    .foregroundStyle(palette.textPrimary)
+                    .frame(maxWidth: 720, alignment: .leading)
+                    .padding(.horizontal, MekaSpace.gutterWide)
+                    .padding(.vertical, MekaSpace.xl)
             }
         }
         .animation(MekaMotion.replan(reduced: reduceMotion), value: model.review?.weekStart)
