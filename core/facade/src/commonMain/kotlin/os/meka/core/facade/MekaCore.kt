@@ -1779,7 +1779,14 @@ class MekaCore(
     private var mailMomentUndo: (() -> Unit)? = null
 
     init {
-        replica.addListener { refresh(); requestSync() }
+        replica.addListener {
+            // Taps feel instant, slice 4: another device's changes pulled during a sync round are shown with one
+            // refresh after the pull (SyncRefreshRules), not one whole-app rebuild per page; this device's own
+            // commits (a tap made while the round waits on the network) still refresh at once.
+            if (os.meka.core.domain.SyncRefreshRules.putOff(syncRoundRunning, replica.notifyingRemote)) remoteRefreshOwed = true
+            else refresh()
+            requestSync()
+        }
         refresh()
     }
 
@@ -10347,6 +10354,7 @@ class MekaCore(
     private fun vaultLocal(key: String): String? = runCatching { localStore.transaction { localStore.localValue(key) } }.getOrNull()
 
     private fun setVaultLocal(key: String, value: String?) {
+        vaultLocalTouched = true
         runCatching { localStore.transaction { localStore.setLocalValue(key, value) } }
     }
 
@@ -11702,8 +11710,11 @@ class MekaCore(
     private suspend fun runSyncOnce(): Long? {
         val client = syncClient ?: return null
         _sync.value = SyncStatus.Syncing
+        syncRoundRunning = true
+        vaultLocalTouched = false
         return try {
             val report = client.syncOnce()
+            showPulled()
             failures = 0
             lastSyncedMs = nowMs()
             // About you, release 1: the Fold copies what MEKA held into the profile once, after a clean round.
@@ -11716,7 +11727,7 @@ class MekaCore(
             if (seedsAboutYou && report.rejected.isEmpty()) releaseOneRoute?.let { aboutYou.seedRouteOnce(it) }
             // The Obi plan, slice 2: a woman's voice chosen for Ada goes back to Obi's (a man's) once, on every device,
             // and the change goes up at once so the other devices don't run it from an older copy.
-            if (report.rejected.isEmpty() && runCatching { mekaVoice.obiVoiceOnce() }.getOrDefault(false)) runCatchingNotCancel { client.syncOnce() }
+            if (report.rejected.isEmpty() && runCatching { mekaVoice.obiVoiceOnce() }.getOrDefault(false)) { runCatchingNotCancel { client.syncOnce() }; showPulled() }
             // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
             if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
             // The Vault, slice 2a: this phone's or Mac's key is published, the household's made or opened, and what
@@ -11724,14 +11735,16 @@ class MekaCore(
             if (report.rejected.isEmpty()) {
                 val waiting = replica.pendingPushCount()
                 runCatching { vaultAfterSync() }
-                if (replica.pendingPushCount() > waiting) runCatchingNotCancel { client.syncOnce() }
+                if (replica.pendingPushCount() > waiting) { runCatchingNotCancel { client.syncOnce() }; showPulled() }
                 // Slice 2b: copies added offline go up, removed ones come off the server, and copies the other
                 // devices added are fetched (still sealed) so they open offline here too.
                 runCatchingNotCancel { vaultFilesAfterSync() }
             }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
-            refresh()
+            // Taps feel instant, slice 4: the round used to end with one more whole-app rebuild even when it pulled
+            // nothing (every tap's own push round did); now only what the vault steps kept on this device needs one.
+            if (os.meka.core.domain.SyncRefreshRules.endOfRound(vaultLocalTouched)) refresh()
             catchUpBlocks()
             null
         } catch (e: CancellationException) {
@@ -11745,7 +11758,24 @@ class MekaCore(
             val wait = Backoff.delayMs(failures) { bound -> jitter.nextLong(bound) }
             _sync.value = SyncStatus.Offline(replica.pendingPushCount(), nowMs() + wait)
             wait
+        } finally {
+            // A round that failed half way still shows the pages it pulled.
+            syncRoundRunning = false
+            showPulled()
         }
+    }
+
+    /** While a sync round runs, other devices' changes wait for [showPulled] instead of refreshing per page. Core only. */
+    private var syncRoundRunning = false
+    private var remoteRefreshOwed = false
+    /** Set when this device's own Vault values change (a key held, a copy kept), which the views read. */
+    private var vaultLocalTouched = false
+
+    /** One refresh for everything pulled since the last one (none when nothing came). Core only. */
+    private fun showPulled() {
+        if (!remoteRefreshOwed) return
+        remoteRefreshOwed = false
+        refresh()
     }
 
     /**

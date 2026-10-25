@@ -174,9 +174,19 @@ class Replica(
                 }
             }.also { store.setClockHighWater(clock.latest) }
         }
-        if (changed.isNotEmpty()) notify(changed)
+        if (changed.isNotEmpty()) {
+            notifyingRemote = true
+            try { notify(changed) } finally { notifyingRemote = false }
+        }
         return results
     }
+
+    /**
+     * True only while listeners are being told about other devices' changes ([applyRemoteBatch]), never for this
+     * device's own commits (taps feel instant, 2026-10-25: a listener can put off a sync's page-by-page refreshes).
+     */
+    var notifyingRemote: Boolean = false
+        private set
 
     fun entity(entityType: String, entityId: String): EntitySnapshot? {
         val ref = EntityRef(entityType, entityId)
