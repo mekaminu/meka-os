@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Money</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.bar{transform-origin:left;animation:grow .8s cubic-bezier(.2,.8,.2,1) both}
+.col{transition:height .45s cubic-bezier(.2,.8,.2,1)}
+.seg{transition:stroke-dasharray .7s cubic-bezier(.2,.8,.2,1),stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1),opacity .3s}
+@keyframes sheet{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheet{animation:sheet .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+.orb{animation:pulse 2.4s ease-in-out infinite}
+input[type=range]{width:100%;accent-color:#c9b37e;height:28px}
+button{cursor:pointer}
+@media (prefers-reduced-motion:reduce){.in,.bar,.sheet,.orb{animation:none}.seg,.col{transition:none}}
+</style>
+</helmet>
+<div style="{{L.root}}">
+<sc-if value="{{L.side}}" hint-placeholder-val="{{false}}">
+<nav aria-label="Navilife" style="{{L.sideStyle}}">
+<div style="font-size:15px;font-weight:700;color:#e8cf93;padding:4px 10px 14px">Navilife</div>
+<sc-for list="{{appNav}}" as="n" hint-placeholder-count="5"><a href="#" style="{{n.style}}">{{n.name}}</a></sc-for>
+<sc-if value="{{L.mac}}" hint-placeholder-val="{{false}}">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f897f;padding:18px 10px 6px">Money</div>
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="5"><button type="button" onClick="{{t.pick}}" style="{{t.side}}">{{t.name}}</button></sc-for>
+</sc-if>
+</nav>
+</sc-if>
+<div style="{{L.main}}">
+
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="font-size:28px;font-weight:700">Money</div>
+<button type="button" aria-label="Refresh" style="border:0;background:#1a1a1d;color:#a8a29a;border-radius:999px;padding:8px 12px;font:500 12.5px DM Sans,sans-serif;display:flex;gap:6px;align-items:center">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"></path><path d="M21 3v5h-5"></path></svg>Updated 08:14</button>
+</div>
+
+<sc-if value="{{L.pills}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="5"><button type="button" onClick="{{t.pick}}" style="{{t.style}}">{{t.name}}</button></sc-for>
+</div>
+</sc-if>
+
+<button type="button" onClick="{{openAsk}}" style="max-width:640px;border:1px solid #2a2721;background:#0f0e0c;color:#a8a29a;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;text-align:left;font:500 14px DM Sans,sans-serif">
+<span class="orb" style="width:22px;height:22px;border-radius:11px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0"></span>
+<span style="flex:1">Ask Obi: “Can I afford…”, “What if I save…”</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+</button>
+
+<sc-if value="{{isSpend}}" hint-placeholder-val="{{true}}">
+<div class="in" style="{{L.body}}">
+<div style="{{L.col}}">
+<div style="display:flex;justify-content:center;align-items:center;gap:8px">
+<button type="button" onClick="{{prevMonth}}" aria-label="Previous month" style="border:0;background:transparent;color:#a8a29a;width:44px;height:44px;font-size:20px">‹</button>
+<div style="font-size:15px;font-weight:600;min-width:120px;text-align:center">{{m.name}}</div>
+<button type="button" onClick="{{nextMonth}}" aria-label="Next month" style="border:0;background:transparent;color:#a8a29a;width:44px;height:44px;font-size:20px">›</button>
+</div>
+<div style="position:relative;width:236px;height:236px;align-self:center">
+<svg width="236" height="236" viewBox="0 0 236 236" aria-hidden="true" style="position:absolute;inset:0;transform:rotate(-90deg)">
+<circle cx="118" cy="118" r="96" fill="none" stroke="#161618" stroke-width="18"></circle>
+<sc-for list="{{segs}}" as="g" hint-placeholder-count="6"><circle class="seg" cx="118" cy="118" r="96" fill="none" stroke="{{g.color}}" stroke-width="18" stroke-dasharray="{{g.dash}}" stroke-dashoffset="{{g.off}}" style="{{g.op}}"></circle></sc-for>
+</svg>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+<div style="font-size:12px;color:#a8a29a">{{centre.top}}</div>
+<div style="font-size:34px;font-weight:700;letter-spacing:-.01em">{{centre.big}}</div>
+<div style="font-size:12.5px;color:{{centre.subColor}}">{{centre.sub}}</div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#121214;border-radius:14px;padding:10px 12px"><div style="font-size:11.5px;color:#a8a29a">Came in</div><div style="font-size:16px;font-weight:600;color:#c9b37e">{{m.inn}}</div></div>
+<div style="background:#121214;border-radius:14px;padding:10px 12px"><div style="font-size:11.5px;color:#a8a29a">Bills to come</div><div style="font-size:16px;font-weight:600">{{m.bills}}</div></div>
+<div style="background:#121214;border-radius:14px;padding:10px 12px"><div style="font-size:11.5px;color:#a8a29a">Left</div><div style="font-size:16px;font-weight:600">{{m.left}}</div></div>
+</div>
+</div>
+<div style="{{L.col}}">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;gap:6px"><sc-for list="{{views}}" as="v" hint-placeholder-count="2"><button type="button" onClick="{{v.pick}}" style="{{v.style}}">{{v.name}}</button></sc-for></div>
+<button type="button" onClick="{{toggleCats}}" style="border:0;background:transparent;color:#c9b37e;font:500 13px DM Sans,sans-serif;padding:8px 0">{{catsLabel}}</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<sc-for list="{{rows}}" as="c" hint-placeholder-count="5">
+<button type="button" onClick="{{c.focus}}" style="border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:12px;padding:8px 0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<span style="{{c.chip}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{c.icon}}"></path></svg></span>
+<span style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+<span style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-size:15px">{{c.name}} <span style="font-size:12px;color:#8f897f">{{c.pct}}</span></span><span style="font-size:15px;font-weight:600">{{c.amt}}</span></span>
+<span style="height:4px;border-radius:2px;background:#1c1c1f;display:block;overflow:hidden"><span class="bar" style="{{c.bar}}"></span></span>
+<span style="font-size:12px;color:{{c.noteColor}}">{{c.note}}</span>
+</span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Latest payments</div><button type="button" style="border:0;background:transparent;color:#c9b37e;font:500 13px DM Sans,sans-serif;padding:8px 0">See all ›</button></div>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="2">
+<div style="display:flex;justify-content:space-between;font-size:12.5px;color:#8f897f;padding:10px 0 2px"><span>{{d.day}}</span><span>{{d.total}}</span></div>
+<sc-for list="{{d.rows}}" as="p" hint-placeholder-count="3">
+<button type="button" onClick="{{p.open}}" style="border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:12px;padding:8px 0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<span style="{{p.chip}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{p.icon}}"></path></svg></span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px">{{p.name}}</span><span style="font-size:12.5px;color:#8f897f">{{p.sub}}</span></span>
+<span style="font-size:15px;font-weight:600;color:{{p.color}}">{{p.amt}}</span>
+</button>
+</sc-for>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isBills}}" hint-placeholder-val="{{false}}">
+<div class="in" style="{{L.body}}">
+<div style="{{L.col}}">
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;color:#a8a29a">Still to go out before payday · 31 Oct</div>
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:32px;font-weight:700">£410</span><span style="font-size:13px;color:#a8a29a">3 bills</span></div>
+<div style="height:6px;border-radius:3px;background:#1c1c1f;overflow:hidden"><div class="bar" style="width:62%;height:100%;background:#c9b37e"></div></div>
+<div style="font-size:12px;color:#8f897f">£672 of £1,082 this month already paid</div>
+</div>
+<div style="font-size:12.5px;color:#8f897f;line-height:1.5">Found from payments that repeat each month. Tap one to change its date, stop tracking it, or be reminded the day before.</div>
+</div>
+<div style="{{L.col}}">
+<sc-for list="{{bills}}" as="b" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:12px;min-height:52px">
+<span style="width:44px;text-align:center;display:flex;flex-direction:column"><span style="font-size:11px;color:#8f897f">{{b.mon}}</span><span style="font-size:18px;font-weight:700">{{b.d}}</span></span>
+<span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px">{{b.name}}</span><span style="font-size:12.5px;color:{{b.subColor}}">{{b.sub}}</span></span>
+<span style="font-size:15px;font-weight:600;color:{{b.amtColor}}">{{b.amt}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isPlan}}" hint-placeholder-val="{{false}}">
+<div class="in" style="{{L.body}}">
+<div style="{{L.col}}">
+
+<div style="background:#17140f;border:1px solid #3a2e1c;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#e8cf93">Obi’s money check · Sun 25 Oct</div>
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:30px;font-weight:700">{{saveTotal}}</span><span style="font-size:13px;color:#a8a29a">a year, from {{saveCount}}</span></div>
+<div style="font-size:13.5px;color:#d8d2c6;line-height:1.45">Written by Obi from your last 6 months of payments. Each idea shows the payments behind it.</div>
+</div>
+<sc-for list="{{ideas}}" as="i" hint-placeholder-count="3">
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><span style="font-size:16px;font-weight:600;line-height:1.3">{{i.title}}</span><span style="font-size:15px;font-weight:700;color:#c9b37e;white-space:nowrap">{{i.save}}</span></div>
+<div style="font-size:13.5px;color:#a8a29a;line-height:1.45">{{i.why}}</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button type="button" style="border:0;background:#2a2721;color:#e8cf93;border-radius:999px;padding:10px 14px;font:600 13px DM Sans,sans-serif">{{i.act}}</button>
+<button type="button" onClick="{{i.dismiss}}" style="border:0;background:#1a1a1d;color:#ededed;border-radius:999px;padding:10px 14px;font:500 13px DM Sans,sans-serif">Remind me</button>
+<button type="button" onClick="{{i.dismiss}}" style="border:0;background:transparent;color:#8f897f;padding:10px 8px;font:500 13px DM Sans,sans-serif">Not for me</button>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="{{L.col}}">
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a;margin-top:6px">What if I save…</div>
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px">Each month</span><span style="font-size:22px;font-weight:700">{{sv.amtText}}</span></div>
+<input type="range" min="50" max="1000" step="25" value="{{sv.amt}}" onChange="{{sv.setAmt}}" aria-label="Amount to save each month">
+<div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{sv.months}}" as="k" hint-placeholder-count="4"><button type="button" onClick="{{k.pick}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{sv.rates}}" as="k" hint-placeholder-count="2"><button type="button" onClick="{{k.pick}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="display:flex;align-items:flex-end;gap:3px;height:96px;padding-top:6px">
+<sc-for list="{{sv.cols}}" as="c" hint-placeholder-count="6"><div class="col" style="{{c.style}}" title="{{c.label}}"></div></sc-for>
+</div>
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:30px;font-weight:700;color:#c9b37e">{{sv.total}}</span><span style="font-size:13.5px;color:#a8a29a">by {{sv.end}}</span></div>
+<div style="font-size:13px;color:#8f897f">{{sv.split}}</div>
+<div style="display:flex;gap:10px;align-items:flex-start;background:#17140f;border-radius:12px;padding:12px"><span class="orb" style="width:18px;height:18px;border-radius:9px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0;margin-top:2px"></span><span style="font-size:13.5px;line-height:1.45;color:#d8d2c6">{{sv.obi}}</span></div>
+<div style="display:flex;gap:8px"><button type="button" style="border:0;background:#c9b37e;color:#111;border-radius:999px;padding:11px 16px;font:600 13.5px DM Sans,sans-serif">Make it a goal</button><button type="button" style="border:0;background:#1a1a1d;color:#ededed;border-radius:999px;padding:11px 16px;font:500 13.5px DM Sans,sans-serif">Remind me on payday</button></div>
+</div>
+
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a;margin-top:6px">Clear my cards</div>
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{debt.cards}}" as="cd" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px">
+<span style="width:40px;height:40px;border-radius:12px;background:#1a1a1d;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#e0a97a">CC</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px">{{cd.name}}</span><span style="font-size:12.5px;color:#8f897f">{{cd.apr}} · clear by <span style="color:#ededed">{{cd.clear}}</span></span></span>
+<span style="font-size:15px;font-weight:600">{{cd.bal}}</span>
+</div>
+</sc-for>
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px"><span style="font-size:15px">Pay each month, both cards</span><span style="font-size:22px;font-weight:700">{{debt.payText}}</span></div>
+<input type="range" min="200" max="1500" step="25" value="{{debt.pay}}" onChange="{{debt.setPay}}" aria-label="Total to pay off the cards each month">
+<div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{debt.strats}}" as="k" hint-placeholder-count="2"><button type="button" onClick="{{k.pick}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div style="background:#1a1a1d;border-radius:12px;padding:10px 12px"><div style="font-size:11.5px;color:#a8a29a">Debt-free</div><div style="font-size:17px;font-weight:700;color:#c9b37e">{{debt.free}}</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px 12px"><div style="font-size:11.5px;color:#a8a29a">Interest you’ll pay</div><div style="font-size:17px;font-weight:700">{{debt.interest}}</div></div>
+</div>
+<div style="font-size:13px;color:#e0a97a">{{debt.vsMin}}</div>
+<div style="display:flex;gap:10px;align-items:flex-start;background:#17140f;border-radius:12px;padding:12px"><span class="orb" style="width:18px;height:18px;border-radius:9px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0;margin-top:2px"></span><span style="font-size:13.5px;line-height:1.45;color:#d8d2c6">{{debt.obi}}</span></div>
+<div style="display:flex;gap:8px"><button type="button" style="border:0;background:#c9b37e;color:#111;border-radius:999px;padding:11px 16px;font:600 13.5px DM Sans,sans-serif">Use this plan</button><button type="button" style="border:0;background:#1a1a1d;color:#ededed;border-radius:999px;padding:11px 16px;font:500 13.5px DM Sans,sans-serif">Track it monthly</button></div>
+<div style="font-size:11.5px;color:#8f897f;line-height:1.45">Balances from your bank feed; rates from your statements (tap a card to correct one). Sums, not advice: Navilife never pays anything.</div>
+</div>
+
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a;margin-top:6px">Goals</div>
+<sc-for list="{{goals}}" as="g" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between"><span style="font-size:15px">{{g.name}}</span><span style="font-size:13.5px;color:#a8a29a">{{g.amt}}</span></div>
+<div style="height:6px;border-radius:3px;background:#1c1c1f;overflow:hidden"><div class="bar" style="{{g.bar}}"></div></div>
+<div style="font-size:12px;color:#8f897f">{{g.note}}</div>
+</div>
+</sc-for>
+
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a;margin-top:6px">What Obi watches for</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{watch}}" as="w" hint-placeholder-count="8"><span style="background:#121214;border-radius:999px;padding:8px 12px;font-size:12.5px;color:#d8d2c6">{{w}}</span></sc-for>
+</div>
+<div style="font-size:12px;color:#8f897f;line-height:1.5">Obi tells you on a card, not out loud, except a bill that would bounce or a payment you don’t recognise. Ideas come from your own payments: not financial advice.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isTrade}}" hint-placeholder-val="{{false}}">
+<div class="in" style="{{L.body}}">
+<div style="{{L.col}}">
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12.5px;color:#a8a29a">Hyperliquid · Main 0x7a…c3e1</span><span style="font-size:11.5px;color:#8fbf8f;background:#16201a;border-radius:999px;padding:4px 8px">Read-only</span></div>
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:34px;font-weight:700">{{tr.equity}}</span><span style="font-size:13px;color:#a8a29a">≈ {{tr.gbp}}</span></div>
+<div style="font-size:14px;color:{{tr.pnlColor}}">{{tr.pnl}}</div>
+<svg width="100%" height="{{L.chartH}}" viewBox="0 0 354 90" preserveAspectRatio="none" role="img" aria-label="Account value over the chosen range" style="display:block">
+<polyline points="{{tr.area}}" fill="#c9b37e" fill-opacity=".08" stroke="none"></polyline>
+<polyline points="{{tr.line}}" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>
+</svg>
+<div style="display:flex;gap:6px"><sc-for list="{{tr.ranges}}" as="k" hint-placeholder-count="4"><button type="button" onClick="{{k.pick}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="font-size:11.5px;color:#8f897f">Unified account: the USDC in your spot wallet counts toward this. Deposits and withdrawals aren’t profit.</div>
+</div>
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">October so far</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<sc-for list="{{tr.stats}}" as="s" hint-placeholder-count="4"><div style="background:#121214;border-radius:14px;padding:10px 12px"><div style="font-size:11.5px;color:#a8a29a">{{s.a}}</div><div style="font-size:16px;font-weight:600;color:{{s.color}}">{{s.b}}</div></div></sc-for>
+</div>
+<div style="display:flex;gap:10px;align-items:flex-start;background:#17140f;border-radius:12px;padding:12px"><span class="orb" style="width:18px;height:18px;border-radius:9px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0;margin-top:2px"></span><span style="font-size:13.5px;line-height:1.45;color:#d8d2c6">Trading is 9% of everything you hold. Your BTC long is 5x: a 17% drop reaches its liquidation price. Funding has cost $38 this month.</span></div>
+</div>
+<div style="{{L.col}}">
+
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Open positions</div>
+<sc-for list="{{tr.pos}}" as="p" hint-placeholder-count="2">
+<div style="background:#121214;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:16px;font-weight:600">{{p.coin}} <span style="{{p.sideStyle}}">{{p.side}}</span></span><span style="font-size:16px;font-weight:700;color:{{p.color}}">{{p.upnl}}</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;font-size:12px;color:#8f897f">
+<span>Size<br><span style="color:#ededed;font-size:13.5px">{{p.size}}</span></span>
+<span>Entry · mark<br><span style="color:#ededed;font-size:13.5px">{{p.px}}</span></span>
+<span>Liquidation<br><span style="color:#e0a97a;font-size:13.5px">{{p.liq}}</span></span>
+</div>
+</div>
+</sc-for>
+
+<div style="background:#121214;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:600">Kestrel</span><span style="font-size:12px;color:#e8cf93">1 trade waiting for your OK</span></div>
+<div style="font-size:13px;color:#a8a29a;line-height:1.45">Kestrel wants to go long ETH, 0.8 at 3,420, stop 3,330. You approve it in Kestrel; Navilife only shows what it’s doing.</div>
+<div style="display:flex;gap:8px;margin-top:4px"><button type="button" style="border:0;background:#2a2721;color:#e8cf93;border-radius:999px;padding:10px 14px;font:600 13px DM Sans,sans-serif">Open in Kestrel</button><span style="font-size:12.5px;color:#8f897f;align-self:center">Today: 3 trades · +$42</span></div>
+</div>
+<div style="font-size:12px;color:#8f897f;line-height:1.5">From Hyperliquid’s public data with your public address only: no keys, nothing here can trade. US dollars. Not trading advice.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isAcc}}" hint-placeholder-val="{{false}}">
+<div class="in" style="{{L.body}}">
+<div style="{{L.col}}">
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:4px">
+<div style="font-size:12px;color:#a8a29a">Across 6 accounts and trading</div>
+<div style="font-size:32px;font-weight:700">£5,750</div>
+<div style="font-size:12.5px;color:#8f897f">Cash £5,924 · trading £6,512 · owed on cards £6,686</div>
+</div>
+<sc-for list="{{accts}}" as="a" hint-placeholder-count="6">
+<div style="display:flex;align-items:center;gap:12px;min-height:52px">
+<span style="width:40px;height:40px;border-radius:12px;background:#1a1a1d;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#c9b37e">{{a.ini}}</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px">{{a.name}}</span><span style="font-size:12.5px;color:#8f897f">{{a.sub}}</span></span>
+<span style="font-size:15px;font-weight:600;color:{{a.color}}">{{a.bal}}</span>
+</div>
+</sc-for>
+</div>
+<div style="{{L.col}}">
+<div style="display:flex;flex-direction:column;border-top:1px solid #1c1c1f;margin-top:6px">
+<sc-for list="{{more}}" as="x" hint-placeholder-count="3">
+<button type="button" style="border:0;border-bottom:1px solid #1c1c1f;background:transparent;color:#ededed;display:flex;align-items:center;gap:12px;padding:14px 0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{x.a}}</span><span style="font-size:12.5px;color:#8f897f">{{x.b}}</span></span><span style="color:#a8a29a;font-size:18px">›</span>
+</button>
+</sc-for>
+</div>
+<div style="font-size:12px;color:#8f897f;line-height:1.5">Through Lunch Flow, read-only: Navilife never moves money or pays anything. Not financial advice.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{askOpen}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-start;justify-content:center;padding-top:120px">
+<div class="sheet" style="width:100%;max-width:560px;background:#151517;border-radius:22px;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;margin:0 8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;gap:8px;align-items:center;font-size:17px;font-weight:700"><span class="orb" style="width:22px;height:22px;border-radius:11px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438)"></span>Obi · money</span><button type="button" onClick="{{closeAsk}}" aria-label="Close" style="border:0;background:#1a1a1d;color:#a8a29a;width:36px;height:36px;border-radius:18px;font-size:16px">✕</button></div>
+<sc-for list="{{chat}}" as="c" hint-placeholder-count="4">
+<div style="{{c.style}}">{{c.text}}</div>
+<sc-if value="{{c.acts}}" hint-placeholder-val="{{false}}"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-6px"><sc-for list="{{c.acts}}" as="b" hint-placeholder-count="2"><button type="button" style="border:0;background:#2a2721;color:#e8cf93;border-radius:999px;padding:9px 13px;font:600 12.5px DM Sans,sans-serif">{{b}}</button></sc-for></div></sc-if>
+</sc-for>
+<div style="font-size:12px;color:#a8a29a">Try</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{askChips}}" as="q" hint-placeholder-count="4"><button type="button" onClick="{{q.pick}}" style="border:0;background:#1a1a1d;color:#ededed;border-radius:999px;padding:9px 12px;font:500 12.5px DM Sans,sans-serif;text-align:left">{{q.q}}</button></sc-for></div>
+<div style="display:flex;gap:8px;align-items:center;background:#0f0f11;border-radius:999px;padding:6px 6px 6px 14px"><span style="flex:1;font-size:14px;color:#8f897f">Ask about your money…</span><span style="width:36px;height:36px;border-radius:18px;background:#c9b37e;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></span></div>
+<div style="font-size:11.5px;color:#8f897f;line-height:1.45">Obi sees category totals, shop names and these plans, never account numbers. Sums and suggestions, not financial advice.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{sheetOpen}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding-top:200px">
+<div class="sheet" style="width:100%;max-width:520px;background:#151517;border-radius:22px;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;margin:0 8px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:20px;font-weight:700">{{sel.name}}</span><span style="font-size:20px;font-weight:700">{{sel.amt}}</span></div>
+<div style="font-size:13px;color:#8f897f">{{sel.sub}}</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{catChips}}" as="k" hint-placeholder-count="6"><button type="button" onClick="{{k.pick}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<button type="button" style="border:0;background:#1a1a1d;color:#ededed;border-radius:12px;padding:12px 6px;font:500 13.5px DM Sans,sans-serif">Need</button>
+<button type="button" style="border:0;background:#1a1a1d;color:#ededed;border-radius:12px;padding:12px 6px;font:500 13.5px DM Sans,sans-serif">Shared</button>
+<button type="button" style="border:0;background:#1a1a1d;color:#ededed;border-radius:12px;padding:12px 6px;font:500 13.5px DM Sans,sans-serif">Side hustle</button>
+</div>
+<button type="button" onClick="{{closeSheet}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;padding:14px;font:600 15px DM Sans,sans-serif">Done</button>
+</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"layout":{"editor":"enum","options":["phone","fold","mac"],"default":"phone"},"tab":{"editor":"enum","options":["Spending","Bills","Plan","Trading","Accounts"],"default":"Plan"},"$preview":{"width":390,"height":1900}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={tab:(p&&p.tab)||'Plan',mi:1,view:'Categories',all:false,focus:null,sel:null,cat:{},gone:{},amt:300,months:6,rate:0.04,pay:450,strat:'rate',range:'1M',ask:false,asked:null};}
+renderVals(){
+var s=this.state,self=this;
+var fmt=function(n){return '£'+Math.round(n).toLocaleString('en-GB');};
+var usd=function(n){return (n<0?'−':'')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US');};
+var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var monthName=function(k){var m=(10+k)%12,y=2026+Math.floor((10+k)/12);return MON[m]+' '+y;};
+var chip=function(on){return 'border:0;border-radius:999px;padding:8px 13px;font:500 13px DM Sans,sans-serif;white-space:nowrap;'+(on?'background:#c9b37e;color:#111':'background:#1a1a1d;color:#ededed');};
+var tabStyle=function(on){return 'border:0;border-radius:999px;padding:10px 15px;font:600 13.5px DM Sans,sans-serif;white-space:nowrap;'+(on?'background:#2a2721;color:#e8cf93':'background:#121214;color:#a8a29a');};
+
+var I={cart:'M3 4h2l2.4 11h11l2-8H6.2M9 20a1 1 0 1 0 0-.1M18 20a1 1 0 1 0 0-.1',bill:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',bag:'M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2',train:'M7 3h10a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2zM5 10h14M8 21l2-4M16 21l-2-4',cup:'M5 8h11v6a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10h2a2 2 0 0 1 0 4h-2M8 3v2M12 3v2',fork:'M7 3v8a2 2 0 0 0 4 0V3M9 11v10M16 3c-2 2-2 6 0 8v10',repeat:'M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4',dots:'M5 12h.01M12 12h.01M19 12h.01',inc:'M12 19V5M5 12l7-7 7 7'};
+var C=[['Groceries',402,'#c9b37e',I.cart,'£20 under usual','#8fbf8f','Need'],['Bills',388,'#8a9bd1',I.bill,'as usual','#8f897f','Need'],['Shopping',252,'#d18a6b',I.bag,'£79 under usual','#8fbf8f','Want'],['Transport',160,'#7fb3a8',I.train,'£110 over usual','#e0a97a','Need'],['Coffee',115,'#b5a48a',I.cup,'£38 over usual · 15 coffees','#e0a97a','Want'],['Eating out',68,'#b38fd1',I.fork,'as usual','#8f897f','Want'],['Subscriptions',31,'#6b8fd1',I.repeat,'as usual','#8f897f','Want'],['Other',424,'#55524d',I.dots,'14 without a category','#8f897f','Want']];
+var months=[{name:'September 2026',inn:'£3,640',bills:'£0',left:'£728',scale:1.25,top:'Spent in September',sub:'£140 under usual'},{name:'October 2026',inn:'£3,200',bills:'£410',left:'£950',scale:1,top:'Spent so far',sub:'£220 under usual by the 24th'}];
+var m=months[s.mi];
+var data;
+if(s.view==='Categories'){data=C.map(function(c){return {name:c[0],v:Math.round(c[1]*m.scale),color:c[2],icon:c[3],note:c[4],noteColor:c[5]};});}
+else{var need=0,want=0;C.forEach(function(c){if(c[6]==='Need')need+=c[1];else want+=c[1];});
+data=[{name:'Needs',v:Math.round(need*m.scale),color:'#c9b37e',icon:I.cart,note:'Groceries, bills, transport',noteColor:'#8f897f'},{name:'Wants',v:Math.round(want*m.scale),color:'#d18a6b',icon:I.bag,note:'Shopping, coffee, eating out and the rest',noteColor:'#8f897f'}];}
+var total=data.reduce(function(a,c){return a+c.v;},0);
+var circ=2*Math.PI*96,pos=0;
+var segs=data.map(function(c){var len=c.v/total*circ;var g={color:c.color,dash:Math.max(len-3,1)+' '+circ,off:String(-pos),op:(s.focus&&s.focus!==c.name)?'opacity:.25':'opacity:1'};pos+=len;return g;});
+var f=s.focus?data.filter(function(c){return c.name===s.focus;})[0]:null;
+var centre=f?{top:f.name,big:fmt(f.v),sub:Math.round(f.v/total*100)+'% of spending',subColor:'#a8a29a'}:{top:m.top,big:fmt(total),sub:m.sub,subColor:'#8fbf8f'};
+var shown=(s.all||s.view!=='Categories')?data:data.slice(0,5);
+var rows=shown.map(function(c){return {name:c.name,amt:fmt(c.v),pct:Math.round(c.v/total*100)+'%',note:c.note,noteColor:c.noteColor,icon:c.icon,
+chip:'width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:'+c.color+'22;color:'+c.color,
+bar:'display:block;height:100%;border-radius:2px;width:'+Math.max(2,Math.round(c.v/data[0].v*100))+'%;background:'+c.color,
+focus:function(){self.setState({focus:s.focus===c.name?null:c.name});}};});
+var ic={Groceries:[I.cart,'#c9b37e'],Coffee:[I.cup,'#b5a48a'],Income:[I.inc,'#c9b37e'],Other:[I.dots,'#8f897f'],Transport:[I.train,'#7fb3a8'],Bills:[I.bill,'#8a9bd1']};
+var pays=[['Today','Tesco','Groceries','Current ••80',-42.5],['Today','Starbucks','Coffee','Current ••80',-5.7],['Today','Salary','Income','Current ••80',3200],['Fri 23 Oct','Creation.co.uk','Other','Current ••80 · new payee',-838.25],['Fri 23 Oct','Thameslink','Transport','Card ••01',-27.4]];
+var days=[];pays.forEach(function(p){var d=days.length&&days[days.length-1].day===p[0]?days[days.length-1]:null;if(!d){d={day:p[0],rows:[],sum:0};days.push(d);}
+var cat=s.cat[p[1]]||p[2];var k=ic[cat]||ic.Other;var amt=(p[4]<0?'−':'+')+'£'+Math.abs(p[4]).toFixed(2);if(p[4]<0)d.sum+=-p[4];
+d.rows.push({name:p[1],sub:cat+' · '+p[3],amt:amt,color:p[4]<0?'#ededed':'#c9b37e',icon:k[0],chip:'width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:'+k[1]+'22;color:'+k[1],
+open:function(){self.setState({sel:{name:p[1],amt:amt,cat:cat,sub:cat+' · '+p[3]}});}});});
+days.forEach(function(d){d.total=d.sum?'−£'+d.sum.toFixed(2):'';});
+
+// Plan: savings what-if
+var bal=0,cols=[],monthsN=s.months,r=s.rate;
+for(var k=1;k<=monthsN;k++){bal=bal*(1+r/12)+s.amt;cols.push(bal);}
+var paidIn=s.amt*monthsN,interest=bal-paidIn;
+var maxB=cols[cols.length-1];
+var svCols=cols.map(function(b,i){return {label:monthName(i)+': '+fmt(b),style:'flex:1;border-radius:4px 4px 0 0;background:'+(i===cols.length-1?'#c9b37e':'#3a3428')+';height:'+Math.max(4,Math.round(b/maxB*90))+'px'};});
+var spare=950-s.amt;
+var svObi=spare>=400?'£'+s.amt+' a month leaves about '+fmt(spare)+' spare in an average month. December runs about £400 higher, so that month is tighter but fine.':(spare>=150?'Doable, but it leaves only '+fmt(spare)+' in an average month, and December runs about £400 higher. Consider £'+Math.max(50,s.amt-150)+' in December only.':'That’s more than you usually have left ('+fmt(950)+'). You’d be dipping into savings or the cards most months.');
+var sv={amt:s.amt,amtText:'£'+s.amt,setAmt:function(e){self.setState({amt:Number(e.target.value)});},
+months:[3,6,12,24].map(function(n){return {name:n+' months',style:chip(s.months===n),pick:function(){self.setState({months:n});}};}),
+rates:[[0,'No interest'],[0.04,'At 4.0% (your savings ••12)']].map(function(x){return {name:x[1],style:chip(s.rate===x[0]),pick:function(){self.setState({rate:x[0]});}};}),
+cols:svCols,total:fmt(bal),end:monthName(monthsN-1),
+split:'You put in '+fmt(paidIn)+(interest>0.5?' · interest '+fmt(interest):'')+' · left each month after usual spending: '+fmt(spare),obi:svObi};
+
+// Plan: clear my cards
+var CARDS=[{name:'Card ••09',bal:4200,apr:0.249},{name:'Card ••01',bal:1800,apr:0.229}];
+function minPay(b){return Math.min(b,Math.max(25,b*0.025));}
+function sim(pay,strat,minOnly){var cs=CARDS.map(function(c){return {name:c.name,bal:c.bal,apr:c.apr,done:null};});var tot=0;
+for(var mo=1;mo<=600;mo++){var left=pay;cs.forEach(function(c){if(c.bal>0){var it=c.bal*c.apr/12;c.bal+=it;tot+=it;}});
+var live=cs.filter(function(c){return c.bal>0.005;});if(!live.length)break;
+live.forEach(function(c){var mp=minPay(c.bal);c.bal-=mp;left-=mp;});
+if(!minOnly){var order=live.slice().sort(function(a,b){return strat==='rate'?b.apr-a.apr:a.bal-b.bal;});
+order.forEach(function(c){if(left>0&&c.bal>0){var x=Math.min(left,c.bal);c.bal-=x;left-=x;}});}
+cs.forEach(function(c){if(c.bal<=0.005&&c.done===null){c.bal=0;c.done=mo;}});
+if(cs.every(function(c){return c.done!==null;}))break;}
+return {cards:cs,interest:tot,months:Math.max.apply(null,cs.map(function(c){return c.done===null?600:c.done;}))};}
+var plan=sim(s.pay,s.strat,false);
+var mins=sim(0,s.strat,true);
+var other=sim(s.pay,s.strat==='rate'?'small':'rate',false);
+var diffI=other.interest-plan.interest;
+var debt={pay:s.pay,payText:'£'+s.pay,setPay:function(e){self.setState({pay:Number(e.target.value)});},
+cards:plan.cards.map(function(c,i){return {name:c.name,apr:(CARDS[i].apr*100).toFixed(1)+'% APR',bal:fmt(CARDS[i].bal),clear:c.done?monthName(c.done-1):'never'};}),
+strats:[['rate','Highest interest first'],['small','Smallest balance first']].map(function(x){return {name:x[1],style:chip(s.strat===x[0]),pick:function(){self.setState({strat:x[0]});}};}),
+free:monthName(plan.months-1)+' · '+plan.months+' mo',interest:fmt(plan.interest),
+vsMin:'Paying only the minimums: '+(mins.months>=600?'50+ years':Math.round(mins.months/12)+' years')+' and about '+fmt(mins.interest)+' in interest.',
+obi:(s.strat==='rate'?'Clearing ••09 first saves '+fmt(Math.max(0,diffI))+' compared with smallest-first. ':'Smallest-first clears ••01 sooner, but costs '+fmt(Math.max(0,-diffI))+' more in interest. ')+(s.pay+s.amt>950?'With £'+s.amt+' going to savings too, that’s more than you usually have left: try saving less until ••01 is clear.':'Paying £'+s.pay+' and saving £'+s.amt+' fits inside an average month.')+' A 0% balance transfer could cut the interest further; worth checking what you’re offered.'};
+
+var IDEAS=[
+{k:'interest',title:'Card interest is your biggest leak',v:1250,why:'£203 in interest and fees in August alone, on ••09 and ••01. The plan below clears both; a direct debit for at least the planned amount keeps it on track.',act:'Set up the plan'},
+{k:'sub',title:'Two subscriptions you may not use',v:348,why:'Premier Sports £16.99 and a storage plan £11.99 a month, both paid every month since March: still using them?',act:'Show how to cancel'},
+{k:'sky',title:'Sky went up · ask for a better price',v:240,why:'£153.48 a month, up from £133 in April. Ringing to say you’re thinking of leaving often gets a lower price.',act:'Obi rings them (later)'},
+{k:'coffee',title:'Coffee on work days',v:470,why:'£115 last month, 15 Starbucks. A flask three days a week saves about £39 a month.',act:'Set a coffee budget'}];
+var ideaList=IDEAS.filter(function(i){return !s.gone[i.k];}).map(function(i){return {title:i.title,why:i.why,act:i.act,v:i.v,save:'~£'+i.v.toLocaleString('en-GB')+'/yr',
+dismiss:function(){var g=Object.assign({},s.gone);g[i.k]=1;self.setState({gone:g});}};});
+
+// Trading
+var R={'1D':[8294,8301,8280,8310,8350,8342,8390,8420],'1W':[8110,8150,8090,8230,8260,8310,8420],'1M':[7810,7700,7920,8050,7980,8140,8260,8190,8350,8420],'3M':[6900,7200,7050,7480,7700,7600,7950,8100,8420]};
+var series=R[s.range],lo=Math.min.apply(null,series),hi=Math.max.apply(null,series);
+var pts=series.map(function(v,i){return (i/(series.length-1)*350+2).toFixed(1)+','+(82-(v-lo)/(hi-lo||1)*72).toFixed(1);});
+var change=series[series.length-1]-series[0];
+var tr={equity:usd(8420),gbp:'£6,512',pnl:(change>=0?'+':'')+usd(change)+' ('+(change/series[0]*100).toFixed(1)+'%) over '+{'1D':'today','1W':'the week','1M':'the month','3M':'3 months'}[s.range],pnlColor:change>=0?'#8fbf8f':'#e0a97a',
+line:pts.join(' '),area:'2,88 '+pts.join(' ')+' 352,88',
+ranges:['1D','1W','1M','3M'].map(function(x){return {name:x,style:chip(s.range===x),pick:function(){self.setState({range:x});}};}),
+pos:[{coin:'BTC',side:'Long 5x',sideStyle:'font-size:12px;color:#8fbf8f;background:#16201a;border-radius:6px;padding:2px 6px',upnl:'+$90',color:'#8fbf8f',size:'0.12 BTC',px:'98,400 · 99,150',liq:'82,300'},
+{coin:'SOL',side:'Short 3x',sideStyle:'font-size:12px;color:#e0a97a;background:#241a14;border-radius:6px;padding:2px 6px',upnl:'−$24',color:'#e0a97a',size:'14 SOL',px:'182.1 · 183.8',liq:'238.5'}],
+stats:[{a:'Closed profit',b:'+$610',color:'#8fbf8f'},{a:'Funding paid',b:'−$38',color:'#e0a97a'},{a:'Fees',b:'−$52',color:'#e0a97a'},{a:'Winning trades',b:'14 of 23',color:'#ededed'}]};
+
+// Ask Obi
+var QA={
+save:{q:'If I save £300 a month for 6 months, can I still clear my cards by summer?',a:'Not both at that pace. £300 saved plus £450 on the cards is £750, and you usually have £950 left, so it fits, but the cards clear in '+monthName(sim(450,'rate',false).months-1)+'. Drop savings to £150 and pay £600: the cards clear by '+monthName(sim(600,'rate',false).months-1)+' and you still save £900.',acts:['Use £150 / £600','Show the numbers']},
+holiday:{q:'Can I afford a £1,200 holiday in July?',a:'Yes, if you start now: £135 a month from November gets you there by July with £15 to spare, and your cards plan still fits. I’ve kept December lighter.',acts:['Make it a goal']},
+coffee:{q:'How much have I spent on coffee this year?',a:'£842 since January, mostly Starbucks on work days. That’s about £3.50 a coffee, 4 times a week.',acts:['Set a coffee budget']},
+cards:{q:'Which card should I pay off first?',a:'••09: it charges 24.9%, more than ••01’s 22.9%. Keep paying the minimum on ••01 and put the rest on ••09. Sums only, not advice.',acts:['Use this plan']}};
+var asked=s.asked||'save';
+var cur=QA[asked];
+var chat=[{text:cur.q,style:'align-self:flex-end;max-width:85%;background:#2a2721;color:#f0e6cf;border-radius:16px 16px 4px 16px;padding:10px 13px;font-size:14px;line-height:1.4',acts:null},
+{text:cur.a,style:'max-width:92%;background:#1d1d20;color:#ededed;border-radius:16px 16px 16px 4px;padding:11px 13px;font-size:14px;line-height:1.45',acts:cur.acts}];
+var askChips=Object.keys(QA).filter(function(k){return k!==asked;}).map(function(k){return {q:QA[k].q,pick:function(){self.setState({asked:k});}};});
+
+var lay=this.props.layout||'phone',wide=lay!=='phone',mac=lay==='mac';
+var base='background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;position:relative;';
+var L={
+root:base+(lay==='phone'?'width:390px;min-height:1900px':(mac?'width:1280px;min-height:1300px':'width:884px;min-height:1500px')),
+main:'flex:1;min-width:0;box-sizing:border-box;display:flex;flex-direction:column;gap:16px;position:relative;'+(lay==='phone'?'padding:20px 18px 120px':(mac?'padding:28px 40px 60px':'padding:24px 28px 80px')),
+side:wide,mac:mac,pills:!mac,chartH:wide?120:90,
+sideStyle:'flex-shrink:0;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;border-right:1px solid #1a1a1d;background:#0a0a0b;'+(mac?'width:230px;padding:28px 14px':'width:112px;padding:24px 8px'),
+body:wide?'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:'+(mac?'32px':'24px')+';align-items:start':'display:flex;flex-direction:column;gap:18px',
+col:'display:flex;flex-direction:column;gap:16px;min-width:0'};
+var navItem=function(on){return 'display:block;text-decoration:none;border-radius:10px;padding:10px;font-size:14px;'+(on?'background:#1a1a1d;color:#e8cf93':'color:#a8a29a');};
+var appNav=['Today','Needs you','Calendar','Ask','Money'].map(function(n){return {name:n,style:navItem(n==='Money')};});
+return {
+L:L,appNav:appNav,
+tabs:['Spending','Bills','Plan','Trading','Accounts'].map(function(t){return {name:t,style:tabStyle(s.tab===t),side:'border:0;text-align:left;border-radius:10px;padding:9px 10px 9px 18px;font:500 14px DM Sans,sans-serif;'+(s.tab===t?'background:#2a2721;color:#e8cf93':'background:transparent;color:#a8a29a'),pick:function(){self.setState({tab:t,sel:null});}};}),
+isSpend:s.tab==='Spending',isBills:s.tab==='Bills',isPlan:s.tab==='Plan',isTrade:s.tab==='Trading',isAcc:s.tab==='Accounts',
+m:m,prevMonth:function(){self.setState({mi:0,focus:null});},nextMonth:function(){self.setState({mi:1,focus:null});},
+segs:segs,centre:centre,rows:rows,
+views:['Categories','Needs vs wants'].map(function(v){return {name:v,style:chip(s.view===v),pick:function(){self.setState({view:v,focus:null});}};}),
+catsLabel:s.view!=='Categories'?'':(s.all?'Show less':'All '+data.length+' ›'),toggleCats:function(){self.setState({all:!s.all});},
+days:days,
+bills:[{mon:'OCT',d:'27',name:'Card ••01',sub:'Pay in full to avoid interest',subColor:'#e0a97a',amt:'£767',amtColor:'#ededed'},{mon:'OCT',d:'28',name:'Sky',sub:'Monthly · same as last month',subColor:'#8f897f',amt:'£153.48',amtColor:'#ededed'},{mon:'OCT',d:'30',name:'Council tax',sub:'Monthly',subColor:'#8f897f',amt:'£189',amtColor:'#ededed'},{mon:'OCT',d:'2',name:'Mortgage',sub:'Paid',subColor:'#8fbf8f',amt:'£1,050',amtColor:'#8f897f'}],
+saveTotal:'£'+ideaList.reduce(function(a,i){return a+i.v;},0).toLocaleString('en-GB'),saveCount:ideaList.length+' ideas',ideas:ideaList,
+sv:sv,debt:debt,
+goals:[{name:'Christmas',amt:'£240 of £600',bar:'width:40%;height:100%;background:#c9b37e',note:'£180 a month to Dec 15 · on track'},{name:'Holiday 2027',amt:'£900 of £3,000',bar:'width:30%;height:100%;background:#8a9bd1',note:'£210 a month to July · a little behind'}],
+watch:['Unused subscriptions','Price rises','Card interest and fees','Bills due with a low balance','Duplicate charges','Refunds that never came','A payee you don’t know','Spending over usual','Payday buffer','Cashback on the right card','Goals off track','Trading risk'],
+tr:tr,
+accts:[{ini:'CU',name:'Current account ••80',sub:'Updated 08:14',bal:'£1,204',color:'#ededed'},{ini:'SA',name:'Savings ••12',sub:'4.0% · updated 08:14',bal:'£4,100',color:'#ededed'},{ini:'BU',name:'Business ••80',sub:'Side hustle',bal:'£620',color:'#ededed'},{ini:'CC',name:'Card ••09',sub:'24.9% APR',bal:'−£4,200',color:'#e0a97a'},{ini:'CC',name:'Card ••01',sub:'22.9% APR · £767 due Tue',bal:'−£1,800',color:'#e0a97a'},{ini:'HL',name:'Hyperliquid',sub:'Read-only · public address',bal:'£6,512',color:'#ededed'}],
+more:[{a:'Side hustle and tax',b:'Tax year so far: £1,240 profit · put aside £248'},{a:'Shared with Dana',b:'Dana owes you £36.20'},{a:'Import, export and delete',b:'Statement files, CSV, delete all money data'}],
+askOpen:s.ask,openAsk:function(){self.setState({ask:true});},closeAsk:function(){self.setState({ask:false});},chat:chat,askChips:askChips,
+sheetOpen:!!s.sel,sel:s.sel||{name:'',amt:'',sub:''},closeSheet:function(){self.setState({sel:null});},
+catChips:['Groceries','Bills','Shopping','Transport','Coffee','Eating out','Subscriptions','Transfer','Other'].map(function(n){var curCat=s.sel?(s.cat[s.sel.name]||s.sel.cat):'';return {name:n,style:chip(n===curCat),pick:function(){var c=Object.assign({},s.cat);c[s.sel.name]=n;self.setState({cat:c,sel:Object.assign({},s.sel,{cat:n,sub:s.sel.sub.replace(/^[^·]+/,n+' ')})});}};})
+};
+}
+}
+</script>
+</body>
+</html>
