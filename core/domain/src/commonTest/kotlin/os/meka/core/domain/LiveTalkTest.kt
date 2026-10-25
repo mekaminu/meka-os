@@ -61,7 +61,9 @@ class LiveTalkTest {
         assertFalse(LiveTalkRules.speaking(2_000, 2_300))
         // On the speaker only Meka's voice clearly over Obi's goes up while Obi speaks; with headphones everything.
         assertFalse(LiveTalkRules.sendWhileSpeaking(BargeInOutput.SPEAKER, -40f))
-        assertTrue(LiveTalkRules.sendWhileSpeaking(BargeInOutput.SPEAKER, -20f))
+        // Obi's echo from the speaker (often -30 to -15 dBFS) stays muted; Meka speaking right at the phone gets through.
+        assertFalse(LiveTalkRules.sendWhileSpeaking(BargeInOutput.SPEAKER, -20f))
+        assertTrue(LiveTalkRules.sendWhileSpeaking(BargeInOutput.SPEAKER, -10f))
         assertTrue(LiveTalkRules.sendWhileSpeaking(BargeInOutput.HEADPHONES, -60f))
     }
 

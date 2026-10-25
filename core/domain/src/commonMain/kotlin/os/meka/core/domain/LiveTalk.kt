@@ -33,7 +33,10 @@ object LiveTalkRules {
      * [SPEAKER_OVER_DBFS] (Meka talking over him) goes up, the rest goes as silence so Google doesn't hear Obi as Meka.
      * With headphones everything goes up.
      */
-    const val SPEAKER_OVER_DBFS = -28f
+    // Hotfix 2026-10-25: -28 dBFS let Obi's own voice from the Fold's speaker through, so Google heard him as Meka and
+    // cut him off after a word or two, over and over (Meka 18:57). Only speech right at the phone, clearly louder than
+    // his echo, goes up now; the echo-relative gate and a jitter buffer follow in the Fix-first item.
+    const val SPEAKER_OVER_DBFS = -12f
 
     fun sendWhileSpeaking(output: BargeInOutput, dbfs: Float): Boolean =
         output == BargeInOutput.HEADPHONES || dbfs >= SPEAKER_OVER_DBFS
