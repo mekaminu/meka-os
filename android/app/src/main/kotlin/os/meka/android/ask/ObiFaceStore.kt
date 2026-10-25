@@ -25,12 +25,12 @@ object ObiFaceStore {
     /** The last look at the server's list (Health's face line, Meka 2026-10-24 13:12). */
     private const val CHECK = "check.txt"
     private const val PREFS = "obi_face"
-    private const val ON_KEY = "on"
+    private const val ON_KEY = "on_v2" // v2: Meka 2026-10-25 01:42 "Revert back to orb": the orb is the default again, the face is opt-in
 
     private val allowed = FaceCodec.FILES
     private val mutex = Mutex()
     private val _ready = MutableStateFlow(false)
-    private val _on = MutableStateFlow(true)
+    private val _on = MutableStateFlow(false)
     @Volatile private var loaded = false
 
     val ready: StateFlow<Boolean> = _ready.asStateFlow()
@@ -46,7 +46,7 @@ object ObiFaceStore {
     fun load(context: Context) {
         if (loaded) return
         loaded = true
-        _on.value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ON_KEY, true)
+        _on.value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ON_KEY, false)
         _ready.value = readIndex(context).complete
     }
 

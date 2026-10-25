@@ -16,10 +16,10 @@ import SwiftUI
 @Observable
 final class MacFaceStore {
     static let shared = MacFaceStore()
-    static let onKey = "meka.obi.face"
+    static let onKey = "meka.obi.face.v2" // v2: the orb is the default again (Meka 2026-10-25), the face is opt-in
 
     private(set) var ready = false
-    private(set) var on: Bool = UserDefaults.standard.object(forKey: MacFaceStore.onKey) as? Bool ?? true
+    private(set) var on: Bool = UserDefaults.standard.object(forKey: MacFaceStore.onKey) as? Bool ?? false
 
     @ObservationIgnored private var loaded = false
     @ObservationIgnored private var refreshing = false
