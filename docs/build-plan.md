@@ -54,6 +54,12 @@ Moved to **docs/motion-catalogue.md** (2026-10-11). Read it before building or c
 ## Daily plan (Meka, 2026-10-14 10:30: "a daily plan of what will be built so I can plan and track it")
 
 Runs keep to this order after any new "Take first" fix from Meka. It mirrors the Navilife tab of his project tracker (https://claude.ai/artifact — see the midnight report task), which the midnight run updates. Items marked [!] for mail access are **buildable now** (Connect mail and Inbox autopilot landed 2026-10-13): build them, and say in the run summary that they need his accounts connected to test. If a day's items finish early, start the next day's.
+- **Mon 26 Oct (set by Claude 2026-10-25 22:30, mirrored on the tracker):** finish instant taps · one voice for Obi in Live · confirm Clean up / Mark read run for Personal Gmail.
+- **Tue 27 Oct:** calmer Today (approved mockup, Done today choice) · Money bugs (A).
+- **Wed 28 Oct:** Money redesign part 1: tabs, Spending, Bills, Accounts at all three sizes.
+- **Thu 29 Oct:** Money part 2: Plan (what-if saving, clear my cards, goals), Obi's money check, Ask Obi.
+- **Fri 30 Oct:** Money Trading tab · Week board alignment on the open Fold.
+- **Sat 31 Oct:** folded Week board (once Meka approves `Folded.dc.html`) · screenshot checks against every mockup · buffer.
 - **Wed 14 Oct:** natural voice (finish) · school dates for both boys + School rhythm · Ask's help: Take me there · two cars (Car on autopilot per car) · Car and parking (Where I parked, Find my car, big car parks).
 - **Thu 15 Oct:** Voice notes into actions · Screenshots and photos that do something + Photo of a letter → task · Weekly reflection · Kids' admin · Barça match day.
 - **Fri 16 Oct:** the email assistant set: Email triage completeness · Promises → Waiting for, receipts → Vault, renewals radar · Follow-up radar · Scheduling assistant · Meeting prep · School and family logistics from email · Life audit · Returns and warranties completeness.
