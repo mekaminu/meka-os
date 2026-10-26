@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trip lists</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes fadeup{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.pop{animation:pop .25s cubic-bezier(.2,.8,.2,1) both}
+.fill{transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.chev{transition:transform .2s}
+button{cursor:pointer}
+input::placeholder{color:#8f897f}
+@media (prefers-reduced-motion:reduce){.in,.pop{animation:none}.fill,.chev{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1250px;box-sizing:border-box;padding:18px 18px 110px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;position:relative">
+
+<div style="display:flex;justify-content:space-between;align-items:center">
+<a href="#" style="font-size:14px;text-decoration:none">‹ Trips</a>
+<button type="button" aria-label="Trip options" style="border:0;background:#121214;color:#a8a29a;width:40px;height:40px;border-radius:20px;font-size:18px;line-height:1">⋯</button>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:4px">
+<div style="font-size:26px;font-weight:700;letter-spacing:-.01em">[Destination] trip</div>
+<div style="font-size:13.5px;color:#a8a29a">Wed 28 Oct → Sun 1 Nov · 5 days · 4 people</div>
+<div style="font-size:13px;color:#e8cf93">2 days to go · leave home 06:30 Wednesday</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div style="background:#121214;border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#a8a29a"><span>Bought</span><span>{{buyStat}}</span></div><div style="height:4px;border-radius:2px;background:#1c1c1f;overflow:hidden"><div class="fill" style="{{buyBar}}"></div></div></div>
+<div style="background:#121214;border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#a8a29a"><span>Packed</span><span>{{packStat}}</span></div><div style="height:4px;border-radius:2px;background:#1c1c1f;overflow:hidden"><div class="fill" style="{{packBar}}"></div></div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:#121214;border-radius:999px;padding:4px">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{t.pick}}" style="{{t.style}}">{{t.name}}</button></sc-for>
+</div>
+
+<sc-if value="{{obi}}" hint-placeholder-val="{{true}}">
+<div class="in" style="background:#17140f;border:1px solid #3a2e1c;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:10px;align-items:flex-start"><span style="width:20px;height:20px;border-radius:10px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0;margin-top:1px"></span><span style="font-size:13.5px;line-height:1.45;color:#d8d2c6">{{obi.text}}</span></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{obi.chips}}" as="c" hint-placeholder-count="3"><span style="background:#2a2721;color:#e8cf93;border-radius:999px;padding:6px 10px;font-size:12.5px">{{c}}</span></sc-for></div>
+<div style="display:flex;gap:8px"><button type="button" onClick="{{obiAdd}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 14px;font:600 13px DM Sans,sans-serif">Add all</button><button type="button" onClick="{{obiNo}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:36px;padding:0 14px;font:500 13px DM Sans,sans-serif">Not now</button></div>
+</div>
+</sc-if>
+
+<form onSubmit="{{addItem}}" style="display:flex;gap:8px;align-items:center;background:#121214;border-radius:999px;padding:5px 5px 5px 16px;margin:0">
+<label for="add" style="position:absolute;left:-9999px">Add an item</label>
+<input id="add" value="{{draft}}" onChange="{{setDraft}}" placeholder="{{placeholder}}" style="flex:1;min-width:0;border:0;background:transparent;color:#ededed;font:400 15px DM Sans,sans-serif;outline:none">
+<button type="submit" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font:600 13.5px DM Sans,sans-serif">Add</button>
+</form>
+<div style="font-size:12px;color:#8f897f;margin-top:-10px;padding-left:4px">Type or say it: “buy sun cream”, “pack 2 chargers”. Navilife puts it on the right list.</div>
+
+<sc-if value="{{showPeople}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{people}}" as="p" hint-placeholder-count="4"><button type="button" onClick="{{p.pick}}" style="{{p.style}}">{{p.name}}</button></sc-for></div>
+</sc-if>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+<div style="background:#0d0d0f;border-radius:16px;padding:4px 14px">
+<button type="button" onClick="{{g.toggle}}" aria-expanded="{{g.open}}" style="border:0;background:transparent;color:#ededed;width:100%;display:flex;align-items:center;gap:10px;min-height:48px;padding:0;text-align:left;font-family:DM Sans,sans-serif">
+<span style="flex:1;font-size:15px;font-weight:600">{{g.name}}</span>
+<span style="font-size:12.5px;color:{{g.countColor}}">{{g.count}}</span>
+<svg class="chev" style="{{g.chev}}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a8a29a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+</button>
+<sc-if value="{{g.open}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;padding-bottom:6px">
+<sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+<button type="button" onClick="{{it.tick}}" style="border:0;border-top:1px solid #18181b;background:transparent;color:{{it.color}};display:flex;align-items:center;gap:12px;min-height:46px;padding:0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<sc-if value="{{it.done}}" hint-placeholder-val="{{false}}"><span class="pop" style="width:20px;height:20px;border-radius:10px;background:#c9b37e;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></sc-if>
+<sc-if value="{{it.open}}" hint-placeholder-val="{{true}}"><span style="width:20px;height:20px;border-radius:10px;border:1.5px solid #5a5650;box-sizing:border-box;flex-shrink:0"></span></sc-if>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px;text-decoration:{{it.strike}}">{{it.name}}</span><sc-if value="{{it.sub}}" hint-placeholder-val="{{false}}"><span style="font-size:12px;color:#8f897f">{{it.sub}}</span></sc-if></span>
+<span style="font-size:12.5px;color:#a8a29a">{{it.qty}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+<button type="button" style="border:1px dashed #2e2e32;background:transparent;color:#c9b37e;border-radius:12px;height:44px;font:500 14px DM Sans,sans-serif">Save as a template for next time</button>
+<div style="font-size:12px;color:#8f897f;line-height:1.5;text-align:center">To buy items also show on your shopping list. Ticked items stay ticked on the Fold and the Mac.</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1250}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={tab:'pack',done:{p_pass:1,p_ehic:1,b_plug:1,p_shirts:1,l_bins:1},closed:{},who:'Everyone',obi:true,draft:'',extra:[]};}
+renderVals(){
+var s=this.state,self=this;
+var BUY=[
+{g:'Pharmacy',items:[['b_sun','Sun cream SPF 50','Boots · need by Tue',''],['b_cal','Calpol sachets','For the kids',''],['b_plast','Plasters','','']]},
+{g:'Supermarket',items:[['b_snack','Snacks for the journey','',''],['b_water','Water bottles','','× 4'],['b_mini','Travel-size shower gel','Under 100 ml','× 2']]},
+{g:'Online',items:[['b_plug','EU plug adapters','Amazon · arrives Tue','× 2'],['b_lock','Luggage locks','',''],['b_ear','Kids headphones','','']]}];
+var PACK=[
+{g:'Documents',items:[['p_pass','Passports','Everyone','× 4'],['p_ehic','GHIC cards','Everyone','× 4'],['p_board','Boarding passes','On your phone',''],['p_ins','Travel insurance','Saved in Trip docs','']]},
+{g:'Clothes',items:[['p_shirts','T-shirts','Me','× 5'],['p_trou','Trousers','Me','× 2'],['p_kids','Kids outfits','Kids','× 10'],['p_jump','Jumpers','Everyone','× 4'],['p_pj','Pyjamas','Everyone','× 4']]},
+{g:'Toiletries',items:[['p_tooth','Toothbrushes and paste','Everyone',''],['p_deo','Deodorant','Me',''],['p_meds','Your medicines','Me','']]},
+{g:'Tech',items:[['p_chg','Phone chargers','Everyone','× 3'],['p_watch','Watch charger','Me',''],['p_bank','Power bank','Me',''],['p_tab','Kids tablets','Kids','× 2']]}];
+var LEAVE=[
+{g:'The house',items:[['l_bins','Put the bins out','Tue night',''],['l_heat','Heating to holiday mode','',''],['l_plants','Water the plants','',''],['l_fridge','Empty the fridge','',''],['l_lock','Lock windows and back door','','']]},
+{g:'On the day',items:[['l_check','Check in online','Opens Tue 06:30',''],['l_park','Book airport parking','Not booked yet',''],['l_wallet','Passports in the bag','Last check at the door','']]}];
+var extraBuy=s.extra.filter(function(e){return e.list==='buy';}),extraPack=s.extra.filter(function(e){return e.list==='pack';});
+if(extraBuy.length)BUY=BUY.concat([{g:'Added',items:extraBuy.map(function(e){return [e.id,e.name,'','']; })}]);
+if(extraPack.length)PACK=PACK.concat([{g:'Added',items:extraPack.map(function(e){return [e.id,e.name,e.who||'Everyone',''];})}]);
+var count=function(L){var n=0,d=0;L.forEach(function(g){g.items.forEach(function(i){n++;if(s.done[i[0]])d++;});});return [d,n];};
+var bc=count(BUY),pc=count(PACK);
+var src=s.tab==='buy'?BUY:(s.tab==='pack'?PACK:LEAVE);
+var groups=src.map(function(g){
+var items=g.items.filter(function(i){if(s.tab!=='pack'||s.who==='Everyone')return true;return i[2]===s.who||i[2]==='Everyone';});
+var d=items.filter(function(i){return s.done[i[0]];}).length;
+var key=s.tab+g.g,open=!s.closed[key];
+items=items.slice().sort(function(a,b){return (s.done[a[0]]?1:0)-(s.done[b[0]]?1:0);});
+return {name:g.g,count:d===items.length&&items.length?'All done':d+' of '+items.length,countColor:d===items.length&&items.length?'#8fbf8f':'#8f897f',open:open,chev:open?'transform:rotate(180deg)':'',
+toggle:function(){var c=Object.assign({},s.closed);c[key]=open;self.setState({closed:c});},
+items:items.map(function(i){var dn=!!s.done[i[0]];return {name:i[1],sub:i[2],qty:i[3],done:dn,open:!dn,strike:dn?'line-through':'none',color:dn?'#8f897f':'#ededed',
+tick:function(){var x=Object.assign({},s.done);if(dn)delete x[i[0]];else x[i[0]]=1;self.setState({done:x});}};})};}).filter(function(g){return g.items.length;});
+var tabStyle=function(on){return 'border:0;border-radius:999px;padding:10px 0;font:600 13.5px DM Sans,sans-serif;'+(on?'background:#2a2721;color:#e8cf93':'background:transparent;color:#a8a29a');};
+var chip=function(on){return 'border:0;border-radius:999px;padding:8px 13px;font:500 13px DM Sans,sans-serif;'+(on?'background:#c9b37e;color:#111':'background:#1a1a1d;color:#ededed');};
+var OBI={buy:{text:'Rain is forecast two of the five days and it’s 14° there. You haven’t got these on the list:',chips:['Kids rain jackets','Travel umbrella','Motion-sickness bands']},
+pack:{text:'Last trip you forgot the watch charger and swimwear. For 5 days with 4 people, also worth packing:',chips:['Swimwear × 4','Laundry bag','Kids comfort toys']},
+leave:{text:'Your flight leaves 09:40, so leaving at 06:30 gets you there 2 hours before. Add a reminder for each of these the night before?',chips:['Charge everything Tue 21:00','Bags by the door','Check-in opens 06:30']}};
+var o=OBI[s.tab];
+var ph={buy:'Add something to buy…',pack:'Add something to pack…',leave:'Add a job before you leave…'}[s.tab];
+var nextId=function(){return 'x'+Date.now()+Math.floor(Math.random()*1000);};
+return {
+tabs:[['buy','To buy'],['pack','To pack'],['leave','Before we leave']].map(function(t){return {name:t[1],style:tabStyle(s.tab===t[0]),pick:function(){self.setState({tab:t[0],obi:true});}};}),
+buyStat:bc[0]+' of '+bc[1],packStat:pc[0]+' of '+pc[1],
+buyBar:'height:100%;background:#c9b37e;width:'+Math.round(bc[0]/bc[1]*100)+'%',packBar:'height:100%;background:#c9b37e;width:'+Math.round(pc[0]/pc[1]*100)+'%',
+obi:s.obi&&s.tab!=='leave'||s.obi&&s.tab==='leave'?o:null,
+obiAdd:function(){var ex=s.extra.slice();if(s.tab!=='leave')o.chips.forEach(function(c){ex.push({id:nextId(),name:c,list:s.tab});});self.setState({extra:ex,obi:false});},
+obiNo:function(){self.setState({obi:false});},
+draft:s.draft,setDraft:function(e){self.setState({draft:e.target.value});},placeholder:ph,
+addItem:function(e){e.preventDefault();var t=(s.draft||'').trim();if(!t)return;var list=s.tab==='leave'?'pack':s.tab;var name=t;
+if(/^buy /i.test(t)){list='buy';name=t.slice(4);}else if(/^pack /i.test(t)){list='pack';name=t.slice(5);}
+name=name.charAt(0).toUpperCase()+name.slice(1);var ex=s.extra.slice();ex.push({id:nextId(),name:name,list:list});self.setState({extra:ex,draft:'',tab:list});},
+showPeople:s.tab==='pack',
+people:['Everyone','Me','Kids'].map(function(n){return {name:n,style:chip(s.who===n),pick:function(){self.setState({who:n});}};}),
+groups:groups
+};
+}
+}
+</script>
+</body>
+</html>
