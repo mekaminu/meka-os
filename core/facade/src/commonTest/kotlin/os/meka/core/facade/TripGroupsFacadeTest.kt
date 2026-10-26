@@ -32,8 +32,11 @@ class TripGroupsFacadeTest {
         fold.addTrip("Lisbon 28–31 Oct")
         val tripId = fold.tripsView.value.rows.single().id
         fold.addTripItem(tripId, "passports", TripList.PACK)
+        now += 1_000 // one second apart, so the rows keep the order they were added in
         fold.addTripItem(tripId, "t-shirts × 5", TripList.PACK)
+        now += 1_000
         val blender = fold.addTripItem(tripId, "blender", TripList.PACK)
+        now += 1_000
         assertEquals("Added Blender to To pack · Kitchen", blender.line)
         val odd = fold.addTripItem(tripId, "Mr Wobbles", TripList.PACK)
         assertEquals(listOf("Documents", "Clothes", "Kitchen"), odd.askGroups)

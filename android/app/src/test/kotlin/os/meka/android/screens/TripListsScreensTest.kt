@@ -8,9 +8,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -133,20 +134,46 @@ class TripListsScreensTest {
         assertEquals(1, core.tripListsView.value.single().tab(TripList.PACK).groups.first().rows.count { !it.done })
     }
 
+    /** Editing slice 4a: a short To pack (Documents: Passports, Boarding passes; Clothes: T-shirts), so it all fits. */
+    private fun small(): Pair<MekaCore, String> {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        val tripId = runBlocking {
+            core.tick()
+            check(!core.addTrip("Lisbon 28–31 Oct").refused)
+            val id = core.tripsView.value.rows.single().id
+            listOf("passports", "boarding passes", "t-shirts").forEach { check(!core.addTripItem(id, it, TripList.PACK).refused) }
+            core.tick()
+            id
+        }
+        putAwaySuggestions(core, tripId)
+        return core to tripId
+    }
+
+    private fun scrollTo(tag: String) {
+        compose.onNodeWithTag("trip-lists").performScrollToNode(hasTestTag(tag))
+        compose.mainClock.advanceTimeBy(500L)
+    }
+
     @Test
     @Config(qualifiers = ScreenShots.INNER)
     fun aThingMovesToAnotherGroupInTheNextFrame() {
         // Editing slice 4a: ⋯ on a row opens its sheet; a group chip moves it there at once, then the core agrees.
-        val (core, tripId) = filled(ThemeChoice.DARK)
-        putAwaySuggestions(core, tripId)
+        val (core, tripId) = small()
         show(core, tripId)
         val boarding = core.tripListsView.value.single().tab(TripList.PACK).groups.first().rows.first { it.text == "Boarding passes" }
+        scrollTo("trip-item-more-${boarding.id}")
         compose.onNodeWithTag("trip-item-more-${boarding.id}").performClick()
         compose.mainClock.advanceTimeBy(500L)
-        compose.onNodeWithTag("trip-item-sheet").assertIsDisplayed()
+        scrollTo("trip-item-group-Clothes")
         compose.onNodeWithTag("trip-item-group-Clothes").performClick()
         compose.mainClock.advanceTimeBy(16L)
-        compose.onNode(hasContentDescription("Documents, 1 of 2", substring = true)).assertExists()
+        // The sheet (now under Clothes) shows Clothes as its group.
+        scrollTo("trip-item-group-Clothes")
+        compose.onNodeWithTag("trip-item-group-Clothes")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) {
             core.tripListsView.value.single().tab(TripList.PACK).groups.first { it.name == "Clothes" }.rows.any { it.id == boarding.id }
@@ -156,17 +183,22 @@ class TripListsScreensTest {
     @Test
     @Config(qualifiers = ScreenShots.INNER)
     fun aGroupIsRenamedFromItsMenu() {
-        val (core, tripId) = filled(ThemeChoice.DARK)
-        putAwaySuggestions(core, tripId)
+        val (core, tripId) = small()
         show(core, tripId)
+        scrollTo("trip-group-more-Clothes")
         compose.onNodeWithTag("trip-group-more-Clothes").performClick()
         compose.mainClock.advanceTimeBy(500L)
+        scrollTo("trip-group-rename")
         compose.onNodeWithTag("trip-group-rename").performClick()
         compose.mainClock.advanceTimeBy(500L)
-        compose.onNode(hasSetTextAction() and hasContentDescription(TripGroupRules.RENAME_HINT)).performTextInput("Outfits")
-        compose.onNode(hasSetTextAction() and hasContentDescription(TripGroupRules.RENAME_HINT)).performImeAction()
+        val field = hasSetTextAction() and hasContentDescription(TripGroupRules.RENAME_HINT)
+        compose.onNodeWithTag("trip-lists").performScrollToNode(field)
+        compose.mainClock.advanceTimeBy(500L)
+        compose.onNode(field).performTextInput("Outfits")
+        compose.onNode(field).performImeAction()
         compose.mainClock.advanceTimeBy(16L)
-        compose.onNode(hasContentDescription("Outfits,", substring = true)).assertExists()
+        scrollTo("trip-group-more-Outfits")
+        compose.onNodeWithTag("trip-group-more-Outfits").assertExists()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) {
             core.tripListsView.value.single().tab(TripList.PACK).groups.any { it.name == "Outfits" }
