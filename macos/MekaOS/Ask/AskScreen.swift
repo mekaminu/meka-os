@@ -444,6 +444,24 @@ private struct AppearanceRow: View {
                 .onChange(of: motion) { MekaHaptics.tick() }
             }
             MotionCheckView(motion: $motion, palette: palette)
+            // Calmer Today, slice 1: how Today shows the day's done tasks, synced with the Fold.
+            HStack {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(DoneTodayRules.shared.HEADING).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(model.doneTodayShown.show.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.doneTodayShown.show.code)
+                }
+                Spacer()
+                Picker(DoneTodayRules.shared.HEADING, selection: Binding(
+                    get: { model.doneTodayShown.show.code },
+                    set: { code in if let s = DoneTodayChoiceMac.all.first(where: { $0.code == code }) { model.setDoneTodayShow(s) } })) {
+                    ForEach(DoneTodayChoiceMac.all, id: \.code) { s in Text(s.label).tag(s.code) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
             // Text size (Mac text is too big, Meka 2026-10-15): the same four sizes as View → Text Size.
             TextSizeRow(palette: palette)
             HStack {
@@ -493,6 +511,11 @@ private struct AppearanceRow: View {
         .offset(y: hovering && !reduceMotion ? -2 : 0)
         .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
     }
+}
+
+/// Calmer Today, slice 1: the three choices for Done tasks on Today, in the Fold's order.
+enum DoneTodayChoiceMac {
+    static var all: [DoneShow] { [.folded, .hidden, .shown] }
 }
 
 /// This Mac app's version and build number (Info.plist).

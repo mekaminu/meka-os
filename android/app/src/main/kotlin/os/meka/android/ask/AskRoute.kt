@@ -35,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -574,7 +576,11 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
  * the chips appear at once and colours cross-fade.
  */
 @Composable
-internal fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, playOpening: () -> Unit, toggle: () -> Unit) {
+internal fun AppearanceRow(
+    open: Boolean, modifier: Modifier, openTopics: () -> Unit, playOpening: () -> Unit, toggle: () -> Unit,
+    /** Calmer Today, slice 1: Done tasks on Today (Folded · Hidden · Shown), synced; null: the choice isn't shown. */
+    core: os.meka.core.facade.MekaCore? = null,
+) {
     val theme = Meka.theme
     val context = LocalContext.current.applicationContext
     val tickerMode = rememberTickerMode()
@@ -629,6 +635,7 @@ internal fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> 
                 label = "motion-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
             ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
             MotionCheckSection(motion, playOpening)
+            if (core != null) DoneTodayChoiceSection(core)
             // News ticker (news ticker, slice 2): how the strip under Today's header moves, on this device; Topics
             // opens News (the topics and their sources).
             Text("News ticker", style = MekaType.caption, color = Meka.colors.textSecondary,
@@ -719,6 +726,41 @@ private fun MotionCheckSection(motion: MotionControl, playOpening: () -> Unit) {
                 .clickable(role = Role.Button) { haptics.light(); playOpening() }
                 .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
     }
+}
+
+/**
+ * Calmer Today, slice 1 (Meka 2026-10-25 15:05): how Today shows the day's done tasks, Folded (the default) · Hidden ·
+ * Shown, synced with the Mac. The chosen chip lights at once (tick haptic) while the core's write follows; the line
+ * under it cross-fades.
+ */
+@Composable
+private fun DoneTodayChoiceSection(core: os.meka.core.facade.MekaCore) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
+    val stored by core.doneTodayChoice.collectAsState()
+    var picked by remember { mutableStateOf<os.meka.core.domain.DoneShow?>(null) }
+    LaunchedEffect(stored.show) { if (picked == stored.show) picked = null }
+    val show = picked ?: stored.show
+    Text(os.meka.core.domain.DoneTodayRules.HEADING, style = MekaType.caption, color = Meka.colors.textSecondary,
+        modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
+    Row(
+        Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        os.meka.core.domain.DoneShow.entries.forEach { c ->
+            Chip(c.label, show == c) {
+                haptics.tick()
+                picked = c
+                scope.launch { runCatching { core.setDoneTodayShow(c.code) } }
+            }
+        }
+    }
+    AnimatedContent(
+        targetState = show.line,
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+        label = "done-choice-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
+    ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
 }
 
 /** A choice chip: the chosen one's colour blends across (`themeBlend`). */

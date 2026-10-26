@@ -28,6 +28,12 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.fold.NOW_CHIP_TAG
 import os.meka.android.today.TodayRoute
+import os.meka.android.today.DoneFoldLine
+import os.meka.core.domain.DoneTodayRules
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -189,6 +195,41 @@ class TodayScreensTest {
         compose.onAllNodes(hasText("Undo"), useUnmergedTree = false)[0].performClick()
         awaitCore("Undo") { core.fastingView.value.current != null }
         if (compose.onAllNodesWithTag(FASTING_TODAY_TAG).fetchSemanticsNodes().isEmpty()) fail("Undo didn't bring the card back")
+    }
+
+    /**
+     * Calmer Today, slice 1, works by hand (quality gate 3): Done today is folded by default into "1 done today ›"; a tap
+     * opens it for the day ("· hide", written to the core so the Mac follows) and a second tap folds it again.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun doneTodayFoldOpensAndClosesByHand() {
+        val core = core()
+        runBlocking {
+            val id = core.addTask("Reply to Oakfield School")
+            core.complete(id)
+            core.tick()
+        }
+        compose.setContent {
+            MekaTheme {
+                val scope = rememberCoroutineScope()
+                val choice by core.doneTodayChoice.collectAsState()
+                val today by core.today.collectAsState()
+                val line = DoneTodayRules.foldLine(today.doneToday, choice) ?: "no line"
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    DoneFoldLine(line, DoneTodayRules.foldLabel(today.doneToday, choice),
+                        { scope.launch { core.setDoneTodayOpen(!choice.openToday) } },
+                        Modifier.testTag("done-fold"))
+                }
+            }
+        }
+        compose.waitForIdle()
+        ScreenShots.assertShows(compose, "folded", "1 done today ›")
+        compose.onNodeWithTag("done-fold").performClick()
+        awaitCore("Open") { core.doneTodayChoice.value.openToday }
+        ScreenShots.assertShows(compose, "opened", "1 done today · hide")
+        compose.onNodeWithTag("done-fold").performClick()
+        awaitCore("Close") { !core.doneTodayChoice.value.openToday }
+        ScreenShots.assertShows(compose, "closed", "1 done today ›")
     }
 
     private fun settle() {

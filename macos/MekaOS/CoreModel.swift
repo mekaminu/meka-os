@@ -121,6 +121,17 @@ final class CoreModel {
     var showWeekAhead = false
     /// Slice 2: Sunday's heads-up on or off and its time (synced with the Fold).
     private(set) var weekAheadSetting: WeekAheadSettingView?
+    /// Calmer Today, slice 1: how Today shows the day's done tasks (Folded by default · Hidden · Shown) and whether the
+    /// fold is open today; synced with the Fold.
+    private(set) var doneTodayChoice: DoneTodayChoiceView = DoneTodayChoiceView.companion.DEFAULT
+    /// A click's choice shown at once, until the core's view says the same (taps feel instant).
+    private var doneTodayPickedShow: DoneShow?
+    private var doneTodayTappedOpen: Bool?
+    /// What Today and Appearance draw: the core's choice with any click still on its way laid over it.
+    var doneTodayShown: DoneTodayChoiceView {
+        DoneTodayChoiceView(show: doneTodayPickedShow ?? doneTodayChoice.show,
+                            openToday: doneTodayTappedOpen ?? doneTodayChoice.openToday)
+    }
     /// Listen on Sunday's heads-up: the week ahead sheet reads itself aloud once open; the sheet clears it.
     var readWeekAheadOnOpen = false
     /// Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately (Ask → More →
@@ -614,6 +625,14 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.weekAheadSettingView { self?.weekAheadSetting = s }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.doneTodayChoice {
+                guard let self else { continue }
+                self.doneTodayChoice = c
+                if self.doneTodayPickedShow == c.show { self.doneTodayPickedShow = nil }
+                if self.doneTodayTappedOpen == c.openToday { self.doneTodayTappedOpen = nil }
+            }
         })
         observers.append(Task { [weak self] in
             for await a in core.autonomyView { self?.autonomy = a }
@@ -1699,6 +1718,21 @@ final class CoreModel {
     }
 
     /// The week ahead's Sunday heads-up: on or off and its time. Only a Bool and an Int32 cross.
+    /// Calmer Today, slice 1: Done tasks on Today, Folded · Hidden · Shown (synced). Shows at once; the write follows.
+    func setDoneTodayShow(_ show: DoneShow) {
+        MekaHaptics.tick()
+        doneTodayPickedShow = show
+        let code = show.code
+        run { _ = try await $0.setDoneTodayShow(code: code) }
+    }
+
+    /// Opens the folded "2 done today" for the rest of today, or closes it. Shows at once; the write follows.
+    func toggleDoneTodayFold() {
+        let open = !doneTodayShown.openToday
+        doneTodayTappedOpen = open
+        run { _ = try await $0.setDoneTodayOpen(open: open) }
+    }
+
     func setWeekAhead(on: Bool, minute: Int) {
         MekaHaptics.tick()
         let m = Int32(minute)

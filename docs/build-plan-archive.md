@@ -3993,3 +3993,21 @@ slice 1 (2026-10-25: **Done is instant and a decided card never comes back**: ca
 ## One conversation, one voice (Take first, Meka 2026-10-25 14:38) — done 2026-10-26
 
 **Cause:** the hello (and its openers made ahead) was Navilife's own clip in the server's default voice, Polly's Brian, then Live answered in Gemini's Charon. **Fix:** core `OneVoiceRules.asked(chosen, liveOn, liveVoice)`: while Live is on, every clip Navilife's voice asks for names Live's voice (`LiveTalkRules.voice`, Charon by default), which the server speaks as Google's Chirp 3 HD voice of the same name (the voice Live's is built on; free tier under the 900k meter, Polly stands in past it or if Google fails); the device's own voice, when chosen, stays the device's; Live off is unchanged. `MekaCore.speechVoiceNow` uses it, so the hello, openers, normal Obi's fallback lines, the brief and the streamed answer's first piece all ask for one voice; the clip memory is keyed by the voice asked, so Brian's openers aren't played while Live is on and are played again when it's off. `setLiveOn` / `setLiveVoice` remake the hello's openers at once when the voice changes. `OneVoiceRules.inUse` gives Health's "Speaking as Charon · the same as Live" / "Speaking as Brian · not Live's Charon"; a clip played from memory now also names its voice. Tests: OneVoiceTest (domain), OneVoiceFacadeTest +3 (hello and every line in Live's voice, a new Live voice followed, Live off back to Brian from memory; Health when Polly stood in; the device's voice untouched). No server change, no migration; the Mac uses the same core (Mac checked nightly).
+
+## Calmer Today — slice 1 (2026-10-26): smaller task rows and Done today is his choice
+
+Meka 2026-10-25 15:03/15:05 (the approved mockup docs/design/today/today-calmer.dc.html). **Task rows** in every task
+list on the Fold (Today's timeline and Anytime today, Needs you, Done today): the tick is drawn 22 dp (1.5 dp ring)
+inside a 44 dp tap target that bleeds 11 dp into the row's start, so the circle lines up with the section label and
+the title sits the target's own 11 dp after it (no spacer; was a 28 dp circle and a 16 dp spacer); titles use the new
+`taskTitle` type token (16 sp regular, Mac 13; was `body` 17 sp); rows keep the 48 dp minimum. **Done today** (core
+DoneTodayChoice.kt: DoneShow, DoneTodayRules, DoneTodaySettings; CONTEXT_MODE entity `done_today`, fields show/openedDay,
+synced): Folded (the default) is one quiet line "2 done today ›" beside a small filled check that opens the rows ("2
+done today · hide" closes them) and stays open until the end of that day on both apps; Hidden shows nothing (Undo after
+a tick still works); Shown is the old heading and rows. The tap shows its result in the same frame (local override
+until the core's view agrees). The choice: Ask → Settings → Appearance → "Done tasks on Today" (chips on the Fold, a
+segmented control on the Mac). Facade doneTodayChoice / setDoneTodayShow / setDoneTodayOpen (publishes only that view,
+no whole-app refresh). Tests: DoneTodayChoiceTest (6), DoneTodayChoiceFacadeTest (Fold ↔ Mac sync, next-day fold),
+TodayScreensTest.doneTodayFoldOpensAndClosesByHand. Mockup check: tick 20→22 px drawn (board's 22), 44 target ✓, title
+16 ✓, 48 row ✓, "N done today ›" fold line ✓; Up next card, the update banner and the 12 sp section labels are the next
+slices. No server change, no migration. Mac checked nightly.

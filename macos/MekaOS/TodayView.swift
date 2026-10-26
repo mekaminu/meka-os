@@ -585,17 +585,29 @@ struct TodayView: View {
                             SectionLabel("Anytime today", palette).staggeredAppear(step(.anytime), play: play)
                             ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(step(.anytime), play: play) }
                         }
-                        if let doneLabel = TodayTickRules.shared.label(doneToday: today.doneToday) {
+                        let doneChoice = model.doneTodayShown
+                        if !today.doneToday.isEmpty && doneChoice.show != .hidden {
                             // Straight under the day's section, which already ends with its own spacing (Meka's
                             // 10:48 screenshots: a double gap left a large empty stretch above it). The Sunsama tick
                             // (Week board by hand, slice 6): the day's done tasks stay, ticked and struck through.
-                            SectionLabel(doneLabel, palette)
-                                .padding(.top, tl.head != nil && tl.anytime.isEmpty ? 0 : MekaSpace.l)
+                            // Calmer Today, slice 1: Folded (the default) is one line, "2 done today ›", that opens them.
+                            let top = tl.head != nil && tl.anytime.isEmpty ? 0 : MekaSpace.l
+                            if let line = DoneTodayRules.shared.foldLine(doneToday: today.doneToday, view: doneChoice) {
+                                DoneFoldLine(line: line, label: DoneTodayRules.shared.foldLabel(doneToday: today.doneToday, view: doneChoice), palette: palette) {
+                                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { model.toggleDoneTodayFold() }
+                                }
+                                .padding(.top, top)
                                 .staggeredAppear(step(.done), play: play)
-                            ForEach(TodayTickRules.shared.shown(doneToday: today.doneToday, open: doneOpen), id: \.id) { t in
+                            }
+                            if let doneLabel = DoneTodayRules.shared.heading(doneToday: today.doneToday, view: doneChoice) {
+                                SectionLabel(doneLabel, palette)
+                                    .padding(.top, top)
+                                    .staggeredAppear(step(.done), play: play)
+                            }
+                            ForEach(DoneTodayRules.shared.rows(doneToday: today.doneToday, view: doneChoice, more: doneOpen), id: \.id) { t in
                                 DoneTodayRow(task: t, palette: palette).staggeredAppear(step(.done), play: play)
                             }
-                            if let more = TodayTickRules.shared.moreLine(doneToday: today.doneToday, open: doneOpen) {
+                            if let more = DoneTodayRules.shared.moreLine(doneToday: today.doneToday, view: doneChoice, more: doneOpen) {
                                 Button(more) { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { doneOpen = true } }
                                     .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                     .padding(.vertical, MekaSpace.xs)
@@ -777,7 +789,7 @@ struct TaskRow: View {
             }
             CompleteButton(id: task.id, title: task.title, palette: palette, settle: true) { ticking = true }
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body)
+                Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.taskTitle)
                     .strikethrough(ticking, color: palette.textTertiary)
                     .foregroundStyle(ticking ? palette.textTertiary : palette.textPrimary)
                     .lineLimit(2)
@@ -1053,7 +1065,7 @@ struct DoneTodayRow: View {
             }
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel(TodayTickRules.shared.untickLabel(title: task.title))
-            Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body)
+            Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.taskTitle)
                 .strikethrough(true, color: palette.textTertiary)
                 .foregroundStyle(palette.textTertiary)
                 .lineLimit(2)
@@ -1064,6 +1076,37 @@ struct DoneTodayRow: View {
         .contentShape(Rectangle())
         .onTapGesture { model.select(task.id, reduced: reduceMotion) }
         .transition(.opacity)
+    }
+}
+
+/// Calmer Today, slice 1 (the approved mockup): Done today folded into one quiet line, "2 done today ›", beside a small
+/// filled check; a click opens the ticked rows under it ("2 done today · hide" closes them) and the text cross-fades.
+/// Reduce Motion: at once.
+struct DoneFoldLine: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let line: String
+    let label: String
+    let palette: MekaPalette
+    let toggle: () -> Void
+
+    var body: some View {
+        Button {
+            MekaHaptics.light()
+            toggle()
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                TickRingView(done: true, palette: palette).frame(width: 22, height: 22)
+                Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                Spacer()
+            }
+            .padding(.vertical, MekaSpace.xs)
+            .padding(.horizontal, MekaSpace.xs)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(label)
     }
 }
 

@@ -4,6 +4,8 @@ import os.meka.android.activity.ActivityPane
 import os.meka.android.ask.TrainQueuePane
 import os.meka.android.ask.WeekAheadPane
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.TickSize
+import os.meka.android.designsystem.bleedStart
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import os.meka.android.work.AfterWorkHost
@@ -768,6 +770,19 @@ private fun TodayPane(
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
     var doneOpen by rememberSaveable { mutableStateOf(false) }
+    // Calmer Today, slice 1: Done today is his choice (Folded by default · Hidden · Shown), synced with the Mac. A tap on
+    // the fold line opens or closes it in the same frame; the core's write (open for the rest of today) follows.
+    val doneChoiceFlow = remember(core) { core?.doneTodayChoice ?: MutableStateFlow(os.meka.core.domain.DoneTodayChoiceView.DEFAULT) }
+    val doneChoiceCore by doneChoiceFlow.collectAsState()
+    var doneFoldTapped by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(doneChoiceCore) { if (doneFoldTapped == doneChoiceCore.openToday) doneFoldTapped = null }
+    val doneChoice = doneFoldTapped?.let { doneChoiceCore.copy(openToday = it) } ?: doneChoiceCore
+    val doneScope = rememberCoroutineScope()
+    val toggleDoneFold: () -> Unit = {
+        val open = !doneChoice.openToday
+        doneFoldTapped = open
+        if (core != null) doneScope.launch { runCatching { core.setDoneTodayOpen(open) } }
+    }
     // "+2 more" unfolds the rest of the all-day group.
     var allDayOpen by rememberSaveable { mutableStateOf(false) }
     val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
@@ -1367,7 +1382,7 @@ private fun TodayPane(
                         TaskRow(t, actions, motion = rowMotion(t.id), modifier = m)
                     }
                 }
-                if (today.doneToday.isNotEmpty()) item(key = "s-anytime") { Spacer(Modifier.height(MekaSpace.l)) }
+                if (today.doneToday.isNotEmpty() && doneChoice.show != os.meka.core.domain.DoneShow.HIDDEN) item(key = "s-anytime") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             }
             TodaySlot.DONE -> {
@@ -1378,14 +1393,22 @@ private fun TodayPane(
                 // through, the latest first; a tap on a circle un-ticks it. The row keeps its "d-" key so a ticked
                 // Anytime row glides down into the group.
                 val doneStep = TodayOrderRules.stagger(TodaySlot.DONE)
-                val doneRows = os.meka.core.domain.TodayTickRules.shown(today.doneToday, doneOpen)
+                // Calmer Today, slice 1: Folded (the default) is one line, "2 done today ›", that opens the rows.
+                os.meka.core.domain.DoneTodayRules.foldLine(today.doneToday, doneChoice)?.let { line ->
+                    item(key = "done-fold") {
+                        DoneFoldLine(line, os.meka.core.domain.DoneTodayRules.foldLabel(today.doneToday, doneChoice), toggleDoneFold,
+                            Modifier.animateItem().appear(rememberAppearance(doneStep, play)))
+                    }
+                }
+                val doneRows = os.meka.core.domain.DoneTodayRules.rows(today.doneToday, doneChoice, doneOpen)
+                val doneHeading = os.meka.core.domain.DoneTodayRules.heading(today.doneToday, doneChoice)
                 itemsIndexed(doneRows, key = { _, t -> "d-" + t.id }) { i, t ->
-                    Headed(os.meka.core.domain.TodayTickRules.label(today.doneToday).takeIf { i == 0 },
+                    Headed(doneHeading.takeIf { i == 0 },
                         Modifier.animateItem().appear(rememberAppearance(doneStep, play))) { m ->
                         DoneTodayRow(t, actions, m)
                     }
                 }
-                os.meka.core.domain.TodayTickRules.moreLine(today.doneToday, doneOpen)?.let { more ->
+                os.meka.core.domain.DoneTodayRules.moreLine(today.doneToday, doneChoice, doneOpen)?.let { more ->
                     item(key = "done-more") {
                         Text(more, style = MekaType.caption, color = Meka.colors.textTertiary,
                             modifier = Modifier.animateItem().clip(RoundedCornerShape(MekaRadius.m)).clickable { doneOpen = true }
@@ -1473,10 +1496,11 @@ internal fun TaskRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (time != null) TimeColumn(time, past = false)
-        CompleteButton(t.id, t.title, actions.complete, settle = true, onPressed = { ticking = true })
-        Spacer(Modifier.width(MekaSpace.m))
+        // Calmer Today (Meka 2026-10-25 15:03): a 22 dp circle in a 44 dp target, the text the target's inset after it.
+        CompleteButton(t.id, t.title, actions.complete, size = TickSize.DRAWN, settle = true, onPressed = { ticking = true },
+            touch = TickSize.TOUCH, bleed = time == null)
         Column(Modifier.weight(1f)) {
-            Text(os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.body, color = titleColor,
+            Text(os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.taskTitle, color = titleColor,
                 textDecoration = if (ticking) TextDecoration.LineThrough else null, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = if (motion.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(t.id), motion.titleVisible) else Modifier)
             val line = when (reason) {
@@ -1499,6 +1523,32 @@ internal fun TaskRow(
 }
 
 /**
+ * Calmer Today, slice 1 (the approved mockup): Done today folded into one quiet line, "2 done today ›", with a small
+ * filled check; a tap opens the ticked rows under it (the line becomes "2 done today · hide") and they rise in with
+ * the list's own motion; Motion → Off: they appear at once. Light haptic on the tap.
+ */
+@Composable
+internal fun DoneFoldLine(line: String, label: String, toggle: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberMekaHaptics()
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+            .semantics(mergeDescendants = true) { contentDescription = label }
+            .clickable(role = Role.Button) { haptics.light(); toggle() }
+            .minTouch(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.bleedStart(TickSize.BLEED).size(TickSize.TOUCH), contentAlignment = Alignment.Center) {
+            TickRing(done = true, modifier = Modifier.size(TickSize.DRAWN))
+        }
+        AnimatedContent(
+            targetState = line,
+            transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+            label = "done-fold",
+        ) { t -> Text(t, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+    }
+}
+
+/**
  * A task done today, at Today's foot (Week board by hand, slice 6; catalogue "Complete a task"): the circle filled gold
  * with its tick, the title struck through and dimmed. A tap on the circle un-ticks it (light haptic; the ring empties and
  * the row rises back among the open ones), a tap on the row opens it as any task does.
@@ -1512,15 +1562,14 @@ internal fun DoneTodayRow(t: Task, actions: TodayActions, modifier: Modifier = M
             .minTouch().padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TickRing(
-            done = true,
-            modifier = Modifier.size(28.dp).clip(CircleShape)
+        Box(
+            Modifier.bleedStart(TickSize.BLEED).size(TickSize.TOUCH).clip(CircleShape)
                 .semantics { contentDescription = label }
                 .clickable(role = Role.Checkbox) { haptics.light(); actions.reopen(t.id) },
-        )
-        Spacer(Modifier.width(MekaSpace.m))
+            contentAlignment = Alignment.Center,
+        ) { TickRing(done = true, modifier = Modifier.size(TickSize.DRAWN)) }
         Text(
-            os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.body, color = Meka.colors.textTertiary,
+            os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.taskTitle, color = Meka.colors.textTertiary,
             textDecoration = TextDecoration.LineThrough, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
@@ -1543,6 +1592,10 @@ internal fun CompleteButton(
     settle: Boolean = false,
     /** Told at the tap, so the row can strike its title through at once. */
     onPressed: (() -> Unit)? = null,
+    /** Calmer Today: the tap target around the drawn [size] (a task row's 44 dp around 22); null: the drawn size. */
+    touch: androidx.compose.ui.unit.Dp? = null,
+    /** With [touch]: the target bleeds into the row's start so the drawn circle lines up with the label above. */
+    bleed: Boolean = false,
 ) {
     var pressed by remember(id) { mutableStateOf(false) }
     val haptics = rememberMekaHaptics()
@@ -1560,21 +1613,25 @@ internal fun CompleteButton(
             done(id)
         }
     }
-    CheckRing(
-        fraction = draw.value,
-        rest = Meka.colors.textTertiary, accent = Meka.colors.accent, onAccent = Meka.colors.onAccent,
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .semantics { contentDescription = "Complete $title" }
-            .clickable(role = Role.Checkbox) {
-                if (!pressed) {
-                    pressed = true
-                    haptics.light()
-                    onPressed?.invoke()
-                }
-            },
-    )
+    val tap = Modifier
+        .then(if (touch != null && bleed) Modifier.bleedStart((touch - size) / 2) else Modifier)
+        .size(touch ?: size)
+        .clip(CircleShape)
+        .semantics { contentDescription = "Complete $title" }
+        .clickable(role = Role.Checkbox) {
+            if (!pressed) {
+                pressed = true
+                haptics.light()
+                onPressed?.invoke()
+            }
+        }
+    Box(tap, contentAlignment = Alignment.Center) {
+        CheckRing(
+            fraction = draw.value,
+            rest = Meka.colors.textTertiary, accent = Meka.colors.accent, onAccent = Meka.colors.onAccent,
+            modifier = Modifier.size(size),
+        )
+    }
 }
 
 /**

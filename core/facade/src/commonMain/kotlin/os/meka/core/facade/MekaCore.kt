@@ -1699,6 +1699,30 @@ class MekaCore(
     /** The week ahead's Sunday heads-up (slice 2): on or off and its time (default 18:00). Synced. */
     val weekAheadSettingView: StateFlow<os.meka.core.domain.WeekAheadSettingView> = _weekAheadSetting.asStateFlow()
 
+    private val doneTodaySettings = os.meka.core.domain.DoneTodaySettings(replica)
+    private val _doneTodayChoice = MutableStateFlow(os.meka.core.domain.DoneTodayChoiceView.DEFAULT)
+    /**
+     * Calmer Today, slice 1: how Today shows the day's done tasks (Folded by default · Hidden · Shown) and whether the
+     * fold is open today. Synced, so the Fold and the Mac agree; follows a change on the other app at the next refresh.
+     */
+    val doneTodayChoice: StateFlow<os.meka.core.domain.DoneTodayChoiceView> = _doneTodayChoice.asStateFlow()
+
+    /** Sets how done tasks show on Today by its code ("F", "H", "S"); false when nothing changed. Touches nothing else. */
+    suspend fun setDoneTodayShow(code: String): Boolean = onCore {
+        val show = os.meka.core.domain.DoneShow.entries.firstOrNull { it.code == code } ?: return@onCore false
+        doneTodaySettings.setShow(show).also { publishDoneTodayChoice() }
+    }
+
+    /** Opens the folded "2 done today" for the rest of today, or closes it; false when nothing changed. */
+    suspend fun setDoneTodayOpen(open: Boolean): Boolean = onCore {
+        doneTodaySettings.setOpen(open, todayEpochDay()).also { publishDoneTodayChoice() }
+    }
+
+    /** Core only: cheap (one entity read), so it runs on every refresh too, which is how the other app's change arrives. */
+    private fun publishDoneTodayChoice() {
+        _doneTodayChoice.value = os.meka.core.domain.DoneTodayRules.view(doneTodaySettings.setting(), todayEpochDay())
+    }
+
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
      * What MEKA may do (V1, policy engine UI, slice 1): the kill switch, each earned-trust kind and the locked rows
@@ -12306,6 +12330,7 @@ class MekaCore(
         )
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
+        publishDoneTodayChoice()
         _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
