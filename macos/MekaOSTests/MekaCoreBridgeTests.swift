@@ -3004,6 +3004,31 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.tripsView.value.rows.isEmpty)
     }
 
+    func testTripListsReachSwift() async throws {
+        // Trip lists, slice 1: an item typed on the Mac lands on the list its words choose, the tab and filter cross
+        // as Swift enums, and a tick reaches the view.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "triplists-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        _ = try await core.addTrip(text: "Lisbon 3–6 Mar \(y)")
+        let tripId = core.tripsView.value.rows[0].id
+        XCTAssertEqual(core.tripListsView.value.first?.summary, TripListRules.shared.LISTS_EMPTY)
+        let added = try await core.addTripItem(tripId: tripId, text: "pack 2 chargers", open: .buy)
+        XCTAssertFalse(added.refused)
+        XCTAssertEqual(added.list, .pack)
+        XCTAssertEqual(added.line, "Added Chargers × 2 to To pack · Tech")
+        _ = try await core.addTripItem(tripId: tripId, text: "kids outfits × 10", open: .pack)
+        let v = try XCTUnwrap(core.tripListsView.value.first)
+        XCTAssertEqual(v.groups(list: .pack, who: .kids).flatMap { $0.rows.map(\.text) }, ["Kids outfits", "Chargers"])
+        let charger = try XCTUnwrap(v.tab(list: .pack).groups.last?.rows.first)
+        let ticked = try await core.tickTripItem(id: charger.id, done: true)
+        XCTAssertTrue(ticked.boolValue)
+        XCTAssertEqual(core.tripListsView.value.first?.packed.line, "1 of 2")
+    }
+
     func testVaultReceiptReachesSwift() async throws {
         // Receipts → Vault: the preview's offer, Keep / Take out and Open the email reach the Mac (only Strings cross).
         XCTAssertEqual(VaultReceiptRules.shared.KEEP, "Keep in the Vault")

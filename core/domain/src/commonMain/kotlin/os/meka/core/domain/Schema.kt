@@ -155,6 +155,8 @@ object EntityTypes {
     const val VAULT_WRAP = "vault_wrap"
     /** Clean-ups (2026-10-19): a new phone or Mac asking to join, id the ask's request id; written only by the server (see [DeviceJoinRules]). */
     const val DEVICE_JOIN = "device_join"
+    /** Trip lists, slice 1 (2026-10-26): one thing to buy, pack or do before leaving on a trip (see [TripLists]). */
+    const val TRIP_ITEM = "trip_item"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -166,7 +168,7 @@ object EntityTypes {
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
-        TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN,
+        TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM,
     )
 }
 
@@ -579,6 +581,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.TRIP -> MergePolicy.Lww
         entityType == EntityTypes.TRIP_BOOKING && field == TripBookingFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.TRIP_BOOKING -> MergePolicy.Lww
+        entityType == EntityTypes.TRIP_ITEM && field == TripItemFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.TRIP_ITEM -> MergePolicy.Lww
         // Vault documents: one removed on any device is gone for good; the title and date, the latest edit wins.
         entityType == EntityTypes.VAULT_DOC && field == VaultDocFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.VAULT_DOC -> MergePolicy.Lww

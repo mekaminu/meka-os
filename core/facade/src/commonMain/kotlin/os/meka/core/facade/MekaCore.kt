@@ -188,6 +188,8 @@ class MekaCore(
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    /** Trip lists, slice 1 (2026-10-26): To buy, To pack and Before we leave on each trip. */
+    private val tripLists = os.meka.core.domain.TripLists(replica, ids::next, nowMs)
     private val documents = os.meka.core.domain.Documents(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val parkingTimers = os.meka.core.domain.ParkingTimers(replica)
@@ -574,6 +576,14 @@ class MekaCore(
      * timeline; Today's header shows the trip a week ahead and while it's on.
      */
     val tripsView: StateFlow<os.meka.core.domain.TripsView> = _trips.asStateFlow()
+
+    private val _tripLists = MutableStateFlow<List<os.meka.core.domain.TripListsView>>(emptyList())
+
+    /**
+     * Trip lists, slice 1 (Meka 2026-10-26): each trip's To buy, To pack and Before we leave, grouped, with Bought and
+     * Packed progress; one per trip in Trips (on now, to come, just ended, then past), found by [os.meka.core.domain.TripListsView.tripId].
+     */
+    val tripListsView: StateFlow<List<os.meka.core.domain.TripListsView>> = _tripLists.asStateFlow()
 
     /**
      * Travel mode completeness, slice 2: the UK's clock and each destination's (by the trip's name), so a booking at the
@@ -4952,6 +4962,25 @@ class MekaCore(
 
     /** Undo after [removeTripForUndo] or [removeTripBookingForUndo]: exactly what was removed comes back. */
     suspend fun undoTripRemoval(token: String): Boolean = onCore { trips.undoRemove(token) }
+
+    // ---- Trip lists (slice 1, 2026-10-26; Trips → a trip → Lists) ----
+
+    /**
+     * Adds one typed line to the trip [tripId]'s lists ([os.meka.core.domain.TripListRules.read]): "buy sun cream" to To
+     * buy, "pack 2 chargers" to To pack, anything else to [open] (the tab showing). Refused (nothing written) when there's
+     * nothing to add or the trip has gone; the result names the list it went on, so the app shows that tab.
+     */
+    suspend fun addTripItem(tripId: String, text: String, open: os.meka.core.domain.TripList): os.meka.core.domain.TripListAdded =
+        onCore { tripLists.add(tripId, text, open, tripExists = trips.items().any { it.id == tripId }) }
+
+    /** Ticks or unticks one list item (the apps show it at once and call this after); false when nothing changed. */
+    suspend fun tickTripItem(id: String, done: Boolean): Boolean = onCore { tripLists.tick(id, done) }
+
+    /** Removes one list item: "Removed Sun cream" with Undo's token; null when it isn't there. */
+    suspend fun removeTripItem(id: String): os.meka.core.domain.TripListRemoved? = onCore { tripLists.remove(id) }
+
+    /** Undo after [removeTripItem]: the item comes back as it was. */
+    suspend fun undoTripItemRemoval(token: String): Boolean = onCore { tripLists.undoRemove(token) }
 
     // ---- The Vault (V2, slice 1) ----
 
@@ -12611,6 +12640,10 @@ class MekaCore(
         val docItems = documents.items()
         _trips.value = timed("Trips") { viewMemo.keep("Trips", listOf(tripItems, todayDay, docItems, timeZone())) {
             os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
+        } }
+        val tripListItems = tripLists.items()
+        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay)) {
+            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

@@ -1,0 +1,313 @@
+package os.meka.android.ask
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaRadius
+import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.TickRing
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.lists.Field
+import os.meka.core.domain.TripList
+import os.meka.core.domain.TripListAdded
+import os.meka.core.domain.TripListGroup
+import os.meka.core.domain.TripListRemoved
+import os.meka.core.domain.TripListRow
+import os.meka.core.domain.TripListRules
+import os.meka.core.domain.TripProgress
+import os.meka.core.domain.TripRules
+import os.meka.core.domain.TripWho
+import os.meka.core.facade.MekaCore
+
+/**
+ * Trips → a trip → Lists (trip lists, slice 1; mockup `docs/design/trip/trip-lists.dc.html`): the trip's dates and days
+ * to go, two thin bars (Bought n of N, Packed n of N), the three lists as tabs (To buy · To pack · Before we leave), one
+ * add field ("buy sun cream" → To buy, "pack 2 chargers" → To pack × 2, else the open tab; the tab follows where it
+ * went), Everyone / Me / Kids on To pack, and each list's groups with a count ("1 of 3", "All done"), folding on a tap.
+ * A tick shows in the same frame (the core's write runs after; the rule for every tap); ticked items sink to the foot of
+ * their group and fade. A long press removes an item, with Undo for a few seconds. Synced with the Mac.
+ *
+ * Motion: the header and bars stagger in; the bars fill on the appear spring; the tab content cross-fades; rows move
+ * with the list's item motion (a tick sinks the row), the ring draws its check (TickRing) and the title fades and
+ * strikes; groups fold on the expand spring with the chevron turning; the line under the field cross-fades (refused lit
+ * in the accent). Haptics: light on a tick and an add, a tick on a tab, a filter, a fold or a remove. Reduced motion:
+ * cross-fades only, the bars set at once.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    val all by core.tripListsView.collectAsState()
+    val v = all.firstOrNull { it.tripId == tripId }
+    var tab by rememberSaveable { mutableStateOf(TripList.PACK) }
+    var who by rememberSaveable { mutableStateOf(TripWho.EVERYONE) }
+    var said by remember { mutableStateOf<TripListAdded?>(null) }
+    var removed by remember { mutableStateOf<TripListRemoved?>(null) }
+    // The tap's result in the next frame: what this screen ticked, until the view says the same.
+    val pending = remember { mutableStateMapOf<String, Boolean>() }
+    val folded = remember { mutableStateMapOf<String, Boolean>() }
+    BackHandler(onBack = onBack)
+    LaunchedEffect(v) {
+        val shown = v?.tabs.orEmpty().flatMap { t -> t.groups.flatMap { it.rows } }.associate { it.id to it.done }
+        pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
+    }
+    LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
+    val tick: (TripListRow, Boolean) -> Unit = { row, done ->
+        haptics.light()
+        pending[row.id] = done
+        scope.launch { if (runCatching { core.tickTripItem(row.id, done) }.isFailure) pending.remove(row.id) }
+    }
+    val remove: (TripListRow) -> Unit = { row ->
+        haptics.tick()
+        scope.launch { runCatching { core.removeTripItem(row.id) }.getOrNull()?.let { removed = it } }
+    }
+    val saidColor by animateColorAsState(
+        if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trip-list-said",
+    )
+
+    LazyColumn(
+        Modifier.fillMaxSize().testTag("trip-lists"),
+        contentPadding = PaddingValues(MekaSpace.gutter),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        item(key = "back") {
+            Text("‹ Trips", style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { onBack() }.semantics { contentDescription = "Back to Trips" }.minTouch())
+        }
+        if (v == null) {
+            item(key = "gone") { Text(TripListRules.GONE, style = MekaType.body, color = Meka.colors.textSecondary) }
+            return@LazyColumn
+        }
+        item(key = "head") {
+            Column(Modifier.appear(rememberAppearance(0)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(v.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
+                Text(v.dates, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(v.countdown, style = MekaType.captionStrong, color = if (v.countdownLit) Meka.colors.accent else Meka.colors.textSecondary)
+            }
+        }
+        item(key = "bars") {
+            Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                ProgressBar(v.bought, Modifier.weight(1f))
+                ProgressBar(v.packed, Modifier.weight(1f))
+            }
+        }
+        item(key = "tabs") {
+            Row(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+                    .padding(MekaSpace.xxs).appear(rememberAppearance(2)),
+            ) {
+                for (t in v.tabs) {
+                    val on = t.list == tab
+                    val bg by animateColorAsState(if (on) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "trip-tab")
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                            .clickable(role = Role.Tab) { if (!on) { haptics.tick(); tab = t.list; said = null } }
+                            .semantics { contentDescription = t.label + if (t.left > 0) ", ${t.left} to go" else ""; if (on) stateDescription = "Selected" }
+                            .minTouch().testTag("trip-tab-${t.list.wire}"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(t.label, style = MekaType.captionStrong, color = if (on) Meka.colors.accent else Meka.colors.textSecondary,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        item(key = "field") {
+            Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Field(v.tab(tab).hint, description = TripListRules.ADD_DESCRIPTION) { text ->
+                    scope.launch {
+                        val r = runCatching { core.addTripItem(tripId, text, tab) }.getOrNull()
+                        if (r?.refused == false) { haptics.light(); tab = r.list } else haptics.reject()
+                        said = r
+                    }
+                }
+                Crossfade(said?.line ?: TripListRules.ADD_NOTE, animationSpec = MekaMotion.appear(reduced), label = "trip-list-added") { line ->
+                    Text(line, style = MekaType.caption, color = if (said != null) saidColor else Meka.colors.textTertiary)
+                }
+                AnimatedVisibility(
+                    visible = removed != null,
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    removed?.let { r ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                            Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) {
+                                        haptics.light(); removed = null
+                                        scope.launch { runCatching { core.undoTripItemRemoval(r.token) } }
+                                    }
+                                    .semantics { contentDescription = "Undo: ${r.line}" }
+                                    .minTouch().padding(MekaSpace.xs))
+                        }
+                    }
+                }
+            }
+        }
+        if (tab == TripList.PACK) {
+            item(key = "who") {
+                Row(Modifier.animateItem(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    for (w in TripWho.entries) {
+                        val on = w == who
+                        Text(
+                            w.label, style = MekaType.caption, color = if (on) Meka.colors.onAccent else Meka.colors.textPrimary,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                .background(if (on) Meka.colors.accent else Meka.colors.surface)
+                                .clickable(role = Role.Tab) { haptics.tick(); who = w }
+                                .semantics { if (on) stateDescription = "Selected" }
+                                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                        )
+                    }
+                }
+            }
+        }
+        val groups = v.groups(tab, who)
+        if (groups.isEmpty()) {
+            item(key = "empty-${tab.wire}") {
+                Text(v.tab(tab).empty, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+        }
+        for (g in groups) {
+            val open = folded[g.key] != true
+            item(key = "group-${g.key}") {
+                GroupHead(g, open, pending, Modifier.animateItem()) { haptics.tick(); folded[g.key] = open }
+            }
+            if (open) {
+                // A row ticked here sinks at once (a stable sort keeps the rest in their order).
+                val rows = g.rows.sortedBy { pending[it.id] ?: it.done }
+                items(rows, key = { "item-${it.id}" }) { row ->
+                    ItemRow(row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) }, onRemove = { remove(row) })
+                }
+            }
+        }
+        item(key = "note") {
+            Text(TripListRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+        }
+    }
+}
+
+/** "Bought" · "3 of 9" over a thin bar filling to its share. */
+@Composable
+private fun ProgressBar(p: TripProgress, modifier: Modifier) {
+    val reduced = Meka.reducedMotion
+    val fill by animateFloatAsState(p.fraction, MekaMotion.appear(reduced), label = "trip-bar")
+    Column(modifier.semantics(mergeDescendants = true) { contentDescription = "${p.label} ${p.line}" }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(p.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            Text(p.line, style = MekaType.captionStrong, color = Meka.colors.textPrimary)
+        }
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fill).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+        }
+    }
+}
+
+/** A group's head: its name, its count ("1 of 3", "All done" in green) and a chevron; a tap folds it. */
+@Composable
+private fun GroupHead(g: TripListGroup, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onToggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val done = g.rows.count { pending[it.id] ?: it.done }
+    val allDone = g.rows.isNotEmpty() && done == g.rows.size
+    val count = if (allDone) "All done" else "$done of ${g.rows.size}"
+    val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "trip-group-chev")
+    Row(
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onToggle)
+            .semantics(mergeDescendants = true) { contentDescription = "${g.name}, $count, " + if (open) "tap to fold" else "tap to open" }
+            .minTouch(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(g.name.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textTertiary)
+        Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+    }
+}
+
+/** One item: the ring (22 dp in a 48 dp target), its name (struck and faded once ticked), whose, and "× 5". */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onRemove: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val fade by animateFloatAsState(if (done) 0.5f else 1f, MekaMotion.appear(reduced), label = "trip-item-fade")
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+            .combinedClickable(role = Role.Checkbox, onClick = { onTick(!done) }, onLongClick = onRemove, onLongClickLabel = "Remove")
+            .semantics(mergeDescendants = true) {
+                contentDescription = row.spoken.removeSuffix(", ticked")
+                stateDescription = if (done) "Ticked" else "Not ticked"
+            }
+            .minTouch().testTag("trip-item-${row.id}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+    ) {
+        TickRing(done, Modifier.size(22.dp))
+        Column(Modifier.weight(1f).alpha(fade)) {
+            Text(row.text, style = MekaType.taskTitle, color = Meka.colors.textPrimary,
+                textDecoration = if (done) TextDecoration.LineThrough else null, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (row.sub.isNotEmpty()) Text(row.sub, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        if (row.qty.isNotEmpty()) Text(row.qty, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade))
+    }
+}

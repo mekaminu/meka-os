@@ -30,11 +30,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,6 +62,7 @@ import os.meka.android.today.SectionLabel
 import os.meka.core.domain.TripAdded
 import os.meka.core.domain.TripDocRow
 import os.meka.core.domain.TripDocRules
+import os.meka.core.domain.TripListRules
 import os.meka.core.domain.TripRemoved
 import os.meka.core.domain.TripRow
 import os.meka.core.domain.TripRules
@@ -87,10 +90,21 @@ import os.meka.core.facade.MekaCore
  */
 @Composable
 fun TripsPane(core: MekaCore, onClose: () -> Unit) {
+    // Trip lists, slice 1: a trip's Lists open in place of Trips (‹ Trips or Back returns), cross-fading.
+    var listsFor by rememberSaveable { mutableStateOf<String?>(null) }
+    Crossfade(listsFor, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "trips-lists") { id ->
+        if (id != null) TripListsPane(core, id, onBack = { listsFor = null })
+        else TripsHome(core, onClose, onOpenLists = { listsFor = it })
+    }
+}
+
+@Composable
+private fun TripsHome(core: MekaCore, onClose: () -> Unit, onOpenLists: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val v by core.tripsView.collectAsState()
+    val lists by core.tripListsView.collectAsState()
     var said by remember { mutableStateOf<TripAdded?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
     // Completeness slice 4: what the last × or Remove trip took, offered back for a few seconds; past trips folded.
@@ -209,6 +223,8 @@ fun TripsPane(core: MekaCore, onClose: () -> Unit) {
                 docSaid = docSaid,
                 onOpenCopy = openCopy,
                 onRemove = { removeTrip(r.id) },
+                lists = lists.firstOrNull { it.tripId == r.id }?.summary,
+                onOpenLists = { haptics.tick(); onOpenLists(r.id) },
             )
         }
         if (v.past.isNotEmpty()) {
@@ -233,6 +249,8 @@ fun TripsPane(core: MekaCore, onClose: () -> Unit) {
                         docSaid = docSaid,
                         onOpenCopy = openCopy,
                         onRemove = { removeTrip(r.id) },
+                        lists = lists.firstOrNull { it.tripId == r.id }?.summary,
+                        onOpenLists = { haptics.tick(); onOpenLists(r.id) },
                     )
                 }
             }
@@ -263,6 +281,8 @@ private fun TripRowView(
     docSaid: Pair<String, String>?,
     onOpenCopy: (String) -> Unit,
     onRemove: () -> Unit,
+    lists: String?,
+    onOpenLists: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val statusColor by animateColorAsState(
@@ -282,6 +302,18 @@ private fun TripRowView(
             Text(row.name, style = MekaType.body, color = Meka.colors.textPrimary)
             Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
             Text(row.status, style = MekaType.caption, color = statusColor)
+        }
+        // Trip lists, slice 1: To buy, To pack and Before we leave, one tap away on every trip.
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpenLists)
+                .semantics(mergeDescendants = true) { contentDescription = "Open the lists for ${row.name}: ${lists ?: TripListRules.LISTS_EMPTY}" }
+                .minTouch().testTag("trip-lists-${row.id}"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            Text(TripListRules.OPEN_LISTS, style = MekaType.captionStrong, color = Meka.colors.accent)
+            Text(lists ?: TripListRules.LISTS_EMPTY, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            Text("›", style = MekaType.body, color = Meka.colors.accent)
         }
         AnimatedVisibility(
             visible = open,

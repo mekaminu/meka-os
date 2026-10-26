@@ -170,6 +170,8 @@ final class CoreModel {
     var showPeople = false
     /// Travel mode (V1, slice 1): trips and their bookings as day-by-day timelines (Ask → More → Trips).
     private(set) var trips: TripsView?
+    /// Trip lists (slice 1): each trip's To buy, To pack and Before we leave, by trip id.
+    private(set) var tripLists: [TripListsView] = []
     /// Ask → More → Trips.
     var showTrips = false
     /// The Vault (V2, slice 1): the documents and when they run out.
@@ -589,6 +591,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await t in core.tripsView { self?.trips = t }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.tripListsView { self?.tripLists = l }
         })
         observers.append(Task { [weak self] in
             for await d in core.documentsView { self?.documents = d }
@@ -5914,6 +5919,53 @@ final class CoreModel {
 
     /// Undo: puts back exactly what the removal took.
     func undoTripRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripRemoval(token: token) } }
+
+    // MARK: Trip lists (slice 1)
+
+    /// What adding to a trip's lists said, and the list it went on (the panel shows that tab).
+    struct TripListSaid: Equatable {
+        let line: String
+        let refused: Bool
+        let list: TripList
+    }
+
+    /// Adds "buy sun cream", "pack 2 chargers" or anything else to the open tab; Strings and the tab cross once.
+    func addTripItem(_ tripId: String, _ text: String, open: TripList) async -> TripListSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addTripItem(tripId: tripId, text: t, open: open)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripListSaid(line: r.line, refused: r.refused, list: r.list)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Ticks or unticks one item; the panel already shows it (the rule for every tap), this writes it after.
+    func tickTripItem(_ id: String, done: Bool) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.tickTripItem(id: id, done: done); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Removes one item: "Removed Sun cream" with Undo's token.
+    func removeTripItem(_ id: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let r = try await core.removeTripItem(id: id) else { return nil }
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func undoTripItemRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripItemRemoval(token: token) } }
 
     // MARK: The Vault (V2, slice 1)
 

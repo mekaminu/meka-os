@@ -31,8 +31,30 @@ struct TripsSheet: View {
     /// What the last × or Remove trip took, offered back for a few seconds; past trips folded.
     @State private var removed: CoreModel.TripUndo?
     @State private var showPast = false
+    /// Trip lists, slice 1: the trip whose Lists show in place of Trips.
+    @State private var listsFor: String?
 
     var body: some View {
+        if let id = listsFor {
+            TripListsPanel(tripId: id, palette: palette, onBack: {
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { listsFor = nil }
+            })
+            .padding(MekaSpace.l)
+            .frame(width: 500, alignment: .topLeading)
+            .background(palette.surface)
+            .transition(.opacity)
+        } else {
+            home.transition(.opacity)
+        }
+    }
+
+    private func openLists(_ id: String) {
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { listsFor = id }
+    }
+
+    @ViewBuilder
+    private var home: some View {
         let v = model.trips
         let rows = v?.rows ?? []
         let past = v?.past ?? []
@@ -97,7 +119,9 @@ struct TripsSheet: View {
                             onToggle: { open = open == row.id ? nil : row.id },
                             onOpenCopy: openCopy,
                             onRemoveBooking: removeBooking,
-                            onRemove: removeTrip
+                            onRemove: removeTrip,
+                            lists: model.tripLists.first { $0.tripId == row.id }?.summary,
+                            onOpenLists: openLists
                         )
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                         .staggeredAppear(4 + i)
@@ -123,7 +147,9 @@ struct TripsSheet: View {
                                     onToggle: { open = open == row.id ? nil : row.id },
                                     onOpenCopy: openCopy,
                                     onRemoveBooking: removeBooking,
-                                    onRemove: removeTrip
+                                    onRemove: removeTrip,
+                                    lists: model.tripLists.first { $0.tripId == row.id }?.summary,
+                                    onOpenLists: openLists
                                 )
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                             }
@@ -187,6 +213,8 @@ private struct TripRowView: View {
     let onOpenCopy: (String) -> Void
     let onRemoveBooking: (String) -> Void
     let onRemove: (String) -> Void
+    let lists: String?
+    let onOpenLists: (String) -> Void
 
     var body: some View {
         let days = row.timeline.filter { !$0.lines.isEmpty }
@@ -203,6 +231,18 @@ private struct TripRowView: View {
             .buttonStyle(MekaPressStyle())
             .accessibilityElement(children: .combine)
             .accessibilityLabel(row.spoken)
+            // Trip lists, slice 1: To buy, To pack and Before we leave, one click away on every trip.
+            Button { onOpenLists(row.id) } label: {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(TripListRules.shared.OPEN_LISTS).font(MekaType.captionStrong).foregroundStyle(palette.accent)
+                    Text(lists ?? TripListRules.shared.LISTS_EMPTY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel("Open the lists for \(row.name): \(lists ?? TripListRules.shared.LISTS_EMPTY)")
             if isOpen {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if days.isEmpty {
