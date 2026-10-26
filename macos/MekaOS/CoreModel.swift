@@ -535,19 +535,19 @@ final class CoreModel {
             for await s in core.afterWork { self?.afterWork = s }
         })
         observers.append(Task { [weak self] in
-            for await a in core.archivedForYou { self?.allArchivedForYou = a; self?.showMail() }
+            for await a in core.archivedForYou { self?.allArchivedForYou = a; self?.showMailCards() }
         })
         observers.append(Task { [weak self] in
             for await u in core.mailUnopened { self?.mailUnopened = u }
         })
         observers.append(Task { [weak self] in
-            for await n in core.mailNeeds { self?.allMailNeeds = n; self?.showMail() }
+            for await n in core.mailNeeds { self?.allMailNeeds = n; self?.showMailCards() }
         })
         observers.append(Task { [weak self] in
-            for await c in core.mailChases { self?.allMailChases = c; self?.showMail() }
+            for await c in core.mailChases { self?.allMailChases = c; self?.showMailCards() }
         })
         observers.append(Task { [weak self] in
-            for await f in core.mailFinds { self?.allMailFinds = f; self?.showMail() }
+            for await f in core.mailFinds { self?.allMailFinds = f; self?.showMailCards() }
         })
         observers.append(Task { [weak self] in
             for await d in core.discord { self?.discord = d }
@@ -7314,7 +7314,7 @@ final class CoreModel {
                             work: @escaping (MekaCore) async throws -> String) {
         guard let core else { return }
         mailDecided.insert(id)
-        showMail()
+        showMailCards()
         Task {
             do {
                 let line = try await work(core)
@@ -7332,7 +7332,7 @@ final class CoreModel {
 
     private func backMail(_ id: String, _ line: String) {
         mailDecided.remove(id)
-        showMail()
+        showMailCards()
         offerEventUndo(line, nil)
     }
 
@@ -7340,11 +7340,11 @@ final class CoreModel {
     private func unhideMail() {
         mailDecided.subtract(mailUndoIds)
         mailUndoIds = []
-        showMail()
+        showMailCards()
     }
 
     /// The mail cards as shown: the core's, less what was just answered here; ids the core no longer holds are forgotten.
-    private func showMail() {
+    private func showMailCards() {
         let R = InstantMailRules.shared
         if !mailDecided.isEmpty {
             let present = Set(R.present(needs: allMailNeeds, chases: allMailChases, finds: allMailFinds, archived: allArchivedForYou))
