@@ -395,6 +395,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/trip-lists/cover-dark-going.png](docs/screens/fold/trip-lists/cover-dark-going.png)
 - [fold/trip-lists/cover-dark-pack.png](docs/screens/fold/trip-lists/cover-dark-pack.png)
 - [fold/trip-lists/cover-dark-start-from.png](docs/screens/fold/trip-lists/cover-dark-start-from.png)
+- [fold/trip-lists/cover-dark-start-template.png](docs/screens/fold/trip-lists/cover-dark-start-template.png)
 - [fold/trip-lists/cover-light-pack.png](docs/screens/fold/trip-lists/cover-light-pack.png)
 - [fold/trip-lists/inner-dark-pack.png](docs/screens/fold/trip-lists/inner-dark-pack.png)
 - [fold/trips/cover-dark-empty.png](docs/screens/fold/trips/cover-dark-empty.png)
