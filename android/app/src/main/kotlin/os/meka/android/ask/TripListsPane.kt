@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -11,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +48,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.rotate
@@ -80,6 +83,9 @@ import os.meka.core.domain.TripListRow
 import os.meka.core.domain.TripListRules
 import os.meka.core.domain.TripProgress
 import os.meka.core.domain.TripRules
+import os.meka.core.domain.TripSuggestAdded
+import os.meka.core.domain.TripSuggestRules
+import os.meka.core.domain.TripSuggestion
 import os.meka.core.domain.TripTemplateSaved
 import os.meka.core.domain.TripWho
 import os.meka.core.facade.MekaCore
@@ -105,6 +111,11 @@ import os.meka.core.facade.MekaCore
  * Slice 2e: "Save as a template for next time" at the foot (a dashed outline, as the mockup; "Update the Lisbon template" once
  * saved); a new trip's empty lists offer saved templates first, then the last trip; a long press forgets a template.
  * The offers fold away on the expand spring once one is used; the saved line fades in and out.
+ *
+ * Slice 3b: **Obi's suggestions** above the add field, one card per tab (the core's [TripSuggestion]): Obi's line, the
+ * chips (a tap adds that one), Add all and Not now. Nothing is added without a tap. A tapped chip leaves in the same
+ * frame (the card's height follows on the expand spring), the card folds away once empty or put away, and "Added 3
+ * things to To pack" fades in with Undo. Light haptic on an add, a tick on Not now. Reduced motion: fades only.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -123,6 +134,10 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     var copying by remember { mutableStateOf(false) }
     // Slice 2e: what "Save as a template for next time" said, for a few seconds.
     var templateSaid by remember { mutableStateOf<TripTemplateSaved?>(null) }
+    // Slice 3b: chips this screen has added or put away, hidden at once until the view agrees; what adding said.
+    val suggestGone = remember { mutableStateMapOf<String, Boolean>() }
+    var suggestSaid by remember { mutableStateOf<TripSuggestAdded?>(null) }
+    LaunchedEffect(suggestSaid) { if (suggestSaid != null) { delay(TripRules.UNDO_MS); suggestSaid = null } }
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     val folded = remember { mutableStateMapOf<String, Boolean>() }
@@ -135,6 +150,10 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         goingPending.keys.toList().forEach { w -> if (shown[w] == goingPending[w]) goingPending.remove(w) }
     }
     BackHandler(onBack = onBack)
+    LaunchedEffect(v?.suggestions) {
+        val offered = v?.suggestions.orEmpty().flatMap { c -> c.chips.map { it.key } }.toSet()
+        suggestGone.keys.toList().forEach { k -> if (k !in offered) suggestGone.remove(k) }
+    }
     LaunchedEffect(v) {
         val shown = v?.tabs.orEmpty().flatMap { t -> t.groups.flatMap { it.rows } }.associate { it.id to it.done }
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
@@ -272,6 +291,51 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                     ) {
                         Text(t.label, style = MekaType.captionStrong, color = if (on) Meka.colors.accent else Meka.colors.textSecondary,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        item(key = "suggest") {
+            val card = v.suggestion(tab)
+            val chips = card?.chips.orEmpty().filter { suggestGone[it.key] != true }
+            Column(Modifier.animateContentSize(MekaMotion.expand(reduced))) {
+                AnimatedVisibility(
+                    visible = chips.isNotEmpty(),
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    if (card != null) SuggestCard(card, chips.map { it.key }.toSet(),
+                        onAdd = { keys ->
+                            haptics.light()
+                            keys.forEach { suggestGone[it] = true }
+                            scope.launch {
+                                val r = runCatching { core.addTripSuggestions(tripId, card.list, keys.toList()) }.getOrNull()
+                                if (r == null || r.refused) { haptics.reject(); keys.forEach { suggestGone.remove(it) } }
+                                suggestSaid = r
+                            }
+                        },
+                        onNotNow = { keys ->
+                            haptics.tick()
+                            keys.forEach { suggestGone[it] = true }
+                            scope.launch { if (runCatching { core.dismissTripSuggestions(tripId, keys.toList()) }.isFailure) keys.forEach { suggestGone.remove(it) } }
+                        })
+                }
+                AnimatedVisibility(visible = suggestSaid != null, enter = fadeIn(), exit = fadeOut()) {
+                    suggestSaid?.let { r ->
+                        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(r.line, style = MekaType.caption, color = if (r.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                                modifier = Modifier.weight(1f).testTag("trip-suggest-said"))
+                            if (!r.refused) {
+                                Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                        .clickable(role = Role.Button) {
+                                            haptics.light(); suggestSaid = null
+                                            scope.launch { runCatching { core.undoTripListsCopy(r.token) }; suggestGone.clear() }
+                                        }
+                                        .semantics { contentDescription = "Undo: ${r.line}" }
+                                        .minTouch().padding(MekaSpace.xs).testTag("trip-suggest-undo"))
+                            }
+                        }
                     }
                 }
             }
@@ -444,6 +508,51 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         item(key = "note") {
             Text(TripListRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+        }
+    }
+}
+
+/**
+ * Slice 3b: Obi's card for one tab: a small brass orb and his line, the chips (only [keys] still showing; a tap adds
+ * that one), then Add all and Not now.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SuggestCard(card: TripSuggestion, keys: Set<String>, onAdd: (Set<String>) -> Unit, onNotNow: (Set<String>) -> Unit) {
+    val accent = Meka.colors.accent
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface).border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(MekaRadius.m))
+            .padding(MekaSpace.m).testTag("trip-suggest-${card.list.wire}"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalAlignment = Alignment.Top,
+            modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "${TripSuggestRules.TITLE}. ${card.lead}" }) {
+            Box(Modifier.padding(top = 2.dp).size(18.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.95f), accent.copy(alpha = 0.35f)))))
+            Text(card.lead, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (c in card.chips) {
+                if (c.key !in keys) continue
+                Text(
+                    c.label, style = MekaType.caption, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                        .clickable(role = Role.Button, onClickLabel = "Add") { onAdd(setOf(c.key)) }
+                        .semantics { contentDescription = "Add ${c.spoken}" }
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-suggest-chip-${c.key}"),
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(TripSuggestRules.ADD_ALL, style = MekaType.captionStrong, color = Meka.colors.onAccent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(accent)
+                    .clickable(role = Role.Button) { onAdd(keys) }
+                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-suggest-add-all"))
+            Text(TripSuggestRules.NOT_NOW, style = MekaType.captionStrong, color = Meka.colors.textPrimary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    .clickable(role = Role.Button) { onNotNow(keys) }
+                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-suggest-not-now"))
         }
     }
 }

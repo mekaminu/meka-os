@@ -6034,6 +6034,28 @@ final class CoreModel {
         }
     }
 
+    /// Slice 3b, Obi's suggestions: adds the chips `keys` of the trip's `list` card ("Added 3 things to To pack") with
+    /// Undo's token (undoTripListsCopy); only Strings and the tab cross, once.
+    func addTripSuggestions(_ tripId: String, list: TripList, keys: [String]) async -> TripListCopy? {
+        guard let core, !keys.isEmpty else { return nil }
+        MekaHaptics.light()
+        do {
+            let r = try await core.addTripSuggestions(tripId: tripId, list: list, keys: keys)
+            if r.refused { MekaHaptics.tick() }
+            return TripListCopy(line: r.line, token: r.token, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 3b: "Not now" puts the card's chips away on this trip, on every device.
+    func dismissTripSuggestions(_ tripId: String, keys: [String]) {
+        guard !keys.isEmpty else { return }
+        MekaHaptics.tick()
+        run { _ = try await $0.dismissTripSuggestions(tripId: tripId, keys: keys) }
+    }
+
     /// What setting the leave time said: "Leaving home 06:30 on Wed 28 Oct", or why not.
     struct TripLeaveSaid: Equatable {
         let line: String

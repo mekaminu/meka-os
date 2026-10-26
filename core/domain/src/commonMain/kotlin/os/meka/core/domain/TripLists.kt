@@ -138,8 +138,13 @@ data class TripListsView(
     val startOptions: List<TripStartFrom> = listOfNotNull(startFrom),
     /** Slice 2e: the foot's button ("Save as a template for next time", "Update the Lisbon template"); null while the lists are empty. */
     val saveTemplate: String? = null,
+    /** Slice 3b: Obi's suggestions, at most one card per list ([TripSuggestRules.suggest]). */
+    val suggestions: List<TripSuggestion> = emptyList(),
 ) {
     fun tab(list: TripList): TripListTab = tabs.first { it.list == list }
+
+    /** Slice 3b: [list]'s suggestions card, or null when there is nothing to suggest. */
+    fun suggestion(list: TripList): TripSuggestion? = suggestions.firstOrNull { it.list == list }
 
     /** [list]'s groups with To pack filtered to [who] (Everyone's things show for Me and Kids too); empty groups go. */
     fun groups(list: TripList, who: TripWho): List<TripListGroup> {
@@ -698,7 +703,7 @@ object TripListRules {
 
     fun view(
         trip: TripItem, all: List<TripListItem>, today: Long, trips: List<TripItem> = emptyList(), about: AboutYou = AboutYou.EMPTY,
-        templates: List<TripTemplate> = emptyList(),
+        templates: List<TripTemplate> = emptyList(), forecast: WeatherForecast = WeatherForecast.EMPTY,
     ): TripListsView {
         val items = all.filter { it.tripId == trip.id }
         val options = startOptions(trip, trips, all, templates)
@@ -728,13 +733,15 @@ object TripListRules {
                 items.none { it.list == TripList.PACK && it.who == TripWho.KIDS }) listOf(TripWho.EVERYONE, TripWho.ME) else TripWho.entries,
             startOptions = options,
             saveTemplate = if (items.isEmpty()) null else templates.firstOrNull { it.sourceTripId == trip.id }?.let { updateTemplateLabel(it.name) } ?: SAVE_TEMPLATE,
+            suggestions = TripSuggestRules.suggest(trip, all, today, trips, about, forecast),
         )
     }
 
     /** Every trip's lists, by trip, in the trips' order. */
     fun views(
         trips: List<TripItem>, items: List<TripListItem>, today: Long, about: AboutYou = AboutYou.EMPTY, templates: List<TripTemplate> = emptyList(),
-    ): List<TripListsView> = trips.map { view(it, items, today, trips, about, templates) }
+        forecast: WeatherForecast = WeatherForecast.EMPTY,
+    ): List<TripListsView> = trips.map { view(it, items, today, trips, about, templates, forecast) }
 }
 
 /**

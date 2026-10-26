@@ -9,11 +9,13 @@ import SwiftUI
 /// trip>", copying its lists unticked, with Undo; slice 2e adds "Save as a template for next time" at the foot and
 /// offers saved templates first (right-click → Forget this template). Slice 2d: a click on the header (or "Add who's going and when you
 /// leave") opens who's going (chips lit at once, written after) and Leave home at; the dates line counts the people and
-/// the countdown says when he leaves. Synced with the Fold.
+/// the countdown says when he leaves. Synced with the Fold. Slice 3b: Obi's suggestions above the field, one card per
+/// tab: his line, chips (a click adds that one), Add all and Not now; nothing is added without a click.
 ///
 /// Motion: the header and bars stagger in; the bars fill on the appear spring; rows move on the expand spring (a tick
 /// sinks the row) and the ring draws its check; groups fold on the expand spring with the chevron turning; the line
-/// under the field cross-fades. Reduce Motion: cross-fades.
+/// under the field cross-fades; a clicked suggestion leaves at once and the card's height follows on the expand spring,
+/// the card folding away once empty or put away, "Added 3 things to To pack" fading in with Undo. Reduce Motion: cross-fades.
 struct TripListsPanel: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -38,6 +40,9 @@ struct TripListsPanel: View {
     @State private var leaveSaid: CoreModel.TripLeaveSaid?
     /// Slice 2e: what "Save as a template for next time" said.
     @State private var templateSaid: CoreModel.TripTemplateSaid?
+    /// Slice 3b: chips this panel added or put away, hidden at once until the view agrees; what adding said.
+    @State private var suggestGone: Set<String> = []
+    @State private var suggestSaid: CoreModel.TripListCopy?
 
     var body: some View {
         let v = model.tripLists.first { $0.tripId == tripId }
@@ -62,6 +67,9 @@ struct TripListsPanel: View {
             var shown: [String: Bool] = [:]
             for t in v.tabs { for g in t.groups { for r in g.rows { shown[r.id] = r.done } } }
             pending = pending.filter { id, done in shown[id] != nil && shown[id] != done }
+            var offered: Set<String> = []
+            for c in v.suggestions { for chip in c.chips { offered.insert(chip.key) } }
+            suggestGone = suggestGone.intersection(offered)
         }
     }
 
@@ -226,6 +234,7 @@ struct TripListsPanel: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tab)
         .padding(.top, MekaSpace.xs)
         .staggeredAppear(2)
+        suggestCard(v)
         TextField(v.tab(list: tab).hint, text: $text)
             .textFieldStyle(.roundedBorder)
             .accessibilityLabel(TripListRules.shared.ADD_DESCRIPTION)
@@ -360,6 +369,102 @@ struct TripListsPanel: View {
             .animation(MekaMotion.expand(reduced: reduceMotion), value: groups.map { g in g.rows.map { "\($0.id)\($0.done)" } })
         }
         .frame(maxHeight: 380)
+    }
+
+    /// Slice 3b: Obi's card for the open tab, and what adding said with Undo.
+    @ViewBuilder
+    private func suggestCard(_ v: TripListsView) -> some View {
+        let card = v.suggestion(list: tab)
+        let chips = (card?.chips ?? []).filter { !suggestGone.contains($0.key) }
+        if let card, !chips.isEmpty {
+            let keys = chips.map { $0.key }
+            let list = card.list
+            VStack(alignment: .leading, spacing: MekaSpace.s) {
+                HStack(alignment: .top, spacing: MekaSpace.s) {
+                    Circle()
+                        .fill(RadialGradient(colors: [palette.accent.opacity(0.95), palette.accent.opacity(0.35)], center: .topLeading, startRadius: 0, endRadius: 16))
+                        .frame(width: 16, height: 16)
+                        .padding(.top, 1)
+                        .accessibilityHidden(true)
+                    Text(card.lead).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(TripSuggestRules.shared.TITLE). \(card.lead)")
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(chips, id: \.key) { c in
+                        let key = c.key
+                        Button { addSuggestions(list, [key]) } label: {
+                            Text(c.label).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                                .padding(.horizontal, MekaSpace.m)
+                                .padding(.vertical, MekaSpace.xxs)
+                                .background(palette.surfaceRaised, in: Capsule())
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel("Add \(c.spoken)")
+                        .transition(.opacity)
+                    }
+                }
+                HStack(spacing: MekaSpace.xs) {
+                    Button { addSuggestions(list, keys) } label: {
+                        Text(TripSuggestRules.shared.ADD_ALL).font(MekaType.captionStrong).foregroundStyle(palette.onAccent)
+                            .padding(.horizontal, MekaSpace.m)
+                            .padding(.vertical, MekaSpace.xxs)
+                            .background(palette.accent, in: Capsule())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    Button {
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { suggestGone.formUnion(keys) }
+                        model.dismissTripSuggestions(tripId, keys: keys)
+                    } label: {
+                        Text(TripSuggestRules.shared.NOT_NOW).font(MekaType.captionStrong).foregroundStyle(palette.textPrimary)
+                            .padding(.horizontal, MekaSpace.m)
+                            .padding(.vertical, MekaSpace.xxs)
+                            .background(palette.surfaceRaised, in: Capsule())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                }
+            }
+            .padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent.opacity(0.28), lineWidth: 1))
+            .padding(.top, MekaSpace.xs)
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        }
+        if let suggestSaid {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                Text(suggestSaid.line).font(MekaType.caption).foregroundStyle(suggestSaid.refused ? palette.accent : palette.textSecondary)
+                Spacer()
+                if !suggestSaid.refused {
+                    Button("Undo") {
+                        let token = suggestSaid.token
+                        self.suggestSaid = nil
+                        suggestGone = []
+                        model.undoTripListsCopy(token)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Undo: \(suggestSaid.line)")
+                }
+            }
+            .transition(.opacity)
+            .task(id: suggestSaid) {
+                try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
+                if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.suggestSaid = nil } }
+            }
+        }
+    }
+
+    /// Slice 3b: adds the chips `keys` (hidden at once); only Strings and the tab cross.
+    private func addSuggestions(_ list: TripList, _ keys: [String]) {
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { suggestGone.formUnion(keys) }
+        Task {
+            let r = await model.addTripSuggestions(tripId, list: list, keys: keys)
+            if r == nil || r?.refused == true { suggestGone.subtract(keys) }
+            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { suggestSaid = r }
+        }
     }
 
     private func bar(_ p: TripProgress) -> some View {

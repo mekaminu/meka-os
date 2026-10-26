@@ -5029,6 +5029,27 @@ class MekaCore(
         trips.setGoing(tripId, g, on)
     }
 
+    /**
+     * Slice 3b, Obi's suggestions: adds the chips [keys] of the trip [tripId]'s [list] card (worked out again now, so a
+     * chip that has since landed on the lists isn't doubled), To buy on the shopping list too: "Added 3 things to To
+     * pack" with the token [undoTripListsCopy] takes. Refused when none of them is still suggested.
+     */
+    suspend fun addTripSuggestions(tripId: String, list: os.meka.core.domain.TripList, keys: List<String>): os.meka.core.domain.TripSuggestAdded = onCore {
+        val all = trips.items()
+        val trip = all.firstOrNull { it.id == tripId } ?: return@onCore os.meka.core.domain.TripSuggestAdded(os.meka.core.domain.TripListRules.GONE, "", refused = true)
+        val about = aboutYou.profile().let { a -> os.meka.core.domain.AboutYou(partnerName = a.partnerName, children = a.children) }
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        val card = os.meka.core.domain.TripSuggestRules.suggest(trip, tripLists.items(), today, all, about, tripWeather.forecast()).firstOrNull { it.list == list }
+        val chips = card?.chips.orEmpty().filter { it.key in keys }
+        if (chips.isEmpty()) return@onCore os.meka.core.domain.TripSuggestAdded(os.meka.core.domain.TripSuggestRules.NOTHING, "", refused = true)
+        val label = os.meka.core.domain.TripListRules.tripLabel(trip)
+        val ids = chips.map { tripLists.addEntry(tripId, it.entry, label) }
+        os.meka.core.domain.TripSuggestAdded(os.meka.core.domain.TripSuggestRules.addedLine(chips.map { it.entry }, list), ids.joinToString(","), refused = false)
+    }
+
+    /** Slice 3b: "Not now" on a suggestions card: its chips [keys] are put away on this trip, on every device. */
+    suspend fun dismissTripSuggestions(tripId: String, keys: List<String>): Boolean = onCore { trips.dismissSuggestions(tripId, keys) }
+
     /** Slice 2d: the time he leaves home on the trip's first day ("06:30", "6.30am"); blank clears it. */
     suspend fun setTripLeave(tripId: String, text: String): os.meka.core.domain.TripLeaveSaved = onCore { trips.setLeave(tripId, text) }
 
@@ -12711,8 +12732,10 @@ class MekaCore(
         // Slice 2d: who's going names his partner and the children from About you.
         val tripAbout = aboutYou.profile().let { a -> os.meka.core.domain.AboutYou(partnerName = a.partnerName, children = a.children) }
         val tripTemplates = tripLists.templates()
-        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay, tripAbout, tripTemplates)) {
-            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout, tripTemplates)
+        // Slice 3b: Obi's suggestions read the destination's forecast once the server has it.
+        val tripSky = tripWeather.forecast()
+        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay, tripAbout, tripTemplates, tripSky)) {
+            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout, tripTemplates, tripSky)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

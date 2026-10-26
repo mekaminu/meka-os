@@ -202,4 +202,34 @@ class TripListsFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.noticesNow().none { it.source == os.meka.core.domain.NoticeSource.TRIP_JOBS })
     }
+
+    @Test
+    fun obisSuggestionsAddOnATapAndNotNowPutsThemAwayOnTheMacToo() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addTrip("Lisbon 28–31 Oct")
+        val tripId = fold.tripsView.value.rows.single().id
+        val card = assertNotNull(fold.tripListsView.value.single().suggestion(TripList.PACK))
+        assertEquals("Passports", card.chips.first().label)
+        // One chip, then Add all on To buy (on the shopping list too); Undo takes them off.
+        val one = fold.addTripSuggestions(tripId, TripList.PACK, listOf("pack:passports"))
+        assertEquals("Added Passports to To pack", one.line)
+        val after = fold.tripListsView.value.single()
+        assertEquals(listOf("Passports"), after.tab(TripList.PACK).groups.single().rows.map { it.text })
+        assertTrue(after.suggestion(TripList.PACK)!!.chips.none { it.key == "pack:passports" })
+        assertTrue(fold.addTripSuggestions(tripId, TripList.PACK, listOf("pack:passports")).refused)
+        val buy = after.suggestion(TripList.BUY)!!
+        val all = fold.addTripSuggestions(tripId, TripList.BUY, buy.chips.map { it.key })
+        assertEquals("Added ${os.meka.core.domain.TripListRules.things(buy.chips.size)} to To buy", all.line)
+        assertTrue(fold.listsView.value.shopping.toBuy.any { it.title == "Plug adapters × 2" })
+        assertTrue(fold.undoTripListsCopy(all.token))
+        assertTrue(fold.listsView.value.shopping.toBuy.none { it.title == "Plug adapters × 2" })
+        // Not now on the Fold: gone from the Mac's card too.
+        val leave = fold.tripListsView.value.single().suggestion(TripList.LEAVE)!!
+        assertTrue(fold.dismissTripSuggestions(tripId, leave.chips.map { it.key }))
+        fold.syncNow(); mac.syncNow()
+        val onMac = mac.tripListsView.value.single()
+        assertTrue(onMac.suggestion(TripList.LEAVE)?.chips.orEmpty().none { c -> leave.chips.any { it.key == c.key } })
+        assertEquals(listOf("Passports"), onMac.tab(TripList.PACK).groups.single().rows.map { it.text })
+    }
 }

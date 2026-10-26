@@ -3077,6 +3077,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(forgot.boolValue)
     }
 
+    func testTripSuggestionsReachSwift() async throws {
+        // Trip lists, slice 3b: Obi's suggestions cross as Strings; a chip adds on a tap and Not now puts the rest away.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "tripsuggest-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        _ = try await core.addTrip(text: "Porto 3–6 Mar \(y)")
+        let porto = core.tripsView.value.rows[0].id
+        let card = try XCTUnwrap(core.tripListsView.value.first?.suggestion(list: .pack))
+        XCTAssertEqual(card.chips.first?.label, "Passports")
+        let added = try await core.addTripSuggestions(tripId: porto, list: .pack, keys: ["pack:passports"])
+        XCTAssertEqual(added.line, "Added Passports to To pack")
+        let rest = try XCTUnwrap(core.tripListsView.value.first?.suggestion(list: .pack)).chips.map { $0.key }
+        XCTAssertFalse(rest.contains("pack:passports"))
+        let gone = try await core.dismissTripSuggestions(tripId: porto, keys: rest)
+        XCTAssertTrue(gone.boolValue)
+        XCTAssertTrue(core.tripListsView.value.first?.suggestion(list: .pack)?.chips.allSatisfy { !rest.contains($0.key) } ?? true)
+    }
+
     func testTripGoingAndLeaveReachSwift() async throws {
         // Trip lists, slice 2d: who's going and the leave time cross as Strings and a Bool, and show in the header.
         let core = MacCoreFactory.shared.create(

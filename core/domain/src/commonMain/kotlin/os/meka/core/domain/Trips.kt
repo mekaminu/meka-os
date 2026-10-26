@@ -30,6 +30,11 @@ object TripFields {
     const val GOING = "going"
     /** Trip lists slice 2d: the local minute he leaves home on the first day ("06:30"); absent when not set. LWW. */
     const val LEAVE_MINUTE = "leaveMinute"
+    /**
+     * Trip lists slice 3b: the suggestions put away with "Not now" on this trip ([TripSuggestRules] keys joined by
+     * commas, at most [TripSuggestRules.MAX_DISMISSED]); absent when none. LWW.
+     */
+    const val SUGGEST_NO = "suggestNo"
 }
 
 /** Who's going on a trip (trip lists slice 2d): him, his partner, the children (names come from About you). */
@@ -88,6 +93,8 @@ data class TripItem(
     val going: Set<TripGoer>? = null,
     /** Slice 2d: the minute he leaves home on [startDay]; null when not set. */
     val leaveMinute: Int? = null,
+    /** Slice 3b: Obi's suggestions put away on this trip with "Not now". */
+    val suggestNo: Set<String> = emptySet(),
 ) {
     val days: Int get() = (endDay - startDay + 1).toInt()
 }
@@ -306,6 +313,7 @@ object TripRules {
                 id, name, start, end, s.f(TripFields.ADDED_AT).longOrNull ?: 0L, bookings[id].orEmpty(),
                 going = TripGoer.read(s.f(TripFields.GOING).textOrNull),
                 leaveMinute = s.f(TripFields.LEAVE_MINUTE).longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 },
+                suggestNo = s.f(TripFields.SUGGEST_NO).textOrNull?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
         }.sortedWith(compareBy<TripItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
 
@@ -727,6 +735,16 @@ class Trips(
      * Trip lists slice 2d: the time he leaves home on the trip's first day, typed ("06:30", "6.30am", "leave at 7");
      * blank clears it. Refused (nothing written) when it isn't a time or the trip has gone.
      */
+    /** Slice 3b: puts Obi's suggestions [keys] away on the trip [tripId] ("Not now"); false when nothing changed. */
+    fun dismissSuggestions(tripId: String, keys: Collection<String>): Boolean {
+        val trip = items().firstOrNull { it.id == tripId } ?: return false
+        val clean = keys.map { it.replace(',', ' ').trim() }.filter { it.isNotEmpty() }
+        if (clean.all { it in trip.suggestNo }) return false
+        val after = TripSuggestRules.dismissed(trip.suggestNo, clean)
+        replica.commitLocal(EntityTypes.TRIP, tripId, mapOf(TripFields.SUGGEST_NO to after.joinToString(",").fv()))
+        return true
+    }
+
     fun setLeave(tripId: String, typed: String): TripLeaveSaved {
         val trip = items().firstOrNull { it.id == tripId } ?: return TripLeaveSaved(TripListRules.GONE, refused = true)
         if (typed.isBlank()) {

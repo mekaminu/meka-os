@@ -210,4 +210,24 @@ class TripListsScreensTest {
         ScreenShots.assertShows(compose, name, "Charge everything")
         ScreenShots.assertShows(compose, name, "Remind Tue 21:00")
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun obisSuggestionLeavesInTheNextFrameAndLandsOnTheList() {
+        val (core, tripId) = filled(ThemeChoice.DARK)
+        show(core, tripId)
+        val name = "cover-dark-suggest"
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", name))
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertShows(compose, name, "Travel insurance")
+        ScreenShots.assertShows(compose, name, "Add all")
+        compose.onNodeWithTag("trip-suggest-chip-pack:insurance").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithTag("trip-suggest-chip-pack:insurance").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) {
+            core.tripListsView.value.single().tab(TripList.PACK).groups.flatMap { it.rows }.any { it.text == "Travel insurance" }
+        }
+    }
 }

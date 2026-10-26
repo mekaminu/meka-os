@@ -1,7 +1,7 @@
 ---
 id: trips
 title: Trips
-keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack
+keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack, obi's suggestions, suggestions, what have I forgotten, add all, not now
 data: yes
 fold: TRIPS
 fold_where: Ask → Life → Trips
@@ -25,3 +25,5 @@ tip: Tap a trip's name on its Lists to say who's going (you, your partner, the k
 tip: A new trip with empty lists offers "Start from" your last trip: one tap copies its To buy, To pack and Before we leave, all unticked (Undo takes them off again), and the To buy ones go on your shopping list for the new trip.
 tip: At the foot of a trip's Lists, "Save as a template for next time" keeps them (never the ticks) under the trip's name. A new trip's empty lists then offer "Start from your Lisbon template" first; press and hold it (right-click on the Mac) to forget it. Saving the same trip again updates its template.
 tip: Ask or Talk to Obi: "add sun cream to my trip list", "pack the passports for Lisbon" or "what's left to pack?". He shows a card with what goes on which list; tap Add (or say yes) and it is added, Undo takes it off again.
+tip: Each list has Obi's suggestions above the add field: what you might have forgotten, from the trip's length, who's going, where it is (passports, GHIC cards and plug adapters abroad), a flight (boarding passes, check in online the night before) and the forecast there once it's known (sun cream, swimwear, coats, an umbrella). Tap one to add it, or Add all; nothing is added until you tap.
+tip: "Not now" puts that card's suggestions away for this trip on the Fold and the Mac. Anything already on the lists, ticked or not, is never suggested, and once a trip has lists a few things from your last trip are offered too.
