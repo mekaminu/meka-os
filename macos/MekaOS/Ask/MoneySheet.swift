@@ -57,6 +57,10 @@ struct MoneySheet: View {
     @State private var yearOpen: [Int32: Bool] = [:]
     /// Money redesign (B), slice 1: the tab shown (Spending · Bills · Plan · Trading · Accounts); opens on Spending.
     @State private var tab: MoneyTab = MoneyTabs.shared.FIRST
+    /// Money redesign (B2): the category picked on Spending's ring, and whether all categories / all payments show.
+    @State private var focus: String?
+    @State private var allCats = false
+    @State private var allPays = false
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -171,9 +175,15 @@ struct MoneySheet: View {
                 Spacer()
                 Button("›") { model.moneyStep(1) }.disabled(!v.later).accessibilityLabel("Month after")
             }
+            if let sp = m.spending {
+                // Money redesign (B2): the ring with the month's total in the middle, then the tiles.
+                MoneyRingView(spending: sp, focus: focus, palette: palette, reduced: reduceMotion) { focus = nil }
+                if !sp.tiles.isEmpty { MoneyTilesView(tiles: sp.tiles, palette: palette) }
+            } else {
             Text(m.spentLine).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
             if let vs = m.vsLine {
                 Text(vs).font(MekaType.caption).foregroundStyle(m.vsLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
+            }
             }
             }
             if let b = v.travel?.banner, has(.travelBanner, v) {
@@ -215,16 +225,37 @@ struct MoneySheet: View {
                 ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
             }
             if let f = v.forecast, has(.forecast, v) { forecast(f).transition(.opacity) }
-            if has(.categories, v) {
+            if has(.categories, v), let sp = m.spending {
+                MoneyHeadWithLink(head: "WHERE IT WENT", link: MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats), palette: palette) {
+                    allCats.toggle()
+                }
+                ForEach(MoneySpending.shared.shownRows(v: sp, open: allCats), id: \.key) { r in
+                    let key = r.key
+                    MoneySpendRowView(row: r, picked: focus == key, palette: palette, reduced: reduceMotion) {
+                        MekaHaptics.tick()
+                        focus = focus == key ? nil : key
+                    }
+                    .transition(.opacity)
+                }
+            } else if has(.categories, v) {
                 Text("BY CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(m.categories, id: \.key) { c in category(c).transition(.opacity) }
             }
-            if has(.payments, v) {
+            if has(.payments, v), let sp = m.spending, !allPays {
+                MoneyHeadWithLink(head: MoneySpending.shared.LATEST_HEAD, link: sp.seeAll, palette: palette) { allPays = true }
+                ForEach(sp.latest, id: \.label) { d in
+                    MoneyDayHead(day: d, palette: palette)
+                    ForEach(d.rows, id: \.id) { t in txn(t, chip: sp, showDay: false) }
+                }
+            } else if has(.payments, v) {
+                if m.spending != nil {
+                    MoneyHeadWithLink(head: "ALL PAYMENTS THIS MONTH", link: MoneySpending.shared.SEE_ALL_CLOSE, palette: palette) { allPays = false }
+                }
                 Text("PAYMENTS · CLICK ONE TO CHANGE ITS CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 if let l = m.receiptsLine {
                     Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
-                ForEach(m.txns, id: \.id) { t in txn(t) }
+                ForEach(m.txns, id: \.id) { t in txn(t, chip: m.spending) }
                 if m.more > 0 {
                     Text("and \(m.more) more this month").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
@@ -1039,7 +1070,7 @@ struct MoneySheet: View {
         .accessibilityLabel(c.spoken)
     }
 
-    private func txn(_ t: MoneyTxnRow) -> some View {
+    private func txn(_ t: MoneyTxnRow, chip: MoneySpendingView? = nil, showDay: Bool = true) -> some View {
         Menu {
             // Slice 13: the payer counts as the side hustle's (or not), on every account.
             Button(t.business ? MoneyBusiness.shared.MENU_ON : MoneyBusiness.shared.MENU_OFF) {
@@ -1066,10 +1097,13 @@ struct MoneySheet: View {
                 }
             }
         } label: {
-            HStack {
+            HStack(spacing: chip == nil ? nil : MekaSpace.m) {
+                if let sp = chip {
+                    MoneyIconChip(icon: MoneySpending.shared.icon(key: t.category), tone: MoneySpending.shared.txnTone(v: sp, category: t.category), palette: palette)
+                }
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(t.merchant).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text("\(t.day) · \(t.categoryLabel)\(t.taught ? " · yours" : "")\(t.business ? " · Business" : "")\(t.shared ? " · Shared" : "") · \(t.account)")
+                    Text(t.merchant).font(chip == nil ? MekaType.body : MekaType.taskTitle).foregroundStyle(palette.textPrimary)
+                    Text("\(showDay ? "\(t.day) · " : "")\(t.categoryLabel)\(t.taught ? " · yours" : "")\(t.business ? " · Business" : "")\(t.shared ? " · Shared" : "") · \(t.account)")
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
                     if let r = t.receipt {

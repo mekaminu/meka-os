@@ -147,7 +147,26 @@ private fun blend(a: MekaColors, b: MekaColors, t: Float): MekaColors = when (t)
         calendar4 = lerp(a.calendar4, b.calendar4, t),
         calendar5 = lerp(a.calendar5, b.calendar5, t),
         rain = lerp(a.rain, b.rain, t),
+        money1 = lerp(a.money1, b.money1, t),
+        money2 = lerp(a.money2, b.money2, t),
+        money3 = lerp(a.money3, b.money3, t),
+        money4 = lerp(a.money4, b.money4, t),
+        money5 = lerp(a.money5, b.money5, t),
+        money6 = lerp(a.money6, b.money6, t),
+        money7 = lerp(a.money7, b.money7, t),
     )
+}
+
+/** Money's ring and category chips (Money redesign B2): a [os.meka.core.domain.MoneySpending] tone, 0–6 a colour, the rest quiet. */
+fun MekaColors.moneyTone(tone: Int): Color = when (tone) {
+    0 -> money1
+    1 -> money2
+    2 -> money3
+    3 -> money4
+    4 -> money5
+    5 -> money6
+    6 -> money7
+    else -> textTertiary
 }
 
 /** A calendar's dot colour for a [os.meka.core.domain.CalendarTones] value: fixtures in Barça's colour, else 1–5. */

@@ -39,6 +39,8 @@ data class MoneyPaydayView(
     val safe: String?, val safeLit: Boolean, val foot: String,
     /** Money manager (16), Ask: the next payday and, with a balance, what's left after the bills before it (pence). */
     val paydayDay: Long? = null, val leftPence: Long? = null,
+    /** Money redesign (B2): what's still to go out before payday (pence), for Spending's "Bills to come" tile. */
+    val toGoPence: Long? = null,
 )
 
 /** A line of the statements for the payday view: its account, day, signed pence, merchant key and category. */
@@ -207,7 +209,7 @@ object MoneyPayday {
         return MoneyPaydayView(
             HEAD, null, payLine, fromLine, sinceLine, goingOut, rows, (sorted.size - rows.size).coerceAtLeast(0),
             pay.account, accountName, balanceLine, bal != null, safe, lit, foot(source),
-            paydayDay = payday, leftPence = leftPence,
+            paydayDay = payday, leftPence = leftPence, toGoPence = total,
         )
     }
 }

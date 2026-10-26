@@ -100,6 +100,7 @@ import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
+import os.meka.core.domain.MoneySpending
 import os.meka.core.domain.InstantPaymentRules
 import os.meka.core.domain.PaymentTap
 import os.meka.core.domain.MoneyTip
@@ -195,6 +196,10 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     // Money redesign (B), slice 1: the tab shown; Money opens on Spending each time the pane opens.
     var tab by rememberSaveable { mutableStateOf(MoneyTabs.FIRST) }
     val has: (MoneySection) -> Boolean = { s -> MoneyTabs.shows(tab, s, v) }
+    // Money redesign (B2): the category picked on Spending's ring, and whether all categories / all payments show.
+    var focus by rememberSaveable { mutableStateOf<String?>(null) }
+    var allCats by rememberSaveable { mutableStateOf(false) }
+    var allPays by rememberSaveable { mutableStateOf(false) }
 
     val unlock: () -> Unit = {
         FoldBiometric.unlock(context, MoneyRules.UNLOCK_REASON, "Your spending, read-only") { ok ->
@@ -380,7 +385,16 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Arrow("›", "Month after", enabled = v.later) { scope.launch { runCatching { core.moneyStep(1) } } }
                 }
             }
-            if (has(MoneySection.MONTH)) item(key = "spent") {
+            val sp = m.spending
+            if (has(MoneySection.MONTH) && sp != null) {
+                item(key = "ring") {
+                    Box(Modifier.fillMaxWidth().animateItem().appear(rememberAppearance(3)), contentAlignment = Alignment.Center) {
+                        MoneyRing(sp, focus) { focus = null }
+                    }
+                }
+                if (sp.tiles.isNotEmpty()) item(key = "tiles") { MoneyTiles(sp.tiles, Modifier.animateItem().appear(rememberAppearance(4))) }
+            }
+            if (has(MoneySection.MONTH) && sp == null) item(key = "spent") {
                 Column(Modifier.animateItem().appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Crossfade(m.spentLine, animationSpec = MekaMotion.appear(reduced), label = "money-spent") { l ->
                         Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -586,7 +600,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
             }
-            if (has(MoneySection.CATEGORIES)) {
+            if (has(MoneySection.CATEGORIES) && sp != null) {
+                item(key = "cats-head") {
+                    MoneyHeadWithLink("WHERE IT WENT", MoneySpending.allLabel(sp.rows.size, allCats), Modifier.animateItem()) { allCats = !allCats }
+                }
+                MoneySpending.shownRows(sp, allCats).forEachIndexed { i, r ->
+                    item(key = "spend-${r.key}") {
+                        MoneySpendRowView(r, picked = focus == r.key, modifier = Modifier.animateItem().appear(rememberAppearance(4 + i))) {
+                            haptics.tick(); focus = if (focus == r.key) null else r.key
+                        }
+                    }
+                }
+            }
+            if (has(MoneySection.CATEGORIES) && sp == null) {
                 item(key = "cats-head") {
                     Text("BY CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -595,7 +621,28 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     item(key = "cat-${c.key}") { CategoryRow(c, Modifier.animateItem().appear(rememberAppearance(4 + i))) }
                 }
             }
-            if (has(MoneySection.PAYMENTS)) {
+            if (has(MoneySection.PAYMENTS) && sp != null && !allPays) {
+                item(key = "latest-head") {
+                    MoneyHeadWithLink(MoneySpending.LATEST_HEAD, sp.seeAll, Modifier.animateItem()) { allPays = true }
+                }
+                sp.latest.forEach { d ->
+                    item(key = "day-${d.label}") { MoneyDayHead(d, Modifier.animateItem()) }
+                    d.rows.forEach { t ->
+                        item(key = "latest-${t.id}") {
+                            TxnRow(t, Modifier.animateItem(), chip = MoneySpending.icon(t.category) to MoneySpending.txnTone(sp, t.category), showDay = false,
+                                onBusiness = { on -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) } },
+                                onShared = { on -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) } },
+                                onAlways = { on -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) } }) { key ->
+                                payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) }
+                            }
+                        }
+                    }
+                }
+            }
+            if (has(MoneySection.PAYMENTS) && (sp == null || allPays)) {
+                if (sp != null) item(key = "latest-only") {
+                    MoneyHeadWithLink("ALL PAYMENTS THIS MONTH", MoneySpending.SEE_ALL_CLOSE, Modifier.animateItem()) { allPays = false }
+                }
                 item(key = "txns-head") {
                     Text("PAYMENTS · TAP ONE TO CHANGE ITS CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -607,7 +654,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
-                        TxnRow(t, Modifier.animateItem(),
+                        TxnRow(t, Modifier.animateItem(), chip = sp?.let { MoneySpending.icon(t.category) to MoneySpending.txnTone(it, t.category) },
                             onBusiness = { on -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) } },
                             onShared = { on -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) } },
                             onAlways = { on -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) } }) { key ->
@@ -1100,7 +1147,10 @@ private fun CategoryRow(c: MoneyCategoryRow, modifier: Modifier) {
 @Composable
 private fun TxnRow(
     t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> Unit = {}, onShared: (Boolean) -> Unit = {},
-    onAlways: (Boolean) -> Unit = {}, onCategory: (String) -> Unit,
+    onAlways: (Boolean) -> Unit = {},
+    /** Money redesign (B2): the category's icon chip in its colour this month, and whether the sub-line names the day. */
+    chip: Pair<os.meka.core.domain.MoneyIcon, Int>? = null, showDay: Boolean = true,
+    onCategory: (String) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -1109,10 +1159,12 @@ private fun TxnRow(
                 .semantics(mergeDescendants = true) { contentDescription = t.spoken + ". Change category" }
                 .minTouch().padding(vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (chip != null) Arrangement.spacedBy(MekaSpace.m) else Arrangement.Start,
         ) {
+            chip?.let { (icon, tone) -> MoneyIconChip(icon, tone) }
             Column(Modifier.weight(1f)) {
-                Text(t.merchant, style = MekaType.body, color = Meka.colors.textPrimary)
-                Text("${t.day} · ${t.categoryLabel}" + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
+                Text(t.merchant, style = if (chip != null) MekaType.taskTitle else MekaType.body, color = Meka.colors.textPrimary)
+                Text((if (showDay) "${t.day} · " else "") + t.categoryLabel + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
                     style = MekaType.caption, color = Meka.colors.textSecondary)                // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
                 t.receipt?.let { r -> Text(r, style = MekaType.caption, color = Meka.colors.textSecondary) }
                 t.receiptDetail?.let { d -> Text(d, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }

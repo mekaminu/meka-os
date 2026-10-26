@@ -4111,3 +4111,22 @@ Mac (MoneySheet.swift): the same pills above the scroll view, the same guards, t
 Motion: none). Opens on Spending each time. Tests: MoneyTabsTest; MoneyScreensTest now also shoots Bills, Plan, Trading
 and Accounts (cover, plus inner Light Accounts and empty Accounts) and checks five pills, the chosen one selected, Import
 only on Accounts and Spending's categories nowhere else. No server change, no migration. Mac checked nightly.
+
+#### Money redesign (B) — slice B2 (2026-10-26): Spending in the new look
+
+Mockup v4, Spending tab. Core `MoneySpending` (core/domain/MoneySpending.kt): from the month's spend categories, the
+usual month (the same 6-month average the month already uses), Until payday's still-to-go-out and left, and the newest
+payments, it builds `MoneySpendingView`: the ring's slices (biggest first; the seven money colours in turn, Other always
+quiet and everything past the seventh folded into one quiet "Everything else"), the middle ("Spent so far" · "£1,860" ·
+"£312 over usual by the 24th": this month against the usual month's pace by today, a finished month against the usual
+month, within £20 "about usual"; with one month before, it is named), `focus` (a picked category's name, amount and
+"N% of spending") and `lit` (the others fade), the tiles (Came in · Bills to come · Left), the category rows (icon,
+share, bar against the biggest, the note in green under usual / lit over), "All N ›" past five, and the latest five
+payments by day ("Today", "Yesterday", "Fri 23 Oct", each day's money out) with "See all N ›". `MoneyMonth.spending`
+(additive), `MoneyPaydayView.toGoPence` (additive); InstantPaymentRules applies a tap to the latest rows too. Tokens
+`money1`–`money7` (ADR-012 addendum). Fold: MoneySpendingBlocks.kt (`MoneyRing` drawn on a Canvas, `MoneyTiles`,
+`MoneySpendRowView`, `MoneyIconChip` from the mockup's stroke icons, `MoneyHeadWithLink`, `MoneyDayHead`); MoneyPane
+draws them on Spending (the old spent line, BY CATEGORY and the payments list stay as the fallback and as See all).
+Mac: MoneySpendingViews.swift, the same with system symbols. Tests: MoneySpendingTest (ring order and tiling, rows, the
+middle's pace, focus, tiles, days, the screen and an instant tap); MoneyScreensTest checks the middle shows and the old
+spent line doesn't. No server change, no migration. Mac checked nightly.

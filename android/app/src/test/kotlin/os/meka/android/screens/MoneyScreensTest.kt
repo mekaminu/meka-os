@@ -152,7 +152,7 @@ class MoneyScreensTest {
         if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")
         if (!importShown && tab == MoneyTab.ACCOUNTS && fill == Fill.EMPTY) fail("$name: Import a statement is missing from Accounts")
         if (tab != MoneyTab.SPENDING) {
-            if (compose.onAllNodesWithText("BY CATEGORY").fetchSemanticsNodes().isNotEmpty()) fail("$name: Spending's categories show on ${tab.label}")
+            if (compose.onAllNodesWithText("WHERE IT WENT").fetchSemanticsNodes().isNotEmpty()) fail("$name: Spending's categories show on ${tab.label}")
             MoneyTabs.empty(tab, v)?.let { ScreenShots.assertShows(compose, name, it) }
             return
         }
@@ -168,7 +168,11 @@ class MoneyScreensTest {
             else -> {
                 val m = v.month ?: fail("$name: no month shown with a statement in")
                 ScreenShots.assertShows(compose, name, m.label)
-                ScreenShots.assertShows(compose, name, m.spentLine)
+                // Money redesign (B2): the ring's middle says what went out (the old "Spent … · in …" line is gone).
+                val sp = m.spending ?: fail("$name: no Spending view with a statement in")
+                ScreenShots.assertShows(compose, name, sp.centre.top)
+                ScreenShots.assertShows(compose, name, sp.centre.big)
+                if (compose.onAllNodesWithText(m.spentLine).fetchSemanticsNodes().isNotEmpty()) fail("$name: the old spent line still shows")
                 // Slice 12: an average is named by the months it covers (two months of statements here, never "6-month").
                 m.vsLine?.let { if ("6-month" in it) fail("$name: \"$it\" from ${v.accounts.size} account(s) of at most two months") }
                 // Slice 13: a current account is never offered as a card (it waits behind "Show 1 more account"),

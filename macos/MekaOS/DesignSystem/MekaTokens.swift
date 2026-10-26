@@ -23,6 +23,13 @@ struct MekaPalette {
     let calendar4: Color
     let calendar5: Color
     let rain: Color
+    let money1: Color
+    let money2: Color
+    let money3: Color
+    let money4: Color
+    let money5: Color
+    let money6: Color
+    let money7: Color
 }
 
 extension MekaPalette {
@@ -46,7 +53,14 @@ extension MekaPalette {
         calendar3: Color(.sRGB, red: 0.9098, green: 0.6353, blue: 0.4157, opacity: 1),
         calendar4: Color(.sRGB, red: 0.4902, green: 0.7020, blue: 0.9098, opacity: 1),
         calendar5: Color(.sRGB, red: 0.7176, green: 0.7686, blue: 0.4157, opacity: 1),
-        rain: Color(.sRGB, red: 0.4980, green: 0.6980, blue: 0.8980, opacity: 1)
+        rain: Color(.sRGB, red: 0.4980, green: 0.6980, blue: 0.8980, opacity: 1),
+        money1: Color(.sRGB, red: 0.7882, green: 0.7020, blue: 0.4941, opacity: 1),
+        money2: Color(.sRGB, red: 0.5412, green: 0.6078, blue: 0.8196, opacity: 1),
+        money3: Color(.sRGB, red: 0.8196, green: 0.5412, blue: 0.4196, opacity: 1),
+        money4: Color(.sRGB, red: 0.4980, green: 0.7020, blue: 0.6588, opacity: 1),
+        money5: Color(.sRGB, red: 0.7098, green: 0.6431, blue: 0.5412, opacity: 1),
+        money6: Color(.sRGB, red: 0.7020, green: 0.5608, blue: 0.8196, opacity: 1),
+        money7: Color(.sRGB, red: 0.4196, green: 0.5608, blue: 0.8196, opacity: 1)
     )
 }
 
@@ -71,7 +85,14 @@ extension MekaPalette {
         calendar3: Color(.sRGB, red: 0.6510, green: 0.3529, blue: 0.1098, opacity: 1),
         calendar4: Color(.sRGB, red: 0.1765, green: 0.4353, blue: 0.6824, opacity: 1),
         calendar5: Color(.sRGB, red: 0.4000, green: 0.4392, blue: 0.1176, opacity: 1),
-        rain: Color(.sRGB, red: 0.1843, green: 0.4235, blue: 0.6588, opacity: 1)
+        rain: Color(.sRGB, red: 0.1843, green: 0.4235, blue: 0.6588, opacity: 1),
+        money1: Color(.sRGB, red: 0.5412, green: 0.4353, blue: 0.1843, opacity: 1),
+        money2: Color(.sRGB, red: 0.2471, green: 0.3333, blue: 0.6275, opacity: 1),
+        money3: Color(.sRGB, red: 0.6588, green: 0.3137, blue: 0.1843, opacity: 1),
+        money4: Color(.sRGB, red: 0.1843, green: 0.4549, blue: 0.4078, opacity: 1),
+        money5: Color(.sRGB, red: 0.4627, green: 0.3922, blue: 0.2471, opacity: 1),
+        money6: Color(.sRGB, red: 0.4784, green: 0.3098, blue: 0.6588, opacity: 1),
+        money7: Color(.sRGB, red: 0.1843, green: 0.3725, blue: 0.6588, opacity: 1)
     )
 }
 

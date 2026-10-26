@@ -33,6 +33,13 @@ data class MekaColors(
     val calendar4: Color,
     val calendar5: Color,
     val rain: Color,
+    val money1: Color,
+    val money2: Color,
+    val money3: Color,
+    val money4: Color,
+    val money5: Color,
+    val money6: Color,
+    val money7: Color,
 )
 
 val MekaDarkColors = MekaColors(
@@ -56,6 +63,13 @@ val MekaDarkColors = MekaColors(
     calendar4 = Color(0xFF7DB3E8),
     calendar5 = Color(0xFFB7C46A),
     rain = Color(0xFF7FB2E5),
+    money1 = Color(0xFFC9B37E),
+    money2 = Color(0xFF8A9BD1),
+    money3 = Color(0xFFD18A6B),
+    money4 = Color(0xFF7FB3A8),
+    money5 = Color(0xFFB5A48A),
+    money6 = Color(0xFFB38FD1),
+    money7 = Color(0xFF6B8FD1),
 )
 
 val MekaLightColors = MekaColors(
@@ -79,6 +93,13 @@ val MekaLightColors = MekaColors(
     calendar4 = Color(0xFF2D6FAE),
     calendar5 = Color(0xFF66701E),
     rain = Color(0xFF2F6CA8),
+    money1 = Color(0xFF8A6F2F),
+    money2 = Color(0xFF3F55A0),
+    money3 = Color(0xFFA8502F),
+    money4 = Color(0xFF2F7468),
+    money5 = Color(0xFF76643F),
+    money6 = Color(0xFF7A4FA8),
+    money7 = Color(0xFF2F5FA8),
 )
 
 object MekaType {

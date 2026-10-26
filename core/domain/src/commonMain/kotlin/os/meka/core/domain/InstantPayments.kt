@@ -49,7 +49,12 @@ object InstantPaymentRules {
             txns = txns.map { t -> if (t.id == tap.txnId || (tap.kind != PaymentTapKind.SHARED && t.merchant == payer)) apply(t, tap) else t }
         }
         if (txns == month.txns) return view
-        return view.copy(month = month.copy(txns = txns))
+        // Money redesign (B2): the latest payments by day show the same tap at once.
+        val byId = txns.associateBy { it.id }
+        val spending = month.spending?.let { sp ->
+            sp.copy(latest = sp.latest.map { d -> d.copy(rows = d.rows.map { r -> byId[r.id] ?: r }) })
+        }
+        return view.copy(month = month.copy(txns = txns, spending = spending))
     }
 
     private fun apply(t: MoneyTxnRow, tap: PaymentTap): MoneyTxnRow = when (tap.kind) {

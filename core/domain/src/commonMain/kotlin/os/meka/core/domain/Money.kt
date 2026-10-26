@@ -410,6 +410,8 @@ data class MoneyMonth(
     val categories: List<MoneyCategoryRow>, val txns: List<MoneyTxnRow>, val more: Int,
     /** Money at a glance: "4 payments this month have a receipt in your email" ([MoneyReceipts.monthLine]); null with none. */
     val receiptsLine: String? = null,
+    /** Money redesign (B2): the Spending tab's ring, tiles, category rows and latest payments by day ([MoneySpending]). */
+    val spending: MoneySpendingView? = null,
 )
 
 /**
@@ -644,6 +646,7 @@ object MoneyRules {
         val avgName = averageName(prior)
         val partial = shown == thisMonth
         val label = if (partial) "${CivilDate.MONTH_LONG[shown % 12]} so far" else monthLabel(shown)
+        val spendCats = ArrayList<MoneySpendCat>()
         val catRows = spend.filter { it.value > 0 }.entries.sortedByDescending { it.value }.map { (c, p) ->
             val n = cur.count { cat(it) == c && it.pence < 0 }
             val a = avg[c]
@@ -656,6 +659,7 @@ object MoneyRules {
                 else -> if (prior.size == 1) "about the same as $avgName" else "about $avgName"
             }
             val line = listOfNotNull("$n payment${if (n == 1) "" else "s"}", vs).joinToString(" · ")
+            spendCats += MoneySpendCat(c, p, line, over, under = !partial && a != null && a > 0 && a - p >= OVER_MIN_PENCE)
             MoneyCategoryRow(c.key, c.label, fmt(p), if (spent > 0) (p.toFloat() / spent).coerceIn(0f, 1f) else 0f, line, over,
                 "${c.label}, ${fmt(p)}, $line")
         }
@@ -705,22 +709,33 @@ object MoneyRules {
         // Money bugs (A4): the footers say where these lines came from (statement files, his banks through Lunch Flow, or both).
         val source = MoneySource.ofLines(accounts, mine.mapTo(HashSet()) { it.account })
         val watch = if (partial) mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) } else emptyList()
+        val paydayView = if (partial) MoneyPayday.view(
+            mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
+            counted.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
+            // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
+            // Bills due, completeness: a radar bill that is a card's payment counts once, as the card's.
+            BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
+            source,
+        ) else null
+        // Money redesign (B2): the Spending tab's ring, tiles, category rows and the latest payments by day.
+        val shownDate = CivilDate.fromEpochDay(today)
+        val spending = MoneySpending.view(
+            partial = partial, monthName = CivilDate.MONTH_LONG[shown % 12], spentPence = spent, incomePence = income,
+            cats = spendCats, avgTotal = avgTotal, usual = if (prior.size == 1) avgName else "usual",
+            dayOfMonth = shownDate.day, daysInMonth = CivilDate.lengthOfMonth(shownDate.year, shownDate.month),
+            toGoPence = paydayView?.takeIf { it.notReady == null }?.toGoPence, leftPence = paydayView?.leftPence,
+            txns = sorted.take(MoneySpending.LATEST).mapNotNull { t -> rows.firstOrNull { it.id == t.id }?.let { MoneySpendTxn(it, t.day, t.pence) } },
+            allTxns = sorted.size, today = today,
+        )
         return MoneyView(
-            false, summary, null, month, accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
+            false, summary, null, month.copy(spending = spending), accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
             tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),
             regular = MoneyTips.regularView(regular),
             hiddenTips = MoneyTips.hiddenLine(hiddenTips),
             alerts = if (partial) MoneyWatch.alerts(watch, today, names, fineAlerts) else emptyList(),
             forecast = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null,
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
-            payday = if (partial) MoneyPayday.view(
-                mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
-                counted.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
-                // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
-                // Bills due, completeness: a radar bill that is a card's payment counts once, as the card's.
-                BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
-                source,
-            ) else null,
+            payday = paydayView,
             cards = if (partial) MoneyCards.view(
                 cards.filter { it.id in names }, counted, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
             ) else null,
