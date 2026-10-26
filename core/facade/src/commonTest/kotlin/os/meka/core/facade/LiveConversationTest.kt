@@ -211,7 +211,8 @@ class LiveConversationTest {
             runCurrent()
             socket.sent.last().contains("YYYY")
         }
-        assertEquals(listOf(false, false, false, false, false, false, true, true), passed, "Meka over Obi goes up")
+        // Hotfix 2026-10-26: on the speaker nothing goes up while Obi speaks (he is stopped by a tap on the orb).
+        assertEquals(List(8) { false }, passed, "on the speaker the mic waits while Obi speaks")
         c.sendAudio("XXXX", 3, -45f, headphones = true)
         runCurrent()
         assertTrue(socket.sent.last().contains("XXXX"), "headphones: everything goes up")

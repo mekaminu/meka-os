@@ -64,7 +64,13 @@ object LiveAudioRules {
  * Whether each microphone chunk goes up while Obi speaks ([send]), from what is playing right now ([played]) and what
  * the microphone hears of it. One per conversation.
  */
-class LiveEchoGate {
+/**
+ * Hotfix 2026-10-26 (Meka 20:27: Obi says "the same sentence 20 times" on the speaker): with [bargeInOnSpeaker] false,
+ * the default, nothing from the microphone goes up while Obi is speaking on the phone's own speaker, so his echo can
+ * never make Google cut him off and restart; Meka stops him by tapping the orb. Headphones keep full barge-in. The
+ * echo-relative barge-in below stays for when it's proven on the Fold (Health → Obi's voice shows cut-offs per talk).
+ */
+class LiveEchoGate(private val bargeInOnSpeaker: Boolean = false) {
     /** What is queued to play, in order (Google sends faster than real time, so this can run many seconds ahead). */
     private class Span(val start: Long, val end: Long, val dbfs: Float)
     private val spans = ArrayDeque<Span>()
@@ -117,7 +123,7 @@ class LiveEchoGate {
         }
         val played = playedAt(nowMs)
         lastPlayedDbfs = played
-        if (micDbfs < LiveAudioRules.threshold(played, echoDb)) {
+        if (!bargeInOnSpeaker || micDbfs < LiveAudioRules.threshold(played, echoDb)) {
             overSince = -1
             if (played > LiveAudioRules.LEARN_ABOVE_DBFS) {
                 echoDb = (echoDb + LiveAudioRules.ECHO_ALPHA * ((micDbfs - played) - echoDb))

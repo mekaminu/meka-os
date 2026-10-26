@@ -28,7 +28,7 @@ class LiveAudioTest {
 
     @Test
     fun hisVoiceClearlyOverObisGoesUpAfterAQuarterSecond() {
-        val gate = LiveEchoGate()
+        val gate = LiveEchoGate(bargeInOnSpeaker = true)
         obiPlaying(gate, 0, 6_000, -18f)
         // Two seconds of echo at -32 dBFS teach the gate the phone's echo (about -14 dB under what plays).
         var t = 0L
@@ -42,6 +42,17 @@ class LiveAudioTest {
         assertFalse(gate.send(BargeInOutput.SPEAKER, -32f, true, 2_400))
         assertFalse(gate.send(BargeInOutput.SPEAKER, -5f, true, 2_440))
         assertFalse(gate.send(BargeInOutput.SPEAKER, -32f, true, 2_480))
+    }
+
+    @Test
+    fun onTheSpeakerByDefaultNothingGoesUpWhileObiSpeaks() {
+        val gate = LiveEchoGate()
+        obiPlaying(gate, 0, 3_000, -18f)
+        // Even loud, long speech at the phone stays muted while he speaks: his echo can never restart him.
+        assertTrue((0 until 20).none { i -> gate.send(BargeInOutput.SPEAKER, -6f, true, i * 40L) })
+        // Once he has stopped, everything goes up again; headphones always do.
+        assertTrue(gate.send(BargeInOutput.SPEAKER, -40f, speaking = false, nowMs = 3_500))
+        assertTrue(gate.send(BargeInOutput.HEADPHONES, -40f, speaking = true, nowMs = 1_000))
     }
 
     @Test
