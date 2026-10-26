@@ -662,16 +662,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         v.empty?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) } }
         item(key = "import") {
             Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                if (v.accounts.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        v.accounts.take(4).forEach { a ->
-                            val on = a.name == account
-                            Text(a.name, style = MekaType.caption, color = if (on) Meka.colors.accent else Meka.colors.textSecondary,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                                    .clickable(role = Role.Button) { account = a.name }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
-                        }
-                    }
-                }
+                if (v.accounts.isNotEmpty()) ImportAccountChips(v.accounts.map { it.name }, chosen = account) { account = it }
                 Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = { account = it }) { account = it }
                 Text(if (busy) "Reading the file…" else MoneyRules.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button, enabled = !busy) {
@@ -729,6 +720,28 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Money bugs (A5), Meka 2026-10-24: Import a statement's account chips were one Row, so a third account's chip was
+ * squeezed to one letter per line. Now they wrap onto the next line (every account, not the first four), each chip one
+ * line, a name too long for the width cut with "…" rather than broken.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun ImportAccountChips(names: List<String>, chosen: String, onPick: (String) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        names.distinct().forEach { name ->
+            val on = name == chosen
+            Text(name, style = MekaType.caption, color = if (on) Meka.colors.accent else Meka.colors.textSecondary,
+                maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    .clickable(role = Role.Button) { onPick(name) }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
         }
     }
 }

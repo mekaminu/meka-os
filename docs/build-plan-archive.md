@@ -4079,3 +4079,17 @@ and sorts rows newest first; no path to a stale month was found, so `MoneyFacade
 pins it (paged to September, closed and opened, and a second open while open: October so far, 5 → 3 → 2 Oct). Tests:
 MoneySourceTest (sources, the review's two footers, year and payday). Not yet: Travel, Challenges and Ask's "from your
 own statements". No server change, no migration. Mac checked nightly.
+
+#### Money bugs (A) — slices A5 + A6 (2026-10-26): the import chips wrap; nothing shows through above a pane
+
+A5: Import a statement's account chips were one `Row` of the first four accounts, so the third chip got what width was
+left and its name broke one letter per line. Fold: `ImportAccountChips` (MoneyPane.kt) is a `FlowRow` of every account,
+each chip one line (`maxLines = 1`, no soft wrap, "…" if a name is wider than the screen), 48 dp targets kept. Mac
+(MoneySheet.swift `importer`): the chips sit in a horizontal `ScrollView`, each `lineLimit(1).fixedSize()`, every account.
+A6: Meka's "faded strip of the Today screen's Add a habit / Plan this week buttons above every scrolled screen": those
+are Ask's Life tiles, and Money (like every pane) is a `MekaPane` over Ask whose sheet starts 8 dp down in Dark
+(`MotionMath.sheetTopGapDp`), so the sliver and the wedges under the sheet's rounded top corners showed the dimmed
+screen behind. The scrim layer now first fills the top (gap + the 24 dp corner radius) with the theme's background, then
+dims it, so the sliver reads as plain dimmed background; it fades with the scrim, Light (no gap) unchanged. Tests:
+MoneyBugsLayoutTest (four chips at 280 dp wrap to two rows, each one line tall; a Dark pane over a red screen shows no
+red in the sliver or the corner wedges). No core change, no server change, no migration. Mac checked nightly.

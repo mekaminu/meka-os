@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -184,10 +185,19 @@ fun MekaPane(visible: Boolean, origin: (() -> Bounds?)?, content: @Composable ()
             val opened = remember { if (reduced) null else origin?.invoke() }
             val closing = transition.targetState == EnterExitState.PostExit
             val row = remember(closing) { if (closing) origin?.invoke() ?: opened else opened }
+            // Money bugs (A6), Meka 2026-10-24: the sliver above the sheet (Dark) showed the screen behind (Ask's Life tiles,
+            // "Add a habit · Plan this week") as a faded strip over every scrolled pane. The sliver is now the plain
+            // background, dimmed like the rest, so nothing behind shows through it.
+            val gapFill = Meka.colors.background
+            val gapDp = MotionMath.sheetTopGapDp(Meka.theme.isDark)
             Box(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.fillMaxSize()
                         .animateEnterExit(enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced)))
+                        .drawBehind {
+                            val gap = (gapDp + MekaRadius.l.value) * density
+                            if (gapDp > 0f) drawRect(gapFill, size = Size(size.width, gap.coerceAtMost(size.height)))
+                        }
                         .background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
                         .pointerInput(Unit) { detectTapGestures { } }
                         .clearAndSetSemantics { },

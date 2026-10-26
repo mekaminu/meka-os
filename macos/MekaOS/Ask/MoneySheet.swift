@@ -1396,11 +1396,15 @@ struct MoneySheet: View {
                 Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
             if !v.accounts.isEmpty {
-                HStack {
-                    ForEach(v.accounts.prefix(4), id: \.id) { a in
-                        Button(a.name) { account = a.name }
-                            .buttonStyle(MekaPressStyle()).font(MekaType.caption)
-                            .foregroundStyle(a.name == account ? palette.accent : palette.textSecondary)
+                // Money bugs (A5): the account chips scroll sideways, each one line, never squashed.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(v.accounts, id: \.id) { a in
+                            Button(a.name) { account = a.name }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.caption)
+                                .lineLimit(1).fixedSize()
+                                .foregroundStyle(a.name == account ? palette.accent : palette.textSecondary)
+                        }
                     }
                 }
             }
