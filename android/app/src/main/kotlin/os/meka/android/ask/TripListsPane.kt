@@ -300,7 +300,7 @@ private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick:
             }
             .minTouch().testTag("trip-item-${row.id}"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         TickRing(done, Modifier.size(22.dp))
         Column(Modifier.weight(1f).alpha(fade)) {
