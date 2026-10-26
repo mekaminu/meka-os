@@ -93,4 +93,32 @@ class TripListsFacadeTest {
         assertEquals(1, fold.clearGotShopping())
         assertTrue(fold.tripListsView.value.single().tab(TripList.BUY).groups.single().rows.single().done)
     }
+
+    @Test
+    fun aNewTripStartsFromTheLastTripsListsAndUndoEmptiesItAgain() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addTrip("Porto 2–5 Oct")
+        val porto = fold.tripsView.value.rows.single().id
+        fold.addTripItem(porto, "pack 2 chargers", TripList.PACK)
+        fold.addTripItem(porto, "buy sun cream", TripList.PACK)
+        fold.addTrip("Lisbon 28–31 Oct")
+        val lisbon = fold.tripsView.value.rows.first { it.id != porto }.id
+        val offer = assertNotNull(fold.tripListsView.value.single { it.tripId == lisbon }.startFrom)
+        assertEquals(porto, offer.sourceTripId)
+        assertEquals("Copies its 2 things, all unticked", offer.sub)
+
+        val copied = fold.copyTripLists(offer.sourceTripId, lisbon)
+        assertEquals(false, copied.refused)
+        val v = fold.tripListsView.value.single { it.tripId == lisbon }
+        assertEquals(null, v.startFrom)
+        assertEquals("Bought 0 of 1 · packed 0 of 1", v.summary)
+        assertTrue(fold.copyTripLists(porto, lisbon).refused)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Bought 0 of 1 · packed 0 of 1", mac.tripListsView.value.single { it.tripId == lisbon }.summary)
+
+        assertTrue(fold.undoTripListsCopy(copied.token))
+        assertEquals(TripListRules.LISTS_EMPTY, fold.tripListsView.value.single { it.tripId == lisbon }.summary)
+        assertNotNull(fold.tripListsView.value.single { it.tripId == lisbon }.startFrom)
+    }
 }

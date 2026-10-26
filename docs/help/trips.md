@@ -1,7 +1,7 @@
 ---
 id: trips
 title: Trips
-keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave
+keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists
 data: yes
 fold: TRIPS
 fold_where: Ask → Life → Trips
@@ -19,3 +19,4 @@ tip: Removed a booking or a trip by mistake? Tap Undo on the line that says what
 tip: Every trip has Lists: To buy, To pack and Before we leave. Type "buy sun cream" or "pack 2 chargers" and it goes on the right list, in its group (Pharmacy, Documents, Tech…), with "× 2"; anything else goes on the list you have open.
 tip: On To pack, "for the kids" or "my …" says whose it is, and Everyone · Me · Kids shows just theirs. A tick shows at once on the Fold and the Mac and sinks to the bottom; Bought and Packed count how far you are. Press and hold an item (right-click on the Mac) to remove it, with Undo.
 tip: Anything on a trip's To buy is on your shopping list too, marked "For Barcelona trip". Tick it in either place (in the shop, or on the trip) and both are ticked, on the Fold and the Mac; if it was already on your shopping list, the trip shares it rather than adding it twice.
+tip: A new trip with empty lists offers "Start from" your last trip: one tap copies its To buy, To pack and Before we leave, all unticked (Undo takes them off again), and the To buy ones go on your shopping list for the new trip.

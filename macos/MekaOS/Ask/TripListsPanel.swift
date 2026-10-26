@@ -5,7 +5,8 @@ import SwiftUI
 /// go, Bought and Packed bars, To buy · To pack · Before we leave as tabs, one add field ("buy sun cream" → To buy,
 /// "pack 2 chargers" → To pack × 2, else the open tab; the tab follows where it went), Everyone / Me / Kids on To pack,
 /// and each list's groups with their count, folding on a click. A tick shows at once and is written after; ticked items
-/// sink and fade. Right-click → Remove, with Undo for a few seconds. Synced with the Fold.
+/// sink and fade. Right-click → Remove, with Undo for a few seconds. Slice 2b: an empty trip offers "Start from <last
+/// trip>", copying its lists unticked, with Undo. Synced with the Fold.
 ///
 /// Motion: the header and bars stagger in; the bars fill on the appear spring; rows move on the expand spring (a tick
 /// sinks the row) and the ring draws its check; groups fold on the expand spring with the chevron turning; the line
@@ -21,6 +22,9 @@ struct TripListsPanel: View {
     @State private var text = ""
     @State private var said: CoreModel.TripListSaid?
     @State private var removed: CoreModel.TripUndo?
+    /// Slice 2b: what "Start from last trip" copied (Undo for a few seconds); `copying` hides the offer at once.
+    @State private var copied: CoreModel.TripListCopy?
+    @State private var copying = false
     /// What this panel ticked, until the view says the same.
     @State private var pending: [String: Bool] = [:]
     @State private var folded: Set<String> = []
@@ -42,6 +46,7 @@ struct TripListsPanel: View {
         }
         .onChange(of: model.tripLists) { _, lists in
             guard let v = lists.first(where: { $0.tripId == tripId }) else { pending = [:]; return }
+            if v.startFrom == nil { copying = false }
             var shown: [String: Bool] = [:]
             for t in v.tabs { for g in t.groups { for r in g.rows { shown[r.id] = r.done } } }
             pending = pending.filter { id, done in shown[id] != nil && shown[id] != done }
@@ -105,6 +110,52 @@ struct TripListsPanel: View {
             .fixedSize(horizontal: false, vertical: true)
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+        if let from = v.startFrom, !copying {
+            Button {
+                copying = true
+                let source = from.sourceTripId
+                Task {
+                    let r = await model.copyTripLists(from: source, to: tripId)
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { copied = r }
+                    if r == nil || r?.refused == true { copying = false }
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(from.line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                    Text(from.sub).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(MekaSpace.m)
+                .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(from.spoken)
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        }
+        if let copied {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                Text(copied.line).font(MekaType.caption).foregroundStyle(copied.refused ? palette.accent : palette.textSecondary)
+                Spacer()
+                if !copied.refused {
+                    Button("Undo") {
+                        let token = copied.token
+                        self.copied = nil
+                        copying = false
+                        model.undoTripListsCopy(token)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Undo: \(copied.line)")
+                }
+            }
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            .task(id: copied) {
+                try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
+                if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.copied = nil } }
+            }
+        }
         if let removed {
             HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                 Text(removed.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)

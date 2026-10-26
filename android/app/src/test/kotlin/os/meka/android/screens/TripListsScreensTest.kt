@@ -33,7 +33,8 @@ import kotlin.test.assertEquals
 
 /**
  * Trip lists, slice 1: a trip's To pack on the Fold's cover and inner screens (Dark, and Light on the cover), read for
- * nonsense and words broken in two, saved under `trip-lists/`; and a tick shows in the next frame. Invented data (rule 13).
+ * nonsense and words broken in two, saved under `trip-lists/`; a tick shows in the next frame; and (slice 2b) an empty
+ * trip starts from the last trip's lists. Invented data (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -114,5 +115,28 @@ class TripListsScreensTest {
             core.tripListsView.value.single().tab(TripList.PACK).groups.first().rows.first { it.id == ghic.id }.done
         }
         assertEquals(1, core.tripListsView.value.single().tab(TripList.PACK).groups.first().rows.count { !it.done })
+    }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun anEmptyTripStartsFromTheLastTripsLists() {
+        val (core, lisbonId) = filled(ThemeChoice.DARK)
+        val rome = runBlocking {
+            check(!core.addTrip("Rome 20–23 Dec").refused)
+            core.tick()
+            core.tripsView.value.rows.first { it.id != lisbonId }.id
+        }
+        show(core, rome)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", "cover-dark-start-from"))
+        ScreenShots.assertSensible(compose, "cover-dark-start-from")
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-start-from")
+        ScreenShots.assertShows(compose, "cover-dark-start-from", "Start from Lisbon trip")
+        compose.onNodeWithTag("trip-start-from").performClick()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.tripListsView.value.single { it.tripId == rome }.packed.total == 9 }
+        // Copied unticked (Lisbon's passports were ticked), and the offer has gone.
+        assertEquals(null, core.tripListsView.value.single { it.tripId == rome }.startFrom)
+        assertEquals(0, core.tripListsView.value.single { it.tripId == rome }.packed.done)
+        assertEquals("1 of 9", core.tripListsView.value.single { it.tripId == lisbonId }.packed.line)
     }
 }

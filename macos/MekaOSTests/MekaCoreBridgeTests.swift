@@ -3029,6 +3029,29 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.tripListsView.value.first?.packed.line, "1 of 2")
     }
 
+    func testTripListsStartFromLastTripReachSwift() async throws {
+        // Trip lists, slice 2b: an empty trip offers the last trip's lists, and copying them crosses as Strings.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "tripstart-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        _ = try await core.addTrip(text: "Porto 3–6 Mar \(y)")
+        let porto = core.tripsView.value.rows[0].id
+        _ = try await core.addTripItem(tripId: porto, text: "pack 2 chargers", open: .pack)
+        _ = try await core.addTrip(text: "Rome 3–6 May \(y)")
+        let rome = try XCTUnwrap(core.tripsView.value.rows.first { $0.id != porto }).id
+        let from = try XCTUnwrap(core.tripListsView.value.first { $0.tripId == rome }?.startFrom)
+        XCTAssertEqual(from.line, "Start from Porto trip")
+        let copied = try await core.copyTripLists(fromTripId: from.sourceTripId, toTripId: rome)
+        XCTAssertFalse(copied.refused)
+        XCTAssertEqual(copied.line, "Copied 1 thing from Porto trip")
+        XCTAssertEqual(core.tripListsView.value.first { $0.tripId == rome }?.packed.line, "0 of 1")
+        let undone = try await core.undoTripListsCopy(token: copied.token)
+        XCTAssertTrue(undone.boolValue)
+    }
+
     func testVaultReceiptReachesSwift() async throws {
         // Receipts → Vault: the preview's offer, Keep / Take out and Open the email reach the Mac (only Strings cross).
         XCTAssertEqual(VaultReceiptRules.shared.KEEP, "Keep in the Vault")

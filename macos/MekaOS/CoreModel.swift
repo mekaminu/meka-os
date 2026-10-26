@@ -5967,6 +5967,28 @@ final class CoreModel {
 
     func undoTripItemRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripItemRemoval(token: token) } }
 
+    /// What "Start from last trip" did (slice 2b): "Copied 23 things from Lisbon trip" and Undo's token.
+    struct TripListCopy: Equatable {
+        let line: String
+        let token: String
+        let refused: Bool
+    }
+
+    /// Copies the trip `fromTripId`'s lists onto `toTripId`'s empty ones, unticked; only Strings cross.
+    func copyTripLists(from fromTripId: String, to toTripId: String) async -> TripListCopy? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.copyTripLists(fromTripId: fromTripId, toTripId: toTripId)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripListCopy(line: r.line, token: r.token, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func undoTripListsCopy(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripListsCopy(token: token) } }
+
     // MARK: The Vault (V2, slice 1)
 
     /// Adds "Passport expires 3 Mar 2029" or "Railcard 05/2027"; only a String crosses. Says what it did like Trips.

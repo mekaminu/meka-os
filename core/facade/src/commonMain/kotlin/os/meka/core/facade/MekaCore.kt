@@ -4989,6 +4989,18 @@ class MekaCore(
     /** Undo after [removeTripItem]: the item comes back as it was. */
     suspend fun undoTripItemRemoval(token: String): Boolean = onCore { tripLists.undoRemove(token) }
 
+    /**
+     * Slice 2b, "Start from last trip": copies the trip [fromTripId]'s lists onto [toTripId]'s empty ones, unticked
+     * ("Copied 23 things from Lisbon trip", with Undo's token); refused when [toTripId] has lists already.
+     */
+    suspend fun copyTripLists(fromTripId: String, toTripId: String): os.meka.core.domain.TripListCopied = onCore {
+        val all = trips.items()
+        tripLists.copyFrom(all.firstOrNull { it.id == fromTripId }, all.firstOrNull { it.id == toTripId })
+    }
+
+    /** Undo after [copyTripLists]: the copied items leave again. */
+    suspend fun undoTripListsCopy(token: String): Boolean = onCore { tripLists.undoCopy(token) }
+
     // ---- The Vault (V2, slice 1) ----
 
     /**

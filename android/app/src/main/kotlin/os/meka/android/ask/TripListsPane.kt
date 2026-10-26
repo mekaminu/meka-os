@@ -66,6 +66,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
 import os.meka.core.domain.TripList
 import os.meka.core.domain.TripListAdded
+import os.meka.core.domain.TripListCopied
 import os.meka.core.domain.TripListGroup
 import os.meka.core.domain.TripListRemoved
 import os.meka.core.domain.TripListRow
@@ -101,6 +102,9 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     var who by rememberSaveable { mutableStateOf(TripWho.EVERYONE) }
     var said by remember { mutableStateOf<TripListAdded?>(null) }
     var removed by remember { mutableStateOf<TripListRemoved?>(null) }
+    // Slice 2b: what "Start from last trip" copied, with Undo for a few seconds; [copying] hides the card at once.
+    var copied by remember { mutableStateOf<TripListCopied?>(null) }
+    var copying by remember { mutableStateOf(false) }
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     val folded = remember { mutableStateMapOf<String, Boolean>() }
@@ -110,6 +114,9 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
     }
     LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
+    LaunchedEffect(copied) { if (copied != null) { delay(TripRules.UNDO_MS); copied = null } }
+    // Once the view has the copy (no offer any more), the card's own hiding is no longer needed.
+    LaunchedEffect(v?.startFrom) { if (v?.startFrom == null) copying = false }
     val tick: (TripListRow, Boolean) -> Unit = { row, done ->
         haptics.light()
         pending[row.id] = done
@@ -181,6 +188,52 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 }
                 Crossfade(said?.line ?: TripListRules.ADD_NOTE, animationSpec = MekaMotion.appear(reduced), label = "trip-list-added") { line ->
                     Text(line, style = MekaType.caption, color = if (said != null) saidColor else Meka.colors.textTertiary)
+                }
+                AnimatedVisibility(
+                    visible = v.startFrom != null && !copying,
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    v.startFrom?.let { from ->
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                                .clickable(role = Role.Button) {
+                                    haptics.light(); copying = true
+                                    scope.launch {
+                                        val r = runCatching { core.copyTripLists(from.sourceTripId, tripId) }.getOrNull()
+                                        copied = r
+                                        if (r == null || r.refused) { haptics.reject(); copying = false }
+                                    }
+                                }
+                                .semantics(mergeDescendants = true) { contentDescription = from.spoken }
+                                .minTouch().padding(MekaSpace.m).testTag("trip-start-from"),
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                        ) {
+                            Text(from.line, style = MekaType.itemMeta, color = Meka.colors.accent)
+                            Text(from.sub, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
+                    }
+                }
+                AnimatedVisibility(
+                    visible = copied != null,
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    copied?.let { c ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(c.line, style = MekaType.caption, color = if (c.refused) Meka.colors.accent else Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                            if (!c.refused) {
+                                Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                        .clickable(role = Role.Button) {
+                                            haptics.light(); copied = null; copying = false
+                                            scope.launch { runCatching { core.undoTripListsCopy(c.token) } }
+                                        }
+                                        .semantics { contentDescription = "Undo: ${c.line}" }
+                                        .minTouch().padding(MekaSpace.xs).testTag("trip-copy-undo"))
+                            }
+                        }
+                    }
                 }
                 AnimatedVisibility(
                     visible = removed != null,

@@ -257,4 +257,68 @@ class TripListsTest {
         assertTrue(linkedFold.tick(back.id, true))
         assertTrue(sFold.view().toBuy.isEmpty())
     }
+
+    // ---- Slice 2b: Start from last trip ----
+
+    private val porto = TripItem("p", "Porto", d(8, 10), d(8, 14), 0)
+    private val rome = TripItem("r", "Rome", d(12, 20), d(12, 23), 0)
+
+    @Test
+    fun anEmptyTripOffersTheLastTripWithLists() {
+        linkedFold.add("p", "pack 5 t-shirts for the kids", TripList.PACK, tripExists = true, tripLabel = "Porto trip")
+        linkedFold.add("p", "buy sun cream", TripList.PACK, tripExists = true, tripLabel = "Porto trip")
+        linkedFold.add("r", "pack passports", TripList.PACK, tripExists = true, tripLabel = "Rome trip")
+        val trips = listOf(porto, trip, rome)
+        val from = TripListRules.view(trip, linkedFold.items(), mon, trips).startFrom!!
+        // Porto (before Lisbon) is the last trip; Rome comes later.
+        assertEquals("p", from.sourceTripId)
+        assertEquals("Start from Porto trip", from.line)
+        assertEquals("Copies its 2 things, all unticked", from.sub)
+        // A trip with lists offers nothing; nor does one with no other trip's lists.
+        assertNull(TripListRules.view(porto, linkedFold.items(), mon, trips).startFrom)
+        assertNull(TripListRules.view(trip, emptyList(), mon, trips).startFrom)
+        // With no trip before it, the latest trip with lists.
+        val first = TripItem("f", "Paris", d(1, 2), d(1, 4), 0)
+        assertEquals("r", TripListRules.view(first, linkedFold.items(), mon, trips + first).startFrom?.sourceTripId)
+    }
+
+    @Test
+    fun startingFromLastTripCopiesEverythingUntickedAndUndoTakesItOff() {
+        linkedFold.add("p", "pack 5 t-shirts for the kids", TripList.PACK, tripExists = true, tripLabel = "Porto trip")
+        linkedFold.add("p", "buy sun cream", TripList.PACK, tripExists = true, tripLabel = "Porto trip")
+        linkedFold.add("p", "before we leave: put the bins out", TripList.PACK, tripExists = true, tripLabel = "Porto trip")
+        linkedFold.items().forEach { linkedFold.tick(it.id, true) }
+        sFold.clearGot()
+        val copied = linkedFold.copyFrom(porto, trip)
+        assertFalse(copied.refused)
+        assertEquals("Copied 3 things from Porto trip", copied.line)
+        val mine = linkedFold.items().filter { it.tripId == "t" }
+        assertEquals(listOf("T-shirts", "Sun cream", "Put the bins out"), mine.map { it.text })
+        assertTrue(mine.none { it.done })
+        assertEquals(5, mine.first().qty)
+        assertEquals(TripWho.KIDS, mine.first().who)
+        assertEquals("Pharmacy", mine[1].group)
+        // The To buy copy is back on the shopping list, for Lisbon.
+        assertEquals("For Lisbon trip", sFold.view().toBuy.single().meta)
+        assertEquals(mine[1].shopId, sFold.view().toBuy.single().id)
+        // Porto's own lists are untouched.
+        assertTrue(linkedFold.items().filter { it.tripId == "p" }.all { it.done })
+        // Once Lisbon has lists, copying again is refused.
+        assertTrue(linkedFold.copyFrom(porto, trip).refused)
+        // On the Mac after a sync.
+        sync()
+        assertEquals(3, linkedMac.items().count { it.tripId == "t" })
+        // Undo: Lisbon's lists are empty again and the shopping item it made leaves.
+        assertTrue(linkedFold.undoCopy(copied.token))
+        assertTrue(linkedFold.items().none { it.tripId == "t" })
+        assertTrue(sFold.view().toBuy.isEmpty())
+        assertFalse(linkedFold.undoCopy(copied.token))
+    }
+
+    @Test
+    fun copyingFromNothingOrAGoneTripIsRefused() {
+        assertEquals(TripListRules.COPY_NOTHING, linkedFold.copyFrom(porto, trip).line)
+        assertEquals(TripListRules.GONE, linkedFold.copyFrom(null, trip).line)
+        assertTrue(linkedFold.items().isEmpty())
+    }
 }

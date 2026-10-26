@@ -91,6 +91,8 @@ data class TripListsView(
     val tabs: List<TripListTab>,
     /** The Trips row's line: "Bought 3 of 9 · packed 2 of 14", or [TripListRules.LISTS_EMPTY]. */
     val summary: String,
+    /** Slice 2b: while this trip's lists are empty, the last trip with lists to start from; else null. */
+    val startFrom: TripStartFrom? = null,
 ) {
     fun tab(list: TripList): TripListTab = tabs.first { it.list == list }
 
@@ -108,6 +110,15 @@ data class TripListsView(
 /** What adding a line did: the line under the field, the list it went on (the app opens that tab), and whether nothing was written. */
 data class TripListAdded(val line: String, val list: TripList, val refused: Boolean)
 
+/**
+ * Slice 2b, "Start from last trip": [line] "Start from Lisbon trip", [sub] "Copies its 23 things, all unticked",
+ * [sourceTripId] the trip copied from.
+ */
+data class TripStartFrom(val sourceTripId: String, val line: String, val sub: String, val spoken: String)
+
+/** What copying another trip's lists did: "Copied 23 things from Lisbon trip" and Undo's token; [refused] when nothing was copied. */
+data class TripListCopied(val line: String, val token: String, val refused: Boolean)
+
 /** What removing an item did: "Removed Sun cream" and the token Undo takes. */
 data class TripListRemoved(val line: String, val token: String)
 
@@ -123,6 +134,10 @@ object TripListRules {
     const val NOT_READ = "Type what to buy, pack or do, for example \"buy sun cream\"."
     const val GONE = "That trip has gone."
     const val NOTHING_YET = "Nothing yet"
+    /** Slice 2b. */
+    const val COPY_NOTHING = "That trip has nothing on its lists."
+    const val COPY_NOT_EMPTY = "This trip has lists already."
+    const val COPY_UNDONE = "Copied lists taken off"
     /** A linked To buy row's line (slice 2). */
     const val ON_SHOPPING = "On your shopping list"
 
@@ -372,7 +387,29 @@ object TripListRules {
         else -> TripRules.status(t, today)
     }
 
-    fun view(trip: TripItem, all: List<TripListItem>, today: Long): TripListsView {
+    fun things(n: Int): String = if (n == 1) "1 thing" else "$n things"
+
+    /** "Copied 23 things from Lisbon trip". */
+    fun copiedLine(n: Int, from: TripItem): String = "Copied ${things(n)} from ${tripLabel(from)}"
+
+    /**
+     * The trip to start [trip]'s empty lists from: of the other trips with anything on their lists, the latest to start
+     * on or before [trip] ("your last trip"), else the latest of any. Null when [trip] has lists or no other trip does.
+     */
+    fun startFrom(trip: TripItem, trips: List<TripItem>, all: List<TripListItem>): TripStartFrom? {
+        if (all.any { it.tripId == trip.id }) return null
+        val counts = all.groupingBy { it.tripId }.eachCount()
+        val others = trips.filter { it.id != trip.id && (counts[it.id] ?: 0) > 0 }
+        val src = others.filter { it.startDay <= trip.startDay }.maxWithOrNull(compareBy<TripItem> { it.startDay }.thenBy { it.addedAtMs })
+            ?: others.maxWithOrNull(compareBy<TripItem> { it.startDay }.thenBy { it.addedAtMs })
+            ?: return null
+        val n = counts.getValue(src.id)
+        val line = "Start from ${tripLabel(src)}"
+        val sub = "Copies its ${things(n)}, all unticked"
+        return TripStartFrom(src.id, line, sub, "$line. $sub")
+    }
+
+    fun view(trip: TripItem, all: List<TripListItem>, today: Long, trips: List<TripItem> = emptyList()): TripListsView {
         val items = all.filter { it.tripId == trip.id }
         val bought = progress("Bought", items.filter { it.list == TripList.BUY })
         val packed = progress("Packed", items.filter { it.list == TripList.PACK })
@@ -391,11 +428,12 @@ object TripListRules {
             packed = packed,
             tabs = TripList.entries.map { tab(it, items) },
             summary = summary,
+            startFrom = startFrom(trip, trips, all),
         )
     }
 
     /** Every trip's lists, by trip, in the trips' order. */
-    fun views(trips: List<TripItem>, items: List<TripListItem>, today: Long): List<TripListsView> = trips.map { view(it, items, today) }
+    fun views(trips: List<TripItem>, items: List<TripListItem>, today: Long): List<TripListsView> = trips.map { view(it, items, today, trips) }
 }
 
 /**
@@ -469,6 +507,35 @@ class TripLists(
         linked.forEach { replica.commitLocal(EntityTypes.TRIP_ITEM, it.ref.entityId, TripListRules.tickFields(got, nowMs())) }
         return linked.isNotEmpty()
     }
+
+    /**
+     * Slice 2b, "Start from last trip": copies every item on [from]'s lists onto [to]'s, unticked, in the same order,
+     * groups, quantities and whose; To buy items go on the shopping list for [to] like a typed one. Refused (nothing
+     * written) when [to] has lists already, either trip has gone, or [from] has nothing. The token is the new items' ids,
+     * for [undoCopy].
+     */
+    fun copyFrom(from: TripItem?, to: TripItem?): TripListCopied {
+        if (from == null || to == null) return TripListCopied(TripListRules.GONE, "", refused = true)
+        val all = items()
+        if (all.any { it.tripId == to.id }) return TripListCopied(TripListRules.COPY_NOT_EMPTY, "", refused = true)
+        val source = all.filter { it.tripId == from.id }
+        if (source.isEmpty()) return TripListCopied(TripListRules.COPY_NOTHING, "", refused = true)
+        val now = nowMs()
+        val label = TripListRules.tripLabel(to)
+        val ids = source.mapIndexed { i, item ->
+            val id = newId()
+            val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who)
+            // One millisecond apart, so the copies keep the source's order.
+            replica.commitLocal(EntityTypes.TRIP_ITEM, id, TripListRules.fields(to.id, e, now + i))
+            if (item.list == TripList.BUY) link(id, item.text, item.qty, label)
+            id
+        }
+        return TripListCopied(TripListRules.copiedLine(ids.size, from), ids.joinToString(","), refused = false)
+    }
+
+    /** Undo after [copyFrom]: the copied items leave (and the shopping items they made); false when none was there. */
+    fun undoCopy(token: String): Boolean =
+        token.split(',').filter { it.isNotBlank() }.map { remove(it) != null }.fold(false) { a, b -> a || b }
 
     /** Removes one item, with Undo's token (its id); null when it isn't there. A shopping item it made, still to buy, goes too. */
     fun remove(id: String): TripListRemoved? {
