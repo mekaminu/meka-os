@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Study plan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes fadeup{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+.pop{animation:pop .25s cubic-bezier(.2,.8,.2,1) both}
+.ring{transition:stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1)}
+.chev{transition:transform .2s}
+button{cursor:pointer}
+@media (prefers-reduced-motion:reduce){.in,.pop{animation:none}.ring,.chev{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1500px;box-sizing:border-box;padding:18px 18px 100px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:18px">
+
+<div style="display:flex;justify-content:space-between;align-items:center">
+<a href="#" style="font-size:14px;text-decoration:none">‹ Goals</a>
+<button type="button" aria-label="Course options" style="border:0;background:#121214;color:#a8a29a;width:40px;height:40px;border-radius:20px;font-size:18px;line-height:1">⋯</button>
+</div>
+
+<div style="display:flex;gap:16px;align-items:center">
+<div style="position:relative;width:96px;height:96px;flex-shrink:0">
+<svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true" style="transform:rotate(-90deg)">
+<circle cx="48" cy="48" r="40" fill="none" stroke="#1c1b1e" stroke-width="8"></circle>
+<circle class="ring" cx="48" cy="48" r="40" fill="none" stroke="#c9b37e" stroke-width="8" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="{{ringOff}}"></circle>
+</svg>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:20px;font-weight:700">{{pct}}</span><span style="font-size:11px;color:#a8a29a">done</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+<div style="font-size:22px;font-weight:700;line-height:1.2">[Your course]</div>
+<div style="font-size:13px;color:#a8a29a">{{doneCount}} of 24 lessons · about 18 h in all</div>
+<div style="font-size:13px;color:{{statusColor}}">{{status}}</div>
+</div>
+</div>
+
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Your plan</div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a8a29a">Finish by</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ends}}" as="c" hint-placeholder-count="3"><button type="button" onClick="{{c.pick}}" style="{{c.style}}">{{c.name}}</button></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a8a29a">Each session</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{lens}}" as="c" hint-placeholder-count="3"><button type="button" onClick="{{c.pick}}" style="{{c.style}}">{{c.name}}</button></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a8a29a">When you can study</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{slots}}" as="c" hint-placeholder-count="4"><button type="button" onClick="{{c.pick}}" aria-pressed="{{c.on}}" style="{{c.style}}">{{c.name}}</button></sc-for></div></div>
+<div style="display:flex;align-items:baseline;gap:8px;padding-top:4px"><span style="font-size:24px;font-weight:700;color:#c9b37e">{{perWeek}}</span><span style="font-size:13.5px;color:#a8a29a">{{perWeekSub}}</span></div>
+<div style="font-size:13px;color:{{fitColor}}">{{fit}}</div>
+</div>
+
+<div style="display:flex;gap:10px;align-items:flex-start;background:#17140f;border:1px solid #3a2e1c;border-radius:14px;padding:12px 14px"><span style="width:18px;height:18px;border-radius:9px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0;margin-top:2px"></span><span style="font-size:13.5px;line-height:1.45;color:#d8d2c6">{{obi}}</span></div>
+
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding-bottom:4px"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">This week</span><span style="font-size:12.5px;color:#8f897f">on your Week board</span></div>
+<sc-for list="{{week}}" as="w" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;min-height:56px;border-bottom:1px solid #141416">
+<span style="width:52px;display:flex;flex-direction:column;flex-shrink:0"><span style="font-size:12px;color:#8f897f">{{w.day}}</span><span style="font-size:15px;font-weight:600">{{w.time}}</span></span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{w.lesson}}</span><span style="font-size:12px;color:#8f897f">{{w.where}}</span></span>
+<button type="button" onClick="{{w.done}}" style="{{w.btnStyle}}">{{w.btn}}</button>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Lessons</div>
+<sc-for list="{{mods}}" as="m" hint-placeholder-count="4">
+<div style="background:#0d0d0f;border-radius:16px;padding:2px 14px">
+<button type="button" onClick="{{m.toggle}}" aria-expanded="{{m.open}}" style="border:0;background:transparent;color:#ededed;width:100%;display:flex;align-items:center;gap:10px;min-height:48px;padding:0;text-align:left;font-family:DM Sans,sans-serif">
+<span style="flex:1;font-size:15px;font-weight:600">{{m.name}}</span><span style="font-size:12.5px;color:{{m.countColor}}">{{m.count}}</span>
+<svg class="chev" style="{{m.chev}}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a8a29a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+</button>
+<sc-if value="{{m.open}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;flex-direction:column;padding-bottom:6px">
+<sc-for list="{{m.lessons}}" as="l" hint-placeholder-count="3">
+<button type="button" onClick="{{l.tick}}" style="border:0;border-top:1px solid #18181b;background:transparent;color:{{l.color}};display:flex;align-items:center;gap:12px;min-height:44px;padding:0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<sc-if value="{{l.done}}" hint-placeholder-val="{{false}}"><span class="pop" style="width:20px;height:20px;border-radius:10px;background:#c9b37e;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></sc-if>
+<sc-if value="{{l.todo}}" hint-placeholder-val="{{true}}"><span style="width:20px;height:20px;border-radius:10px;border:1.5px solid #5a5650;box-sizing:border-box;flex-shrink:0"></span></sc-if>
+<span style="flex:1;font-size:15px">{{l.name}}</span><span style="font-size:12.5px;color:#8f897f">{{l.mins}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<button type="button" style="border:1px dashed #2e2e32;background:transparent;color:#c9b37e;border-radius:12px;height:44px;font:500 14px DM Sans,sans-serif">+ Add lessons · paste the course outline or a link</button>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{toggles}}" as="t" hint-placeholder-count="3">
+<button type="button" onClick="{{t.flip}}" aria-pressed="{{t.on}}" style="border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:12px;min-height:52px;padding:0;text-align:left;font-family:DM Sans,sans-serif;width:100%">
+<span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px">{{t.a}}</span><span style="font-size:12px;color:#8f897f">{{t.b}}</span></span>
+<span style="{{t.track}}"><span style="{{t.knob}}"></span></span>
+</button>
+</sc-for>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={weeks:6,len:45,slots:{train:1,thu:1,sat:1},done:{l1:1,l2:1,l3:1,l4:1,l5:1},open:{m2:1},tog:{board:1,nudge:1,week:1},wdone:{}};}
+renderVals(){
+var s=this.state,self=this;
+var MODS=[{id:'m1',name:'1 · Foundations',n:6},{id:'m2',name:'2 · Core skills',n:6},{id:'m3',name:'3 · Putting it together',n:6},{id:'m4',name:'4 · Project and exam prep',n:6}];
+var L=[],k=1;MODS.forEach(function(m){m.ls=[];for(var i=0;i<m.n;i++){var id='l'+k;var mins=[30,45,45,60,40,50][i];var l={id:id,name:'Lesson '+k,mins:mins};m.ls.push(l);L.push(l);k++;}});
+var doneCount=L.filter(function(l){return s.done[l.id];}).length,left=24-doneCount;
+var leftMin=L.filter(function(l){return !s.done[l.id];}).reduce(function(a,l){return a+l.mins;},0);
+var perWeekMin=Math.ceil(leftMin/s.weeks);
+var sessions=Math.ceil(perWeekMin/s.len);
+var SL=[['train','Train mornings',3,'Mon–Wed 07:45','On the train · Thameslink'],['thu','Thu after work',1,'Thu 16:00','Home, early finish'],['sat','Sat morning',1,'Sat 09:00','Home'],['eve','Evenings',2,'Tue/Wed 20:30','Home, after the kids are down']];
+var avail=SL.reduce(function(a,x){return a+(s.slots[x[0]]?x[2]:0);},0);
+var chip=function(on){return 'border:0;border-radius:999px;padding:8px 13px;font:500 13px DM Sans,sans-serif;'+(on?'background:#c9b37e;color:#111':'background:#1a1a1d;color:#ededed');};
+var END={4:'Mon 23 Nov',6:'Mon 7 Dec',8:'Mon 21 Dec'};
+var hm=function(m){var h=Math.floor(m/60),r=m%60;return h?(h+' h'+(r?' '+r:'')):r+' min';};
+var behind=doneCount<5;
+var weekSlots=[];SL.forEach(function(x){if(!s.slots[x[0]])return;if(x[0]==='train'){weekSlots.push(['Tue','07:45',x[4]]);weekSlots.push(['Wed','07:45',x[4]]);weekSlots.push(['Mon','07:45',x[4]]);}else if(x[0]==='thu')weekSlots.push(['Thu','16:00',x[4]]);else if(x[0]==='sat')weekSlots.push(['Sat','09:00',x[4]]);else{weekSlots.push(['Tue','20:30',x[4]]);weekSlots.push(['Wed','20:30',x[4]]);}});
+var order={Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:7};
+weekSlots=weekSlots.slice(0,sessions).sort(function(a,b){return order[a[0]]-order[b[0]]||(a[1]<b[1]?-1:1);});
+var nextLessons=L.filter(function(l){return !s.done[l.id];});
+var week=weekSlots.map(function(w,i){var l=nextLessons[i];var key=w[0]+w[1];var d=!!s.wdone[key];
+return {day:w[0],time:w[1],lesson:l?(l.name+' · '+s.len+' min'):'Catch-up',where:w[2],btn:d?'Done':'Start',
+btnStyle:'border:0;border-radius:999px;height:34px;padding:0 14px;font:600 13px DM Sans,sans-serif;'+(d?'background:#1d2a1f;color:#8fbf8f':'background:#2a2721;color:#e8cf93'),
+done:function(){var x=Object.assign({},s.wdone);x[key]=1;var dn=Object.assign({},s.done);if(l)dn[l.id]=1;self.setState({wdone:x,done:dn});}};});
+var fits=sessions<=avail;
+var tog=function(on){return {track:'width:44px;height:26px;border-radius:13px;position:relative;flex-shrink:0;background:'+(on?'#c9b37e':'#2a2a2e'),knob:'position:absolute;top:3px;width:20px;height:20px;border-radius:10px;background:#111;'+(on?'right:3px':'left:3px')};};
+return {
+ringOff:String(251.3*(1-doneCount/24)),pct:Math.round(doneCount/24*100)+'%',doneCount:doneCount,
+status:doneCount>=8?'On track for '+END[s.weeks]:(behind?'1 lesson behind · catch up Saturday':'On track for '+END[s.weeks]),statusColor:behind?'#e0a97a':'#8fbf8f',
+ends:[4,6,8].map(function(w){return {name:END[w]+' · '+w+' wks',style:chip(s.weeks===w),pick:function(){self.setState({weeks:w});}};}),
+lens:[30,45,60].map(function(m){return {name:m+' min',style:chip(s.len===m),pick:function(){self.setState({len:m});}};}),
+slots:SL.map(function(x){var on=!!s.slots[x[0]];return {name:x[1],on:on,style:chip(on),pick:function(){var y=Object.assign({},s.slots);if(on)delete y[x[0]];else y[x[0]]=1;self.setState({slots:y});}};}),
+perWeek:sessions+' sessions a week',perWeekSub:'about '+hm(perWeekMin)+' · '+left+' lessons left',
+fit:fits?'Fits: you picked '+avail+' slots a week.':'Doesn’t fit: you need '+sessions+' slots a week but picked '+avail+'. Add a slot, make sessions longer or move the date.',fitColor:fits?'#8fbf8f':'#e0a97a',
+obi:fits?'I’ll put lessons on your train mornings first, skip days you’re off or working from home, and keep Saturday as the catch-up if one slips.':'Your calendar has a free hour most Thursdays after your early finish: want me to add it?',
+week:week,
+mods:MODS.map(function(m){var d=m.ls.filter(function(l){return s.done[l.id];}).length;var open=!!s.open[m.id];
+return {name:m.name,count:d===m.n?'Done':d+' of '+m.n,countColor:d===m.n?'#8fbf8f':'#8f897f',open:open,chev:open?'transform:rotate(180deg)':'',
+toggle:function(){var o=Object.assign({},s.open);if(open)delete o[m.id];else o[m.id]=1;self.setState({open:o});},
+lessons:m.ls.map(function(l){var dn=!!s.done[l.id];return {name:l.name,mins:l.mins+' min',done:dn,todo:!dn,color:dn?'#8f897f':'#ededed',
+tick:function(){var x=Object.assign({},s.done);if(dn)delete x[l.id];else x[l.id]=1;self.setState({done:x});}};})};}),
+toggles:[['board','Put sessions on my Week board','Moves them if something clashes'],['nudge','Nudge me 10 minutes before','A card from Obi, not out loud'],['week','Sunday check-in','How the week went, and next week’s sessions']].map(function(t){var on=!!s.tog[t[0]];var g=tog(on);return {a:t[1],b:t[2],on:on,track:g.track,knob:g.knob,flip:function(){var x=Object.assign({},s.tog);if(on)delete x[t[0]];else x[t[0]]=1;self.setState({tog:x});}};})
+};
+}
+}
+</script>
+</body>
+</html>
