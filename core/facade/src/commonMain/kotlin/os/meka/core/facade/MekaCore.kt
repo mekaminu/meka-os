@@ -189,7 +189,7 @@ class MekaCore(
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     /** Trip lists, slice 1 (2026-10-26): To buy, To pack and Before we leave on each trip. */
-    private val tripLists = os.meka.core.domain.TripLists(replica, ids::next, nowMs)
+    private val tripLists = os.meka.core.domain.TripLists(replica, ids::next, nowMs, shopping)
     private val documents = os.meka.core.domain.Documents(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val parkingTimers = os.meka.core.domain.ParkingTimers(replica)
@@ -4321,13 +4321,17 @@ class MekaCore(
      */
     suspend fun addShopping(text: String): List<String> = onCore { shopping.add(text) }
     /** Ticks a shopping item as bought; it moves under Got for a week, where it can be put back. */
-    suspend fun gotShopping(id: String): Boolean = onCore { shopping.got(id) }
+    suspend fun gotShopping(id: String): Boolean = onCore { shopping.got(id).also { if (it) tripLists.followShopping(id, got = true) } }
     /** Unticks a got item: back to buy, in the place it was first added. */
-    suspend fun putBackShopping(id: String): Boolean = onCore { shopping.putBack(id) }
+    suspend fun putBackShopping(id: String): Boolean = onCore { shopping.putBack(id).also { if (it) tripLists.followShopping(id, got = false) } }
     /** Takes an item off the list for good (added by mistake). */
     suspend fun removeShopping(id: String): Boolean = onCore { shopping.remove(id) }
     /** Clear under Got: every bought item leaves the list for good. Returns how many. */
-    suspend fun clearGotShopping(): Int = onCore { shopping.clearGot() }
+    suspend fun clearGotShopping(): Int = onCore {
+        // A trip's To buy item ticked from his wife's page keeps its tick once its shopping item leaves Got.
+        shopping.view().got.forEach { tripLists.followShopping(it.id, got = true) }
+        shopping.clearGot()
+    }
 
     // ---- Meal plan → shopping (V1, slice 1; Ask → More → Dinners) ----
 
@@ -4971,7 +4975,10 @@ class MekaCore(
      * nothing to add or the trip has gone; the result names the list it went on, so the app shows that tab.
      */
     suspend fun addTripItem(tripId: String, text: String, open: os.meka.core.domain.TripList): os.meka.core.domain.TripListAdded =
-        onCore { tripLists.add(tripId, text, open, tripExists = trips.items().any { it.id == tripId }) }
+        onCore {
+            val trip = trips.items().firstOrNull { it.id == tripId }
+            tripLists.add(tripId, text, open, tripExists = trip != null, tripLabel = trip?.let(os.meka.core.domain.TripListRules::tripLabel))
+        }
 
     /** Ticks or unticks one list item (the apps show it at once and call this after); false when nothing changed. */
     suspend fun tickTripItem(id: String, done: Boolean): Boolean = onCore { tripLists.tick(id, done) }

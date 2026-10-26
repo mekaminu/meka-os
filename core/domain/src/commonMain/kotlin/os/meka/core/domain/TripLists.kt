@@ -32,6 +32,10 @@ object TripItemFields {
     const val DELETED = ActionableFields.DELETED
     /** Set on a removed item once Undo has put a copy back, so a second Undo adds nothing. */
     const val RESTORED = "restored"
+    /** Slice 2: the shopping list's item a To buy item is linked to ([ShoppingFields.TRIP_ITEM] points back). */
+    const val SHOP = "shopId"
+    /** True when adding this item made that shopping item, so removing it from the trip takes it off the shopping list too. */
+    const val SHOP_MADE = "shopMade"
 }
 
 /** The three lists, in tab order. */
@@ -53,6 +57,8 @@ enum class TripWho(val wire: String, val label: String) {
 data class TripListItem(
     val id: String, val tripId: String, val list: TripList, val text: String, val group: String, val qty: Int?,
     val who: TripWho, val done: Boolean, val doneAtMs: Long?, val addedAtMs: Long,
+    /** Slice 2: the linked shopping item (To buy only), whose Got decides [done] while it is on the list. */
+    val shopId: String? = null,
 )
 
 /** A typed item ([TripListRules.read]). */
@@ -117,6 +123,8 @@ object TripListRules {
     const val NOT_READ = "Type what to buy, pack or do, for example \"buy sun cream\"."
     const val GONE = "That trip has gone."
     const val NOTHING_YET = "Nothing yet"
+    /** A linked To buy row's line (slice 2). */
+    const val ON_SHOPPING = "On your shopping list"
 
     /** Each list's groups in the order they show; [ADDED] (anything not matched) comes last. */
     val GROUPS: Map<TripList, List<String>> = mapOf(
@@ -261,19 +269,27 @@ object TripListRules {
 
     private fun Map<String, FieldValue>.f(field: String): FieldValue = this[field] ?: FieldValue.Null
 
-    fun items(entities: Map<String, Map<String, FieldValue>>): List<TripListItem> = entities.mapNotNull { (id, s) ->
+    /**
+     * The items from their fields; [shop] is each shopping item still on the list → whether it is got. A To buy item
+     * linked to one of those is done exactly when it is got, so a tick on the shopping list (on any device, or by his
+     * wife on the family page) ticks the trip's item too, and the other way round.
+     */
+    fun items(entities: Map<String, Map<String, FieldValue>>, shop: Map<String, Boolean> = emptyMap()): List<TripListItem> = entities.mapNotNull { (id, s) ->
         if (s.f(TripItemFields.DELETED).boolOrNull == true) return@mapNotNull null
         val trip = s.f(TripItemFields.TRIP).textOrNull ?: return@mapNotNull null
         val text = s.f(TripItemFields.TEXT).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         val list = TripList.of(s.f(TripItemFields.LIST).textOrNull)
         val group = s.f(TripItemFields.GROUP).textOrNull?.takeIf { it in GROUPS.getValue(list) } ?: groupOf(list, text)
+        val shopId = s.f(TripItemFields.SHOP).textOrNull?.takeIf { list == TripList.BUY && it.isNotBlank() }
+        val stored = s.f(TripItemFields.DONE).boolOrNull == true
         TripListItem(
             id, trip, list, text, group,
             s.f(TripItemFields.QTY).longOrNull?.toInt()?.takeIf { it > 1 },
             TripWho.of(s.f(TripItemFields.WHO).textOrNull),
-            s.f(TripItemFields.DONE).boolOrNull == true,
+            shopId?.let { shop[it] } ?: stored,
             s.f(TripItemFields.DONE_AT).longOrNull,
             s.f(TripItemFields.ADDED_AT).longOrNull ?: 0L,
+            shopId,
         )
     }.sortedWith(compareBy<TripListItem> { it.addedAtMs }.thenBy { it.id })
 
@@ -302,6 +318,16 @@ object TripListRules {
 
     fun removedLine(i: TripListItem): String = "Removed ${i.text}"
 
+    /**
+     * What a To buy item is called on the shopping list: "Plug adapters × 2" (one line, so no commas or semicolons,
+     * which would split it into several things).
+     */
+    fun shoppingTitle(text: String, qty: Int?): String =
+        ShoppingRules.tidy(text.replace(',', ' ').replace(';', ' ').replace('\n', ' ') + (qty?.takeIf { it > 1 }?.let { " × $it" } ?: ""))
+
+    /** The trip's name on its shopping items: "Lisbon trip". */
+    fun tripLabel(trip: TripItem): String = "${trip.name} trip"
+
     internal fun group(key: String, name: String, rows: List<TripListRow>): TripListGroup {
         val done = rows.count { it.done }
         val all = rows.isNotEmpty() && done == rows.size
@@ -309,7 +335,11 @@ object TripListRules {
     }
 
     private fun row(i: TripListItem): TripListRow {
-        val sub = if (i.list == TripList.PACK) i.who.label else ""
+        val sub = when {
+            i.list == TripList.PACK -> i.who.label
+            i.shopId != null -> ON_SHOPPING
+            else -> ""
+        }
         val qty = qtyLabel(i.qty)
         val spoken = listOfNotNull(
             i.text, qty.takeIf { it.isNotEmpty() }?.let { "times ${i.qty}" }, sub.takeIf { it.isNotEmpty() }?.let { "for ${it.lowercase()}" },
@@ -353,7 +383,7 @@ object TripListRules {
         ).joinToString(" · ").replaceFirstChar { it.uppercaseChar() }
         return TripListsView(
             tripId = trip.id,
-            title = "${trip.name} trip",
+            title = tripLabel(trip),
             dates = CalendarAgenda.spanLabel(trip.startDay, trip.endDay) + " · " + (if (trip.days == 1) "1 day" else "${trip.days} days"),
             countdown = countdown(trip, today),
             countdownLit = today >= trip.startDay - 2 && today <= trip.endDay,
@@ -368,48 +398,113 @@ object TripListRules {
     fun views(trips: List<TripItem>, items: List<TripListItem>, today: Long): List<TripListsView> = trips.map { view(it, items, today) }
 }
 
-/** The trips' lists on a replica. */
+/**
+ * The trips' lists on a replica. With [shopping] (slice 2), every To buy item is also on the shopping list under the
+ * trip's name ("For Lisbon trip"), and ticking either ticks both.
+ */
 class TripLists(
     private val replica: Replica,
     private val newId: () -> String,
     private val nowMs: () -> Long,
+    private val shopping: Shopping? = null,
 ) {
-    fun items(): List<TripListItem> =
-        TripListRules.items(replica.entities(EntityTypes.TRIP_ITEM).associate { it.ref.entityId to it.fields })
+    /** Each shopping item still on the list → whether it is got. */
+    private fun shopState(): Map<String, Boolean> =
+        if (shopping == null) emptyMap()
+        else replica.entities(EntityTypes.SHOPPING_ITEM)
+            .filter { it.fields[ShoppingFields.DELETED]?.boolOrNull != true }
+            .associate { it.ref.entityId to (it.fields[ShoppingFields.GOT]?.boolOrNull == true) }
 
-    /** Adds what [text] says to the trip [tripId] ([TripListRules.read]); refused (nothing written) when there's nothing to add or the trip is gone. */
-    fun add(tripId: String, text: String, open: TripList, tripExists: Boolean): TripListAdded {
+    fun items(): List<TripListItem> =
+        TripListRules.items(replica.entities(EntityTypes.TRIP_ITEM).associate { it.ref.entityId to it.fields }, shopState())
+
+    /**
+     * Adds what [text] says to the trip [tripId] ([TripListRules.read]); refused (nothing written) when there's nothing
+     * to add or the trip is gone. A To buy item also goes on the shopping list, named for [tripLabel] when given.
+     */
+    fun add(tripId: String, text: String, open: TripList, tripExists: Boolean, tripLabel: String? = null): TripListAdded {
         if (!tripExists) return TripListAdded(TripListRules.GONE, open, refused = true)
         val e = TripListRules.read(text, open) ?: return TripListAdded(TripListRules.NOT_READ, open, refused = true)
-        replica.commitLocal(EntityTypes.TRIP_ITEM, newId(), TripListRules.fields(tripId, e, nowMs()))
+        val id = newId()
+        replica.commitLocal(EntityTypes.TRIP_ITEM, id, TripListRules.fields(tripId, e, nowMs()))
+        if (e.list == TripList.BUY) link(id, e.text, e.qty, tripLabel)
         return TripListAdded(TripListRules.addedLine(e), e.list, refused = false)
     }
 
-    /** Ticks (or unticks) one item; false when it isn't there or is already so. */
+    /**
+     * Puts the To buy item [id] on the shopping list and links the two. A name already to buy there is shared, not
+     * doubled (and stays when the trip's item is removed); one under Got comes back to buy.
+     */
+    private fun link(id: String, text: String, qty: Int?, tripLabel: String?) {
+        val shop = shopping ?: return
+        val a = shop.addTracked(TripListRules.shoppingTitle(text, qty))
+        val shopId = a.ids.firstOrNull() ?: return
+        replica.commitLocal(EntityTypes.SHOPPING_ITEM, shopId, buildMap {
+            put(ShoppingFields.TRIP_ITEM, id.fv())
+            tripLabel?.let { put(ShoppingFields.TRIP, it.fv()) }
+        })
+        replica.commitLocal(EntityTypes.TRIP_ITEM, id, mapOf(TripItemFields.SHOP to shopId.fv(), TripItemFields.SHOP_MADE to (shopId in a.created).fv()))
+    }
+
+    /** Ticks (or unticks) one item, and its shopping item with it; false when it isn't there or is already so. */
     fun tick(id: String, done: Boolean): Boolean {
         val f = replica.entity(EntityTypes.TRIP_ITEM, id)?.fields ?: return false
         if (f[TripItemFields.DELETED]?.boolOrNull == true) return false
-        if ((f[TripItemFields.DONE]?.boolOrNull == true) == done) return false
+        val item = items().firstOrNull { it.id == id } ?: return false
+        if (item.done == done) return false
         replica.commitLocal(EntityTypes.TRIP_ITEM, id, TripListRules.tickFields(done, nowMs()))
+        item.shopId?.let { s -> if (done) shopping?.got(s) else shopping?.putBack(s) }
         return true
     }
 
-    /** Removes one item, with Undo's token (its id); null when it isn't there. */
+    /**
+     * The shopping item [shopId] was ticked ([got]) or put back on this device: the trip items linked to it keep the
+     * same tick in their own fields, so it holds after the shopping item is cleared from Got. True when any changed.
+     */
+    fun followShopping(shopId: String, got: Boolean): Boolean {
+        val linked = replica.entities(EntityTypes.TRIP_ITEM).filter {
+            it.fields[TripItemFields.SHOP]?.textOrNull == shopId && it.fields[TripItemFields.DELETED]?.boolOrNull != true &&
+                (it.fields[TripItemFields.DONE]?.boolOrNull == true) != got
+        }
+        linked.forEach { replica.commitLocal(EntityTypes.TRIP_ITEM, it.ref.entityId, TripListRules.tickFields(got, nowMs())) }
+        return linked.isNotEmpty()
+    }
+
+    /** Removes one item, with Undo's token (its id); null when it isn't there. A shopping item it made, still to buy, goes too. */
     fun remove(id: String): TripListRemoved? {
         val item = items().firstOrNull { it.id == id } ?: return null
+        val made = replica.entity(EntityTypes.TRIP_ITEM, id)?.fields?.get(TripItemFields.SHOP_MADE)?.boolOrNull == true
         replica.commitLocal(EntityTypes.TRIP_ITEM, id, mapOf(TripItemFields.DELETED to true.fv()))
+        val s = item.shopId
+        if (made && s != null && !item.done) {
+            val linkedHere = replica.entity(EntityTypes.SHOPPING_ITEM, s)?.fields?.get(ShoppingFields.TRIP_ITEM)?.textOrNull == id
+            if (linkedHere) shopping?.remove(s)
+        }
         return TripListRemoved(TripListRules.removedLine(item), id)
     }
 
     /**
      * Undo after [remove]: a removal is for good on every device (`deleted` is TrueWins), so the item comes back as a
-     * copy under a new id, ticked as it was. False when [token] names nothing removed.
+     * copy under a new id, ticked as it was (and back on the shopping list if it left it). False when [token] names
+     * nothing removed.
      */
     fun undoRemove(token: String): Boolean {
         val f = replica.entity(EntityTypes.TRIP_ITEM, token)?.fields ?: return false
         if (f[TripItemFields.DELETED]?.boolOrNull != true || f[TripItemFields.RESTORED]?.boolOrNull == true) return false
         replica.commitLocal(EntityTypes.TRIP_ITEM, token, mapOf(TripItemFields.RESTORED to true.fv()))
-        replica.commitLocal(EntityTypes.TRIP_ITEM, newId(), f - TripItemFields.DELETED - TripItemFields.RESTORED)
+        val copy = newId()
+        val shopId = f[TripItemFields.SHOP]?.textOrNull
+        val shop = shopId?.let { replica.entity(EntityTypes.SHOPPING_ITEM, it)?.fields }
+        val shopGone = shopId != null && (shop == null || shop[ShoppingFields.DELETED]?.boolOrNull == true)
+        replica.commitLocal(EntityTypes.TRIP_ITEM, copy, f - TripItemFields.DELETED - TripItemFields.RESTORED - (if (shopGone) setOf(TripItemFields.SHOP, TripItemFields.SHOP_MADE) else emptySet()))
+        val text = f[TripItemFields.TEXT]?.textOrNull
+        if (shopId != null && text != null) {
+            if (shopGone) {
+                if (f[TripItemFields.DONE]?.boolOrNull != true) link(copy, text, f[TripItemFields.QTY]?.longOrNull?.toInt(), shop?.get(ShoppingFields.TRIP)?.textOrNull)
+            } else {
+                replica.commitLocal(EntityTypes.SHOPPING_ITEM, shopId, mapOf(ShoppingFields.TRIP_ITEM to copy.fv()))
+            }
+        }
         return true
     }
 }

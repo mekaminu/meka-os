@@ -65,4 +65,32 @@ class TripListsFacadeTest {
         mac.syncNow(); fold.syncNow()
         assertEquals(listOf("Sun cream"), fold.tripListsView.value.single().tab(TripList.BUY).groups.single().rows.map { it.text })
     }
+
+    @Test
+    fun aTripsToBuyIsOnTheShoppingListAndATickOnEitherTicksBoth() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addTrip("Lisbon 28–31 Oct")
+        val tripId = fold.tripsView.value.rows.single().id
+        fold.addTripItem(tripId, "buy sun cream", TripList.PACK)
+        val shop = fold.listsView.value.shopping.toBuy.single()
+        assertEquals("Sun cream", shop.title)
+        assertEquals("For " + fold.tripListsView.value.single().title, shop.meta)
+        val row = fold.tripListsView.value.single().tab(TripList.BUY).groups.single().rows.single()
+        assertEquals(TripListRules.ON_SHOPPING, row.sub)
+
+        // Got in the shop on the Mac: the trip's item is ticked on both.
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.gotShopping(shop.id))
+        assertEquals("1 of 1", mac.tripListsView.value.single().bought.line)
+        mac.syncNow(); fold.syncNow()
+        assertTrue(fold.tripListsView.value.single().tab(TripList.BUY).groups.single().rows.single().done)
+        // Unticked on the trip: back to buy on the shopping list.
+        assertTrue(fold.tickTripItem(row.id, false))
+        assertEquals(listOf("Sun cream"), fold.listsView.value.shopping.toBuy.map { it.title })
+        // Ticked on the trip, then Got cleared: still ticked.
+        assertTrue(fold.tickTripItem(row.id, true))
+        assertEquals(1, fold.clearGotShopping())
+        assertTrue(fold.tripListsView.value.single().tab(TripList.BUY).groups.single().rows.single().done)
+    }
 }

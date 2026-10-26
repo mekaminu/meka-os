@@ -20,6 +20,10 @@ object ShoppingFields {
     /** Who added it: [ShoppingRules.OWNER] or a family member's name key ("jordan"). Display only. */
     const val BY = "by"
     const val DELETED = ActionableFields.DELETED
+    /** Trip lists, slice 2: the trip a thing is for ("Lisbon trip"), shown under it while it is to buy. */
+    const val TRIP = "trip"
+    /** The trip's To buy item this is linked to (a tick on either ticks both; [TripItemFields.SHOP] points back). */
+    const val TRIP_ITEM = "tripItemId"
 }
 
 /** One row of the shopping list. [meta] is null for Meka's own items still to buy. */
@@ -79,6 +83,11 @@ object ShoppingRules {
     fun toBuyMeta(by: String?, addedAtMs: Long, nowMs: Long, cal: LocalCalendar): String? =
         byName(by)?.let { "From $it · ${day(addedAtMs, nowMs, cal)}" }
 
+    /** As [toBuyMeta], with the trip it is for: "For Lisbon trip", "From Jordan · today · For Lisbon trip". */
+    fun toBuyMeta(by: String?, addedAtMs: Long, nowMs: Long, cal: LocalCalendar, trip: String?): String? =
+        listOfNotNull(toBuyMeta(by, addedAtMs, nowMs, cal), trip?.trim()?.takeIf { it.isNotEmpty() }?.let { "For $it" })
+            .joinToString(" · ").ifEmpty { null }
+
     /** A got row's line: "Got today", "Got Thu 8 Oct". */
     fun gotMeta(gotAtMs: Long, nowMs: Long, cal: LocalCalendar): String = "Got ${day(gotAtMs, nowMs, cal)}"
 
@@ -108,7 +117,7 @@ object ShoppingRules {
             .map { (id, s) ->
                 val at = s.f(ShoppingFields.ADDED_AT).longOrNull ?: 0L
                 val by = s.f(ShoppingFields.BY).textOrNull ?: OWNER
-                ShoppingItem(id, s.f(ShoppingFields.TITLE).textOrNull.orEmpty(), false, toBuyMeta(by, at, nowMs, cal), by, at)
+                ShoppingItem(id, s.f(ShoppingFields.TITLE).textOrNull.orEmpty(), false, toBuyMeta(by, at, nowMs, cal, s.f(ShoppingFields.TRIP).textOrNull), by, at)
             }
             .filter { it.title.isNotEmpty() }
             .sortedWith(compareBy<ShoppingItem> { it.atMs }.thenBy { it.id })

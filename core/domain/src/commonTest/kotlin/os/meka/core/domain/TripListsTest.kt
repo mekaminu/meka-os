@@ -182,4 +182,79 @@ class TripListsTest {
         assertTrue(back.done)
         assertEquals(TripList.BUY, back.list)
     }
+
+    // ---- Slice 2: To buy is on the shopping list too ----
+
+    private val sFold = Shopping(fold.replica, { "s${n++}" }, { world.clock.nowMs }, cal)
+    private val sMac = Shopping(mac.replica, { "s${n++}" }, { world.clock.nowMs }, cal)
+    private val linkedFold = TripLists(fold.replica, { "i${n++}" }, { world.clock.nowMs }, sFold)
+    private val linkedMac = TripLists(mac.replica, { "i${n++}" }, { world.clock.nowMs }, sMac)
+
+    @Test
+    fun aToBuyItemIsOnTheShoppingListWithTheTripsName() {
+        linkedFold.add("t", "buy plug adapters × 2", TripList.PACK, tripExists = true, tripLabel = "Lisbon trip")
+        linkedFold.add("t", "pack 2 chargers", TripList.PACK, tripExists = true, tripLabel = "Lisbon trip")
+        val shop = sFold.view().toBuy.single()
+        assertEquals("Plug adapters × 2", shop.title)
+        assertEquals("For Lisbon trip", shop.meta)
+        val item = linkedFold.items().first { it.list == TripList.BUY }
+        assertEquals(shop.id, item.shopId)
+        assertEquals(TripListRules.ON_SHOPPING, TripListRules.view(trip, linkedFold.items(), mon).tab(TripList.BUY).groups.single().rows.single().sub)
+        // Packing never touches the shopping list.
+        assertNull(linkedFold.items().first { it.list == TripList.PACK }.shopId)
+        assertEquals("Sun cream, factor 50", TripListRules.read("buy sun cream, factor 50", TripList.BUY)?.text)
+        assertEquals("Sun cream  factor 50".let(ShoppingRules::tidy), TripListRules.shoppingTitle("Sun cream, factor 50", null))
+    }
+
+    @Test
+    fun tickingEitherTicksBothOnBothDevices() {
+        linkedFold.add("t", "buy sun cream", TripList.BUY, tripExists = true, tripLabel = "Lisbon trip")
+        val item = linkedFold.items().single()
+        val shopId = item.shopId!!
+        // Ticked on the trip: got on the shopping list.
+        assertTrue(linkedFold.tick(item.id, true))
+        assertTrue(sFold.view().got.any { it.id == shopId })
+        // Put back on the shopping list (the Mac, after a sync): the trip's item is unticked there and on the Fold.
+        sync()
+        assertTrue(sMac.putBack(shopId))
+        linkedMac.followShopping(shopId, got = false)
+        assertFalse(linkedMac.items().single().done)
+        sync()
+        assertFalse(linkedFold.items().single().done)
+        // Got on the shopping list alone (as his wife's page does): the trip shows it ticked.
+        assertTrue(sFold.got(shopId))
+        assertTrue(linkedFold.items().single().done)
+        assertEquals("1 of 1", TripListRules.view(trip, linkedFold.items(), mon).bought.line)
+        // Cleared from Got after following: the tick holds.
+        linkedFold.followShopping(shopId, got = true)
+        assertEquals(1, sFold.clearGot())
+        assertTrue(linkedFold.items().single().done)
+    }
+
+    @Test
+    fun aNameAlreadyToBuyIsSharedAndStaysWhenTheTripsItemGoes() {
+        sFold.add("Milk, Sun cream")
+        linkedFold.add("t", "buy sun cream", TripList.BUY, tripExists = true, tripLabel = "Lisbon trip")
+        assertEquals(listOf("Milk", "Sun cream"), sFold.view().toBuy.map { it.title })
+        val item = linkedFold.items().single()
+        linkedFold.remove(item.id)
+        assertEquals(listOf("Milk", "Sun cream"), sFold.view().toBuy.map { it.title })
+    }
+
+    @Test
+    fun removingTakesItOffTheShoppingListAndUndoPutsItBack() {
+        linkedFold.add("t", "buy snacks", TripList.BUY, tripExists = true, tripLabel = "Lisbon trip")
+        val item = linkedFold.items().single()
+        val removed = linkedFold.remove(item.id)!!
+        assertTrue(sFold.view().toBuy.isEmpty())
+        assertTrue(linkedFold.undoRemove(removed.token))
+        val back = linkedFold.items().single()
+        val shop = sFold.view().toBuy.single()
+        assertEquals("Snacks", shop.title)
+        assertEquals("For Lisbon trip", shop.meta)
+        assertEquals(shop.id, back.shopId)
+        // The new link holds: ticking the copy gets it.
+        assertTrue(linkedFold.tick(back.id, true))
+        assertTrue(sFold.view().toBuy.isEmpty())
+    }
 }
