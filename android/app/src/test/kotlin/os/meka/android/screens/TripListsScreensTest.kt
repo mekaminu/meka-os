@@ -198,9 +198,12 @@ class TripListsScreensTest {
         compose.mainClock.advanceTimeBy(500L)
         val field = hasSetTextAction() and hasContentDescription(TripGroupRules.RENAME_HINT)
         scrollTo(field)
+        // The field must recompose with the text before Done reads it, so the clock runs here.
+        compose.mainClock.autoAdvance = true
         compose.onNode(field).performTextInput("Outfits")
+        compose.waitForIdle()
         compose.onNode(field).performImeAction()
-        compose.mainClock.advanceTimeBy(16L)
+        compose.waitForIdle()
         scrollTo("trip-group-more-Outfits")
         compose.onNodeWithTag("trip-group-more-Outfits").assertExists()
         compose.mainClock.autoAdvance = true
