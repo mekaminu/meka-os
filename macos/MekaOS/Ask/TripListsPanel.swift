@@ -67,6 +67,8 @@ struct TripListsPanel: View {
     @State private var newGroupText = ""
     @State private var sheetFor: String?
     @State private var askFor: CoreModel.TripListSaid?
+    /// Slice 4b: the group head a drag is over (lit).
+    @State private var dropTarget: String?
 
     var body: some View {
         let v = model.tripLists.first { $0.tripId == tripId }
@@ -599,10 +601,20 @@ struct TripListsPanel: View {
                     .rotationEffect(.degrees(open ? 180 : 0))
             }
             .contentShape(Rectangle())
+            .padding(.horizontal, MekaSpace.xxs)
+            .background(dropTarget == g.name ? palette.accent.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: dropTarget)
         }
         .buttonStyle(MekaPressStyle())
         .padding(.top, MekaSpace.xs)
         .accessibilityLabel("\(g.name), \(allDone ? "all done" : "\(done) of \(g.rows.count)")")
+        // Slice 4b: drag a thing onto a group's head to move it there; drag a head onto another to take its place.
+        .modifier(GroupHeadDrag(name: g.name, editable: g.editable))
+        .dropDestination(for: String.self) { items, _ in
+            drop(items, on: g.name, editable: editable)
+        } isTargeted: { on in
+            if on { dropTarget = g.name } else if dropTarget == g.name { dropTarget = nil }
+        }
         .contextMenu {
             if g.editable {
                 let name = g.name
@@ -667,6 +679,7 @@ struct TripListsPanel: View {
         .buttonStyle(MekaPressStyle())
         .accessibilityLabel(r.text)
         .accessibilityValue(done ? "Ticked" : "Not ticked")
+        .draggable(id)
         .contextMenu {
             Button("Change…") { sheetFor = id }
             Menu("Move to") {
@@ -726,6 +739,25 @@ struct TripListsPanel: View {
             writing -= 1
             if !ok || (writing == 0 && viewTicks != at) { clearEdits() }
         }
+    }
+
+    /// Slice 4b: a drop on the group `group`'s head: a thing moves into it; another group's head takes its place.
+    private func drop(_ items: [String], on group: String, editable: [String]) -> Bool {
+        dropTarget = nil
+        guard let first = items.first else { return false }
+        let prefix = "group:"
+        if first.hasPrefix(prefix) {
+            let name = String(first.dropFirst(prefix.count))
+            let next = TripGroupRules.shared.dropOn(names: editable, dragged: name, target: group)
+            guard next != editable else { return false }
+            MekaHaptics.light()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { groupOrder = next }
+            let list = tab
+            edit { await model.setTripGroupOrder(tripId, list: list, names: next) }
+            return true
+        }
+        moveItem(first, to: group)
+        return true
     }
 
     private func moveItem(_ id: String, to typed: String) {
@@ -847,5 +879,19 @@ private struct TripItemSheetMac: View {
         .padding(MekaSpace.m)
         .frame(width: 300)
         .onAppear { name = text; count = qty }
+    }
+}
+
+/// Slice 4b: a group's head can be dragged (as "group:<name>") onto another head to reorder; Other can't.
+private struct GroupHeadDrag: ViewModifier {
+    let name: String
+    let editable: Bool
+
+    func body(content: Content) -> some View {
+        if editable {
+            content.draggable("group:\(name)")
+        } else {
+            content
+        }
     }
 }

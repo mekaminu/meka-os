@@ -28,7 +28,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -126,6 +135,12 @@ import os.meka.core.facade.MekaCore
  * offers "Put it in:" chips under the field for a few seconds. Motion: the sheet and the menus open on the expand spring
  * (fades when reduced), rows move to their new group with the list's item motion; haptics: a tick on a menu, light on a
  * change, reject on a refusal.
+ *
+ * Slice 4b, **drag**: press and hold a thing, then drag it onto another group (a tick when it lifts and on each group it
+ * passes, that group's head lit in the accent, light on the drop; it moves in the same frame and is written after);
+ * press and hold a group's head and drag it up or down to reorder the groups. Near the list's top or foot the list
+ * scrolls. Holding without moving still opens the thing's sheet (or the group's menu). Reduced motion: the lifted row
+ * still follows the finger (it is the gesture), the lit head fades instead of easing.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -154,6 +169,27 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     // Editing slice 4a: the overlays drawn before the core's writes come back, the open sheet and group menu, what a group
     // change said (Undo for a deleted group), and the "Put it in:" chips after an add that matched no group.
     val edits = rememberTripGroupEdits()
+    // Slice 4b: drag, the list (for scrolling near its edges) and its bounds on screen.
+    val drag = remember { TripDrag() }
+    val listState = rememberLazyListState()
+    var listTop by remember { mutableFloatStateOf(0f) }
+    var listBottom by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val slopPx = with(density) { TripGroupRules.DRAG_SLOP_DP.dp.toPx() }
+    val edgePx = with(density) { TripGroupRules.EDGE_DP.dp.toPx() }
+    LaunchedEffect(drag.active) {
+        while (drag.active) {
+            val y = drag.fingerY
+            val step = when {
+                !drag.moved || listBottom <= listTop -> 0f
+                y < listTop + edgePx -> -edgePx / 4
+                y > listBottom - edgePx -> edgePx / 4
+                else -> 0f
+            }
+            if (step != 0f) drag.scrolled += listState.scrollBy(step)
+            delay(16L)
+        }
+    }
     var sheetFor by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<String?>(null) }
     var groupSaid by remember { mutableStateOf<TripGroupDone?>(null) }
@@ -197,7 +233,9 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     )
 
     LazyColumn(
-        Modifier.fillMaxSize().testTag("trip-lists"),
+        Modifier.fillMaxSize().testTag("trip-lists")
+            .onGloballyPositioned { val b = it.boundsInRoot(); listTop = b.top; listBottom = b.bottom },
+        state = listState,
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -515,6 +553,18 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         // Every group a thing can go to (the sheet's chips), as drawn now, Other last.
         val allGroups = edits.apply(v.tab(tab).groups, tab).map { it.name }.let { if (TripListRules.ADDED in it) it else it + TripListRules.ADDED }
         val editable = groups.filter { it.editable }.map { it.name }
+        val order = groups.map { it.name }
+        // Slice 4b: the group under a dragged thing, a tick each time it changes.
+        val dragStep: (Float) -> Unit = { dy ->
+            drag.offsetY += dy
+            if (!drag.moved && kotlin.math.abs(drag.offsetY) > slopPx) {
+                drag.moved = true; sheetFor = null; menuFor = null
+            }
+            if (drag.moved) {
+                val t = if (drag.item != null) drag.groupUnder(order) else null
+                if (t != null && t != drag.target) { drag.target = t; haptics.tick() }
+            }
+        }
         val moveGroup: (TripListGroup, Int) -> Unit = { g, delta ->
             val now = edits.apply(v.tab(tab).groups, tab).filter { it.editable }.map { it.name }
             val at = now.indexOf(g.name)
@@ -533,7 +583,35 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         for (g in groups) {
             val open = folded[g.key] != true
             item(key = "group-${g.key}") {
-                GroupHead(g, open, pending, Modifier.animateItem(), onMenu = if (g.editable) ({ haptics.tick(); menuFor = if (menuFor == g.key) null else g.key }) else null) {
+                DisposableEffect(g.name) { onDispose { drag.heads.remove(g.name) } }
+                var top by remember { mutableFloatStateOf(0f) }
+                val dragging = drag.head == g.name && drag.moved
+                val lit = drag.item != null && drag.moved && drag.target == g.name && drag.target != drag.from
+                val headDrag = if (!g.editable) Modifier else Modifier.tripDraggable(
+                    "head-${g.name}",
+                    onStart = { y -> haptics.tick(); drag.start(null, g.name, g.name, top + y) },
+                    onMove = dragStep,
+                    onEnd = { dropped ->
+                        if (dropped && drag.moved) {
+                            val middles = editable.mapNotNull { n -> drag.heads[n]?.let { n to it.center.y } }.toMap()
+                            val next = TripGroupRules.reorder(editable, g.name, middles, drag.fingerY)
+                            if (next != editable) {
+                                haptics.light()
+                                edits.run(scope, { edits.order = next }) { core.setTripGroupOrder(tripId, tab, next) }
+                            }
+                        }
+                        drag.reset()
+                    },
+                )
+                GroupHead(
+                    g, open, pending,
+                    Modifier.animateItem()
+                        .onGloballyPositioned { val b = it.boundsInRoot(); top = b.top; if (!dragging) drag.heads[g.name] = b }
+                        .graphicsLayer { if (dragging) { translationY = drag.offsetY + drag.scrolled; shadowElevation = 8f } }
+                        .then(headDrag),
+                    lit = lit,
+                    onMenu = if (g.editable) ({ haptics.tick(); menuFor = if (menuFor == g.key) null else g.key }) else null,
+                ) {
                     haptics.tick(); folded[g.key] = open
                 }
             }
@@ -570,8 +648,29 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 val rows = g.rows.sortedBy { pending[it.id] ?: it.done }
                 for (row in rows) {
                     item(key = "item-${row.id}") {
-                        ItemRow(row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) },
-                            onOpen = { haptics.tick(); sheetFor = if (sheetFor == row.id) null else row.id })
+                        var top by remember { mutableFloatStateOf(0f) }
+                        val lifted = drag.item == row.id && drag.moved
+                        ItemRow(
+                            row, pending[row.id] ?: row.done,
+                            Modifier.animateItem()
+                                .onGloballyPositioned { top = it.positionInRoot().y }
+                                .graphicsLayer { if (lifted) { translationY = drag.offsetY + drag.scrolled; shadowElevation = 8f; alpha = 0.92f } }
+                                .tripDraggable(
+                                    "item-${row.id}-${g.name}",
+                                    onStart = { y -> haptics.tick(); drag.start(row.id, null, g.name, top + y) },
+                                    onMove = dragStep,
+                                    onEnd = { dropped ->
+                                        val to = drag.target
+                                        if (dropped && drag.moved && to != null && to != g.name) {
+                                            haptics.light()
+                                            edits.run(scope, { edits.moves[row.id] = to }) { core.moveTripItem(row.id, to)?.refused == false }
+                                        }
+                                        drag.reset()
+                                    },
+                                ),
+                            onTick = { tick(row, it) },
+                            onOpen = { haptics.tick(); sheetFor = if (sheetFor == row.id) null else row.id },
+                        )
                     }
                     if (sheetFor == row.id) {
                         item(key = "sheet-${row.id}") {
@@ -731,17 +830,26 @@ private fun ProgressBar(p: TripProgress, modifier: Modifier) {
 }
 
 /** A group's head: its name, its count ("1 of 3", "All done" in green) and a chevron; a tap folds it. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupHead(g: TripListGroup, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onMenu: (() -> Unit)? = null, onToggle: () -> Unit) {
+private fun GroupHead(
+    g: TripListGroup, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, lit: Boolean = false,
+    onMenu: (() -> Unit)? = null, onToggle: () -> Unit,
+) {
     val reduced = Meka.reducedMotion
     val done = g.rows.count { pending[it.id] ?: it.done }
     val allDone = g.rows.isNotEmpty() && done == g.rows.size
     val count = if (g.rows.isEmpty()) TripGroupRules.EMPTY else if (allDone) "All done" else "$done of ${g.rows.size}"
     val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "trip-group-chev")
+    // Slice 4b: the drop target under a dragged thing.
+    val glow by animateColorAsState(if (lit) Meka.colors.accent.copy(alpha = 0.18f) else Meka.colors.accent.copy(alpha = 0f), MekaMotion.appear(reduced), label = "trip-group-lit")
     Row(
-        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-            .clickable(role = Role.Button, onClick = onToggle)
-            .semantics(mergeDescendants = true) { contentDescription = "${g.name}, $count, " + if (open) "tap to fold" else "tap to open" }
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(glow)
+            .combinedClickable(role = Role.Button, onClick = onToggle, onLongClick = onMenu, onLongClickLabel = if (onMenu != null) "Change the group" else null)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${g.name}, $count, " + if (open) "tap to fold" else "tap to open"
+                if (lit) stateDescription = "Drop here"
+            }
             .minTouch(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),

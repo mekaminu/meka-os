@@ -3106,6 +3106,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         let ordered = try await core.setTripGroupOrder(tripId: tripId, list: .pack, names: ["Toys", "Documents"])
         XCTAssertTrue(ordered.boolValue)
         XCTAssertEqual(core.tripListsView.value.first?.tab(list: .pack).groups.map(\.name), ["Toys", "Documents"])
+        // Slice 4b: a head dropped on another takes its place (the Mac's drag).
+        XCTAssertEqual(TripGroupRules.shared.dropOn(names: ["Toys", "Documents"], dragged: "Documents", target: "Toys"), ["Documents", "Toys"])
     }
 
     func testTripListsStartFromLastTripReachSwift() async throws {

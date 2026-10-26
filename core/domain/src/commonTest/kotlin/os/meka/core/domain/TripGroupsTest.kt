@@ -198,4 +198,26 @@ class TripGroupsTest {
         val added = TripGroupRules.preview(g, added = listOf("Snacks"))
         assertEquals(listOf("Documents", "Clothes", "Snacks", "Other"), added.map { it.name })
     }
+
+    @Test
+    fun aDragLandsOnTheGroupUnderTheFinger() {
+        val tops = listOf("Documents" to 100f, "Clothes" to 300f, "Other" to 520f)
+        assertEquals("Documents", TripGroupRules.groupAt(tops, 50f))
+        assertEquals("Documents", TripGroupRules.groupAt(tops, 299f))
+        assertEquals("Clothes", TripGroupRules.groupAt(tops, 300f))
+        assertEquals("Other", TripGroupRules.groupAt(tops, 900f))
+        assertNull(TripGroupRules.groupAt(emptyList(), 10f))
+    }
+
+    @Test
+    fun aDraggedGroupHeadTakesItsNewPlace() {
+        val names = listOf("Documents", "Clothes", "Tech", "Kitchen")
+        val mid = mapOf("Documents" to 100f, "Clothes" to 200f, "Tech" to 300f, "Kitchen" to 400f)
+        assertEquals(listOf("Clothes", "Tech", "Documents", "Kitchen"), TripGroupRules.reorder(names, "Documents", mid, 350f))
+        assertEquals(listOf("Kitchen", "Documents", "Clothes", "Tech"), TripGroupRules.reorder(names, "Kitchen", mid, 20f))
+        assertEquals(names, TripGroupRules.reorder(names, "Tech", mid, 299f))
+        assertEquals(listOf("Tech", "Documents", "Clothes", "Kitchen"), TripGroupRules.dropOn(names, "Tech", "Documents"))
+        assertEquals(listOf("Clothes", "Tech", "Documents", "Kitchen"), TripGroupRules.dropOn(names, "Documents", "Tech"))
+        assertEquals(names, TripGroupRules.dropOn(names, "Other", "Tech"))
+    }
 }

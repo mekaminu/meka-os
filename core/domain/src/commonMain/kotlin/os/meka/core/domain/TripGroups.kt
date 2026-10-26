@@ -135,6 +135,44 @@ object TripGroupRules {
     fun tooMany(): String = "A list can have $MAX_GROUPS groups at most."
     fun savedLine(text: String): String = "Saved $text"
 
+    // ---- Slice 4b: drag ----
+
+    /** How far (dp) a held thing must move before it is a drag rather than a press that opens its sheet. */
+    const val DRAG_SLOP_DP = 12f
+    /** Within this far (dp) of the list's top or foot a drag scrolls the list. */
+    const val EDGE_DP = 64f
+    const val DRAG_HINT = "Press and hold to drag it to another group"
+
+    /**
+     * The group a dragged thing is over: of the group heads' tops ([tops], in screen order, any units), the last one
+     * at or above [y], so the whole stretch from a head down to the next is that group; above the first head, the
+     * first. Null when there are no heads.
+     */
+    fun groupAt(tops: List<Pair<String, Float>>, y: Float): String? {
+        if (tops.isEmpty()) return null
+        val sorted = tops.sortedBy { it.second }
+        return sorted.lastOrNull { it.second <= y }?.first ?: sorted.first().first
+    }
+
+    /**
+     * Where a dragged group head lands: [names] (his groups, Other left out) with [dragged] moved to sit among the
+     * others by [y] against their heads' middles ([middles]). Names without a middle keep their order.
+     */
+    fun reorder(names: List<String>, dragged: String, middles: Map<String, Float>, y: Float): List<String> {
+        if (dragged !in names) return names
+        val rest = names.filter { it != dragged }
+        val at = rest.count { n -> (middles[n] ?: Float.NEGATIVE_INFINITY) < y }
+        return rest.toMutableList().also { it.add(at.coerceIn(0, it.size), dragged) }
+    }
+
+    /** The Mac's drop of the head [dragged] on the head [target]: it takes [target]'s place (the rest shift). */
+    fun dropOn(names: List<String>, dragged: String, target: String): List<String> {
+        if (dragged == target || dragged !in names || target !in names) return names
+        val from = names.indexOf(dragged)
+        val to = names.indexOf(target)
+        return names.toMutableList().also { val x = it.removeAt(from); it.add(to, x) }
+    }
+
     // ---- Undo of a deleted group: "list|name|index|id,id" ----
 
     fun deleteToken(list: TripList, name: String, index: Int, ids: List<String>): String =

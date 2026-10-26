@@ -3,6 +3,7 @@ package os.meka.android.ask
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -16,16 +17,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -190,5 +195,69 @@ internal fun TripAddGroup(onAdd: (String) -> Unit) {
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { open = !open }
                 .semantics { contentDescription = "Add a group" }.minTouch().padding(MekaSpace.xs).testTag("trip-add-group"))
         if (open) Field(TripGroupRules.ADD_GROUP_HINT, modifier = Modifier.testTag("trip-add-group-field")) { onAdd(it); open = false }
+    }
+}
+
+/**
+ * Slice 4b, drag: what is being dragged right now (a thing or a group's head), where the finger is (root pixels), how
+ * far it has moved, the list's scroll since it started (so the lifted row stays under the finger), the group heads on
+ * screen (their bounds) and the group the finger is over.
+ */
+@Stable
+internal class TripDrag {
+    var item by mutableStateOf<String?>(null)
+    var head by mutableStateOf<String?>(null)
+    var from: String? = null
+    var startY = 0f
+    var offsetY by mutableFloatStateOf(0f)
+    var scrolled by mutableFloatStateOf(0f)
+    var moved by mutableStateOf(false)
+    var target by mutableStateOf<String?>(null)
+    val heads = mutableStateMapOf<String, Rect>()
+    val active: Boolean get() = item != null || head != null
+    val fingerY: Float get() = startY + offsetY
+
+    fun start(item: String?, head: String?, from: String?, y: Float) {
+        this.item = item; this.head = head; this.from = from; startY = y
+        offsetY = 0f; scrolled = 0f; moved = false; target = from
+    }
+
+    fun reset() { item = null; head = null; from = null; offsetY = 0f; scrolled = 0f; moved = false; target = null }
+
+    /**
+     * The group under the finger, by the heads on screen in [order] (the tab's groups): above every head on screen it is
+     * the group before the first one shown (its head has scrolled away), else the core's [TripGroupRules.groupAt].
+     */
+    fun groupUnder(order: List<String>): String? {
+        val tops = order.mapNotNull { n -> heads[n]?.let { n to it.top } }
+        if (tops.isEmpty()) return null
+        val y = fingerY
+        if (tops.none { it.second <= y }) {
+            val first = tops.minBy { it.second }.first
+            val i = order.indexOf(first)
+            return if (i > 0) order[i - 1] else first
+        }
+        return TripGroupRules.groupAt(tops, y)
+    }
+}
+
+/**
+ * Press and hold, then drag (slice 4b): [onStart] with the finger's y inside the element, [onMove] with each step's y,
+ * [onEnd] with true when let go (false when the gesture was cancelled). Each step is consumed, so the list doesn't
+ * scroll under the finger.
+ */
+@Composable
+internal fun Modifier.tripDraggable(key: Any, onStart: (Float) -> Unit, onMove: (Float) -> Unit, onEnd: (Boolean) -> Unit): Modifier {
+    // The gesture outlives a recomposition, so it always calls the newest callbacks.
+    val start by rememberUpdatedState(onStart)
+    val move by rememberUpdatedState(onMove)
+    val end by rememberUpdatedState(onEnd)
+    return pointerInput(key) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = { start(it.y) },
+            onDrag = { change, amount -> change.consume(); move(amount.y) },
+            onDragEnd = { end(true) },
+            onDragCancel = { end(false) },
+        )
     }
 }

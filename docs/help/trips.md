@@ -1,7 +1,7 @@
 ---
 id: trips
 title: Trips
-keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack, obi's suggestions, suggestions, what have I forgotten, add all, not now, move to another group, rename a group, new group, delete a group, reorder groups, change an item
+keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack, obi's suggestions, suggestions, what have I forgotten, add all, not now, move to another group, rename a group, new group, drag to another group, drag a group, delete a group, reorder groups, change an item
 data: yes
 fold: TRIPS
 fold_where: Ask → Life → Trips
@@ -30,3 +30,4 @@ tip: "Not now" puts that card's suggestions away for this trip on the Fold and t
 tip: The groups on a trip's lists are yours. Tap ⋯ on a thing (or press and hold it) to change its name, how many, whose it is, or its group (New group… makes one); right-click it on the Mac for Change… and Move to.
 tip: Tap ⋯ on a group's heading (right-click on the Mac) to rename it, move it up or down, or delete it; its things go to Other, with Undo. "+ Group" at the foot adds a group. A template saved from the trip keeps your groups.
 tip: A thing goes into one of your own groups when its words match (a "Kitchen" group catches a blender). When nothing matches, "Put it in:" offers your groups under the field for a few seconds.
+tip: Press and hold a thing on a trip's list and drag it onto another group: that group's heading lights up and the thing moves there when you let go. Press and hold a group's heading and drag it to put your groups in the order you pack. On the Mac, drag a thing onto a heading, or a heading onto another.
