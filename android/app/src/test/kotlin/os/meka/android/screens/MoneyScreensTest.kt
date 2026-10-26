@@ -28,8 +28,8 @@ import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -126,8 +126,10 @@ class MoneyScreensTest {
         compose.waitForIdle()
         // Money redesign (B), slice 1: the tab's pill, as he'd tap it.
         if (tab != MoneyTabs.FIRST) {
-            // The row scrolls sideways on the cover screen, so Accounts may start partly off the edge.
-            compose.onNodeWithContentDescription(MoneyTabs.spoken(tab, chosen = false), useUnmergedTree = true).performScrollTo().performClick()
+            // The row scrolls sideways on the cover screen, so Accounts may start partly off the edge: its click action, not
+            // a touch at its centre (and not performScrollTo, whose animated scroll never ends with the clock held).
+            compose.onNodeWithContentDescription(MoneyTabs.spoken(tab, chosen = false), useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.OnClick)
             compose.mainClock.advanceTimeBy(SETTLE_MS)
             compose.waitForIdle()
         }
