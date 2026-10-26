@@ -304,9 +304,10 @@ object MoneyBusinessExport {
         val biz = businessAccounts.filter { it in names }.toSet()
         if (biz.isEmpty() && merchants.none { it.value }) return TradingExportResult(MoneySaved(NOTHING_MARKED, refused = true))
         val merged = MoneyBank.merge(accounts, txns.filter { it.account in names }).txns
+        val moves = MoneyTransfers.ids(accounts.filter { it.id in names }, merged, rules)
         val lines = merged.mapNotNull { t ->
             val key = MoneyCategoryRules.merchantKey(t.text)
-            val cat = rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence)
+            val cat = MoneyTransfers.categoryOf(t, key, rules, moves)
             val l = MoneyBusinessLine(t.account, t.day, t.pence, key, cat)
             if (!MoneyBusiness.counts(l, biz, merchants)) null
             else MoneyBusinessExportLine(t.day, names[t.account].orEmpty(), t.text, cat, t.pence)

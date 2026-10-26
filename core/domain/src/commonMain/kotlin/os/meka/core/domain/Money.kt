@@ -333,7 +333,7 @@ object MoneyCategoryRules {
 
     /** Words → category, in order: the first that matches wins (so "UBER EATS" is a takeaway before "UBER" is transport). */
     private val RULES: List<Pair<MoneyCategory, Regex>> = listOf(
-        MoneyCategory.TRANSFERS to w("transfer", "to savings", "from savings", "savings pot", "pot transfer", "own account", "american express", "amex", "barclaycard", "credit card payment", "card repayment", "payment received", "payment thank you", "thank you for your payment", "monzo", "revolut", "starling", "top up", "topup"),
+        MoneyCategory.TRANSFERS to w("transfer", "to savings", "from savings", "savings pot", "pot transfer", "own account", "american express", "american exp", "amex", "capital one", "mbna", "vanquis", "barclaycard", "credit card payment", "card repayment", "payment received", "payment thank you", "thank you for your payment", "monzo", "revolut", "starling", "top up", "topup"),
         MoneyCategory.TAKEAWAY to w("deliveroo", "just eat", "justeat", "uber eats", "ubereats", "domino", "papa john", "hungry"),
         MoneyCategory.COFFEE to w("costa", "starbucks", "pret", "caffe nero", "nero", "gail", "coffee", "cafe", "café", "black sheep", "joe & the juice"),
         MoneyCategory.EATING_OUT to w("mcdonald", "nando", "wagamama", "kfc", "burger king", "greggs", "restaurant", "pizza express", "pizzaexpress", "leon", "itsu", "wasabi", "five guys", "subway", "toby carvery", "harvester", "dishoom", "zizzi", "prezzo", "bella italia", "wetherspoon", "pub", "tap ", "bar ", "grill", "kitchen", "chicken"),
@@ -359,6 +359,9 @@ object MoneyCategoryRules {
     /** Any of [words] as whole words (a plural or 's after one is fine): "bus" never matches "business". */
     private fun w(vararg words: String): Regex =
         Regex("(^|[^a-z0-9])(" + words.joinToString("|") { Regex.escape(it.trim().lowercase()) } + ")(s|'s)?([^a-z0-9]|$)", RegexOption.IGNORE_CASE)
+
+    /** Money transfers: the words say this money in is pay or benefits ("SALARY", "HMRC"), so it is never one of his own moves. */
+    fun incomeWords(text: String): Boolean = INCOME_WORDS.containsMatchIn(" " + text.lowercase() + " ")
 
     /**
      * What the words point to. Money out with no match is [MoneyCategory.OTHER]; money in from a shop is that shop's
@@ -595,8 +598,10 @@ object MoneyRules {
         val keys = HashMap<String, String>()
         val cats = HashMap<String, MoneyCategory>()
         fun keyOf(t: MoneyTxn): String = keys.getOrPut(t.id) { MoneyCategoryRules.merchantKey(t.text) }
-        fun cat(t: MoneyTxn): MoneyCategory = cats.getOrPut(t.id) { rules[keyOf(t)] ?: MoneyCategoryRules.categoryOf(t.text, t.pence) }
         val mine = merged.txns
+        // Money bugs (A1): card repayments and moves between his own accounts are transfers, out of spent and in.
+        val moves = MoneyTransfers.ids(accounts, mine, rules)
+        fun cat(t: MoneyTxn): MoneyCategory = cats.getOrPut(t.id) { MoneyTransfers.categoryOf(t, keyOf(t), rules, moves) }
         val accountRows = accounts.sortedBy { it.name.lowercase() }.map { a ->
             val ts = mine.filter { it.account == a.id }
             val span = if (ts.isEmpty()) "no transactions" else
@@ -733,27 +738,33 @@ object MoneyRules {
      */
     fun askLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyLine> {
         val ids = accounts.map { it.id }.toSet()
-        return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
+        val mine = MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns
+        val moves = MoneyTransfers.ids(accounts, mine, rules)
+        return mine.map { t ->
             val key = MoneyCategoryRules.merchantKey(t.text)
-            MoneyLine(t.day, t.pence, key, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence))
+            MoneyLine(t.day, t.pence, key, MoneyTransfers.categoryOf(t, key, rules, moves))
         }
     }
 
     /** Money manager, nudges: every account's lines as the watchdog sees them, counted once ([MoneyBank.merge]). */
     fun watchLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyWatchLine> {
         val ids = accounts.map { it.id }.toSet()
-        return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
+        val mine = MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns
+        val moves = MoneyTransfers.ids(accounts, mine, rules)
+        return mine.map { t ->
             val key = MoneyCategoryRules.merchantKey(t.text)
-            MoneyWatchLine(t.id, t.account, t.day, t.pence, key, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence), t.text)
+            MoneyWatchLine(t.id, t.account, t.day, t.pence, key, MoneyTransfers.categoryOf(t, key, rules, moves), t.text)
         }
     }
 
     /** Money manager (17): every account's lines for PAYING ABROAD in Ask's answer, counted once, with text and category. */
     fun travelLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyTravelLine> {
         val ids = accounts.map { it.id }.toSet()
-        return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
+        val mine = MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns
+        val moves = MoneyTransfers.ids(accounts, mine, rules)
+        return mine.map { t ->
             val key = MoneyCategoryRules.merchantKey(t.text)
-            MoneyTravelLine(t.account, t.day, t.pence, t.text, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence))
+            MoneyTravelLine(t.account, t.day, t.pence, t.text, MoneyTransfers.categoryOf(t, key, rules, moves))
         }
     }
 

@@ -4042,3 +4042,16 @@ width unchanged so "09:30–10:00" still fits; the agenda's calendar dot is cent
 agenda's planned tasks use `taskTitle` like Today's. The open Fold draws the same rows, so it follows. **Mac:** the same
 rows take `eventTitle` / `taskTitle` (same 13 pt size there, named for the scale). Test: CalmerTypeTest (12 sp label,
 16 sp event title, 13 sp time, detail and All day). No core change, no server change, no migration. Mac checked nightly.
+
+#### Money bugs (A) — slice A1 (2026-10-26): repayments and own moves are Transfers
+Meka's screenshots showed "Hsbc −£767.72" on the bank with "Payment Thank YOU +£767.72" on the card, "American EXP
+−£1,000" with "Payment Received +£1,000", and "…sent From +£500", all counted as spending or income (most of "Other"
+£9,344, and August £3,010 more out than in). Core `MoneyTransfers` (domain, pure): `ids(accounts, txns, rules)` pairs money
+out on one of his accounts with the same amount (±1p) in on another within 5 days (closest days first, each line once),
+and marks a line whose words name another of his accounts' banks (`bankWords`: the account name's non-generic words,
+"hsbc" from "HSBC Credit card"); only lines whose words point to Transfers, Other or unexplained money in qualify, never
+pay (`MoneyCategoryRules.incomeWords`), and his merchant correction wins. `categoryOf(t, key, rules, moves)` is used by
+`MoneyRules.view`, `askLines`, `watchLines`, `travelLines` and `MoneyBusinessExport.result`. Card-issuer words added to
+Transfers: "american exp", "capital one", "mbna", "vanquis". Test: MoneyTransfersTest (the three shapes, spent £85 · in
+£2,500, a shop and a refund elsewhere aren't a pair, pay never is, same account / 8 days apart aren't, a penny out still
+pairs, his correction wins, a payee naming another account). No server change, no migration. Mac checked nightly.
