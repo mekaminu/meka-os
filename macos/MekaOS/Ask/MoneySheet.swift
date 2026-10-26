@@ -55,6 +55,8 @@ struct MoneySheet: View {
     @State private var worthBalances: [String: String] = [:]
     /// Slice 18: the year in review opened or folded by him, per year (else January's finished year opens by itself).
     @State private var yearOpen: [Int32: Bool] = [:]
+    /// Money redesign (B), slice 1: the tab shown (Spending · Bills · Plan · Trading · Accounts); opens on Spending.
+    @State private var tab: MoneyTab = MoneyTabs.shared.FIRST
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -76,24 +78,31 @@ struct MoneySheet: View {
                     .keyboardShortcut(.defaultAction)
                     .staggeredAppear(2)
             } else {
+                tabPills(v).staggeredAppear(2)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
-                        if let b = v.bank { bank(b).staggeredAppear(2) }
-                        // TRADING · HYPERLIQUID leads once an address is in; its set-up block waits below Import (MoneyView.tradingFirst).
-                        if let t = v.trading, v.tradingFirst { trading(t).staggeredAppear(2) }
-                        if let m = v.month { month(m, v).staggeredAppear(2) }
-                        if let ch = v.challenges { challenges(ch).staggeredAppear(3) }
-                        if let g = v.goals { moneyGoals(g).staggeredAppear(3) }
-                        if let b = v.business { business(b).staggeredAppear(3) }
-                        if let sh = v.shared { shared(sh).staggeredAppear(3) }
-                        if let w = v.worth { worth(w).staggeredAppear(3) }
+                        if let e = MoneyTabs.shared.empty(tab: tab, v: v) {
+                            Text(e).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true).transition(.opacity)
+                        }
+                        if let b = v.bank, has(.bank, v) { bank(b).staggeredAppear(2) }
+                        if let t = v.trading, has(.trading, v) { trading(t).staggeredAppear(2) }
+                        if let m = v.month, tabOfMonth { month(m, v).staggeredAppear(2) }
+                        if let g = v.goals, has(.goals, v) { moneyGoals(g).staggeredAppear(3) }
+                        if let ch = v.challenges, has(.challenges, v) { challenges(ch).staggeredAppear(3) }
+                        if let tv = v.travel, has(.travel, v) { travel(tv).transition(.opacity) }
+                        if let w = v.worth, has(.worth, v) { worth(w).staggeredAppear(3) }
+                        if let b = v.business, has(.business, v) { business(b).staggeredAppear(3) }
+                        if let sh = v.shared, has(.sharedCosts, v) { shared(sh).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
-                        importer(v).staggeredAppear(3)
-                        if let t = v.trading, !v.tradingFirst { trading(t).staggeredAppear(3) }
-                        if !v.accounts.isEmpty { accounts(v).staggeredAppear(4) }
-                        foot(v)
+                        if has(.importStatement, v) { importer(v).staggeredAppear(3) }
+                        if has(.accounts, v) { accounts(v).staggeredAppear(4) }
+                        if has(.foot, v) { foot(v) }
                     }
+                    .id(tab.name)
+                    .transition(.opacity)
                 }
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: tab.name)
                 .scrollIndicators(.never)
                 .frame(maxHeight: 560)
             }
@@ -112,6 +121,39 @@ struct MoneySheet: View {
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.sessionDidResignActiveNotification)) { _ in model.closeMoney() }
     }
 
+    /// Whether the chosen tab shows section [s] of [v] (MoneyTabs decides, as on the Fold).
+    private func has(_ s: MoneySection, _ v: MoneyView) -> Bool { MoneyTabs.shared.shows(tab: tab, s: s, v: v) }
+
+    /// Spending and Bills draw from the month's block (this month's payday, cards and refunds live there).
+    private var tabOfMonth: Bool { tab == MoneyTab.spending || tab == MoneyTab.bills || tab == MoneyTab.plan }
+
+    /// Money redesign (B), slice 1: Spending · Bills · Plan · Trading · Accounts as pills; the chosen one is lit and
+    /// blends there; a click gives a tick. Bills and Plan step back to this month (MoneyTabs.stepOnPick).
+    private func tabPills(_ v: MoneyView) -> some View {
+        HStack(spacing: MekaSpace.xs) {
+            ForEach(MoneyTabs.shared.ALL, id: \.name) { t in
+                let lit = t == tab
+                Button {
+                    guard !lit else { return }
+                    MekaHaptics.tick()
+                    tab = t
+                    if let step = MoneyTabs.shared.stepOnPick(tab: t, v: v) { model.moneyStep(step.int32Value) }
+                } label: {
+                    Text(t.label).font(MekaType.itemMeta).lineLimit(1)
+                        .foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                        .background(Capsule().fill(lit ? palette.surfaceRaised : palette.background))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityLabel(MoneyTabs.shared.spoken(tab: t, chosen: lit))
+                .accessibilityAddTraits(lit ? [.isSelected] : [])
+            }
+            Spacer(minLength: 0)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: tab.name)
+    }
+
     private func unlock() {
         let model = self.model // the observable model (main actor), not the view, crosses into the callback
         MacBiometric.unlock(reason: MoneyRules.shared.UNLOCK_REASON) { ok in
@@ -121,6 +163,7 @@ struct MoneySheet: View {
 
     private func month(_ m: MoneyMonth, _ v: MoneyView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if has(.month, v) {
             HStack {
                 Button("‹") { model.moneyStep(-1) }.disabled(!v.earlier).accessibilityLabel("Month before")
                 Text(m.label).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -132,33 +175,33 @@ struct MoneySheet: View {
             if let vs = m.vsLine {
                 Text(vs).font(MekaType.caption).foregroundStyle(m.vsLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
             }
-            if let b = v.travel?.banner {
+            }
+            if let b = v.travel?.banner, has(.travelBanner, v) {
                 // Slice 17: abroad, or a trip near — the card to use leads this month.
                 Text(b).font(MekaType.body).foregroundStyle(palette.accent).contentTransition(.opacity)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, MekaSpace.xxs)
             }
-            if let rv = v.review { review(rv).transition(.opacity) }
-            if !v.alerts.isEmpty {
+            if let rv = v.review, has(.review, v) { review(rv).transition(.opacity) }
+            if has(.alerts, v) {
                 Text(MoneyWatch.shared.head(n: Int32(v.alerts.count))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
                 ForEach(v.alerts, id: \.id) { a in alert(a).transition(.opacity) }
                 Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
-            if let p = v.payday { payday(p).transition(.opacity) }
-            if let c = v.cards, c.shown { cards(c).transition(.opacity) }
-            if let tv = v.travel { travel(tv).transition(.opacity) }
-            if let yv = v.year { year(yv).transition(.opacity) }
-            if let r = v.refunds {
+            if let p = v.payday, has(.payday, v) { payday(p).transition(.opacity) }
+            if let c = v.cards, has(.cards, v) { cards(c).transition(.opacity) }
+            if let yv = v.year, has(.year, v) { year(yv).transition(.opacity) }
+            if let r = v.refunds, has(.refunds, v) {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
                 ForEach(r.rows, id: \.id) { row in refund(row).transition(.opacity) }
                 if let f = r.foot { Text(f).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             }
-            if !v.tips.isEmpty {
+            if has(.tips, v) && !v.tips.isEmpty {
                 Text("TIPS FROM YOUR NUMBERS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(v.tips, id: \.id) { t in tip(t).transition(.opacity) }
             }
-            if let h = v.hiddenTips {
+            if let h = v.hiddenTips, has(.tips, v) {
                 HStack {
                     Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
                     Spacer()
@@ -166,17 +209,17 @@ struct MoneySheet: View {
                         .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 }
             }
-            if let r = v.regular {
+            if let r = v.regular, has(.regular, v) {
                 Text("REGULAR PAYMENTS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
                 ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
             }
-            if let f = v.forecast { forecast(f).transition(.opacity) }
-            if !m.categories.isEmpty {
+            if let f = v.forecast, has(.forecast, v) { forecast(f).transition(.opacity) }
+            if has(.categories, v) {
                 Text("BY CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(m.categories, id: \.key) { c in category(c).transition(.opacity) }
             }
-            if !m.txns.isEmpty {
+            if has(.payments, v) {
                 Text("PAYMENTS · CLICK ONE TO CHANGE ITS CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 if let l = m.receiptsLine {
                     Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary)

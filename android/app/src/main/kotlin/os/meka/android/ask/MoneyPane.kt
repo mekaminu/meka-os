@@ -17,6 +17,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -90,6 +97,9 @@ import os.meka.core.domain.MoneyRefunds
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneySaved
+import os.meka.core.domain.MoneySection
+import os.meka.core.domain.MoneyTab
+import os.meka.core.domain.MoneyTabs
 import os.meka.core.domain.InstantPaymentRules
 import os.meka.core.domain.PaymentTap
 import os.meka.core.domain.MoneyTip
@@ -182,6 +192,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var removing by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    // Money redesign (B), slice 1: the tab shown; Money opens on Spending each time the pane opens.
+    var tab by rememberSaveable { mutableStateOf(MoneyTabs.FIRST) }
+    val has: (MoneySection) -> Boolean = { s -> MoneyTabs.shows(tab, s, v) }
 
     val unlock: () -> Unit = {
         FoldBiometric.unlock(context, MoneyRules.UNLOCK_REASON, "Your spending, read-only") { ok ->
@@ -322,8 +335,21 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             return@LazyColumn
         }
-        // Bank sync: FROM YOUR BANKS (whatever month is shown).
-        v.bank?.let { b ->
+        // Money redesign (B), slice 1: Spending · Bills · Plan · Trading · Accounts; only the chosen tab's sections show.
+        item(key = "tabs") {
+            MoneyTabPills(tab, Modifier.animateItem().padding(top = MekaSpace.s).appear(rememberAppearance(2))) { t ->
+                tab = t
+                MoneyTabs.stepOnPick(t, v)?.let { step -> scope.launch { runCatching { core.moneyStep(step) } } }
+            }
+        }
+        MoneyTabs.empty(tab, v)?.let { e ->
+            item(key = "tab-empty-${tab.name}") {
+                Text(e, style = MekaType.body, color = Meka.colors.textSecondary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(3)))
+            }
+        }
+        // Bank sync: FROM YOUR BANKS (Accounts).
+        v.bank?.takeIf { has(MoneySection.BANK) }?.let { b ->
             item(key = "bank-head") {
                 Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -343,9 +369,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
         // Trading tracker: TRADING · HYPERLIQUID (whatever month is shown), from his public addresses only; it leads once
         // an address is in, else its set-up block waits below Import (quality gate, MoneyView.tradingFirst).
-        v.trading?.takeIf { v.tradingFirst }?.let { tradingItems(it) }
+        v.trading?.takeIf { has(MoneySection.TRADING) }?.let { tradingItems(it) }
         v.month?.let { m ->
-            item(key = "month") {
+            if (has(MoneySection.MONTH)) item(key = "month") {
                 Row(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
                     Arrow("‹", "Month before", enabled = v.earlier) { scope.launch { runCatching { core.moneyStep(-1) } } }
                     Crossfade(m.label, animationSpec = MekaMotion.appear(reduced), label = "money-month", modifier = Modifier.weight(1f)) { l ->
@@ -354,7 +380,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Arrow("›", "Month after", enabled = v.later) { scope.launch { runCatching { core.moneyStep(1) } } }
                 }
             }
-            item(key = "spent") {
+            if (has(MoneySection.MONTH)) item(key = "spent") {
                 Column(Modifier.animateItem().appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Crossfade(m.spentLine, animationSpec = MekaMotion.appear(reduced), label = "money-spent") { l ->
                         Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -368,7 +394,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 17: abroad, or a trip near — the card to use leads this month (lit).
-            v.travel?.banner?.let { b ->
+            v.travel?.banner?.takeIf { has(MoneySection.TRAVEL_BANNER) }?.let { b ->
                 item(key = "travel-banner") {
                     Crossfade(b, animationSpec = MekaMotion.appear(reduced), label = "money-travel-banner",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(3))) { l ->
@@ -378,7 +404,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             // Money manager (7): the month in review in plain sentences — the finished month shown, or last month leading
             // this one for its first days.
-            v.review?.let { rv ->
+            v.review?.takeIf { has(MoneySection.REVIEW) }?.let { rv ->
                 item(key = "review-head-${rv.month}") {
                     Text(rv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -386,7 +412,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 item(key = "review-${rv.month}") { ReviewBlock(rv, Modifier.animateItem().appear(rememberAppearance(3))) }
             }
             // Slice 3: payments worth a second look (this month only), before the tips.
-            if (v.alerts.isNotEmpty()) {
+            if (has(MoneySection.ALERTS)) {
                 item(key = "alerts-head") {
                     Crossfade(MoneyWatch.head(v.alerts.size), animationSpec = MekaMotion.appear(reduced), label = "money-alerts-head",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m)) { h ->
@@ -405,7 +431,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 6: payday, what's still to go out before it and what's safe to spend (this month only).
-            v.payday?.let { p ->
+            v.payday?.takeIf { has(MoneySection.PAYDAY) }?.let { p ->
                 item(key = "payday-head") {
                     Text(p.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -418,7 +444,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 7: his cards — due, statement, limit used, 0% ending, fees (this month only).
-            v.cards?.takeIf { it.shown }?.let { cv ->
+            v.cards?.takeIf { has(MoneySection.CARDS) }?.let { cv ->
                 item(key = "cards-head") {
                     Text(cv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -437,16 +463,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            // Slice 17: PAYING ABROAD — which accounts charged foreign fees, and the one to use (this month only).
-            v.travel?.let { tv ->
-                item(key = "travel-head") {
-                    Text(tv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-                }
-                item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
-            }
             // Slice 18: the year in review — last year, open, in January; this year so far, folded, after (this month only).
-            v.year?.let { yv ->
+            v.year?.takeIf { has(MoneySection.YEAR) }?.let { yv ->
                 item(key = "year-head") {
                     Text(yv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -454,7 +472,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 item(key = "year") { YearBlock(yv, Modifier.animateItem().appear(rememberAppearance(4)), onToggle = { haptics.tick() }) }
             }
             // Slice 5: refunds on Waiting for, checked against his statements (this month only).
-            v.refunds?.let { rf ->
+            v.refunds?.takeIf { has(MoneySection.REFUNDS) }?.let { rf ->
                 item(key = "refunds-head") {
                     Crossfade(rf.head, animationSpec = MekaMotion.appear(reduced), label = "money-refunds-head",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m)) { h ->
@@ -479,7 +497,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 2: tips from his own numbers, then his regular payments (this month only).
-            if (v.tips.isNotEmpty()) {
+            if (has(MoneySection.TIPS) && v.tips.isNotEmpty()) {
                 item(key = "tips-head") {
                     Text("TIPS FROM YOUR NUMBERS", style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -492,7 +510,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            v.hiddenTips?.let { h ->
+            v.hiddenTips?.takeIf { has(MoneySection.TIPS) }?.let { h ->
                 item(key = "tips-hidden") {
                     Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Crossfade(h, animationSpec = MekaMotion.appear(reduced), label = "money-tips-hidden", modifier = Modifier.weight(1f)) { l ->
@@ -505,7 +523,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            v.regular?.let { r ->
+            v.regular?.takeIf { has(MoneySection.REGULAR) }?.let { r ->
                 item(key = "regular-head") {
                     Column(Modifier.animateItem().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         Text("REGULAR PAYMENTS", style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -519,7 +537,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 4: the forecast at his pace, with what-ifs on this phone only (this month only).
-            v.forecast?.let { f ->
+            v.forecast?.takeIf { has(MoneySection.FORECAST) }?.let { f ->
                 item(key = "forecast-head") {
                     Text(f.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -533,8 +551,21 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         onExtra = { text -> scope.launch { runCatching { core.moneyForecastExtra(text) }.getOrNull()?.let(say) } })
                 }
             }
+            // Money manager (6): MONEY GOALS — a £ goal from Goals can follow an account's balance (this month only).
+            v.goals?.takeIf { has(MoneySection.GOALS) }?.let { gv ->
+                item(key = "goals-head") {
+                    Text(gv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "goals") {
+                    GoalsBlock(gv, Modifier.animateItem().appear(rememberAppearance(4))) { goalId, accountId ->
+                        haptics.tick()
+                        scope.launch { runCatching { core.moneyGoalFollow(goalId, accountId) }.getOrNull()?.let(say) }
+                    }
+                }
+            }
             // Slice 15: challenges he set himself — no-spend days, fun money for the week, category caps (this month only).
-            v.challenges?.let { ch ->
+            v.challenges?.takeIf { has(MoneySection.CHALLENGES) }?.let { ch ->
                 item(key = "challenges-head") {
                     Text(ch.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -547,20 +578,15 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         onRemove = { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } })
                 }
             }
-            // Money manager (6): MONEY GOALS — a £ goal from Goals can follow an account's balance (this month only).
-            v.goals?.let { gv ->
-                item(key = "goals-head") {
-                    Text(gv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+            // Slice 17: PAYING ABROAD — which accounts charged foreign fees, and the one to use (Plan).
+            v.travel?.takeIf { has(MoneySection.TRAVEL) }?.let { tv ->
+                item(key = "travel-head") {
+                    Text(tv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
-                item(key = "goals") {
-                    GoalsBlock(gv, Modifier.animateItem().appear(rememberAppearance(4))) { goalId, accountId ->
-                        haptics.tick()
-                        scope.launch { runCatching { core.moneyGoalFollow(goalId, accountId) }.getOrNull()?.let(say) }
-                    }
-                }
+                item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
             }
-            if (m.categories.isNotEmpty()) {
+            if (has(MoneySection.CATEGORIES)) {
                 item(key = "cats-head") {
                     Text("BY CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -569,7 +595,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     item(key = "cat-${c.key}") { CategoryRow(c, Modifier.animateItem().appear(rememberAppearance(4 + i))) }
                 }
             }
-            if (m.txns.isNotEmpty()) {
+            if (has(MoneySection.PAYMENTS)) {
                 item(key = "txns-head") {
                     Text("PAYMENTS · TAP ONE TO CHANGE ITS CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -596,8 +622,21 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // Slice 8: net worth (Accounts).
+        v.worth?.takeIf { has(MoneySection.WORTH) }?.let { w ->
+            item(key = "worth-head") {
+                Text(w.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "worth") {
+                WorthBlock(w, Modifier.animateItem().appear(rememberAppearance(4)),
+                    onAdd = { text -> scope.launch { runCatching { core.moneyWorthAdd(text) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } },
+                    onBalance = { id, text -> scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) } })
+            }
+        }
         // Slice 13: the side hustle's tax year, the share to put aside and Self Assessment dates (whatever month).
-        v.business?.let { b ->
+        v.business?.takeIf { has(MoneySection.BUSINESS) }?.let { b ->
             item(key = "business-head") {
                 Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -611,7 +650,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         // Slice 14: shared costs with his partner and who paid what (whatever month).
-        v.shared?.let { sh ->
+        v.shared?.takeIf { has(MoneySection.SHARED_COSTS) }?.let { sh ->
             item(key = "shared-head") {
                 Text(sh.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -622,19 +661,6 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     onAdd = { text -> scope.launch { runCatching { core.moneySharedAdd(text) }.getOrNull()?.let(say) } },
                     onRemove = { id -> scope.launch { runCatching { core.moneySharedRemove(id) }.getOrNull()?.let(say) } },
                     onSettle = { scope.launch { runCatching { core.moneySharedSettle() }.getOrNull()?.let(say) } })
-            }
-        }
-        // Slice 8: net worth (this month, and before any statement is in).
-        v.worth?.let { w ->
-            item(key = "worth-head") {
-                Text(w.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            item(key = "worth") {
-                WorthBlock(w, Modifier.animateItem().appear(rememberAppearance(4)),
-                    onAdd = { text -> scope.launch { runCatching { core.moneyWorthAdd(text) }.getOrNull()?.let(say) } },
-                    onRemove = { id -> scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } },
-                    onBalance = { id, text -> scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) } })
             }
         }
         item(key = "said") {
@@ -655,12 +681,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
-        item(key = "import-head") {
+        if (has(MoneySection.IMPORT_STATEMENT)) item(key = "import-head") {
             Text("IMPORT A STATEMENT", style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.m))
         }
-        v.empty?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) } }
-        item(key = "import") {
+        v.empty?.takeIf { has(MoneySection.IMPORT_STATEMENT) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) } }
+        if (has(MoneySection.IMPORT_STATEMENT)) item(key = "import") {
             Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 if (v.accounts.isNotEmpty()) ImportAccountChips(v.accounts.map { it.name }, chosen = account) { account = it }
                 Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = { account = it }) { account = it }
@@ -672,8 +698,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 if (v.bank == null) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
-        v.trading?.takeIf { !v.tradingFirst }?.let { tradingItems(it) }
-        if (v.accounts.isNotEmpty()) {
+        if (has(MoneySection.ACCOUNTS)) {
             item(key = "accounts-head") {
                 Text("ACCOUNTS", style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -697,7 +722,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
-        item(key = "foot") {
+        if (has(MoneySection.FOOT)) item(key = "foot") {
             Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(MoneyRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
                 if (v.accounts.isNotEmpty() || v.worth?.rows?.any { it.removable } == true) {
@@ -719,6 +744,41 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Money redesign (B), slice 1 (mockup v4, approved 2026-10-25): the five tabs as pills on one row that scrolls sideways
+ * if the screen is narrow. The chosen one is lit (raised fill, gold label) and blends there on the appear spring; a tap
+ * gives a tick haptic. Each pill is a tab for a screen reader ("Bills tab, selected") with a 48 dp target.
+ */
+@Composable
+internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPick: (MoneyTab) -> Unit) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MoneyTabs.ALL.forEach { t ->
+            val lit = t == chosen
+            val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "money-tab-${t.name}")
+            val ink by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-tab-ink-${t.name}")
+            Box(
+                Modifier.heightIn(min = MekaSpace.touch)
+                    .clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Tab) { if (!lit) { haptics.tick(); onPick(t) } }
+                    .clearAndSetSemantics { contentDescription = MoneyTabs.spoken(t, lit); selected = lit; role = Role.Tab },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    t.label, style = MekaType.itemMeta, color = ink, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs + MekaSpace.xxs),
+                )
             }
         }
     }

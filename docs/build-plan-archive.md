@@ -4093,3 +4093,21 @@ screen behind. The scrim layer now first fills the top (gap + the 24 dp corner r
 dims it, so the sliver reads as plain dimmed background; it fades with the scrim, Light (no gap) unchanged. Tests:
 MoneyBugsLayoutTest (four chips at 280 dp wrap to two rows, each one line tall; a Dark pane over a red screen shows no
 red in the sliver or the corner wedges). No core change, no server change, no migration. Mac checked nightly.
+
+#### Money redesign (B) — slice B1 (2026-10-26): five tabs instead of one long page
+
+Mockup v4 (approved 2026-10-25 09:30), `docs/design/money/Main.dc.html`. Core `MoneyTabs` (core/domain/MoneyTabs.kt):
+`MoneyTab` Spending · Bills · Plan · Trading · Accounts and `MoneySection`, the screen's parts in drawing order, each on
+one tab (Spending: the month, travel banner, month review, worth a look, the year, tips, categories, payments; Bills:
+until payday, cards, refunds, regular payments; Plan: forecast, goals, challenges, paying abroad; Trading: Hyperliquid;
+Accounts: banks, net worth, side hustle, shared costs, import, the accounts list, delete and the foot). `sections`/
+`shows` say what the chosen tab draws (nothing while locked or opening), `empty` gives an empty tab's line (Accounts
+never empty: Import is there), `stepOnPick` steps back to this month when Bills or Plan is picked while an earlier month
+is shown (only Spending pages months), `spoken` is the pill's screen-reader label. Fold (MoneyPane.kt): `MoneyTabPills`
+under the title (scrolls sideways when narrow; the chosen pill raised with a gold label, blending on the appear spring;
+tick haptic; Role.Tab, selected, 48 dp); every block guarded by `has(section)`; goals now before challenges and paying
+abroad after them, net worth before the side hustle; Trading shows once (its old lead/below-Import positions gone).
+Mac (MoneySheet.swift): the same pills above the scroll view, the same guards, the tab's content cross-fading (Reduce
+Motion: none). Opens on Spending each time. Tests: MoneyTabsTest; MoneyScreensTest now also shoots Bills, Plan, Trading
+and Accounts (cover, plus inner Light Accounts and empty Accounts) and checks five pills, the chosen one selected, Import
+only on Accounts and Spending's categories nowhere else. No server change, no migration. Mac checked nightly.

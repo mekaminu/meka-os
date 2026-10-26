@@ -25,6 +25,10 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.MoneyRules
+import os.meka.core.domain.MoneyTab
+import os.meka.core.domain.MoneyTabs
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -89,7 +93,7 @@ class MoneyScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, tab: MoneyTab = MoneyTabs.FIRST) {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -119,6 +123,12 @@ class MoneyScreensTest {
         }
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
+        // Money redesign (B), slice 1: the tab's pill, as he'd tap it.
+        if (tab != MoneyTabs.FIRST) {
+            compose.onNodeWithContentDescription(MoneyTabs.spoken(tab, chosen = false), useUnmergedTree = true).performClick()
+            compose.mainClock.advanceTimeBy(SETTLE_MS)
+            compose.waitForIdle()
+        }
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", name))
         ScreenShots.assertSensible(compose, name)
@@ -127,10 +137,26 @@ class MoneyScreensTest {
         ScreenShots.assertShows(compose, name, MoneyRules.TITLE)
         val v = core.moneyView.value
         if (v.locked) fail("$name: Money is still locked after opening")
+        // Slice 1 of the redesign: five tabs, the chosen one selected, and only its own sections on screen.
+        MoneyTabs.ALL.forEach { t ->
+            val spoken = MoneyTabs.spoken(t, chosen = t == tab)
+            if (compose.onAllNodesWithContentDescription(spoken, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+                fail("$name: no \"$spoken\" pill")
+        }
+        val importShown = compose.onAllNodesWithText("IMPORT A STATEMENT").fetchSemanticsNodes().isNotEmpty()
+        // (A lazy list only lays out what's on screen, so Import is only required on Accounts with nothing above it.)
+        if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")
+        if (!importShown && tab == MoneyTab.ACCOUNTS && fill == Fill.EMPTY) fail("$name: Import a statement is missing from Accounts")
+        if (tab != MoneyTab.SPENDING) {
+            if (compose.onAllNodesWithText("BY CATEGORY").fetchSemanticsNodes().isNotEmpty()) fail("$name: Spending's categories show on ${tab.label}")
+            MoneyTabs.empty(tab, v)?.let { ScreenShots.assertShows(compose, name, it) }
+            return
+        }
         when (fill) {
             // Nothing in: the line says how to start, never a month of "£0".
             Fill.EMPTY -> {
-                ScreenShots.assertShows(compose, name, MoneyRules.EMPTY.substringBefore(" ·"))
+                ScreenShots.assertShows(compose, name, MoneyRules.EMPTY_SUMMARY.substringBefore(" ·"))
+                ScreenShots.assertShows(compose, name, MoneyTabs.EMPTY_SPENDING)
                 // Slice 12: the how-to is said once (under Import a statement), never under the title as well.
                 val said = compose.onAllNodesWithText(MoneyRules.EMPTY).fetchSemanticsNodes().size
                 if (said > 1) fail("$name: the empty line is said $said times")
@@ -171,6 +197,24 @@ class MoneyScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverManyLight() = shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverBills() = shoot("cover-dark-bills", Fill.MANY, tab = MoneyTab.BILLS)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverPlan() = shoot("cover-dark-plan", Fill.MANY, tab = MoneyTab.PLAN)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverTrading() = shoot("cover-dark-trading", Fill.MANY, tab = MoneyTab.TRADING)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverAccounts() = shoot("cover-dark-accounts", Fill.MANY, tab = MoneyTab.ACCOUNTS)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverEmptyAccounts() = shoot("cover-dark-empty-accounts", Fill.EMPTY, tab = MoneyTab.ACCOUNTS)
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerAccountsLight() = shoot("inner-light-accounts", Fill.MANY, ThemeChoice.LIGHT, tab = MoneyTab.ACCOUNTS)
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerEmpty() = shoot("inner-dark-empty", Fill.EMPTY)
