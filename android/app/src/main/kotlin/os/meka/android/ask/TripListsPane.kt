@@ -73,6 +73,8 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
+import os.meka.core.domain.TripGroupDone
+import os.meka.core.domain.TripGroupRules
 import os.meka.core.domain.TripList
 import os.meka.core.domain.TripListAdded
 import os.meka.core.domain.TripLeaveSaved
@@ -116,6 +118,14 @@ import os.meka.core.facade.MekaCore
  * chips (a tap adds that one), Add all and Not now. Nothing is added without a tap. A tapped chip leaves in the same
  * frame (the card's height follows on the expand spring), the card folds away once empty or put away, and "Added 3
  * things to To pack" fades in with Undo. Light haptic on an add, a tick on Not now. Reduced motion: fades only.
+ *
+ * Editing slice 4a (Meka 2026-10-26): **the groups are his**. ⋯ on a row (or a long press) opens its sheet: name, how
+ * many, whose, the group as chips (New group… makes one) and Remove; ⋯ on a group's head opens Rename, Move up, Move
+ * down and Delete group (its things go to Other, with Undo); "+ Group" at the foot adds one. Every change shows in the
+ * same frame ([TripGroupEdits], the core's [TripGroupRules.preview]) and is written after. A thing that matched no group
+ * offers "Put it in:" chips under the field for a few seconds. Motion: the sheet and the menus open on the expand spring
+ * (fades when reduced), rows move to their new group with the list's item motion; haptics: a tick on a menu, light on a
+ * change, reject on a refusal.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -141,6 +151,15 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     val folded = remember { mutableStateMapOf<String, Boolean>() }
+    // Editing slice 4a: the overlays drawn before the core's writes come back, the open sheet and group menu, what a group
+    // change said (Undo for a deleted group), and the "Put it in:" chips after an add that matched no group.
+    val edits = rememberTripGroupEdits()
+    var sheetFor by remember { mutableStateOf<String?>(null) }
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    var groupSaid by remember { mutableStateOf<TripGroupDone?>(null) }
+    var askFor by remember { mutableStateOf<TripListAdded?>(null) }
+    LaunchedEffect(groupSaid) { if (groupSaid != null) { delay(TripRules.UNDO_MS); groupSaid = null } }
+    LaunchedEffect(askFor) { if (askFor != null) { delay(TripGroupRules.ASK_MS); askFor = null } }
     // Slice 2d: the who's-going editor, its chips lit at once (until the view agrees), and what the leave time said.
     var editing by rememberSaveable { mutableStateOf(false) }
     val goingPending = remember { mutableStateMapOf<String, Boolean>() }
@@ -155,6 +174,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         suggestGone.keys.toList().forEach { k -> if (k !in offered) suggestGone.remove(k) }
     }
     LaunchedEffect(v) {
+        edits.viewChanged()
         val shown = v?.tabs.orEmpty().flatMap { t -> t.groups.flatMap { it.rows } }.associate { it.id to it.done }
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
     }
@@ -347,10 +367,51 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                         val r = runCatching { core.addTripItem(tripId, text, tab) }.getOrNull()
                         if (r?.refused == false) { haptics.light(); tab = r.list } else haptics.reject()
                         said = r
+                        askFor = r?.takeIf { it.askGroups.isNotEmpty() && it.id != null }
                     }
                 }
                 Crossfade(said?.line ?: TripListRules.ADD_NOTE, animationSpec = MekaMotion.appear(reduced), label = "trip-list-added") { line ->
                     Text(line, style = MekaType.caption, color = if (said != null) saidColor else Meka.colors.textTertiary)
+                }
+                // Editing slice 4a: it matched no group, so the groups to put it in, for a few seconds.
+                AnimatedVisibility(
+                    visible = askFor != null,
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    askFor?.let { a ->
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                            modifier = Modifier.testTag("trip-ask-group")) {
+                            Text(TripGroupRules.PUT_IN, style = MekaType.caption, color = Meka.colors.textSecondary)
+                            for (name in a.askGroups) TripPill(name, tag = "trip-ask-$name", description = "Put it in $name") {
+                                haptics.light(); askFor = null
+                                val id = a.id ?: return@TripPill
+                                edits.run(scope, { edits.moves[id] = name }) { core.moveTripItem(id, name)?.refused == false }
+                            }
+                        }
+                    }
+                }
+                AnimatedVisibility(
+                    visible = groupSaid != null,
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    groupSaid?.let { r ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(r.line, style = MekaType.caption, color = if (r.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                                modifier = Modifier.weight(1f).testTag("trip-group-said"))
+                            if (r.token.isNotEmpty()) {
+                                Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                        .clickable(role = Role.Button) {
+                                            haptics.light(); groupSaid = null
+                                            scope.launch { runCatching { core.undoTripGroupDelete(tripId, r.token) } }
+                                        }
+                                        .semantics { contentDescription = "Undo: ${r.line}" }
+                                        .minTouch().padding(MekaSpace.xs).testTag("trip-group-undo"))
+                            }
+                        }
+                    }
                 }
                 // Slice 2e: every way to start empty lists: saved templates (newest first), then the last trip.
                 for (from in v.startOptions) {
@@ -450,7 +511,19 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 }
             }
         }
-        val groups = v.groups(tab, whoShown)
+        val groups = edits.apply(v.groups(tab, whoShown), tab)
+        // Every group a thing can go to (the sheet's chips), as drawn now, Other last.
+        val allGroups = edits.apply(v.tab(tab).groups, tab).map { it.name }.let { if (TripListRules.ADDED in it) it else it + TripListRules.ADDED }
+        val editable = groups.filter { it.editable }.map { it.name }
+        val moveGroup: (TripListGroup, Int) -> Unit = { g, delta ->
+            val now = edits.apply(v.tab(tab).groups, tab).filter { it.editable }.map { it.name }
+            val at = now.indexOf(g.name)
+            if (at >= 0 && at + delta in now.indices) {
+                haptics.light()
+                val next = now.toMutableList().also { val x = it.removeAt(at); it.add(at + delta, x) }
+                edits.run(scope, { edits.order = next }) { core.setTripGroupOrder(tripId, tab, next) }
+            }
+        }
         if (groups.isEmpty()) {
             item(key = "empty-${tab.wire}") {
                 Text(v.tab(tab).empty, style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -460,13 +533,97 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         for (g in groups) {
             val open = folded[g.key] != true
             item(key = "group-${g.key}") {
-                GroupHead(g, open, pending, Modifier.animateItem()) { haptics.tick(); folded[g.key] = open }
+                GroupHead(g, open, pending, Modifier.animateItem(), onMenu = if (g.editable) ({ haptics.tick(); menuFor = if (menuFor == g.key) null else g.key }) else null) {
+                    haptics.tick(); folded[g.key] = open
+                }
+            }
+            if (menuFor == g.key && g.editable) {
+                item(key = "group-menu-${g.key}") {
+                    Column(Modifier.animateItem()) {
+                        TripGroupMenu(
+                            g, first = editable.firstOrNull() == g.name, last = editable.lastOrNull() == g.name,
+                            onRename = { typed ->
+                                val name = TripGroupRules.tidy(typed)
+                                if (name == null) { haptics.reject(); return@TripGroupMenu }
+                                haptics.light(); menuFor = null
+                                edits.run(scope, { edits.renames[g.name] = name }) {
+                                    val r = core.renameTripGroup(tripId, tab, g.name, typed)
+                                    if (r.refused) { haptics.reject(); groupSaid = r }
+                                    !r.refused
+                                }
+                            },
+                            onMove = { moveGroup(g, it) },
+                            onDelete = {
+                                haptics.light(); menuFor = null
+                                edits.run(scope, { edits.deleted[g.name] = true }) {
+                                    val r = core.deleteTripGroup(tripId, tab, g.name)
+                                    groupSaid = r
+                                    !r.refused
+                                }
+                            },
+                        )
+                    }
+                }
             }
             if (open) {
                 // A row ticked here sinks at once (a stable sort keeps the rest in their order).
                 val rows = g.rows.sortedBy { pending[it.id] ?: it.done }
-                items(rows, key = { "item-${it.id}" }) { row ->
-                    ItemRow(row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) }, onRemove = { remove(row) })
+                for (row in rows) {
+                    item(key = "item-${row.id}") {
+                        ItemRow(row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) },
+                            onOpen = { haptics.tick(); sheetFor = if (sheetFor == row.id) null else row.id })
+                    }
+                    if (sheetFor == row.id) {
+                        item(key = "sheet-${row.id}") {
+                            val qty = row.qty.removePrefix("× ").toIntOrNull() ?: 1
+                            Column(Modifier.animateItem()) {
+                                TripItemSheet(
+                                    row, tab, g.name, allGroups, qty,
+                                    onName = { typed ->
+                                        haptics.light()
+                                        val name = typed.trim().replaceFirstChar { it.uppercaseChar() }
+                                        edits.run(scope, { edits.rows[row.id] = row.copy(text = name) }) { core.editTripItem(row.id, typed, null, null)?.refused == false }
+                                    },
+                                    onQty = { n ->
+                                        haptics.tick()
+                                        edits.run(scope, { edits.rows[row.id] = row.copy(qty = TripListRules.qtyLabel(n)) }) { core.editTripItem(row.id, null, n, null)?.refused == false }
+                                    },
+                                    onWho = { w ->
+                                        haptics.tick()
+                                        edits.run(scope, { edits.rows[row.id] = row.copy(sub = w.label) }) { core.editTripItem(row.id, null, null, w)?.refused == false }
+                                    },
+                                    onGroup = { typed ->
+                                        val name = TripGroupRules.tidy(typed)
+                                        if (name == null) { haptics.reject(); return@TripItemSheet }
+                                        haptics.light()
+                                        edits.run(scope, { edits.moves[row.id] = allGroups.firstOrNull { it.equals(name, ignoreCase = true) } ?: name }) {
+                                            core.moveTripItem(row.id, typed)?.refused == false
+                                        }
+                                    },
+                                    onRemove = { sheetFor = null; remove(row) },
+                                    onDone = { haptics.tick(); sheetFor = null },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Editing slice 4a: "+ Group" under the groups.
+        item(key = "add-group-${tab.wire}") {
+            Column(Modifier.animateItem()) {
+                TripAddGroup { typed ->
+                    val name = TripGroupRules.tidy(typed)
+                    if (name == null || allGroups.any { it.equals(name, ignoreCase = true) }) {
+                        haptics.reject(); groupSaid = TripGroupDone(if (name == null) TripGroupRules.NOT_READ else TripGroupRules.exists(name), refused = true)
+                        return@TripAddGroup
+                    }
+                    haptics.light()
+                    edits.run(scope, { edits.added += name }) {
+                        val r = core.addTripGroup(tripId, tab, typed)
+                        if (r.refused) groupSaid = r
+                        !r.refused
+                    }
                 }
             }
         }
@@ -575,11 +732,11 @@ private fun ProgressBar(p: TripProgress, modifier: Modifier) {
 
 /** A group's head: its name, its count ("1 of 3", "All done" in green) and a chevron; a tap folds it. */
 @Composable
-private fun GroupHead(g: TripListGroup, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onToggle: () -> Unit) {
+private fun GroupHead(g: TripListGroup, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onMenu: (() -> Unit)? = null, onToggle: () -> Unit) {
     val reduced = Meka.reducedMotion
     val done = g.rows.count { pending[it.id] ?: it.done }
     val allDone = g.rows.isNotEmpty() && done == g.rows.size
-    val count = if (allDone) "All done" else "$done of ${g.rows.size}"
+    val count = if (g.rows.isEmpty()) TripGroupRules.EMPTY else if (allDone) "All done" else "$done of ${g.rows.size}"
     val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "trip-group-chev")
     Row(
         modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
@@ -592,18 +749,23 @@ private fun GroupHead(g: TripListGroup, open: Boolean, pending: Map<String, Bool
         Text(g.name.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
         Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textTertiary)
         Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+        if (onMenu != null) {
+            Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMenu)
+                    .semantics { contentDescription = "Change the group ${g.name}" }.minTouch().testTag("trip-group-more-${g.name}"))
+        }
     }
 }
 
 /** One item: the ring (22 dp in a 48 dp target), its name (struck and faded once ticked), whose, and "× 5". */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onRemove: () -> Unit) {
+private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onOpen: () -> Unit) {
     val reduced = Meka.reducedMotion
     val fade by animateFloatAsState(if (done) 0.5f else 1f, MekaMotion.appear(reduced), label = "trip-item-fade")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .combinedClickable(role = Role.Checkbox, onClick = { onTick(!done) }, onLongClick = onRemove, onLongClickLabel = "Remove")
+            .combinedClickable(role = Role.Checkbox, onClick = { onTick(!done) }, onLongClick = onOpen, onLongClickLabel = "Change")
             .semantics(mergeDescendants = true) {
                 contentDescription = row.spoken.removeSuffix(", ticked")
                 stateDescription = if (done) "Ticked" else "Not ticked"
@@ -619,5 +781,8 @@ private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick:
             if (row.sub.isNotEmpty()) Text(row.sub, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         if (row.qty.isNotEmpty()) Text(row.qty, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade))
+        Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textTertiary,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpen)
+                .semantics { contentDescription = "Change ${row.text}" }.minTouch().testTag("trip-item-more-${row.id}"))
     }
 }

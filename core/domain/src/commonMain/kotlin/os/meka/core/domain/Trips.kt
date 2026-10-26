@@ -35,6 +35,13 @@ object TripFields {
      * commas, at most [TripSuggestRules.MAX_DISMISSED]); absent when none. LWW.
      */
     const val SUGGEST_NO = "suggestNo"
+    /**
+     * Trip lists editing, slice 4a: each list's group order, his names joined by a newline ([TripGroupRules]); absent
+     * until he first renames, adds, deletes or moves a group on that list. LWW.
+     */
+    const val GROUPS_BUY = "groupsBuy"
+    const val GROUPS_PACK = "groupsPack"
+    const val GROUPS_LEAVE = "groupsLeave"
 }
 
 /** Who's going on a trip (trip lists slice 2d): him, his partner, the children (names come from About you). */
@@ -95,6 +102,8 @@ data class TripItem(
     val leaveMinute: Int? = null,
     /** Slice 3b: Obi's suggestions put away on this trip with "Not now". */
     val suggestNo: Set<String> = emptySet(),
+    /** Trip lists editing: each list's group order as he left it; a list missing here keeps the built-in order. */
+    val groups: Map<TripList, List<String>> = emptyMap(),
 ) {
     val days: Int get() = (endDay - startDay + 1).toInt()
 }
@@ -314,6 +323,7 @@ object TripRules {
                 going = TripGoer.read(s.f(TripFields.GOING).textOrNull),
                 leaveMinute = s.f(TripFields.LEAVE_MINUTE).longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 },
                 suggestNo = s.f(TripFields.SUGGEST_NO).textOrNull?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
+                groups = TripGroupRules.readOrder(s),
             )
         }.sortedWith(compareBy<TripItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
 

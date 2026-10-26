@@ -6031,6 +6031,9 @@ final class CoreModel {
         let line: String
         let refused: Bool
         let list: TripList
+        /// Editing slice 4a: the new thing's id, and the groups to offer when it matched none.
+        var id: String? = nil
+        var askGroups: [String] = []
     }
 
     /// Adds "buy sun cream", "pack 2 chargers" or anything else to the open tab; Strings and the tab cross once.
@@ -6040,7 +6043,7 @@ final class CoreModel {
         do {
             let r = try await core.addTripItem(tripId: tripId, text: t, open: open)
             if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
-            return TripListSaid(line: r.line, refused: r.refused, list: r.list)
+            return TripListSaid(line: r.line, refused: r.refused, list: r.list, id: r.id, askGroups: r.askGroups)
         } catch {
             lastError = error.localizedDescription
             return nil
@@ -6070,6 +6073,76 @@ final class CoreModel {
     }
 
     func undoTripItemRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripItemRemoval(token: token) } }
+
+    // MARK: Trip lists editing (slice 4a): the groups are his
+
+    /// What a group change said ("Moved Blender to Kitchen"); `token` is a deleted group's Undo.
+    struct TripGroupSaid: Equatable {
+        let line: String
+        let refused: Bool
+        let token: String
+    }
+
+    private static func said(_ r: TripGroupDone?) -> TripGroupSaid? {
+        r.map { TripGroupSaid(line: $0.line, refused: $0.refused, token: $0.token) }
+    }
+
+    /// Moves one thing to the group `group` (a new name makes it); the panel already shows it there.
+    func moveTripItem(_ id: String, to group: String) async -> TripGroupSaid? {
+        guard let core else { return nil }
+        do { return Self.said(try await core.moveTripItem(id: id, group: group)) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The item sheet: a new name, how many, or whose (nil keeps that as it is).
+    func editTripItem(_ id: String, text: String? = nil, qty: Int? = nil, who: TripWho? = nil) async -> TripGroupSaid? {
+        guard let core else { return nil }
+        do { return Self.said(try await core.editTripItem(id: id, text: text, qty: Self.k(qty), who: who)) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func renameTripGroup(_ tripId: String, list: TripList, old: String, name: String) async -> TripGroupSaid? {
+        guard let core else { return nil }
+        do { return Self.said(try await core.renameTripGroup(tripId: tripId, list: list, old: old, name: name)) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func addTripGroup(_ tripId: String, list: TripList, name: String) async -> TripGroupSaid? {
+        guard let core else { return nil }
+        do { return Self.said(try await core.addTripGroup(tripId: tripId, list: list, name: name)) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Deletes a group: its things go to Other; the result's token is Undo's.
+    func deleteTripGroup(_ tripId: String, list: TripList, name: String) async -> TripGroupSaid? {
+        guard let core else { return nil }
+        do { return Self.said(try await core.deleteTripGroup(tripId: tripId, list: list, name: name)) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func undoTripGroupDelete(_ tripId: String, token: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.undoTripGroupDelete(tripId: tripId, token: token) }
+    }
+
+    /// Puts a list's groups in the order `names` (after Move up / Move down); Other stays last.
+    func setTripGroupOrder(_ tripId: String, list: TripList, names: [String]) async -> Bool {
+        guard let core else { return false }
+        do { return try await core.setTripGroupOrder(tripId: tripId, list: list, names: names).boolValue } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
 
     /// What "Start from last trip" did (slice 2b): "Copied 23 things from Lisbon trip" and Undo's token.
     struct TripListCopy: Equatable {

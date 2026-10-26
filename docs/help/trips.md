@@ -1,7 +1,7 @@
 ---
 id: trips
 title: Trips
-keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack, obi's suggestions, suggestions, what have I forgotten, add all, not now
+keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack, obi's suggestions, suggestions, what have I forgotten, add all, not now, move to another group, rename a group, new group, delete a group, reorder groups, change an item
 data: yes
 fold: TRIPS
 fold_where: Ask → Life → Trips
@@ -27,3 +27,6 @@ tip: At the foot of a trip's Lists, "Save as a template for next time" keeps the
 tip: Ask or Talk to Obi: "add sun cream to my trip list", "pack the passports for Lisbon" or "what's left to pack?". He shows a card with what goes on which list; tap Add (or say yes) and it is added, Undo takes it off again.
 tip: Each list has Obi's suggestions above the add field: what you might have forgotten, from the trip's length, who's going, where it is (passports, GHIC cards and plug adapters abroad), a flight (boarding passes, check in online the night before) and the forecast there once it's known (sun cream, swimwear, coats, an umbrella). Tap one to add it, or Add all; nothing is added until you tap.
 tip: "Not now" puts that card's suggestions away for this trip on the Fold and the Mac. Anything already on the lists, ticked or not, is never suggested, and once a trip has lists a few things from your last trip are offered too.
+tip: The groups on a trip's lists are yours. Tap ⋯ on a thing (or press and hold it) to change its name, how many, whose it is, or its group (New group… makes one); right-click it on the Mac for Change… and Move to.
+tip: Tap ⋯ on a group's heading (right-click on the Mac) to rename it, move it up or down, or delete it; its things go to Other, with Undo. "+ Group" at the foot adds a group. A template saved from the trip keeps your groups.
+tip: A thing goes into one of your own groups when its words match (a "Kitchen" group catches a blender). When nothing matches, "Put it in:" offers your groups under the field for a few seconds.

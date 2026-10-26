@@ -4989,7 +4989,7 @@ class MekaCore(
             val trip = trips.items().firstOrNull { it.id == tripId }
             tripLists.add(
                 tripId, text, open, tripExists = trip != null, tripLabel = trip?.let(os.meka.core.domain.TripListRules::tripLabel),
-                startDay = trip?.startDay, leaveMinute = trip?.leaveMinute,
+                startDay = trip?.startDay, leaveMinute = trip?.leaveMinute, stored = trip?.groups.orEmpty(),
             )
         }
 
@@ -5001,6 +5001,39 @@ class MekaCore(
 
     /** Undo after [removeTripItem]: the item comes back as it was. */
     suspend fun undoTripItemRemoval(token: String): Boolean = onCore { tripLists.undoRemove(token) }
+
+    // ---- Trip lists editing, slice 4a (2026-10-26): the groups are his ----
+    // The apps draw each of these in the same frame with [os.meka.core.domain.TripGroupRules.preview] and call these after.
+
+    /** Moves one thing to the group [group] on its list (a new name makes the group): "Moved Blender to Kitchen"; null when it's gone. */
+    suspend fun moveTripItem(id: String, group: String): os.meka.core.domain.TripGroupDone? = onCore { tripLists.moveItem(id, group) }
+
+    /** The item sheet: a new name, quantity (1 for one) or whose it is; null leaves that as it is. */
+    suspend fun editTripItem(id: String, text: String?, qty: Int?, who: os.meka.core.domain.TripWho?): os.meka.core.domain.TripGroupDone? =
+        onCore { tripLists.editItem(id, text, qty, who) }
+
+    /** Renames a group on a trip's list; its things and its place go with it (another group's name puts the two together). */
+    suspend fun renameTripGroup(tripId: String, list: os.meka.core.domain.TripList, old: String, name: String): os.meka.core.domain.TripGroupDone =
+        onCore { tripLists.renameGroup(tripId, list, old, name) }
+
+    /** Adds an empty group, before Other. */
+    suspend fun addTripGroup(tripId: String, list: os.meka.core.domain.TripList, name: String): os.meka.core.domain.TripGroupDone =
+        onCore { tripLists.addGroup(tripId, list, name) }
+
+    /** Deletes a group: its things go to Other; the result's token is Undo's ([undoTripGroupDelete]). */
+    suspend fun deleteTripGroup(tripId: String, list: os.meka.core.domain.TripList, name: String): os.meka.core.domain.TripGroupDone =
+        onCore { tripLists.deleteGroup(tripId, list, name) }
+
+    /** Undo after [deleteTripGroup]: the group comes back in its place with its things. */
+    suspend fun undoTripGroupDelete(tripId: String, token: String): Boolean = onCore { tripLists.undoDeleteGroup(tripId, token) }
+
+    /** Moves a group one place up (-1) or down (+1). */
+    suspend fun moveTripGroup(tripId: String, list: os.meka.core.domain.TripList, name: String, delta: Int): Boolean =
+        onCore { tripLists.moveGroup(tripId, list, name, delta) }
+
+    /** Puts a list's groups in the order [names] (after a drag); Other stays last. */
+    suspend fun setTripGroupOrder(tripId: String, list: os.meka.core.domain.TripList, names: List<String>): Boolean =
+        onCore { tripLists.setGroupOrder(tripId, list, names) }
 
     // ---- Study plan (slice 1, 2026-10-26; Goals → Study → a course) ----
 

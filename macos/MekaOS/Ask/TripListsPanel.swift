@@ -16,6 +16,12 @@ import SwiftUI
 /// sinks the row) and the ring draws its check; groups fold on the expand spring with the chevron turning; the line
 /// under the field cross-fades; a clicked suggestion leaves at once and the card's height follows on the expand spring,
 /// the card folding away once empty or put away, "Added 3 things to To pack" fading in with Undo. Reduce Motion: cross-fades.
+///
+/// Editing slice 4a (Meka 2026-10-26): the groups are his. Right-click a thing → Change… (a popover: name, how many,
+/// whose, the group, Remove) or Move to ▸ any group or New group…; right-click a group's head → Rename…, Move up, Move
+/// down, Delete group (its things go to Other, with Undo); "+ Group" at the foot adds one. Each change shows at once
+/// (the core's TripGroupRules.preview) and is written after; a thing that matched no group offers "Put it in:" for a few
+/// seconds. Motion: rows move to their new group on the expand spring; menus and fields fade in.
 struct TripListsPanel: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -43,6 +49,24 @@ struct TripListsPanel: View {
     /// Slice 3b: chips this panel added or put away, hidden at once until the view agrees; what adding said.
     @State private var suggestGone: Set<String> = []
     @State private var suggestSaid: CoreModel.TripListCopy?
+    /// Editing slice 4a: what this panel changed and is still writing, drawn before the core's writes come back.
+    @State private var moves: [String: String] = [:]
+    @State private var renames: [String: String] = [:]
+    @State private var deletedGroups: Set<String> = []
+    @State private var groupOrder: [String]?
+    @State private var addedGroups: [String] = []
+    @State private var rowText: [String: String] = [:]
+    @State private var rowQty: [String: Int] = [:]
+    @State private var rowWho: [String: String] = [:]
+    @State private var writing = 0
+    @State private var viewTicks = 0
+    @State private var groupSaid: CoreModel.TripGroupSaid?
+    @State private var renaming: String?
+    @State private var renameText = ""
+    @State private var addingGroup = false
+    @State private var newGroupText = ""
+    @State private var sheetFor: String?
+    @State private var askFor: CoreModel.TripListSaid?
 
     var body: some View {
         let v = model.tripLists.first { $0.tripId == tripId }
@@ -60,6 +84,8 @@ struct TripListsPanel: View {
             }
         }
         .onChange(of: model.tripLists) { _, lists in
+            viewTicks += 1
+            if writing == 0 { clearEdits() }
             guard let v = lists.first(where: { $0.tripId == tripId }) else { pending = [:]; return }
             if v.startFrom == nil { copying = false }
             let lit = Dictionary(uniqueKeysWithValues: v.going.map { ($0.wire, $0.on) })
@@ -246,6 +272,7 @@ struct TripListsPanel: View {
                     let r = await model.addTripItem(tripId, typed, open: open)
                     said = r
                     if let r, !r.refused { tab = r.list }
+                    askFor = (r?.askGroups.isEmpty == false && r?.id != nil) ? r : nil
                 }
             }
         Text(said?.line ?? TripListRules.shared.ADD_NOTE).font(MekaType.caption)
@@ -253,6 +280,52 @@ struct TripListsPanel: View {
             .fixedSize(horizontal: false, vertical: true)
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+        // Editing slice 4a: it matched no group, so the groups to put it in, for a few seconds.
+        if let askFor, let newId = askFor.id {
+            HStack(spacing: MekaSpace.xs) {
+                Text(TripGroupRules.shared.PUT_IN).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                ForEach(askFor.askGroups, id: \.self) { name in
+                    Button {
+                        self.askFor = nil
+                        moveItem(newId, to: name)
+                    } label: {
+                        Text(name).font(MekaType.caption).foregroundStyle(palette.textPrimary).lineLimit(1)
+                            .padding(.horizontal, MekaSpace.m)
+                            .padding(.vertical, MekaSpace.xxs)
+                            .background(palette.surfaceRaised, in: Capsule())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel("Put it in \(name)")
+                }
+            }
+            .transition(.opacity)
+            .task(id: askFor) {
+                try? await Task.sleep(for: .milliseconds(TripGroupRules.shared.ASK_MS))
+                if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.askFor = nil } }
+            }
+        }
+        if let groupSaid {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                Text(groupSaid.line).font(MekaType.caption).foregroundStyle(groupSaid.refused ? palette.accent : palette.textSecondary)
+                Spacer()
+                if !groupSaid.token.isEmpty {
+                    Button("Undo") {
+                        let token = groupSaid.token
+                        self.groupSaid = nil
+                        model.undoTripGroupDelete(tripId, token: token)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Undo: \(groupSaid.line)")
+                }
+            }
+            .transition(.opacity)
+            .task(id: groupSaid) {
+                try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
+                if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.groupSaid = nil } }
+            }
+        }
         // Slice 2e: every way to start empty lists: saved templates (newest first), then the last trip.
         if !copying {
             ForEach(v.startOptions, id: \.line) { from in
@@ -323,7 +396,10 @@ struct TripListsPanel: View {
                 }
             }
         }
-        let groups = v.groups(list: tab, who: whoShown)
+        let groups = shown(v.groups(list: tab, who: whoShown))
+        let everyGroup = shown(v.tab(list: tab).groups)
+        let allNames = everyGroup.map(\.name) + (everyGroup.contains { $0.name == TripListRules.shared.ADDED } ? [] : [TripListRules.shared.ADDED])
+        let editable = everyGroup.filter(\.editable).map(\.name)
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 if groups.isEmpty {
@@ -332,7 +408,21 @@ struct TripListsPanel: View {
                         .padding(.top, MekaSpace.m)
                 }
                 ForEach(groups, id: \.key) { g in
-                    group(g)
+                    group(g, editable: editable, allNames: allNames)
+                }
+                // Editing slice 4a: "+ Group" under the groups.
+                if addingGroup {
+                    TextField(TripGroupRules.shared.ADD_GROUP_HINT, text: $newGroupText)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { addGroup(newGroupText, allNames: allNames) }
+                        .onExitCommand { addingGroup = false }
+                } else {
+                    Button(TripGroupRules.shared.ADD_GROUP) { newGroupText = ""; addingGroup = true }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                        .padding(.top, MekaSpace.xs)
+                        .accessibilityLabel("Add a group")
                 }
                 // Slice 2e: "Save as a template for next time" (or "Update the Lisbon template").
                 if let save = v.saveTemplate {
@@ -366,7 +456,7 @@ struct TripListsPanel: View {
             }
             .animation(MekaMotion.expand(reduced: reduceMotion), value: pending)
             .animation(MekaMotion.expand(reduced: reduceMotion), value: folded)
-            .animation(MekaMotion.expand(reduced: reduceMotion), value: groups.map { g in g.rows.map { "\($0.id)\($0.done)" } })
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: groups.map { g in g.name + g.rows.map { "\($0.id)\($0.done)" }.joined() })
         }
         .frame(maxHeight: 380)
     }
@@ -490,7 +580,7 @@ struct TripListsPanel: View {
     private func isDone(_ r: TripListRow) -> Bool { pending[r.id] ?? r.done }
 
     @ViewBuilder
-    private func group(_ g: TripListGroup) -> some View {
+    private func group(_ g: TripListGroup, editable: [String], allNames: [String]) -> some View {
         let open = !folded.contains(g.key)
         let done = g.rows.filter { isDone($0) }.count
         let allDone = !g.rows.isEmpty && done == g.rows.count
@@ -503,7 +593,7 @@ struct TripListsPanel: View {
                     .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                     .foregroundStyle(palette.textTertiary)
                 Spacer()
-                Text(allDone ? "All done" : "\(done) of \(g.rows.count)").font(MekaType.caption)
+                Text(g.rows.isEmpty ? TripGroupRules.shared.EMPTY : (allDone ? "All done" : "\(done) of \(g.rows.count)")).font(MekaType.caption)
                     .foregroundStyle(allDone ? palette.success : palette.textTertiary)
                 Image(systemName: "chevron.down").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .rotationEffect(.degrees(open ? 180 : 0))
@@ -513,6 +603,23 @@ struct TripListsPanel: View {
         .buttonStyle(MekaPressStyle())
         .padding(.top, MekaSpace.xs)
         .accessibilityLabel("\(g.name), \(allDone ? "all done" : "\(done) of \(g.rows.count)")")
+        .contextMenu {
+            if g.editable {
+                let name = g.name
+                Button(TripGroupRules.shared.RENAME + "…") { renameText = name; renaming = name }
+                if editable.first != name { Button(TripGroupRules.shared.MOVE_UP) { moveGroup(name, by: -1, editable: editable) } }
+                if editable.last != name { Button(TripGroupRules.shared.MOVE_DOWN) { moveGroup(name, by: 1, editable: editable) } }
+                Divider()
+                Button(TripGroupRules.shared.DELETE, role: .destructive) { deleteGroup(name) }
+            }
+        }
+        if renaming == g.name {
+            TextField(TripGroupRules.shared.RENAME_HINT, text: $renameText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { renameGroup(g.name, to: renameText) }
+                .onExitCommand { renaming = nil }
+                .transition(.opacity)
+        }
         if open {
             // A row ticked here sinks at once (a stable sort keeps the rest in their order).
             let rows = g.rows.enumerated().sorted { a, b in
@@ -520,15 +627,18 @@ struct TripListsPanel: View {
                 return da != db ? !da : a.offset < b.offset
             }.map(\.element)
             ForEach(rows, id: \.id) { r in
-                row(r)
+                row(r, group: g.name, allNames: allNames)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
     }
 
-    private func row(_ r: TripListRow) -> some View {
+    private func row(_ r: TripListRow, group: String, allNames: [String]) -> some View {
         let done = isDone(r)
         let id = r.id
+        let text = rowText[id] ?? r.text
+        let qty = rowQty[id].map { TripListRules.shared.qtyLabel(qty: KotlinInt(int: Int32($0))) } ?? r.qty
+        let sub = rowWho[id] ?? r.sub
         return Button {
             pending[id] = !done
             Task {
@@ -538,15 +648,15 @@ struct TripListsPanel: View {
             HStack(spacing: MekaSpace.xs) {
                 TickRingView(done: done, palette: palette).frame(width: 18, height: 18)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(r.text).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
+                    Text(text).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
                         .strikethrough(done)
-                    if !r.sub.isEmpty {
-                        Text(r.sub).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    if !sub.isEmpty {
+                        Text(sub).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                 }
                 Spacer()
-                if !r.qty.isEmpty {
-                    Text(r.qty).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                if !qty.isEmpty {
+                    Text(qty).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
             }
             .opacity(done ? 0.5 : 1)
@@ -558,9 +668,184 @@ struct TripListsPanel: View {
         .accessibilityLabel(r.text)
         .accessibilityValue(done ? "Ticked" : "Not ticked")
         .contextMenu {
+            Button("Change…") { sheetFor = id }
+            Menu("Move to") {
+                ForEach(allNames.filter { $0 != group }, id: \.self) { name in
+                    Button(name) { moveItem(id, to: name) }
+                }
+            }
+            Divider()
             Button("Remove") {
                 Task { if let u = await model.removeTripItem(id) { removed = u } }
             }
         }
+        .popover(isPresented: Binding(get: { sheetFor == id }, set: { if !$0 { sheetFor = nil } })) {
+            TripItemSheetMac(
+                text: text, qty: rowQty[id] ?? (Int(r.qty.replacingOccurrences(of: "× ", with: "")) ?? 1), who: sub,
+                pack: tab == .pack, group: group, groups: allNames, palette: palette,
+                onName: { new in
+                    rowText[id] = new
+                    edit { await model.editTripItem(id, text: new)?.refused == false }
+                },
+                onQty: { n in
+                    rowQty[id] = n
+                    edit { await model.editTripItem(id, qty: n)?.refused == false }
+                },
+                onWho: { w in
+                    rowWho[id] = w.label
+                    edit { await model.editTripItem(id, who: w)?.refused == false }
+                },
+                onGroup: { name in moveItem(id, to: name) },
+                onRemove: {
+                    sheetFor = nil
+                    Task { if let u = await model.removeTripItem(id) { removed = u } }
+                }
+            )
+        }
+    }
+
+    // MARK: Editing slice 4a
+
+    private func shown(_ groups: [TripListGroup]) -> [TripListGroup] {
+        TripGroupRules.shared.preview(
+            groups: groups, moves: moves, renames: renames, deleted: deletedGroups, order: groupOrder, added: addedGroups, listWire: tab.wire
+        )
+    }
+
+    private func clearEdits() {
+        moves = [:]; renames = [:]; deletedGroups = []; groupOrder = nil; addedGroups = []
+        rowText = [:]; rowQty = [:]; rowWho = [:]
+    }
+
+    /// Runs `write` after the panel already shows the change; a refused write, or one the view has caught up with, clears it.
+    private func edit(_ write: @escaping @MainActor () async -> Bool) {
+        writing += 1
+        let at = viewTicks
+        Task { @MainActor in
+            let ok = await write()
+            writing -= 1
+            if !ok || (writing == 0 && viewTicks != at) { clearEdits() }
+        }
+    }
+
+    private func moveItem(_ id: String, to typed: String) {
+        guard let name = TripGroupRules.shared.tidy(typed: typed) else { MekaHaptics.tick(); return }
+        MekaHaptics.light()
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { moves[id] = name }
+        edit { await model.moveTripItem(id, to: typed)?.refused == false }
+    }
+
+    private func renameGroup(_ old: String, to typed: String) {
+        renaming = nil
+        guard let name = TripGroupRules.shared.tidy(typed: typed) else { MekaHaptics.tick(); return }
+        MekaHaptics.light()
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { renames[old] = name }
+        let list = tab
+        edit {
+            let r = await model.renameTripGroup(tripId, list: list, old: old, name: typed)
+            if r?.refused == true { groupSaid = r }
+            return r?.refused == false
+        }
+    }
+
+    private func deleteGroup(_ name: String) {
+        MekaHaptics.light()
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { _ = deletedGroups.insert(name) }
+        let list = tab
+        edit {
+            let r = await model.deleteTripGroup(tripId, list: list, name: name)
+            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { groupSaid = r }
+            return r?.refused == false
+        }
+    }
+
+    private func moveGroup(_ name: String, by delta: Int, editable: [String]) {
+        guard let at = editable.firstIndex(of: name), editable.indices.contains(at + delta) else { return }
+        MekaHaptics.light()
+        var next = editable
+        next.swapAt(at, at + delta)
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { groupOrder = next }
+        let list = tab
+        edit { await model.setTripGroupOrder(tripId, list: list, names: next) }
+    }
+
+    private func addGroup(_ typed: String, allNames: [String]) {
+        addingGroup = false
+        guard let name = TripGroupRules.shared.tidy(typed: typed) else { MekaHaptics.tick(); return }
+        if allNames.contains(where: { $0.lowercased() == name.lowercased() }) {
+            groupSaid = CoreModel.TripGroupSaid(line: TripGroupRules.shared.exists(name: name), refused: true, token: "")
+            return
+        }
+        MekaHaptics.light()
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { addedGroups.append(name) }
+        let list = tab
+        edit {
+            let r = await model.addTripGroup(tripId, list: list, name: typed)
+            if r?.refused == true { groupSaid = r }
+            return r?.refused == false
+        }
+    }
+}
+
+/// Editing slice 4a: a thing's sheet on the Mac (Change…): its name, how many, whose (To pack), the group, Remove.
+private struct TripItemSheetMac: View {
+    let text: String
+    let qty: Int
+    let who: String
+    let pack: Bool
+    let group: String
+    let groups: [String]
+    let palette: MekaPalette
+    let onName: (String) -> Void
+    let onQty: (Int) -> Void
+    let onWho: (TripWho) -> Void
+    let onGroup: (String) -> Void
+    let onRemove: () -> Void
+    @State private var name = ""
+    @State private var count = 1
+    @State private var newGroup = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(TripGroupRules.shared.NAME_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+            TextField(text, text: $name)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { if !name.trimmingCharacters(in: .whitespaces).isEmpty { onName(name) } }
+            Stepper(value: $count, in: 1...Int(TripListRules.shared.MAX_QTY)) {
+                Text("\(TripGroupRules.shared.QTY_LABEL)  \(count)").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            .onChange(of: count) { _, n in if n != qty { onQty(n) } }
+            if pack {
+                Text(TripGroupRules.shared.WHO_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach([TripWho.everyone, TripWho.me, TripWho.kids], id: \.self) { w in
+                        Button(w.label) { onWho(w) }
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.caption)
+                            .foregroundStyle(w.label == who ? palette.accent : palette.textPrimary)
+                    }
+                }
+            }
+            Text(TripGroupRules.shared.GROUP_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
+                ForEach(groups, id: \.self) { g in
+                    Button(g) { if g != group { onGroup(g) } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(g == group ? palette.accent : palette.textPrimary)
+                        .accessibilityAddTraits(g == group ? .isSelected : [])
+                }
+            }
+            TextField(TripGroupRules.shared.NEW_GROUP, text: $newGroup)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { if !newGroup.trimmingCharacters(in: .whitespaces).isEmpty { onGroup(newGroup); newGroup = "" } }
+            Button(TripGroupRules.shared.REMOVE, role: .destructive, action: onRemove)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 300)
+        .onAppear { name = text; count = qty }
     }
 }

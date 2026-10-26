@@ -101,10 +101,18 @@ data class TripListEntry(val list: TripList, val text: String, val group: String
 data class TripListRow(val id: String, val text: String, val sub: String, val qty: String, val done: Boolean, val spoken: String)
 
 /** One group: "Pharmacy" · "1 of 3" (or "All done", [allDone]), its rows to do first, then the ticked ones. */
-data class TripListGroup(val key: String, val name: String, val count: String, val allDone: Boolean, val rows: List<TripListRow>)
+data class TripListGroup(
+    val key: String, val name: String, val count: String, val allDone: Boolean, val rows: List<TripListRow>,
+    /** Editing slice 4a: false for Other, which can't be renamed, moved or deleted. */
+    val editable: Boolean = name != TripListRules.ADDED,
+)
 
 /** One tab: its groups (packing's carry [TripListRow.sub] = whose). */
-data class TripListTab(val list: TripList, val label: String, val hint: String, val empty: String, val groups: List<TripListGroup>, val left: Int)
+data class TripListTab(
+    val list: TripList, val label: String, val hint: String, val empty: String, val groups: List<TripListGroup>, val left: Int,
+    /** Editing slice 4a: every group an item can be moved to (the item sheet's chips), Other last. */
+    val groupNames: List<String> = groups.map { it.name },
+)
 
 /** "Bought" · "3 of 9", and how far along (0..1) for the thin bar. */
 data class TripProgress(val label: String, val line: String, val fraction: Float, val done: Int, val total: Int)
@@ -158,7 +166,12 @@ data class TripListsView(
 }
 
 /** What adding a line did: the line under the field, the list it went on (the app opens that tab), and whether nothing was written. */
-data class TripListAdded(val line: String, val list: TripList, val refused: Boolean)
+data class TripListAdded(
+    val line: String, val list: TripList, val refused: Boolean,
+    /** Editing slice 4a: the new item's id, and the groups to offer ("Put it in:") when it matched none; empty otherwise. */
+    val id: String? = null,
+    val askGroups: List<String> = emptyList(),
+)
 
 /**
  * Slice 2b, "Start from last trip": [line] "Start from Lisbon trip", [sub] "Copies its 23 things, all unticked",
@@ -179,13 +192,18 @@ data class TripGoingChip(val wire: String, val label: String, val on: Boolean, v
 /** Slice 2d: what setting the leave time did: "Leaving home 06:30 on Wednesday"; [refused] when nothing was written. */
 data class TripLeaveSaved(val line: String, val refused: Boolean)
 
+/** Editing slice 4a: what a group or item edit did ("Moved Blender to Kitchen"); [token] is a deleted group's Undo. */
+data class TripGroupDone(val line: String, val refused: Boolean, val token: String = "")
+
 /** What removing an item did: "Removed Sun cream" and the token Undo takes. */
 data class TripListRemoved(val line: String, val token: String)
 
 object TripListRules {
     const val MAX_TEXT = 60
     const val MAX_QTY = 99
-    const val ADDED = "Added"
+    /** Anything not matched to a group (editing slice 4a renamed it from "Added", still read as this). */
+    const val ADDED = "Other"
+    const val LEGACY_ADDED = "Added"
     const val ADD_DESCRIPTION = "Add an item. Start with buy or pack to choose the list, for example buy sun cream, or pack 2 chargers"
     const val ADD_NOTE = "Type it: \"buy sun cream\", \"pack 2 chargers\". Navilife puts it on the right list."
     const val LISTS_EMPTY = "To buy, to pack and before we leave"
@@ -228,7 +246,7 @@ object TripListRules {
     /** Each list's groups in the order they show; [ADDED] (anything not matched) comes last. */
     val GROUPS: Map<TripList, List<String>> = mapOf(
         TripList.BUY to listOf("Pharmacy", "Supermarket", "Online", ADDED),
-        TripList.PACK to listOf("Documents", "Clothes", "Toiletries", "Medicines", "Tech", "Kids", ADDED),
+        TripList.PACK to listOf("Documents", "Clothes", "Toiletries", "Medicines", "Tech", "Kids", "Kitchen", "Beach", ADDED),
         TripList.LEAVE to listOf("The house", "On the day", ADDED),
     )
 
@@ -274,6 +292,12 @@ object TripListRules {
                 "cables", "adapter", "adapters", "power", "watch", "kindle", "camera", "plug", "plugs",
             ),
             "Kids" to words("toys", "toy", "teddy", "comfort", "buggy", "pushchair", "nappies", "nappy", "dummy", "colouring", "books", "games", "car-seat"),
+            // Editing slice 4a (Meka: "Blender" landed in Added).
+            "Kitchen" to words(
+                "blender", "kettle", "pan", "pans", "knife", "knives", "cutlery", "plates", "mugs", "toaster", "utensils",
+                "tupperware", "lunchbox", "lunchboxes", "flask", "spices", "corkscrew", "kitchen",
+            ),
+            "Beach" to words("bucket", "spade", "spades", "snorkel", "snorkels", "goggles", "inflatable", "lilo", "windbreak", "beach"),
         ),
         TripList.LEAVE to listOf(
             "The house" to words(
@@ -301,7 +325,7 @@ object TripListRules {
      * it ("t-shirts × 5", "x5") is its quantity; "for the kids"/"kids'" or "for me"/"my" says whose (packing only).
      * Null when nothing is left to add.
      */
-    fun read(text: String, open: TripList, leaveMinute: Int? = null): TripListEntry? {
+    fun read(text: String, open: TripList, leaveMinute: Int? = null, own: Map<TripList, List<String>> = emptyMap()): TripListEntry? {
         var t = text.trim().replace(Regex("\\s+"), " ").trimEnd('.', '!', ',')
         if (t.isEmpty()) return null
         var list = open
@@ -356,7 +380,8 @@ object TripListRules {
         if (t.isEmpty() || t.none { it.isLetterOrDigit() }) return null
         val name = t.replaceFirstChar { it.uppercaseChar() }
         if (list != TripList.PACK) who = TripWho.EVERYONE
-        return TripListEntry(list, name, groupOf(list, name, who), qty, who, remind.takeIf { list == TripList.LEAVE })
+        val group = TripGroupRules.matchOwn(name, own[list].orEmpty()) ?: groupOf(list, name, who)
+        return TripListEntry(list, name, group, qty, who, remind.takeIf { list == TripList.LEAVE })
     }
 
     private const val DAY_WORDS =
@@ -454,7 +479,7 @@ object TripListRules {
         val trip = s.f(TripItemFields.TRIP).textOrNull ?: return@mapNotNull null
         val text = s.f(TripItemFields.TEXT).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         val list = TripList.of(s.f(TripItemFields.LIST).textOrNull)
-        val group = s.f(TripItemFields.GROUP).textOrNull?.takeIf { it in GROUPS.getValue(list) } ?: groupOf(list, text)
+        val group = TripGroupRules.tidy(s.f(TripItemFields.GROUP).textOrNull) ?: groupOf(list, text)
         val shopId = s.f(TripItemFields.SHOP).textOrNull?.takeIf { list == TripList.BUY && it.isNotBlank() }
         val stored = s.f(TripItemFields.DONE).boolOrNull == true
         TripListItem(
@@ -512,7 +537,7 @@ object TripListRules {
     internal fun group(key: String, name: String, rows: List<TripListRow>): TripListGroup {
         val done = rows.count { it.done }
         val all = rows.isNotEmpty() && done == rows.size
-        return TripListGroup(key, name, if (all) "All done" else "$done of ${rows.size}", all, rows)
+        return TripListGroup(key, name, if (rows.isEmpty()) TripGroupRules.EMPTY else if (all) "All done" else "$done of ${rows.size}", all, rows)
     }
 
     private fun row(i: TripListItem, startDay: Long): TripListRow {
@@ -537,16 +562,20 @@ object TripListRules {
         return TripProgress(label, if (items.isEmpty()) NOTHING_YET else "$done of ${items.size}", if (items.isEmpty()) 0f else done.toFloat() / items.size, done, items.size)
     }
 
-    private fun tab(list: TripList, items: List<TripListItem>, startDay: Long): TripListTab {
+    private fun tab(list: TripList, items: List<TripListItem>, startDay: Long, stored: List<String>? = null): TripListTab {
         val mine = items.filter { it.list == list }
-        val byGroup = mine.groupBy { it.group }
-        val groups = GROUPS.getValue(list).mapNotNull { g ->
-            val inGroup = byGroup[g] ?: return@mapNotNull null
+        val byGroup = mine.groupBy { it.group.lowercase() }
+        val names = TripGroupRules.order(list, mine, stored)
+        val groups = names.mapNotNull { g ->
+            // An empty group stays only when it is one he made or renamed (a built-in one goes once it is empty).
+            val inGroup = byGroup[g.lowercase()] ?: if (stored.orEmpty().any { it.equals(g, ignoreCase = true) } &&
+                GROUPS.getValue(list).none { it.equals(g, ignoreCase = true) }) emptyList() else return@mapNotNull null
             // To do in the order added; ticked ones sink below, the latest ticked last.
             val sorted = inGroup.filter { !it.done } + inGroup.filter { it.done }.sortedWith(compareBy<TripListItem> { it.doneAtMs ?: 0L }.thenBy { it.addedAtMs })
             group("${list.wire}:$g", g, sorted.map { row(it, startDay) })
         }
-        return TripListTab(list, list.label, list.hint, list.empty, groups, mine.count { !it.done })
+        val all = groups.map { it.name }.let { if (ADDED in it) it else it + ADDED }
+        return TripListTab(list, list.label, list.hint, list.empty, groups, mine.count { !it.done }, all)
     }
 
     /**
@@ -676,7 +705,7 @@ object TripListRules {
             if (s.f(TripItemFields.TRIP).textOrNull != null) return@mapNotNull null
             val text = s.f(TripItemFields.TEXT).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val list = TripList.of(s.f(TripItemFields.LIST).textOrNull)
-            val group = s.f(TripItemFields.GROUP).textOrNull?.takeIf { it in GROUPS.getValue(list) } ?: groupOf(list, text)
+            val group = TripGroupRules.tidy(s.f(TripItemFields.GROUP).textOrNull) ?: groupOf(list, text)
             val who = if (list == TripList.PACK) TripWho.of(s.f(TripItemFields.WHO).textOrNull) else TripWho.EVERYONE
             Triple(tpl, (s.f(TripItemFields.ADDED_AT).longOrNull ?: 0L) to id,
                 TripListEntry(list, text, group, s.f(TripItemFields.QTY).longOrNull?.toInt()?.takeIf { it > 1 }, who,
@@ -723,7 +752,7 @@ object TripListRules {
             countdownLit = today >= trip.startDay - 2 && today <= trip.endDay,
             bought = bought,
             packed = packed,
-            tabs = TripList.entries.map { tab(it, items, trip.startDay) },
+            tabs = TripList.entries.map { tab(it, items, trip.startDay, trip.groups[it]) },
             summary = summary,
             startFrom = options.firstOrNull(),
             going = goingChips(trip, about),
@@ -772,11 +801,16 @@ class TripLists(
         tripId: String, text: String, open: TripList, tripExists: Boolean, tripLabel: String? = null,
         /** Slice 3a: the trip's first day and leave time, for a job's reminder ("at 9pm" the night before). */
         startDay: Long? = null, leaveMinute: Int? = null,
+        /** Editing slice 4a: the trip's stored group order, so a thing lands in one of his own groups first. */
+        stored: Map<TripList, List<String>> = emptyMap(),
     ): TripListAdded {
         if (!tripExists) return TripListAdded(TripListRules.GONE, open, refused = true)
-        val e = TripListRules.read(text, open, leaveMinute) ?: return TripListAdded(TripListRules.NOT_READ, open, refused = true)
-        addEntry(tripId, e, tripLabel)
-        return TripListAdded(TripListRules.addedLine(e, startDay), e.list, refused = false)
+        val mine = items().filter { it.tripId == tripId }
+        val own = TripList.entries.associateWith { TripGroupRules.order(it, mine, stored[it]) }
+        val e = TripListRules.read(text, open, leaveMinute, own) ?: return TripListAdded(TripListRules.NOT_READ, open, refused = true)
+        val id = addEntry(tripId, e, tripLabel)
+        val ask = if (e.group == TripListRules.ADDED) own.getValue(e.list).filter { it != TripListRules.ADDED }.take(8) else emptyList()
+        return TripListAdded(TripListRules.addedLine(e, startDay), e.list, refused = false, id = id, askGroups = ask)
     }
 
     /**
@@ -851,7 +885,18 @@ class TripLists(
             if (item.list == TripList.BUY) link(id, item.text, item.qty, label)
             id
         }
+        copyOrder(replica.entity(EntityTypes.TRIP, from.id)?.fields, to.id)
         return TripListCopied(TripListRules.copiedLine(ids.size, from), ids.joinToString(","), refused = false)
+    }
+
+    /** Editing slice 4a: the group-order fields of a trip or template, to carry into a template or a new trip. */
+    private fun groupOrderFields(f: Map<String, FieldValue>?): Map<String, FieldValue> =
+        TripList.entries.mapNotNull { l -> f?.get(TripGroupRules.field(l))?.textOrNull?.let { TripGroupRules.field(l) to it.fv() } }.toMap()
+
+    /** Editing slice 4a: a copy keeps his group names and order. */
+    private fun copyOrder(from: Map<String, FieldValue>?, toTripId: String) {
+        val f = groupOrderFields(from)
+        if (f.isNotEmpty()) replica.commitLocal(EntityTypes.TRIP, toTripId, f)
     }
 
     /** Slice 2e: the saved templates, newest first. */
@@ -879,7 +924,7 @@ class TripLists(
         val now = nowMs()
         replica.commitLocal(EntityTypes.TRIP_TEMPLATE, id, mapOf(
             TripTemplateFields.NAME to name.fv(), TripTemplateFields.SOURCE to trip.id.fv(), TripTemplateFields.ADDED_AT to now.fv(),
-        ))
+        ) + groupOrderFields(replica.entity(EntityTypes.TRIP, trip.id)?.fields))
         source.forEachIndexed { i, item ->
             val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who, item.remind)
             replica.commitLocal(EntityTypes.TRIP_ITEM, newId(), TripListRules.fields("", e, now + i) - TripItemFields.TRIP + (TripItemFields.TEMPLATE to id.fv()))
@@ -916,6 +961,7 @@ class TripLists(
             if (e.list == TripList.BUY) link(id, e.text, e.qty, label)
             id
         }
+        copyOrder(replica.entity(EntityTypes.TRIP_TEMPLATE, tpl.id)?.fields, to.id)
         return TripListCopied("Copied ${TripListRules.things(ids.size)} from your ${tpl.name} template", ids.joinToString(","), refused = false)
     }
 
@@ -959,5 +1005,148 @@ class TripLists(
             }
         }
         return true
+    }
+
+    // ---- Editing slice 4a: the groups are his ----
+
+    private fun tripFields(tripId: String): Map<String, FieldValue>? =
+        replica.entity(EntityTypes.TRIP, tripId)?.fields?.takeIf { it[TripFields.DELETED]?.boolOrNull != true }
+
+    /** [list]'s groups on the trip as shown now (his order, then the rest), Other left out. */
+    fun groupNames(tripId: String, list: TripList): List<String> {
+        val stored = tripFields(tripId)?.let { TripGroupRules.readOrder(it)[list] }
+        return TripGroupRules.order(list, items().filter { it.tripId == tripId }, stored).filter { it != TripListRules.ADDED }
+    }
+
+    private fun saveOrder(tripId: String, list: TripList, names: List<String>) {
+        replica.commitLocal(EntityTypes.TRIP, tripId, mapOf(TripGroupRules.field(list) to TripGroupRules.writeOrder(names).fv()))
+    }
+
+    private fun inGroup(tripId: String, list: TripList, name: String): List<TripListItem> =
+        items().filter { it.tripId == tripId && it.list == list && it.group.equals(name, ignoreCase = true) }
+
+    /**
+     * Moves the item [id] to the group [typed] on its list (an existing one, Other, or a new name, which joins the
+     * trip's order before Other). Null when it isn't there or the name is empty; else "Moved Blender to Kitchen".
+     */
+    fun moveItem(id: String, typed: String): TripGroupDone? {
+        val item = items().firstOrNull { it.id == id } ?: return null
+        val name0 = TripGroupRules.tidy(typed) ?: return TripGroupDone(TripGroupRules.NOT_READ, refused = true)
+        val names = groupNames(item.tripId, item.list)
+        val name = names.firstOrNull { it.equals(name0, ignoreCase = true) } ?: name0
+        if (name != TripListRules.ADDED && names.none { it == name }) {
+            if (names.size >= TripGroupRules.MAX_GROUPS) return TripGroupDone(TripGroupRules.tooMany(), refused = true)
+            saveOrder(item.tripId, item.list, names + name)
+        }
+        if (item.group != name) replica.commitLocal(EntityTypes.TRIP_ITEM, id, mapOf(TripItemFields.GROUP to name.fv()))
+        return TripGroupDone(TripGroupRules.movedLine(item.text, name), refused = false)
+    }
+
+    /**
+     * Renames [list]'s group [old] to [typed] on the trip: every thing in it moves with it, and its place in the order
+     * is kept. Renaming to another group's name puts both together. Other can't be renamed.
+     */
+    fun renameGroup(tripId: String, list: TripList, old: String, typed: String): TripGroupDone {
+        if (tripFields(tripId) == null) return TripGroupDone(TripListRules.GONE, refused = true)
+        if (old == TripListRules.ADDED) return TripGroupDone(TripGroupRules.OTHER_FIXED, refused = true)
+        val new0 = TripGroupRules.tidy(typed) ?: return TripGroupDone(TripGroupRules.NOT_READ, refused = true)
+        val names = groupNames(tripId, list)
+        val at = names.indexOfFirst { it.equals(old, ignoreCase = true) }
+        if (at < 0) return TripGroupDone(TripListRules.GONE, refused = true)
+        val existing = names.firstOrNull { it.equals(new0, ignoreCase = true) && !it.equals(old, ignoreCase = true) } ?: new0.takeIf { it == TripListRules.ADDED }
+        val new = existing ?: new0
+        if (new == names[at]) return TripGroupDone(TripGroupRules.renamedLine(old, new), refused = false)
+        inGroup(tripId, list, old).forEach { replica.commitLocal(EntityTypes.TRIP_ITEM, it.id, mapOf(TripItemFields.GROUP to new.fv())) }
+        val after = if (existing != null) names.filterIndexed { i, _ -> i != at } else names.toMutableList().also { it[at] = new }
+        saveOrder(tripId, list, after)
+        return TripGroupDone(if (existing != null) TripGroupRules.mergedLine(names[at], new) else TripGroupRules.renamedLine(names[at], new), refused = false)
+    }
+
+    /** Adds an empty group named [typed] to [list], before Other. */
+    fun addGroup(tripId: String, list: TripList, typed: String): TripGroupDone {
+        if (tripFields(tripId) == null) return TripGroupDone(TripListRules.GONE, refused = true)
+        val name = TripGroupRules.tidy(typed) ?: return TripGroupDone(TripGroupRules.NOT_READ, refused = true)
+        val names = groupNames(tripId, list)
+        if (name == TripListRules.ADDED || names.any { it.equals(name, ignoreCase = true) }) return TripGroupDone(TripGroupRules.exists(name), refused = true)
+        if (names.size >= TripGroupRules.MAX_GROUPS) return TripGroupDone(TripGroupRules.tooMany(), refused = true)
+        saveOrder(tripId, list, names + name)
+        return TripGroupDone(TripGroupRules.addedLine(name), refused = false)
+    }
+
+    /** Deletes [list]'s group [name]: its things move to Other; the token puts it back as it was ([undoDeleteGroup]). */
+    fun deleteGroup(tripId: String, list: TripList, name: String): TripGroupDone {
+        if (tripFields(tripId) == null) return TripGroupDone(TripListRules.GONE, refused = true)
+        if (name == TripListRules.ADDED) return TripGroupDone(TripGroupRules.OTHER_FIXED, refused = true)
+        val names = groupNames(tripId, list)
+        val at = names.indexOfFirst { it.equals(name, ignoreCase = true) }
+        if (at < 0) return TripGroupDone(TripListRules.GONE, refused = true)
+        val moved = inGroup(tripId, list, name)
+        moved.forEach { replica.commitLocal(EntityTypes.TRIP_ITEM, it.id, mapOf(TripItemFields.GROUP to TripListRules.ADDED.fv())) }
+        saveOrder(tripId, list, names.filterIndexed { i, _ -> i != at })
+        return TripGroupDone(TripGroupRules.deletedLine(names[at], moved.size), refused = false,
+            token = TripGroupRules.deleteToken(list, names[at], at, moved.map { it.id }))
+    }
+
+    /** Undo after [deleteGroup]: the group comes back in its place with the things that were in it (still in Other). */
+    fun undoDeleteGroup(tripId: String, token: String): Boolean {
+        val d = TripGroupRules.readDeleteToken(token) ?: return false
+        if (tripFields(tripId) == null) return false
+        val names = groupNames(tripId, d.list)
+        if (names.none { it.equals(d.name, ignoreCase = true) }) {
+            if (names.size >= TripGroupRules.MAX_GROUPS) return false
+            saveOrder(tripId, d.list, names.toMutableList().also { it.add(d.index.coerceIn(0, it.size), d.name) })
+        }
+        val live = items().filter { it.tripId == tripId }.associateBy { it.id }
+        d.ids.forEach { id -> if (live[id]?.group == TripListRules.ADDED) replica.commitLocal(EntityTypes.TRIP_ITEM, id, mapOf(TripItemFields.GROUP to d.name.fv())) }
+        return true
+    }
+
+    /**
+     * Puts [list]'s groups in the order [names] (names not there keep their place after them; Other stays last). The
+     * apps send the whole order after a drag or a Move up/down.
+     */
+    fun setGroupOrder(tripId: String, list: TripList, names: List<String>): Boolean {
+        if (tripFields(tripId) == null) return false
+        val now = groupNames(tripId, list)
+        val first = names.mapNotNull { n -> now.firstOrNull { it.equals(n, ignoreCase = true) } }.distinct()
+        val after = first + now.filter { it !in first }
+        if (after == now && tripFields(tripId)?.get(TripGroupRules.field(list)) != null) return false
+        saveOrder(tripId, list, after)
+        return true
+    }
+
+    /** Moves [list]'s group [name] one place up ([delta] -1) or down (+1). */
+    fun moveGroup(tripId: String, list: TripList, name: String, delta: Int): Boolean {
+        val now = groupNames(tripId, list)
+        val at = now.indexOfFirst { it.equals(name, ignoreCase = true) }
+        val to = at + delta
+        if (at < 0 || to !in now.indices) return false
+        return setGroupOrder(tripId, list, now.toMutableList().also { val n = it.removeAt(at); it.add(to, n) })
+    }
+
+    /**
+     * The item sheet: changes [id]'s name ([text], null keeps it), quantity ([qty] 1..99, null keeps it) and whose it is
+     * ([who], To pack only). A To buy thing this trip put on the shopping list is renamed there too.
+     */
+    fun editItem(id: String, text: String? = null, qty: Int? = null, who: TripWho? = null): TripGroupDone? {
+        val item = items().firstOrNull { it.id == id } ?: return null
+        val name = text?.let { t -> t.replace('\n', ' ').replace(Regex("\\s+"), " ").trim().take(TripListRules.MAX_TEXT).trim().takeIf { n -> n.any { it.isLetterOrDigit() } } }
+        if (text != null && name == null) return TripGroupDone(TripListRules.NOT_READ, refused = true)
+        val fields = buildMap {
+            name?.replaceFirstChar { it.uppercaseChar() }?.takeIf { it != item.text }?.let { put(TripItemFields.TEXT, it.fv()) }
+            qty?.coerceIn(1, TripListRules.MAX_QTY)?.takeIf { (it.takeIf { q -> q > 1 }) != item.qty }?.let { put(TripItemFields.QTY, if (it > 1) it.toLong().fv() else FieldValue.Null) }
+            who?.takeIf { item.list == TripList.PACK && it != item.who }?.let { put(TripItemFields.WHO, it.wire.fv()) }
+        }
+        if (fields.isEmpty()) return TripGroupDone(TripGroupRules.savedLine(item.text), refused = false)
+        replica.commitLocal(EntityTypes.TRIP_ITEM, id, fields)
+        val newText = (fields[TripItemFields.TEXT]?.textOrNull) ?: item.text
+        val newQty = if (TripItemFields.QTY in fields) fields[TripItemFields.QTY]?.longOrNull?.toInt() else item.qty
+        val shopId = item.shopId
+        val made = replica.entity(EntityTypes.TRIP_ITEM, id)?.fields?.get(TripItemFields.SHOP_MADE)?.boolOrNull == true
+        if (shopId != null && made && (TripItemFields.TEXT in fields || TripItemFields.QTY in fields)) {
+            val linkedHere = replica.entity(EntityTypes.SHOPPING_ITEM, shopId)?.fields?.get(ShoppingFields.TRIP_ITEM)?.textOrNull == id
+            if (linkedHere) replica.commitLocal(EntityTypes.SHOPPING_ITEM, shopId, mapOf(ShoppingFields.TITLE to TripListRules.shoppingTitle(newText, newQty).fv()))
+        }
+        return TripGroupDone(TripGroupRules.savedLine(newText + TripListRules.qtyLabel(newQty).let { if (it.isEmpty()) "" else " $it" }), refused = false)
     }
 }

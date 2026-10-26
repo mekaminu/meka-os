@@ -3074,6 +3074,40 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.tripListsView.value.first?.packed.line, "1 of 2")
     }
 
+    func testTripGroupsReachSwift() async throws {
+        // Trip lists editing, slice 4a: a thing moved to a new group, a group renamed and deleted with Undo, the order
+        // set, and the preview the panel draws, all from Swift.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "tripgroups-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        _ = try await core.addTrip(text: "Lisbon 3–6 Mar \(y)")
+        let tripId = core.tripsView.value.rows[0].id
+        _ = try await core.addTripItem(tripId: tripId, text: "passports", open: .pack)
+        let odd = try await core.addTripItem(tripId: tripId, text: "Mr Wobbles", open: .pack)
+        XCTAssertEqual(odd.askGroups, ["Documents"])
+        let moved = try await core.moveTripItem(id: try XCTUnwrap(odd.id), group: "kids' bag")
+        XCTAssertEqual(moved?.line, "Moved Mr Wobbles to Kids' bag")
+        _ = try await core.renameTripGroup(tripId: tripId, list: .pack, old: "Kids' bag", name: "Toys")
+        _ = try await core.editTripItem(id: try XCTUnwrap(odd.id), text: nil, qty: KotlinInt(int: 2), who: .kids)
+        let groups = try XCTUnwrap(core.tripListsView.value.first).tab(list: .pack).groups
+        XCTAssertEqual(groups.map(\.name), ["Documents", "Toys"])
+        XCTAssertEqual(groups.last?.rows.first?.qty, "× 2")
+        let preview = TripGroupRules.shared.preview(
+            groups: groups, moves: [:], renames: ["Toys": "Games"], deleted: [], order: ["Games", "Documents"], added: [], listWire: "pack"
+        )
+        XCTAssertEqual(preview.map(\.name), ["Games", "Documents"])
+        let del = try await core.deleteTripGroup(tripId: tripId, list: .pack, name: "Toys")
+        XCTAssertEqual(del.line, "Deleted Toys · 1 thing moved to Other")
+        let undone = try await core.undoTripGroupDelete(tripId: tripId, token: del.token)
+        XCTAssertTrue(undone.boolValue)
+        let ordered = try await core.setTripGroupOrder(tripId: tripId, list: .pack, names: ["Toys", "Documents"])
+        XCTAssertTrue(ordered.boolValue)
+        XCTAssertEqual(core.tripListsView.value.first?.tab(list: .pack).groups.map(\.name), ["Toys", "Documents"])
+    }
+
     func testTripListsStartFromLastTripReachSwift() async throws {
         // Trip lists, slice 2b: an empty trip offers the last trip's lists, and copying them crosses as Strings.
         let core = MacCoreFactory.shared.create(
