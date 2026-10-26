@@ -4181,4 +4181,4 @@ nightly.
 
 ## Nightly Mac check, 2026-10-26
 
-- Dispatched ci run 40404209947 (e6d5bd9): the Swift build stopped on `CoreModel.showMail()` (the instant mail cards' private function) redeclaring the `showMail` sheet flag; the function is now `showMailCards()`. Re-checked at the next nightly run.
+- Dispatched ci run 40404209947 (e6d5bd9): the Swift build stopped on `CoreModel.showMail()` (the instant mail cards' private function) redeclaring the `showMail` sheet flag; the function is now `showMailCards()`. Re-checked at the next nightly run. Re-dispatched run 40411632141 then named two more: `core.copyTripLists` reaches Swift as `doCopyTripLists` (Kotlin/Native prefixes Kotlin functions named copy… with do), in the app and MekaCoreBridgeTests; `NeedsYouStack` gained `working` (Swift gets no default arguments), now passed through. Next nightly run re-checks.

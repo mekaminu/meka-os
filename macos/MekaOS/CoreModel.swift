@@ -6155,7 +6155,7 @@ final class CoreModel {
     func copyTripLists(from fromTripId: String, to toTripId: String) async -> TripListCopy? {
         guard let core else { return nil }
         do {
-            let r = try await core.copyTripLists(fromTripId: fromTripId, toTripId: toTripId)
+            let r = try await core.doCopyTripLists(fromTripId: fromTripId, toTripId: toTripId)
             if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
             return TripListCopy(line: r.line, token: r.token, refused: r.refused)
         } catch {
@@ -7361,7 +7361,7 @@ final class CoreModel {
     /// The stack as shown: set-aside cards at the back, in the order they were set aside.
     var needsYouCards: [DecisionCard] {
         guard let stack = needsYouStack else { return [] }
-        let shown = decidedHere.isEmpty ? stack : NeedsYouStack(cards: InstantTapRules.shared.stack(cards: stack.cards, hidden: decidedHere))
+        let shown = decidedHere.isEmpty ? stack : NeedsYouStack(cards: InstantTapRules.shared.stack(cards: stack.cards, hidden: decidedHere), working: stack.working)
         return NeedsYouStackRules.shared.ordered(stack: shown, setAside: needsYouSetAside)
     }
 

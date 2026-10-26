@@ -3125,7 +3125,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let rome = try XCTUnwrap(core.tripsView.value.rows.first { $0.id != porto }).id
         let from = try XCTUnwrap(core.tripListsView.value.first { $0.tripId == rome }?.startFrom)
         XCTAssertEqual(from.line, "Start from Porto trip")
-        let copied = try await core.copyTripLists(fromTripId: from.sourceTripId, toTripId: rome)
+        let copied = try await core.doCopyTripLists(fromTripId: from.sourceTripId, toTripId: rome)
         XCTAssertFalse(copied.refused)
         XCTAssertEqual(copied.line, "Copied 1 thing from Porto trip")
         XCTAssertEqual(core.tripListsView.value.first { $0.tripId == rome }?.packed.line, "0 of 1")
