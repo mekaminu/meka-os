@@ -5001,6 +5001,18 @@ class MekaCore(
     /** Undo after [copyTripLists]: the copied items leave again. */
     suspend fun undoTripListsCopy(token: String): Boolean = onCore { tripLists.undoCopy(token) }
 
+    /**
+     * Slice 2d: puts one person on or off the trip's who's going ([goer] a [os.meka.core.domain.TripGoer] wire: `me`,
+     * `partner`, `kids`). The apps light the chip at once and call this after; false when nothing changed.
+     */
+    suspend fun setTripGoing(tripId: String, goer: String, on: Boolean): Boolean = onCore {
+        val g = os.meka.core.domain.TripGoer.of(goer) ?: return@onCore false
+        trips.setGoing(tripId, g, on)
+    }
+
+    /** Slice 2d: the time he leaves home on the trip's first day ("06:30", "6.30am"); blank clears it. */
+    suspend fun setTripLeave(tripId: String, text: String): os.meka.core.domain.TripLeaveSaved = onCore { trips.setLeave(tripId, text) }
+
     // ---- The Vault (V2, slice 1) ----
 
     /**
@@ -12677,8 +12689,10 @@ class MekaCore(
             os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
         } }
         val tripListItems = tripLists.items()
-        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay)) {
-            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay)
+        // Slice 2d: who's going names his partner and the children from About you.
+        val tripAbout = aboutYou.profile().let { a -> os.meka.core.domain.AboutYou(partnerName = a.partnerName, children = a.children) }
+        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay, tripAbout)) {
+            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

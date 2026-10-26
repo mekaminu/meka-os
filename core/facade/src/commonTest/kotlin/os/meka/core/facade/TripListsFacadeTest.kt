@@ -121,4 +121,32 @@ class TripListsFacadeTest {
         assertEquals(TripListRules.LISTS_EMPTY, fold.tripListsView.value.single { it.tripId == lisbon }.summary)
         assertNotNull(fold.tripListsView.value.single { it.tripId == lisbon }.startFrom)
     }
+
+    @Test
+    fun whosGoingAndTheLeaveTimeAreSetOnTheFoldAndShowOnTheMac() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.setAboutYou(os.meka.core.domain.AboutField.PARTNER_NAME, "Jo")
+        fold.addTrip("Lisbon 28–31 Oct")
+        val tripId = fold.tripsView.value.rows.single().id
+        val fresh = fold.tripListsView.value.single()
+        assertTrue(fresh.needsSetUp)
+        assertEquals(listOf("Me", "Jo", "The kids"), fresh.going.map { it.label })
+
+        assertTrue(fold.setTripGoing(tripId, "me", true))
+        assertTrue(fold.setTripGoing(tripId, "partner", true))
+        assertEquals(false, fold.setTripGoing(tripId, "dog", true))
+        assertEquals("Leaving home 06:30 on Wed 28 Oct", fold.setTripLeave(tripId, "6.30am").line)
+        assertTrue(fold.setTripLeave(tripId, "soon").refused)
+        val v = fold.tripListsView.value.single()
+        assertEquals("Wed 28 – Sat 31 Oct · 4 days · 2 people", v.dates)
+        assertEquals("2 days to go · leave home 06:30 Wednesday", v.countdown)
+        assertEquals(listOf(TripWho.EVERYONE, TripWho.ME), v.whoFilters)
+
+        fold.syncNow(); mac.syncNow()
+        val onMac = mac.tripListsView.value.single()
+        assertEquals("2 days to go · leave home 06:30 Wednesday", onMac.countdown)
+        assertEquals("06:30", onMac.leave)
+        assertEquals(listOf(true, true, false), onMac.going.map { it.on })
+    }
 }

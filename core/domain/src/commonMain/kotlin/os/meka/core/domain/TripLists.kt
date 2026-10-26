@@ -93,6 +93,14 @@ data class TripListsView(
     val summary: String,
     /** Slice 2b: while this trip's lists are empty, the last trip with lists to start from; else null. */
     val startFrom: TripStartFrom? = null,
+    /** Slice 2d: who's going, one chip each (Me, his partner, the kids), lit when going. */
+    val going: List<TripGoingChip> = emptyList(),
+    /** Slice 2d: the leave time as typed back ("06:30"), or "" when not set; the editor's field starts from it. */
+    val leave: String = "",
+    /** Slice 2d: true until he has said who's going or when he leaves, so the screen offers [TripListRules.SET_UP]. */
+    val needsSetUp: Boolean = false,
+    /** Slice 2d: To pack's filters; Kids goes when the kids aren't going and nothing is theirs. */
+    val whoFilters: List<TripWho> = TripWho.entries,
 ) {
     fun tab(list: TripList): TripListTab = tabs.first { it.list == list }
 
@@ -119,6 +127,12 @@ data class TripStartFrom(val sourceTripId: String, val line: String, val sub: St
 /** What copying another trip's lists did: "Copied 23 things from Lisbon trip" and Undo's token; [refused] when nothing was copied. */
 data class TripListCopied(val line: String, val token: String, val refused: Boolean)
 
+/** Slice 2d: one who's-going chip: [wire] a [TripGoer] wire, "Me" / his partner's first name / the kids' names. */
+data class TripGoingChip(val wire: String, val label: String, val on: Boolean, val spoken: String)
+
+/** Slice 2d: what setting the leave time did: "Leaving home 06:30 on Wednesday"; [refused] when nothing was written. */
+data class TripLeaveSaved(val line: String, val refused: Boolean)
+
 /** What removing an item did: "Removed Sun cream" and the token Undo takes. */
 data class TripListRemoved(val line: String, val token: String)
 
@@ -140,6 +154,16 @@ object TripListRules {
     const val COPY_UNDONE = "Copied lists taken off"
     /** A linked To buy row's line (slice 2). */
     const val ON_SHOPPING = "On your shopping list"
+    /** Slice 2d: the header's offer while who's going and the leave time are both unset. */
+    const val SET_UP = "Add who's going and when you leave"
+    const val EDIT = "Who's going and when you leave"
+    const val GOING_LABEL = "WHO'S GOING"
+    const val LEAVE_LABEL = "LEAVE HOME AT"
+    const val LEAVE_HINT = "06:30"
+    const val LEAVE_DESCRIPTION = "The time you leave home on the first day, for example 06:30"
+    const val LEAVE_NOT_READ = "Type the time you leave home, for example 06:30 or 6.30am."
+    const val LEAVE_CLEARED = "No leave time"
+    const val DONE = "Done"
 
     /** Each list's groups in the order they show; [ADDED] (anything not matched) comes last. */
     val GROUPS: Map<TripList, List<String>> = mapOf(
@@ -381,10 +405,79 @@ object TripListRules {
         return TripListTab(list, list.label, list.hint, list.empty, groups, mine.count { !it.done })
     }
 
-    /** "2 days to go", "Tomorrow", "Day 2 of 5", "Ended Sun 1 Nov". */
-    fun countdown(t: TripItem, today: Long): String = when {
-        today < t.startDay -> when (val n = t.startDay - today) { 1L -> "Tomorrow"; else -> "$n days to go" }
-        else -> TripRules.status(t, today)
+    /**
+     * "2 days to go", "Tomorrow", "Day 2 of 5", "Ended Sun 1 Nov"; slice 2d adds the leave time until the first day is
+     * over: "2 days to go · leave home 06:30 Wednesday", "Tomorrow · leave home 06:30", "Day 1 of 5 · leave home 06:30".
+     */
+    fun countdown(t: TripItem, today: Long): String {
+        val base = when {
+            today < t.startDay -> when (val n = t.startDay - today) { 1L -> "Tomorrow"; else -> "$n days to go" }
+            else -> TripRules.status(t, today)
+        }
+        val leave = t.leaveMinute?.takeIf { today <= t.startDay } ?: return base
+        val day = if (t.startDay - today >= 2) " " + CivilDate.DAY_LONG[CivilDate.isoDayOfWeek(t.startDay) - 1] else ""
+        return "$base · leave home ${LocalClock.formatMinute(leave)}$day"
+    }
+
+    /**
+     * Slice 2d: a typed leave time → its minute of the day: "06:30", "6:30", "6.30", "0630", "7", "6am", "6:30 pm",
+     * "leave at 7". Null for anything else.
+     */
+    fun readLeave(typed: String): Int? {
+        val t = typed.trim().lowercase().removePrefix("leave").trim().removePrefix("home").trim().removePrefix("at").trim()
+        val m = Regex("""^(\d{1,2})(?:[:.]?(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?$""").matchEntire(t) ?: return null
+        var h = m.groupValues[1].toInt()
+        val mi = m.groupValues[2].takeIf { it.isNotEmpty() }?.toInt() ?: 0
+        val mer = m.groupValues[3].replace(".", "")
+        if (mi !in 0..59) return null
+        when (mer) {
+            "am" -> { if (h !in 1..12) return null; if (h == 12) h = 0 }
+            "pm" -> { if (h !in 1..12) return null; if (h != 12) h += 12 }
+            else -> if (h !in 0..23) return null
+        }
+        return h * 60 + mi
+    }
+
+    /** "Leaving home 06:30 on Wed 28 Oct". */
+    fun leaveSavedLine(startDay: Long, minute: Int): String =
+        "Leaving home ${LocalClock.formatMinute(minute)} on ${CivilDate.shortLabel(startDay)}"
+
+    private fun firstName(name: String?): String? = name?.trim()?.split(' ')?.firstOrNull()?.takeIf { it.isNotEmpty() }
+
+    /** "Alex", "Alex and Sam", "Alex, Sam and Jo"; "The kids" when About you names none (or more than three). */
+    private fun kidsLabel(about: AboutYou): String {
+        val names = about.children.mapNotNull { firstName(it.name) }
+        return when (names.size) {
+            0 -> "The kids"
+            1 -> names[0]
+            2, 3 -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+            else -> "The kids"
+        }
+    }
+
+    /** Slice 2d: the who's-going chips, from About you's names. */
+    fun goingChips(trip: TripItem, about: AboutYou): List<TripGoingChip> = TripGoer.entries.map { g ->
+        val label = when (g) {
+            TripGoer.ME -> "Me"
+            TripGoer.PARTNER -> firstName(about.partnerName) ?: "Partner"
+            TripGoer.KIDS -> kidsLabel(about)
+        }
+        val on = trip.going?.contains(g) == true
+        TripGoingChip(g.wire, label, on, "$label, " + if (on) "going" else "not going")
+    }
+
+    /** Slice 2d: "4 people", "Just you", "2 people and the kids" (children not in About you); null until chosen or when nobody is. */
+    fun people(trip: TripItem, about: AboutYou): String? {
+        val going = trip.going?.takeIf { it.isNotEmpty() } ?: return null
+        val adults = listOf(TripGoer.ME, TripGoer.PARTNER).count { it in going }
+        val kids = TripGoer.KIDS in going
+        if (kids && about.children.isEmpty()) return when (adults) {
+            0 -> "The kids"
+            1 -> "1 person and the kids"
+            else -> "$adults people and the kids"
+        }
+        val n = adults + if (kids) about.children.size else 0
+        return if (going == setOf(TripGoer.ME)) "Just you" else if (n == 1) "1 person" else "$n people"
     }
 
     fun things(n: Int): String = if (n == 1) "1 thing" else "$n things"
@@ -409,7 +502,7 @@ object TripListRules {
         return TripStartFrom(src.id, line, sub, "$line. $sub")
     }
 
-    fun view(trip: TripItem, all: List<TripListItem>, today: Long, trips: List<TripItem> = emptyList()): TripListsView {
+    fun view(trip: TripItem, all: List<TripListItem>, today: Long, trips: List<TripItem> = emptyList(), about: AboutYou = AboutYou.EMPTY): TripListsView {
         val items = all.filter { it.tripId == trip.id }
         val bought = progress("Bought", items.filter { it.list == TripList.BUY })
         val packed = progress("Packed", items.filter { it.list == TripList.PACK })
@@ -421,7 +514,8 @@ object TripListRules {
         return TripListsView(
             tripId = trip.id,
             title = tripLabel(trip),
-            dates = CalendarAgenda.spanLabel(trip.startDay, trip.endDay) + " · " + (if (trip.days == 1) "1 day" else "${trip.days} days"),
+            dates = CalendarAgenda.spanLabel(trip.startDay, trip.endDay) + " · " + (if (trip.days == 1) "1 day" else "${trip.days} days") +
+                people(trip, about)?.let { " · $it" }.orEmpty(),
             countdown = countdown(trip, today),
             countdownLit = today >= trip.startDay - 2 && today <= trip.endDay,
             bought = bought,
@@ -429,11 +523,17 @@ object TripListRules {
             tabs = TripList.entries.map { tab(it, items) },
             summary = summary,
             startFrom = startFrom(trip, trips, all),
+            going = goingChips(trip, about),
+            leave = trip.leaveMinute?.let(LocalClock::formatMinute).orEmpty(),
+            needsSetUp = trip.going == null && trip.leaveMinute == null,
+            whoFilters = if (trip.going != null && TripGoer.KIDS !in trip.going &&
+                items.none { it.list == TripList.PACK && it.who == TripWho.KIDS }) listOf(TripWho.EVERYONE, TripWho.ME) else TripWho.entries,
         )
     }
 
     /** Every trip's lists, by trip, in the trips' order. */
-    fun views(trips: List<TripItem>, items: List<TripListItem>, today: Long): List<TripListsView> = trips.map { view(it, items, today, trips) }
+    fun views(trips: List<TripItem>, items: List<TripListItem>, today: Long, about: AboutYou = AboutYou.EMPTY): List<TripListsView> =
+        trips.map { view(it, items, today, trips, about) }
 }
 
 /**

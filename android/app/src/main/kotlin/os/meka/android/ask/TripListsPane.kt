@@ -16,6 +16,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -66,6 +68,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
 import os.meka.core.domain.TripList
 import os.meka.core.domain.TripListAdded
+import os.meka.core.domain.TripLeaveSaved
 import os.meka.core.domain.TripListCopied
 import os.meka.core.domain.TripListGroup
 import os.meka.core.domain.TripListRemoved
@@ -89,8 +92,12 @@ import os.meka.core.facade.MekaCore
  * strikes; groups fold on the expand spring with the chevron turning; the line under the field cross-fades (refused lit
  * in the accent). Haptics: light on a tick and an add, a tick on a tab, a filter, a fold or a remove. Reduced motion:
  * cross-fades only, the bars set at once.
+ *
+ * Slice 2d: a tap on the header (or "Add who's going and when you leave" on a new trip) opens who's going (Me, his
+ * partner, the kids: chips lit at once, written after) and Leave home at ("06:30"); the dates line then counts the
+ * people and the countdown says when he leaves. The editor opens and closes on the expand spring (a fade when reduced).
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -108,6 +115,14 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     val folded = remember { mutableStateMapOf<String, Boolean>() }
+    // Slice 2d: the who's-going editor, its chips lit at once (until the view agrees), and what the leave time said.
+    var editing by rememberSaveable { mutableStateOf(false) }
+    val goingPending = remember { mutableStateMapOf<String, Boolean>() }
+    var leaveSaid by remember { mutableStateOf<TripLeaveSaved?>(null) }
+    LaunchedEffect(v?.going) {
+        val shown = v?.going.orEmpty().associate { it.wire to it.on }
+        goingPending.keys.toList().forEach { w -> if (shown[w] == goingPending[w]) goingPending.remove(w) }
+    }
     BackHandler(onBack = onBack)
     LaunchedEffect(v) {
         val shown = v?.tabs.orEmpty().flatMap { t -> t.groups.flatMap { it.rows } }.associate { it.id to it.done }
@@ -144,10 +159,82 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
             return@LazyColumn
         }
         item(key = "head") {
-            Column(Modifier.appear(rememberAppearance(0)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Column(
+                Modifier.fillMaxWidth().appear(rememberAppearance(0)).clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClickLabel = TripListRules.EDIT) { haptics.tick(); editing = !editing }
+                    .semantics(mergeDescendants = true) { if (editing) stateDescription = "Editing who's going" }
+                    .testTag("trip-head"),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
                 Text(v.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
-                Text(v.dates, style = MekaType.caption, color = Meka.colors.textSecondary)
-                Text(v.countdown, style = MekaType.captionStrong, color = if (v.countdownLit) Meka.colors.accent else Meka.colors.textSecondary)
+                Crossfade(v.dates, animationSpec = MekaMotion.appear(reduced), label = "trip-dates") { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                Crossfade(v.countdown, animationSpec = MekaMotion.appear(reduced), label = "trip-countdown") {
+                    Text(it, style = MekaType.captionStrong, color = if (v.countdownLit) Meka.colors.accent else Meka.colors.textSecondary)
+                }
+                if (v.needsSetUp && !editing) {
+                    Text(TripListRules.SET_UP, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.minTouch().testTag("trip-set-up"))
+                }
+            }
+        }
+        item(key = "going") {
+            AnimatedVisibility(
+                visible = editing,
+                enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                        .padding(MekaSpace.m).testTag("trip-going"),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    Text(TripListRules.GOING_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        for (c in v.going) {
+                            val on = goingPending[c.wire] ?: c.on
+                            val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "trip-going-chip")
+                            Text(
+                                c.label, style = MekaType.caption, color = if (on) Meka.colors.onAccent else Meka.colors.textPrimary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                                    .clickable(role = Role.Checkbox) {
+                                        haptics.light()
+                                        goingPending[c.wire] = !on
+                                        scope.launch { if (runCatching { core.setTripGoing(tripId, c.wire, !on) }.isFailure) goingPending.remove(c.wire) }
+                                    }
+                                    .semantics { contentDescription = c.label; stateDescription = if (on) "Going" else "Not going" }
+                                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-going-${c.wire}"),
+                            )
+                        }
+                    }
+                    Text(TripListRules.LEAVE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+                    Field(v.leave.ifEmpty { TripListRules.LEAVE_HINT }, description = TripListRules.LEAVE_DESCRIPTION) { text ->
+                        scope.launch {
+                            val r = runCatching { core.setTripLeave(tripId, text) }.getOrNull()
+                            if (r?.refused == false) haptics.light() else haptics.reject()
+                            leaveSaid = r
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Crossfade(leaveSaid, animationSpec = MekaMotion.appear(reduced), label = "trip-leave-said", modifier = Modifier.weight(1f)) { r ->
+                            Text(r?.line ?: TripListRules.LEAVE_DESCRIPTION, style = MekaType.caption,
+                                color = if (r?.refused == true) Meka.colors.accent else if (r == null) Meka.colors.textTertiary else Meka.colors.textSecondary)
+                        }
+                        if (v.leave.isNotEmpty()) {
+                            Text("Clear", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) {
+                                        haptics.tick()
+                                        scope.launch { leaveSaid = runCatching { core.setTripLeave(tripId, "") }.getOrNull() }
+                                    }
+                                    .semantics { contentDescription = "Clear the leave time" }
+                                    .minTouch().padding(MekaSpace.xs))
+                        }
+                        Text(TripListRules.DONE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { haptics.tick(); editing = false; leaveSaid = null }
+                                .minTouch().padding(MekaSpace.xs).testTag("trip-going-done"))
+                    }
+                }
             }
         }
         item(key = "bars") {
@@ -256,11 +343,13 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 }
             }
         }
+        // Slice 2d: Kids goes from the filters when the kids aren't going (and nothing is theirs).
+        val whoShown = if (who in v.whoFilters) who else TripWho.EVERYONE
         if (tab == TripList.PACK) {
             item(key = "who") {
                 Row(Modifier.animateItem(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    for (w in TripWho.entries) {
-                        val on = w == who
+                    for (w in v.whoFilters) {
+                        val on = w == whoShown
                         Text(
                             w.label, style = MekaType.caption, color = if (on) Meka.colors.onAccent else Meka.colors.textPrimary,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
@@ -273,7 +362,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 }
             }
         }
-        val groups = v.groups(tab, who)
+        val groups = v.groups(tab, whoShown)
         if (groups.isEmpty()) {
             item(key = "empty-${tab.wire}") {
                 Text(v.tab(tab).empty, style = MekaType.caption, color = Meka.colors.textTertiary,

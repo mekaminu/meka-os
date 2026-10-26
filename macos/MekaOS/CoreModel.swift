@@ -5989,6 +5989,35 @@ final class CoreModel {
 
     func undoTripListsCopy(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripListsCopy(token: token) } }
 
+    /// Slice 2d: puts one person on or off the trip's who's going (`goer` a wire: "me", "partner", "kids"); only
+    /// Strings and a Bool cross. The panel lights the chip at once; this writes it after.
+    func setTripGoing(_ tripId: String, goer: String, on: Bool) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.setTripGoing(tripId: tripId, goer: goer, on: on); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// What setting the leave time said: "Leaving home 06:30 on Wed 28 Oct", or why not.
+    struct TripLeaveSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Slice 2d: the time he leaves home on the trip's first day ("06:30", "6.30am"); blank clears it.
+    func setTripLeave(_ tripId: String, _ text: String) async -> TripLeaveSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.setTripLeave(tripId: tripId, text: text.trimmingCharacters(in: .whitespacesAndNewlines))
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripLeaveSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     // MARK: The Vault (V2, slice 1)
 
     /// Adds "Passport expires 3 Mar 2029" or "Railcard 05/2027"; only a String crosses. Says what it did like Trips.

@@ -6,7 +6,9 @@ import SwiftUI
 /// "pack 2 chargers" → To pack × 2, else the open tab; the tab follows where it went), Everyone / Me / Kids on To pack,
 /// and each list's groups with their count, folding on a click. A tick shows at once and is written after; ticked items
 /// sink and fade. Right-click → Remove, with Undo for a few seconds. Slice 2b: an empty trip offers "Start from <last
-/// trip>", copying its lists unticked, with Undo. Synced with the Fold.
+/// trip>", copying its lists unticked, with Undo. Slice 2d: a click on the header (or "Add who's going and when you
+/// leave") opens who's going (chips lit at once, written after) and Leave home at; the dates line counts the people and
+/// the countdown says when he leaves. Synced with the Fold.
 ///
 /// Motion: the header and bars stagger in; the bars fill on the appear spring; rows move on the expand spring (a tick
 /// sinks the row) and the ring draws its check; groups fold on the expand spring with the chevron turning; the line
@@ -28,6 +30,11 @@ struct TripListsPanel: View {
     /// What this panel ticked, until the view says the same.
     @State private var pending: [String: Bool] = [:]
     @State private var folded: Set<String> = []
+    /// Slice 2d: the who's-going editor, its chips lit at once until the view agrees, and the leave time.
+    @State private var editing = false
+    @State private var goingPending: [String: Bool] = [:]
+    @State private var leaveText = ""
+    @State private var leaveSaid: CoreModel.TripLeaveSaid?
 
     var body: some View {
         let v = model.tripLists.first { $0.tripId == tripId }
@@ -47,20 +54,107 @@ struct TripListsPanel: View {
         .onChange(of: model.tripLists) { _, lists in
             guard let v = lists.first(where: { $0.tripId == tripId }) else { pending = [:]; return }
             if v.startFrom == nil { copying = false }
+            let lit = Dictionary(uniqueKeysWithValues: v.going.map { ($0.wire, $0.on) })
+            goingPending = goingPending.filter { wire, on in lit[wire] != on }
             var shown: [String: Bool] = [:]
             for t in v.tabs { for g in t.groups { for r in g.rows { shown[r.id] = r.done } } }
             pending = pending.filter { id, done in shown[id] != nil && shown[id] != done }
         }
     }
 
+    /// Slice 2d: who's going (Me, his partner, the kids) and Leave home at.
+    private func goingEditor(_ v: TripListsView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(TripListRules.shared.GOING_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(v.going, id: \.wire) { c in
+                    let on = goingPending[c.wire] ?? c.on
+                    Button {
+                        MekaHaptics.light()
+                        let wire = c.wire
+                        goingPending[wire] = !on
+                        Task { if !(await model.setTripGoing(tripId, goer: wire, on: !on)) { goingPending[wire] = nil } }
+                    } label: {
+                        Text(c.label).font(MekaType.caption).lineLimit(1)
+                            .foregroundStyle(on ? palette.onAccent : palette.textPrimary)
+                            .padding(.horizontal, MekaSpace.m)
+                            .padding(.vertical, MekaSpace.xxs)
+                            .background(on ? palette.accent : palette.surfaceRaised, in: Capsule())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
+                    .accessibilityLabel(c.label)
+                    .accessibilityValue(on ? "Going" : "Not going")
+                }
+            }
+            Text(TripListRules.shared.LEAVE_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                .padding(.top, MekaSpace.xxs)
+            HStack(spacing: MekaSpace.xs) {
+                TextField(v.leave.isEmpty ? TripListRules.shared.LEAVE_HINT : v.leave, text: $leaveText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 120)
+                    .accessibilityLabel(TripListRules.shared.LEAVE_DESCRIPTION)
+                    .onSubmit {
+                        let typed = leaveText
+                        leaveText = ""
+                        guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        Task { leaveSaid = await model.setTripLeave(tripId, typed) }
+                    }
+                if !v.leave.isEmpty {
+                    Button("Clear") { Task { leaveSaid = await model.setTripLeave(tripId, "") } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.textSecondary)
+                        .accessibilityLabel("Clear the leave time")
+                }
+                Spacer()
+                Button(TripListRules.shared.DONE) {
+                    MekaHaptics.tick()
+                    leaveSaid = nil
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { editing = false }
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+            }
+            Text(leaveSaid?.line ?? TripListRules.shared.LEAVE_DESCRIPTION).font(MekaType.caption)
+                .foregroundStyle(leaveSaid?.refused == true ? palette.accent : (leaveSaid == nil ? palette.textTertiary : palette.textSecondary))
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: leaveSaid)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+
     @ViewBuilder
     private func content(_ v: TripListsView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(v.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
-            Text(v.dates).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-            Text(v.countdown).font(MekaType.captionStrong).foregroundStyle(v.countdownLit ? palette.accent : palette.textSecondary)
+        Button {
+            MekaHaptics.tick()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { editing.toggle() }
+        } label: {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(v.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
+                Text(v.dates).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                Text(v.countdown).font(MekaType.captionStrong).foregroundStyle(v.countdownLit ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity)
+                if v.needsSetUp && !editing {
+                    Text(TripListRules.shared.SET_UP).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityHint(TripListRules.shared.EDIT)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.dates)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.countdown)
         .staggeredAppear(0)
+        if editing {
+            goingEditor(v)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        }
         HStack(spacing: MekaSpace.m) {
             bar(v.bought)
             bar(v.packed)
@@ -176,10 +270,12 @@ struct TripListsPanel: View {
                 if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.removed = nil } }
             }
         }
+        // Slice 2d: Kids goes from the filters when the kids aren't going (and nothing is theirs).
+        let whoShown = v.whoFilters.contains(who) ? who : TripWho.everyone
         if tab == .pack {
             HStack(spacing: MekaSpace.xs) {
-                ForEach([TripWho.everyone, TripWho.me, TripWho.kids], id: \.self) { w in
-                    let on = w == who
+                ForEach(v.whoFilters, id: \.self) { w in
+                    let on = w == whoShown
                     Button {
                         MekaHaptics.tick()
                         who = w
@@ -195,7 +291,7 @@ struct TripListsPanel: View {
                 }
             }
         }
-        let groups = v.groups(list: tab, who: who)
+        let groups = v.groups(list: tab, who: whoShown)
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 if groups.isEmpty {

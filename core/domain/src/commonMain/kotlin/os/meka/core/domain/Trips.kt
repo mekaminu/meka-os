@@ -23,6 +23,27 @@ object TripFields {
     const val END = "endDay"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
+    /**
+     * Trip lists slice 2d: who's going, the [TripGoer] wires joined by commas ("me,partner,kids"); empty when he took
+     * everyone off, absent until he chooses. LWW.
+     */
+    const val GOING = "going"
+    /** Trip lists slice 2d: the local minute he leaves home on the first day ("06:30"); absent when not set. LWW. */
+    const val LEAVE_MINUTE = "leaveMinute"
+}
+
+/** Who's going on a trip (trip lists slice 2d): him, his partner, the children (names come from About you). */
+enum class TripGoer(val wire: String) {
+    ME("me"), PARTNER("partner"), KIDS("kids");
+
+    companion object {
+        fun of(wire: String?): TripGoer? = entries.firstOrNull { it.wire == wire }
+
+        /** "me,kids" → {ME, KIDS}; unknown words are dropped; null stays null (never chosen). */
+        fun read(text: String?): Set<TripGoer>? = text?.split(',')?.mapNotNull { of(it.trim()) }?.toSet()
+
+        fun write(going: Set<TripGoer>): String = entries.filter { it in going }.joinToString(",") { it.wire }
+    }
 }
 
 object TripBookingFields {
@@ -63,6 +84,10 @@ data class TripBooking(
 data class TripItem(
     val id: String, val name: String, val startDay: Long, val endDay: Long, val addedAtMs: Long,
     val bookings: List<TripBooking> = emptyList(),
+    /** Slice 2d: who's going; null until he chooses. */
+    val going: Set<TripGoer>? = null,
+    /** Slice 2d: the minute he leaves home on [startDay]; null when not set. */
+    val leaveMinute: Int? = null,
 ) {
     val days: Int get() = (endDay - startDay + 1).toInt()
 }
@@ -277,7 +302,11 @@ object TripRules {
             val name = s.f(TripFields.NAME).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val start = s.f(TripFields.START).longOrNull ?: return@mapNotNull null
             val end = s.f(TripFields.END).longOrNull?.takeIf { it >= start } ?: start
-            TripItem(id, name, start, end, s.f(TripFields.ADDED_AT).longOrNull ?: 0L, bookings[id].orEmpty())
+            TripItem(
+                id, name, start, end, s.f(TripFields.ADDED_AT).longOrNull ?: 0L, bookings[id].orEmpty(),
+                going = TripGoer.read(s.f(TripFields.GOING).textOrNull),
+                leaveMinute = s.f(TripFields.LEAVE_MINUTE).longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 },
+            )
         }.sortedWith(compareBy<TripItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
 
     fun fields(e: TripEntry, nowMs: Long): Map<String, FieldValue> = mapOf(
@@ -680,6 +709,34 @@ class Trips(
 
     /** Removes one booking for good; false when it isn't there. */
     fun removeBooking(id: String): Boolean = removeBookingForUndo(id) != null
+
+    /**
+     * Trip lists slice 2d: puts [goer] on or off the trip [tripId]'s who's going. A trip never chosen starts from nobody,
+     * so the first tap says just that one. False when the trip has gone or nothing changed.
+     */
+    fun setGoing(tripId: String, goer: TripGoer, on: Boolean): Boolean {
+        val trip = items().firstOrNull { it.id == tripId } ?: return false
+        val before = trip.going.orEmpty()
+        val after = if (on) before + goer else before - goer
+        if (trip.going != null && after == before) return false
+        replica.commitLocal(EntityTypes.TRIP, tripId, mapOf(TripFields.GOING to TripGoer.write(after).fv()))
+        return true
+    }
+
+    /**
+     * Trip lists slice 2d: the time he leaves home on the trip's first day, typed ("06:30", "6.30am", "leave at 7");
+     * blank clears it. Refused (nothing written) when it isn't a time or the trip has gone.
+     */
+    fun setLeave(tripId: String, typed: String): TripLeaveSaved {
+        val trip = items().firstOrNull { it.id == tripId } ?: return TripLeaveSaved(TripListRules.GONE, refused = true)
+        if (typed.isBlank()) {
+            if (trip.leaveMinute != null) replica.commitLocal(EntityTypes.TRIP, tripId, mapOf(TripFields.LEAVE_MINUTE to FieldValue.Null))
+            return TripLeaveSaved(TripListRules.LEAVE_CLEARED, refused = false)
+        }
+        val minute = TripListRules.readLeave(typed) ?: return TripLeaveSaved(TripListRules.LEAVE_NOT_READ, refused = true)
+        if (trip.leaveMinute != minute) replica.commitLocal(EntityTypes.TRIP, tripId, mapOf(TripFields.LEAVE_MINUTE to minute.toLong().fv()))
+        return TripLeaveSaved(TripListRules.leaveSavedLine(trip.startDay, minute), refused = false)
+    }
 
     /** Removes a trip and its bookings, saying so with Undo's token; null when it isn't there. */
     fun removeForUndo(id: String): TripRemoved? {

@@ -139,4 +139,34 @@ class TripListsScreensTest {
         assertEquals(0, core.tripListsView.value.single { it.tripId == rome }.packed.done)
         assertEquals("1 of 9", core.tripListsView.value.single { it.tripId == lisbonId }.packed.line)
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun whosGoingAndTheLeaveTimeShowInTheHeader() {
+        val (core, tripId) = filled(ThemeChoice.DARK)
+        runBlocking {
+            check(core.setTripGoing(tripId, "me", true))
+            check(core.setTripGoing(tripId, "partner", true))
+            check(!core.setTripLeave(tripId, "6.30am").refused)
+            core.tick()
+        }
+        show(core, tripId)
+        compose.onNodeWithTag("trip-head").performClick()
+        compose.mainClock.advanceTimeBy(1_000L)
+        compose.waitForIdle()
+        val name = "cover-dark-going"
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", name))
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertShows(compose, name, "2 people")
+        ScreenShots.assertShows(compose, name, "leave home 06:30 Wednesday")
+        ScreenShots.assertShows(compose, name, "WHO'S GOING")
+        // A chip lights in the next frame; the core's write lands after.
+        compose.onNodeWithTag("trip-going-kids").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithTag("trip-going-kids")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Going"))
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.tripListsView.value.single().going.last().on }
+    }
 }

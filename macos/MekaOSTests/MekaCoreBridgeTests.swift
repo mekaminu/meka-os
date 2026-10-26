@@ -3052,6 +3052,29 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(undone.boolValue)
     }
 
+    func testTripGoingAndLeaveReachSwift() async throws {
+        // Trip lists, slice 2d: who's going and the leave time cross as Strings and a Bool, and show in the header.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "tripgoing-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        _ = try await core.addTrip(text: "Porto 3–6 Mar \(y)")
+        let porto = core.tripsView.value.rows[0].id
+        XCTAssertEqual(core.tripListsView.value.first?.needsSetUp, true)
+        let going = try await core.setTripGoing(tripId: porto, goer: "me", on: true)
+        XCTAssertTrue(going.boolValue)
+        let saved = try await core.setTripLeave(tripId: porto, text: "6.30am")
+        XCTAssertFalse(saved.refused)
+        let v = try XCTUnwrap(core.tripListsView.value.first)
+        XCTAssertTrue(v.dates.hasSuffix("· Just you"))
+        XCTAssertTrue(v.countdown.contains("leave home 06:30"))
+        XCTAssertEqual(v.leave, "06:30")
+        XCTAssertEqual(v.whoFilters.count, 2)
+        XCTAssertNil(TripListRules.shared.readLeave(typed: "early"))
+    }
+
     func testVaultReceiptReachesSwift() async throws {
         // Receipts → Vault: the preview's offer, Keep / Take out and Open the email reach the Mac (only Strings cross).
         XCTAssertEqual(VaultReceiptRules.shared.KEEP, "Keep in the Vault")
