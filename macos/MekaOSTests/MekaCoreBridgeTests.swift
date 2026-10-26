@@ -3052,6 +3052,31 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(undone.boolValue)
     }
 
+    func testTripTemplatesReachSwift() async throws {
+        // Trip lists, slice 2e: a trip saved as a template is offered on the next one; Strings cross.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "triptemplate-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        _ = try await core.addTrip(text: "Porto 3–6 Mar \(y)")
+        let porto = core.tripsView.value.rows[0].id
+        _ = try await core.addTripItem(tripId: porto, text: "pack 2 chargers", open: .pack)
+        XCTAssertEqual(core.tripListsView.value.first { $0.tripId == porto }?.saveTemplate, "Save as a template for next time")
+        let saved = try await core.saveTripTemplate(tripId: porto)
+        XCTAssertEqual(saved.line, "Saved as a template · 1 thing")
+        _ = try await core.addTrip(text: "Rome 3–6 May \(y)")
+        let rome = try XCTUnwrap(core.tripsView.value.rows.first { $0.id != porto }).id
+        let offer = try XCTUnwrap(core.tripListsView.value.first { $0.tripId == rome }?.startOptions.first)
+        XCTAssertEqual(offer.line, "Start from your Porto template")
+        let templateId = try XCTUnwrap(offer.templateId)
+        let copied = try await core.startTripFromTemplate(templateId: templateId, toTripId: rome)
+        XCTAssertEqual(copied.line, "Copied 1 thing from your Porto template")
+        let forgot = try await core.forgetTripTemplate(templateId: templateId)
+        XCTAssertTrue(forgot.boolValue)
+    }
+
     func testTripGoingAndLeaveReachSwift() async throws {
         // Trip lists, slice 2d: who's going and the leave time cross as Strings and a Bool, and show in the header.
         let core = MacCoreFactory.shared.create(

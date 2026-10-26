@@ -36,7 +36,28 @@ object TripItemFields {
     const val SHOP = "shopId"
     /** True when adding this item made that shopping item, so removing it from the trip takes it off the shopping list too. */
     const val SHOP_MADE = "shopMade"
+    /** Slice 2e: the [TripTemplateFields] template this item belongs to; such an item has no [TRIP] and is never shown on a trip. */
+    const val TEMPLATE = "templateId"
 }
+
+/**
+ * Slice 2e, "Save as a template for next time" (ADR-008 addendum 2026-10-26): one saved set of lists, named for the trip
+ * it was saved from; its things are `trip_item`s with [TripItemFields.TEMPLATE] instead of a trip.
+ */
+object TripTemplateFields {
+    /** The trip's name when saved ("Lisbon"). */
+    const val NAME = "name"
+    /** The trip it was saved from; saving that trip again replaces it. */
+    const val SOURCE = "sourceTripId"
+    const val ADDED_AT = "addedAtMs"
+    const val DELETED = ActionableFields.DELETED
+}
+
+/** A saved template: [count] things on its lists. */
+data class TripTemplate(val id: String, val name: String, val sourceTripId: String?, val addedAtMs: Long, val count: Int)
+
+/** What saving a trip's lists as a template did: "Saved as a template · 23 things"; [refused] when nothing was saved. */
+data class TripTemplateSaved(val line: String, val refused: Boolean)
 
 /** The three lists, in tab order. */
 enum class TripList(val wire: String, val label: String, val hint: String, val empty: String) {
@@ -101,6 +122,10 @@ data class TripListsView(
     val needsSetUp: Boolean = false,
     /** Slice 2d: To pack's filters; Kids goes when the kids aren't going and nothing is theirs. */
     val whoFilters: List<TripWho> = TripWho.entries,
+    /** Slice 2e: while the lists are empty, every way to start them: saved templates (newest first), then the last trip. */
+    val startOptions: List<TripStartFrom> = listOfNotNull(startFrom),
+    /** Slice 2e: the foot's button ("Save as a template for next time", "Update the Lisbon template"); null while the lists are empty. */
+    val saveTemplate: String? = null,
 ) {
     fun tab(list: TripList): TripListTab = tabs.first { it.list == list }
 
@@ -122,7 +147,11 @@ data class TripListAdded(val line: String, val list: TripList, val refused: Bool
  * Slice 2b, "Start from last trip": [line] "Start from Lisbon trip", [sub] "Copies its 23 things, all unticked",
  * [sourceTripId] the trip copied from.
  */
-data class TripStartFrom(val sourceTripId: String, val line: String, val sub: String, val spoken: String)
+data class TripStartFrom(
+    val sourceTripId: String, val line: String, val sub: String, val spoken: String,
+    /** Slice 2e: set when this offer is a saved template (copy with its id), else it is the trip [sourceTripId]. */
+    val templateId: String? = null,
+)
 
 /** What copying another trip's lists did: "Copied 23 things from Lisbon trip" and Undo's token; [refused] when nothing was copied. */
 data class TripListCopied(val line: String, val token: String, val refused: Boolean)
@@ -164,6 +193,13 @@ object TripListRules {
     const val LEAVE_NOT_READ = "Type the time you leave home, for example 06:30 or 6.30am."
     const val LEAVE_CLEARED = "No leave time"
     const val DONE = "Done"
+    /** Slice 2e. */
+    const val SAVE_TEMPLATE = "Save as a template for next time"
+    const val TEMPLATE_EMPTY = "There's nothing on this trip's lists to save."
+    const val TEMPLATE_FORGOTTEN = "Template forgotten"
+    const val FORGET_TEMPLATE = "Forget this template"
+    /** At most this many templates are offered on a new trip. */
+    const val MAX_TEMPLATE_OFFERS = 3
 
     /** Each list's groups in the order they show; [ADDED] (anything not matched) comes last. */
     val GROUPS: Map<TripList, List<String>> = mapOf(
@@ -502,8 +538,66 @@ object TripListRules {
         return TripStartFrom(src.id, line, sub, "$line. $sub")
     }
 
-    fun view(trip: TripItem, all: List<TripListItem>, today: Long, trips: List<TripItem> = emptyList(), about: AboutYou = AboutYou.EMPTY): TripListsView {
+    /** "Update the Lisbon template" once this trip has been saved as one. */
+    fun updateTemplateLabel(name: String): String = "Update the $name template"
+
+    /** "Saved as a template · 23 things", or "Lisbon template updated · 23 things" when it replaced one. */
+    fun templateSavedLine(name: String, n: Int, replaced: Boolean): String =
+        (if (replaced) "$name template updated" else "Saved as a template") + " · ${things(n)}"
+
+    /**
+     * Slice 2e: the saved templates from their entities and the template items' fields, newest first; each counts the
+     * things saved with it, and one with nothing left is not offered.
+     */
+    fun templates(entities: Map<String, Map<String, FieldValue>>, itemEntities: Map<String, Map<String, FieldValue>>): List<TripTemplate> {
+        val counts = templateEntries(itemEntities).mapValues { it.value.size }
+        return entities.mapNotNull { (id, s) ->
+            if (s.f(TripTemplateFields.DELETED).boolOrNull == true) return@mapNotNull null
+            val name = s.f(TripTemplateFields.NAME).textOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val n = counts[id] ?: 0
+            if (n == 0) return@mapNotNull null
+            TripTemplate(id, name, s.f(TripTemplateFields.SOURCE).textOrNull, s.f(TripTemplateFields.ADDED_AT).longOrNull ?: 0L, n)
+        }.sortedWith(compareByDescending<TripTemplate> { it.addedAtMs }.thenBy { it.id })
+    }
+
+    /** Slice 2e: each template's things, in the order saved (removed ones left out). */
+    fun templateEntries(itemEntities: Map<String, Map<String, FieldValue>>): Map<String, List<TripListEntry>> =
+        itemEntities.entries.mapNotNull { (id, s) ->
+            if (s.f(TripItemFields.DELETED).boolOrNull == true) return@mapNotNull null
+            val tpl = s.f(TripItemFields.TEMPLATE).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            if (s.f(TripItemFields.TRIP).textOrNull != null) return@mapNotNull null
+            val text = s.f(TripItemFields.TEXT).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val list = TripList.of(s.f(TripItemFields.LIST).textOrNull)
+            val group = s.f(TripItemFields.GROUP).textOrNull?.takeIf { it in GROUPS.getValue(list) } ?: groupOf(list, text)
+            val who = if (list == TripList.PACK) TripWho.of(s.f(TripItemFields.WHO).textOrNull) else TripWho.EVERYONE
+            Triple(tpl, (s.f(TripItemFields.ADDED_AT).longOrNull ?: 0L) to id,
+                TripListEntry(list, text, group, s.f(TripItemFields.QTY).longOrNull?.toInt()?.takeIf { it > 1 }, who))
+        }.groupBy({ it.first }) { it }.mapValues { (_, l) -> l.sortedWith(compareBy({ it.second.first }, { it.second.second })).map { it.third } }
+
+    /** Slice 2e: a template's offer: "Start from your Lisbon template" · "23 things, all unticked". */
+    fun templateOffer(t: TripTemplate): TripStartFrom {
+        val line = "Start from your ${t.name} template"
+        val sub = "${things(t.count).replaceFirstChar { it.uppercaseChar() }}, all unticked"
+        return TripStartFrom(t.sourceTripId.orEmpty(), line, sub, "$line. $sub", templateId = t.id)
+    }
+
+    /**
+     * Slice 2e: every way to start [trip]'s empty lists: up to [MAX_TEMPLATE_OFFERS] saved templates, newest first, then
+     * the last trip ([startFrom]) unless a template was saved from that very trip. Empty once the trip has lists.
+     */
+    fun startOptions(trip: TripItem, trips: List<TripItem>, all: List<TripListItem>, templates: List<TripTemplate>): List<TripStartFrom> {
+        if (all.any { it.tripId == trip.id }) return emptyList()
+        val tpl = templates.filter { it.sourceTripId != trip.id }.take(MAX_TEMPLATE_OFFERS)
+        val last = startFrom(trip, trips, all)?.takeIf { l -> tpl.none { it.sourceTripId == l.sourceTripId } }
+        return tpl.map(::templateOffer) + listOfNotNull(last)
+    }
+
+    fun view(
+        trip: TripItem, all: List<TripListItem>, today: Long, trips: List<TripItem> = emptyList(), about: AboutYou = AboutYou.EMPTY,
+        templates: List<TripTemplate> = emptyList(),
+    ): TripListsView {
         val items = all.filter { it.tripId == trip.id }
+        val options = startOptions(trip, trips, all, templates)
         val bought = progress("Bought", items.filter { it.list == TripList.BUY })
         val packed = progress("Packed", items.filter { it.list == TripList.PACK })
         val summary = if (items.isEmpty()) LISTS_EMPTY else listOfNotNull(
@@ -522,18 +616,21 @@ object TripListRules {
             packed = packed,
             tabs = TripList.entries.map { tab(it, items) },
             summary = summary,
-            startFrom = startFrom(trip, trips, all),
+            startFrom = options.firstOrNull(),
             going = goingChips(trip, about),
             leave = trip.leaveMinute?.let(LocalClock::formatMinute).orEmpty(),
             needsSetUp = trip.going == null && trip.leaveMinute == null,
             whoFilters = if (trip.going != null && TripGoer.KIDS !in trip.going &&
                 items.none { it.list == TripList.PACK && it.who == TripWho.KIDS }) listOf(TripWho.EVERYONE, TripWho.ME) else TripWho.entries,
+            startOptions = options,
+            saveTemplate = if (items.isEmpty()) null else templates.firstOrNull { it.sourceTripId == trip.id }?.let { updateTemplateLabel(it.name) } ?: SAVE_TEMPLATE,
         )
     }
 
     /** Every trip's lists, by trip, in the trips' order. */
-    fun views(trips: List<TripItem>, items: List<TripListItem>, today: Long, about: AboutYou = AboutYou.EMPTY): List<TripListsView> =
-        trips.map { view(it, items, today, trips, about) }
+    fun views(
+        trips: List<TripItem>, items: List<TripListItem>, today: Long, about: AboutYou = AboutYou.EMPTY, templates: List<TripTemplate> = emptyList(),
+    ): List<TripListsView> = trips.map { view(it, items, today, trips, about, templates) }
 }
 
 /**
@@ -640,6 +737,71 @@ class TripLists(
             id
         }
         return TripListCopied(TripListRules.copiedLine(ids.size, from), ids.joinToString(","), refused = false)
+    }
+
+    /** Slice 2e: the saved templates, newest first. */
+    fun templates(): List<TripTemplate> = TripListRules.templates(
+        replica.entities(EntityTypes.TRIP_TEMPLATE).associate { it.ref.entityId to it.fields },
+        replica.entities(EntityTypes.TRIP_ITEM).associate { it.ref.entityId to it.fields },
+    )
+
+    /**
+     * Slice 2e, "Save as a template for next time": saves every thing on [trip]'s lists (list, group, quantity, whose;
+     * never the ticks) as a template named for the trip. A template saved from the same trip, or with the same name, is
+     * replaced. Refused (nothing written) when the trip has gone or its lists are empty.
+     */
+    fun saveTemplate(trip: TripItem?): TripTemplateSaved {
+        if (trip == null) return TripTemplateSaved(TripListRules.GONE, refused = true)
+        val source = items().filter { it.tripId == trip.id }
+        if (source.isEmpty()) return TripTemplateSaved(TripListRules.TEMPLATE_EMPTY, refused = true)
+        val name = trip.name.trim().ifEmpty { "Trip" }
+        val replaced = replica.entities(EntityTypes.TRIP_TEMPLATE).filter {
+            it.fields[TripTemplateFields.DELETED]?.boolOrNull != true &&
+                (it.fields[TripTemplateFields.SOURCE]?.textOrNull == trip.id || it.fields[TripTemplateFields.NAME]?.textOrNull?.trim().equals(name, ignoreCase = true))
+        }.map { it.ref.entityId }
+        replaced.forEach(::forgetTemplate)
+        val id = newId()
+        val now = nowMs()
+        replica.commitLocal(EntityTypes.TRIP_TEMPLATE, id, mapOf(
+            TripTemplateFields.NAME to name.fv(), TripTemplateFields.SOURCE to trip.id.fv(), TripTemplateFields.ADDED_AT to now.fv(),
+        ))
+        source.forEachIndexed { i, item ->
+            val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who)
+            replica.commitLocal(EntityTypes.TRIP_ITEM, newId(), TripListRules.fields("", e, now + i) - TripItemFields.TRIP + (TripItemFields.TEMPLATE to id.fv()))
+        }
+        return TripTemplateSaved(TripListRules.templateSavedLine(name, source.size, replaced.isNotEmpty()), refused = false)
+    }
+
+    /** Slice 2e: forgets a saved template (and its things) on every device; false when it isn't there. */
+    fun forgetTemplate(id: String): Boolean {
+        val f = replica.entity(EntityTypes.TRIP_TEMPLATE, id)?.fields ?: return false
+        if (f[TripTemplateFields.DELETED]?.boolOrNull == true) return false
+        replica.commitLocal(EntityTypes.TRIP_TEMPLATE, id, mapOf(TripTemplateFields.DELETED to true.fv()))
+        replica.entities(EntityTypes.TRIP_ITEM)
+            .filter { it.fields[TripItemFields.TEMPLATE]?.textOrNull == id && it.fields[TripItemFields.DELETED]?.boolOrNull != true }
+            .forEach { replica.commitLocal(EntityTypes.TRIP_ITEM, it.ref.entityId, mapOf(TripItemFields.DELETED to true.fv())) }
+        return true
+    }
+
+    /**
+     * Slice 2e: starts [to]'s empty lists from the saved template [templateId], unticked, as [copyFrom] does from a trip
+     * (To buy on the shopping list too); Undo with [undoCopy].
+     */
+    fun copyFromTemplate(templateId: String, to: TripItem?): TripListCopied {
+        if (to == null) return TripListCopied(TripListRules.GONE, "", refused = true)
+        val tpl = templates().firstOrNull { it.id == templateId } ?: return TripListCopied(TripListRules.COPY_NOTHING, "", refused = true)
+        if (items().any { it.tripId == to.id }) return TripListCopied(TripListRules.COPY_NOT_EMPTY, "", refused = true)
+        val entries = TripListRules.templateEntries(replica.entities(EntityTypes.TRIP_ITEM).associate { it.ref.entityId to it.fields })[tpl.id].orEmpty()
+        if (entries.isEmpty()) return TripListCopied(TripListRules.COPY_NOTHING, "", refused = true)
+        val now = nowMs()
+        val label = TripListRules.tripLabel(to)
+        val ids = entries.mapIndexed { i, e ->
+            val id = newId()
+            replica.commitLocal(EntityTypes.TRIP_ITEM, id, TripListRules.fields(to.id, e, now + i))
+            if (e.list == TripList.BUY) link(id, e.text, e.qty, label)
+            id
+        }
+        return TripListCopied("Copied ${TripListRules.things(ids.size)} from your ${tpl.name} template", ids.joinToString(","), refused = false)
     }
 
     /** Undo after [copyFrom]: the copied items leave (and the shopping items they made); false when none was there. */

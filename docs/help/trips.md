@@ -1,7 +1,7 @@
 ---
 id: trips
 title: Trips
-keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, who's going, leave time, leave home, add to my trip list, what's left to pack
+keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, add to my trip list, what's left to pack
 data: yes
 fold: TRIPS
 fold_where: Ask → Life → Trips
@@ -21,4 +21,5 @@ tip: On To pack, "for the kids" or "my …" says whose it is, and Everyone · Me
 tip: Anything on a trip's To buy is on your shopping list too, marked "For Barcelona trip". Tick it in either place (in the shop, or on the trip) and both are ticked, on the Fold and the Mac; if it was already on your shopping list, the trip shares it rather than adding it twice.
 tip: Tap a trip's name on its Lists to say who's going (you, your partner, the kids, named from About you) and when you leave home ("06:30"); the dates then say "4 people" and the countdown "leave home 06:30 Wednesday". With the kids not going, To pack drops its Kids filter.
 tip: A new trip with empty lists offers "Start from" your last trip: one tap copies its To buy, To pack and Before we leave, all unticked (Undo takes them off again), and the To buy ones go on your shopping list for the new trip.
+tip: At the foot of a trip's Lists, "Save as a template for next time" keeps them (never the ticks) under the trip's name. A new trip's empty lists then offer "Start from your Lisbon template" first; press and hold it (right-click on the Mac) to forget it. Saving the same trip again updates its template.
 tip: Ask or Talk to Obi: "add sun cream to my trip list", "pack the passports for Lisbon" or "what's left to pack?". He shows a card with what goes on which list; tap Add (or say yes) and it is added, Undo takes it off again.

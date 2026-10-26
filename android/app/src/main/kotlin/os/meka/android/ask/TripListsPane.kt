@@ -44,6 +44,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -76,6 +80,7 @@ import os.meka.core.domain.TripListRow
 import os.meka.core.domain.TripListRules
 import os.meka.core.domain.TripProgress
 import os.meka.core.domain.TripRules
+import os.meka.core.domain.TripTemplateSaved
 import os.meka.core.domain.TripWho
 import os.meka.core.facade.MekaCore
 
@@ -96,6 +101,10 @@ import os.meka.core.facade.MekaCore
  * Slice 2d: a tap on the header (or "Add who's going and when you leave" on a new trip) opens who's going (Me, his
  * partner, the kids: chips lit at once, written after) and Leave home at ("06:30"); the dates line then counts the
  * people and the countdown says when he leaves. The editor opens and closes on the expand spring (a fade when reduced).
+ *
+ * Slice 2e: "Save as a template for next time" at the foot (a dashed outline, as the mockup; "Update the Lisbon template" once
+ * saved); a new trip's empty lists offer saved templates first, then the last trip; a long press forgets a template.
+ * The offers fold away on the expand spring once one is used; the saved line fades in and out.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -112,6 +121,8 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     // Slice 2b: what "Start from last trip" copied, with Undo for a few seconds; [copying] hides the card at once.
     var copied by remember { mutableStateOf<TripListCopied?>(null) }
     var copying by remember { mutableStateOf(false) }
+    // Slice 2e: what "Save as a template for next time" said, for a few seconds.
+    var templateSaid by remember { mutableStateOf<TripTemplateSaved?>(null) }
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     val folded = remember { mutableStateMapOf<String, Boolean>() }
@@ -130,6 +141,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
     }
     LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
     LaunchedEffect(copied) { if (copied != null) { delay(TripRules.UNDO_MS); copied = null } }
+    LaunchedEffect(templateSaid) { if (templateSaid != null) { delay(TripRules.UNDO_MS); templateSaid = null } }
     // Once the view has the copy (no offer any more), the card's own hiding is no longer needed.
     LaunchedEffect(v?.startFrom) { if (v?.startFrom == null) copying = false }
     val tick: (TripListRow, Boolean) -> Unit = { row, done ->
@@ -276,24 +288,36 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 Crossfade(said?.line ?: TripListRules.ADD_NOTE, animationSpec = MekaMotion.appear(reduced), label = "trip-list-added") { line ->
                     Text(line, style = MekaType.caption, color = if (said != null) saidColor else Meka.colors.textTertiary)
                 }
-                AnimatedVisibility(
-                    visible = v.startFrom != null && !copying,
-                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
-                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
-                ) {
-                    v.startFrom?.let { from ->
+                // Slice 2e: every way to start empty lists: saved templates (newest first), then the last trip.
+                for (from in v.startOptions) {
+                    AnimatedVisibility(
+                        visible = !copying,
+                        enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                        exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                    ) {
+                        val tpl = from.templateId
                         Column(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                                .clickable(role = Role.Button) {
-                                    haptics.light(); copying = true
-                                    scope.launch {
-                                        val r = runCatching { core.copyTripLists(from.sourceTripId, tripId) }.getOrNull()
-                                        copied = r
-                                        if (r == null || r.refused) { haptics.reject(); copying = false }
-                                    }
-                                }
+                                .combinedClickable(
+                                    role = Role.Button,
+                                    onClick = {
+                                        haptics.light(); copying = true
+                                        scope.launch {
+                                            val r = runCatching {
+                                                if (tpl != null) core.startTripFromTemplate(tpl, tripId) else core.copyTripLists(from.sourceTripId, tripId)
+                                            }.getOrNull()
+                                            copied = r
+                                            if (r == null || r.refused) { haptics.reject(); copying = false }
+                                        }
+                                    },
+                                    onLongClick = if (tpl == null) null else ({
+                                        haptics.tick()
+                                        scope.launch { runCatching { core.forgetTripTemplate(tpl) } }
+                                    }),
+                                    onLongClickLabel = if (tpl == null) null else TripListRules.FORGET_TEMPLATE,
+                                )
                                 .semantics(mergeDescendants = true) { contentDescription = from.spoken }
-                                .minTouch().padding(MekaSpace.m).testTag("trip-start-from"),
+                                .minTouch().padding(MekaSpace.m).testTag(if (tpl == null) "trip-start-from" else "trip-start-template"),
                             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                         ) {
                             Text(from.line, style = MekaType.itemMeta, color = Meka.colors.accent)
@@ -379,6 +403,41 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 val rows = g.rows.sortedBy { pending[it.id] ?: it.done }
                 items(rows, key = { "item-${it.id}" }) { row ->
                     ItemRow(row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) }, onRemove = { remove(row) })
+                }
+            }
+        }
+        // Slice 2e: "Save as a template for next time" (or "Update the Lisbon template"), a dashed button at the foot.
+        v.saveTemplate?.let { save ->
+            item(key = "save-template") {
+                Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    val dash = Meka.colors.hairline
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                            .drawBehind {
+                                drawRoundRect(
+                                    dash, cornerRadius = CornerRadius(MekaRadius.m.toPx()),
+                                    style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
+                                )
+                            }
+                            .clickable(role = Role.Button) {
+                                scope.launch {
+                                    val r = runCatching { core.saveTripTemplate(tripId) }.getOrNull()
+                                    if (r?.refused == false) haptics.light() else haptics.reject()
+                                    templateSaid = r
+                                }
+                            }
+                            .semantics { contentDescription = save }
+                            .minTouch().testTag("trip-save-template"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(save, style = MekaType.itemMeta, color = Meka.colors.accent)
+                    }
+                    AnimatedVisibility(visible = templateSaid != null, enter = fadeIn(), exit = fadeOut()) {
+                        templateSaid?.let { r ->
+                            Text(r.line, style = MekaType.caption, color = if (r.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                                modifier = Modifier.fillMaxWidth().testTag("trip-template-said"))
+                        }
+                    }
                 }
             }
         }

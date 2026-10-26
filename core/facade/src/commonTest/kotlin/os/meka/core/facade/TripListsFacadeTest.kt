@@ -123,6 +123,39 @@ class TripListsFacadeTest {
     }
 
     @Test
+    fun aTripSavedAsATemplateStartsAnotherOnTheMacAndCanBeForgotten() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addTrip("Porto 2–5 Oct")
+        val porto = fold.tripsView.value.rows.single().id
+        assertEquals(null, fold.tripListsView.value.single().saveTemplate)
+        assertTrue(fold.saveTripTemplate(porto).refused)
+        fold.addTripItem(porto, "pack 2 chargers", TripList.PACK)
+        fold.addTripItem(porto, "buy sun cream", TripList.PACK)
+        assertEquals(TripListRules.SAVE_TEMPLATE, fold.tripListsView.value.single().saveTemplate)
+        assertEquals("Saved as a template · 2 things", fold.saveTripTemplate(porto).line)
+        assertEquals("Update the Porto template", fold.tripListsView.value.single().saveTemplate)
+
+        fold.syncNow(); mac.syncNow()
+        mac.addTrip("Lisbon 28–31 Oct")
+        val lisbon = mac.tripsView.value.rows.first { it.id != porto }.id
+        val offer = mac.tripListsView.value.single { it.tripId == lisbon }.startOptions.first()
+        assertEquals("Start from your Porto template", offer.line)
+        val tpl = assertNotNull(offer.templateId)
+        val copied = mac.startTripFromTemplate(tpl, lisbon)
+        assertEquals("Copied 2 things from your Porto template", copied.line)
+        assertEquals("Bought 0 of 1 · packed 0 of 1", mac.tripListsView.value.single { it.tripId == lisbon }.summary)
+        assertTrue(mac.undoTripListsCopy(copied.token))
+        assertEquals(TripListRules.LISTS_EMPTY, mac.tripListsView.value.single { it.tripId == lisbon }.summary)
+
+        assertTrue(mac.forgetTripTemplate(tpl))
+        mac.syncNow(); fold.syncNow()
+        assertEquals(TripListRules.SAVE_TEMPLATE, fold.tripListsView.value.single { it.tripId == porto }.saveTemplate)
+        // Porto, the last trip, is still offered.
+        assertEquals("Start from Porto trip", mac.tripListsView.value.single { it.tripId == lisbon }.startOptions.single().line)
+    }
+
+    @Test
     fun whosGoingAndTheLeaveTimeAreSetOnTheFoldAndShowOnTheMac() = runTest {
         val fold = core("android")
         val mac = core("mac")

@@ -5989,6 +5989,41 @@ final class CoreModel {
 
     func undoTripListsCopy(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripListsCopy(token: token) } }
 
+    /// Slice 2e: what "Save as a template for next time" said ("Saved as a template · 23 things").
+    struct TripTemplateSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Saves the trip's lists (never the ticks) as a template for next time; only a String crosses.
+    func saveTripTemplate(_ tripId: String) async -> TripTemplateSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.saveTripTemplate(tripId: tripId)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripTemplateSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 2e: starts the trip's empty lists from a saved template, unticked (Undo with undoTripListsCopy); Strings cross.
+    func startTripFromTemplate(_ templateId: String, to toTripId: String) async -> TripListCopy? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.startTripFromTemplate(templateId: templateId, toTripId: toTripId)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripListCopy(line: r.line, token: r.token, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 2e: forgets a saved template on every device.
+    func forgetTripTemplate(_ templateId: String) { MekaHaptics.tick(); run { _ = try await $0.forgetTripTemplate(templateId: templateId) } }
+
     /// Slice 2d: puts one person on or off the trip's who's going (`goer` a wire: "me", "partner", "kids"); only
     /// Strings and a Bool cross. The panel lights the chip at once; this writes it after.
     func setTripGoing(_ tripId: String, goer: String, on: Bool) async -> Bool {

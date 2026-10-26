@@ -6,7 +6,8 @@ import SwiftUI
 /// "pack 2 chargers" → To pack × 2, else the open tab; the tab follows where it went), Everyone / Me / Kids on To pack,
 /// and each list's groups with their count, folding on a click. A tick shows at once and is written after; ticked items
 /// sink and fade. Right-click → Remove, with Undo for a few seconds. Slice 2b: an empty trip offers "Start from <last
-/// trip>", copying its lists unticked, with Undo. Slice 2d: a click on the header (or "Add who's going and when you
+/// trip>", copying its lists unticked, with Undo; slice 2e adds "Save as a template for next time" at the foot and
+/// offers saved templates first (right-click → Forget this template). Slice 2d: a click on the header (or "Add who's going and when you
 /// leave") opens who's going (chips lit at once, written after) and Leave home at; the dates line counts the people and
 /// the countdown says when he leaves. Synced with the Fold.
 ///
@@ -35,6 +36,8 @@ struct TripListsPanel: View {
     @State private var goingPending: [String: Bool] = [:]
     @State private var leaveText = ""
     @State private var leaveSaid: CoreModel.TripLeaveSaid?
+    /// Slice 2e: what "Save as a template for next time" said.
+    @State private var templateSaid: CoreModel.TripTemplateSaid?
 
     var body: some View {
         let v = model.tripLists.first { $0.tripId == tripId }
@@ -60,6 +63,43 @@ struct TripListsPanel: View {
             for t in v.tabs { for g in t.groups { for r in g.rows { shown[r.id] = r.done } } }
             pending = pending.filter { id, done in shown[id] != nil && shown[id] != done }
         }
+    }
+
+    /// Slice 2b/2e: one way to start empty lists ("Start from your Lisbon template", "Start from Porto trip"); a
+    /// template's offer has Forget this template on right-click.
+    private func startOption(_ from: TripStartFrom) -> some View {
+        let templateId = from.templateId
+        let source = from.sourceTripId
+        return Button {
+            copying = true
+            Task {
+                let r: CoreModel.TripListCopy?
+                if let templateId {
+                    r = await model.startTripFromTemplate(templateId, to: tripId)
+                } else {
+                    r = await model.copyTripLists(from: source, to: tripId)
+                }
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { copied = r }
+                if r == nil || r?.refused == true { copying = false }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(from.line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                Text(from.sub).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(MekaSpace.m)
+            .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(from.spoken)
+        .contextMenu {
+            if let templateId {
+                Button(TripListRules.shared.FORGET_TEMPLATE) { model.forgetTripTemplate(templateId) }
+            }
+        }
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
     }
 
     /// Slice 2d: who's going (Me, his partner, the kids) and Leave home at.
@@ -204,28 +244,11 @@ struct TripListsPanel: View {
             .fixedSize(horizontal: false, vertical: true)
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-        if let from = v.startFrom, !copying {
-            Button {
-                copying = true
-                let source = from.sourceTripId
-                Task {
-                    let r = await model.copyTripLists(from: source, to: tripId)
-                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { copied = r }
-                    if r == nil || r?.refused == true { copying = false }
-                }
-            } label: {
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(from.line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
-                    Text(from.sub).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(MekaSpace.m)
-                .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                .contentShape(Rectangle())
+        // Slice 2e: every way to start empty lists: saved templates (newest first), then the last trip.
+        if !copying {
+            ForEach(v.startOptions, id: \.line) { from in
+                startOption(from)
             }
-            .buttonStyle(MekaPressStyle())
-            .accessibilityLabel(from.spoken)
-            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
         if let copied {
             HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
@@ -301,6 +324,33 @@ struct TripListsPanel: View {
                 }
                 ForEach(groups, id: \.key) { g in
                     group(g)
+                }
+                // Slice 2e: "Save as a template for next time" (or "Update the Lisbon template").
+                if let save = v.saveTemplate {
+                    Button {
+                        Task {
+                            let r = await model.saveTripTemplate(tripId)
+                            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { templateSaid = r }
+                        }
+                    } label: {
+                        Text(save).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.hairline, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .padding(.top, MekaSpace.m)
+                    .accessibilityHint("Saves these lists, unticked, for your next trip")
+                }
+                if let templateSaid {
+                    Text(templateSaid.line).font(MekaType.caption)
+                        .foregroundStyle(templateSaid.refused ? palette.accent : palette.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .transition(.opacity)
+                        .task(id: templateSaid) {
+                            try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
+                            if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.templateSaid = nil } }
+                        }
                 }
                 Text(TripListRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.m)

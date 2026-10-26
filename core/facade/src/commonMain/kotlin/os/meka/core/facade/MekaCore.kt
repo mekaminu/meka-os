@@ -4998,8 +4998,24 @@ class MekaCore(
         tripLists.copyFrom(all.firstOrNull { it.id == fromTripId }, all.firstOrNull { it.id == toTripId })
     }
 
-    /** Undo after [copyTripLists]: the copied items leave again. */
+    /** Undo after [copyTripLists] or [startTripFromTemplate]: the copied items leave again. */
     suspend fun undoTripListsCopy(token: String): Boolean = onCore { tripLists.undoCopy(token) }
+
+    /**
+     * Slice 2e, "Save as a template for next time": saves the trip [tripId]'s lists (never the ticks) as a template named
+     * for the trip ("Saved as a template · 23 things"); saving the same trip again updates it. Refused when the lists are empty.
+     */
+    suspend fun saveTripTemplate(tripId: String): os.meka.core.domain.TripTemplateSaved = onCore {
+        tripLists.saveTemplate(trips.items().firstOrNull { it.id == tripId })
+    }
+
+    /** Slice 2e: starts the trip [toTripId]'s empty lists from the saved template [templateId], unticked, with Undo's token. */
+    suspend fun startTripFromTemplate(templateId: String, toTripId: String): os.meka.core.domain.TripListCopied = onCore {
+        tripLists.copyFromTemplate(templateId, trips.items().firstOrNull { it.id == toTripId })
+    }
+
+    /** Slice 2e: forgets a saved template on every device; false when it isn't there. */
+    suspend fun forgetTripTemplate(templateId: String): Boolean = onCore { tripLists.forgetTemplate(templateId) }
 
     /**
      * Slice 2d: puts one person on or off the trip's who's going ([goer] a [os.meka.core.domain.TripGoer] wire: `me`,
@@ -12691,8 +12707,9 @@ class MekaCore(
         val tripListItems = tripLists.items()
         // Slice 2d: who's going names his partner and the children from About you.
         val tripAbout = aboutYou.profile().let { a -> os.meka.core.domain.AboutYou(partnerName = a.partnerName, children = a.children) }
-        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay, tripAbout)) {
-            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout)
+        val tripTemplates = tripLists.templates()
+        _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay, tripAbout, tripTemplates)) {
+            os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout, tripTemplates)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {
