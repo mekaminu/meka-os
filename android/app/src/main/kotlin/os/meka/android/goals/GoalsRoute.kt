@@ -125,6 +125,13 @@ fun GoalsRoute(core: MekaCore) {
     // Fasting rebuild slice 2: Goals' tile opens the Fasting screen as a pane; back drops it.
     var fastingOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = fastingOpen) { fastingOpen = false }
+    // Study plan, slice 1: a course opens as a pane like Fasting; a removed course offers Undo here.
+    val study by core.studyView.collectAsState()
+    var studyOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    var studyShown by rememberSaveable { mutableStateOf<String?>(null) }
+    var studyRemoved by remember { mutableStateOf<os.meka.core.domain.StudyRemoved?>(null) }
+    LaunchedEffect(studyRemoved) { if (studyRemoved != null) { kotlinx.coroutines.delay(os.meka.core.domain.TripRules.UNDO_MS); studyRemoved = null } }
+    val openStudy: (String) -> Unit = { id -> studyShown = id; studyOpen = id }
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background),
@@ -284,8 +291,26 @@ fun GoalsRoute(core: MekaCore) {
             )
         }
         item(key = "add-goal") { AddGoal { title, target, hz -> act { core.addGoal(title, target, hz) } } }
+        // Study plan, slice 1: courses with their modules and lessons, under the goals.
+        item(key = "study") {
+            StudySection(
+                study, Modifier.animateItem().padding(top = MekaSpace.xl), studyRemoved,
+                onUndo = { r -> studyRemoved = null; act { core.undoStudyRemoval(r.token) } },
+                onAdd = { text ->
+                    scope.launch {
+                        val r = runCatching { core.addStudyCourse(text) }.getOrNull()
+                        val id = r?.courseId
+                        if (id != null) { haptics.light(); openStudy(id) } else haptics.reject()
+                    }
+                },
+                onOpen = openStudy,
+            )
+        }
     }
     MekaPane(visible = fastingOpen) { FastingPane(core, onClose = { fastingOpen = false }) }
+    MekaPane(visible = studyOpen != null) {
+        studyShown?.let { id -> StudyPane(core, id, onClose = { studyOpen = null }, onRemoved = { studyRemoved = it }) }
+    }
     }
 }
 

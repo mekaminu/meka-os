@@ -3004,6 +3004,35 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.tripsView.value.rows.isEmpty)
     }
 
+    func testStudyReachesSwift() async throws {
+        // Study plan, slice 1: a course and its pasted outline added on the Mac split into modules and lessons, a tick
+        // reaches the view, and removing a lesson comes back with Undo.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "study-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let added = try await core.addStudyCourse(text: "Data analytics")
+        XCTAssertFalse(added.refused)
+        let id = try XCTUnwrap(added.courseId)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.line, StudyRules.shared.NO_LESSONS)
+        let r = try await core.addStudyLessons(courseId: id, text: "Module 1: Foundations\nWelcome 15 min\nModule 2: Core skills\nPivot tables 1 h")
+        XCTAssertEqual(r.line, "Added 2 lessons in 2 modules")
+        let c = try XCTUnwrap(core.studyView.value.course(id: id))
+        XCTAssertEqual(c.modules.map(\.name), ["1 · Foundations", "2 · Core skills"])
+        let welcome = try XCTUnwrap(c.modules.first?.lessons.first)
+        XCTAssertEqual(welcome.mins, "15 min")
+        let ticked = try await core.tickStudyLesson(id: welcome.id, done: true)
+        XCTAssertTrue(ticked.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.pct, 50)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.modules.first?.count, "Done")
+        let removed = try await core.removeStudyLesson(id: welcome.id)
+        XCTAssertEqual(removed?.line, "Removed Welcome")
+        let back = try await core.undoStudyRemoval(token: try XCTUnwrap(removed?.token))
+        XCTAssertTrue(back.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.total, 2)
+    }
+
     func testTripListsReachSwift() async throws {
         // Trip lists, slice 1: an item typed on the Mac lands on the list its words choose, the tab and filter cross
         // as Swift enums, and a tick reaches the view.

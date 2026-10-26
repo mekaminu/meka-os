@@ -1,0 +1,126 @@
+package os.meka.android.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import com.github.takahirom.roborazzi.captureRoboImage
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.TimeZone
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaTheme
+import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.goals.StudyPane
+import os.meka.core.facade.MekaCore
+import os.meka.core.sync.InMemoryReplicaStore
+import kotlin.random.Random
+import kotlin.test.assertEquals
+
+/**
+ * Study plan, slice 1: a course's page on the Fold's cover and inner screens (Dark, and Light on the cover), read for
+ * nonsense and words broken in two, saved under `study/`; and a lesson's tick shows in the next frame. Invented course
+ * (rule 13).
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], application = ShotApplication::class)
+class StudyScreensTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val now = 1_793_008_800_000L // Mon 26 Oct 2026, 10:00 in London
+
+    private fun core(): MekaCore = MekaCore(
+        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+        secureRandom = Random(43), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+    )
+
+    private val outline = """
+        Module 1: Foundations
+        Welcome and setup 30 min
+        Spreadsheets refresher 45 min
+        Cleaning data 45 min
+        Module 2: Core skills
+        Pivot tables 1 h
+        Charts that say something 40 min
+        Lookups 50 min
+        Module 3: Putting it together
+        A small project 1 h
+        Presenting findings 45 min
+    """.trimIndent()
+
+    private fun filled(theme: ThemeChoice): Pair<MekaCore, String> {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, theme)
+        val core = core()
+        context.useCoreForScreens(core)
+        val id = runBlocking {
+            core.tick()
+            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            check(!core.addStudyLessons(id, outline).refused)
+            core.studyView.value.course(id)!!.modules.first().lessons.forEach { core.tickStudyLesson(it.id, true) }
+            core.tick()
+            id
+        }
+        return core to id
+    }
+
+    private fun show(core: MekaCore, id: String) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    StudyPane(core, id, onClose = {}, onRemoved = {})
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(3_000L)
+        compose.waitForIdle()
+    }
+
+    private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
+        val (core, id) = filled(theme)
+        show(core, id)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", name))
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertShows(compose, name, "Data analytics certificate")
+        ScreenShots.assertShows(compose, name, "3 of 8 lessons · about 4½ h left")
+        ScreenShots.assertShows(compose, name, "2 · Core skills")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER) fun courseCoverDark() = shoot("cover-dark-course")
+    @Test @Config(qualifiers = ScreenShots.COVER) fun courseCoverLight() = shoot("cover-light-course", ThemeChoice.LIGHT)
+    @Test @Config(qualifiers = ScreenShots.INNER) fun courseInnerDark() = shoot("inner-dark-course")
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun aLessonTickShowsInTheNextFrame() {
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        // Module 2 is the first not yet done, so it is open.
+        val pivot = core.studyView.value.course(id)!!.modules[1].lessons.first()
+        compose.onNodeWithTag("study-lesson-${pivot.id}").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithTag("study-lesson-${pivot.id}")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Done"))
+        // The core's write lands after: the view then says the same.
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.first().done }
+        assertEquals(4, core.studyView.value.course(id)!!.done)
+    }
+}

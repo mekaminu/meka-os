@@ -159,6 +159,10 @@ object EntityTypes {
     const val TRIP_ITEM = "trip_item"
     /** Trip lists, slice 2e (2026-10-26): a trip's lists saved as a template for next time (see [TripLists.saveTemplate]). */
     const val TRIP_TEMPLATE = "trip_template"
+    /** Study plan, slice 1 (2026-10-26): a course under Goals (see [Study]). */
+    const val STUDY_COURSE = "study_course"
+    /** Study plan, slice 1 (2026-10-26): one lesson of a course, in its module (see [Study]). */
+    const val STUDY_LESSON = "study_lesson"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -171,6 +175,7 @@ object EntityTypes {
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
         TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM, TRIP_TEMPLATE,
+        STUDY_COURSE, STUDY_LESSON,
     )
 }
 
@@ -587,6 +592,10 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.TRIP_ITEM -> MergePolicy.Lww
         entityType == EntityTypes.TRIP_TEMPLATE && field == TripTemplateFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.TRIP_TEMPLATE -> MergePolicy.Lww
+        // Study plan: a removed lesson is gone for good (Undo writes a copy); a course's `removed`, a tick, the rest LWW.
+        entityType == EntityTypes.STUDY_LESSON && field == StudyLessonFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.STUDY_LESSON -> MergePolicy.Lww
+        entityType == EntityTypes.STUDY_COURSE -> MergePolicy.Lww
         // Vault documents: one removed on any device is gone for good; the title and date, the latest edit wins.
         entityType == EntityTypes.VAULT_DOC && field == VaultDocFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.VAULT_DOC -> MergePolicy.Lww

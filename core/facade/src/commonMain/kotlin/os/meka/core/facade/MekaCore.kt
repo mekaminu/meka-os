@@ -190,6 +190,8 @@ class MekaCore(
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     /** Trip lists, slice 1 (2026-10-26): To buy, To pack and Before we leave on each trip. */
     private val tripLists = os.meka.core.domain.TripLists(replica, ids::next, nowMs, shopping)
+    /** Study plan, slice 1 (2026-10-26): courses under Goals, their modules and lessons. */
+    private val study = os.meka.core.domain.Study(replica, ids::next, nowMs)
     private val documents = os.meka.core.domain.Documents(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val parkingTimers = os.meka.core.domain.ParkingTimers(replica)
@@ -584,6 +586,14 @@ class MekaCore(
      * Packed progress; one per trip in Trips (on now, to come, just ended, then past), found by [os.meka.core.domain.TripListsView.tripId].
      */
     val tripListsView: StateFlow<List<os.meka.core.domain.TripListsView>> = _tripLists.asStateFlow()
+
+    private val _study = MutableStateFlow(os.meka.core.domain.StudyView.EMPTY)
+
+    /**
+     * Study plan, slice 1 (Meka 2026-10-26): the courses under Goals, each with its ring, its modules and lessons in
+     * course order, "5 of 24 lessons · about 18 h left" and the next lesson; found by [os.meka.core.domain.StudyView.course].
+     */
+    val studyView: StateFlow<os.meka.core.domain.StudyView> = _study.asStateFlow()
 
     /**
      * Travel mode completeness, slice 2: the UK's clock and each destination's (by the trip's name), so a booking at the
@@ -4991,6 +5001,33 @@ class MekaCore(
 
     /** Undo after [removeTripItem]: the item comes back as it was. */
     suspend fun undoTripItemRemoval(token: String): Boolean = onCore { tripLists.undoRemove(token) }
+
+    // ---- Study plan (slice 1, 2026-10-26; Goals → Study → a course) ----
+
+    /**
+     * Adds a course named by [text]'s first line; any lines after it are its outline ([addStudyLessons]). Refused
+     * (nothing written) when there's no name; the result carries the new course's id so the app can open it.
+     */
+    suspend fun addStudyCourse(text: String): os.meka.core.domain.StudyAdded = onCore { study.addCourse(text) }
+
+    /**
+     * Adds the lessons a pasted or typed outline lists to the course [courseId], after its last lesson: one lesson a
+     * line, "Module 2: Core skills" starts a module, "45 min" at the end is its length ([os.meka.core.domain.StudyRules.readOutline]).
+     * Refused when there's no lesson in it or the course has gone.
+     */
+    suspend fun addStudyLessons(courseId: String, text: String): os.meka.core.domain.StudyAdded = onCore { study.addLessons(courseId, text) }
+
+    /** Ticks or unticks one lesson (the apps show it at once and call this after); false when nothing changed. */
+    suspend fun tickStudyLesson(id: String, done: Boolean): Boolean = onCore { study.tick(id, done) }
+
+    /** Removes one lesson: "Removed Pivot tables" with Undo's token; null when it isn't there. */
+    suspend fun removeStudyLesson(id: String): os.meka.core.domain.StudyRemoved? = onCore { study.removeLesson(id) }
+
+    /** Removes a course and its lessons: "Removed Data analytics" with Undo's token; null when it isn't there. */
+    suspend fun removeStudyCourse(id: String): os.meka.core.domain.StudyRemoved? = onCore { study.removeCourse(id) }
+
+    /** Undo after [removeStudyLesson] or [removeStudyCourse]: it comes back as it was. */
+    suspend fun undoStudyRemoval(token: String): Boolean = onCore { study.undoRemove(token) }
 
     /**
      * Slice 2b, "Start from last trip": copies the trip [fromTripId]'s lists onto [toTripId]'s empty ones, unticked
@@ -12736,6 +12773,11 @@ class MekaCore(
         val tripSky = tripWeather.forecast()
         _tripLists.value = timed("Trip lists") { viewMemo.keep("Trip lists", listOf(tripItems, tripListItems, todayDay, tripAbout, tripTemplates, tripSky)) {
             os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout, tripTemplates, tripSky)
+        } }
+        val studyCourses = study.courses()
+        val studyLessons = study.lessons()
+        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons)) {
+            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

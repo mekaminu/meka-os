@@ -99,6 +99,8 @@ struct GoalsScreen: View {
                     Text("\(finished) finished").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 AddGoalRow(palette: palette).padding(.top, MekaSpace.m)
+                // Study plan, slice 1: courses with their modules and lessons, under the goals.
+                StudySection(palette: palette).padding(.top, MekaSpace.xl)
             }
             .frame(maxWidth: 720, alignment: .leading)
             .padding(.horizontal, MekaSpace.gutterWide)

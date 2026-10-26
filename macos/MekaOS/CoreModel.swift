@@ -172,6 +172,8 @@ final class CoreModel {
     private(set) var trips: TripsView?
     /// Trip lists (slice 1): each trip's To buy, To pack and Before we leave, by trip id.
     private(set) var tripLists: [TripListsView] = []
+    /// Study plan (slice 1): the courses under Goals, with their modules and lessons.
+    private(set) var study: StudyView?
     /// Ask → More → Trips.
     var showTrips = false
     /// The Vault (V2, slice 1): the documents and when they run out.
@@ -594,6 +596,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.tripListsView { self?.tripLists = l }
+        })
+        observers.append(Task { [weak self] in
+            for await v in core.studyView { self?.study = v }
         })
         observers.append(Task { [weak self] in
             for await d in core.documentsView { self?.documents = d }
@@ -5919,6 +5924,79 @@ final class CoreModel {
 
     /// Undo: puts back exactly what the removal took.
     func undoTripRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripRemoval(token: token) } }
+
+    // MARK: Study plan (slice 1)
+
+    /// What adding a course or lessons said, and the course it went on.
+    struct StudySaid: Equatable {
+        let line: String
+        let refused: Bool
+        let courseId: String?
+    }
+
+    /// Adds a course named by the typed line; only a String crosses. The sheet opens it once it's there.
+    func addStudyCourse(_ text: String) async -> StudySaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addStudyCourse(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return StudySaid(line: r.line, refused: r.refused, courseId: r.courseId)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Adds the lessons a pasted outline lists; Strings cross once.
+    func addStudyLessons(_ courseId: String, _ text: String) async -> StudySaid? {
+        guard let core, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        do {
+            let r = try await core.addStudyLessons(courseId: courseId, text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return StudySaid(line: r.line, refused: r.refused, courseId: r.courseId)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Ticks or unticks one lesson; the sheet already shows it (the rule for every tap), this writes it after.
+    func tickStudyLesson(_ id: String, done: Bool) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.tickStudyLesson(id: id, done: done); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Removes one lesson: "Removed Pivot tables" with Undo's token.
+    func removeStudyLesson(_ id: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let r = try await core.removeStudyLesson(id: id) else { return nil }
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Removes a course and its lessons: "Removed Data analytics" with Undo's token.
+    func removeStudyCourse(_ id: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let r = try await core.removeStudyCourse(id: id) else { return nil }
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func undoStudyRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoStudyRemoval(token: token) } }
 
     // MARK: Trip lists (slice 1)
 
