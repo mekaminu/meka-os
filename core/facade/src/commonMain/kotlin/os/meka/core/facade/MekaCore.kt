@@ -4977,7 +4977,10 @@ class MekaCore(
     suspend fun addTripItem(tripId: String, text: String, open: os.meka.core.domain.TripList): os.meka.core.domain.TripListAdded =
         onCore {
             val trip = trips.items().firstOrNull { it.id == tripId }
-            tripLists.add(tripId, text, open, tripExists = trip != null, tripLabel = trip?.let(os.meka.core.domain.TripListRules::tripLabel))
+            tripLists.add(
+                tripId, text, open, tripExists = trip != null, tripLabel = trip?.let(os.meka.core.domain.TripListRules::tripLabel),
+                startDay = trip?.startDay, leaveMinute = trip?.leaveMinute,
+            )
         }
 
     /** Ticks or unticks one list item (the apps show it at once and call this after); false when nothing changed. */
@@ -12881,6 +12884,7 @@ class MekaCore(
             lifeAdmin = _lifeAdmin.value,
             occasions = gifts.items(),
             trips = trips.items(),
+            tripItems = tripLists.items(),
             documents = documents.items(),
             sessionAskGraceMin = if (workoutsInBackground) os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN else 0,
             wake = currentWake(),

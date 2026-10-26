@@ -94,7 +94,7 @@ object TripListAskRules {
         val entries = mutableListOf<TripListEntry>()
         for (part in body.split(',', ';', '\n').map { it.trim() }.filter { it.isNotEmpty() }) {
             val bare = part.removePrefix("and ").trim()
-            val e = TripListRules.read(bare, open) ?: continue
+            val e = TripListRules.read(bare, open, trip.leaveMinute) ?: continue
             open = e.list
             if ((e.list to e.text.lowercase()) in waiting) continue
             if (entries.any { it.list == e.list && it.text.equals(e.text, ignoreCase = true) }) continue

@@ -38,7 +38,17 @@ object TripItemFields {
     const val SHOP_MADE = "shopMade"
     /** Slice 2e: the [TripTemplateFields] template this item belongs to; such an item has no [TRIP] and is never shown on a trip. */
     const val TEMPLATE = "templateId"
+    /**
+     * Slice 3a, Before we leave reminders: the reminder's day, counted from the trip's first day (-1 the night before,
+     * 0 on the day), so it moves with the trip's dates and copies into a template; absent for none.
+     */
+    const val REMIND_DAY = "remindDay"
+    /** Slice 3a: the reminder's minute of that day (21:00 = 1260). */
+    const val REMIND_MIN = "remindMin"
 }
+
+/** Slice 3a: a Before we leave job's reminder, [dayOffset] days from the trip's first day at [minute]. */
+data class TripRemind(val dayOffset: Int, val minute: Int)
 
 /**
  * Slice 2e, "Save as a template for next time" (ADR-008 addendum 2026-10-26): one saved set of lists, named for the trip
@@ -63,7 +73,7 @@ data class TripTemplateSaved(val line: String, val refused: Boolean)
 enum class TripList(val wire: String, val label: String, val hint: String, val empty: String) {
     BUY("buy", "To buy", "Add something to buy…", "Nothing to buy yet. Type it above: \"sun cream\", \"plug adapters × 2\"."),
     PACK("pack", "To pack", "Add something to pack…", "Nothing to pack yet. Type it above: \"passports × 4\", \"2 chargers\"."),
-    LEAVE("leave", "Before we leave", "Add a job before you leave…", "No jobs yet. Type them above: \"put the bins out\", \"check in online\".");
+    LEAVE("leave", "Before we leave", "Add a job before you leave…", "No jobs yet. Type them above: \"put the bins out at 9pm\", \"check in online on the day\". A time sets a reminder.");
 
     companion object { fun of(wire: String?): TripList = entries.firstOrNull { it.wire == wire } ?: PACK }
 }
@@ -80,10 +90,12 @@ data class TripListItem(
     val who: TripWho, val done: Boolean, val doneAtMs: Long?, val addedAtMs: Long,
     /** Slice 2: the linked shopping item (To buy only), whose Got decides [done] while it is on the list. */
     val shopId: String? = null,
+    /** Slice 3a: Before we leave only. */
+    val remind: TripRemind? = null,
 )
 
-/** A typed item ([TripListRules.read]). */
-data class TripListEntry(val list: TripList, val text: String, val group: String, val qty: Int?, val who: TripWho)
+/** A typed item ([TripListRules.read]); slice 3a: a Before we leave job may carry its [remind]er. */
+data class TripListEntry(val list: TripList, val text: String, val group: String, val qty: Int?, val who: TripWho, val remind: TripRemind? = null)
 
 /** One row: "T-shirts" · "Me" · "× 5", [done] drawn struck through and faded. */
 data class TripListRow(val id: String, val text: String, val sub: String, val qty: String, val done: Boolean, val spoken: String)
@@ -200,6 +212,13 @@ object TripListRules {
     const val FORGET_TEMPLATE = "Forget this template"
     /** At most this many templates are offered on a new trip. */
     const val MAX_TEMPLATE_OFFERS = 3
+    /** Slice 3a: "the night before" with no time reminds at 21:00. */
+    const val NIGHT_BEFORE_MIN = 21 * 60
+    /** Slice 3a: "on the day" with no time reminds this long before he leaves home (07:00 when no leave time is set). */
+    const val ON_THE_DAY_LEAD_MIN = 30
+    const val ON_THE_DAY_MIN = 7 * 60
+    /** Slice 3a: a job's reminder stands this long after its time (until ticked), then goes quietly. */
+    const val REMIND_STANDS_MIN = 12 * 60
 
     /** Each list's groups in the order they show; [ADDED] (anything not matched) comes last. */
     val GROUPS: Map<TripList, List<String>> = mapOf(
@@ -277,7 +296,7 @@ object TripListRules {
      * it ("t-shirts × 5", "x5") is its quantity; "for the kids"/"kids'" or "for me"/"my" says whose (packing only).
      * Null when nothing is left to add.
      */
-    fun read(text: String, open: TripList): TripListEntry? {
+    fun read(text: String, open: TripList, leaveMinute: Int? = null): TripListEntry? {
         var t = text.trim().replace(Regex("\\s+"), " ").trimEnd('.', '!', ',')
         if (t.isEmpty()) return null
         var list = open
@@ -296,6 +315,9 @@ object TripListRules {
         }
         // "… to my trip list", "… for the trip"
         t = t.replace(Regex("(?i)\\s+(to|on|for)\\s+(the|my|our)\\s+trip(\\s+list)?$"), "").trim()
+        // Slice 3a: "put the bins out at 9pm", "check in online at 06:30", "charge everything the night before".
+        var remind: TripRemind? = null
+        if (list == TripList.LEAVE) readRemind(t, leaveMinute)?.let { (rest, r) -> t = rest; remind = r }
         var who = TripWho.EVERYONE
         val kids = Regex("(?i)\\s+for\\s+(the\\s+)?(kids|children|boys|girls)$")
         val me = Regex("(?i)\\s+for\\s+me$")
@@ -329,7 +351,80 @@ object TripListRules {
         if (t.isEmpty() || t.none { it.isLetterOrDigit() }) return null
         val name = t.replaceFirstChar { it.uppercaseChar() }
         if (list != TripList.PACK) who = TripWho.EVERYONE
-        return TripListEntry(list, name, groupOf(list, name, who), qty, who)
+        return TripListEntry(list, name, groupOf(list, name, who), qty, who, remind.takeIf { list == TripList.LEAVE })
+    }
+
+    private const val DAY_WORDS =
+        "the night before|the evening before|the day before|the night before we leave|on the day|that morning|the morning we leave|on the morning"
+    private val REMIND_TIME = Regex(
+        "(?i)[\\s,]+(?:remind(?:\\s+me)?\\s+)?(?:($DAY_WORDS)\\s+)?(?:at\\s+(\\d{1,2}(?:[:.]\\d{2})?\\s*(?:am|pm)?)|(\\d{1,2}(?:[:.]\\d{2})?\\s*(?:am|pm)|\\d{1,2}[:.]\\d{2}))(?:\\s+($DAY_WORDS))?$",
+    )
+    private val REMIND_DAY = Regex("(?i)[\\s,]+(?:remind(?:\\s+me)?\\s+)?($DAY_WORDS)$")
+
+    private fun offsetOf(words: String): Int = if (words.lowercase().contains("before")) -1 else 0
+
+    /**
+     * Slice 3a: a Before we leave job's reminder at the end of its words, and the words without it: "at 9pm" / "21:00" /
+     * "at 6.30am", with "the night before" or "on the day" either side, or the day words alone (the night before at
+     * [NIGHT_BEFORE_MIN]; on the day [ON_THE_DAY_LEAD_MIN] before [leaveMinute], else [ON_THE_DAY_MIN]). A time with no
+     * day is the night before when it is after [leaveMinute] (after noon when that isn't set), else on the day. Null when
+     * the words name no reminder, or nothing would be left of the job.
+     */
+    fun readRemind(text: String, leaveMinute: Int? = null): Pair<String, TripRemind>? {
+        REMIND_TIME.find(text)?.let { m ->
+            val minute = readLeave(m.groupValues[2].ifEmpty { m.groupValues[3] }) ?: return@let
+            val day = m.groupValues[1].ifEmpty { m.groupValues[4] }
+            val offset = if (day.isNotEmpty()) offsetOf(day) else if (minute > (leaveMinute ?: (12 * 60 - 1))) -1 else 0
+            val rest = jobOf(text.substring(0, m.range.first)) ?: return null
+            return rest to TripRemind(offset, minute)
+        }
+        REMIND_DAY.find(text)?.let { m ->
+            val offset = offsetOf(m.groupValues[1])
+            val minute = if (offset < 0) NIGHT_BEFORE_MIN else leaveMinute?.let { (it - ON_THE_DAY_LEAD_MIN).coerceAtLeast(0) } ?: ON_THE_DAY_MIN
+            val rest = jobOf(text.substring(0, m.range.first)) ?: return null
+            return rest to TripRemind(offset, minute)
+        }
+        return null
+    }
+
+    /** The job's words before its reminder, without a dangling "at" / "remind me"; null when none are left. */
+    private fun jobOf(before: String): String? {
+        val rest = before.trim().replace(Regex("(?i)(^|[\\s,]+)(at|remind(\\s+me)?)$"), "").trim(' ', ',')
+        return rest.takeIf { r -> r.any { it.isLetterOrDigit() } }
+    }
+
+    /** Slice 3a: "Remind Tue 21:00" for a trip starting on [startDay]. */
+    fun remindLabel(startDay: Long, r: TripRemind): String {
+        val day = startDay + r.dayOffset
+        return "Remind ${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1]} ${LocalClock.formatMinute(r.minute)}"
+    }
+
+    private fun remindOf(s: Map<String, FieldValue>): TripRemind? {
+        val min = s[TripItemFields.REMIND_MIN]?.longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 } ?: return null
+        val day = s[TripItemFields.REMIND_DAY]?.longOrNull?.toInt()?.coerceIn(-7, 0) ?: return null
+        return TripRemind(day, min)
+    }
+
+    /**
+     * Slice 3a: each Before we leave job with a reminder, not yet ticked, as a heads-up at its time ("Before Lisbon:
+     * Put the bins out" · "Lisbon trip · Wed 28 Oct"), standing [REMIND_STANDS_MIN] or until ticked. Jobs of trips
+     * already over, and reminders more than a day gone, are left out.
+     */
+    fun notices(trips: List<TripItem>, items: List<TripListItem>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val byId = trips.associateBy { it.id }
+        return items.mapNotNull { i ->
+            val r = i.remind ?: return@mapNotNull null
+            if (i.list != TripList.LEAVE || i.done) return@mapNotNull null
+            val trip = byId[i.tripId] ?: return@mapNotNull null
+            val at = cal.toEpochMs(trip.startDay + r.dayOffset, r.minute)
+            val until = at + REMIND_STANDS_MIN * 60_000L
+            if (nowMs >= until || cal.epochDayOf(nowMs) > trip.endDay) return@mapNotNull null
+            Notice(
+                key = "trip-job:${i.id}:${trip.startDay + r.dayOffset}:${r.minute}", source = NoticeSource.TRIP_JOBS, tier = NoticeTier.HEADS_UP,
+                title = "Before ${trip.name}: ${i.text}", text = "${tripLabel(trip)} · ${CivilDate.shortLabel(trip.startDay)}",
+                atMs = at, target = NoticeTarget.TODAY, expiresAtMs = until,
+            )
+        }
     }
 
     /** The group [text] falls in on [list]: the first group with one of its words, then Kids for a kid's thing, else [ADDED]. */
@@ -365,6 +460,7 @@ object TripListRules {
             s.f(TripItemFields.DONE_AT).longOrNull,
             s.f(TripItemFields.ADDED_AT).longOrNull ?: 0L,
             shopId,
+            remindOf(s).takeIf { list == TripList.LEAVE },
         )
     }.sortedWith(compareBy<TripListItem> { it.addedAtMs }.thenBy { it.id })
 
@@ -375,6 +471,10 @@ object TripListRules {
         put(TripItemFields.GROUP, e.group.fv())
         e.qty?.let { put(TripItemFields.QTY, it.toLong().fv()) }
         if (e.list == TripList.PACK) put(TripItemFields.WHO, e.who.wire.fv())
+        e.remind?.takeIf { e.list == TripList.LEAVE }?.let {
+            put(TripItemFields.REMIND_DAY, it.dayOffset.toLong().fv())
+            put(TripItemFields.REMIND_MIN, it.minute.toLong().fv())
+        }
         put(TripItemFields.DONE, false.fv())
         put(TripItemFields.ADDED_AT, nowMs.fv())
     }
@@ -388,8 +488,9 @@ object TripListRules {
     fun qtyLabel(qty: Int?): String = qty?.takeIf { it > 1 }?.let { "× $it" }.orEmpty()
 
     /** "Added Sun cream to To buy · Pharmacy", "Added Chargers × 2 to To pack · Tech". */
-    fun addedLine(e: TripListEntry): String =
-        "Added ${e.text}" + (e.qty?.let { " × $it" } ?: "") + " to ${e.list.label}" + (e.group.takeIf { it != ADDED }?.let { " · $it" } ?: "")
+    fun addedLine(e: TripListEntry, startDay: Long? = null): String =
+        "Added ${e.text}" + (e.qty?.let { " × $it" } ?: "") + " to ${e.list.label}" + (e.group.takeIf { it != ADDED }?.let { " · $it" } ?: "") +
+            (if (startDay != null) e.remind?.let { " · " + remindLabel(startDay, it).replaceFirstChar { c -> c.lowercaseChar() } } else null).orEmpty()
 
     fun removedLine(i: TripListItem): String = "Removed ${i.text}"
 
@@ -409,15 +510,17 @@ object TripListRules {
         return TripListGroup(key, name, if (all) "All done" else "$done of ${rows.size}", all, rows)
     }
 
-    private fun row(i: TripListItem): TripListRow {
+    private fun row(i: TripListItem, startDay: Long): TripListRow {
         val sub = when {
             i.list == TripList.PACK -> i.who.label
             i.shopId != null -> ON_SHOPPING
+            i.remind != null && !i.done -> remindLabel(startDay, i.remind)
             else -> ""
         }
         val qty = qtyLabel(i.qty)
         val spoken = listOfNotNull(
-            i.text, qty.takeIf { it.isNotEmpty() }?.let { "times ${i.qty}" }, sub.takeIf { it.isNotEmpty() }?.let { "for ${it.lowercase()}" },
+            i.text, qty.takeIf { it.isNotEmpty() }?.let { "times ${i.qty}" },
+            sub.takeIf { it.isNotEmpty() }?.let { if (i.list == TripList.LEAVE) it.replaceFirstChar { c -> c.lowercaseChar() } else "for ${it.lowercase()}" },
             if (i.done) "ticked" else null,
         ).joinToString(", ")
         return TripListRow(i.id, i.text, sub, qty, i.done, spoken)
@@ -429,14 +532,14 @@ object TripListRules {
         return TripProgress(label, if (items.isEmpty()) NOTHING_YET else "$done of ${items.size}", if (items.isEmpty()) 0f else done.toFloat() / items.size, done, items.size)
     }
 
-    private fun tab(list: TripList, items: List<TripListItem>): TripListTab {
+    private fun tab(list: TripList, items: List<TripListItem>, startDay: Long): TripListTab {
         val mine = items.filter { it.list == list }
         val byGroup = mine.groupBy { it.group }
         val groups = GROUPS.getValue(list).mapNotNull { g ->
             val inGroup = byGroup[g] ?: return@mapNotNull null
             // To do in the order added; ticked ones sink below, the latest ticked last.
             val sorted = inGroup.filter { !it.done } + inGroup.filter { it.done }.sortedWith(compareBy<TripListItem> { it.doneAtMs ?: 0L }.thenBy { it.addedAtMs })
-            group("${list.wire}:$g", g, sorted.map(::row))
+            group("${list.wire}:$g", g, sorted.map { row(it, startDay) })
         }
         return TripListTab(list, list.label, list.hint, list.empty, groups, mine.count { !it.done })
     }
@@ -571,7 +674,8 @@ object TripListRules {
             val group = s.f(TripItemFields.GROUP).textOrNull?.takeIf { it in GROUPS.getValue(list) } ?: groupOf(list, text)
             val who = if (list == TripList.PACK) TripWho.of(s.f(TripItemFields.WHO).textOrNull) else TripWho.EVERYONE
             Triple(tpl, (s.f(TripItemFields.ADDED_AT).longOrNull ?: 0L) to id,
-                TripListEntry(list, text, group, s.f(TripItemFields.QTY).longOrNull?.toInt()?.takeIf { it > 1 }, who))
+                TripListEntry(list, text, group, s.f(TripItemFields.QTY).longOrNull?.toInt()?.takeIf { it > 1 }, who,
+                    remindOf(s).takeIf { list == TripList.LEAVE }))
         }.groupBy({ it.first }) { it }.mapValues { (_, l) -> l.sortedWith(compareBy({ it.second.first }, { it.second.second })).map { it.third } }
 
     /** Slice 2e: a template's offer: "Start from your Lisbon template" · "23 things, all unticked". */
@@ -614,7 +718,7 @@ object TripListRules {
             countdownLit = today >= trip.startDay - 2 && today <= trip.endDay,
             bought = bought,
             packed = packed,
-            tabs = TripList.entries.map { tab(it, items) },
+            tabs = TripList.entries.map { tab(it, items, trip.startDay) },
             summary = summary,
             startFrom = options.firstOrNull(),
             going = goingChips(trip, about),
@@ -657,11 +761,15 @@ class TripLists(
      * Adds what [text] says to the trip [tripId] ([TripListRules.read]); refused (nothing written) when there's nothing
      * to add or the trip is gone. A To buy item also goes on the shopping list, named for [tripLabel] when given.
      */
-    fun add(tripId: String, text: String, open: TripList, tripExists: Boolean, tripLabel: String? = null): TripListAdded {
+    fun add(
+        tripId: String, text: String, open: TripList, tripExists: Boolean, tripLabel: String? = null,
+        /** Slice 3a: the trip's first day and leave time, for a job's reminder ("at 9pm" the night before). */
+        startDay: Long? = null, leaveMinute: Int? = null,
+    ): TripListAdded {
         if (!tripExists) return TripListAdded(TripListRules.GONE, open, refused = true)
-        val e = TripListRules.read(text, open) ?: return TripListAdded(TripListRules.NOT_READ, open, refused = true)
+        val e = TripListRules.read(text, open, leaveMinute) ?: return TripListAdded(TripListRules.NOT_READ, open, refused = true)
         addEntry(tripId, e, tripLabel)
-        return TripListAdded(TripListRules.addedLine(e), e.list, refused = false)
+        return TripListAdded(TripListRules.addedLine(e, startDay), e.list, refused = false)
     }
 
     /**
@@ -730,7 +838,7 @@ class TripLists(
         val label = TripListRules.tripLabel(to)
         val ids = source.mapIndexed { i, item ->
             val id = newId()
-            val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who)
+            val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who, item.remind)
             // One millisecond apart, so the copies keep the source's order.
             replica.commitLocal(EntityTypes.TRIP_ITEM, id, TripListRules.fields(to.id, e, now + i))
             if (item.list == TripList.BUY) link(id, item.text, item.qty, label)
@@ -766,7 +874,7 @@ class TripLists(
             TripTemplateFields.NAME to name.fv(), TripTemplateFields.SOURCE to trip.id.fv(), TripTemplateFields.ADDED_AT to now.fv(),
         ))
         source.forEachIndexed { i, item ->
-            val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who)
+            val e = TripListEntry(item.list, item.text, item.group, item.qty, item.who, item.remind)
             replica.commitLocal(EntityTypes.TRIP_ITEM, newId(), TripListRules.fields("", e, now + i) - TripItemFields.TRIP + (TripItemFields.TEMPLATE to id.fv()))
         }
         return TripTemplateSaved(TripListRules.templateSavedLine(name, source.size, replaced.isNotEmpty()), refused = false)

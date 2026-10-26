@@ -1,7 +1,7 @@
 ---
 id: trips
 title: Trips
-keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, add to my trip list, what's left to pack
+keywords: trips, trip timeline, bookings, add a trip, travel mode, packing list, trip list, to pack, to buy, before we leave, start from last trip, copy lists, save as a template, trip template, who's going, leave time, leave home, reminder, remind me, the night before, add to my trip list, what's left to pack
 data: yes
 fold: TRIPS
 fold_where: Ask → Life → Trips
@@ -19,6 +19,8 @@ tip: Removed a booking or a trip by mistake? Tap Undo on the line that says what
 tip: Every trip has Lists: To buy, To pack and Before we leave. Type "buy sun cream" or "pack 2 chargers" and it goes on the right list, in its group (Pharmacy, Documents, Tech…), with "× 2"; anything else goes on the list you have open.
 tip: On To pack, "for the kids" or "my …" says whose it is, and Everyone · Me · Kids shows just theirs. A tick shows at once on the Fold and the Mac and sinks to the bottom; Bought and Packed count how far you are. Press and hold an item (right-click on the Mac) to remove it, with Undo.
 tip: Anything on a trip's To buy is on your shopping list too, marked "For Barcelona trip". Tick it in either place (in the shop, or on the trip) and both are ticked, on the Fold and the Mac; if it was already on your shopping list, the trip shares it rather than adding it twice.
+tip: On Before we leave, a time at the end of a job sets a reminder: "put the bins out at 9pm" reminds you the night before at 21:00, "check in online at 06:30" on the day ("the night before" or "on the day" choose the day yourself).
+tip: A job's row then says "Remind Tue 21:00" and a heads-up comes at that time until you tick it. It moves with the trip's dates, and comes along when you start from a last trip or a template.
 tip: Tap a trip's name on its Lists to say who's going (you, your partner, the kids, named from About you) and when you leave home ("06:30"); the dates then say "4 people" and the countdown "leave home 06:30 Wednesday". With the kids not going, To pack drops its Kids filter.
 tip: A new trip with empty lists offers "Start from" your last trip: one tap copies its To buy, To pack and Before we leave, all unticked (Undo takes them off again), and the To buy ones go on your shopping list for the new trip.
 tip: At the foot of a trip's Lists, "Save as a template for next time" keeps them (never the ticks) under the trip's name. A new trip's empty lists then offer "Start from your Lisbon template" first; press and hold it (right-click on the Mac) to forget it. Saving the same trip again updates its template.

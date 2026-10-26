@@ -191,4 +191,23 @@ class TripListsScreensTest {
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.tripListsView.value.single().going.last().on }
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun aJobsReminderShowsOnItsRow() {
+        val (core, tripId) = filled(ThemeChoice.DARK)
+        runBlocking {
+            check(!core.addTripItem(tripId, "before we leave: charge everything at 9pm", TripList.PACK).refused)
+            core.tick()
+        }
+        show(core, tripId)
+        compose.onNodeWithTag("trip-tab-leave").performClick()
+        compose.mainClock.advanceTimeBy(1_000L)
+        compose.waitForIdle()
+        val name = "cover-dark-leave"
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertShows(compose, name, "Charge everything")
+        ScreenShots.assertShows(compose, name, "Remind Tue 21:00")
+    }
 }

@@ -200,6 +200,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      */
     TRIPS("Trips: the evening before you go", NoticeTier.HEADS_UP),
     /**
+     * Trip lists, slice 3a ([TripListRules.notices]): a Before we leave job's reminder at the time he typed — "Before
+     * Lisbon: Put the bins out" · "Lisbon trip · Wed 28 Oct" — until it is ticked.
+     */
+    TRIP_JOBS("Trips: jobs before you leave", NoticeTier.HEADS_UP),
+    /**
      * The Vault, slice 1 ([DocumentRules.notices]): a document's renewal window opening (six months before a passport),
      * a month and a week before it runs out and on the day, at 09:00 — "Theo passport expires Thu 20 May 2027".
      */
@@ -718,6 +723,7 @@ object Governor {
         NoticeSource.TRADING -> plural(n, "trading alert")
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
+        NoticeSource.TRIP_JOBS -> plural(n, "job") + " before you leave"
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
         NoticeSource.MAIL_MOMENT -> "your ten-minute inbox"
         NoticeSource.PARCELS -> if (n == 1) "a parcel out for delivery" else "$n parcels out for delivery"
@@ -811,6 +817,8 @@ object NoticeSources {
         occasions: List<Occasion> = emptyList(),
         /** Travel mode: the trips with their bookings, for the evening before each ([TripRules.notices]). */
         trips: List<TripItem> = emptyList(),
+        /** Trip lists, slice 3a: the trips' list items, for each Before we leave job's reminder ([TripListRules.notices]). */
+        tripItems: List<TripListItem> = emptyList(),
         /** The Vault: the documents and when they run out ([DocumentRules.notices]). */
         documents: List<DocumentItem> = emptyList(),
         /** Health Connect slice 2: minutes "Did you go?" waits after a session while workouts are read in the background. */
@@ -1011,6 +1019,7 @@ object NoticeSources {
         out += TradingAlerts.notices(trading, tradingAlerts, nowMs, cal)
         out += MailReturnRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)
+        out += TripListRules.notices(trips, tripItems, nowMs, cal)
         out += DocumentRules.notices(documents, nowMs, cal)
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
         if (mailMoment != null) out += MailMomentRules.notices(mailMoment, mailWaiting, protectedFromMin, nowMs, cal)

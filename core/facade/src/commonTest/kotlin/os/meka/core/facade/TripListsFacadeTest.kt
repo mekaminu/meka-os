@@ -182,4 +182,24 @@ class TripListsFacadeTest {
         assertEquals("06:30", onMac.leave)
         assertEquals(listOf(true, true, false), onMac.going.map { it.on })
     }
+
+    @Test
+    fun aJobsReminderIsAHeadsUpOnTheMacAtItsTime() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addTrip("Lisbon 28–31 Oct")
+        val tripId = fold.tripsView.value.rows.single().id
+        val added = fold.addTripItem(tripId, "before we leave: put the bins out at 9pm", TripList.PACK)
+        assertEquals("Added Put the bins out to Before we leave · The house · remind Tue 21:00", added.line)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Remind Tue 21:00", mac.tripListsView.value.single().tab(TripList.LEAVE).groups.single().rows.single().sub)
+        now += (35L * 60 + 5) * 60_000L // Tue 21:05
+        val n = mac.noticesNow().single { it.source == os.meka.core.domain.NoticeSource.TRIP_JOBS }
+        assertEquals("Before Lisbon: Put the bins out", n.title)
+        // Ticked on the Fold, it goes on the Mac too.
+        val id = fold.tripListsView.value.single().tab(TripList.LEAVE).groups.single().rows.single().id
+        assertTrue(fold.tickTripItem(id, true))
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.noticesNow().none { it.source == os.meka.core.domain.NoticeSource.TRIP_JOBS })
+    }
 }
