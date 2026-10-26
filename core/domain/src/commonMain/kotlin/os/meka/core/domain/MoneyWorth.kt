@@ -5,7 +5,8 @@ import kotlin.math.abs
 /**
  * Money manager, slice 8 (2026-10-17): **Net worth** (board item 12) on the Money screen, behind his fingerprint like the
  * rest. One total from what Navilife already knows plus what he types:
- *  - each account's balance (a statement's Balance column, or typed; a card counts what its statement says he owes);
+ *  - each account's balance (a statement's Balance column, or typed; a card counts what its statement says he owes,
+ *    else its balance as owed, also for an account only named like a card; one with neither is "balance unknown");
  *  - things outside these accounts he types once and updates when he likes: "Pension £42,000", "Savings elsewhere 12k",
  *    "Car £8,500", "Car loan £3,200" (a loan, mortgage, debt, "owe…" or a minus sign makes it something owed);
  *  - a month-by-month line over up to the last 12 months: each account's balance worked back through its statements
@@ -84,6 +85,15 @@ object MoneyWorth {
     const val MAX_ITEMS = 20
     const val MAX_PENCE = 100_000_000_00L
     const val MONTHS = 12
+    /** A card with neither a statement typed nor a balance from the bank. */
+    const val UNKNOWN_CARD = "Card · balance unknown · add it"
+
+    /** "Partial · 1 account has no balance yet": net worth leaves out accounts and cards it has no balance for. */
+    fun partialLine(missing: Int): String? = when (missing) {
+        0 -> null
+        1 -> "Partial · 1 account has no balance yet"
+        else -> "Partial · $missing accounts have no balance yet"
+    }
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 
@@ -161,18 +171,23 @@ object MoneyWorth {
         val history = mutableListOf<MoneyWorthAccount>()
         var flat = 0L
         var missing = 0
+        var cardsOwe = 0L
         for (a in accounts.sortedBy { it.name.lowercase() }) {
             val card = cardById[a.id]
-            if (card != null) {
-                val st = card.statementPence
-                if (st == null) {
+            // Money's wrong numbers (2): a card's balance is what he owes, marked as a card or only named like one
+            // ("HSBC Premier Card"); a statement he typed wins, then the account's balance (either sign) as owed.
+            if (card != null || (MoneyCards.looksLikeCard(a.name) && !MoneyCards.looksNotCard(a.name))) {
+                val owed = card?.statementPence ?: a.balance?.pence?.let { abs(it) }
+                if (owed == null) {
                     missing++
-                    rows += MoneyWorthRow(a.id, a.name, CARD, "", "Card · type its statement balance under Cards", owes = true,
-                        needsBalance = false, removable = false, spoken = "${a.name}, card, no statement balance yet")
+                    rows += MoneyWorthRow(a.id, a.name, CARD, "", UNKNOWN_CARD, owes = true,
+                        needsBalance = card == null, removable = false, spoken = "${a.name}, card, balance unknown")
                 } else {
-                    flat -= st
-                    rows += MoneyWorthRow(a.id, a.name, CARD, signed(-st), if (st == 0L) "Card · nothing owed" else "Card · what its statement says you owe",
-                        owes = st > 0, needsBalance = false, removable = false, spoken = "${a.name}, card, owes ${fmt(st)}")
+                    flat -= owed
+                    cardsOwe += owed
+                    val from = if (card?.statementPence != null) "what its statement says you owe" else "its balance, owed"
+                    rows += MoneyWorthRow(a.id, a.name, CARD, signed(-owed), if (owed == 0L) "Card · nothing owed" else "Card · $from",
+                        owes = owed > 0, needsBalance = false, removable = false, spoken = "${a.name}, card, owes ${fmt(owed)}")
                 }
                 continue
             }
@@ -214,8 +229,7 @@ object MoneyWorth {
         }
         val counted = history.isNotEmpty() || rows.any { it.amount.isNotEmpty() }
         val have = history.filter { it.balance > 0 }.sumOf { it.balance } + items.filter { !it.owes }.sumOf { it.pence } + tradingPence.coerceAtLeast(0)
-        val owe = -history.filter { it.balance < 0 }.sumOf { it.balance } + items.filter { it.owes }.sumOf { it.pence } - tradingPence.coerceAtMost(0) +
-            cards.filter { c -> accounts.any { it.id == c.id } }.sumOf { it.statementPence ?: 0L }
+        val owe = -history.filter { it.balance < 0 }.sumOf { it.balance } + items.filter { it.owes }.sumOf { it.pence } - tradingPence.coerceAtMost(0) + cardsOwe
         val total = have - owe
         val points = points(history, flat, today)
         val change = if (points.size >= 2) {
@@ -227,11 +241,7 @@ object MoneyWorth {
                 else -> "Down ${fmt(-d)} since the end of $before"
             }
         } else null
-        val missingLine = when (missing) {
-            0 -> null
-            1 -> "1 account isn't counted yet: it has no balance"
-            else -> "$missing accounts aren't counted yet: they have no balance"
-        }
+        val missingLine = partialLine(missing)
         val split = if (counted) "You have ${fmt(have)} · you owe ${fmt(owe)}" else null
         val chartLine = when {
             !counted -> null

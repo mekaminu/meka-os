@@ -45,6 +45,23 @@ class MoneyPaydayTest {
     }
 
     @Test
+    fun onPaydayItCountsToTheNextPayday() {
+        // Money's wrong numbers (1): Fri 30 Oct is payday and the pay hasn't landed yet; until payday runs to Mon 30 Nov,
+        // never "£… a day" over 0 days, and the council tax on 1 Nov is still to go out.
+        val onPayday = d(10, 30)
+        val v = MoneyPayday.view(lines, onPayday, names, mapOf("a-current" to MoneyBalance(30_000, onPayday, typed = true)),
+            listOf(councilTax), HolidayCalendar())
+        assertEquals("Payday Mon 30 Nov · in 31 days", v.payLine)
+        assertEquals(d(11, 30), v.paydayDay)
+        assertEquals(listOf("Council tax"), v.rows.map { it.title })
+        assertEquals("Safe to spend until payday · about £150 · about £5 a day", v.safe)
+        assertEquals("Still to go out before payday · Mon 30 Nov", v.bills!!.head)
+        // Once the pay lands that day, it's the same next payday.
+        val landed = MoneyPayday.view(lines + line(onPayday, 250_000, "ACME PAYROLL"), onPayday, names, emptyMap(), emptyList(), HolidayCalendar())
+        assertEquals("Payday Mon 30 Nov · in 31 days", landed.payLine)
+    }
+
+    @Test
     fun stillToGoOutCountsRegularPaymentsAndRadarBillsBeforePaydayOnce() {
         val v = view()
         assertEquals(listOf("Streamly.com", "Water bill"), v.rows.map { it.title })

@@ -39,6 +39,8 @@ class MoneyTransfersTest {
     fun theMonthCountsOnlyRealSpendingAndPay() {
         val month = MoneyRules.view(accounts, august, emptyMap(), aug, LocalCalendar.UTC, 0).month!!
         assertEquals("Spent £85 · in £2,500", month.spentLine)
+        // Money's wrong numbers (3): Spending's "Left" is the month's in less out, not a balance.
+        assertEquals("£2,415", month.spending!!.tiles.single { it.label == "Left" }.value)
         assertFalse(month.categories.any { it.key == MoneyCategory.OTHER.key })
         val rows = month.txns.associateBy { it.id }
         for (id in listOf("r1", "r2", "x1", "x2", "m1", "m2")) assertEquals(MoneyCategory.TRANSFERS.key, rows.getValue(id).category, id)

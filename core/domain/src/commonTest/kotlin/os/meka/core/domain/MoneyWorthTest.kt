@@ -66,7 +66,7 @@ class MoneyWorthTest {
         // 1,840 + 42,000 − 640 − 3,200
         assertEquals("£40,000", v.total)
         assertEquals("You have £43,840 · you owe £3,840", v.splitLine)
-        assertEquals("1 account isn't counted yet: it has no balance", v.missingLine)
+        assertEquals("Partial · 1 account has no balance yet", v.missingLine)
         assertEquals(listOf("Credit card", "Current account", "Saver", "Pension", "Car loan"), v.rows.map { it.name })
         assertEquals("−£640", v.rows[0].amount)
         assertTrue(v.rows[2].needsBalance)
@@ -76,6 +76,36 @@ class MoneyWorthTest {
         // End of Sep: 1,840 + 100 spent since = 1,940.
         assertEquals(listOf(4_010_000L, 4_000_000L), v.points.map { it.pence })
         assertEquals("Down £100 since the end of Sep", v.changeLine)
+    }
+
+    @Test
+    fun aCardsBalanceIsOwedNeverMoneyYouHave() {
+        // Money's wrong numbers (2): a bank card that isn't marked as one still counts as owed, whichever sign the bank
+        // gives; a marked card with nothing typed uses its balance; one with neither is unknown and the total partial.
+        val accounts = listOf(
+            MoneyAccount("a-current", "Oakbank current", "bank", 1L, MoneyBalance(500_000, today, typed = false)),
+            MoneyAccount("a-premier", "Oakbank Premier Card", "bank", 1L, MoneyBalance(300_000, today, typed = false)),
+            MoneyAccount("a-plat", "Amex Platinum", "bank", 1L, MoneyBalance(-120_000, today, typed = false)),
+            MoneyAccount("a-gold", "Amex Gold", "bank", 1L),
+        )
+        val cards = listOf(MoneyCard("a-plat", "Amex Platinum", MoneyCards.CHARGE), MoneyCard("a-gold", "Amex Gold", MoneyCards.CREDIT))
+        val v = MoneyWorth.view(accounts, cards, emptyList(), emptyList(), today)
+        // 5,000 − 3,000 − 1,200
+        assertEquals("£800", v.total)
+        assertEquals("You have £5,000 · you owe £4,200", v.splitLine)
+        val premier = v.rows.single { it.id == "a-premier" }
+        assertEquals(MoneyWorth.CARD, premier.kind)
+        assertEquals("−£3,000", premier.amount)
+        assertEquals("Card · its balance, owed", premier.line)
+        assertEquals("−£1,200", v.rows.single { it.id == "a-plat" }.amount)
+        val gold = v.rows.single { it.id == "a-gold" }
+        assertEquals(MoneyWorth.UNKNOWN_CARD, gold.line)
+        assertEquals("", gold.amount)
+        assertEquals("Partial · 1 account has no balance yet", v.missingLine)
+        // An unmarked card with no balance can have one typed.
+        val bare = MoneyWorth.view(listOf(MoneyAccount("a-premier", "Oakbank Premier Card", "bank", 1L)), emptyList(), emptyList(), emptyList(), today)
+        assertTrue(bare.rows.single().needsBalance)
+        assertEquals("Partial · 1 account has no balance yet", bare.missingLine)
     }
 
     @Test

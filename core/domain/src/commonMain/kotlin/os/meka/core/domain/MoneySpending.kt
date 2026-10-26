@@ -119,7 +119,7 @@ object MoneySpending {
     /**
      * The view. [partial] while the month is this month ([dayOfMonth] of [daysInMonth] gone); [avgTotal] the usual
      * month's spending (null with nothing to compare) named [usual] ("usual", or "September" with one month before);
-     * [toGoPence] and [leftPence] from Until payday (this month only); [txns] newest first, [allTxns] the month's count.
+     * [toGoPence] from Until payday (this month only), [leftPence] the month's in less out; [txns] newest first, [allTxns] the month's count.
      */
     fun view(
         partial: Boolean, monthName: String, spentPence: Long, incomePence: Long, cats: List<MoneySpendCat>,

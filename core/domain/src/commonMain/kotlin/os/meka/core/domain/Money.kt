@@ -731,7 +731,9 @@ object MoneyRules {
             partial = partial, monthName = CivilDate.MONTH_LONG[shown % 12], spentPence = spent, incomePence = income,
             cats = spendCats, avgTotal = avgTotal, usual = if (prior.size == 1) avgName else "usual",
             dayOfMonth = shownDate.day, daysInMonth = CivilDate.lengthOfMonth(shownDate.year, shownDate.month),
-            toGoPence = paydayView?.takeIf { it.notReady == null }?.toGoPence, leftPence = paydayView?.leftPence,
+            toGoPence = paydayView?.takeIf { it.notReady == null }?.toGoPence,
+            // Money's wrong numbers (3): "Left" is the month's in less out (as the mockup), not the bank balance.
+            leftPence = income - spent,
             txns = sorted.take(MoneySpending.LATEST).mapNotNull { t -> rows.firstOrNull { it.id == t.id }?.let { MoneySpendTxn(it, t.day, t.pence) } },
             allTxns = sorted.size, today = today,
         )

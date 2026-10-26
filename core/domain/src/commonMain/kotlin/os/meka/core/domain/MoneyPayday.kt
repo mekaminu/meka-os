@@ -115,7 +115,10 @@ object MoneyPayday {
         return d
     }
 
-    /** The next payday on or after [today], after the last pay. */
+    /**
+     * The next payday after [today], after the last pay. Money's wrong numbers (1): on payday itself it's already the
+     * next month's, so "until payday" never counts down 0 days ("£5,266 a day") and the bills run to the next pay.
+     */
     fun nextPayday(pay: Pay, today: Long, holidays: HolidayCalendar): Long {
         val nominal = nominalDay(pay.days)
         val last = pay.days.last()
@@ -124,7 +127,7 @@ object MoneyPayday {
         var m = t.month
         repeat(4) {
             val c = workingDayOnOrBefore(CivilDate.toEpochDay(y, m, minOf(nominal, CivilDate.lengthOfMonth(y, m))), holidays)
-            if (c >= today && c > last + 20) return c
+            if (c > today && c > last + 20) return c
             if (m == 12) { y++; m = 1 } else m++
         }
         return today + 30
