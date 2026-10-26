@@ -61,7 +61,8 @@ import os.meka.core.domain.UpNextEvent
 
 /**
  * Today's timeline (calendar redesign, slice 1): events and planned tasks in one list with a now line and free gaps.
- * Events are context, not things to tick, so their titles use the regular body weight (build plan, type weight).
+ * Events are context, not things to tick, so their titles use the regular `eventTitle` (16 sp; Calmer Today, slice 3),
+ * with the time in `caption` in the left column.
  * Motion: rows glide as the day moves on (animateItem); the now line's dot breathes; "3 earlier" unfolds in place.
  * Reduced motion: cross-fades only and a steady dot.
  */
@@ -70,7 +71,7 @@ internal val TIME_COLUMN = 92.dp
 @Composable
 internal fun TimeColumn(time: String, past: Boolean) {
     Text(
-        time, style = MekaType.itemMeta,
+        time, style = MekaType.caption,
         color = if (past) Meka.colors.textTertiary else Meka.colors.textSecondary,
         modifier = Modifier.width(TIME_COLUMN),
     )
@@ -82,7 +83,7 @@ internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier 
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.body, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
+            Text(r.title, style = MekaType.eventTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
             val line = listOfNotNull(if (r.running) "Now" else null, r.detail).joinToString(" · ")
             if (line.isNotEmpty()) {
                 Text(line, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary)
@@ -107,7 +108,7 @@ internal fun SessionTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
     ) {
         TimeColumn(r.time, past = false)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(r.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
             r.detail?.let { Text(it, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary) }
         }
     }
@@ -226,7 +227,7 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
  */
 @Composable
 internal fun AllDayLabel(label: String, modifier: Modifier = Modifier) {
-    Text(label, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = modifier.padding(top = MekaSpace.xxs))
+    Text(label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = modifier.padding(top = MekaSpace.xxs))
 }
 
 /**
@@ -265,7 +266,7 @@ internal fun AllDayRow(
         ) {
             Spacer(Modifier.width(TIME_COLUMN))
             Column(Modifier.weight(1f)) {
-                Text(item.event.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Text(item.event.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
                 item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
             }
             if (item.todo && handlers != null) {
@@ -333,7 +334,7 @@ internal fun NextEventCard(e: UpNextEvent, modifier: Modifier = Modifier, onEven
         Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.accent))
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
-            Text(e.line, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(e.line, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
             Text(e.detail, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
     }

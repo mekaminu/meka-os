@@ -83,7 +83,7 @@ val MekaLightColors = MekaColors(
 
 object MekaType {
     val greeting = TextStyle(fontSize = 34.sp, fontWeight = FontWeight(600), lineHeight = 39.1.sp, letterSpacing = -0.02.em)
-    val sectionLabel = TextStyle(fontSize = 13.sp, fontWeight = FontWeight(600), lineHeight = 16.9.sp, letterSpacing = 0.08.em)
+    val sectionLabel = TextStyle(fontSize = 12.sp, fontWeight = FontWeight(600), lineHeight = 15.6.sp, letterSpacing = 0.08.em)
     val itemTitle = TextStyle(fontSize = 19.sp, fontWeight = FontWeight(500), lineHeight = 24.7.sp, letterSpacing = -0.005.em)
     val itemMeta = TextStyle(fontSize = 15.sp, fontWeight = FontWeight(400), lineHeight = 20.3.sp, letterSpacing = 0.em)
     val upNextTitle = TextStyle(fontSize = 26.sp, fontWeight = FontWeight(600), lineHeight = 31.2.sp, letterSpacing = -0.015.em)
@@ -91,6 +91,7 @@ object MekaType {
     val upNextCardTitle = TextStyle(fontSize = 17.sp, fontWeight = FontWeight(600), lineHeight = 22.1.sp, letterSpacing = -0.005.em)
     val body = TextStyle(fontSize = 17.sp, fontWeight = FontWeight(400), lineHeight = 24.6.sp, letterSpacing = 0.em)
     val taskTitle = TextStyle(fontSize = 16.sp, fontWeight = FontWeight(400), lineHeight = 20.8.sp, letterSpacing = 0.em)
+    val eventTitle = TextStyle(fontSize = 16.sp, fontWeight = FontWeight(400), lineHeight = 20.8.sp, letterSpacing = 0.em)
     val caption = TextStyle(fontSize = 13.sp, fontWeight = FontWeight(400), lineHeight = 16.9.sp, letterSpacing = 0.01.em)
     val captionStrong = TextStyle(fontSize = 13.sp, fontWeight = FontWeight(600), lineHeight = 16.9.sp, letterSpacing = 0.01.em)
     val micro = TextStyle(fontSize = 12.sp, fontWeight = FontWeight(400), lineHeight = 15.6.sp, letterSpacing = 0.02.em)

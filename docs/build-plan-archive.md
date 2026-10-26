@@ -4029,3 +4029,16 @@ The Mac has no update card (it publishes builds). Tests: CoverNowTest.aShortLine
 AppUpdatesTest.theBannerSaysReadyAndTheBuildOnOneShortLine, UpdateBannerTest (one slim row, taps reach the updater;
 Undo), TodayScreensTest's shots now fail if the Up next card is over 150 dp. No server change, no migration. Mac checked
 nightly.
+
+## Calmer Today — slice 3 (2026-10-26): section labels and event rows at the calmer scale
+
+The approved mockup (docs/design/today/today-calmer.dc.html) draws section labels as small caps and events at about the
+task rows' size. **Tokens** (design/tokens/tokens.json, regenerated for the Fold, the Mac and the watch): `sectionLabel`
+12 sp (was 13; Mac 11 as before), so every screen's section labels inherit it; a new `eventTitle`, 16 sp regular at 1.3
+(Mac 13), for an event's title — context you don't act on, so never `itemTitle`. **Fold:** Today's timeline (events,
+booked sessions, All day rows, Up next's event line) and the Calendar agenda's events and all-day rows use `eventTitle`
+(were `body` 17); the time column and the "All day" label use the 13 sp `caption` (were `itemMeta` 15), the column's
+width unchanged so "09:30–10:00" still fits; the agenda's calendar dot is centred on the new first line (21 dp); the
+agenda's planned tasks use `taskTitle` like Today's. The open Fold draws the same rows, so it follows. **Mac:** the same
+rows take `eventTitle` / `taskTitle` (same 13 pt size there, named for the scale). Test: CalmerTypeTest (12 sp label,
+16 sp event title, 13 sp time, detail and All day). No core change, no server change, no migration. Mac checked nightly.

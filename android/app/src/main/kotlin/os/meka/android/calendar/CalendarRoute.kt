@@ -488,7 +488,7 @@ private fun EventRow(r: TimelineRow, past: Boolean, tone: Int?, modifier: Modifi
         TimeColumn(r.time, past)
         DotColumn(tone, past)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.body, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
+            Text(r.title, style = MekaType.eventTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
             val line = listOfNotNull(if (r.running) "Now" else null, r.detail).joinToString(" · ")
             if (line.isNotEmpty()) {
                 Text(
@@ -505,7 +505,8 @@ private fun EventRow(r: TimelineRow, past: Boolean, tone: Int?, modifier: Modifi
 /** The dot beside a title, centred on its first line; nothing (but the same width) without a calendar. */
 @Composable
 private fun DotColumn(tone: Int?, past: Boolean = false) {
-    Box(Modifier.width(MekaSpace.m).height(24.dp), contentAlignment = Alignment.CenterStart) {
+    // The event title's first line (eventTitle: 16 sp at 1.3, about 21 dp; Calmer Today, slice 3).
+    Box(Modifier.width(MekaSpace.m).height(21.dp), contentAlignment = Alignment.CenterStart) {
         if (tone != null) CalendarDot(tone, Modifier.alpha(if (past) 0.5f else 1f))
     }
 }
@@ -525,7 +526,7 @@ private fun AgendaAllDayRow(item: AllDayItem, tone: Int, modifier: Modifier, onO
         Spacer(Modifier.width(os.meka.android.today.TIME_COLUMN))
         DotColumn(tone)
         Column(Modifier.weight(1f)) {
-            Text(item.event.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(item.event.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
             item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
@@ -549,14 +550,14 @@ private fun HiddenRow(event: CalendarEvent, modifier: Modifier, onOpen: () -> Un
     }
 }
 
-/** A planned task in the body weight like Today's task rows (Fold review 2026-10-08). Shown only; it's ticked in Today. */
+/** A planned task in Today's task-row style (`taskTitle`, Calmer Today). Shown only; it's ticked in Today. */
 @Composable
 private fun TaskRow(r: TimelineRow, modifier: Modifier) {
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past = false)
         DotColumn(null)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(r.title, style = MekaType.taskTitle, color = Meka.colors.textPrimary)
             r.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }

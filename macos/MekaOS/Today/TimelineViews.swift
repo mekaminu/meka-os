@@ -183,7 +183,7 @@ struct TimelineEventRow: View {
                 .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
+                Text(row.title).font(MekaType.eventTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 if asking, let event = row.event {
                     Menu {
                         ForEach(club.NAMES, id: \.self) { name in
@@ -230,7 +230,7 @@ struct SessionTimelineRow: View {
                 .foregroundStyle(palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(row.title).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
                 if let line = row.detail {
                     Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
                 }
@@ -405,7 +405,7 @@ struct AllDayRow: View {
         HStack(alignment: .center, spacing: 0) {
             Spacer().frame(width: TimelineMetrics.timeColumn)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(item.event.title).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }

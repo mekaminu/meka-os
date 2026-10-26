@@ -465,7 +465,7 @@ private struct AgendaAllDayRow: View {
             Spacer().frame(width: TimelineMetrics.timeColumn)
             CalendarDot(tone: tone, palette: palette).frame(width: dotColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(item.event.title).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
@@ -498,7 +498,7 @@ private struct AgendaEventRow: View {
             }
             .frame(width: dotColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
+                Text(row.title).font(MekaType.eventTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 let line = [row.running ? "Now" : nil, row.detail].compactMap { $0 }.joined(separator: " · ")
                 if !line.isEmpty {
                     Text(line).font(MekaType.caption)
@@ -517,7 +517,7 @@ private struct AgendaEventRow: View {
     }
 }
 
-/// A planned task: something to act on, so the item title weight. Shown only; it's ticked in Today.
+/// A planned task in Today's task-row style (taskTitle, Calmer Today). Shown only; it's ticked in Today.
 private struct AgendaTaskRow: View {
     let row: TimelineRow
     let palette: MekaPalette
@@ -528,7 +528,7 @@ private struct AgendaTaskRow: View {
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             Spacer().frame(width: dotColumn)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(row.title).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
                 if let d = row.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             }
             Spacer()
