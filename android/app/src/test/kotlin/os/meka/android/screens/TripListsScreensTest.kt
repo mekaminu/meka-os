@@ -152,10 +152,15 @@ class TripListsScreensTest {
         return core to tripId
     }
 
-    private fun scrollTo(tag: String) {
-        compose.onNodeWithTag("trip-lists").performScrollToNode(hasTestTag(tag))
-        compose.mainClock.advanceTimeBy(500L)
+    /** Scrolls to [m] with the clock running (a paused clock can't scroll a lazy list), then pauses it again. */
+    private fun scrollTo(m: SemanticsMatcher) {
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("trip-lists").performScrollToNode(m)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
     }
+
+    private fun scrollTo(tag: String) = scrollTo(hasTestTag(tag))
 
     @Test
     @Config(qualifiers = ScreenShots.INNER)
@@ -192,8 +197,7 @@ class TripListsScreensTest {
         compose.onNodeWithTag("trip-group-rename").performClick()
         compose.mainClock.advanceTimeBy(500L)
         val field = hasSetTextAction() and hasContentDescription(TripGroupRules.RENAME_HINT)
-        compose.onNodeWithTag("trip-lists").performScrollToNode(field)
-        compose.mainClock.advanceTimeBy(500L)
+        scrollTo(field)
         compose.onNode(field).performTextInput("Outfits")
         compose.onNode(field).performImeAction()
         compose.mainClock.advanceTimeBy(16L)
