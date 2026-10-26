@@ -524,11 +524,11 @@ private fun SuggestCard(card: TripSuggestion, keys: Set<String>, onAdd: (Set<Str
         Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface).border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m).testTag("trip-suggest-${card.list.wire}"),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalAlignment = Alignment.Top,
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.Top,
             modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "${TripSuggestRules.TITLE}. ${card.lead}" }) {
-            Box(Modifier.padding(top = 2.dp).size(18.dp).clip(RoundedCornerShape(MekaRadius.pill))
+            Box(Modifier.size(18.dp).clip(RoundedCornerShape(MekaRadius.pill))
                 .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.95f), accent.copy(alpha = 0.35f)))))
             Text(card.lead, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         }

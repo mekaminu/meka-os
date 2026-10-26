@@ -379,12 +379,11 @@ struct TripListsPanel: View {
         if let card, !chips.isEmpty {
             let keys = chips.map { $0.key }
             let list = card.list
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
-                HStack(alignment: .top, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                HStack(alignment: .top, spacing: MekaSpace.xs) {
                     Circle()
                         .fill(RadialGradient(colors: [palette.accent.opacity(0.95), palette.accent.opacity(0.35)], center: .topLeading, startRadius: 0, endRadius: 16))
                         .frame(width: 16, height: 16)
-                        .padding(.top, 1)
                         .accessibilityHidden(true)
                     Text(card.lead).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

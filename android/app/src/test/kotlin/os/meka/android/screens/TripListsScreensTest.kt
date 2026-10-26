@@ -72,6 +72,15 @@ class TripListsScreensTest {
         return core to tripId
     }
 
+    /** Slice 3b: Not now on every card (more can surface after each), so the rows sit where the older tests expect. */
+    private fun putAwaySuggestions(core: MekaCore, tripId: String) = runBlocking {
+        repeat(6) {
+            val keys = core.tripListsView.value.single { it.tripId == tripId }.suggestions.flatMap { c -> c.chips.map { it.key } }
+            if (keys.isNotEmpty()) core.dismissTripSuggestions(tripId, keys)
+        }
+        core.tick()
+    }
+
     private fun show(core: MekaCore, tripId: String) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -103,6 +112,7 @@ class TripListsScreensTest {
     @Config(qualifiers = ScreenShots.COVER)
     fun aTickShowsInTheNextFrame() {
         val (core, tripId) = filled(ThemeChoice.DARK)
+        putAwaySuggestions(core, tripId)
         show(core, tripId)
         val ghic = core.tripListsView.value.single().tab(TripList.PACK).groups.first().rows.first { it.text == "GHIC cards" }
         compose.onNodeWithTag("trip-item-${ghic.id}").performClick()
@@ -200,6 +210,7 @@ class TripListsScreensTest {
             check(!core.addTripItem(tripId, "before we leave: charge everything at 9pm", TripList.PACK).refused)
             core.tick()
         }
+        putAwaySuggestions(core, tripId)
         show(core, tripId)
         compose.onNodeWithTag("trip-tab-leave").performClick()
         compose.mainClock.advanceTimeBy(1_000L)
