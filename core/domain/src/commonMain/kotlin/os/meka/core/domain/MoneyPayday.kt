@@ -41,6 +41,8 @@ data class MoneyPaydayView(
     val paydayDay: Long? = null, val leftPence: Long? = null,
     /** Money redesign (B2): what's still to go out before payday (pence), for Spending's "Bills to come" tile. */
     val toGoPence: Long? = null,
+    /** Money redesign (B3): the Bills tab's card and list, from the same bills ([MoneyBills]). */
+    val bills: MoneyBillsView? = null,
 )
 
 /** A line of the statements for the payday view: its account, day, signed pence, merchant key and category. */
@@ -146,6 +148,7 @@ object MoneyPayday {
     fun view(
         lines: List<MoneyPayLine>, today: Long, names: Map<String, String>, balances: Map<String, MoneyBalance>,
         bills: List<MoneyBill>, holidays: HolidayCalendar, source: MoneySource = MoneySource.FILES,
+        cardTitles: Set<String> = emptySet(),
     ): MoneyPaydayView {
         val pay = pay(lines, today) ?: return MoneyPaydayView(HEAD, NOT_READY, null, null, null, null, emptyList(), 0,
             null, null, null, false, null, false, foot(source))
@@ -164,8 +167,8 @@ object MoneyPayday {
         val latestLine = payLines.maxOfOrNull { it.day }
         // What the balance already holds: the balance's day, or the account's latest line when that's later.
         val asOf = bal?.let { maxOf(it.day, latestLine ?: it.day) } ?: (today - 1)
-        val regular = MoneyTips.regular(payLines.map { MoneyLine(it.day, it.pence, it.merchant, it.category) }, today)
-            .filter { it.nextDay > asOf && it.nextDay < payday }
+        val allRegular = MoneyTips.regular(payLines.map { MoneyLine(it.day, it.pence, it.merchant, it.category) }, today)
+        val regular = allRegular.filter { it.nextDay > asOf && it.nextDay < payday }
         val radar = bills.filter { it.pence > 0 && it.dueDay > asOf && it.dueDay < payday && regular.none { r -> sameAs(it, r) } }
         val out = regular.map { r -> Triple("r-${r.key}", r.label, r.nextDay) to r.monthly } +
             radar.map { b -> Triple("b-${b.title.lowercase()}-${b.dueDay}", b.title, b.dueDay) to b.pence }
@@ -174,6 +177,13 @@ object MoneyPayday {
         val rows = sorted.take(SHOWN).map { (k, p) ->
             MoneyPaydayRow(k.first, k.second, CivilDate.shortLabel(k.third), fmt(p), "${k.second}, ${CivilDate.shortLabel(k.third)}, ${fmt(p)}")
         }
+        // Money redesign (B3): the same bills, each with its kind, for the Bills tab's card and list.
+        val due = regular.map { r -> MoneyBills.Due("r-${r.key}", r.label, r.nextDay, r.monthly, MoneyBillKind.REGULAR, r.rise) } +
+            radar.map { b ->
+                MoneyBills.Due("b-${b.title.lowercase()}-${b.dueDay}", b.title, b.dueDay, b.pence,
+                    if (b.title in cardTitles) MoneyBillKind.CARD else MoneyBillKind.RENEWAL)
+            }
+        val billsView = MoneyBills.view(due, MoneyBills.paidThisMonth(allRegular, today), CivilDate.shortLabel(payday), today)
         val goingOut = if (sorted.isEmpty()) "Nothing regular left to go out before payday" else
             "Still to go out before payday · about ${fmt(pounds(total))} · ${sorted.size} payment${if (sorted.size == 1) "" else "s"}"
 
@@ -209,7 +219,7 @@ object MoneyPayday {
         return MoneyPaydayView(
             HEAD, null, payLine, fromLine, sinceLine, goingOut, rows, (sorted.size - rows.size).coerceAtLeast(0),
             pay.account, accountName, balanceLine, bal != null, safe, lit, foot(source),
-            paydayDay = payday, leftPence = leftPence, toGoPence = total,
+            paydayDay = payday, leftPence = leftPence, toGoPence = total, bills = billsView,
         )
     }
 }

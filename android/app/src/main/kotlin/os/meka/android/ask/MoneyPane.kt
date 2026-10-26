@@ -444,6 +444,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
                 }
             }
+            // Money redesign (B3): the Bills tab's card, then the month's bills by date (to come first, paid greyed).
+            v.bills?.takeIf { has(MoneySection.BILLS) }?.let { b ->
+                item(key = "bills-card") {
+                    MoneyBillsCard(b, Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(3)))
+                }
+                b.rows.forEachIndexed { i, r ->
+                    item(key = "bill-${r.key}") { MoneyBillRowView(r, Modifier.animateItem().appear(rememberAppearance(4 + i))) }
+                }
+                item(key = "bills-foot") {
+                    Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                }
+            }
             // Slice 6: payday, what's still to go out before it and what's safe to spend (this month only).
             v.payday?.takeIf { has(MoneySection.PAYDAY) }?.let { p ->
                 item(key = "payday-head") {
@@ -451,7 +463,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "payday") {
-                    PaydayBlock(p, Modifier.animateItem().appear(rememberAppearance(4))) { text ->
+                    PaydayBlock(p, Modifier.animateItem().appear(rememberAppearance(4)), withRows = MoneyTabs.paydayRows(v)) { text ->
                         val id = p.account ?: return@PaydayBlock
                         scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) }
                     }
@@ -1765,7 +1777,7 @@ private fun CardOffers(cv: MoneyCardsView, modifier: Modifier, onMark: (String) 
 
 /** Slice 6: payday, since payday, what's still to go out (each payment), the pay account's balance and safe to spend. */
 @Composable
-private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, onBalance: (String) -> Unit) {
+private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolean = true, onBalance: (String) -> Unit) {
     val reduced = Meka.reducedMotion
     var balance by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -1783,12 +1795,13 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, onBalance: (Stri
                 }
             }
         }
-        p.goingOut?.let { g ->
+        // Money redesign (B3): with the Bills card above, its list holds these rows.
+        p.goingOut?.takeIf { withRows }?.let { g ->
             Crossfade(g, animationSpec = MekaMotion.appear(reduced), label = "money-payday-out") { t ->
                 Text(t, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
-        p.rows.forEach { r ->
+        if (withRows) p.rows.forEach { r ->
             Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken }, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -1797,7 +1810,7 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, onBalance: (Stri
                 Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
             }
         }
-        if (p.more > 0) Text("+ ${p.more} more", style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (withRows && p.more > 0) Text("+ ${p.more} more", style = MekaType.caption, color = Meka.colors.textTertiary)
         p.balanceLine?.let { b ->
             Crossfade(b, animationSpec = MekaMotion.appear(reduced), label = "money-payday-balance") { t ->
                 Text(t, style = MekaType.caption, color = Meka.colors.textSecondary)

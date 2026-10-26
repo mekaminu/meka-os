@@ -4130,3 +4130,21 @@ draws them on Spending (the old spent line, BY CATEGORY and the payments list st
 Mac: MoneySpendingViews.swift, the same with system symbols. Tests: MoneySpendingTest (ring order and tiling, rows, the
 middle's pace, focus, tiles, days, the screen and an instant tap); MoneyScreensTest checks the middle shows and the old
 spent line doesn't. No server change, no migration. Mac checked nightly.
+
+#### Money redesign (B) — slice B3 (2026-10-26): Bills in the new look
+
+Mockup v4, Bills tab. Core `MoneyBills` (core/domain/MoneyBills.kt) builds `MoneyBillsView`: the head ("Still to go out
+before payday · Fri 30 Oct", or "before the month ends" while no payday is found), the big amount in whole pounds (the
+same total as Until payday's still-to-go-out and Spending's "Bills to come" tile), "N bills" / "nothing left", the share
+of the month's bills already paid for the bar and "£N of £M this month already paid" (null before anything is paid), and
+the rows: each bill with a month/day block ("OCT" · "28"), its name, what it is ("Monthly", "Monthly · went up £1.50",
+"Card statement", "From Lists → Renewals"; "Due today/tomorrow · …" lit), the amount, still-to-come by date first and
+the regular payments already taken this month after them ("Paid · Sat 3 Oct", greyed). `MoneyPayday.view` builds it from
+the bills it already counts (the pay account's regular payments, radar bills and cards' statements before payday; a new
+`cardTitles` tells a card's statement from a renewal) as `MoneyPaydayView.bills` (additive); without a payday
+`MoneyBills.forMonth` uses every account's regular payments and the bills due before the month ends. `MoneyView.bills`
+(additive); `MoneySection.BILLS` leads the Bills tab, and `MoneyTabs.paydayRows` tells the Until payday block not to
+repeat the list. Fold: MoneyBillsBlocks.kt (`MoneyBillsCard`, `MoneyBillRowView`); Mac: MoneyBillsViews.swift. Tests:
+MoneyBillsTest (the card's numbers, row order and words, lit due-tomorrow and a price rise, nothing left, the month
+without a payday), MoneyTabsTest (BILLS leads the tab, payday rows hidden). No server change, no migration. Mac checked
+nightly.

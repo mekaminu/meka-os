@@ -435,6 +435,8 @@ data class MoneyView(
     val refunds: MoneyRefundsView? = null,
     /** Slice 6: payday, what's still to go out before it and what's safe to spend ([MoneyPayday]), shown with this month only. */
     val payday: MoneyPaydayView? = null,
+    /** Money redesign (B3): the Bills tab's card and the month's bills by date ([MoneyBills]), shown with this month only. */
+    val bills: MoneyBillsView? = null,
     /** Slice 7: his cards — due dates, statements, limits, 0% ending, fees ([MoneyCards]), shown with this month only. */
     val cards: MoneyCardsView? = null,
     /** Slice 8: his net worth — balances, cards, what he typed, and the month-by-month line ([MoneyWorth]); shown with this month (and before any statement). */
@@ -709,13 +711,19 @@ object MoneyRules {
         // Money bugs (A4): the footers say where these lines came from (statement files, his banks through Lunch Flow, or both).
         val source = MoneySource.ofLines(accounts, mine.mapTo(HashSet()) { it.account })
         val watch = if (partial) mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) } else emptyList()
+        val cardBills = if (partial) MoneyCards.bills(cards.filter { it.id in names }, today) else emptyList()
         val paydayView = if (partial) MoneyPayday.view(
             mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
             counted.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
             // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
             // Bills due, completeness: a radar bill that is a card's payment counts once, as the card's.
-            BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
-            source,
+            BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + cardBills, holidays,
+            source, cardTitles = cardBills.mapTo(HashSet()) { it.title },
+        ) else null
+        // Money redesign (B3): the Bills tab's card and list; before a payday is found, the month's bills on every account.
+        val billsView = if (!partial) null else paydayView?.bills ?: if (paydayView?.notReady != null) MoneyBills.forMonth(
+            regular, BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + cardBills,
+            cardBills.mapTo(HashSet()) { it.title }, today,
         ) else null
         // Money redesign (B2): the Spending tab's ring, tiles, category rows and the latest payments by day.
         val shownDate = CivilDate.fromEpochDay(today)
@@ -736,6 +744,7 @@ object MoneyRules {
             forecast = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null,
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
             payday = paydayView,
+            bills = billsView,
             cards = if (partial) MoneyCards.view(
                 cards.filter { it.id in names }, counted, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
             ) else null,

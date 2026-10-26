@@ -198,7 +198,13 @@ struct MoneySheet: View {
                 ForEach(v.alerts, id: \.id) { a in alert(a).transition(.opacity) }
                 Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
-            if let p = v.payday, has(.payday, v) { payday(p).transition(.opacity) }
+            // Money redesign (B3): the Bills tab's card, then the month's bills by date (to come first, paid greyed).
+            if let b = v.bills, has(.bills, v) {
+                MoneyBillsCardView(bills: b, palette: palette, reduced: reduceMotion).padding(.top, MekaSpace.xs).transition(.opacity)
+                ForEach(b.rows, id: \.key) { r in MoneyBillRowView(row: r, palette: palette).transition(.opacity) }
+                Text(b.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            }
+            if let p = v.payday, has(.payday, v) { payday(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
             if let c = v.cards, has(.cards, v) { cards(c).transition(.opacity) }
             if let yv = v.year, has(.year, v) { year(yv).transition(.opacity) }
             if let r = v.refunds, has(.refunds, v) {
@@ -266,7 +272,7 @@ struct MoneySheet: View {
 
     /// Slice 6: payday, what's still to go out before it, the pay account's balance (typed here or from a statement)
     /// and what's safe to spend, lit when it's tight.
-    private func payday(_ p: MoneyPaydayView) -> some View {
+    private func payday(_ p: MoneyPaydayView, withRows: Bool) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(p.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
             if let n = p.notReady {
@@ -275,8 +281,9 @@ struct MoneySheet: View {
             if let l = p.payLine { Text(l).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
             if let f = p.fromLine { Text(f).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
             if let s = p.sinceLine { Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
-            if let g = p.goingOut { Text(g).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity) }
-            ForEach(p.rows, id: \.key) { r in
+            // Money redesign (B3): with the Bills card above, its list holds these rows.
+            if withRows, let g = p.goingOut { Text(g).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity) }
+            ForEach(withRows ? p.rows : [], id: \.key) { r in
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
@@ -288,7 +295,7 @@ struct MoneySheet: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(r.spoken)
             }
-            if p.more > 0 { Text("+ \(p.more) more").font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            if withRows && p.more > 0 { Text("+ \(p.more) more").font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             if let b = p.balanceLine {
                 Text(b).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
                     .fixedSize(horizontal: false, vertical: true)

@@ -14,8 +14,9 @@ enum class MoneyTab(val label: String) {
 enum class MoneySection {
     // Spending: the month, its review, payments worth a look, the year, tips, categories and the payments.
     MONTH, TRAVEL_BANNER, REVIEW, ALERTS, YEAR, TIPS, CATEGORIES, PAYMENTS,
-    // Bills: what's still to go out before payday, the cards' due dates, refunds on the way, the regular payments.
-    PAYDAY, CARDS, REFUNDS, REGULAR,
+    // Bills: the card and the month's bills by date (B3), payday and safe to spend, the cards' due dates, refunds on the
+    // way, the regular payments.
+    BILLS, PAYDAY, CARDS, REFUNDS, REGULAR,
     // Plan: the forecast at his pace, money goals, challenges, paying abroad.
     FORECAST, GOALS, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
@@ -40,7 +41,7 @@ object MoneyTabs {
     fun tabOf(s: MoneySection): MoneyTab = when (s) {
         MoneySection.MONTH, MoneySection.TRAVEL_BANNER, MoneySection.REVIEW, MoneySection.ALERTS, MoneySection.YEAR,
         MoneySection.TIPS, MoneySection.CATEGORIES, MoneySection.PAYMENTS -> MoneyTab.SPENDING
-        MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
+        MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
         MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
         MoneySection.BANK, MoneySection.WORTH, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.IMPORT_STATEMENT,
@@ -57,6 +58,7 @@ object MoneyTabs {
         MoneySection.TIPS -> v.month != null && (v.tips.isNotEmpty() || v.hiddenTips != null)
         MoneySection.CATEGORIES -> v.month?.categories?.isNotEmpty() == true
         MoneySection.PAYMENTS -> v.month?.txns?.isNotEmpty() == true
+        MoneySection.BILLS -> v.month != null && v.bills != null
         MoneySection.PAYDAY -> v.month != null && v.payday != null
         MoneySection.CARDS -> v.month != null && v.cards?.shown == true
         MoneySection.REFUNDS -> v.month != null && v.refunds != null
@@ -103,6 +105,12 @@ object MoneyTabs {
         val offset = v.month?.offset ?: return null
         return offset.takeIf { it > 0 }
     }
+
+    /**
+     * Whether the payday block lists its own "still to go out" rows: not when the Bills card above already shows them
+     * (the payday block then keeps payday, since payday, the balance and safe to spend).
+     */
+    fun paydayRows(v: MoneyView): Boolean = v.bills == null
 
     /** What a screen reader says for a tab pill. */
     fun spoken(tab: MoneyTab, chosen: Boolean): String = tab.label + " tab" + if (chosen) ", selected" else ""

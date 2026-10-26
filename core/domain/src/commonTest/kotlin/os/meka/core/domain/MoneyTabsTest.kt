@@ -47,6 +47,17 @@ class MoneyTabsTest {
     }
 
     @Test
+    fun theBillsCardLeadsTheBillsTabAndThePaydayBlockStopsListingTheSameRows() {
+        val bills = MoneyBills.view(
+            listOf(MoneyBills.Due("r-a", "Streamly", 10, 1_099, MoneyBillKind.REGULAR)), emptyList(), "Fri 30 Oct", 5,
+        )
+        val v = open().copy(bills = bills)
+        assertEquals(listOf(MoneySection.BILLS, MoneySection.REFUNDS, MoneySection.REGULAR), MoneyTabs.sections(MoneyTab.BILLS, v))
+        assertTrue(!MoneyTabs.paydayRows(v))
+        assertTrue(MoneyTabs.paydayRows(open()))
+    }
+
+    @Test
     fun anEmptyTabSaysWhatWillShowThereAndAccountsIsNeverEmpty() {
         val v = open()
         assertNull(MoneyTabs.empty(MoneyTab.SPENDING, v))
