@@ -1190,7 +1190,7 @@ private fun TodayPane(
             // Self-updating phone app: the card rises in when the Mac has published a newer build.
             if (update !is UpdateState.None && updater != null) {
                 item(key = "update") {
-                    UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
+                    UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
             // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or the

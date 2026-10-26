@@ -49,6 +49,12 @@ object AppUpdateRules {
     /** The notification's line: "Build 412 · 24.3 MB · open MEKA to install". */
     fun notificationLine(b: Build): String = "${line(b)} · open Navilife to install"
 
+    /**
+     * Today's slim update banner (Calmer Today, slice 2; the approved mockup): "Update ready · build 412" on one line
+     * beside Later and Install. The size stays in Health → Updates and the notification.
+     */
+    fun bannerLine(b: Build): String = "Update ready · build ${b.versionCode}"
+
     /** "Build 412 · 24.3 MB". */
     fun line(b: Build): String = "Build ${b.versionCode} · ${sizeLabel(b.sizeBytes)}"
 

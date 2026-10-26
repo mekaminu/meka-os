@@ -27,6 +27,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.fold.NOW_CHIP_TAG
+import os.meka.android.fold.NOW_CARD_TAG
 import os.meka.android.today.TodayRoute
 import os.meka.android.today.DoneFoldLine
 import os.meka.core.domain.DoneTodayRules
@@ -60,7 +61,18 @@ class TodayScreensTest {
         secureRandom = Random(11), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        /** A two-line title adds ~22 dp to the mockup's ~122 dp card. */
+        const val UP_NEXT_MAX_DP = 150f
+    }
+
+    /** The tallest Up next / now card on screen in dp, or null when there is none. */
+    private fun upNextCardHeightDp(): Float? {
+        val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+        return compose.onAllNodesWithTag(NOW_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .maxOfOrNull { it.boundsInRoot.height / density }
+    }
 
     private enum class Fill { EMPTY, ONE, MANY, FASTING }
 
@@ -79,6 +91,9 @@ class TodayScreensTest {
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         // The re-shot's findings (2026-10-22): Up next's chips on one row, and the greeting by the core's clock (17:15).
         ScreenShots.assertOneRow(compose, name, NOW_CHIP_TAG)
+        // Calmer Today, slice 2 (the approved mockup): the Up next card at about half its old height (was ~185 dp with
+        // a one-line title; the mockup's is ~122 dp), so it takes ~15% of the folded screen, not ~30%.
+        upNextCardHeightDp()?.let { if (it > UP_NEXT_MAX_DP) fail("$name: the Up next card is $it dp tall (at most $UP_NEXT_MAX_DP)") }
         ScreenShots.assertShows(compose, name, "Good afternoon")
         // The re-shot after that (2026-10-22): the greeting on one line beside the watch face, on both screens.
         ScreenShots.assertOneLine(compose, name, "Good afternoon")

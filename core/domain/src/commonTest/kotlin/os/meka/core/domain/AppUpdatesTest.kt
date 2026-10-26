@@ -109,4 +109,12 @@ class AppUpdatesTest {
         kotlin.test.assertEquals("Now called Navilife", AppUpdateRules.ICON_SUMMARY)
         kotlin.test.assertTrue("restart" in AppUpdateRules.ICON_WHY)
     }
+
+    @Test
+    fun theBannerSaysReadyAndTheBuildOnOneShortLine() {
+        val line = AppUpdateRules.bannerLine(AppUpdateRules.Build(2221, "0.1.2221", 24_300_000))
+        assertEquals("Update ready · build 2221", line)
+        // Short enough for one line beside Later and Install on the folded phone (no size: Health has it).
+        kotlin.test.assertTrue(line.length <= 28)
+    }
 }

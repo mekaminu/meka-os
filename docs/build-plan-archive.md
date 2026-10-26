@@ -4011,3 +4011,21 @@ no whole-app refresh). Tests: DoneTodayChoiceTest (6), DoneTodayChoiceFacadeTest
 TodayScreensTest.doneTodayFoldOpensAndClosesByHand. Mockup check: tick 20→22 px drawn (board's 22), 44 target ✓, title
 16 ✓, 48 row ✓, "N done today ›" fold line ✓; Up next card, the update banner and the 12 sp section labels are the next
 slices. No server change, no migration. Mac checked nightly.
+
+## Calmer Today — slice 2 (2026-10-26): Up next at about half its height, the update card a slim banner
+
+The approved mockup (docs/design/today/today-calmer.dc.html). **Up next / the now card** (Fold NowCard, the cover
+screen's now card too; Mac NowCardFace): 16 dp inside (was 24), title in the new `upNextCardTitle` token (17 sp
+semibold, Mac 14; was `nowTitle` 22/17), a short line ("Carried over 5 days", at most 28 characters: core
+`CoverNowRules.lineOnLabelRow`) rides at the end of the "UP NEXT" row as the mockup draws it, a longer one ("Carried
+over 2 days · On this week's goal") keeps its own row under the title as a 13 sp caption rather than being cut; the
+actions are 36 dp pills (`PillSize.DRAWN`) each in its 48 dp target, Done filled and semibold, Break it down /
+Tomorrow / Open quiet; the bottom padding is trimmed by the target's inset. About 122 dp with a one-line title (was
+~185). **The update card** becomes a slim banner (UpdateBanner, taps passed in so a test can draw it): "Update ready ·
+build 2221" (core `AppUpdateRules.bannerLine`; size stays in Health → Updates and the notification) with Later and a lit
+Install at its end in one 48 dp row; downloading shows a 4 dp bar under the line; failed shows Android's words under
+it; Later's "Hidden till the next build · Health → Updates has it" with Undo as before; 16 dp under it on Today (was 24).
+The Mac has no update card (it publishes builds). Tests: CoverNowTest.aShortLineRidesOnTheLabelRowAndALongOneKeepsItsOwn,
+AppUpdatesTest.theBannerSaysReadyAndTheBuildOnOneShortLine, UpdateBannerTest (one slim row, taps reach the updater;
+Undo), TodayScreensTest's shots now fail if the Up next card is over 150 dp. No server change, no migration. Mac checked
+nightly.

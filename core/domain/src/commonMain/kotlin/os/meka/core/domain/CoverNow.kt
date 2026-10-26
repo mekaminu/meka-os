@@ -276,6 +276,16 @@ object CoverNowRules {
     const val BREAK_DOWN_LABEL = "Break it down"
 
     /**
+     * Calmer Today, slice 2 (the approved mockup: "UP NEXT · Carried over 5 days" on one row): a short line rides on the
+     * card's label row, at its end, so the card is about half its old height; a longer one ("Carried over 2 days · On
+     * this week's goal") keeps its own row under the title rather than being cut. At most [LABEL_ROW_LINE_MAX]
+     * characters, which fits beside the label on the cover screen's narrowest card.
+     */
+    fun lineOnLabelRow(line: String?): Boolean = line != null && line.isNotBlank() && line.length <= LABEL_ROW_LINE_MAX
+
+    const val LABEL_ROW_LINE_MAX = 28
+
+    /**
      * Done · Tomorrow · Open; a late planned task (lit) offers Done · Move to later · Tomorrow instead (the card itself
      * opens it), or Done · Tomorrow · Open when today has no room left. A task carried over 2+ days with no checklist
      * ([breakDown]) offers Done · Break it down · Tomorrow (the card itself opens it).

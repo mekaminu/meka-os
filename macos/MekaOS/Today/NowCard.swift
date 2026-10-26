@@ -76,19 +76,28 @@ struct NowCardFace: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(v.label.uppercased()).font(MekaType.sectionLabel)
-                .foregroundStyle(v.lit ? palette.accent : palette.textTertiary)
-            // Semibold 22 pt (Fold review 2026-10-09, item 3): one bold line that doesn't shout.
-            Text(v.title).font(MekaType.nowTitle).lineLimit(2)
+            // Calmer Today, slice 2 (the approved mockup): "UP NEXT · Carried over 5 days" on one row when the line is
+            // short (core CoverNowRules.lineOnLabelRow), so the card is about half its old height.
+            let lineOnLabel = CoverNowRules.shared.lineOnLabelRow(line: v.line)
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                Text(v.label.uppercased()).font(MekaType.sectionLabel)
+                    .foregroundStyle(v.lit ? palette.accent : palette.textTertiary)
+                Spacer(minLength: 0)
+                if lineOnLabel, let line = v.line {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                }
+            }
+            // Semibold 14 pt (Calmer Today, slice 2; was 17): the one bold line, not a headline.
+            Text(v.title).font(MekaType.upNextCardTitle).lineLimit(2)
                 .foregroundStyle(v.kind == NowKind.clear ? palette.textSecondary : palette.textPrimary)
-            if let line = v.line {
-                Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+            if !lineOnLabel, let line = v.line {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
             }
             if !v.actions.isEmpty {
                 HStack(spacing: MekaSpace.xs) {
                     ForEach(v.actions, id: \.name) { a in chip(a) }
                 }
-                .padding(.top, MekaSpace.m)
+                .padding(.top, MekaSpace.xs)
             }
         }
         .padding(MekaSpace.m)

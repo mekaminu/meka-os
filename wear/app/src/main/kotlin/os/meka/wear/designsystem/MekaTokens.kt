@@ -88,6 +88,7 @@ object MekaType {
     val itemMeta = TextStyle(fontSize = 15.sp, fontWeight = FontWeight(400), lineHeight = 20.3.sp, letterSpacing = 0.em)
     val upNextTitle = TextStyle(fontSize = 26.sp, fontWeight = FontWeight(600), lineHeight = 31.2.sp, letterSpacing = -0.015.em)
     val nowTitle = TextStyle(fontSize = 22.sp, fontWeight = FontWeight(600), lineHeight = 27.5.sp, letterSpacing = -0.01.em)
+    val upNextCardTitle = TextStyle(fontSize = 17.sp, fontWeight = FontWeight(600), lineHeight = 22.1.sp, letterSpacing = -0.005.em)
     val body = TextStyle(fontSize = 17.sp, fontWeight = FontWeight(400), lineHeight = 24.6.sp, letterSpacing = 0.em)
     val taskTitle = TextStyle(fontSize = 16.sp, fontWeight = FontWeight(400), lineHeight = 20.8.sp, letterSpacing = 0.em)
     val caption = TextStyle(fontSize = 13.sp, fontWeight = FontWeight(400), lineHeight = 16.9.sp, letterSpacing = 0.01.em)

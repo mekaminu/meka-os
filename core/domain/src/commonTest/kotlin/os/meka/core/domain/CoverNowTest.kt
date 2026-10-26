@@ -120,4 +120,18 @@ class CoverNowTest {
         val v = now(emptyList(), listOf(ev("s", "Standup", at(9, 30), at(9, 45))), at(10))
         assertEquals(NowKind.CLEAR, v.kind)
     }
+
+    @Test
+    fun aShortLineRidesOnTheLabelRowAndALongOneKeepsItsOwn() {
+        // Calmer Today, slice 2: "UP NEXT · Carried over 5 days" on one row, as the approved mockup draws it.
+        assertTrue(CoverNowRules.lineOnLabelRow("Carried over 5 days"))
+        assertTrue(CoverNowRules.lineOnLabelRow("Anytime today"))
+        assertTrue(CoverNowRules.lineOnLabelRow("Carried over from yesterday"))
+        assertTrue(CoverNowRules.lineOnLabelRow("At 14:00 · 30 min"))
+        // Never cut: the goal's why and a repeat keep their own row under the title.
+        assertFalse(CoverNowRules.lineOnLabelRow("Carried over 2 days · On this week's goal"))
+        assertFalse(CoverNowRules.lineOnLabelRow("Anytime today · ↻ Every weekday"))
+        assertFalse(CoverNowRules.lineOnLabelRow(null))
+        assertFalse(CoverNowRules.lineOnLabelRow(" "))
+    }
 }

@@ -101,6 +101,8 @@ enum MekaType {
     static var upNextTitleTracking: CGFloat { -0.30 * MekaTextScale.shared.factor }
     static var nowTitle: Font { Font.system(size: MekaTextScale.size(17), weight: .semibold) }
     static var nowTitleTracking: CGFloat { -0.17 * MekaTextScale.shared.factor }
+    static var upNextCardTitle: Font { Font.system(size: MekaTextScale.size(14), weight: .semibold) }
+    static var upNextCardTitleTracking: CGFloat { -0.07 * MekaTextScale.shared.factor }
     static var body: Font { Font.system(size: MekaTextScale.size(13), weight: .regular) }
     static var bodyTracking: CGFloat { 0.00 * MekaTextScale.shared.factor }
     static var taskTitle: Font { Font.system(size: MekaTextScale.size(13), weight: .regular) }

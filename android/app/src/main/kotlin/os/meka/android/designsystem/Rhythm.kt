@@ -27,6 +27,16 @@ object TickSize {
     val BLEED: Dp = (TOUCH - DRAWN) / 2
 }
 
+/**
+ * Calmer Today, slice 2 (the approved mockup's Up next buttons and update banner): a compact pill is drawn
+ * [PillSize.DRAWN] (36 dp) tall inside the [MekaSpace.touch] (48 dp) tap target, which reaches [PillSize.INSET] above
+ * and below the drawn pill; a card whose last row is pills trims its bottom padding by that much so it looks even.
+ */
+object PillSize {
+    val DRAWN: Dp = 36.dp
+    val INSET: Dp = (MekaSpace.touch - DRAWN) / 2
+}
+
 /** Lays this out [start] further left than its slot and that much narrower, so it bleeds into the row's inset. */
 fun Modifier.bleedStart(start: Dp): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints)
