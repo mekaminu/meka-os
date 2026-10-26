@@ -61,4 +61,29 @@ class StudyFacadeTest {
         assertTrue(fold.undoStudyRemoval(gone.token))
         assertEquals(3, fold.studyView.value.course(id)!!.total)
     }
+
+    @Test
+    fun aPlanSetOnTheFoldShowsOnTheMac() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 30 min\nSpreadsheets 45 min\nPivot tables 1 h").courseId!!
+        var c = fold.studyView.value.course(id)!!
+        assertEquals(StudyRules.PICK_DATE, c.plan.fit)
+        val fourWeeks = c.plan.ends.first()
+        assertEquals("Mon 23 Nov · 4 wks", fourWeeks.label)
+        // What the Fold shows the moment the chip is tapped is what the core then writes.
+        val tapped = StudyRules.plan(c.planInput.withFinish(fourWeeks.key.toLong()).withSlot("sat", true).withSession(30))
+        assertTrue(fold.setStudyFinish(id, fourWeeks.key.toLong()))
+        assertTrue(fold.setStudySlot(id, "sat", true))
+        assertTrue(fold.setStudySession(id, 30))
+        c = fold.studyView.value.course(id)!!
+        assertEquals(tapped, c.plan)
+        // 135 min over four weeks: 34 a week, two 30-minute sessions; Saturday alone is one slot.
+        assertEquals("2 sessions a week", c.plan.perWeek)
+        assertEquals("On track for Mon 23 Nov", c.plan.status)
+        assertTrue(!c.plan.fits, c.plan.fit)
+        assertEquals("With 45-minute sessions it fits the slots you picked.", c.plan.obi)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(c.plan, mac.studyView.value.course(id)!!.plan)
+    }
 }

@@ -8,6 +8,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -32,7 +36,8 @@ import kotlin.test.assertEquals
 
 /**
  * Study plan, slice 1: a course's page on the Fold's cover and inner screens (Dark, and Light on the cover), read for
- * nonsense and words broken in two, saved under `study/`; and a lesson's tick shows in the next frame. Invented course
+ * nonsense and words broken in two, saved under `study/`; and a lesson's tick shows in the next frame. Slice 2a: the
+ * plan card with a date and slots picked (cover Dark and Light), and a chip answering in the next frame. Invented course
  * (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -100,12 +105,64 @@ class StudyScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Data analytics certificate")
         ScreenShots.assertShows(compose, name, "3 of 8 lessons · about 4½ h left")
+        // Slice 2a: YOUR PLAN sits between the header and the lessons, so the modules are further down.
+        scrollTo(hasTestTag("study-module-${core.studyView.value.course(id)!!.modules[1].key}"))
         ScreenShots.assertShows(compose, name, "2 · Core skills")
+    }
+
+    /** Scrolls the course to [m] with the clock running, then pauses it again for the next-frame checks. */
+    private fun scrollTo(m: androidx.compose.ui.test.SemanticsMatcher) {
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("study-pane").performScrollToNode(m)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun courseCoverDark() = shoot("cover-dark-course")
     @Test @Config(qualifiers = ScreenShots.COVER) fun courseCoverLight() = shoot("cover-light-course", ThemeChoice.LIGHT)
     @Test @Config(qualifiers = ScreenShots.INNER) fun courseInnerDark() = shoot("inner-dark-course")
+
+    private val fourWeeks = 20_752L + 28 // Mon 23 Nov 2026
+
+    private fun shootPlan(name: String, theme: ThemeChoice) {
+        val (core, id) = filled(theme)
+        runBlocking {
+            core.setStudyFinish(id, fourWeeks)
+            core.setStudySlot(id, "train", true)
+            core.setStudySlot(id, "sat", true)
+            core.tick()
+        }
+        show(core, id)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", name))
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertShows(compose, name, "On track for Mon 23 Nov")
+        ScreenShots.assertShows(compose, name, "2 sessions a week")
+        ScreenShots.assertShows(compose, name, "Fits: you picked 4 slots a week.")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER) fun planCoverDark() = shootPlan("cover-dark-plan", ThemeChoice.DARK)
+    @Test @Config(qualifiers = ScreenShots.COVER) fun planCoverLight() = shootPlan("cover-light-plan", ThemeChoice.LIGHT)
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun aPlanChipAnswersInTheNextFrame() {
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        scrollTo(hasTestTag("study-end-$fourWeeks"))
+        compose.onNodeWithTag("study-end-$fourWeeks").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithTag("study-end-$fourWeeks").assertIsSelected()
+        compose.onNodeWithText("2 sessions a week").assertExists()
+        scrollTo(hasTestTag("study-slot-sat"))
+        compose.onNodeWithTag("study-slot-sat").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithText("Doesn’t fit", substring = true).assertExists()
+        // The core's writes land after: the view then says the same.
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.plan.obi != null }
+        assertEquals("Move the date to Mon 7 Dec and it fits the slots you picked.", core.studyView.value.course(id)!!.plan.obi)
+    }
 
     @Test
     @Config(qualifiers = ScreenShots.COVER)
@@ -114,6 +171,7 @@ class StudyScreensTest {
         show(core, id)
         // Module 2 is the first not yet done, so it is open.
         val pivot = core.studyView.value.course(id)!!.modules[1].lessons.first()
+        scrollTo(hasTestTag("study-lesson-${pivot.id}"))
         compose.onNodeWithTag("study-lesson-${pivot.id}").performClick()
         compose.mainClock.advanceTimeBy(16L)
         compose.onNodeWithTag("study-lesson-${pivot.id}")

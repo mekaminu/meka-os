@@ -17,6 +17,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -48,12 +50,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +78,9 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.StudyAdded
+import os.meka.core.domain.StudyChip
+import os.meka.core.domain.StudyPlanInput
+import os.meka.core.domain.StudyPlanView
 import os.meka.core.domain.StudyCourseView
 import os.meka.core.domain.StudyLessonRow
 import os.meka.core.domain.StudyModule
@@ -200,10 +207,13 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     // Modules folded or opened by hand; untouched, the first module not yet done is open and the rest folded.
     val opened = remember { mutableStateMapOf<String, Boolean>() }
+    // Slice 2a: the plan's chips tapped here, worked out at once until the view says the same.
+    var planTap by remember(courseId) { mutableStateOf(PlanTap()) }
     BackHandler(onBack = onClose)
     LaunchedEffect(c) {
         val shown = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.done }
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
+        c?.planInput?.let { planTap = planTap.settled(it) }
     }
     LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
     val tick: (StudyLessonRow, Boolean) -> Unit = { row, done ->
@@ -218,6 +228,12 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             if (r?.refused == false) { haptics.light(); outline = "" } else haptics.reject()
             said = r
         }
+    }
+    val choose: (PlanTap, suspend () -> Boolean) -> Unit = { next, write ->
+        haptics.light()
+        val before = planTap
+        planTap = next
+        scope.launch { if (runCatching { write() }.isFailure) planTap = before }
     }
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "study-said",
@@ -240,6 +256,7 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         }
         val lessons = c.modules.flatMap { it.lessons }
         val done = lessons.count { pending[it.id] ?: it.done }
+        val plan = if (planTap.isEmpty) c.plan else StudyRules.plan(planTap.applyTo(c.planInput))
         val total = lessons.size
         val pct = if (total == 0) 0 else (done * 100 + total / 2) / total
         item(key = "head") {
@@ -254,8 +271,28 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
                     Text(c.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
                     Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
                     c.next?.let { Text(it, style = MekaType.captionStrong, color = if (c.allDone) Meka.colors.success else Meka.colors.accent) }
+                    Crossfade(plan.status, animationSpec = MekaMotion.appear(reduced), label = "study-status") { st ->
+                        st?.let { Text(it, style = MekaType.caption, color = if (plan.behind) Meka.colors.accent else Meka.colors.success, modifier = Modifier.testTag("study-status")) }
+                    }
                 }
             }
+        }
+        if (total > 0 && !c.allDone) item(key = "plan") {
+            PlanCard(
+                plan, Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)),
+                onFinish = { chip ->
+                    val day = chip.key.toLong()
+                    if (!chip.on) choose(planTap.copy(finish = day)) { core.setStudyFinish(courseId, day) }
+                },
+                onSession = { chip ->
+                    val mins = chip.key.toInt()
+                    if (!chip.on) choose(planTap.copy(session = mins)) { core.setStudySession(courseId, mins) }
+                },
+                onSlot = { chip ->
+                    val slots = (planTap.slots ?: c.planInput.slots).let { if (chip.on) it - chip.key else it + chip.key }
+                    choose(planTap.copy(slots = slots)) { core.setStudySlot(courseId, chip.key, !chip.on) }
+                },
+            )
         }
         item(key = "lessons-label") { SectionLabel("Lessons", Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1))) }
         item(key = "field") {
@@ -314,6 +351,101 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             }
         }
     }
+    }
+}
+
+/**
+ * The plan's choices tapped on this screen (slice 2a): applied to the view's [StudyPlanInput] so the card answers in
+ * the same frame, and dropped one by one as the view catches up.
+ */
+internal data class PlanTap(val finish: Long? = null, val session: Int? = null, val slots: Set<String>? = null) {
+    val isEmpty get() = finish == null && session == null && slots == null
+
+    fun applyTo(i: StudyPlanInput): StudyPlanInput {
+        var x = i
+        if (finish != null && finish != i.finishByDay) x = x.withFinish(finish)
+        if (session != null) x = x.withSession(session)
+        if (slots != null) x = x.copy(slots = slots)
+        return x
+    }
+
+    fun settled(i: StudyPlanInput) = PlanTap(
+        finish.takeIf { it != i.finishByDay }, session.takeIf { it != i.sessionMins }, slots.takeIf { it != i.slots },
+    )
+}
+
+/**
+ * YOUR PLAN (slice 2a, mockup): FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips; then "4 sessions a week" in
+ * the accent with "about 2 h 24 · 19 lessons left", whether it fits (green, or amber with what to change) and Obi's
+ * line under it. A chip lights in the same frame (its fill glides); the lines cross-fade.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlanCard(
+    plan: StudyPlanView, modifier: Modifier,
+    onFinish: (StudyChip) -> Unit, onSession: (StudyChip) -> Unit, onSlot: (StudyChip) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth().testTag("study-plan"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface).padding(MekaSpace.l),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
+        ) {
+            SectionLabel(StudyRules.PLAN)
+            ChipGroup(StudyRules.FINISH_LABEL, plan.ends, "study-end", onFinish)
+            ChipGroup(StudyRules.SESSION_LABEL, plan.lens, "study-len", onSession)
+            ChipGroup(StudyRules.SLOTS_LABEL, plan.slots, "study-slot", onSlot)
+            Crossfade(plan.perWeek to plan.perWeekSub, animationSpec = MekaMotion.appear(reduced), label = "study-per-week") { (big, sub) ->
+                if (big != null) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    Text(big, style = MekaType.nowTitle, color = Meka.colors.accent, modifier = Modifier.testTag("study-per-week"))
+                    sub?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs)) }
+                }
+            }
+            Crossfade(plan.fit, animationSpec = MekaMotion.appear(reduced), label = "study-fit") { fit ->
+                fit?.let { Text(it, style = MekaType.caption, color = if (plan.fits) Meka.colors.success else if (plan.perWeek == null) Meka.colors.textTertiary else Meka.colors.accent, modifier = Modifier.testTag("study-fit")) }
+            }
+        }
+        AnimatedVisibility(plan.obi != null, enter = unfold(), exit = fold()) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("study-obi"),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                val accent = Meka.colors.accent
+                Box(Modifier.padding(top = MekaSpace.xxs).size(16.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.9f), accent.copy(alpha = 0.45f)))))
+                Crossfade(plan.obi.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "study-obi") { line ->
+                    Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChipGroup(label: String, chips: List<StudyChip>, tag: String, onTap: (StudyChip) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text(label, style = MekaType.caption, color = Meka.colors.textSecondary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            chips.forEach { chip -> PlanChip(chip, Modifier.testTag("$tag-${chip.key}")) { onTap(chip) } }
+        }
+    }
+}
+
+/** A plan chip: 48 dp to touch, drawn as a pill; lit in the accent when picked (the fill glides). */
+@Composable
+private fun PlanChip(chip: StudyChip, modifier: Modifier, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (chip.on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "study-chip")
+    Box(
+        modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = chip.spoken; selected = chip.on },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            chip.label, style = MekaType.caption, color = if (chip.on) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        )
     }
 }
 

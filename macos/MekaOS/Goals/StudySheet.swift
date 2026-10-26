@@ -147,6 +147,10 @@ struct StudySheet: View {
     @State private var pending: [String: Bool] = [:]
     /// Modules opened or folded by hand; untouched, the first not yet done is open.
     @State private var opened: [String: Bool] = [:]
+    /// Slice 2a: the plan's chips clicked here, worked out at once until the view says the same.
+    @State private var tapFinish: Int64?
+    @State private var tapSession: Int32?
+    @State private var tapSlots: [String: Bool] = [:]
 
     var body: some View {
         let c = model.study?.course(id: courseId)
@@ -171,7 +175,21 @@ struct StudySheet: View {
             var shown: [String: Bool] = [:]
             for m in c.modules { for l in m.lessons { shown[l.id] = l.done } }
             pending = pending.filter { id, done in shown[id] != nil && shown[id] != done }
+            let i = c.planInput
+            if let f = tapFinish, i.finishByDay?.int64Value == f { tapFinish = nil }
+            if let m = tapSession, i.sessionMins == m { tapSession = nil }
+            tapSlots = tapSlots.filter { key, on in i.slots.contains(key) != on }
         }
+    }
+
+    /// The plan card for [c], with any choice clicked here applied (the same rules the core runs).
+    private func plan(_ c: StudyCourseView) -> StudyPlanView {
+        if tapFinish == nil && tapSession == nil && tapSlots.isEmpty { return c.plan }
+        var i = c.planInput
+        if let f = tapFinish, i.finishByDay?.int64Value != f { i = i.withFinish(day: f) }
+        if let m = tapSession { i = i.withSession(mins: m) }
+        for (key, on) in tapSlots { i = i.withSlot(key: key, on: on) }
+        return StudyRules.shared.plan(i: i)
     }
 
     private func isDone(_ l: StudyLessonRow) -> Bool { pending[l.id] ?? l.done }
@@ -182,6 +200,7 @@ struct StudySheet: View {
         let done = lessons.filter { isDone($0) }.count
         let total = lessons.count
         let pct = total == 0 ? 0 : (done * 100 + total / 2) / total
+        let p = plan(c)
         HStack(spacing: MekaSpace.l) {
             StudyRing(fraction: total == 0 ? 0 : Double(done) / Double(total), label: "\(pct)%", size: 96, width: 8, sub: "done", palette: palette)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -190,11 +209,18 @@ struct StudySheet: View {
                 if let next = c.next {
                     Text(next).font(MekaType.captionStrong).foregroundStyle(c.allDone ? palette.success : palette.accent)
                 }
+                if let status = p.status {
+                    Text(status).font(MekaType.caption).foregroundStyle(p.behind ? palette.accent : palette.success)
+                        .contentTransition(.opacity)
+                }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(c.title), \(pct) percent done, \(c.line)")
+        .accessibilityLabel("\(c.title), \(pct) percent done, \(c.line)" + (p.status.map { ", \($0)" } ?? ""))
         .staggeredAppear(0)
+        if total > 0 && !c.allDone {
+            planCard(c, p).padding(.top, MekaSpace.m).staggeredAppear(1)
+        }
         SectionLabel("Lessons", palette).padding(.top, MekaSpace.l).staggeredAppear(1)
         TextField(StudyRules.shared.ADD_LESSONS_HINT, text: $outline, axis: .vertical)
             .lineLimit(1...8)
@@ -268,6 +294,84 @@ struct StudySheet: View {
             .animation(MekaMotion.expand(reduced: reduceMotion), value: opened)
         }
         .frame(maxHeight: 420)
+    }
+
+    /// YOUR PLAN (slice 2a), like the Fold's: FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips, then sessions a
+    /// week, whether it fits and Obi's line. A chip lights at once (its fill glides); the lines cross-fade.
+    @ViewBuilder
+    private func planCard(_ c: StudyCourseView, _ p: StudyPlanView) -> some View {
+        let id = c.id
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            SectionLabel(StudyRules.shared.PLAN, palette)
+            chipRow(StudyRules.shared.FINISH_LABEL, p.ends) { chip in
+                guard !chip.on, let day = Int64(chip.key) else { return }
+                let before = tapFinish
+                tapFinish = day
+                Task { if !(await model.setStudyFinish(id, day: day)) { tapFinish = before } }
+            }
+            chipRow(StudyRules.shared.SESSION_LABEL, p.lens) { chip in
+                guard !chip.on, let mins = Int32(chip.key) else { return }
+                let before = tapSession
+                tapSession = mins
+                Task { if !(await model.setStudySession(id, mins: mins)) { tapSession = before } }
+            }
+            chipRow(StudyRules.shared.SLOTS_LABEL, p.slots) { chip in
+                let key = chip.key
+                let on = !chip.on
+                tapSlots[key] = on
+                Task { if !(await model.setStudySlot(id, key: key, on: on)) { tapSlots[key] = nil } }
+            }
+            if let perWeek = p.perWeek {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(perWeek).font(MekaType.nowTitle).foregroundStyle(palette.accent).contentTransition(.numericText())
+                    if let sub = p.perWeekSub { Text(sub).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                }
+            }
+            if let fit = p.fit {
+                Text(fit).font(MekaType.caption)
+                    .foregroundStyle(p.fits ? palette.success : (p.perWeek == nil ? palette.textTertiary : palette.accent))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            if let obi = p.obi {
+                HStack(alignment: .top, spacing: MekaSpace.xs) {
+                    Circle().fill(RadialGradient(colors: [palette.accent.opacity(0.9), palette.accent.opacity(0.45)], center: .center, startRadius: 0, endRadius: 8))
+                        .frame(width: 16, height: 16)
+                    Text(obi).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xs)
+                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(MekaSpace.m)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.l))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: p.spoken)
+    }
+
+    private func chipRow(_ label: String, _ chips: [StudyChip], _ tap: @escaping (StudyChip) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(chips, id: \.key) { chip in
+                    Button {
+                        MekaHaptics.light()
+                        tap(chip)
+                    } label: {
+                        Text(chip.label).font(MekaType.caption).lineLimit(1)
+                            .foregroundStyle(chip.on ? palette.onAccent : palette.textPrimary)
+                            .padding(.horizontal, MekaSpace.xs)
+                            .padding(.vertical, MekaSpace.xxs)
+                            .background(chip.on ? palette.accent : palette.surfaceRaised, in: Capsule())
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: chip.on)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel(chip.spoken)
+                    .accessibilityAddTraits(chip.on ? .isSelected : [])
+                }
+            }
+        }
     }
 
     private func add() {

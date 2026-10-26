@@ -12,9 +12,9 @@ import os.meka.core.sync.fv
  * course content is Meka's data and never leaves his synced data. Two synced entity types (ADR-008 addendum
  * 2026-10-26): `study_course` and `study_lesson`.
  *
- * Still to come (the board): slice 2, the plan (finish by, session length, when he studies, sessions a week, on track or
- * behind, sessions on the Week board, the 10-minute nudge and the Sunday check-in); slice 3, the outline from a
- * screenshot.
+ * Slice 2a: the plan (finish by, session length, when he studies → sessions a week, whether it fits, on track or behind;
+ * [StudyRules.plan]). Still to come (the board): slice 2b, sessions on the Week board, Start/Done, the 10-minute nudge and
+ * the Sunday check-in; slice 3, the outline from a screenshot.
  */
 object StudyCourseFields {
     /** "Data analytics certificate" (at most [StudyRules.MAX_COURSE]). */
@@ -22,6 +22,16 @@ object StudyCourseFields {
     const val ADDED_AT = "addedAtMs"
     /** LWW: a removed course and its lessons are not shown; Undo sets it back to false. */
     const val REMOVED = "removed"
+    // Slice 2a, the plan (all LWW, absent until chosen):
+    /** The epoch day he means to finish by. */
+    const val FINISH_BY = "finishByDay"
+    /** Minutes in a session (30, 45, 60; [StudyRules.DEFAULT_SESSION] until chosen). */
+    const val SESSION_MINS = "sessionMins"
+    /** When he can study: [StudyRules.SLOTS] keys joined by ",", in that order ("train,sat"). */
+    const val SLOTS = "slots"
+    /** The day the finish date was set, and how many lessons were left then: what "on track" is measured against. */
+    const val PLAN_FROM = "planFromDay"
+    const val PLAN_LEFT = "planLeft"
 }
 
 object StudyLessonFields {
@@ -42,7 +52,59 @@ object StudyLessonFields {
     const val RESTORED = "restored"
 }
 
-data class StudyCourse(val id: String, val title: String, val addedAtMs: Long)
+data class StudyCourse(
+    val id: String, val title: String, val addedAtMs: Long,
+    val finishByDay: Long? = null, val sessionMins: Int? = null, val slots: Set<String> = emptySet(),
+    val planFromDay: Long? = null, val planLeft: Int? = null,
+)
+
+/** A plan choice (a finish date, a session length, a time he can study): its label, whether it's picked, its key. */
+data class StudyChip(val key: String, val label: String, val on: Boolean, val spoken: String)
+
+/** When he can study ([StudyRules.SLOTS]): "Train mornings" are three sessions a week. */
+data class StudySlot(val key: String, val name: String, val perWeek: Int)
+
+/**
+ * What the plan is worked out from (slice 2a): the course's choices and what's left. The apps redo [StudyRules.plan] with
+ * a tapped choice so the card answers in the same frame, before the core has written it.
+ */
+data class StudyPlanInput(
+    val today: Long,
+    val finishByDay: Long?,
+    val sessionMins: Int,
+    val slots: Set<String>,
+    val leftLessons: Int,
+    /** Minutes of the lessons left that say how long they take. */
+    val leftKnownMins: Int,
+    /** Lessons left that don't say; each counts as the course's average length (or a session). */
+    val leftUnknown: Int,
+    val avgKnownMins: Int?,
+    val planFromDay: Long?,
+    val planLeft: Int?,
+) {
+    fun withFinish(day: Long) = copy(finishByDay = day, planFromDay = today, planLeft = leftLessons)
+    fun withSession(mins: Int) = copy(sessionMins = mins)
+    fun withSlot(key: String, on: Boolean) = copy(slots = if (on) slots + key else slots - key)
+}
+
+/**
+ * The course's "Your plan" card (slice 2a, mockup): FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips, then "3
+ * sessions a week" · "about 2 h 15 · 19 lessons left", whether it fits the slots picked, and Obi's line; [status] ("On
+ * track for Mon 7 Dec", "1 lesson behind · catch up Saturday") goes under the course's line.
+ */
+data class StudyPlanView(
+    val ends: List<StudyChip>,
+    val lens: List<StudyChip>,
+    val slots: List<StudyChip>,
+    val perWeek: String?,
+    val perWeekSub: String?,
+    val fit: String?,
+    val fits: Boolean,
+    val status: String?,
+    val behind: Boolean,
+    val obi: String?,
+    val spoken: String,
+)
 
 data class StudyLesson(
     val id: String, val courseId: String, val module: String, val title: String, val mins: Int?, val pos: Long,
@@ -77,6 +139,9 @@ data class StudyCourseView(
     /** The module new lessons go in when the outline doesn't name one (the last one), or null for none yet. */
     val lastModule: String?,
     val spoken: String,
+    /** Slice 2a: the plan card and what it's worked out from. */
+    val plan: StudyPlanView,
+    val planInput: StudyPlanInput,
 )
 
 data class StudyView(val courses: List<StudyCourseView>) {
@@ -216,7 +281,14 @@ object StudyRules {
     fun courses(entities: Map<String, Map<String, FieldValue>>): List<StudyCourse> = entities.mapNotNull { (id, s) ->
         if (s.f(ActionableFields.DELETED).boolOrNull == true || s.f(StudyCourseFields.REMOVED).boolOrNull == true) return@mapNotNull null
         val title = s.f(StudyCourseFields.TITLE).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-        StudyCourse(id, title, s.f(StudyCourseFields.ADDED_AT).longOrNull ?: 0L)
+        StudyCourse(
+            id, title, s.f(StudyCourseFields.ADDED_AT).longOrNull ?: 0L,
+            finishByDay = s.f(StudyCourseFields.FINISH_BY).longOrNull,
+            sessionMins = s.f(StudyCourseFields.SESSION_MINS).longOrNull?.toInt()?.takeIf { it in MIN_SESSION..MAX_SESSION },
+            slots = readSlots(s.f(StudyCourseFields.SLOTS).textOrNull),
+            planFromDay = s.f(StudyCourseFields.PLAN_FROM).longOrNull,
+            planLeft = s.f(StudyCourseFields.PLAN_LEFT).longOrNull?.toInt()?.takeIf { it >= 0 },
+        )
     }.sortedWith(compareBy<StudyCourse> { it.addedAtMs }.thenBy { it.id })
 
     fun lessons(entities: Map<String, Map<String, FieldValue>>): List<StudyLesson> = entities.mapNotNull { (id, s) ->
@@ -262,7 +334,7 @@ object StudyRules {
     /** "2 of 6", or "Done" once every lesson is ticked. */
     fun moduleCount(done: Int, total: Int): String = if (total > 0 && done == total) "Done" else "$done of $total"
 
-    fun view(course: StudyCourse, all: List<StudyLesson>): StudyCourseView {
+    fun view(course: StudyCourse, all: List<StudyLesson>, today: Long): StudyCourseView {
         val lessons = all.filter { it.courseId == course.id }
         val done = lessons.count { it.done }
         val total = lessons.size
@@ -292,15 +364,163 @@ object StudyRules {
             else -> "Next: ${nextLesson.title}"
         }
         val lastModule = lessons.maxByOrNull { it.pos }?.module
+        val known = lessons.mapNotNull { it.mins }
+        val left = lessons.filter { !it.done }
+        val input = StudyPlanInput(
+            today = today, finishByDay = course.finishByDay, sessionMins = course.sessionMins ?: DEFAULT_SESSION,
+            slots = course.slots, leftLessons = left.size, leftKnownMins = left.mapNotNull { it.mins }.sum(),
+            leftUnknown = left.count { it.mins == null }, avgKnownMins = if (known.isEmpty()) null else (known.sum() + known.size / 2) / known.size,
+            planFromDay = course.planFromDay, planLeft = course.planLeft,
+        )
         return StudyCourseView(
             id = course.id, title = course.title, pct = pct, fraction = if (total == 0) 0f else done.toFloat() / total,
             done = done, total = total, line = line, next = next, allDone = total > 0 && done == total,
             modules = modules, lastModule = lastModule,
             spoken = "${course.title}, $pct percent, $line" + (next?.let { ", $it" } ?: ""),
+            plan = plan(input), planInput = input,
         )
     }
 
-    fun view(courses: List<StudyCourse>, lessons: List<StudyLesson>): StudyView = StudyView(courses.map { view(it, lessons) })
+    fun view(courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long): StudyView =
+        StudyView(courses.map { view(it, lessons, today) })
+
+    // ---- The plan (slice 2a) ----
+
+    const val DEFAULT_SESSION = 45
+    const val MIN_SESSION = 10
+    const val MAX_SESSION = 240
+    val SESSION_CHOICES = listOf(30, 45, 60)
+    /** Finish-by choices, in weeks from today. */
+    val WEEK_CHOICES = listOf(4, 6, 8)
+    val SLOTS = listOf(
+        StudySlot("train", "Train mornings", 3),
+        StudySlot("thu", "Thu after work", 1),
+        StudySlot("sat", "Sat morning", 1),
+        StudySlot("eve", "Evenings", 2),
+        StudySlot("night", "Nights", 2),
+    )
+    const val PLAN = "Your plan"
+    const val FINISH_LABEL = "Finish by"
+    const val SESSION_LABEL = "Each session"
+    const val SLOTS_LABEL = "When you can study"
+    const val PICK_DATE = "Pick a finish date to see how many sessions a week it takes."
+    const val PICK_SLOTS = "Pick when you can study to see if it fits."
+    const val PASSED = "The finish date has passed · pick a new one"
+
+    fun readSlots(text: String?): Set<String> =
+        text.orEmpty().split(',').map { it.trim() }.filter { k -> SLOTS.any { it.key == k } }.toSet()
+
+    fun slotsText(keys: Set<String>): String = SLOTS.filter { it.key in keys }.joinToString(",") { it.key }
+
+    private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
+
+    private fun ceilDiv(a: Long, b: Long): Long = if (b <= 0) 0 else (a + b - 1) / b
+
+    /** Minutes of lessons left, counting a lesson that doesn't say as the course's average (or a session). */
+    fun leftMins(i: StudyPlanInput): Int = i.leftKnownMins + i.leftUnknown * (i.avgKnownMins ?: i.sessionMins)
+
+    /** Sessions a week to finish by [finish] (at least one), from [i]'s minutes left and session length. */
+    fun sessionsPerWeek(i: StudyPlanInput, finish: Long, sessionMins: Int = i.sessionMins): Int {
+        val days = (finish - i.today).coerceAtLeast(1)
+        val perWeekMin = ceilDiv(leftMins(i).toLong() * 7, days)
+        return ceilDiv(perWeekMin, sessionMins.toLong().coerceAtLeast(1)).toInt().coerceAtLeast(1)
+    }
+
+    /** Minutes a week to finish by [finish]. */
+    fun minsPerWeek(i: StudyPlanInput, finish: Long): Int =
+        ceilDiv(leftMins(i).toLong() * 7, (finish - i.today).coerceAtLeast(1)).toInt()
+
+    /** Sessions a week the picked slots give. */
+    fun available(slots: Set<String>): Int = SLOTS.filter { it.key in slots }.sumOf { it.perWeek }
+
+    /** "Mon 7 Dec · 6 wks" */
+    fun endLabel(day: Long, today: Long): String {
+        val days = day - today
+        val tail = when {
+            days <= 0 -> "passed"
+            days < 7 -> plural(days.toInt(), "day")
+            else -> "${(days + 3) / 7} wks".let { if (it == "1 wks") "1 wk" else it }
+        }
+        return "${CivilDate.shortLabel(day)} · $tail"
+    }
+
+    /**
+     * How far behind the plan he is, in whole lessons: lessons left when the date was set are spread evenly from that
+     * day to the finish, and anything under a whole lesson counts as on track.
+     */
+    fun behindBy(i: StudyPlanInput): Int {
+        val finish = i.finishByDay ?: return 0
+        val from = i.planFromDay ?: i.today
+        val startLeft = i.planLeft ?: i.leftLessons
+        val span = finish - from
+        if (span <= 0) return 0
+        val elapsed = (i.today - from).coerceIn(0, span)
+        val expected = startLeft.toDouble() * elapsed / span
+        val actual = (startLeft - i.leftLessons).coerceAtLeast(0)
+        return kotlin.math.floor(expected - actual + 1e-9).toInt().coerceAtLeast(0)
+    }
+
+    /** The plan card for [i] ([StudyPlanView]). */
+    fun plan(i: StudyPlanInput): StudyPlanView {
+        val finish = i.finishByDay
+        val options = WEEK_CHOICES.map { i.today + it * 7L }
+        val ends = buildList {
+            if (finish != null && finish !in options) add(StudyChip(finish.toString(), endLabel(finish, i.today), true, "Finish by ${CivilDate.longLabel(finish)}"))
+            options.forEach { d -> add(StudyChip(d.toString(), endLabel(d, i.today), d == finish, "Finish by ${CivilDate.longLabel(d)}")) }
+        }
+        val lens = buildList {
+            if (i.sessionMins !in SESSION_CHOICES) add(StudyChip(i.sessionMins.toString(), minsLabel(i.sessionMins), true, "${minsLabel(i.sessionMins)} sessions"))
+            SESSION_CHOICES.forEach { m -> add(StudyChip(m.toString(), minsLabel(m), m == i.sessionMins, "$m minute sessions")) }
+        }
+        val slots = SLOTS.map { StudyChip(it.key, it.name, it.key in i.slots, "${it.name}, ${plural(it.perWeek, "session")} a week") }
+        val avail = available(i.slots)
+        var perWeek: String? = null
+        var perWeekSub: String? = null
+        var fit: String? = null
+        var fits = false
+        var status: String? = null
+        var behind = false
+        var obi: String? = null
+        when {
+            i.leftLessons == 0 -> Unit
+            finish == null -> fit = PICK_DATE
+            finish <= i.today -> { status = PASSED; behind = true }
+            else -> {
+                val sessions = sessionsPerWeek(i, finish)
+                perWeek = "${plural(sessions, "session")} a week"
+                perWeekSub = "about ${minsLabel(minsPerWeek(i, finish).coerceAtLeast(1))} · ${plural(i.leftLessons, "lesson")} left"
+                fits = avail > 0 && sessions <= avail
+                fit = when {
+                    avail == 0 -> PICK_SLOTS
+                    fits -> "Fits: you picked ${plural(avail, "slot")} a week."
+                    else -> "Doesn’t fit: you need ${plural(sessions, "slot")} a week but picked $avail. Add a slot, make sessions longer or move the date."
+                }
+                val by = behindBy(i)
+                behind = by > 0
+                status = if (by > 0) {
+                    "${plural(by, "lesson")} behind · " + if ("sat" in i.slots) "catch up Saturday" else "an extra session catches you up"
+                } else "On track for ${CivilDate.shortLabel(finish)}"
+                obi = when {
+                    avail == 0 -> null
+                    fits -> (avail - sessions).let { spare ->
+                        if (spare > 0) "That leaves ${plural(spare, "spare slot")} a week to catch up if one slips."
+                        else "Every slot you picked is needed: one more gives you room to catch up."
+                    }
+                    else -> {
+                        val longer = SESSION_CHOICES.firstOrNull { it > i.sessionMins && sessionsPerWeek(i, finish, it) <= avail }
+                        val later = (1..52).map { i.today + it * 7L }.firstOrNull { it > finish && sessionsPerWeek(i, it) <= avail }
+                        when {
+                            longer != null -> "With $longer-minute sessions it fits the slots you picked."
+                            later != null -> "Move the date to ${CivilDate.shortLabel(later)} and it fits the slots you picked."
+                            else -> null
+                        }
+                    }
+                }
+            }
+        }
+        val spoken = listOfNotNull(status, perWeek, perWeekSub, fit, obi).joinToString(". ")
+        return StudyPlanView(ends, lens, slots, perWeek, perWeekSub, fit, fits, status, behind, obi, spoken)
+    }
 }
 
 /** Courses and their lessons on a replica. */
@@ -315,7 +535,7 @@ class Study(
     fun lessons(): List<StudyLesson> =
         StudyRules.lessons(replica.entities(EntityTypes.STUDY_LESSON).associate { it.ref.entityId to it.fields })
 
-    fun view(): StudyView = StudyRules.view(courses(), lessons())
+    fun view(today: Long): StudyView = StudyRules.view(courses(), lessons(), today)
 
     private fun exists(courseId: String): Boolean = courses().any { it.id == courseId }
 
@@ -364,6 +584,39 @@ class Study(
         if (f[StudyLessonFields.DELETED]?.boolOrNull == true) return false
         if ((f[StudyLessonFields.DONE]?.boolOrNull == true) == done) return false
         replica.commitLocal(EntityTypes.STUDY_LESSON, id, StudyRules.tickFields(done, nowMs()))
+        return true
+    }
+
+    /**
+     * Plan (slice 2a): the finish date. "On track" is then measured from [today] with the lessons left now; false when
+     * the course isn't there or the date is already so.
+     */
+    fun setFinish(courseId: String, day: Long, today: Long): Boolean {
+        val c = courses().firstOrNull { it.id == courseId } ?: return false
+        if (c.finishByDay == day) return false
+        val left = lessons().count { it.courseId == courseId && !it.done }
+        replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(
+            StudyCourseFields.FINISH_BY to day.fv(),
+            StudyCourseFields.PLAN_FROM to today.fv(),
+            StudyCourseFields.PLAN_LEFT to left.toLong().fv(),
+        ))
+        return true
+    }
+
+    /** Plan: minutes in a session ([StudyRules.MIN_SESSION]..[StudyRules.MAX_SESSION]). */
+    fun setSession(courseId: String, mins: Int): Boolean {
+        val c = courses().firstOrNull { it.id == courseId } ?: return false
+        if (mins !in StudyRules.MIN_SESSION..StudyRules.MAX_SESSION || c.sessionMins == mins) return false
+        replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.SESSION_MINS to mins.toLong().fv()))
+        return true
+    }
+
+    /** Plan: picks or drops a time he can study ([StudyRules.SLOTS] key). */
+    fun setSlot(courseId: String, key: String, on: Boolean): Boolean {
+        val c = courses().firstOrNull { it.id == courseId } ?: return false
+        if (StudyRules.SLOTS.none { it.key == key } || (key in c.slots) == on) return false
+        val next = if (on) c.slots + key else c.slots - key
+        replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.SLOTS to StudyRules.slotsText(next).fv()))
         return true
     }
 

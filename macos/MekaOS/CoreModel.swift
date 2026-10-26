@@ -5998,6 +5998,32 @@ final class CoreModel {
 
     func undoStudyRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoStudyRemoval(token: token) } }
 
+    // MARK: Study plan (slice 2a): the plan card. Only Strings and numbers cross; the sheet already shows the tap.
+
+    func setStudyFinish(_ courseId: String, day: Int64) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.setStudyFinish(courseId: courseId, epochDay: day); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    func setStudySession(_ courseId: String, mins: Int32) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.setStudySession(courseId: courseId, mins: mins); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    func setStudySlot(_ courseId: String, key: String, on: Bool) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.setStudySlot(courseId: courseId, key: key, on: on); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: Trip lists (slice 1)
 
     /// What adding to a trip's lists said, and the list it went on (the panel shows that tab).

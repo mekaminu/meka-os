@@ -5029,6 +5029,22 @@ class MekaCore(
     /** Undo after [removeStudyLesson] or [removeStudyCourse]: it comes back as it was. */
     suspend fun undoStudyRemoval(token: String): Boolean = onCore { study.undoRemove(token) }
 
+    // ---- Study plan, slice 2a (2026-10-26): the plan card ----
+
+    /**
+     * The course's finish date ([os.meka.core.domain.StudyChip.key] of a FINISH BY chip is its epoch day); "on track" is
+     * measured from today with the lessons left now. The apps redo [os.meka.core.domain.StudyRules.plan] with
+     * [os.meka.core.domain.StudyPlanInput.withFinish] so the card answers in the same frame.
+     */
+    suspend fun setStudyFinish(courseId: String, epochDay: Long): Boolean =
+        onCore { study.setFinish(courseId, epochDay, todayEpochDay()) }
+
+    /** Minutes in a session (an EACH SESSION chip's key). */
+    suspend fun setStudySession(courseId: String, mins: Int): Boolean = onCore { study.setSession(courseId, mins) }
+
+    /** Picks or drops a time he can study (a WHEN YOU CAN STUDY chip's key). */
+    suspend fun setStudySlot(courseId: String, key: String, on: Boolean): Boolean = onCore { study.setSlot(courseId, key, on) }
+
     /**
      * Slice 2b, "Start from last trip": copies the trip [fromTripId]'s lists onto [toTripId]'s empty ones, unticked
      * ("Copied 23 things from Lisbon trip", with Undo's token); refused when [toTripId] has lists already.
@@ -12776,8 +12792,8 @@ class MekaCore(
         } }
         val studyCourses = study.courses()
         val studyLessons = study.lessons()
-        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons)) {
-            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons)
+        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, todayDay)) {
+            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

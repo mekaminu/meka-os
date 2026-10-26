@@ -3031,6 +3031,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         let back = try await core.undoStudyRemoval(token: try XCTUnwrap(removed?.token))
         XCTAssertTrue(back.boolValue)
         XCTAssertEqual(core.studyView.value.course(id: id)?.total, 2)
+
+        // Slice 2a: the plan card's chips cross as Strings and numbers, and a tapped choice is worked out in Swift the
+        // same as the core then writes.
+        let before = try XCTUnwrap(core.studyView.value.course(id: id))
+        XCTAssertEqual(before.plan.fit, StudyRules.shared.PICK_DATE)
+        let end = try XCTUnwrap(before.plan.ends.first)
+        let day = try XCTUnwrap(Int64(end.key))
+        let tapped = StudyRules.shared.plan(i: before.planInput.withFinish(day: day).withSlot(key: "sat", on: true))
+        let setDate = try await core.setStudyFinish(courseId: id, epochDay: day)
+        XCTAssertTrue(setDate.boolValue)
+        let setSlot = try await core.setStudySlot(courseId: id, key: "sat", on: true)
+        XCTAssertTrue(setSlot.boolValue)
+        let plan = try XCTUnwrap(core.studyView.value.course(id: id)?.plan)
+        XCTAssertEqual(plan, tapped)
+        XCTAssertNotNil(plan.perWeek)
+        XCTAssertEqual(plan.slots.filter(\.on).map(\.key), ["sat"])
     }
 
     func testTripListsReachSwift() async throws {
