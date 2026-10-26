@@ -786,7 +786,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     }
 
     fun accounts(): List<MoneyAccount> = replica.entities(EntityTypes.MONEY_ACCOUNT).mapNotNull { e ->
-        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let(MoneyAccountNames::shown) ?: return@mapNotNull null
         val bp = e[MoneyAccountFields.BALANCE].longOrNull
         val bd = e[MoneyAccountFields.BALANCE_DAY].longOrNull
         MoneyAccount(e.ref.entityId, name, e[MoneyAccountFields.SOURCE].textOrNull ?: "csv", e[MoneyAccountFields.IMPORTED_AT].longOrNull,
@@ -818,7 +818,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     /** Slice 7: the accounts marked as cards, with what he typed off their statements. */
     fun cards(): List<MoneyCard> = replica.entities(EntityTypes.MONEY_ACCOUNT).mapNotNull { e ->
         val kind = e[MoneyCardFields.KIND].textOrNull?.takeIf { it == MoneyCards.CREDIT || it == MoneyCards.CHARGE } ?: return@mapNotNull null
-        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let(MoneyAccountNames::shown) ?: return@mapNotNull null
         MoneyCard(
             e.ref.entityId, name, kind,
             limitPence = e[MoneyCardFields.LIMIT].longOrNull, statementPence = e[MoneyCardFields.STATEMENT].longOrNull,
@@ -1155,8 +1155,10 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     /** Imports a statement file's [text] into [accountName] (made if new); lines already there are left alone. */
     fun import(accountName: String, text: String): MoneySaved {
         val name = accountName.trim().take(40)
-        val id = MoneyRules.accountId(name) ?: return MoneySaved(MoneyRules.NO_ACCOUNT, refused = true)
         val existing = accounts()
+        // A2: names are shown with any account number masked, so a chip's name finds its statement account by that.
+        val id = existing.firstOrNull { it.source == "csv" && it.name.equals(MoneyAccountNames.shown(name), ignoreCase = true) }?.id
+            ?: MoneyRules.accountId(name) ?: return MoneySaved(MoneyRules.NO_ACCOUNT, refused = true)
         if (existing.none { it.id == id } && existing.size >= MoneyRules.MAX_ACCOUNTS) return MoneySaved("Up to ${MoneyRules.MAX_ACCOUNTS} accounts.", refused = true)
         val read = MoneyCsv.read(text)
         read.problem?.let { return MoneySaved(it, refused = true) }

@@ -4055,3 +4055,15 @@ pay (`MoneyCategoryRules.incomeWords`), and his merchant correction wins. `categ
 Transfers: "american exp", "capital one", "mbna", "vanquis". Test: MoneyTransfersTest (the three shapes, spent £85 · in
 £2,500, a shop and a refund elsewhere aren't a pair, pay never is, same account / 8 days apart aren't, a penny out still
 pairs, his correction wins, a payee naming another account). No server change, no migration. Mac checked nightly.
+
+#### Money bugs (A) — slice A2 (2026-10-26): account numbers never show
+Meka's screenshots showed a Revolut account named with its whole IBAN. Core `MoneyAccountNames.shown(raw)` (domain,
+pure) keeps the words and turns each IBAN (two letters, two check digits, 10–30 letters/digits, spaces allowed, at least
+8 digits), run of 6+ digits with spaces or dashes (account number, sort code, card number) and already-starred number
+("****1005", "xxxx-xxxx-xxxx-4321") into "••" plus its last 4; neighbouring masks collapse to the last one ("12-34-56
+12345678" → "••5678"). Applied on read in `Money.accounts()`, `Money.cards()` and a goal's money account
+(`Goals.metric`), so names already stored are masked on both apps, and in `MoneyBank.name` so the server writes new bank
+accounts masked. `Money.import` finds a statement account by its shown name first, so a chip still lands in the same
+account. Tests: MoneyAccountNamesTest (IBAN with and without spaces, sort code + number, starred card numbers, ordinary
+names unchanged, a stored name masked on read), MoneyFacadeTest.aBankAccountsNumberNeverShowsOnTheFoldOrTheMac (the whole
+view on both apps holds no part of the number). No migration. Mac checked nightly.

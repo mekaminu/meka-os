@@ -160,6 +160,35 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun aBankAccountsNumberNeverShowsOnTheFoldOrTheMac() = runTest(timeout = SLOW_RUNNER) {
+        // Money bugs (A2): an older server wrote the bank's whole IBAN into the name (invented number).
+        val fold = core("android")
+        val mac = core("mac")
+        val clock = HlcClock("server", { now })
+        var n = 0
+        fun put(type: String, id: String, fields: Map<String, FieldValue>) = fields.forEach { (f, v) ->
+            ops.append(Op("srvmask${n++}", "hh", type, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        val acct = MoneyBank.accountId("202")
+        put(EntityTypes.MONEY_ACCOUNT, acct, mapOf(
+            MoneyAccountFields.NAME to "Revolut GB33REVO00996912349180".fv(), MoneyAccountFields.SOURCE to MoneyBank.SOURCE.fv(),
+            MoneyBankAccountFields.STATUS to MoneyBank.OK.fv(), MoneyAccountFields.IMPORTED_AT to now.fv(),
+        ))
+        put(EntityTypes.MONEY_TXN, MoneyBank.txnId(acct, "y1"), mapOf(
+            MoneyTxnFields.ACCOUNT to acct.fv(), MoneyTxnFields.DAY to CivilDate.toEpochDay(2026, 10, 2).fv(),
+            MoneyTxnFields.PENCE to (-4_000L).fv(), MoneyTxnFields.TEXT to "Tesco · TESCO STORES 2041".fv(),
+        ))
+        for (c in listOf(fold, mac)) {
+            c.openMoney()
+            c.syncNow()
+            val v = c.moneyView.value
+            assertEquals(listOf("Revolut ••9180"), v.accounts.map { it.name })
+            assertFalse(v.toString().contains("GB33"), "the IBAN shows somewhere in Money")
+            assertFalse(v.toString().contains("69123491"), "the account number shows somewhere in Money")
+        }
+    }
+
+    @Test
     fun tipsHiddenOnTheFoldStayHiddenOnTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

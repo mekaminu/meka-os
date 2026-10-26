@@ -891,7 +891,7 @@ class Goals(
         val habitId = s[GoalFields.METRIC_HABIT_ID].textOrNull?.takeIf { live(EntityTypes.HABIT, it) != null }
         val moneyId = s[GoalFields.METRIC_MONEY_ACCOUNT].textOrNull?.takeIf { unit == MoneyGoals.UNIT }
         val moneyName = moneyId?.let { replica.entity(EntityTypes.MONEY_ACCOUNT, it) }?.takeIf { !it.deleted }
-            ?.get(MoneyAccountFields.NAME)?.textOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            ?.get(MoneyAccountFields.NAME)?.textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let(MoneyAccountNames::shown)
         val habitDays = habitId?.let { h -> ticks[h].orEmpty().filter { it in since..today } }.orEmpty()
         val changes = mine.map { it.second to it.third } + habitDays.map { it to 100L }
         val current = changes.sumOf { it.second }

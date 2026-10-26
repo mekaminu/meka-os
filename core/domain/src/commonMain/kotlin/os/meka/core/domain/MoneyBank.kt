@@ -146,7 +146,10 @@ object MoneyBank {
         return words.replace(Regex("\\s+"), " ").take(140).ifEmpty { "Payment" }
     }
 
-    /** An account's name in Navilife: its own name, with the bank's in front unless it already says it. */
+    /**
+     * An account's name in Navilife: its own name, with the bank's in front unless it already says it; any account
+     * number in it shown only as its last 4 ([MoneyAccountNames.shown]).
+     */
     fun name(name: String?, institution: String?): String {
         val n = name?.trim().orEmpty()
         val i = institution?.trim().orEmpty()
@@ -155,7 +158,7 @@ object MoneyBank {
             i.isEmpty() || n.contains(i, ignoreCase = true) -> n
             else -> "$i $n"
         }
-        return out.replace(Regex("\\s+"), " ").take(40).ifEmpty { "Bank account" }
+        return MoneyAccountNames.shown(out.replace(Regex("\\s+"), " ")).take(40).ifEmpty { "Bank account" }
     }
 
     fun read(get: (String) -> FieldValue?): MoneyBankSync? {
