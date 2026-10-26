@@ -24,12 +24,18 @@ class OneVoiceFacadeTest {
     private class Server(service: SyncService) : SyncTransport, SpeechApi {
         private val sync = os.meka.core.testing.FaultyTransport(service)
         val said = mutableListOf<String>()
+        val asked = mutableListOf<String?>()
         var speaker = "Amy"
+        var googleUp = true
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun speak(text: String, voice: String?): SpeechCodec.Response {
             said += text
-            return SpeechCodec.Response(SpeechCodec.Response.SPOKEN, audio = speaker + ":" + text.length, format = "mp3", voice = voice ?: speaker)
+            asked += voice
+            // The server speaks a Google voice by name while Google answers, else its default stands in.
+            val google = voice == "Charon" || voice == "Puck"
+            val by = if (google && googleUp) voice!! else speaker
+            return SpeechCodec.Response(SpeechCodec.Response.SPOKEN, audio = by + ":" + text.length, format = "mp3", voice = if (google) by else voice ?: speaker)
         }
         override suspend fun speechVoices() = SpeechCodec.Voices(SpeechCodec.Voices.ON, defaultVoice = speaker)
     }
@@ -82,5 +88,49 @@ class OneVoiceFacadeTest {
         val before = server.said.size
         assertEquals("Amy:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals(before, server.said.size, "a chosen voice's clips are kept")
+    }
+
+    /** Meka 2026-10-25 14:38: the hello came in Brian, then Live answered in Charon. One conversation, one voice. */
+    @Test
+    fun withLiveOnTheHelloAndEveryLineAskForLivesVoice() = runTest {
+        val c = core()
+        server.speaker = "Brian"
+        assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Brian", c.speechVoiceInUse())
+        c.setLiveOn(true)
+        // The hello kept in Brian isn't played: it's asked for in Live's voice, and so is normal Obi's line if Live drops.
+        assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Charon:20", c.speechClip("Here's what I found.", first = false, reading = false, hold = true))
+        assertEquals(listOf(null, "Charon", "Charon"), server.asked)
+        assertEquals("Charon · the same as Live", c.speechVoiceInUse())
+        // A new Live voice: the next lines follow it.
+        assertEquals(true, c.setLiveVoice("Puck"))
+        assertEquals("Puck:14", c.speechClip("Morning, Meka.", first = true))
+        // Live off: back to the server's default, and its clip kept from before is played again.
+        c.setLiveOn(false)
+        val before = server.said.size
+        assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Brian", c.speechVoiceInUse())
+        assertEquals(before, server.said.size)
+    }
+
+    @Test
+    fun healthSaysWhenAnotherVoiceStoodInForLive() = runTest {
+        val c = core()
+        server.speaker = "Brian"
+        server.googleUp = false
+        c.setLiveOn(true)
+        assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Charon", server.asked.last())
+        assertEquals("Brian · not Live's Charon", c.speechVoiceInUse())
+    }
+
+    @Test
+    fun theDevicesOwnVoiceStaysTheDevicesWithLiveOn() = runTest {
+        val c = core()
+        c.chooseMekaVoice(os.meka.core.domain.MekaVoiceRules.DEVICE)
+        c.setLiveOn(true)
+        assertNull(c.speechClip("Morning, Meka.", first = true))
+        assertEquals(0, server.said.size)
     }
 }

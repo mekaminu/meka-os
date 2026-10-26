@@ -11287,13 +11287,37 @@ class MekaCore(
     suspend fun liveOn(): Boolean = onCore { mekaVoice.liveOn() }
 
     /** Turns Live on or off on every device. */
-    suspend fun setLiveOn(on: Boolean) { onCore { mekaVoice.setLive(on) } }
+    suspend fun setLiveOn(on: Boolean) {
+        onCore {
+            val changed = mekaVoice.liveOn() != on
+            mekaVoice.setLive(on)
+            // One voice: the hello's openers are made again at once in the voice the next tap will use.
+            if (changed) rewarmHelloForVoice()
+        }
+    }
 
     /** The Live voice he picked (one of [os.meka.core.domain.LiveTalkRules.VOICES]). */
     suspend fun liveVoice(): String = onCore { mekaVoice.liveVoice() }
 
     /** Picks the Live voice on every device; false for a name the picker doesn't offer. */
-    suspend fun setLiveVoice(name: String): Boolean = onCore { mekaVoice.chooseLiveVoice(name) }
+    suspend fun setLiveVoice(name: String): Boolean {
+        return onCore {
+            val was = mekaVoice.liveVoice()
+            val ok = mekaVoice.chooseLiveVoice(name)
+            if (ok && mekaVoice.liveOn() && mekaVoice.liveVoice() != was) rewarmHelloForVoice()
+            ok
+        }
+    }
+
+    /**
+     * Caller is on the core: remakes the hello's openers in the voice now (after Live or its voice changed), once the
+     * hello was warmed here.
+     */
+    private fun rewarmHelloForVoice() {
+        if (warmedName == null || speechApi == null) return
+        val welcome = warmedWelcome
+        scope.launch { runCatching { warmHello(welcome) } }
+    }
 
     /** The Live block in Obi's voice settings: the switch, the month's meter or why Live can't run, the voices. */
     suspend fun liveSettings(): os.meka.core.domain.LiveSettingsView {
@@ -11580,8 +11604,14 @@ class MekaCore(
     private fun speechVoiceNow(): SpeechVoice? {
         val chosen = mekaVoice.chosen()
         if (chosen == os.meka.core.domain.MekaVoiceRules.DEVICE || nowMs() < speechQuietUntilMs) return null
-        return SpeechVoice(chosen)
+        // One conversation, one voice (Meka 2026-10-25 14:38): while Live is on, the hello and every line ask for Live's voice.
+        val liveOn = mekaVoice.liveOn()
+        speechLiveVoice = if (liveOn) mekaVoice.liveVoice() else null
+        return SpeechVoice(os.meka.core.domain.OneVoiceRules.asked(chosen, liveOn, mekaVoice.liveVoice()))
     }
+
+    /** Live's voice when Live was on at the last clip asked for, else null; for Health's "Speaking as …" line. */
+    @kotlin.concurrent.Volatile private var speechLiveVoice: String? = null
 
     /**
      * Obi's face, slice 3b: whether this device draws the face ([os.meka.core.domain.FaceFileRules.shows]). While it
@@ -11661,12 +11691,16 @@ class MekaCore(
     }
 
     /** The voice Navilife's server last spoke in ("Brian"), or null before the first clip; for Health → Obi's voice. */
-    fun speechVoiceInUse(): String? = speechLastVoice
+    fun speechVoiceInUse(): String? = speechLastVoice?.let {
+        os.meka.core.domain.OneVoiceRules.inUse(it, speechLiveVoice != null, speechLiveVoice)
+    }
 
     private fun speechCached(voice: String?, words: String): String? {
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words)
         val clip = speechClips.remove(key) ?: return null
         speechClips[key] = clip // newest last
+        // Health's "Speaking as …" names the voice of the clip played, a kept one too (Live off again: Brian's hello).
+        speechClipVoice[key]?.takeIf { it.isNotBlank() }?.let { speechLastVoice = it.trim() }
         return clip
     }
 
