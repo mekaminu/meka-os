@@ -1530,6 +1530,7 @@ internal fun TaskRow(
 @Composable
 internal fun DoneFoldLine(line: String, label: String, toggle: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
             .semantics(mergeDescendants = true) { contentDescription = label }
@@ -1542,7 +1543,7 @@ internal fun DoneFoldLine(line: String, label: String, toggle: () -> Unit, modif
         }
         AnimatedContent(
             targetState = line,
-            transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "done-fold",
         ) { t -> Text(t, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
     }
