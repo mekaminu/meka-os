@@ -31,16 +31,16 @@ object TripListAskRules {
     /**
      * The trips' lists as MEKA describes them to the model: "Trip lists · Lisbon trip · Wed 28 Oct · bought 1 of 3 ·
      * packed 2 of 9 · 0 of 2 jobs done", then for each list with something left "Lisbon trip · To buy · 2 left: Sun
-     * cream, Plasters" (a list all done says "all 3 done"). A trip with nothing on its lists says "nothing on its lists
-     * yet". Nothing at all while no trip is on or coming.
+     * cream, Plasters" (a list all done says "all 3 done"). A trip with nothing on its lists is left out (its trips
+     * line already says it). Nothing at all while no trip on or coming has lists.
      */
     fun askLines(trips: List<TripItem>, items: List<TripListItem>, today: Long): List<String> {
         val out = mutableListOf<String>()
-        for (t in live(trips, today).take(ASK_TRIPS)) {
+        for (t in live(trips, today).filter { t -> items.any { it.tripId == t.id } }.take(ASK_TRIPS)) {
             val mine = items.filter { it.tripId == t.id }
             val label = TripListRules.tripLabel(t)
             val head = "Trip lists · $label · ${CalendarAgenda.spanLabel(t.startDay, t.endDay)}"
-            if (mine.isEmpty()) { out += "$head · nothing on its lists yet"; continue }
+            if (mine.isEmpty()) continue
             val v = TripListRules.view(t, items, today)
             out += "$head · ${v.summary.replaceFirstChar { it.lowercase() }}"
             for (list in TripList.entries) {

@@ -42,7 +42,6 @@ class TripListAskTest {
                 "Trip lists · Lisbon trip · Wed 28 Oct – Sun 1 Nov · bought 1 of 2 · packed 0 of 1",
                 "Lisbon trip · To buy · 1 left: Sun cream",
                 "Lisbon trip · To pack · 1 left: Chargers × 2",
-                "Trip lists · Rome trip · Thu 10 – Mon 14 Dec · nothing on its lists yet",
             ),
             lines,
         )
