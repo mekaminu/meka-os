@@ -9691,7 +9691,9 @@ class MekaCore(
                 // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jordan?" has an answer.
                 people = os.meka.core.domain.PeopleAskRules.askLines(_people.value),
                 // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
-                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs()), tripClocks),
+                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs()), tripClocks) +
+                    // Trip lists, slice 2c: what's still to buy, pack or do, so "what's left to pack?" has an answer.
+                    os.meka.core.domain.TripListAskRules.askLines(trips.items(), tripLists.items(), cal.epochDayOf(nowMs())),
                 // Notifications never seen, slice 4: only for a question about notifications, so "why didn't I get a notification?" has an answer.
                 notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList(),
                 // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
@@ -9771,7 +9773,7 @@ class MekaCore(
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
                     os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items(),
-                    _people.value, lists.promisedItems(), trips.items())
+                    _people.value, lists.promisedItems(), trips.items(), tripLists.items())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -9917,6 +9919,17 @@ class MekaCore(
                 if (os.meka.core.domain.TripAskRules.already(trip, p.entry)) throw os.meka.core.domain.ValidationException(os.meka.core.domain.TripAskRules.ALREADY)
                 os.meka.core.domain.AskUndo.RemoveBooking(trips.addBooking(p.entry))
             }
+            // The trip's own add, against its lists as they are now: a ticked thing comes back, a waiting one stays one row.
+            is os.meka.core.domain.AskProposal.AddTripItems -> {
+                val trip = trips.items().firstOrNull { it.id == p.tripId }
+                    ?: throw os.meka.core.domain.ValidationException(os.meka.core.domain.TripListAskRules.GONE)
+                val plan = os.meka.core.domain.TripListAskRules.plan(trip.id, tripLists.items(), p.entries)
+                if (plan.isEmpty) throw os.meka.core.domain.ValidationException(os.meka.core.domain.TripListAskRules.ALREADY)
+                plan.revive.forEach { tripLists.tick(it, false) }
+                val label = os.meka.core.domain.TripListRules.tripLabel(trip)
+                val added = plan.add.map { tripLists.addEntry(trip.id, it, label) }
+                os.meka.core.domain.AskUndo.TakeBackTripItems(added, plan.revive)
+            }
             // Checked again now: only while it is still due on the card's day (Done here or on the other device moved it on).
             is os.meka.core.domain.AskProposal.RenewalDone -> os.meka.core.domain.AskUndo.PutBackRenewal(renewals.doneFromAsk(p.id, p.dueDay))
             // Kept in today's week (whatever week the review shows); the same line already there is refused.
@@ -10027,6 +10040,9 @@ class MekaCore(
                 if (lists.promisedItems().any { it.id == undo.promiseId }) { lists.deletePromise(undo.promiseId); true } else false
             // The booking the card added leaves the trip (false when it was already removed, here or on the other device).
             is os.meka.core.domain.AskUndo.RemoveBooking -> trips.removeBooking(undo.bookingId)
+            // The things the card added leave the trip (and the shopping items they made); ones it unticked are ticked again.
+            is os.meka.core.domain.AskUndo.TakeBackTripItems ->
+                undo.added.map { tripLists.remove(it) != null }.plus(undo.revived.map { tripLists.tick(it, true) }).any { it }
             // Put back only while it is still as Done left it (a change since, here or on the other device, wins).
             is os.meka.core.domain.AskUndo.PutBackRenewal -> renewals.undoDone(undo.before)
             // The win the card kept leaves the log (false when it was already removed, here or on the other device).
@@ -11207,7 +11223,7 @@ class MekaCore(
             val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
             val card = os.meka.core.domain.AskRules.card(raw, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
                 os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items(),
-                _people.value, lists.promisedItems(), trips.items()) ?: return@onCore unusable
+                _people.value, lists.promisedItems(), trips.items(), tripLists.items()) ?: return@onCore unusable
             if (!askAllowed(card.proposal, context.untrusted)) os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_REFUSED)
             else os.meka.core.domain.LiveOffer(card, os.meka.core.domain.LiveToolRules.offered(card.line))
         }

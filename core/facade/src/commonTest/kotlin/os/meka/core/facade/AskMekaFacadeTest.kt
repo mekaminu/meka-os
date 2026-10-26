@@ -952,6 +952,45 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheTripListsAndAddTripItemAddsOnTheTapWithUndo() = runTest {
+        val c = core()
+        c.addTrip("Lisbon 14–18 Oct")
+        val tripId = c.tripsView.value.rows.single().id
+        c.addTripItem(tripId, "pack hats", os.meka.core.domain.TripList.PACK)
+        val hats = c.tripListsView.value.single().tab(os.meka.core.domain.TripList.PACK).groups.single().rows.single().id
+        c.tickTripItem(hats, true)
+
+        server.reply = AskReply.Answered("Hats are packed.", listOf(
+            AskRawAction("add_trip_item", title = "Lisbon: buy sun cream, pack hats, pack 2 chargers"),
+            AskRawAction("add_trip_item", title = "Madrid: pack hats"), // no such trip: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("What's left to pack? Add sun cream and two chargers"))
+        val ctx = server.asked.last().second
+        assertTrue(ctx.items.any { it.kind == AskItemKind.TRIPS && it.line == "Lisbon trip · To pack · all 1 done" })
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Add to Lisbon trip · To buy: sun cream · To pack: hats and 2 chargers"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(1, c.tripListsView.value.single().packed.total)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Added sun cream, hats and 2 chargers to Lisbon trip", done.line)
+        val v = c.tripListsView.value.single()
+        assertEquals("0 of 2", v.packed.line) // hats unticked, chargers new
+        assertEquals(1, v.bought.total)
+        // To buy is on the shopping list too.
+        assertEquals(listOf("Sun cream"), c.listsView.value.shopping.toBuy.map { it.title })
+        // Tapping again finds nothing new.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        assertTrue(c.undoAsk(assertIs<AskUndo.TakeBackTripItems>(done.undo)))
+        val back = c.tripListsView.value.single()
+        assertEquals("1 of 1", back.packed.line)
+        assertEquals(0, back.bought.total)
+        assertEquals(emptyList(), c.listsView.value.shopping.toBuy.map { it.title })
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun askHearsTheGoalsAndAddGoalAddsOnTheTapWithUndo() = runTest {
         val c = core()
         val g = c.addGoal("Save £2,000", null, os.meka.core.domain.GoalHorizon.YEAR)

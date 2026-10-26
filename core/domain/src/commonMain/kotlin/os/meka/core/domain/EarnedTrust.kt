@@ -85,6 +85,9 @@ object TrustRules {
         is AskProposal.AddPromise -> null
         // A booking (Travel mode slice 2a) goes into Meka's own trip, so he always sees it before it's kept.
         is AskProposal.AddBooking -> null
+        // Things on a trip's lists (Trip lists slice 2c) go on Meka's own trip and its To buy on the shopping list, so he
+        // always sees them first.
+        is AskProposal.AddTripItems -> null
         // Moving a calendar event (Edit your calendars, completeness slice 4) changes Google or Outlook, and an event's
         // title can be someone else's words, so Meka always taps it himself.
         is AskProposal.MoveEvent -> null

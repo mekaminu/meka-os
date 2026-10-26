@@ -102,6 +102,7 @@ class AiAskTest {
         assertTrue("book_leave" in AskService.KINDS && "book_leave" in AskService.SYSTEM)
         assertTrue("add_fact" in AskService.KINDS && "add_fact" in AskService.SYSTEM)
         assertTrue("add_checklist" in AskService.KINDS && "add_checklist" in AskService.SYSTEM && "checklists lines" in AskService.SYSTEM)
+        assertTrue("add_trip_item" in AskService.KINDS && "add_trip_item" in AskService.SYSTEM && "trip lists lines" in AskService.SYSTEM)
         assertTrue("add_goal" in AskService.KINDS && "add_goal" in AskService.SYSTEM && "goals lines" in AskService.SYSTEM)
         assertTrue("add_errand" in AskService.KINDS && "add_errand" in AskService.SYSTEM && "errands lines" in AskService.SYSTEM)
         assertTrue("appointments lines" in AskService.SYSTEM)

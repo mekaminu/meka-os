@@ -93,6 +93,8 @@ object AskPolicy {
         is AskProposal.AddPromise -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         // A booking in Meka's own trip (nothing is booked, paid or sent).
         is AskProposal.AddBooking -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+        // Things on Meka's own trip lists, To buy also on his shopping list (nothing is bought, booked or sent).
+        is AskProposal.AddTripItems -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         // Marks Meka's own radar item done, like its button (nothing is paid, booked or sent).
         is AskProposal.RenewalDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
         // Keeps a line in Meka's own wins log (nothing is sent to anyone).

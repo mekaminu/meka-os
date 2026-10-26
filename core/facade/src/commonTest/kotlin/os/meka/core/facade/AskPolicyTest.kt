@@ -40,6 +40,7 @@ class AskPolicyTest {
         AskProposal.AddGiftIdea("occ-1", "Alex's birthday", "silk scarf"),
         AskProposal.AddPromise("Alex", "fix his bike", null),
         AskProposal.AddBooking(BookingEntry("trip-1", BookingKind.entries.first(), "Flight BA478", 20_010, null, 7 * 60 + 40, null), "Spain"),
+        AskProposal.AddTripItems("trip-1", "Spain trip", listOf(os.meka.core.domain.TripListEntry(os.meka.core.domain.TripList.BUY, "Sun cream", "Pharmacy", null, os.meka.core.domain.TripWho.EVERYONE))),
         AskProposal.RenewalDone("ren-1", "Smoke alarms", "Done", 20_000, 20_090),
         AskProposal.AddWin("Closed the Oakfield deal"),
         AskProposal.QueueDone("q-1", "The BBC one"),
@@ -67,6 +68,7 @@ class AskPolicyTest {
         is AskProposal.AddGiftIdea -> "add_gift_idea"
         is AskProposal.AddPromise -> "add_promise"
         is AskProposal.AddBooking -> "add_booking"
+        is AskProposal.AddTripItems -> "add_trip_item"
         is AskProposal.RenewalDone -> "done_renewal"
         is AskProposal.AddWin -> "add_win"
         is AskProposal.QueueDone -> "queue_done"
@@ -84,7 +86,7 @@ class AskPolicyTest {
         // One sample per kind, and every model-proposable wire kind is among them.
         val names = every.map(::kindName)
         assertEquals(names.size, names.toSet().size, names.toString())
-        assertEquals(24, names.size)
+        assertEquals(25, names.size)
         assertTrue(names.containsAll(AskRules.KINDS), (AskRules.KINDS - names.toSet()).toString())
         for (p in every) {
             // Shown as a card from his own lines and from lines with other people's words alike; never run untapped.

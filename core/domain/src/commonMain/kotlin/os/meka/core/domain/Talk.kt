@@ -291,6 +291,9 @@ object TalkRules {
         is AskProposal.AddBooking -> (if (past) "added " else "add ") + clean(p.entry.title) + " " +
             spokenWhen(p.entry.day, p.entry.minute, today).let { if (p.entry.day > today + 1) "on $it" else it } +
             " to the " + clean(p.tripName) + " trip"
+        // "add sun cream and 2 chargers to the Lisbon trip's lists" / "added …".
+        is AskProposal.AddTripItems -> (if (past) "added " else "add ") + clean(TripListAskRules.names(p.entries)) + " to the " +
+            clean(p.tripLabel) + "'s lists"
         // "mark Boiler service serviced, next due Monday 1 November" / "marked Car tax paid".
         is AskProposal.RenewalDone -> (if (past) "marked " else "mark ") + clean(p.title) + " " + p.doneLabel.lowercase() +
             (p.nextDay?.let { ", next due " + spokenWhen(it, null, today) } ?: "")

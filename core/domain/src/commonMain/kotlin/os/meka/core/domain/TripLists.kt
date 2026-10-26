@@ -463,10 +463,19 @@ class TripLists(
     fun add(tripId: String, text: String, open: TripList, tripExists: Boolean, tripLabel: String? = null): TripListAdded {
         if (!tripExists) return TripListAdded(TripListRules.GONE, open, refused = true)
         val e = TripListRules.read(text, open) ?: return TripListAdded(TripListRules.NOT_READ, open, refused = true)
+        addEntry(tripId, e, tripLabel)
+        return TripListAdded(TripListRules.addedLine(e), e.list, refused = false)
+    }
+
+    /**
+     * Slice 2c (Ask's trip list card): adds the read entry [e] to the trip [tripId] as the add field would, To buy on the
+     * shopping list too; its new id.
+     */
+    fun addEntry(tripId: String, e: TripListEntry, tripLabel: String? = null): String {
         val id = newId()
         replica.commitLocal(EntityTypes.TRIP_ITEM, id, TripListRules.fields(tripId, e, nowMs()))
         if (e.list == TripList.BUY) link(id, e.text, e.qty, tripLabel)
-        return TripListAdded(TripListRules.addedLine(e), e.list, refused = false)
+        return id
     }
 
     /**
