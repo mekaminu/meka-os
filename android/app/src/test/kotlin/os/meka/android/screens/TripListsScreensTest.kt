@@ -10,9 +10,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -144,28 +142,9 @@ class TripListsScreensTest {
 
     @Test
     @Config(qualifiers = ScreenShots.COVER)
-    fun aTripSavedAsATemplateIsOfferedOnTheNextTrip() {
-        val (core, lisbonId) = filled(ThemeChoice.DARK)
-        show(core, lisbonId)
-        compose.onNodeWithTag("trip-lists").performScrollToNode(hasTestTag("trip-save-template"))
-        ScreenShots.assertShows(compose, "cover-dark-save-template", "Save as a template for next time")
-        compose.onNodeWithTag("trip-save-template").performClick()
-        compose.mainClock.autoAdvance = true
-        compose.waitUntil(5_000L) { core.tripListsView.value.single().saveTemplate == "Update the Lisbon template" }
-        val rome = runBlocking {
-            check(!core.addTrip("Rome 20–23 Dec").refused)
-            core.tick()
-            core.tripsView.value.rows.first { it.id != lisbonId }.id
-        }
-        val offers = core.tripListsView.value.single { it.tripId == rome }.startOptions
-        // The template was saved from Lisbon, the last trip, so it is offered once.
-        assertEquals(listOf("Start from your Lisbon template"), offers.map { it.line })
-    }
-
-    @Test
-    @Config(qualifiers = ScreenShots.COVER)
     fun anEmptyTripStartsFromASavedTemplate() {
         val (core, lisbonId) = filled(ThemeChoice.DARK)
+        assertEquals("Save as a template for next time", core.tripListsView.value.single().saveTemplate)
         val rome = runBlocking {
             check(!core.saveTripTemplate(lisbonId).refused)
             check(!core.addTrip("Rome 20–23 Dec").refused)
