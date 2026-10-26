@@ -702,6 +702,8 @@ object MoneyRules {
         val lines = if (partial) mine.map { MoneyLine(it.day, it.pence, keyOf(it), cat(it)) } else emptyList()
         val regular = if (partial) MoneyTips.regular(lines, today) else emptyList()
         val yearLines = mine.map { MoneyYearLine(it.day, it.pence, keyOf(it), cat(it)) }
+        // Money bugs (A4): the footers say where these lines came from (statement files, his banks through Lunch Flow, or both).
+        val source = MoneySource.ofLines(accounts, mine.mapTo(HashSet()) { it.account })
         val watch = if (partial) mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) } else emptyList()
         return MoneyView(
             false, summary, null, month, accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
@@ -717,6 +719,7 @@ object MoneyRules {
                 // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
                 // Bills due, completeness: a radar bill that is a card's payment counts once, as the card's.
                 BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
+                source,
             ) else null,
             cards = if (partial) MoneyCards.view(
                 cards.filter { it.id in names }, counted, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
@@ -727,8 +730,8 @@ object MoneyRules {
             shared = shared,
             challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
-            year = if (partial) MoneyYear.view(yearLines, today) else null,
-            review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }),
+            year = if (partial) MoneyYear.view(yearLines, today, source) else null,
+            review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }, source),
         )
     }
 

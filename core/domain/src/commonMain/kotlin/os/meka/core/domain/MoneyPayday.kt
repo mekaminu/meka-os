@@ -51,6 +51,10 @@ object MoneyPayday {
     const val HEAD = "UNTIL PAYDAY"
     const val NOT_READY = "Navilife finds your payday from your pay coming in · import two months or more of the account it goes into."
     const val FOOT = "From your statements, Lists → Renewals and Cards (a card due before payday counts its statement) · not financial advice"
+
+    /** [FOOT] naming where the lines really came from (Money bugs A4): "From your banks through Lunch Flow, Lists → …". */
+    fun foot(source: MoneySource): String =
+        if (source == MoneySource.FILES) FOOT else FOOT.replaceFirst("From your statements", source.from)
     const val BALANCE_HINT = "Balance now: £1,240 (−£50 if overdrawn)"
     const val BALANCE_BAD = "Type the balance, e.g. £1,240.50, or −£50 if it's overdrawn."
     const val BALANCE_CLEARED = "Balance cleared · type it again any time"
@@ -139,10 +143,10 @@ object MoneyPayday {
 
     fun view(
         lines: List<MoneyPayLine>, today: Long, names: Map<String, String>, balances: Map<String, MoneyBalance>,
-        bills: List<MoneyBill>, holidays: HolidayCalendar,
+        bills: List<MoneyBill>, holidays: HolidayCalendar, source: MoneySource = MoneySource.FILES,
     ): MoneyPaydayView {
         val pay = pay(lines, today) ?: return MoneyPaydayView(HEAD, NOT_READY, null, null, null, null, emptyList(), 0,
-            null, null, null, false, null, false, FOOT)
+            null, null, null, false, null, false, foot(source))
         val payday = nextPayday(pay, today, holidays)
         val lastPay = pay.days.last()
         val accountName = names[pay.account] ?: "your account"
@@ -202,7 +206,7 @@ object MoneyPayday {
         }
         return MoneyPaydayView(
             HEAD, null, payLine, fromLine, sinceLine, goingOut, rows, (sorted.size - rows.size).coerceAtLeast(0),
-            pay.account, accountName, balanceLine, bal != null, safe, lit, FOOT,
+            pay.account, accountName, balanceLine, bal != null, safe, lit, foot(source),
             paydayDay = payday, leftPence = leftPence,
         )
     }

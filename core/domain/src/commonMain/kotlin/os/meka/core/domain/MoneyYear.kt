@@ -50,7 +50,8 @@ object MoneyYear {
     const val SAME_PENCE = 2_000L
     const val NOTICE_DAY = 2
     const val NOTICE_MIN = 9 * 60
-    const val FOOT = "From your own statements: everything you spent, bills included; income and transfers between your accounts left out. Not financial advice."
+    /** The footer's end, after where the lines came from ([MoneySource], Money bugs A4). */
+    const val FOOT = "Everything you spent, bills included; income and transfers between your accounts left out. Not financial advice."
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
     private fun n(k: Int, one: String, many: String = one + "s") = "$k ${if (k == 1) one else many}"
@@ -71,7 +72,7 @@ object MoneyYear {
      * The block for [today] from every line (counted once). Null when the year has no statements (a finished year), or
      * fewer than two months of them (this year so far).
      */
-    fun view(lines: List<MoneyYearLine>, today: Long): MoneyYearView? {
+    fun view(lines: List<MoneyYearLine>, today: Long, source: MoneySource = MoneySource.FILES): MoneyYearView? {
         if (lines.isEmpty()) return null
         val year = yearFor(today)
         val finished = year < CivilDate.fromEpochDay(today).year
@@ -153,7 +154,7 @@ object MoneyYear {
         val leftLit = income > 0 && spent - income >= SAME_PENCE
         val covered = if (wholeYear) "all of $year" else "${dayMonth(from)} – ${dayMonth(to)} $year · ${n(spanMonths, "month")}"
         val folded = if (finished) "Your $year in review · $title" else "Your year so far · $title"
-        val foot = "From your statements, $covered. $FOOT"
+        val foot = "${source.from}, $covered. $FOOT"
         val spoken = listOfNotNull(head.lowercase().replaceFirstChar { it.uppercase() }, title, leftLine, vsLine,
             categories.take(3).joinToString(", ") { "${it.label} ${it.amount}" }.ifEmpty { null }, monthsLine, biggest).joinToString(". ")
         return MoneyYearView(year, head, finished, folded, title, leftLine, leftLit, vsLine, vsLit, categories, monthsLine, biggest, foot, spoken)

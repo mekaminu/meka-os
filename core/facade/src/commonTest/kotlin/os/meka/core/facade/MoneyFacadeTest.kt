@@ -73,6 +73,28 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun moneyAlwaysOpensOnThisMonthWithTheNewestPaymentsFirst() = runTest(timeout = SLOW_RUNNER) {
+        // Money bugs (A3), Meka 2026-10-24: Money opened on August. Whatever month he paged to, opening (again) is this month.
+        val fold = core("android")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        fold.moneyStep(-1)
+        assertEquals("September 2026", fold.moneyView.value.month!!.label)
+        // Locked and opened again (the app went away, the pane closed).
+        fold.closeMoney()
+        fold.openMoney()
+        val m = fold.moneyView.value.month!!
+        assertEquals("October so far", m.label)
+        assertEquals(3, m.txns.size)
+        assertTrue(m.txns.first().moneyIn)
+        assertEquals(listOf("5", "3", "2"), m.txns.map { it.day.filter { c -> c.isDigit() } })
+        // Opened again while still open (a second unlock): this month too, never the month paged to.
+        fold.moneyStep(-1)
+        fold.openMoney()
+        assertEquals("October so far", fold.moneyView.value.month!!.label)
+    }
+
+    @Test
     fun lockedUntilOpenedThenSyncsToTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

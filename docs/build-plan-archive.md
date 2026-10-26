@@ -4067,3 +4067,15 @@ accounts masked. `Money.import` finds a statement account by its shown name firs
 account. Tests: MoneyAccountNamesTest (IBAN with and without spaces, sort code + number, starred card numbers, ordinary
 names unchanged, a stored name masked on read), MoneyFacadeTest.aBankAccountsNumberNeverShowsOnTheFoldOrTheMac (the whole
 view on both apps holds no part of the number). No migration. Mac checked nightly.
+
+#### Money bugs (A) — slices A3 + A4 (2026-10-26): opens on this month; footers say where the numbers came from
+A4: new core `MoneySource` (domain, pure): FILES / BANK / BOTH from the accounts that have lines (`MoneySource.ofLines`,
+an account's `source` "bank" = Lunch Flow). `MoneyMonthReview.view/forScreen`, `MoneyYear.view` and `MoneyPayday.view`
+take it (default FILES, the old wording); `MoneyRules.view` passes it. Footers: "From your statements" / "From your banks
+through Lunch Flow" / "From your banks through Lunch Flow and your statement files"; the month in review says "Worked out
+on this device, nothing sent." only for statement files alone (bank lines come through Navilife's server), else "Worked
+out on this device.". A3: the facade already reset the month on every open (`openMoney` sets offset 0; `closeMoney` too)
+and sorts rows newest first; no path to a stale month was found, so `MoneyFacadeTest.moneyAlwaysOpensOnThisMonthWithTheNewestPaymentsFirst`
+pins it (paged to September, closed and opened, and a second open while open: October so far, 5 → 3 → 2 Oct). Tests:
+MoneySourceTest (sources, the review's two footers, year and payday). Not yet: Travel, Challenges and Ask's "from your
+own statements". No server change, no migration. Mac checked nightly.

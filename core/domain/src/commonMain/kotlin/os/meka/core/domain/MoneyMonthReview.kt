@@ -52,7 +52,8 @@ object MoneyMonthReview {
     const val NOTICE_MIN = 9 * 60
     /** Statements reach "to the end" of a month when their last line is this close to it. */
     const val END_SLACK_DAYS = 4
-    const val FOOT = "From your own statements; worked out on this device, nothing sent. Transfers between your accounts left out. Not financial advice."
+    /** The footer's end, after where the lines came from ([MoneySource], Money bugs A4) and how they were worked out. */
+    const val FOOT = "Transfers between your accounts left out. Not financial advice."
 
     private val NOT_EVERYDAY = setOf(MoneyCategory.BILLS, MoneyCategory.SUBSCRIPTIONS, MoneyCategory.FEES)
 
@@ -75,7 +76,10 @@ object MoneyMonthReview {
      * The review of [month] (finished before [today]) from every line (counted once). Null when the month has fewer
      * than [MIN_LINES] lines.
      */
-    fun view(lines: List<MoneyYearLine>, month: Int, today: Long, business: List<MoneyBusinessLine>? = null): MoneyMonthReviewView? {
+    fun view(
+        lines: List<MoneyYearLine>, month: Int, today: Long, business: List<MoneyBusinessLine>? = null,
+        source: MoneySource = MoneySource.FILES,
+    ): MoneyMonthReviewView? {
         val thisMonth = MoneyRules.monthOf(today)
         if (month >= thisMonth || lines.isEmpty()) return null
         val start = monthStart(month)
@@ -178,7 +182,7 @@ object MoneyMonthReview {
         val head = "${mo.uppercase()} IN REVIEW"
         return MoneyMonthReviewView(
             month = month, head = head, lastMonth = false, sentences = out, firstLit = firstLit,
-            foot = "From your statements, $covered. $FOOT",
+            foot = "${source.from}, $covered. ${source.worked} $FOOT",
             spoken = "$mo in review. " + out.joinToString(" "),
         )
     }
@@ -215,9 +219,12 @@ object MoneyMonthReview {
     }
 
     /** The view for the Money screen showing [shown] on [today] ([monthFor]), marked when it's last month leading this one. */
-    fun forScreen(lines: List<MoneyYearLine>, shown: Int, today: Long, business: List<MoneyBusinessLine>? = null): MoneyMonthReviewView? {
+    fun forScreen(
+        lines: List<MoneyYearLine>, shown: Int, today: Long, business: List<MoneyBusinessLine>? = null,
+        source: MoneySource = MoneySource.FILES,
+    ): MoneyMonthReviewView? {
         val m = monthFor(shown, today) ?: return null
-        return view(lines, m, today, business)?.copy(lastMonth = shown == MoneyRules.monthOf(today))
+        return view(lines, m, today, business, source)?.copy(lastMonth = shown == MoneyRules.monthOf(today))
     }
 
     /**
