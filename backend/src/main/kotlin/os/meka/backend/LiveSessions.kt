@@ -37,7 +37,7 @@ interface LiveTokens {
      * (Google's handle for a conversation already running), the token carries that conversation on. Slice 5b: with
      * [mailMoney] (and [tools]), the mail and money look-ups too.
      */
-    fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean = false, resume: String? = null, mailMoney: Boolean = false): String?
+    fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean = false, resume: String? = null, mailMoney: Boolean = false, speaker: Boolean = false): String?
 
     /** Why Live does or doesn't engage (2026-10-24): the key as Google last answered it; null: never tried. */
     fun keyCheck(): LiveKeyCheck? = null
@@ -136,7 +136,13 @@ class LiveSessions(
         // Slice 2c: a conversation carrying on into a fresh window passes Google's resumption handle; it is a new
         // session here (metered and capped like any other), and the handle is passed through, never kept.
         val resume = os.meka.core.domain.LiveHandOnRules.handle(request.resume)
-        val token = runCatching { tokens.mint(model, voice, LivePrompt.instruction(request.day), now, request.day?.tools == true, resume, request.day?.let { it.tools && it.mailMoney } == true) }.getOrNull()
+        val instruction = LivePrompt.instruction(request.day)
+        val tools = request.day?.tools == true
+        val mailMoney = request.day?.let { it.tools && it.mailMoney } == true
+        val speaker = request.day?.speaker == true
+        // 2026-10-26: should Google ever refuse the speaker's settings, the session still opens as before.
+        val token = runCatching { tokens.mint(model, voice, instruction, now, tools, resume, mailMoney, speaker) }.getOrNull()
+            ?: (if (speaker) runCatching { tokens.mint(model, voice, instruction, now, tools, resume, mailMoney, false) }.getOrNull() else null)
             ?: return meter().let { m ->
                 val why = runCatching { tokens.keyCheck() }.getOrNull()?.takeIf { it.state != LiveDiagnosisRules.KeyState.READY }
                 LiveCodec.Session(LiveCodec.Session.FAILED, m, reason = why?.line?.removePrefix("Live · ") ?: "Google didn't open a Live session just now")
@@ -224,13 +230,13 @@ class GeminiLiveTokens(
         return last
     }
 
-    override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean): String? {
+    override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean, speaker: Boolean): String? {
         val k = key() ?: run {
             last = (missing() ?: LiveKeyCheck(LiveDiagnosisRules.KeyState.NO_KEY)).copy(atMs = nowMs)
             return null
         }
         val (code, body) = try {
-            http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction, tools, resume, mailMoney))
+            http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction, tools, resume, mailMoney, speaker))
         } catch (e: Exception) {
             last = LiveKeyCheck(LiveDiagnosisRules.KeyState.UNREACHABLE, null, LiveDiagnosisRules.redact(e.javaClass.simpleName, k), nowMs)
             System.err.println("live: couldn't reach Google for a token (${e.javaClass.simpleName})")
@@ -264,7 +270,7 @@ class GeminiLiveTokens(
          * of the locked config, and both sides of the conversation are transcribed (his words and Obi's, for Ask's
          * answer and its sources); Navilife keeps none of it.
          */
-        fun request(model: String, voice: String, nowMs: Long, instruction: String = "", tools: Boolean = false, resume: String? = null, mailMoney: Boolean = false): String = buildJsonObject {
+        fun request(model: String, voice: String, nowMs: Long, instruction: String = "", tools: Boolean = false, resume: String? = null, mailMoney: Boolean = false, speaker: Boolean = false): String = buildJsonObject {
             put("uses", 1)
             put("expireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.TOKEN_MS).toString())
             put("newSessionExpireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.START_MS).toString())
@@ -282,6 +288,13 @@ class GeminiLiveTokens(
                 }
                 // Slice 2c: a fresh window for a conversation already running carries on from Google's handle.
                 putJsonObject("sessionResumption") { resume?.let { put("handle", it) } }
+                // 2026-10-26 (the repeat loop): on the device's own speaker Obi always finishes his turn (Google doesn't
+                // stop him on what the microphone hears, which there is mostly his own echo; Meka stops him with a tap)
+                // and the start of speech is detected less eagerly. Headphones keep Google's default barge-in.
+                if (speaker) putJsonObject("realtimeInputConfig") {
+                    put("activityHandling", "NO_INTERRUPTION")
+                    putJsonObject("automaticActivityDetection") { put("startOfSpeechSensitivity", "START_SENSITIVITY_LOW") }
+                }
                 if (instruction.isNotBlank()) {
                     putJsonObject("systemInstruction") {
                         putJsonArray("parts") { add(buildJsonObject { put("text", instruction) }) }

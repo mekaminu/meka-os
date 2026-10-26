@@ -37,6 +37,7 @@ import os.meka.core.domain.LiveDiagnosisRules
 import os.meka.core.domain.LiveEchoGate
 import os.meka.core.domain.LiveJitter
 import os.meka.core.domain.LiveHandOnRules
+import os.meka.core.domain.LiveTalkLog
 import os.meka.core.domain.LiveTalkRules
 import os.meka.core.domain.LiveToolRules
 import os.meka.core.facade.MekaCore
@@ -115,6 +116,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private var jitter = LiveJitter<ByteArray>()
     /** 2026-10-25: each time Google stopped Obi for Meka's voice, with the gate's levels (Health → Obi's voice). Under [audioLock]. */
     private var cuts = LiveCutOffs()
+    /** 2026-10-26 (the repeat loop): this talk's turns, Google's stops and windows, and the guard that ends a loop. Under [audioLock]. */
+    private var log = LiveTalkLog(0)
     // Slice 4: the turn's transcripts and the pages its searches found (main thread only).
     private val heardNow = StringBuilder()
     private val saidNow = StringBuilder()
@@ -149,9 +152,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
      */
     fun prepare(greeted: String?) {
         if (running || prepared != null) return
+        // 2026-10-26: on the phone's own speaker the session lets Obi finish each turn (the repeat loop).
+        val speaker = TalkBargeIn.output(context) == BargeInOutput.SPEAKER
         prepared = Prepared(scope.async {
             val voice = runCatching { core.liveVoice() }.getOrNull()
-            core.liveSession(voice, greeted = greeted)
+            core.liveSession(voice, greeted = greeted, speaker = speaker)
         }, SystemClock.elapsedRealtime())
     }
 
@@ -186,6 +191,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             gate = LiveEchoGate()
             jitter = LiveJitter()
             cuts = LiveCutOffs()
+            log = LiveTalkLog(SystemClock.elapsedRealtime())
         }
         output = TalkBargeIn.output(context)
         val askedAt = SystemClock.elapsedRealtime()
@@ -209,7 +215,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         jobs += scope.launch {
             val s = if (ahead != null) runCatching { ahead.session.await() }.getOrNull() else {
                 val voice = runCatching { core.liveVoice() }.getOrNull()
-                core.liveSession(voice)
+                core.liveSession(voice, speaker = output == BargeInOutput.SPEAKER)
             }
             if (gen != generation) {
                 s?.sessionId?.let { id -> withContext(Dispatchers.IO) { core.liveUsage(id, 0, 0) } }
@@ -268,9 +274,10 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         resuming = true
         resumingFrom = link
         resumes++
+        synchronized(audioLock) { log.newWindow(SystemClock.elapsedRealtime()) }
         jobs += scope.launch {
             val voice = runCatching { core.liveVoice() }.getOrNull()
-            val s = core.liveSession(voice, resume = h)
+            val s = core.liveSession(voice, resume = h, speaker = output == BargeInOutput.SPEAKER)
             if (gen != generation) {
                 s?.sessionId?.let { id -> withContext(Dispatchers.IO) { core.liveUsage(id, 0, 0) } }
                 return@launch
@@ -347,7 +354,10 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             LiveProtocol.Event.SetupComplete -> main.post {
                 if (gen != generation) return@post
                 // Slice 2c: a fresh window is set up: the conversation carries on, nothing to open.
-                if (l == link && resuming) resuming = false
+                if (l == link && resuming) {
+                    resuming = false
+                    synchronized(audioLock) { log.carriedOn(SystemClock.elapsedRealtime()) }
+                }
                 if (setUp) return@post
                 setUp = true
                 openPlayer(gen)
@@ -364,6 +374,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 // Meka talked over him: drop what's held, queued and what the speaker still holds.
                 synchronized(audioLock) {
                     cuts.record(gate)
+                    log.interrupted(gate.lastSent, SystemClock.elapsedRealtime())
                     jitter.interrupted()
                     gate.clear()
                 }
@@ -373,11 +384,17 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             }
             LiveProtocol.Event.TurnComplete -> {
                 synchronized(audioLock) { letThrough(jitter.turnComplete(SystemClock.elapsedRealtime())) }
-                main.post { if (gen == generation) finishTurn() }
+                main.post {
+                    if (gen != generation) return@post
+                    val again = synchronized(audioLock) { log.turnComplete(saidNow.toString(), SystemClock.elapsedRealtime()) }
+                    finishTurn()
+                    if (again) repeating(gen)
+                }
             }
             is LiveProtocol.Event.Heard -> main.post {
                 if (gen != generation) return@post
                 heardNow.append(e.text)
+                synchronized(audioLock) { log.heard(heardNow.toString()) }
                 if (e.text.isNotBlank()) lastHeardAt = SystemClock.elapsedRealtime()
                 listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
             }
@@ -385,14 +402,37 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 if (gen != generation) return@post
                 saidNow.append(e.text)
                 listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
+                if (synchronized(audioLock) { log.said(saidNow.toString(), SystemClock.elapsedRealtime()) }) repeating(gen)
             }
             is LiveProtocol.Event.ToolCall -> scope.launch { answerTool(gen, e) }
             // Slice 2c: Google is closing this connection: carry the conversation on, or end as before.
-            is LiveProtocol.Event.GoAway -> main.post { if (gen == generation && l == link) carryOn(gen) }
+            is LiveProtocol.Event.GoAway -> main.post {
+                if (gen == generation && l == link) {
+                    synchronized(audioLock) { log.goingAway(SystemClock.elapsedRealtime()) }
+                    carryOn(gen)
+                }
+            }
             is LiveProtocol.Event.Resumable -> main.post {
                 if (gen == generation && l == link) LiveHandOnRules.handle(e.handle)?.let { heldHandle = it }
             }
         }
+    }
+
+    /**
+     * 2026-10-26: Obi opened a turn with the same words as one a moment ago: he is looping (his own voice heard back as a
+     * question, or a resumed session replaying). His voice stops now and normal Obi takes over with the reason. Main thread.
+     */
+    private fun repeating(gen: Int) {
+        if (gen != generation || !running) return
+        synchronized(audioLock) {
+            jitter.interrupted()
+            gate.clear()
+        }
+        queue.clear()
+        playUntil = 0
+        track?.let { t -> runCatching { t.pause(); t.flush() } }
+        why = LiveDiagnosisRules.LiveFallback.REPEATING to null
+        end(gen, fellBack = true)
     }
 
     /** What the jitter let through: to the speaker's queue in order, each chunk's span and level to the gate. Under [audioLock]. */
@@ -507,8 +547,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 val n = try { rec.read(buf, 0, chunk) } catch (e: Exception) { -1 }
                 if (n <= 0) break
                 val db = BargeInRules.dbfs(buf, n)
-                val speaking = LiveTalkRules.speaking(playUntil, SystemClock.elapsedRealtime())
-                val send = synchronized(audioLock) { gate.send(output, db, speaking, SystemClock.elapsedRealtime()) }
+                val now = SystemClock.elapsedRealtime()
+                val speaking = LiveTalkRules.speaking(playUntil, now)
+                // 2026-10-26: on the speaker the microphone waits for the tail of Obi's voice and its echo to die away.
+                val hears = LiveTalkRules.micHearsObi(output, playUntil, now)
+                val send = synchronized(audioLock) { gate.send(output, db, hears, now) }
                 val len = n * 2
                 if (send) {
                     for (i in 0 until n) {
@@ -594,7 +637,9 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         val wasLive = setUp
         // 2026-10-25: how it sounded (speaker or headphones, cut-offs with their levels, waits for the network), numbers only.
         val audio = if (!fellBack && wasLive) synchronized(audioLock) { cuts.stats(output, jitter) } else null
-        if (fellBack || wasLive) scope.launch { runCatching { core.noteLiveOutcome(!fellBack && wasLive, reason?.first, reason?.second, audio) } }
+        // 2026-10-26: the talk's events (Obi's turn openings, Google's stops, windows) for Health → Obi's voice, this phone only.
+        val events = if (wasLive) synchronized(audioLock) { log.lines() } else emptyList()
+        if (fellBack || wasLive) scope.launch { runCatching { core.noteLiveOutcome(!fellBack && wasLive, reason?.first, reason?.second, audio, events) } }
         listener.onEnded(fellBack, reason?.let { LiveDiagnosisRules.stageLine(it.first, it.second) })
     }
 

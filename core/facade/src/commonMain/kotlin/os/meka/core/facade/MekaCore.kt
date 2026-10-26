@@ -11253,7 +11253,7 @@ class MekaCore(
      * and normal Obi answers. Slice 2c: [greeted] is the hello just said before Live takes over; [resume] Google's
      * handle when the same conversation carries on into a fresh window ([os.meka.core.domain.LiveHandOnRules]). Never throws.
      */
-    suspend fun liveSession(voice: String?, greeted: String? = null, resume: String? = null): os.meka.core.wire.LiveCodec.Session? {
+    suspend fun liveSession(voice: String?, greeted: String? = null, resume: String? = null, speaker: Boolean = false): os.meka.core.wire.LiveCodec.Session? {
         val api = liveApi ?: return null
         val handle = os.meka.core.domain.LiveHandOnRules.handle(resume)
         // Slice 4: the compact day goes with the request, so the server can start the session as Obi with his day.
@@ -11263,8 +11263,9 @@ class MekaCore(
         val day = try {
             onCore {
                 val kept = liveDaySent
-                if (handle != null && kept != null) kept.copy(introduce = false, greeted = null)
-                else liveDay().copy(greeted = os.meka.core.domain.LiveHandOnRules.greeted(greeted)).also { liveDaySent = it }
+                // 2026-10-26: on the device's own speaker the session lets Obi finish each turn (the repeat loop).
+                if (handle != null && kept != null) kept.copy(introduce = false, greeted = null, speaker = speaker)
+                else liveDay().copy(greeted = os.meka.core.domain.LiveHandOnRules.greeted(greeted), speaker = speaker).also { liveDaySent = it }
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         return try { api.liveSession(voice, day, handle) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
@@ -11440,16 +11441,24 @@ class MekaCore(
         fallback: os.meka.core.domain.LiveDiagnosisRules.LiveFallback?,
         detail: String?,
         audio: os.meka.core.domain.LiveAudioStats? = null,
+        events: List<String> = emptyList(),
     ) {
         try {
             onCore {
                 val now = nowMs()
-                val o = os.meka.core.domain.LiveDiagnosisRules.LiveOutcome(now, live, if (live) null else fallback, if (live) null else os.meka.core.domain.LiveDiagnosisRules.redact(detail), if (live) audio else null)
+                // 2026-10-26: the talk's last events (Obi's turn openings, Google's stops, windows) for Health, this device only.
+                val kept = os.meka.core.domain.LiveTalkLogRules.decode(os.meka.core.domain.LiveTalkLogRules.encode(events))
+                val o = os.meka.core.domain.LiveDiagnosisRules.LiveOutcome(now, live, if (live) null else fallback, if (live) null else os.meka.core.domain.LiveDiagnosisRules.redact(detail), if (live) audio else null, kept)
                 lastLiveOutcome = o
                 lastLiveOutcomeRead = true
                 // 2026-10-25: a talk where Obi waited for the network shows in Health → Speed with its longest wait.
                 if (live && audio != null && audio.waits > 0) speedLog.record(os.meka.core.domain.LiveAudioLines.SPEED_WAIT, audio.longestWaitMs, now)
-                runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.LiveDiagnosisRules.KEY, os.meka.core.domain.LiveDiagnosisRules.encode(o)) } }
+                runCatching {
+                    localStore.transaction {
+                        localStore.setLocalValue(os.meka.core.domain.LiveDiagnosisRules.KEY, os.meka.core.domain.LiveDiagnosisRules.encode(o))
+                        localStore.setLocalValue(os.meka.core.domain.LiveTalkLogRules.KEY, os.meka.core.domain.LiveTalkLogRules.encode(kept))
+                    }
+                }
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { }
     }
@@ -11463,7 +11472,11 @@ class MekaCore(
             lastLiveOutcomeRead = true
             if (lastLiveOutcome == null) lastLiveOutcome = os.meka.core.domain.LiveDiagnosisRules.decode(
                 runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.LiveDiagnosisRules.KEY) } }.getOrNull(),
-            )
+            )?.let { o ->
+                o.copy(events = os.meka.core.domain.LiveTalkLogRules.decode(
+                    runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.LiveTalkLogRules.KEY) } }.getOrNull(),
+                ))
+            }
         }
         return lastLiveOutcome
     }

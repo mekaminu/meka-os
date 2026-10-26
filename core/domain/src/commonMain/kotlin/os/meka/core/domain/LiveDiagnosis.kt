@@ -127,6 +127,8 @@ object LiveDiagnosisRules {
         CLOSED("Google closed the connection before it was set up"),
         /** The microphone couldn't be opened for Live. */
         MIC("the microphone couldn't open for Live"),
+        /** 2026-10-26: Obi started a turn with the same words as one a moment before, so Live stopped ([LiveTalkLog]). */
+        REPEATING("Obi started repeating himself, so Live stopped"),
     }
 
     /** One talk with Live on: it opened ([live]) or why not ([fallback], with Google's or the server's [detail]). */
@@ -137,6 +139,8 @@ object LiveDiagnosisRules {
         val detail: String?,
         /** 2026-10-25: how a talk that ran in Live sounded (the mode, cut-offs, waits); null for an older one or a fallback. */
         val audio: LiveAudioStats? = null,
+        /** 2026-10-26: the talk's last events ([LiveTalkLog.lines]), kept on this device for Health; empty for an older one. */
+        val events: List<String> = emptyList(),
     )
 
     /** The server's session answer as a reason: [state] is the session's wire state, [reason] its reason line. */
@@ -165,8 +169,9 @@ object LiveDiagnosisRules {
     /** Health's line for the last talk: "Last talk 21:40 · Live" / "Last talk 21:40 · normal Obi: Google took over 6 s …". */
     fun healthLine(o: LiveOutcome?, nowMs: Long, cal: LocalCalendar): String? = o?.let {
         val at = HealthRules.at(it.atMs, nowMs, cal)
-        if (it.live || it.fallback == null) "Last talk $at · Live" + (it.audio?.let { a -> "\n" + LiveAudioLines.line(a) } ?: "")
+        val head = if (it.live || it.fallback == null) "Last talk $at · Live" + (it.audio?.let { a -> "\n" + LiveAudioLines.line(a) } ?: "")
         else "Last talk $at · normal Obi: ${it.fallback.line}" + (it.detail?.let { d -> " ($d)" } ?: "")
+        head + it.events.takeLast(LiveTalkLogRules.HEALTH_LINES).joinToString("") { e -> "\n$e" }
     }
 
     /** A talk as text for the device's storage: the time, Live or the reason's name, and the redacted detail. */

@@ -47,6 +47,8 @@ final class MacLiveTalk {
         guard ensure(model) != nil else { return false }
         running = true
         herVoice = false
+        // 2026-10-26: on the Mac's own speakers the session lets Obi finish each turn (the repeat loop). Only a Bool crosses.
+        conversation?.outputIs(headphones: MacAudioOut.headphones)
         conversation?.start()
         return true
     }
@@ -55,6 +57,7 @@ final class MacLiveTalk {
     /// once when the hello ends and Obi doesn't greet him twice. Only a String crosses into the core.
     func prepare(_ model: CoreModel, greeted: String) {
         guard !running, let c = ensure(model) else { return }
+        c.outputIs(headphones: MacAudioOut.headphones)
         c.prepare(greeted: greeted)
     }
 

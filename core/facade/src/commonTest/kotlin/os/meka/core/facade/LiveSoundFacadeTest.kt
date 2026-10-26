@@ -55,4 +55,19 @@ class LiveSoundFacadeTest {
         fell.noteLiveOutcome(false, LiveDiagnosisRules.LiveFallback.SLOW_GOOGLE, null, sound)
         assertEquals(null, LiveDiagnosisRules.decode(fellStore.localValue(LiveDiagnosisRules.KEY))?.audio)
     }
+
+    @Test
+    fun aLoopThatStoppedLiveIsKeptWithItsEventsForHealth() = runTest {
+        // 2026-10-26 (the repeat loop): the talk's last events stay on this device beside it, newest last.
+        val store = InMemoryReplicaStore()
+        val c = MekaCore(
+            householdId = "hh", deviceId = "android", store = store,
+            transport = os.meka.core.testing.FaultyTransport(SyncService(InMemoryServerOpStore())),
+            secureRandom = Random(7), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val events = (1..10).map { "0:0$it Obi: \"line $it…\"" } + "0:12 Obi repeated \"line 9…\": Live stopped"
+        c.noteLiveOutcome(false, LiveDiagnosisRules.LiveFallback.REPEATING, null, null, events)
+        assertEquals(events.takeLast(os.meka.core.domain.LiveTalkLogRules.HEALTH_LINES), os.meka.core.domain.LiveTalkLogRules.decode(store.localValue(os.meka.core.domain.LiveTalkLogRules.KEY)))
+        assertEquals(LiveDiagnosisRules.LiveFallback.REPEATING, LiveDiagnosisRules.decode(store.localValue(LiveDiagnosisRules.KEY))?.fallback)
+    }
 }

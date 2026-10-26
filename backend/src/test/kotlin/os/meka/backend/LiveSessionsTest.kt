@@ -32,7 +32,9 @@ class LiveSessionsTest {
         val tooled = mutableListOf<Boolean>()
         val resumed = mutableListOf<String?>()
         val mailMoneys = mutableListOf<Boolean>()
-        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean): String? {
+        val speakers = mutableListOf<Boolean>()
+        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean, speaker: Boolean): String? {
+            speakers += speaker
             mailMoneys += mailMoney
             resumed += resume
             tooled += tools
@@ -321,6 +323,30 @@ class LiveSessionsTest {
         // A full day with the mail and money lines still fits whole.
         val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
         assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
+    }
+
+    @Test
+    fun onTheSpeakerTheSessionLetsObiFinishEachTurn() {
+        // 2026-10-26 (the repeat loop): a device on its own speaker gets a session where Google doesn't stop Obi on what
+        // it hears (mostly his own echo there) and detects speech starting less eagerly; headphones keep barge-in.
+        val tokens = Tokens(key)
+        val day = LiveCodec.Day("2026-10-26", "Monday 26 October 2026 · 20:40", emptyList(), tools = true, speaker = true)
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day))
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day.copy(speaker = false)))
+        assertEquals(listOf(true, false), tokens.speakers)
+        // Google refusing the speaker's settings: asked again as before.
+        val refusing = Tokens(key, answer = null)
+        service(refusing).session("hh", LiveCodec.SessionRequest("Kore", day))
+        assertEquals(listOf(true, false), refusing.speakers)
+        val setup = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", speaker = true)).jsonObject["bidiGenerateContentSetup"]!!.jsonObject
+        val rt = setup["realtimeInputConfig"]!!.jsonObject
+        assertEquals("NO_INTERRUPTION", rt["activityHandling"]!!.jsonPrimitive.content)
+        assertEquals("START_SENSITIVITY_LOW", rt["automaticActivityDetection"]!!.jsonObject["startOfSpeechSensitivity"]!!.jsonPrimitive.content)
+        assertFalse("realtimeInputConfig" in Json.parseToJsonElement(GeminiLiveTokens.request("m", "Kore", now, "x")).jsonObject["bidiGenerateContentSetup"]!!.jsonObject)
+        // The flag survives the wire both ways; an older device's request reads as headphones.
+        val wire = LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(LiveCodec.SessionRequest("Kore", day)))
+        assertTrue(wire.day!!.speaker)
+        assertFalse(LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(LiveCodec.SessionRequest("Kore", day.copy(speaker = false)))).day!!.speaker)
     }
 
     // ---- 2026-10-24: why Live does or doesn't engage ----

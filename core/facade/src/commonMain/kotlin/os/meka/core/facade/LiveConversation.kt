@@ -28,6 +28,7 @@ import os.meka.core.domain.LiveFactsRules
 import os.meka.core.domain.LiveHandOnRules
 import os.meka.core.domain.LiveMoney
 import os.meka.core.domain.LiveOffer
+import os.meka.core.domain.LiveTalkLog
 import os.meka.core.domain.LiveTalkRules
 import os.meka.core.domain.LiveToolRules
 import os.meka.core.wire.LiveCodec
@@ -57,7 +58,8 @@ class LiveConversation internal constructor(
     /** What the conversation needs of the core (MekaCore's own Live calls). */
     internal interface Core {
         suspend fun voice(): String?
-        suspend fun session(voice: String?, greeted: String?, resume: String?): LiveCodec.Session?
+        /** 2026-10-26: [speaker] when Obi will play through the device's own speakers (the session then lets him finish each turn). */
+        suspend fun session(voice: String?, greeted: String?, resume: String?, speaker: Boolean = false): LiveCodec.Session?
         suspend fun usage(sessionId: String, inSeconds: Long, outSeconds: Long)
         suspend fun search(sessionId: String, query: String): LiveCodec.SearchResult
         suspend fun lookUp(whenText: String): String
@@ -65,7 +67,7 @@ class LiveConversation internal constructor(
         suspend fun mail(about: String): String
         suspend fun money(question: String): LiveMoney
         /** 2026-10-24: how this talk went (Live, or why normal Obi answered), for Health; reasons only, never words. */
-        suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats? = null) {}
+        suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats? = null, events: List<String> = emptyList()) {}
     }
 
     private val out = Channel<LiveEvent>(Channel.UNLIMITED)
@@ -86,6 +88,8 @@ class LiveConversation internal constructor(
     private var jitter = LiveJitter<Held>()
     /** 2026-10-25: each time Google stopped Obi for Meka's voice, with the levels the gate saw (for Health). */
     private var cuts = LiveCutOffs()
+    /** 2026-10-26 (the repeat loop): this talk's turns, Google's stops and windows, and the guard that ends a loop. */
+    private var log = LiveTalkLog(0)
     private class Held(val b64: String, val bytes: Int, val dbfs: Float)
     private var session: LiveCodec.Session? = null
     private val jobs = mutableListOf<Job>()
@@ -119,7 +123,8 @@ class LiveConversation internal constructor(
     /** Asks for a session now (the hello is playing; [greeted] is what it says), so [start] opens at once after it. */
     fun prepare(greeted: String?) {
         if (running || prepared != null) return
-        prepared = Prepared(scope.async { runCatching { core.session(core.voice(), greeted, null) }.getOrNull() }, elapsedMs())
+        val speaker = !headphones
+        prepared = Prepared(scope.async { runCatching { core.session(core.voice(), greeted, null, speaker) }.getOrNull() }, elapsedMs())
     }
 
     /** A session asked for ahead won't be used: reported as 0 seconds, so it costs nothing. */
@@ -145,6 +150,7 @@ class LiveConversation internal constructor(
         gate = LiveEchoGate()
         jitter = LiveJitter()
         cuts = LiveCutOffs()
+        log = LiveTalkLog(elapsedMs())
         heldHandle = null
         resumes = 0
         lastHeardAt = null
@@ -172,7 +178,7 @@ class LiveConversation internal constructor(
         }
         jobs += scope.launch {
             val s = if (ahead != null) runCatching { ahead.session.await() }.getOrNull()
-            else runCatching { core.session(core.voice(), null, null) }.getOrNull()
+            else runCatching { core.session(core.voice(), null, null, !headphones) }.getOrNull()
             if (gen != generation) {
                 s?.sessionId?.let { report(it, 0, 0) }
                 return@launch
@@ -207,11 +213,20 @@ class LiveConversation internal constructor(
     fun sendAudio(base64: String, bytes: Int, dbfs: Float, headphones: Boolean) {
         if (!running || !setUp) return
         this.headphones = headphones
-        val speaking = herVoice(elapsedMs())
         val output = if (headphones) os.meka.core.domain.BargeInOutput.HEADPHONES else os.meka.core.domain.BargeInOutput.SPEAKER
+        // 2026-10-26: on the speakers the microphone waits a moment after Obi's voice, for its tail and echo to die away.
+        val speaking = LiveTalkRules.micHearsObi(output, playUntil, elapsedMs())
         val send = gate.send(output, dbfs, speaking, elapsedMs())
         inBytes += bytes.coerceAtLeast(0)
         outgoing?.trySend(LiveProtocol.audio(if (send) base64 else silence(bytes)))
+    }
+
+    /**
+     * 2026-10-26: what Obi will play through, known before [start] (the Mac's output now), so the session asked for
+     * suits it (on the speakers Google lets him finish each turn). Each microphone chunk keeps it up to date.
+     */
+    fun outputIs(headphones: Boolean) {
+        this.headphones = headphones
     }
 
     /** Ends the conversation at once (the orb clicked, the window closed). */
@@ -268,7 +283,8 @@ class LiveConversation internal constructor(
         resumingFrom = link
         resumes++
         jobs += scope.launch {
-            val s = runCatching { core.session(core.voice(), null, h) }.getOrNull()
+            log.newWindow(elapsedMs())
+            val s = runCatching { core.session(core.voice(), null, h, !headphones) }.getOrNull()
             if (gen != generation) {
                 s?.sessionId?.let { report(it, 0, 0) }
                 return@launch
@@ -284,9 +300,13 @@ class LiveConversation internal constructor(
     }
 
     private fun handle(gen: Int, l: Int, e: LiveProtocol.Event) {
+        if (gen != generation) return // ended mid-message (2026-10-26: a repeat stops the talk at once)
         when (e) {
             LiveProtocol.Event.SetupComplete -> {
-                if (l == link && resuming) resuming = false
+                if (l == link && resuming) {
+                    resuming = false
+                    log.carriedOn(elapsedMs())
+                }
                 if (setUp) return
                 setUp = true
                 out.trySend(LiveEvent.Ready)
@@ -299,6 +319,7 @@ class LiveConversation internal constructor(
             }
             LiveProtocol.Event.Interrupted -> {
                 cuts.record(gate)
+                log.interrupted(gate.lastSent, elapsedMs())
                 jitter.interrupted()
                 gate.clear()
                 playUntil = 0
@@ -306,21 +327,42 @@ class LiveConversation internal constructor(
             }
             LiveProtocol.Event.TurnComplete -> {
                 play(jitter.turnComplete(elapsedMs()))
+                val again = log.turnComplete(saidNow.toString(), elapsedMs())
                 finishTurn()
+                if (again) repeating(gen)
             }
             is LiveProtocol.Event.Heard -> {
                 heardNow.append(e.text)
+                log.heard(heardNow.toString())
                 if (e.text.isNotBlank()) lastHeardAt = elapsedMs()
                 out.trySend(LiveEvent.Words(heardNow.toString().trim(), saidNow.toString().trim()))
             }
             is LiveProtocol.Event.Said -> {
                 saidNow.append(e.text)
                 out.trySend(LiveEvent.Words(heardNow.toString().trim(), saidNow.toString().trim()))
+                if (log.said(saidNow.toString(), elapsedMs())) repeating(gen)
             }
             is LiveProtocol.Event.ToolCall -> scope.launch { answerTool(gen, e) }
-            is LiveProtocol.Event.GoAway -> if (l == link) carryOn(gen)
+            is LiveProtocol.Event.GoAway -> if (l == link) {
+                log.goingAway(elapsedMs())
+                carryOn(gen)
+            }
             is LiveProtocol.Event.Resumable -> if (l == link) LiveHandOnRules.handle(e.handle)?.let { heldHandle = it }
         }
+    }
+
+    /**
+     * 2026-10-26: Obi opened a turn with the same words as one a moment ago: he is looping (his own voice heard back, or
+     * a resumed session replaying). His voice stops at once and normal Obi takes over with the reason under the orb.
+     */
+    private fun repeating(gen: Int) {
+        if (gen != generation || !running) return
+        jitter.interrupted()
+        gate.clear()
+        playUntil = 0
+        out.trySend(LiveEvent.Interrupted)
+        why = LiveDiagnosisRules.LiveFallback.REPEATING to null
+        end(gen, fellBack = true)
     }
 
     /** Obi asked Navilife for something: answered here exactly as the Fold answers it. */
@@ -407,7 +449,8 @@ class LiveConversation internal constructor(
         fallbackLine = reason?.let { LiveDiagnosisRules.stageLine(it.first, it.second) }
         val wasLive = setUp
         val audio = if (!fellBack && wasLive) cuts.stats(if (headphones) os.meka.core.domain.BargeInOutput.HEADPHONES else os.meka.core.domain.BargeInOutput.SPEAKER, jitter) else null
-        if (fellBack || wasLive) scope.launch { runCatching { core.outcome(!fellBack && wasLive, reason?.first, reason?.second, audio) } }
+        val events = if (wasLive) log.lines() else emptyList()
+        if (fellBack || wasLive) scope.launch { runCatching { core.outcome(!fellBack && wasLive, reason?.first, reason?.second, audio, events) } }
         out.trySend(LiveEvent.Ended(fellBack, fallbackLine))
     }
 
@@ -521,12 +564,12 @@ internal class KtorLiveSocket(private val client: HttpClient) : LiveSocket {
 /** MekaCore's own Live calls, as the conversation needs them. */
 internal class MekaLiveCore(private val core: MekaCore) : LiveConversation.Core {
     override suspend fun voice(): String? = runCatching { core.liveVoice() }.getOrNull()
-    override suspend fun session(voice: String?, greeted: String?, resume: String?) = core.liveSession(voice, greeted, resume)
+    override suspend fun session(voice: String?, greeted: String?, resume: String?, speaker: Boolean) = core.liveSession(voice, greeted, resume, speaker)
     override suspend fun usage(sessionId: String, inSeconds: Long, outSeconds: Long) { core.liveUsage(sessionId, inSeconds, outSeconds) }
     override suspend fun search(sessionId: String, query: String) = core.liveSearch(sessionId, query)
     override suspend fun lookUp(whenText: String) = core.liveLookUp(whenText)
     override suspend fun propose(args: Map<String, String>) = core.livePropose(args)
     override suspend fun mail(about: String) = core.liveMail(about)
     override suspend fun money(question: String) = core.liveMoney(question)
-    override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?) { core.noteLiveOutcome(live, fallback, detail, audio) }
+    override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?, events: List<String>) { core.noteLiveOutcome(live, fallback, detail, audio, events) }
 }

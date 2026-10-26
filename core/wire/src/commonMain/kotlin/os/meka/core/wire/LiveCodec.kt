@@ -85,6 +85,12 @@ object LiveCodec {
          * adds them; a slice-5 device leaves it out and its session has the day look-up and the cards alone.
          */
         val mailMoney: Boolean = false,
+        /**
+         * 2026-10-26 (additive, the repeat loop): Obi will speak through the phone's or the Mac's own speaker, so the
+         * server locks the session to finish each of his turns (Google doesn't stop him on what it hears) and to start
+         * hearing speech less eagerly; with headphones (false, or an older device) he can still be talked over.
+         */
+        val speaker: Boolean = false,
     )
 
     /**
@@ -215,6 +221,7 @@ object LiveCodec {
                 if (d.tools) put("tools", true)
                 d.greeted?.takeIf { it.isNotBlank() }?.let { put("greeted", it) }
                 if (d.tools && d.mailMoney) put("mailMoney", true)
+                if (d.speaker) put("speaker", true)
             }
         }
         r.resume?.let { put("resume", it) }
@@ -256,7 +263,8 @@ object LiveCodec {
         val greeted = str(o, "greeted")?.takeIf { it.isNotBlank() }?.also { require(it.length <= MAX_GREETED) { "greeted" } }
         // Handles mean something only to a device that answers the tools.
         val mailMoney = tools && (o["mailMoney"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
-        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted, mailMoney)
+        val speaker = (o["speaker"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted, mailMoney, speaker)
     }
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

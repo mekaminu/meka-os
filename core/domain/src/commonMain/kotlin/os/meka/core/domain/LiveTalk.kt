@@ -48,6 +48,19 @@ object LiveTalkRules {
     /** Obi is still speaking at [nowMs] (his queued audio, plus a short tail). */
     fun speaking(playUntilMs: Long, nowMs: Long): Boolean = nowMs < playUntilMs + SPEAKING_TAIL_MS
 
+    /**
+     * 2026-10-26 (the repeat loop): on the phone's own speaker the last of Obi's voice is still coming out of the speaker
+     * (the track's buffer and the output's latency) and echoing in the room after the clock says he finished, and the
+     * microphone went straight back up: Google heard the end of his own sentence as Meka speaking and answered it. So
+     * the microphone waits [SPEAKER_ECHO_TAIL_MS] after his voice before it goes up again on the speaker.
+     */
+    const val SPEAKER_ECHO_TAIL_MS = 800L
+
+    /** Whether the microphone should treat Obi as still speaking at [nowMs] (the gate's view; the orb uses [speaking]). */
+    fun micHearsObi(output: BargeInOutput, playUntilMs: Long, nowMs: Long): Boolean =
+        if (output == BargeInOutput.HEADPHONES) speaking(playUntilMs, nowMs)
+        else playUntilMs > 0 && nowMs < playUntilMs + SPEAKER_ECHO_TAIL_MS
+
     /** Whole seconds of 16-bit mono audio in [bytes] at [rate], rounded up (what the usage report counts). */
     fun seconds(bytes: Long, rate: Int): Long {
         if (bytes <= 0 || rate <= 0) return 0

@@ -44,15 +44,21 @@ class LiveConversationTest {
         val usage = mutableListOf<Triple<String, Long, Long>>()
         val outcomes = mutableListOf<Triple<Boolean, LiveDiagnosisRules.LiveFallback?, String?>>()
         val audio = mutableListOf<LiveAudioStats?>()
-        override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?) {
+        val events = mutableListOf<List<String>>()
+        override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?, events: List<String>) {
             outcomes += Triple(live, fallback, detail)
             this.audio += audio
+            this.events += events
         }
+        val speakers = mutableListOf<Boolean>()
+        val resumes = mutableListOf<String?>()
         val searches = mutableListOf<String>()
         val asked = mutableListOf<String?>()
         override suspend fun voice(): String? = "Kore"
-        override suspend fun session(voice: String?, greeted: String?, resume: String?): LiveCodec.Session? {
+        override suspend fun session(voice: String?, greeted: String?, resume: String?, speaker: Boolean): LiveCodec.Session? {
             asked += greeted
+            speakers += speaker
+            resumes += resume
             if (refused != null) return LiveCodec.Session(LiveCodec.Session.FAILED, LiveCodec.Meter(true, "ok", 0, 1_500), reason = refused)
             return if (!ready) LiveCodec.Session(LiveCodec.Session.OVER, LiveCodec.Meter(true, "over", 1_500, 1_500))
             else LiveCodec.Session(LiveCodec.Session.READY, LiveCodec.Meter(true, "ok", 0, 1_500), "ls_1", "tok", "gemini-live", "wss://g", voice, expiresAtMs = 600_000)
@@ -276,6 +282,89 @@ class LiveConversationTest {
         runCurrent()
         val answered = events.filterIsInstance<LiveEvent.Turn>().single().answer as AskOutcome.Answered
         assertTrue(answered.answer.unlockMoney != null)
+        c.stop()
+    }
+
+    private fun said(text: String) = """{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"${"A".repeat(2_560)}"}}]},"outputTranscription":{"text":"$text"}}}"""
+
+    @Test
+    fun obiRepeatingHimselfStopsLiveAndNormalObiTakesOverSayingWhy() = runTest {
+        // 2026-10-26 (Meka 20:27: "the same sentence 20 times"): a turn opening with the same words as one a moment ago
+        // stops his voice at once and ends Live with the reason, never a second loop.
+        val socket = FakeSocket()
+        val core = FakeCore()
+        val (c, events) = conversation(core, socket)
+        c.start()
+        runCurrent()
+        assertEquals(listOf(true), core.speakers, "on the speaker the session asked for lets Obi finish his turns")
+        socket.incoming.trySend("""{"setupComplete":{}}""")
+        socket.incoming.trySend(said("Right, so tomorrow you've got the dentist at half nine."))
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        runCurrent()
+        advanceTimeBy(4_000)
+        socket.incoming.trySend("""{"serverContent":{"interrupted":true}}""")
+        socket.incoming.trySend(said("Right, so tomorrow you've got the"))
+        runCurrent()
+        val ended = events.last() as LiveEvent.Ended
+        assertTrue(ended.fellBack, "normal Obi takes over")
+        assertEquals("Normal Obi · Live unavailable: Obi started repeating himself, so Live stopped", ended.fallbackLine)
+        assertTrue(LiveEvent.Interrupted in events)
+        assertEquals(Triple(false, LiveDiagnosisRules.LiveFallback.REPEATING, null), core.outcomes.single())
+        val log = core.events.single()
+        assertEquals("0:00 Obi: \"right so tomorrow you've got the…\"", log.first())
+        assertTrue(log.any { it.startsWith("0:04 Google stopped Obi") }, log.toString())
+        assertEquals("0:04 Obi repeated \"right so tomorrow you've got the…\": Live stopped", log.last())
+        assertTrue(!c.running)
+    }
+
+    @Test
+    fun differentAnswersAndAnAskedForRepeatCarryOn() = runTest {
+        val socket = FakeSocket()
+        val core = FakeCore()
+        val (c, events) = conversation(core, socket)
+        c.outputIs(headphones = true)
+        c.start()
+        runCurrent()
+        assertEquals(listOf(false), core.speakers, "headphones: Google may still stop Obi for his voice")
+        socket.incoming.trySend("""{"setupComplete":{}}""")
+        socket.incoming.trySend(said("The match kicks off at eight tonight on Sky."))
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        socket.incoming.trySend(said("It's twelve degrees and dry at home."))
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        socket.incoming.trySend("""{"serverContent":{"inputTranscription":{"text":"Sorry, say that again?"}}}""")
+        socket.incoming.trySend(said("It's twelve degrees and dry at home."))
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        socket.incoming.trySend(said("Okay."))
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        socket.incoming.trySend(said("Okay."))
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        runCurrent()
+        assertTrue(c.running, "no loop: Live carries on")
+        assertTrue(events.none { it is LiveEvent.Ended })
+        c.stop()
+        runCurrent()
+        assertEquals(3, core.events.single().count { "Obi: " in it }, core.events.single().toString())
+    }
+
+    @Test
+    fun onTheSpeakerTheMicWaitsForObisEchoToDieAway() = runTest {
+        // 2026-10-26: after his voice ends by the clock, the speaker and the room still carry it for a moment.
+        val socket = FakeSocket()
+        val (c, _) = conversation(FakeCore(), socket)
+        c.start()
+        runCurrent()
+        socket.incoming.trySend("""{"setupComplete":{}}""")
+        socket.incoming.trySend("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"${"A".repeat(2_560 * 7)}"}}]}}}""")
+        socket.incoming.trySend("""{"serverContent":{"turnComplete":true}}""")
+        runCurrent()
+        advanceTimeBy(280 + LiveTalkRules.SPEAKING_TAIL_MS + 100)
+        c.sendAudio("TAIL", 3, -30f, headphones = false)
+        runCurrent()
+        assertTrue(!socket.sent.last().contains("TAIL"), "the tail of his voice goes up as silence")
+        advanceTimeBy(LiveTalkRules.SPEAKER_ECHO_TAIL_MS)
+        c.sendAudio("MEKA", 3, -30f, headphones = false)
+        runCurrent()
+        assertTrue(socket.sent.last().contains("MEKA"), "then the microphone goes up again")
         c.stop()
     }
 
