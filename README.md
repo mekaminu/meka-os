@@ -392,6 +392,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/train-queue/cover-light-many.png](docs/screens/fold/train-queue/cover-light-many.png)
 - [fold/train-queue/inner-dark-empty.png](docs/screens/fold/train-queue/inner-dark-empty.png)
 - [fold/train-queue/inner-dark-many.png](docs/screens/fold/train-queue/inner-dark-many.png)
+- [fold/trip-lists/cover-dark-going.png](docs/screens/fold/trip-lists/cover-dark-going.png)
 - [fold/trip-lists/cover-dark-pack.png](docs/screens/fold/trip-lists/cover-dark-pack.png)
 - [fold/trip-lists/cover-dark-start-from.png](docs/screens/fold/trip-lists/cover-dark-start-from.png)
 - [fold/trip-lists/cover-light-pack.png](docs/screens/fold/trip-lists/cover-light-pack.png)
