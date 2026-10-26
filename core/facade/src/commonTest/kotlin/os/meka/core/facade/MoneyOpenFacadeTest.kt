@@ -1,7 +1,9 @@
 package os.meka.core.facade
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -116,6 +118,54 @@ class MoneyOpenFacadeTest {
         assertEquals("October so far", c.moneyView.value.month!!.label)
         release = true
         open.join()
+    }
+
+    /** Waits (on real time) until the core has started [n] money builds; asking proves the core's thread is free. */
+    private suspend fun awaitBuilds(c: MekaCore, n: Int) = withContext(Dispatchers.Default) {
+        while (c.onCoreForTest { c.moneyViewBuilds } < n) delay(5)
+    }
+
+    @Test
+    fun theFreshViewIsBuiltOffTheCoreSoOtherWorkDoesntWaitBehindIt() = runTest(timeout = 5.minutes) {
+        val c = core()
+        c.openMoney()
+        val before = c.moneyViewBuilds
+        assertEquals(MoneyRules.EMPTY, c.moneyView.value.empty)
+        val gate = CompletableDeferred<Unit>()
+        c.moneyBuildGateForTest = gate
+        val import = launch(Dispatchers.Default) { assertFalse(c.importMoneyStatement("Current account", bigStatement()).refused) }
+        // The 3,000-payment build is on its way and held, yet the core's thread answers other work at once.
+        awaitBuilds(c, before + 1)
+        assertEquals(42, c.onCoreForTest { 42 })
+        assertFalse(import.isCompleted)
+        // Meanwhile the screen keeps what it showed; the import's call returns only once the fresh view is showing.
+        assertEquals(MoneyRules.EMPTY, c.moneyView.value.empty)
+        gate.complete(Unit)
+        import.join()
+        c.moneyBuildGateForTest = null
+        assertEquals("October so far", c.moneyView.value.month!!.label)
+        assertNull(c.moneyView.value.opening)
+    }
+
+    @Test
+    fun aBuildStillOnItsWayWhenMoneyLocksNeverShowsBehindTheLock() = runTest(timeout = 5.minutes) {
+        val c = core()
+        c.openMoney()
+        val before = c.moneyViewBuilds
+        val gate = CompletableDeferred<Unit>()
+        c.moneyBuildGateForTest = gate
+        val import = launch(Dispatchers.Default) { c.importMoneyStatement("Current account", bigStatement()) }
+        awaitBuilds(c, before + 1)
+        c.closeMoney()
+        assertTrue(c.moneyView.value.locked)
+        gate.complete(Unit)
+        import.join()
+        c.moneyBuildGateForTest = null
+        assertTrue(c.moneyView.value.locked)
+        assertNull(c.moneyView.value.month)
+        // Opening again builds afresh with the imported payments.
+        c.openMoney()
+        assertEquals("October so far", c.moneyView.value.month!!.label)
     }
 
     @Test

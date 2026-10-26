@@ -3966,3 +3966,19 @@ rebuild shows both and `showPulled` adds none. Tests: SyncRefreshRulesTest (+2) 
 OK; the script now gives the compiler 4 GB, it ran out of memory at the default), SyncRefreshFacadeTest (+1, a gated pull with a tap
 queued behind its answer: the tap runs before the round ends and the whole round costs only the tap's rebuild).
 No server or app change, no migration. Mac checked nightly.
+
+## Taps feel instant — slice 21 (2026-10-26): Money's view is built off the core's thread (part 4c, rest)
+
+`MekaCore.refreshMoney` used to build the whole money view (`MoneyRules.view` over every payment, the trading tracker,
+the business mail check against every statement line, money goals) on the single `confined` core thread, so with Money
+open any change to its inputs held every queued tap behind it. Now the core only reads the inputs (the replica's kept
+lists), compares them with what's showing or already on its way (`moneyPendingFrom`), and launches the build on its own
+one-thread dispatcher (`moneyBuilder`); the build comes back to the core only to publish (and to log "Money view" in
+the Speed log). A generation counter (`moneyGen`) lets only the newest build publish; `closeMoney` and inputs going back
+to the view already showing drop one in flight (`dropMoneyBuild`); a failed build locks Money with the "couldn't open"
+line, as a failed open did. `onCore` (and `syncNow`) hand back a build their block started and join it **outside** the
+core, so the suspend call still returns with the fresh view showing while the core's thread is free for the next tap.
+`moneyStep` uses the offset it set when a build is still on its way. The business-mail check takes plain values.
+Tests: MoneyOpenFacadeTest +2 (a gated 3,000-payment build leaves the core answering other work and the screen as it
+was until it's released; a build still on its way when Money locks never shows behind the lock). No server or app
+change, no migration. Mac checked nightly.

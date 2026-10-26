@@ -796,7 +796,7 @@ class MekaCore(
     internal fun launchOnCoreForTest(block: suspend () -> Unit) { scope.launch { block() } }
 
     /** Locks Money again (the pane closed or the app went away). */
-    suspend fun closeMoney() = onCore { moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
+    suspend fun closeMoney() = onCore { dropMoneyBuild(); moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
 
     // ---- Money manager (16), slice 1: money questions in Ask and Talk, answered on the device ----
 
@@ -855,7 +855,7 @@ class MekaCore(
     /** ‹ / ›: [step] −1 a month earlier, +1 a month later (never past this month). */
     suspend fun moneyStep(step: Int) = onCore {
         if (!moneyOpen) return@onCore
-        val m = _money.value.month
+        val m = _money.value.month.takeIf { moneyJob?.isActive != true }
         moneyOffset = ((m?.offset ?: moneyOffset) - step).coerceAtLeast(0)
         refreshMoney()
     }
@@ -980,64 +980,141 @@ class MekaCore(
     private var moneyBuiltFrom: List<Any?>? = null
     private var moneyBuilt: os.meka.core.domain.MoneyView? = null
 
+    /**
+     * Taps feel instant, (4c) rest (2026-10-26): the money view is built off the core's one thread. [refreshMoney] reads
+     * everything the view needs from the replica on the core (cheap: the replica hands out its kept lists), then builds
+     * the view over the 3,000 payments on [moneyBuilder] and comes back to the core only to publish it, so a tap
+     * elsewhere (Done on a chat, a task tick) no longer waits behind Money. Only the newest build publishes ([moneyGen]);
+     * locking Money, or inputs going back to what's showing, drops one in flight. The suspend call that started a build
+     * returns once it's published ([onCore] waits for it outside the core), so callers still see the fresh view.
+     */
+    private val moneyBuilder = Dispatchers.Default.limitedParallelism(1)
+    private var moneyGen = 0L
+    private var moneyJob: Job? = null
+    private var moneyPendingFrom: List<Any?>? = null
+
+    /** Tests: when set, each money build waits for it before building (to look at the core while a build is on its way). */
+    @kotlin.concurrent.Volatile
+    internal var moneyBuildGateForTest: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    /** Drops the build in flight (if any): it won't publish. Core only. */
+    private fun dropMoneyBuild() {
+        moneyGen++
+        moneyJob?.cancel()
+        moneyJob = null
+        moneyPendingFrom = null
+    }
+
     private fun refreshMoney() {
         if (!moneyOpen) return
         val wallets = trading.wallets()
         val now = nowMs()
         val today = todayEpochDay()
+        val tz = timeZone()
         val accounts = money.accounts()
+        val txns = money.txns()
+        val rules = money.rules()
         val cards = money.cards()
         val tidies = activity.mailTidyBatches()
         val tripItems = trips.items()
         val alerts = tradingAlertSetting()
         val goalList = if (moneyOffset != 0) null else goals.goals(tasks.all()).first
         val businessFinds = activity.mailFinds()
+        val offset = moneyOffset
+        val whatIf = moneyWhatIf
+        val hiddenTips = money.hiddenTips(); val fineAlerts = money.fineAlerts(); val waiting = lists.waitingItems()
+        val bills = moneyBills(); val holidays = bankHolidays.calendar(); val worth = money.worthItems()
+        val bankSync = moneyBank.sync(); val removed = moneyBank.removed().size; val askedAt = moneyBank.askedAtMs()
+        val bizAccounts = money.businessAccounts(); val bizMerchants = money.businessMerchants(); val setAside = money.setAsidePct()
+        val sharedTxns = money.sharedTxns(); val sharedMerchants = money.sharedMerchants(); val sharedEntries = money.sharedEntries()
+        val sharedSetting = money.sharedSetting(); val partner = aboutYou.profile().partnerName
+        val challenges = money.challenges(); val abroad = moneyAbroadNow()
         val inputs = listOf(
-            accounts, money.txns(), money.rules(), today, timeZone(), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), cards, money.worthItems(),
-            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(),
+            accounts, txns, rules, today, tz, offset, hiddenTips, fineAlerts,
+            whatIf, waiting, bills, holidays, cards, worth,
+            bankSync, removed, askedAt,
             // The view says "synced 5 min ago" and the like: a new minute is a new view.
             now / os.meka.core.domain.MoneyViewMemo.MINUTE_MS, wallets,
-            money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
-            money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
-            money.challenges(), moneyAbroadNow(), tripItems, tidies, alerts, goalList, businessFinds,
+            bizAccounts, bizMerchants, setAside,
+            sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner,
+            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds,
         )
-        if (os.meka.core.domain.MoneyViewMemo.same(moneyBuiltFrom, inputs, moneyBuilt, _money.value)) return
-        _money.value = os.meka.core.domain.MoneyRules.view(
-            accounts, money.txns(), money.rules(), today, ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), cards, money.worthItems(),
-            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), now, wallets,
-            money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
-            money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
-            money.challenges(),
-            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(tripItems, today),
-            // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
-            receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, ZoneCalendar(timeZone)),
-        ).let { v ->
+        // The same build is already on its way.
+        if (moneyJob?.isActive == true && moneyPendingFrom == inputs) return
+        if (os.meka.core.domain.MoneyViewMemo.same(moneyBuiltFrom, inputs, moneyBuilt, _money.value)) {
+            // What's showing is right again: a build of something else mustn't replace it.
+            if (moneyJob != null) dropMoneyBuild()
+            return
+        }
+        dropMoneyBuild()
+        val gen = moneyGen
+        moneyPendingFrom = inputs
+        moneyViewBuilds++
+        // Everything below runs off the core: plain values in, the view out.
+        val build: () -> os.meka.core.domain.MoneyView = {
+            val cal = ZoneCalendar { tz }
+            val v = os.meka.core.domain.MoneyRules.view(
+                accounts, txns, rules, today, cal, offset, hiddenTips, fineAlerts,
+                whatIf, waiting, bills, holidays, cards, worth,
+                bankSync, removed, askedAt, now, wallets,
+                bizAccounts, bizMerchants, setAside,
+                sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner,
+                challenges,
+                abroad, os.meka.core.domain.MoneyTravel.tripNear(tripItems, today),
+                // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
+                receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, cal),
+            )
             v.copy(
-                trading = os.meka.core.domain.TradingTracker.view(wallets, now, ZoneCalendar(timeZone), alerts),
+                trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts),
                 // Slice 13c: the side hustle's money in his Business mail, checked against the statements.
-                business = v.business?.let { b -> b.copy(mail = moneyBusinessMail()) },
+                business = v.business?.let { b -> b.copy(mail = moneyBusinessMail(businessFinds, accounts, txns, rules, bizAccounts, bizMerchants, today)) },
                 goals = if (v.locked || goalList == null) null
                 else os.meka.core.domain.MoneyGoals.view(goalList, accounts, cards.map { it.id }.toSet()),
             )
         }
-        moneyBuiltFrom = inputs
-        moneyBuilt = _money.value
-        moneyViewBuilds++
-        if (os.meka.core.domain.MoneyOpenRules.keep(_money.value, moneyOffset, moneyWhatIf)) moneyLast.value = _money.value
+        moneyJob = scope.launch(moneyBuilder) {
+            moneyBuildGateForTest?.await()
+            val started = TimeSource.Monotonic.markNow()
+            val built = try { Result.success(build()) } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Result.failure(e)
+            }
+            val took = started.elapsedNow().inWholeMilliseconds
+            withContext(confined) {
+                speedLog.record(SPEED_MONEY_VIEW, took, nowMs())
+                if (gen != moneyGen || !moneyOpen) return@withContext
+                moneyJob = null
+                moneyPendingFrom = null
+                built.fold(
+                    onSuccess = { v ->
+                        _money.value = v
+                        moneyBuiltFrom = inputs
+                        moneyBuilt = v
+                        if (os.meka.core.domain.MoneyOpenRules.keep(v, offset, whatIf)) moneyLast.value = v
+                    },
+                    onFailure = { e ->
+                        lastBackgroundError = e.toString().take(300)
+                        moneyOpen = false
+                        _money.value = os.meka.core.domain.MoneyOpenRules.failed()
+                    },
+                )
+            }
+        }
     }
 
     /** How many times the money view was really built (slice 5a): tests check a tap elsewhere doesn't rebuild it. */
     internal var moneyViewBuilds = 0
         private set
 
-    /** Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's invoice finds against every statement line. Caller is on the core. */
-    private fun moneyBusinessMail(): os.meka.core.domain.MoneyBusinessMailView? {
-        val finds = activity.mailFinds().filter { os.meka.core.domain.MoneyBusinessMail.isInvoice(it) }
+    /** Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's invoice finds against every statement line, from plain values (built off the core, (4c) rest). */
+    private fun moneyBusinessMail(
+        allFinds: List<os.meka.core.domain.MailFind>, accounts: List<os.meka.core.domain.MoneyAccount>, txns: List<os.meka.core.domain.MoneyTxn>,
+        rules: Map<String, os.meka.core.domain.MoneyCategory>, bizAccounts: Set<String>, bizMerchants: Map<String, Boolean>, today: Long,
+    ): os.meka.core.domain.MoneyBusinessMailView? {
+        val finds = allFinds.filter { os.meka.core.domain.MoneyBusinessMail.isInvoice(it) }
         if (finds.isEmpty()) return null
-        val lines = os.meka.core.domain.MoneyRules.watchLines(money.accounts(), money.txns(), money.rules())
-        return os.meka.core.domain.MoneyBusinessMail.view(finds, lines, money.businessAccounts(), money.businessMerchants(), todayEpochDay())
+        val lines = os.meka.core.domain.MoneyRules.watchLines(accounts, txns, rules)
+        return os.meka.core.domain.MoneyBusinessMail.view(finds, lines, bizAccounts, bizMerchants, today)
     }
 
     // ---- Money manager (6): money goals linked to Goals ----
@@ -6791,6 +6868,7 @@ class MekaCore(
         private const val SPEED_REFRESH = "Whole-app refresh"
         private const val SPEED_WAIT = "A tap waiting for the core"
         private const val SPEED_WORK = "One piece of core work"
+        private const val SPEED_MONEY_VIEW = "Money view"
         /** Fresh tasks To a day… may make for one school date or birthday after Undo removed earlier ones. */
         private const val MAX_DATE_TASKS = 20
         const val FOREGROUND_SYNC_MS: Long = 30_000L
@@ -11772,7 +11850,15 @@ class MekaCore(
         try { pushApi?.registerPushToken(service, token) != null } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
 
     /** For platform schedulers (WorkManager, BGTask): one round, returns true on success. */
-    suspend fun syncNow(): Boolean = withContext(confined) { syncMutex.withLock { runSyncOnce() } == null }
+    suspend fun syncNow(): Boolean {
+        val (ok, moneyBuild) = withContext(confined) {
+            val before = moneyJob
+            (syncMutex.withLock { runSyncOnce() } == null) to moneyJob.takeIf { it !== before }
+        }
+        // Pulled payments show in Money before this returns ((4c) rest: the view is built off the core).
+        moneyBuild?.join()
+        return ok
+    }
 
     fun close() { scope.coroutineContext[Job]?.cancel() }
 
@@ -11869,17 +11955,22 @@ class MekaCore(
      */
     private suspend fun <T> onCore(block: () -> T): T {
         val asked = TimeSource.Monotonic.markNow()
-        return withContext(confined) {
+        val (result, moneyBuild) = withContext(confined) {
             val waited = asked.elapsedNow().inWholeMilliseconds
             if (waited > os.meka.core.domain.SpeedRules.LOG_MS) speedLog.record(SPEED_WAIT, waited, nowMs())
             val started = TimeSource.Monotonic.markNow()
+            val before = moneyJob
             try {
-                block()
+                block() to moneyJob.takeIf { it !== before }
             } finally {
                 val took = started.elapsedNow().inWholeMilliseconds
                 if (took > os.meka.core.domain.SpeedRules.LOG_MS) speedLog.record(SPEED_WORK, took, nowMs())
             }
         }
+        // (4c) rest: a money build this call started runs off the core; the call returns once it's showing, while the
+        // core's thread is already free for the next tap.
+        moneyBuild?.join()
+        return result
     }
 
     /** Times [block] into the Speed log as [name] (every run counted, so Health can say "12 times, 3 slow"). Core only. */
@@ -12208,7 +12299,8 @@ class MekaCore(
             }
         } }
         _facts.value = lifeFacts.view()
-        if (moneyOpen) timed("Money view") { refreshMoney() }
+        // Only the reads are on the core now; the build itself is timed as "Money view" where it runs ((4c) rest).
+        if (moneyOpen) refreshMoney()
         _queue.value = trainQueue.view()
         _reading.value = reading.view(ZoneCalendar(timeZone))
         _errands.value = errands.view()
