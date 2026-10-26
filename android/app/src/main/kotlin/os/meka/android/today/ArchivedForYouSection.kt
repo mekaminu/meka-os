@@ -48,6 +48,7 @@ import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.ArchivedForYouCard
 import os.meka.core.domain.ArchivedForYouLine
 import os.meka.core.domain.ArchivedForYouRules
+import os.meka.core.domain.InstantMailRules
 import os.meka.core.domain.ArchivedAllRules
 import os.meka.core.facade.MekaCore
 
@@ -64,7 +65,8 @@ import os.meka.core.facade.MekaCore
  */
 @Composable
 internal fun ArchivedForYouSection(
-    card: ArchivedForYouCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+    card: ArchivedForYouCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, taps: MailTaps,
+    modifier: Modifier = Modifier,
     openAll: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
@@ -127,9 +129,9 @@ internal fun ArchivedForYouSection(
         Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             ArchivedPill(ArchivedForYouRules.GOT_IT, spoken = "${ArchivedForYouRules.GOT_IT}, fold Archived for you away") {
                 haptics.light()
-                scope.launch {
-                    val said = runCatching { core.seenArchivedForYou() }.getOrNull() ?: return@launch
-                    undo(said) { runCatching { core.undoSeenArchivedForYou() } }
+                // Taps feel instant, slice 20: the card folds away in this frame; Undo or a failure brings it back.
+                taps.answer(InstantMailRules.archivedKey(card), ArchivedForYouRules.GOT_IT, { core.undoSeenArchivedForYou() }) {
+                    core.seenArchivedForYou()
                 }
             }
             val label = if (open) ArchivedForYouRules.HIDE else ArchivedForYouRules.SHOW

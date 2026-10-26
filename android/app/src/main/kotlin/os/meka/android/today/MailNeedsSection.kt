@@ -85,7 +85,8 @@ import os.meka.core.facade.MekaCore
  */
 @Composable
 internal fun MailNeedsSection(
-    card: MailNeedsCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+    card: MailNeedsCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, taps: MailTaps,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -97,6 +98,8 @@ internal fun MailNeedsSection(
             undo(said) { runCatching { core.undoMailItem() } }
         }
     }
+    // Taps feel instant, slice 20: an answer that takes the row away does so in this frame.
+    fun gone(id: String, what: String, work: suspend () -> String) = taps.answer(id, what, { core.undoMailItem() }, work)
     // Draft replies and Send all: each open editor's words by email, the drafts Draft replies put in, and its line.
     val texts = remember { mutableStateMapOf<String, String>() }
     val incoming = remember { mutableStateMapOf<String, Pair<Int, String>>() }
@@ -174,17 +177,17 @@ internal fun MailNeedsSection(
                             row,
                             incoming = incoming[row.id],
                             onEditor = { t -> if (t == null) texts.remove(row.id) else texts[row.id] = t },
-                            onDone = { haptics.medium(); answer { core.doneMailItem(row.id) } },
-                            onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
-                            onToDay = { day -> haptics.medium(); answer { core.mailToDay(row.id, day) } },
+                            onDone = { haptics.medium(); gone(row.id, MailNeedsRules.DONE) { core.doneMailItem(row.id) } },
+                            onTask = { haptics.medium(); gone(row.id, MailNeedsRules.TASK) { core.taskFromMailItem(row.id) } },
+                            onToDay = { day -> haptics.medium(); gone(row.id, "To a day") { core.mailToDay(row.id, day) } },
                             toDays = { core.boardFeedDays() },
-                            onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
-                            onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
+                            onWaiting = { haptics.medium(); gone(row.id, MailNeedsRules.WAITING) { core.waitingFromMailItem(row.id) } },
+                            onSnooze = { haptics.light(); gone(row.id, MailNeedsRules.SNOOZE) { core.snoozeMailItem(row.id) } },
                             // Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive.
-                            onAlwaysTidy = { haptics.medium(); answer { core.alwaysTidyMailItem(row.id) } },
+                            onAlwaysTidy = { haptics.medium(); gone(row.id, "Always tidy") { core.alwaysTidyMailItem(row.id) } },
                             // Junk fix slice 2: Block sender (Bin & block on a possible scam) and Unsubscribe, Undo on the bar.
-                            onBlock = { haptics.medium(); answer { core.blockMailItem(row.id) } },
-                            onUnsubscribe = { haptics.medium(); answer { core.unsubscribeMailItem(row.id) } },
+                            onBlock = { haptics.medium(); gone(row.id, "Block") { core.blockMailItem(row.id) } },
+                            onUnsubscribe = { haptics.medium(); gone(row.id, "Unsubscribe") { core.unsubscribeMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSuggestTimes = { core.suggestMeetingTimes(row.id) },
                             // Drafted replies: Not needed puts Navilife's draft away (Undo on the bar); the email stays.
@@ -552,18 +555,15 @@ internal fun MailNeedsPill(
  */
 @Composable
 internal fun MailChaseSection(
-    card: MailChaseCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+    card: MailChaseCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, taps: MailTaps,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf(true) }
     val reduced = Meka.reducedMotion
-    fun answer(action: suspend () -> String) {
-        scope.launch {
-            val said = runCatching { action() }.getOrNull() ?: return@launch
-            undo(said) { runCatching { core.undoMailChase() } }
-        }
-    }
+    // Taps feel instant, slice 20: an answer that takes the row away does so in this frame.
+    fun gone(id: String, what: String, work: suspend () -> String) = taps.answer(id, what, { core.undoMailChase() }, work)
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).testTag("mail-chases"),
@@ -587,8 +587,8 @@ internal fun MailChaseSection(
                     androidx.compose.runtime.key(row.id) {
                         MailChaseRowView(
                             row,
-                            onGot = { haptics.medium(); answer { core.gotMailChase(row.id) } },
-                            onNotYet = { haptics.light(); answer { core.notYetMailChase(row.id) } },
+                            onGot = { haptics.medium(); gone(row.id, MailChaseRules.GOT_IT) { core.gotMailChase(row.id) } },
+                            onNotYet = { haptics.light(); gone(row.id, MailChaseRules.NOT_YET) { core.notYetMailChase(row.id) } },
                             onDraft = { core.draftMailChase(row.id) },
                             onSend = { text, sent ->
                                 haptics.medium()
@@ -719,7 +719,8 @@ private fun MailChaseRowView(
  */
 @Composable
 internal fun MailFindSection(
-    card: MailFindCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+    card: MailFindCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, taps: MailTaps,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -731,6 +732,8 @@ internal fun MailFindSection(
             undo(said) { runCatching { core.undoMailFind() } }
         }
     }
+    // Taps feel instant, slice 20: an answer that takes the row away does so in this frame.
+    fun gone(id: String, what: String, work: suspend () -> String) = taps.answer(id, what, { core.undoMailFind() }, work)
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).testTag("mail-finds"),
@@ -754,8 +757,8 @@ internal fun MailFindSection(
                     androidx.compose.runtime.key(row.id) {
                         MailFindRowView(
                             row,
-                            onAdd = { haptics.medium(); answer { core.addMailFind(row.id) } },
-                            onNotNeeded = { haptics.light(); answer { core.notNeededMailFind(row.id) } },
+                            onAdd = { haptics.medium(); gone(row.id, row.addLabel) { core.addMailFind(row.id) } },
+                            onNotNeeded = { haptics.light(); gone(row.id, row.notNeededLabel) { core.notNeededMailFind(row.id) } },
                             onWait = { days -> haptics.tick(); answer { core.setFollowUpWait(row.id, days) } },
                         )
                     }

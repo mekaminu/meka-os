@@ -217,6 +217,15 @@ final class CoreModel {
     private(set) var groupGists: [GroupGist] = []
     /// Inbox autopilot, slice 4: what Autopilot archived, shown with the 12:30 and 18:30 digests until Got it.
     private(set) var archivedForYou: ArchivedForYouCard?
+    /// Taps feel instant, slice 20: the mail cards as the core holds them; the shown ones are these less what was just
+    /// answered on this Mac (From your mail, Time to chase, the finds, Archived for you's Got it).
+    private var allArchivedForYou: ArchivedForYouCard?
+    private var allMailNeeds: MailNeedsCard?
+    private var allMailChases: MailChaseCard?
+    private var allMailFinds: MailFindCard?
+    private var mailDecided: Set<String> = []
+    /// The ids the bar's Undo brings back at once (the last mail answer offered with Undo).
+    private var mailUndoIds: [String] = []
     /// Inbox autopilot, slice 5c: the weekly "Not opened in 30 days · unsubscribe from 11?", from Saturday 09:00.
     private(set) var mailUnopened: MailUnopenedCard?
     /// Inbox autopilot, slice 6a: "From your mail" — the emails that need Meka, each with Done and Snooze.
@@ -511,19 +520,19 @@ final class CoreModel {
             for await s in core.afterWork { self?.afterWork = s }
         })
         observers.append(Task { [weak self] in
-            for await a in core.archivedForYou { self?.archivedForYou = a }
+            for await a in core.archivedForYou { self?.allArchivedForYou = a; self?.showMail() }
         })
         observers.append(Task { [weak self] in
             for await u in core.mailUnopened { self?.mailUnopened = u }
         })
         observers.append(Task { [weak self] in
-            for await n in core.mailNeeds { self?.mailNeeds = n }
+            for await n in core.mailNeeds { self?.allMailNeeds = n; self?.showMail() }
         })
         observers.append(Task { [weak self] in
-            for await c in core.mailChases { self?.mailChases = c }
+            for await c in core.mailChases { self?.allMailChases = c; self?.showMail() }
         })
         observers.append(Task { [weak self] in
-            for await f in core.mailFinds { self?.mailFinds = f }
+            for await f in core.mailFinds { self?.allMailFinds = f; self?.showMail() }
         })
         observers.append(Task { [weak self] in
             for await d in core.discord { self?.discord = d }
@@ -4329,12 +4338,12 @@ final class CoreModel {
         case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .afterWork(let ids): run { try await $0.undoClearAfterWork(ids: ids) }
-        case .archivedSeen: run { try await $0.undoSeenArchivedForYou() }
+        case .archivedSeen: unhideMail(); run { try await $0.undoSeenArchivedForYou() }
         case .archivedEmail(let batchId, let key, let action): run { try await $0.undoArchivedEmail(batchId: batchId, key: key, action: action) }
         case .mailUnopened: run { try await $0.undoUnopened() }
-        case .mailItem: run { try await $0.undoMailItem() }
-        case .mailChase: run { try await $0.undoMailChase() }
-        case .mailFind: run { try await $0.undoMailFind() }
+        case .mailItem: unhideMail(); run { try await $0.undoMailItem() }
+        case .mailChase: unhideMail(); run { try await $0.undoMailChase() }
+        case .mailFind: unhideMail(); run { try await $0.undoMailFind() }
         case .discord: run { try await $0.undoDiscord() }
         case .discordIdea(let postId): run { try await $0.undoKeepDiscordIdea(postId: postId) }
         case .mailMoment: run { try await $0.undoMailMoment() }
@@ -6331,13 +6340,10 @@ final class CoreModel {
     /// Got it on "Archived for you" (Inbox autopilot, slice 4): the card folds away here and on the Fold (synced), with
     /// Undo on the bar. Nothing crosses to the core but the call.
     func seenArchivedForYou() {
-        guard let core else { return }
+        guard let card = archivedForYou else { return }
         MekaHaptics.light()
-        Task {
-            do {
-                let line = try await core.seenArchivedForYou()
-                offerEventUndo(line, .archivedSeen)
-            } catch { lastError = error.localizedDescription }
+        answerMail(InstantMailRules.shared.archivedKey(card: card), what: ArchivedForYouRules.shared.GOT_IT, undo: .archivedSeen) {
+            try await $0.seenArchivedForYou()
         }
     }
 
@@ -6417,80 +6423,44 @@ final class CoreModel {
     /// Done on an email in "From your mail" (Inbox autopilot, slice 6a): the card goes here and on the Fold, and the
     /// server archives the email at its next check; Undo on the bar. Only the id (a String) crosses.
     func doneMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.doneMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailNeedsRules.shared.DONE, undo: .mailItem) { try await $0.doneMailItem(id: id) }
     }
 
     /// Always tidy on an email in "From your mail" (slice 10b): Done, and the server gives its sender the always-tidy
     /// rule; Undo on the bar brings the card back and takes the rule off. Only the id (a String) crosses.
     func alwaysTidyMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.alwaysTidyMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: "Always tidy", undo: .mailItem) { try await $0.alwaysTidyMailItem(id: id) }
     }
 
     /// Block sender (Bin & block on a possible scam) on an email in "From your mail" (junk fix slice 2): Done, and at the
     /// server's next check this email and the sender's later ones go to Trash; Undo on the bar brings it back and takes
     /// the block off. Only the id (a String) crosses.
     func blockMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.blockMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: "Block", undo: .mailItem) { try await $0.blockMailItem(id: id) }
     }
 
     /// Unsubscribe on an email in "From your mail" (junk fix slice 2): Done, and the server unsubscribes the sender its
     /// own way at its next check; Undo before then calls it off. Only the id crosses.
     func unsubscribeMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.unsubscribeMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: "Unsubscribe", undo: .mailItem) { try await $0.unsubscribeMailItem(id: id) }
     }
 
     /// Task on an email in "From your mail" (slice 6b-1): a task from its subject, the email archived at the server's
     /// next check, Undo on the bar. Only the id (a String) crosses.
     func taskFromMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.taskFromMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailNeedsRules.shared.TASK, undo: .mailItem) { try await $0.taskFromMailItem(id: id) }
     }
 
     /// Week board item (5): To a day… on an email — its task on that day's Board column, the email archived at the
     /// server's next check, Undo on the bar. Only the id (a String) and the day (an Int64) cross.
     func mailToDay(_ id: String, day: Int64) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.mailToDay(id: id, day: day)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: "To a day", undo: .mailItem) { try await $0.mailToDay(id: id, day: day) }
     }
 
     /// The days To a day… offers now (Today, Tomorrow, the rest of the week, into next week until five).
@@ -6499,14 +6469,8 @@ final class CoreModel {
     /// Waiting for on an email in "From your mail" (slice 6b-1): in Waiting for from the sender, chase in 3 days, the
     /// email archived; Undo on the bar. Only the id crosses.
     func waitingFromMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.waitingFromMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailNeedsRules.shared.WAITING, undo: .mailItem) { try await $0.waitingFromMailItem(id: id) }
     }
 
     /// Draft it in the reply editor on an email in "From your mail" (slice 6b-2b): Navilife's AI drafts a reply in his
@@ -6608,14 +6572,8 @@ final class CoreModel {
 
     /// Add on "Renewals from your mail": onto Lists → Renewals, Undo on the bar. Only the id crosses.
     func addMailFind(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.addMailFind(id: id)
-                offerEventUndo(line, .mailFind)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailRenewalRules.shared.ADD, undo: .mailFind) { try await $0.addMailFind(id: id) }
     }
 
     /// Follow-up radar, slice 3: a chip under "Wait 3 days ▾" — how many days he waits for that person's replies, on
@@ -6698,38 +6656,20 @@ final class CoreModel {
 
     /// Not needed on "Renewals from your mail": gone on both apps, Undo on the bar. Only the id crosses.
     func notNeededMailFind(_ id: String) {
-        guard let core else { return }
         MekaHaptics.light()
-        Task {
-            do {
-                let line = try await core.notNeededMailFind(id: id)
-                offerEventUndo(line, .mailFind)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailRenewalRules.shared.NOT_NEEDED, undo: .mailFind) { try await $0.notNeededMailFind(id: id) }
     }
 
     /// Got it on "Time to chase": off Waiting for, Undo on the bar. Only the id crosses.
     func gotMailChase(_ id: String) {
-        guard let core else { return }
         MekaHaptics.medium()
-        Task {
-            do {
-                let line = try await core.gotMailChase(id: id)
-                offerEventUndo(line, .mailChase)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailChaseRules.shared.GOT_IT, undo: .mailChase) { try await $0.gotMailChase(id: id) }
     }
 
     /// Not yet on "Time to chase": chase again in 3 days, nothing sent, Undo on the bar. Only the id crosses.
     func notYetMailChase(_ id: String) {
-        guard let core else { return }
         MekaHaptics.light()
-        Task {
-            do {
-                let line = try await core.notYetMailChase(id: id)
-                offerEventUndo(line, .mailChase)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailChaseRules.shared.NOT_YET, undo: .mailChase) { try await $0.notYetMailChase(id: id) }
     }
 
     /// Start on the ten-minute inbox (Inbox autopilot, slice 7): the emails that need him, one at a time. Nothing crosses.
@@ -6866,14 +6806,8 @@ final class CoreModel {
     }
 
     func snoozeMailItem(_ id: String) {
-        guard let core else { return }
         MekaHaptics.light()
-        Task {
-            do {
-                let line = try await core.snoozeMailItem(id: id)
-                offerEventUndo(line, .mailItem)
-            } catch { lastError = error.localizedDescription }
-        }
+        answerMail(id, what: MailNeedsRules.shared.SNOOZE, undo: .mailItem) { try await $0.snoozeMailItem(id: id) }
     }
 
     /// Put back on one of "Archived for you"'s tidies: the server returns those emails to the inbox at its next check.
@@ -6998,6 +6932,57 @@ final class CoreModel {
                 offerEventUndo(line, .groupDigest(undo))
             } catch { lastError = error.localizedDescription }
         }
+    }
+
+    // MARK: Mail cards' instant answers
+
+    /// Taps feel instant, slice 20: the row (or Archived for you's card) leaves in this frame and the core's write
+    /// follows; a failure or a refusal ("Couldn't find that email") brings it back with the bar saying why. Only the id
+    /// (a String) crosses to the core.
+    private func answerMail(_ id: String, what: String, undo: EventUndoOffer.Action,
+                            work: @escaping (MekaCore) async throws -> String) {
+        guard let core else { return }
+        mailDecided.insert(id)
+        showMail()
+        Task {
+            do {
+                let line = try await work(core)
+                if InstantMailRules.shared.refused(line: line) {
+                    backMail(id, InstantTapRules.shared.failedLine(what: what, reason: line))
+                } else {
+                    mailUndoIds = [id]
+                    offerEventUndo(line, undo)
+                }
+            } catch {
+                backMail(id, InstantTapRules.shared.failedLine(what: what, reason: error.localizedDescription))
+            }
+        }
+    }
+
+    private func backMail(_ id: String, _ line: String) {
+        mailDecided.remove(id)
+        showMail()
+        offerEventUndo(line, nil)
+    }
+
+    /// Undo on the bar: the last answered row shows again at once, before the core's undo lands.
+    private func unhideMail() {
+        mailDecided.subtract(mailUndoIds)
+        mailUndoIds = []
+        showMail()
+    }
+
+    /// The mail cards as shown: the core's, less what was just answered here; ids the core no longer holds are forgotten.
+    private func showMail() {
+        let R = InstantMailRules.shared
+        if !mailDecided.isEmpty {
+            let present = Set(R.present(needs: allMailNeeds, chases: allMailChases, finds: allMailFinds, archived: allArchivedForYou))
+            mailDecided = mailDecided.filter { present.contains($0) }
+        }
+        mailNeeds = R.needs(card: allMailNeeds, hidden: mailDecided)
+        mailChases = R.chases(card: allMailChases, hidden: mailDecided)
+        mailFinds = R.finds(card: allMailFinds, hidden: mailDecided)
+        archivedForYou = R.archived(card: allArchivedForYou, hidden: mailDecided)
     }
 
     // MARK: Needs you stack

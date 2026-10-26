@@ -49,6 +49,7 @@ import os.meka.core.domain.ChatFinishTap
 import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageChat
 import os.meka.core.domain.InstantTapRules
+import os.meka.core.domain.InstantMailRules
 import os.meka.core.domain.ChatSummaryRules
 import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
@@ -461,11 +462,23 @@ internal fun NeedsYouColumn(
     val chatGroups = remember(grouped, heldGroups) { (TriageChatRules.groupKeys(grouped) + heldGroups).distinct() }
     val digestNow = rememberGroupDigest(captures, core, chatGroups)
     val digest = digestNow.view
-    val archived by core.archivedForYou.collectAsState()
+    val allArchived by core.archivedForYou.collectAsState()
     val unopened by core.mailUnopened.collectAsState()
-    val mailNeeds by core.mailNeeds.collectAsState()
-    val mailChases by core.mailChases.collectAsState()
-    val mailFinds by core.mailFinds.collectAsState()
+    val allMailNeeds by core.mailNeeds.collectAsState()
+    val allMailChases by core.mailChases.collectAsState()
+    val allMailFinds by core.mailFinds.collectAsState()
+    // Taps feel instant, slice 20: an answer on a mail card takes its row (or the card) away in this frame.
+    val mailScope = rememberCoroutineScope()
+    val mailDecided = remember { mutableStateOf(emptySet<String>()) }
+    val mailTaps = remember(mailDecided, mailScope, moves) { MailTaps(mailDecided, mailScope, moves.undoLine) }
+    val mailHidden = mailTaps.hidden
+    LaunchedEffect(allMailNeeds, allMailChases, allMailFinds, allArchived) {
+        mailTaps.settle(InstantMailRules.present(allMailNeeds, allMailChases, allMailFinds, allArchived))
+    }
+    val mailNeeds = remember(allMailNeeds, mailHidden) { InstantMailRules.needs(allMailNeeds, mailHidden) }
+    val mailChases = remember(allMailChases, mailHidden) { InstantMailRules.chases(allMailChases, mailHidden) }
+    val mailFinds = remember(allMailFinds, mailHidden) { InstantMailRules.finds(allMailFinds, mailHidden) }
+    val archived = remember(allArchived, mailHidden) { InstantMailRules.archived(allArchived, mailHidden) }
     val discord by core.discord.collectAsState()
     val mailMoment by core.mailMoment.collectAsState()
     val mailMomentSession by core.mailMomentSession.collectAsState()
@@ -535,21 +548,21 @@ internal fun NeedsYouColumn(
         // While the ten-minute inbox runs, it shows them one at a time instead.
         mailNeeds?.takeIf { mailMomentSession == null }?.let { n ->
             item(key = "mail-needs") {
-                MailNeedsSection(n, core, moves.undoLine,
+                MailNeedsSection(n, core, moves.undoLine, mailTaps,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }
         // Inbox autopilot, slice 6b-3: Waiting for items from email whose chase is due, a chase drafted for each.
         mailChases?.let { c ->
             item(key = "mail-chases") {
-                MailChaseSection(c, core, moves.undoLine,
+                MailChaseSection(c, core, moves.undoLine, mailTaps,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }
         // Promises, receipts and renewals, slice 1: renewals read from his mail, each added to Renewals only on his tap.
         mailFinds?.let { f ->
             item(key = "mail-finds") {
-                MailFindSection(f, core, moves.undoLine,
+                MailFindSection(f, core, moves.undoLine, mailTaps,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }
@@ -563,7 +576,7 @@ internal fun NeedsYouColumn(
         // Inbox autopilot, slice 4: what Autopilot archived, with the digests (12:30, 18:30) until Got it.
         archived?.let { a ->
             item(key = "archived-for-you") {
-                ArchivedForYouSection(a, core, moves.undoLine,
+                ArchivedForYouSection(a, core, moves.undoLine, mailTaps,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
                     openAll = { moves.archivedAll.value = true })
             }
