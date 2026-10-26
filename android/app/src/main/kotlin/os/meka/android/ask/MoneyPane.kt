@@ -337,7 +337,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
         // Money redesign (B), slice 1: Spending · Bills · Plan · Trading · Accounts; only the chosen tab's sections show.
         item(key = "tabs") {
-            MoneyTabPills(tab, Modifier.animateItem().padding(top = MekaSpace.s).appear(rememberAppearance(2))) { t ->
+            MoneyTabPills(tab, Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2))) { t ->
                 tab = t
                 MoneyTabs.stepOnPick(t, v)?.let { step -> scope.launch { runCatching { core.moneyStep(step) } } }
             }
@@ -777,7 +777,7 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
                 Text(
                     t.label, style = MekaType.itemMeta, color = ink, maxLines = 1,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs + MekaSpace.xxs),
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
             }
         }
