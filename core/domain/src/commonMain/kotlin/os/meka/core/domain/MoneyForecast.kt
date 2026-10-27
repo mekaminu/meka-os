@@ -33,6 +33,8 @@ data class MoneyForecastView(
     val rows: List<MoneyForecastRow>, val cuts: List<MoneyCutChip>, val extraLine: String?, val basis: String?,
     /** Trading tracker, slice 11: "Trading as it's gone · +£120 a month" from his Hyperliquid results, and where it's from. */
     val trading: MoneyCutChip? = null, val tradingLine: String? = null,
+    /** Plan's What if I save… ([MoneySave]): his average month's money left over in pence, before any what-if; null with no pay in. */
+    val leftPence: Long? = null,
 )
 
 /**
@@ -191,6 +193,6 @@ object MoneyForecast {
         val basis = "From $span ($n whole months) · $NOT_ADVICE"
         val extraLine = if (whatIf.extraPence > 0) "${signed(whatIf.extraPence)} a month coming in · your own figure" else null
         return MoneyForecastView(HEAD, null, pace, left, income > 0 && leftRounded <= -1_000, rows, cuts, extraLine, basis,
-            tradingChip, trading?.let { tradingLine(it) })
+            tradingChip, trading?.let { tradingLine(it) }, leftPence = net.takeIf { income > 0 })
     }
 }

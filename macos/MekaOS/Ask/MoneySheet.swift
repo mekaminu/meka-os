@@ -278,6 +278,14 @@ struct MoneySheet: View {
                         .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 }
             }
+            // Money redesign, Plan (mockup): What if I save… — worked out on this Mac as he slides, Make it a goal.
+            if let b = v.save, has(.save, v) {
+                Text(MoneySave.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                MoneySaveCardView(base: b, palette: palette, reduced: reduceMotion) { amount, months, rate in
+                    Task { said = await model.moneySaveGoal(amountPence: amount, months: months, rateBp: rate) }
+                }
+                .transition(.opacity)
+            }
             if let r = v.regular, has(.regular, v) {
                 Text("REGULAR PAYMENTS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)

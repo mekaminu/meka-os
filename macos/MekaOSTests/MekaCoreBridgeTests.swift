@@ -3979,7 +3979,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: nil)],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
-            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [])
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil)
         let items = MoneyAccountList.shared.items(v: v)
         XCTAssertEqual(items.map { $0.name }, ["Oakbank saver"])
         XCTAssertEqual(items.first?.amount, MoneyAccountList.shared.ADD_BALANCE)
@@ -3996,7 +3996,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: "Rainy day")],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
-            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [])
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil)
         XCTAssertEqual(MoneyAccountList.shared.items(v: v).map { $0.name }, ["Rainy day"])
         let sheet = MoneyAccountList.shared.sheet(v: v, id: "a1")
         XCTAssertEqual(sheet?.title, "Rainy day")
@@ -4005,5 +4005,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rows.map { $0.kind }, [MoneyMoreKind.data])
         XCTAssertEqual(MoneyMore.shared.title(kind: MoneyMoreKind.data, v: v), MoneyMore.shared.DATA)
         XCTAssertTrue(MoneyTabs.shared.shows(tab: MoneyTab.accounts, s: MoneySection.more, v: v))
+    }
+    /// Plan's What if I save…: the sums, chips, bars and Obi's line cross the bridge; the Plan tab shows it.
+    func testMoneySaveOnTheMac() {
+        let base = MoneySaveBase(leftPence: KotlinLong(value: 95_000), thisMonth: 2026 * 12 + 9, startPence: MoneySave.shared.start(leftPence: KotlinLong(value: 95_000)))
+        XCTAssertEqual(base.startPence, 47_500)
+        let v = MoneySave.shared.view(amountPence: 30_000, months: 6, rateBp: 0, base: base)
+        XCTAssertEqual(v.total, "£1,800")
+        XCTAssertEqual(v.end, "by Apr 2027")
+        XCTAssertEqual(v.bars.count, 6)
+        XCTAssertEqual(v.months.first(where: { $0.on })?.value, 6)
+        XCTAssertFalse(v.obiLit)
+        XCTAssertEqual(MoneySave.shared.snap(pence: 31_000), 30_000)
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .save), MoneyTab.plan)
     }
 }

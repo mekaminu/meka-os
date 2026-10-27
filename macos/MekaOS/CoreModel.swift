@@ -4945,6 +4945,17 @@ final class CoreModel {
 
     /// Money slice 15: takes a cap (its category's key) or fun money ("fun") off.
     /// Money manager (6): a £ goal follows an account's balance (nil stops it), synced; Undo through undoMoneyCategory.
+    /// Plan's What if I save… → Make it a goal: a £ goal in Goals, Undo deletes it (MoneySave in the core).
+    func moneySaveGoal(amountPence: Int64, months: Int32, rateBp: Int32) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySaveGoal(amountPence: amountPence, months: months, rateBp: rateBp))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func moneyGoalFollow(goalId: String, accountId: String?) async -> MoneySaid? {
         guard let core else { return nil }
         do {

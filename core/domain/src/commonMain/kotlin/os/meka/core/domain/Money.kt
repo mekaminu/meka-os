@@ -488,6 +488,8 @@ data class MoneyView(
     val ownCategories: List<MoneyOwnCategory> = emptyList(),
     /** Slice 3: YOUR CATEGORIES on Accounts, one row per category of his with its payees ([MoneyOwnCategories.rows]). */
     val ownRows: List<MoneyOwnRow> = emptyList(),
+    /** Plan's What if I save… ([MoneySave]): what the apps need to work it out on the device; this month only. */
+    val save: MoneySaveBase? = null,
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -801,13 +803,15 @@ object MoneyRules {
                 cur.filter { cat(it).spend }.map { t -> MoneyNeedLine(ownOf(t)?.name ?: cat(t).label, -t.pence, isNeed(t)) }, spent,
             ),
         )
+        val forecastView = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null
         return MoneyView(
             false, summary, null, month.copy(spending = spending), accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
             tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),
             regular = MoneyTips.regularView(regular),
             hiddenTips = MoneyTips.hiddenLine(hiddenTips),
             alerts = if (partial) MoneyWatch.alerts(watch, today, names, fineAlerts) else emptyList(),
-            forecast = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null,
+            forecast = forecastView,
+            save = if (partial) MoneySave.base(forecastView?.takeIf { it.notReady == null }?.leftPence, today) else null,
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
             payday = paydayView,
             bills = billsView,

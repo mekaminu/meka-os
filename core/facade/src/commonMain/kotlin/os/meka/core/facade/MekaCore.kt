@@ -939,6 +939,13 @@ class MekaCore(
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
         if (!moneyOpen) return@onCore false
         if (token.startsWith(os.meka.core.domain.TradingTracker.UNDO)) return@onCore trading.undo(token).also { refreshMoney() }
+        if (token.startsWith(moneySaveGoalUndoPrefix)) {
+            val gid = token.removePrefix(moneySaveGoalUndoPrefix)
+            if (!goals.goalExists(gid)) return@onCore false
+            if (runCatching { goals.deleteGoal(gid) }.isFailure) return@onCore false
+            refresh()
+            return@onCore true
+        }
         if (token.startsWith(moneyGoalUndoPrefix)) {
             val parts = token.removePrefix(moneyGoalUndoPrefix).split('|')
             val gid = parts.getOrNull(0) ?: return@onCore false
@@ -1221,6 +1228,25 @@ class MekaCore(
      * on both devices, and is brought up to it at once. Undo by [undoMoneyCategory] with the result's token. Only while
      * Money is open.
      */
+    private val moneySaveGoalUndoPrefix = "msave|"
+
+    /**
+     * Plan's What if I save… → Make it a goal: a £ goal in Goals ("Save £1,812 by Apr 2027"), its number the total, due the
+     * last day of that month, worked out from the money view's base ([os.meka.core.domain.MoneySave]). Undo (by
+     * [undoMoneyCategory]) deletes it. Only while Money is open.
+     */
+    suspend fun moneySaveGoal(amountPence: Long, months: Int, rateBp: Int): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val base = _money.value.save ?: return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        val v = os.meka.core.domain.MoneySave.view(amountPence, months, rateBp, base)
+        val id = goals.addGoal(v.goalTitle, null, os.meka.core.domain.MoneySave.horizon(months),
+            dueDay = os.meka.core.domain.MoneySave.goalDueDay(months, base))
+        goals.setMetric(id, v.goalTarget)
+        refreshMoney()
+        refresh()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneySave.goalSaid(v.goalTitle), undo = moneySaveGoalUndoPrefix + id)
+    }
+
     suspend fun moneyGoalFollow(goalId: String, accountId: String?): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) return@onCore moneyLocked()
         val goal = goals.goals(tasks.all()).first.firstOrNull { it.id == goalId }

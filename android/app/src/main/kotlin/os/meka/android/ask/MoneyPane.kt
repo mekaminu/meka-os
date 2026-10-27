@@ -100,6 +100,7 @@ import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneyOwnCategories
 import os.meka.core.domain.MoneyAccountList
+import os.meka.core.domain.MoneySave
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneySheetMark
@@ -600,6 +601,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
                                 scope.launch { runCatching { core.showMoneyTips() }.getOrNull()?.let(say) }
                             }.minTouch().padding(MekaSpace.xs))
+                    }
+                }
+            }
+            // Money redesign, Plan (mockup): What if I save… — worked out on this phone as he slides, Make it a goal.
+            v.save?.takeIf { has(MoneySection.SAVE) }?.let { b ->
+                item(key = "save-head") {
+                    Text(MoneySave.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "save") {
+                    MoneySaveCard(b, Modifier.animateItem().appear(rememberAppearance(4)), onTick = { haptics.tick() }) { amount, months, rate ->
+                        haptics.light()
+                        scope.launch { runCatching { core.moneySaveGoal(amount, months, rate) }.getOrNull()?.let(say) }
                     }
                 }
             }
