@@ -97,6 +97,7 @@ import os.meka.core.domain.MoneyRefunds
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneyOwnCategories
+import os.meka.core.domain.MoneyAccountList
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneySheetMark
@@ -193,7 +194,6 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val v = remember(coreView, payTaps) { InstantPaymentRules.shown(coreView, payTaps) }
     var account by rememberSaveable { mutableStateOf("") }
     var said by remember { mutableStateOf<MoneySaved?>(null) }
-    var removing by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     // Money redesign (B), slice 1: the tab shown; Money opens on Spending each time the pane opens.
@@ -267,6 +267,10 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var cardSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val cardRow = cardSheetId?.let { id -> v.cards?.rows?.firstOrNull { it.id == id } }
     var paydaySheet by rememberSaveable { mutableStateOf(false) }
+    // Money review, Accounts: the account whose sheet is open, and the Import a statement sheet.
+    var accountSheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val accountSheet = accountSheetId?.let { id -> MoneyAccountList.sheet(v, id) }
+    var importSheet by rememberSaveable { mutableStateOf(false) }
     val paydayOpen = v.payday?.takeIf { paydaySheet }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -730,6 +734,20 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     onBalance = { id, text -> scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) } })
             }
         }
+        // Money review (Meka 2026-10-26 22:12), Accounts: one clean list under net worth, each row opening its sheet.
+        if (has(MoneySection.ACCOUNTS)) {
+            item(key = "accounts-head") {
+                Text(MoneyAccountList.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "accounts") {
+                MoneyAccountsCard(MoneyAccountList.items(v), Modifier.animateItem().appear(rememberAppearance(4))) { row ->
+                    haptics.tick()
+                    if (row.opens) { said = null; accountSheetId = row.id }
+                    else { tab = MoneyTab.TRADING }
+                }
+            }
+        }
         // Slice 18: the year in review — last year, open, in January; this year so far, folded, after. Money review
         // (Meka 2026-10-26 22:12): it lives on Accounts, under net worth, not on Spending.
         v.year?.takeIf { has(MoneySection.YEAR) }?.let { yv ->
@@ -747,7 +765,6 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "business") {
                 BusinessBlock(b, Modifier.animateItem().appear(rememberAppearance(4)),
-                    onAccount = { id, on -> scope.launch { runCatching { core.moneyBusinessAccount(id, on) }.getOrNull()?.let(say) } },
                     onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } },
                     onExport = exportBusiness,
                     onBusinessTxn = { txnId -> haptics.tick(); scope.launch { runCatching { core.moneyBusinessMerchant(txnId, true) }.getOrNull()?.let(say) } })
@@ -795,58 +812,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
-        if (has(MoneySection.IMPORT_STATEMENT)) item(key = "import-head") {
-            Text("IMPORT A STATEMENT", style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-        }
-        v.empty?.takeIf { has(MoneySection.IMPORT_STATEMENT) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) } }
+        // Money review, Accounts: Import a statement is one row; its field lives in a sheet (inputs never sit open on the page).
+        v.empty?.takeIf { has(MoneySection.IMPORT_STATEMENT) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(top = MekaSpace.m)) } }
         if (has(MoneySection.IMPORT_STATEMENT)) item(key = "import") {
-            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                if (v.accounts.isNotEmpty()) ImportAccountChips(v.accounts.map { it.name }, chosen = account) { account = it }
-                Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = { account = it }) { account = it }
-                Text(if (busy) "Reading the file…" else MoneyRules.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
-                    modifier = Modifier.clickable(role = Role.Button, enabled = !busy) {
-                        if (account.isBlank()) say(MoneySaved(MoneyRules.NO_ACCOUNT, refused = true))
-                        else pick.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
-                    }.minTouch())
-                if (v.bank == null) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
-            }
-        }
-        if (has(MoneySection.ACCOUNTS)) {
-            item(key = "accounts-head") {
-                Text("ACCOUNTS", style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            v.accounts.forEach { a ->
-                item(key = "acct-${a.id}") {
-                    Row(Modifier.animateItem().fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(a.name, style = MekaType.body, color = Meka.colors.textPrimary)
-                            Text(a.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-                        }
-                        val asking = removing == a.id
-                        Text(if (asking) "Remove it?" else "Remove", style = MekaType.caption, color = if (asking) Meka.colors.accent else Meka.colors.textTertiary,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                                if (!asking) { removing = a.id; haptics.tick() } else scope.launch {
-                                    removing = null
-                                    runCatching { core.removeMoneyAccount(a.id) }.getOrNull()?.let(say)
-                                }
-                            }.semantics { contentDescription = "Remove ${a.name} and its transactions" }.minTouch().padding(MekaSpace.xs))
-                    }
-                }
-            }
-        }
-        // Money review: the accounts he could mark as a card, a one-time setup moved here from Bills.
-        v.cards?.takeIf { has(MoneySection.CARD_OFFERS) }?.let { cv ->
-            item(key = "card-offers-head") {
-                Text(MoneyCards.OFFERS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            item(key = "card-offers") {
-                CardOffers(cv, Modifier.animateItem().testTag("money-card-offers")) { id ->
-                    haptics.tick()
-                    scope.launch { runCatching { core.moneyCardKind(id, card = true, charge = false) }.getOrNull()?.let(say) }
-                }
+            MoneyImportRow(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(4))) {
+                haptics.tick(); said = null; account = ""; importSheet = true
             }
         }
         if (has(MoneySection.FOOT)) item(key = "foot") {
@@ -947,6 +917,34 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 if (!card) cardSheetId = null
                 scope.launch { runCatching { core.moneyCardKind(c.id, card, charge) }.getOrNull()?.let(say) }
             })
+    }
+    // Money review, Accounts: an account's sheet — its balance, It's a card, Side hustle account, Import and Remove.
+    MoneyDetailSheet(accountSheet, title = { it.title }, tag = "money-account-sheet", done = MoneyAccountList.DONE, onClose = { accountSheetId = null }) { a ->
+        MoneyAccountDetails(a, busy,
+            onBalance = { text -> scope.launch { runCatching { core.moneyBalance(a.id, text) }.getOrNull()?.let(say) } },
+            onCard = { on -> haptics.tick(); scope.launch { runCatching { core.moneyCardKind(a.id, on, charge = false) }.getOrNull()?.let(say) } },
+            onSideHustle = { on -> haptics.tick(); scope.launch { runCatching { core.moneyBusinessAccount(a.id, on) }.getOrNull()?.let(say) } },
+            onImport = {
+                account = v.accounts.firstOrNull { it.id == a.id }?.name ?: a.title
+                pick.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
+            },
+            onRemove = {
+                accountSheetId = null
+                scope.launch { runCatching { core.removeMoneyAccount(a.id) }.getOrNull()?.let(say) }
+            })
+        SheetSaid(said)
+    }
+    // Import a statement for a new account (or an existing one by its name): the field and the file picker.
+    MoneyDetailSheet(if (importSheet) Unit else null, title = { MoneyAccountList.IMPORT_HEAD }, tag = "money-import-sheet",
+        done = MoneyAccountList.DONE, onClose = { importSheet = false }) {
+        Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = { account = it }) { account = it }
+        Text(if (busy) "Reading the file…" else MoneyRules.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button, enabled = !busy) {
+                if (account.isBlank()) say(MoneySaved(MoneyRules.NO_ACCOUNT, refused = true))
+                else pick.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
+            }.minTouch().testTag("money-import-file"))
+        if (v.bank == null) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
+        SheetSaid(said)
     }
     MoneyDetailSheet(paydayOpen, title = { it.head.lowercase().replaceFirstChar { ch -> ch.uppercase() } }, tag = "money-payday-sheet",
         done = MoneyPayday.DONE, onClose = { paydaySheet = false }) { p ->
@@ -1352,7 +1350,7 @@ private fun TxnRow(
  */
 @Composable
 private fun BusinessBlock(
-    b: MoneyBusinessView, modifier: Modifier, onAccount: (String, Boolean) -> Unit, onSetAside: (String) -> Unit,
+    b: MoneyBusinessView, modifier: Modifier, onSetAside: (String) -> Unit,
     onExport: (String) -> Unit = {}, onBusinessTxn: (String) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
@@ -1406,16 +1404,7 @@ private fun BusinessBlock(
         // Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's money in his Business mail against the statements.
         b.mail?.let { m -> BusinessMailBlock(m, onBusinessTxn) }
         b.merchantsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        b.accounts.forEach { a ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(a.name, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                Text(MoneyBusiness.SWITCH + if (a.on) " ✓" else "", style = MekaType.caption,
-                    color = if (a.on) Meka.colors.accent else Meka.colors.textSecondary,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onAccount(a.id, !a.on) }
-                        .semantics { contentDescription = "${a.name}: ${MoneyBusiness.SWITCH}" + if (a.on) ", on" else ", off" }
-                        .minTouch().padding(MekaSpace.xs))
-            }
-        }
+        // Money review, Accounts: "Side hustle account" is a switch in each account's sheet now.
         Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
@@ -1858,29 +1847,6 @@ private fun CardDetails(
     }
 }
 
-/** Slice 7: the accounts he could mark as a card, card-like names first. */
-@Composable
-private fun CardOffers(cv: MoneyCardsView, modifier: Modifier, onMark: (String) -> Unit) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(MoneyCards.OFFERS_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
-        // Quality gate slice 13: a current or savings account waits behind "Show 1 more account".
-        var showOthers by rememberSaveable { mutableStateOf(false) }
-        (cv.offers.take(4) + if (showOthers) cv.others else emptyList()).forEach { o ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(o.name, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                Text(MoneyCards.MARK, style = MekaType.caption, color = Meka.colors.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onMark(o.id) }
-                        .semantics { contentDescription = "${o.name} is a card" }.minTouch().padding(MekaSpace.xs))
-            }
-        }
-        cv.othersLabel?.takeIf { !showOthers }?.let { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { showOthers = true }
-                    .minTouch().padding(vertical = MekaSpace.xs))
-        }
-    }
-}
-
 /** Slice 6: payday, since payday, what's still to go out (each payment), the pay account's balance and safe to spend. */
 @Composable
 private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolean = true, onBalance: (String) -> Unit) {
@@ -2032,7 +1998,8 @@ private fun WorthBlock(
         w.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
         if (w.points.size >= 2) WorthLine(w.points)
         w.chartLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        w.rows.forEach { r -> WorthRow(r, onRemove = { onRemove(r.id) }, onBalance = { t -> onBalance(r.id, t) }) }
+        // Money review, Accounts: the accounts, cards and trading are the list under this card; here only what he typed.
+        MoneyAccountList.typedRows(w).forEach { r -> WorthRow(r, onRemove = { onRemove(r.id) }, onBalance = { t -> onBalance(r.id, t) }) }
         w.missingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Field(w.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
         Text(w.foot, style = MekaType.caption, color = Meka.colors.textTertiary)

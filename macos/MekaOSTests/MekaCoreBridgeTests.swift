@@ -3964,7 +3964,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         let b = MoneyCards.shared.brief(c: row)
         XCTAssertEqual(b.line, MoneyCards.shared.ADD_DETAILS)
         XCTAssertNil(b.amount)
-        XCTAssertEqual(MoneySection.cardOffers.name, "CARD_OFFERS")
-        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .cardOffers), MoneyTab.accounts)
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .accounts), MoneyTab.accounts)
+    }
+
+    /// Money review, Accounts: the short names, the list and an account's sheet cross the bridge.
+    func testMoneyAccountsListOnTheMac() {
+        XCTAssertEqual(MoneyAccountNames.shared.shortName(name: "HSBC Current Account"), "HSBC current")
+        XCTAssertEqual(MoneyAccountList.shared.initials(name: "HSBC current"), "HS")
+        let v = MoneyView(locked: false, summary: "", empty: nil, month: nil,
+            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil)],
+            earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
+            bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [])
+        let items = MoneyAccountList.shared.items(v: v)
+        XCTAssertEqual(items.map { $0.name }, ["Oakbank saver"])
+        XCTAssertEqual(items.first?.amount, MoneyAccountList.shared.ADD_BALANCE)
+        let sheet = MoneyAccountList.shared.sheet(v: v, id: "a1")
+        XCTAssertNotNil(sheet)
+        XCTAssertNil(sheet?.sideHustle)
+        XCTAssertEqual(sheet?.canType, true)
     }
 }

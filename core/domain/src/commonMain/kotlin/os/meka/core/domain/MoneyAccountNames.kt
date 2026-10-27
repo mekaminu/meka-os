@@ -42,6 +42,38 @@ object MoneyAccountNames {
     private fun pad(v: String, m: String): String =
         (if (v.firstOrNull() == ' ') " " else "") + m + (if (v.lastOrNull() == ' ') " " else "")
 
+    /** Words that read as what the account is, lowered after the bank's name ("HSBC current", "HSBC card"). */
+    private val KIND_WORDS = setOf("card", "current", "saver", "savings", "account", "credit", "debit", "business", "joint", "isa", "bonus", "reward", "rewards")
+
+    /** Words that say nothing in a short name. */
+    private val DROP_WORDS = setOf("personal", "the", "uk", "gbp", "ltd", "plc")
+
+    /**
+     * Money review, Accounts: the short name the list shows, from an already-[shown] name. "American Express" becomes
+     * "Amex", empty words ("Personal", "UK", "GBP") go, a shouty word ("PLATINUM") reads as a name ("Platinum") while a
+     * short initialism ("HSBC", "TSB") stays, kind words after the first lower ("HSBC Current Account" → "HSBC current"),
+     * and a trailing "account" goes after two other words. The account's own name is untouched (matching and transfers
+     * still read it); a masked number ("••9180") stays as it is.
+     */
+    fun shortName(name: String): String {
+        val masked = shown(name)
+        val amex = masked.replace(Regex("\\bAmerican\\s+Exp(?:ress)?\\b\\.?", RegexOption.IGNORE_CASE), "Amex")
+        val words = amex.split(Regex("\\s+")).filter { it.isNotEmpty() && it.lowercase().trim('.', ',') !in DROP_WORDS }
+        if (words.isEmpty()) return masked
+        val out = words.mapIndexed { i, w ->
+            val letters = w.filter { it.isLetter() }
+            val lower = w.lowercase()
+            when {
+                w.startsWith("••") -> w
+                i > 0 && lower.trim('.', ',') in KIND_WORDS -> lower
+                letters.length > 4 && letters.all { it.isUpperCase() } -> lower.replaceFirstChar { it.uppercase() }
+                else -> w
+            }
+        }.toMutableList()
+        if (out.size > 2 && out.last() == "account") out.removeAt(out.size - 1)
+        return out.joinToString(" ").take(32).trim().ifEmpty { masked }
+    }
+
     /** True when [text] would show something [shown] hides (a test helper and a check for anything about to be shown). */
     fun revealsNumber(text: String): Boolean = shown(text) != text.trim().replace(Regex("\\s+"), " ")
 }

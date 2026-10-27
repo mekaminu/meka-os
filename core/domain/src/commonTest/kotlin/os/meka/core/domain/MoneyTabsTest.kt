@@ -36,7 +36,7 @@ class MoneyTabsTest {
         assertEquals(listOf(MoneySection.MONTH, MoneySection.ALERTS, MoneySection.CATEGORIES, MoneySection.PAYMENTS), MoneyTabs.sections(MoneyTab.SPENDING, v))
         assertEquals(listOf(MoneySection.REFUNDS, MoneySection.REGULAR), MoneyTabs.sections(MoneyTab.BILLS, v))
         assertEquals(
-            listOf(MoneySection.BANK, MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.FOOT),
+            listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.IMPORT_STATEMENT, MoneySection.FOOT),
             MoneyTabs.sections(MoneyTab.ACCOUNTS, v),
         )
         // Nothing appears on two tabs: the long page is gone.
@@ -71,23 +71,31 @@ class MoneyTabsTest {
     }
 
     @Test
-    fun billsShowsOnlyCardsAndTheAccountsThatCouldBeOneMoveToAccounts() {
+    fun billsShowsOnlyCardsAndTheAccountsThatCouldBeOneAreMarkedInTheirSheet() {
         val card = MoneyCards.row(MoneyCard("a-card", "Platinum Card", MoneyCards.CREDIT), 100, emptyList())
         val offer = MoneyCardOffer("a-saver", "Easy Saver")
         val onlyOffers = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, emptyList(), MoneyCards.OFFER_FIRST, listOf(offer), MoneyCards.FOOT))
         assertTrue(MoneySection.CARDS !in MoneyTabs.sections(MoneyTab.BILLS, onlyOffers))
-        assertEquals(MoneyTab.ACCOUNTS, MoneyTabs.tabOf(MoneySection.CARD_OFFERS))
+        // Money review, Accounts: "Is one of these a card?" left the page; each account's sheet has It's a card.
         assertEquals(
-            listOf(MoneySection.BANK, MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.CARD_OFFERS, MoneySection.FOOT),
+            listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.IMPORT_STATEMENT, MoneySection.FOOT),
             MoneyTabs.sections(MoneyTab.ACCOUNTS, onlyOffers),
         )
         val both = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, listOf(card), MoneyCards.OFFER_MORE, listOf(offer), MoneyCards.FOOT))
         assertTrue(MoneySection.CARDS in MoneyTabs.sections(MoneyTab.BILLS, both))
-        assertTrue(MoneySection.CARD_OFFERS in MoneyTabs.sections(MoneyTab.ACCOUNTS, both))
-        // A saver kept back behind "Show 1 more account" still counts.
-        val hidden = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, listOf(card), null, emptyList(), MoneyCards.FOOT, listOf(offer), "Show 1 more account"))
-        assertTrue(MoneySection.CARD_OFFERS in MoneyTabs.sections(MoneyTab.ACCOUNTS, hidden))
-        assertTrue(MoneySection.CARD_OFFERS !in MoneyTabs.sections(MoneyTab.ACCOUNTS, open()))
+    }
+
+    @Test
+    fun theAccountsListFollowsNetWorthAndShowsForATradingAccountAlone() {
+        val worth = MoneyWorth.view(emptyList(), emptyList(), listOf(MoneyWorthItem("n-pension", "Pension", false, 100_00, 100)), emptyList(), 100)
+        val v = open().copy(worth = worth)
+        val s = MoneyTabs.sections(MoneyTab.ACCOUNTS, v)
+        assertEquals(s.indexOf(MoneySection.WORTH) + 1, s.indexOf(MoneySection.ACCOUNTS))
+        val noAccounts = MoneyView(false, "", null, null, emptyList(), earlier = false, later = false, worth = worth)
+        assertTrue(MoneySection.ACCOUNTS !in MoneyTabs.sections(MoneyTab.ACCOUNTS, noAccounts))
+        val tradingRow = MoneyWorthRow("w1", "Main", MoneyWorth.TRADING, "£6,512", "Hyperliquid", false, false, false, "Main")
+        val trading = noAccounts.copy(worth = worth.copy(rows = worth.rows + tradingRow))
+        assertTrue(MoneySection.ACCOUNTS in MoneyTabs.sections(MoneyTab.ACCOUNTS, trading))
     }
 
     @Test

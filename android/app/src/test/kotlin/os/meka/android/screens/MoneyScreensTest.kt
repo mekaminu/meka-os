@@ -24,6 +24,7 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.MoneyAccountList
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
@@ -147,7 +148,7 @@ class MoneyScreensTest {
             if (compose.onAllNodesWithContentDescription(spoken, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
                 fail("$name: no \"$spoken\" pill")
         }
-        val importShown = compose.onAllNodesWithText("IMPORT A STATEMENT").fetchSemanticsNodes().isNotEmpty()
+        val importShown = compose.onAllNodesWithText(MoneyAccountList.IMPORT_ROW).fetchSemanticsNodes().isNotEmpty()
         // (A lazy list only lays out what's on screen, so Import is only required on Accounts with nothing above it.)
         if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")
         if (!importShown && tab == MoneyTab.ACCOUNTS && fill == Fill.EMPTY) fail("$name: Import a statement is missing from Accounts")

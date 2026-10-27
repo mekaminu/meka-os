@@ -164,10 +164,14 @@ class MoneyBillsTidyScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun theAccountsThatCouldBeACardAreOnAccounts() {
-        open()
+    fun anAccountThatCouldBeACardIsMarkedInItsSheetOnAccounts() {
+        val core = open()
         pick(MoneyTab.ACCOUNTS)
-        scrollTo("money-card-offers")
-        assertTrue(showsText(MoneyCards.OFFERS_HEAD), "Accounts doesn't offer the other accounts as cards")
+        // Money review, Accounts: no "Is one of these a card?" list on the page; each account's sheet has It's a card.
+        if (showsText(MoneyCards.OFFERS_HEAD)) fail("Accounts still lists the accounts that could be a card")
+        val current = core.moneyView.value.accounts.first { it.name == "Current account" }
+        scrollTo("money-account-${current.id}")
+        tap("money-account-${current.id}")
+        assertTrue(shows("money-account-card"), "the account's sheet has no It's a card switch")
     }
 }

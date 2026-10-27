@@ -22,9 +22,10 @@ enum class MoneySection {
     TIPS, FORECAST, GOALS, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
     TRADING,
-    // Accounts: his banks, net worth, the year in review, the side hustle, shared costs, his own categories (slice 3), import, the accounts list,
-    // the accounts he could mark as a card (one-time setup, moved off Bills by the Money review), delete and the foot.
-    BANK, WORTH, YEAR, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, ACCOUNTS, CARD_OFFERS, FOOT,
+    // Accounts: his banks, net worth, then the accounts as one clean list (Money review, Meka 2026-10-26 22:12: a tap opens
+    // an account's sheet, where It's a card, Side hustle account, Import and Remove now live), the year in review, the side
+    // hustle, shared costs, his own categories (slice 3), Import a statement (one row opening a sheet) and the foot.
+    BANK, WORTH, ACCOUNTS, YEAR, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, FOOT,
 }
 
 object MoneyTabs {
@@ -46,8 +47,8 @@ object MoneyTabs {
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
         MoneySection.TIPS, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
-        MoneySection.BANK, MoneySection.WORTH, MoneySection.YEAR, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.OWN_CATEGORIES,
-        MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.CARD_OFFERS, MoneySection.FOOT -> MoneyTab.ACCOUNTS
+        MoneySection.BANK, MoneySection.WORTH, MoneySection.ACCOUNTS, MoneySection.YEAR, MoneySection.BUSINESS, MoneySection.SHARED_COSTS,
+        MoneySection.OWN_CATEGORIES, MoneySection.IMPORT_STATEMENT, MoneySection.FOOT -> MoneyTab.ACCOUNTS
     }
 
     /** Whether [v] has anything for section [s]. Import and the foot are always there (Accounts is never empty). */
@@ -79,8 +80,7 @@ object MoneyTabs {
         MoneySection.SHARED_COSTS -> v.shared != null
         MoneySection.OWN_CATEGORIES -> v.ownRows.isNotEmpty()
         MoneySection.IMPORT_STATEMENT, MoneySection.FOOT -> true
-        MoneySection.ACCOUNTS -> v.accounts.isNotEmpty()
-        MoneySection.CARD_OFFERS -> v.cards?.let { it.offers.isNotEmpty() || it.others.isNotEmpty() } == true
+        MoneySection.ACCOUNTS -> v.accounts.isNotEmpty() || v.worth?.rows?.any { it.kind == MoneyWorth.TRADING } == true
     }
 
     /** What [tab] shows of [v], in the screen's order; nothing while Money is locked or still opening. */

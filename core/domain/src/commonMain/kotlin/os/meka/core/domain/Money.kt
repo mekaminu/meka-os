@@ -401,7 +401,11 @@ data class MoneyTxnRow(
     val needMarked: Boolean = false,
 )
 
-data class MoneyAccountRow(val id: String, val name: String, val line: String)
+data class MoneyAccountRow(
+    val id: String, val name: String, val line: String,
+    /** Money review, Accounts: how many lines it has, whether it comes from his bank (and needs reconnecting), and "26 Oct" it was last updated or imported. */
+    val txns: Int = 0, val bank: Boolean = false, val reconnect: Boolean = false, val updated: String? = null,
+)
 
 /**
  * The month on the Money screen: [label] ("October so far"), [spentLine] ("Spent £1,234.50 · in £2,500"), [vsLine]
@@ -634,7 +638,8 @@ object MoneyRules {
             val bankLine = if (a.source == MoneyBank.SOURCE) "From your bank" + (if (a.bankStatus == MoneyBank.RECONNECT) " · reconnect in Lunch Flow" else "") + " · " else ""
             val when_ = a.importedAtMs?.let { " · ${if (a.source == MoneyBank.SOURCE) "updated" else "imported"} ${CivilDate.shortLabel(cal.epochDayOf(it))}" } ?: ""
             val same = merged.sameAs[a.id]?.let { b -> " · the same account as ${names[b]} from your bank, so lines in both count once" } ?: ""
-            MoneyAccountRow(a.id, a.name, bankLine + span + when_ + same)
+            MoneyAccountRow(a.id, a.name, bankLine + span + when_ + same, txns = ts.size, bank = a.source == MoneyBank.SOURCE,
+                reconnect = a.bankStatus == MoneyBank.RECONNECT, updated = a.importedAtMs?.let { CivilDate.shortLabel(cal.epochDayOf(it)) })
         }
         // Slice 8: net worth from balances, cards and what he typed (also before any statement is in).
         val liveCards = cards.filter { it.id in names }

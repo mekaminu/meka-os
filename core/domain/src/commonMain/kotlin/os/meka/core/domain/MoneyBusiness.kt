@@ -86,7 +86,7 @@ data class MoneyBusinessView(
 object MoneyBusiness {
     const val ENTITY_ID = "money_business"
     const val HEAD = "SIDE HUSTLE AND TAX"
-    const val INTRO = "Mark the account your side hustle's money goes through (below), or tap a payment and choose Business: Navilife adds up what came in, what went out and the profit for the tax year."
+    const val INTRO = "Mark the account your side hustle's money goes through (tap it under Accounts, then Side hustle account), or tap a payment and choose Side hustle: Navilife adds up what came in, what went out and the profit for the tax year."
     const val FOOT = "Your own numbers, not tax advice: the share to put aside is the one you pick, not a tax bill. Navilife never files or pays anything; the dates are HMRC's."
     const val SWITCH = "Side hustle account"
     const val MENU_ON = "Business ✓"
