@@ -52,7 +52,8 @@ struct MoneySheet: View {
     @State private var capText = ""
     @State private var tradingText = ""
     @State private var exporting = false
-    @State private var worthBalances: [String: String] = [:]
+    /// Net worth's typed things (Money review, layout rule (e)): whether their popover is open.
+    @State private var worthOtherOpen = false
     /// Slice 18: the year in review opened or folded by him, per year (else January's finished year opens by itself).
     @State private var yearOpen: [Int32: Bool] = [:]
     /// Money redesign (B), slice 1: the tab shown (Spending · Bills · Plan · Trading · Accounts); opens on Spending.
@@ -937,8 +938,8 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.profitLine)
     }
 
-    /// Slice 8: net worth — the total, have/owe, the change since last month, the month-by-month line, each account,
-    /// card and typed thing (a field for an account with no balance; Remove on a typed one), and a field to add one.
+    /// Slice 8: net worth — the total, have/owe, the change since last month and the month-by-month line; what he typed
+    /// outside his accounts is one row ("Outside these accounts") opening a popover with each thing and the field.
     private func worth(_ w: MoneyWorthView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(w.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
@@ -956,54 +957,90 @@ struct MoneySheet: View {
             }
             if w.points.count >= 2 { MoneyWorthLine(points: w.points, palette: palette, reduced: reduceMotion) }
             if let l = w.chartLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
-            // Money review, Accounts: the accounts, cards and trading are the list under this; here only what he typed.
-            ForEach(MoneyAccountList.shared.typedRows(w: w), id: \.id) { r in
+            if let m = w.missingLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            // Money review (layout rule (e)): what he typed outside his accounts is one row opening its popover.
+            if let r = MoneyWorthOther.shared.row(w: w) { worthOtherRow(r) }
+            Text(w.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: w.total)
+    }
+
+    /// Net worth's one row for what he typed: the title over the names (or what to add), the total or "Add…", ›.
+    private func worthOtherRow(_ r: MoneyWorthOtherRow) -> some View {
+        Button {
+            MekaHaptics.tick()
+            said = nil
+            worthOtherOpen = true
+        } label: {
+            HStack(spacing: MekaSpace.m) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                            Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(r.spoken)
-                        Spacer()
-                        if !r.amount.isEmpty { Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
-                        if r.removable {
-                            Button("Remove") {
-                                let id = r.id
-                                Task { said = await model.moneyWorthRemove(id: id) }
-                            }
-                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .accessibilityLabel("Remove \(r.name) from your net worth")
-                        }
+                    Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1).contentTransition(.opacity)
+                }
+                Spacer()
+                Text(r.amount ?? MoneyWorthOther.shared.ADD)
+                    .font(r.add ? MekaType.caption : MekaType.body)
+                    .foregroundStyle(r.add ? palette.accent : (r.owes ? palette.approval : palette.textPrimary))
+                    .contentTransition(.opacity)
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(r.spoken)
+        .popover(isPresented: $worthOtherOpen, arrowEdge: .trailing) { worthOtherPopover() }
+    }
+
+    /// The typed things' popover: each with its amount and Remove (Undo in the said line), then the field (typing a
+    /// name again updates it). Found again in each view.
+    @ViewBuilder
+    private func worthOtherPopover() -> some View {
+        let rows = MoneyWorthOther.shared.rows(w: model.money?.worth)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(MoneyWorthOther.shared.TITLE).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(rows, id: \.id) { r in
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     }
-                    if r.needsBalance {
-                        TextField(MoneyWorth.shared.BALANCE_HINT, text: Binding(
-                            get: { worthBalances[r.id] ?? "" },
-                            set: { worthBalances[r.id] = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit {
-                            let id = r.id
-                            let text = worthBalances[id] ?? ""
-                            worthBalances[id] = nil
-                            Task { said = await model.moneyBalance(accountId: id, text: text) }
-                        }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(r.spoken)
+                    Spacer()
+                    Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    Button(MoneyWorthOther.shared.REMOVE) {
+                        let id = r.id
+                        MekaHaptics.tick()
+                        Task { said = await model.moneyWorthRemove(id: id) }
                     }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .accessibilityLabel("Remove \(r.name) from your net worth")
                 }
                 .transition(.opacity)
             }
-            if let m = w.missingLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
-            TextField(w.hint, text: $worthText)
+            TextField(MoneyWorthOther.shared.HINT, text: $worthText)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
                     let text = worthText
                     worthText = ""
                     Task { said = await model.moneyWorthAdd(text: text) }
                 }
-            Text(w.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            Text(MoneyWorthOther.shared.LINE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let s = said {
+                Text(s.line).font(MekaType.caption).foregroundStyle(s.refused ? palette.accent : palette.textSecondary)
+                if let u = s.undo {
+                    Button("Undo") {
+                        Task { _ = await model.undoMoneyCategory(token: u); said = nil }
+                    }
+                }
+            }
+            Button(MoneyWorthOther.shared.DONE) { worthOtherOpen = false }.keyboardShortcut(.defaultAction)
         }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: w.total)
+        .padding(MekaSpace.m)
+        .frame(width: 380)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: rows.count)
     }
 
     /// Slice 4: the forecast at his pace, with what-ifs on this Mac only (they go when Money locks).

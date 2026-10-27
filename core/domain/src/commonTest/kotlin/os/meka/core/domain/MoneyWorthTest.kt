@@ -147,4 +147,36 @@ class MoneyWorthTest {
         assertEquals("£1,500", alone.total)
         assertTrue(alone.rows.single().line.endsWith("the rate of Fri 16 Oct"), alone.rows.single().line)
     }
+
+    @Test
+    fun whatHeTypedIsOneRowOnTheCardAndAListInItsSheet() {
+        // Money review, layout rule (e): the typed things and the field leave the card for a sheet.
+        val none = MoneyWorth.view(emptyList(), emptyList(), emptyList(), emptyList(), today)
+        val add = MoneyWorthOther.row(none)!!
+        assertTrue(add.add)
+        assertNull(add.amount)
+        assertEquals(MoneyWorthOther.ADD_LINE, add.line)
+        assertTrue(MoneyWorthOther.rows(none).isEmpty())
+        assertNull(MoneyWorthOther.row(null))
+        val items = listOf(
+            MoneyWorthItem("n-pension", "Pension", false, 4_200_000, today),
+            MoneyWorthItem("n-car", "Car", false, 850_000, today),
+            MoneyWorthItem("n-car-loan", "Car loan", true, 320_000, today),
+            MoneyWorthItem("n-boat", "Boat", false, 100_000, today),
+            MoneyWorthItem("n-dad", "Dad", true, 50_000, today),
+        )
+        val w = MoneyWorth.view(emptyList(), emptyList(), items, emptyList(), today)
+        val r = MoneyWorthOther.row(w)!!
+        assertTrue(!r.add)
+        assertEquals("£47,800", r.amount)
+        assertEquals("Pension · Car · Boat + 2 more", r.line)
+        assertTrue(r.spoken.startsWith("Outside these accounts, £47,800"))
+        assertEquals(listOf("Pension", "Car", "Boat", "Car loan", "Dad"), MoneyWorthOther.rows(w).map { it.name })
+        assertTrue(MoneyWorthOther.rows(w).all { it.removable })
+        val owed = MoneyWorthOther.row(MoneyWorth.view(emptyList(), emptyList(), listOf(items[2]), emptyList(), today))!!
+        assertEquals("−£3,200", owed.amount)
+        assertTrue(owed.owes)
+        assertEquals("Car loan", owed.line)
+        assertTrue(owed.spoken.contains("owed £3,200"))
+    }
 }

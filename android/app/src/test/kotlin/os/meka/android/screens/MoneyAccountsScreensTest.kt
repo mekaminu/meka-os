@@ -40,6 +40,7 @@ import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyMore
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyWorth
+import os.meka.core.domain.MoneyWorthOther
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
@@ -212,5 +213,34 @@ class MoneyAccountsScreensTest {
         settle()
         assertTrue(showsText("Joint bills"), "the new name doesn't show")
         assertTrue(MoneyAccountList.items(core.moneyView.value).any { it.name == "Joint bills" }, "the list didn't take the new name")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun whatHeTypedIntoNetWorthLivesInASheet() {
+        // Money review, layout rule (e): no field on the page; one "Outside these accounts" row opens a sheet.
+        val core = open()
+        pick(MoneyTab.ACCOUNTS)
+        scrollTo("money-worth-other")
+        assertTrue(showsText(MoneyWorthOther.ADD), "no Add… on the empty row")
+        if (showsText(MoneyWorth.HINT) || showsText(MoneyWorthOther.HINT)) fail("net worth's add field sits open on the page")
+        runBlocking { check(!core.moneyWorthAdd("Pension £42,000").refused); core.tick() }
+        settle()
+        assertTrue(showsText("£42,000"), "the row doesn't show the typed total")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-worth-other-row"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-worth-other-row")
+        if (shows("money-worth-remove-n-pension")) fail("a typed thing's Remove sits on the page")
+        tap("money-worth-other")
+        assertTrue(shows("money-other-sheet"), "the typed things' sheet didn't open")
+        assertTrue(showsText(MoneyWorthOther.HINT), "the sheet has no add field")
+        assertTrue(shows("money-worth-remove-n-pension"), "the sheet doesn't list the pension with Remove")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-worth-other-sheet"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-worth-other-sheet")
+        tap("money-worth-remove-n-pension")
+        runBlocking { core.tick() }
+        settle()
+        if (core.moneyView.value.worth?.rows?.any { it.id == "n-pension" } == true) fail("Remove didn't take the pension off")
+        assertTrue(shows("money-other-sheet"), "the sheet closed on Remove")
+        tap("money-other-sheet-done")
+        if (shows("money-other-sheet")) fail("Done didn't close the sheet")
     }
 }

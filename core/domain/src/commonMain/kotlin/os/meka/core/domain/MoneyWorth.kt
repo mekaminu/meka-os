@@ -48,6 +48,8 @@ data class MoneyWorthParse(val name: String, val owes: Boolean, val pence: Long)
 data class MoneyWorthRow(
     val id: String, val name: String, val kind: String, val amount: String, val line: String,
     val owes: Boolean, val needsBalance: Boolean, val removable: Boolean, val spoken: String,
+    /** Its signed value in pence (0 when not counted); used for the typed things' total. */
+    val pence: Long = 0,
 )
 
 /** One month on the line: its short [label] ("Oct"), its [pence] and what a tap says ([said]: "End of Sep 2026 · £51,880"). */
@@ -208,7 +210,7 @@ object MoneyWorth {
             rows += MoneyWorthRow(i.id, i.name, TYPED, signed(i.signed),
                 (if (i.owes) "Owed" else "You have") + " · typed ${if (i.day == today) "today" else MoneyRules.dayMonth(i.day)}",
                 owes = i.owes, needsBalance = false, removable = true,
-                spoken = "${i.name}, ${if (i.owes) "owed ${fmt(i.pence)}" else fmt(i.pence)}")
+                spoken = "${i.name}, ${if (i.owes) "owed ${fmt(i.pence)}" else fmt(i.pence)}", pence = i.signed)
         }
         // Slice 5 of the trading tracker: each Hyperliquid account read so far, in pounds at the ECB's rate.
         var tradingPence = 0L
@@ -255,5 +257,51 @@ object MoneyWorth {
             if (points.size >= 2) points else emptyList(), chartLine, if (counted) null else EMPTY, HINT,
             if (tradingPence != 0L) FOOT_TRADING else FOOT, spoken,
         )
+    }
+}
+
+/**
+ * NET WORTH's one row for what he typed ("Outside these accounts" over "Pension · Car · Car loan", the total on the right,
+ * or "Add…" with nothing typed yet). [add] when nothing is typed yet; [amount] null then.
+ */
+data class MoneyWorthOtherRow(val title: String, val line: String, val amount: String?, val add: Boolean, val owes: Boolean, val spoken: String)
+
+/**
+ * Money review (Meka 2026-10-26 22:12, layout rule (e): "inputs never sit open on the page"), Accounts: the things he
+ * typed into net worth (a pension, savings elsewhere, the car, a loan) and the field to add one leave the NET WORTH card
+ * for a sheet. The card keeps one row ([row]); the sheet ([rows], [HINT], [LINE]) lists each typed thing with Remove
+ * (Undo, as before) and the field (typing a name again updates it). Words only; nothing new is stored.
+ */
+object MoneyWorthOther {
+    const val TITLE = "Outside these accounts"
+    const val ADD = "Add…"
+    const val ADD_LINE = "A pension, savings elsewhere, the car or a loan"
+    const val LINE = "Type one again with a new amount to update it · counted at today's figure on the line"
+    const val HINT = "Pension £42,000 · Car £8,500 · Car loan £3,200"
+    const val DONE = "Done"
+    const val REMOVE = "Remove"
+    /** Names shown on the row before "+ N more". */
+    const val NAMES = 3
+
+    /** The typed things, owned first then owed, biggest first (as [MoneyWorth.view] orders them). */
+    fun rows(w: MoneyWorthView?): List<MoneyWorthRow> = w?.rows.orEmpty().filter { it.kind == MoneyWorth.TYPED }
+
+    /** "Pension · Car · Car loan", "Pension · Car · Boat + 2 more". */
+    fun names(rows: List<MoneyWorthRow>): String {
+        val shown = rows.take(NAMES).joinToString(" · ") { it.name }
+        return if (rows.size > NAMES) "$shown + ${rows.size - NAMES} more" else shown
+    }
+
+    /** The card's row; null before net worth has a block at all. */
+    fun row(w: MoneyWorthView?): MoneyWorthOtherRow? {
+        w ?: return null
+        val rows = rows(w)
+        if (rows.isEmpty()) return MoneyWorthOtherRow(TITLE, ADD_LINE, null, add = true, owes = false,
+            spoken = "$TITLE. $ADD_LINE. Add one")
+        val sum = rows.sumOf { it.pence }
+        val amount = MoneyWorth.signed(sum)
+        val line = names(rows)
+        return MoneyWorthOtherRow(TITLE, line, amount, add = false, owes = sum < 0,
+            spoken = "$TITLE, ${if (sum < 0) "owed ${MoneyRules.fmt(-sum)}" else amount}. $line. Opens its sheet")
     }
 }

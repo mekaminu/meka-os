@@ -119,10 +119,11 @@ import os.meka.core.domain.MoneyBusinessMail
 import os.meka.core.domain.MoneyBusinessMailView
 import os.meka.core.domain.MoneyShared
 import os.meka.core.domain.MoneySharedView
-import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
+import os.meka.core.domain.MoneyWorthOther
+import os.meka.core.domain.MoneyWorthOtherRow
 import os.meka.core.domain.TradingAlertsView
 import os.meka.core.domain.TradingCurveView
 import os.meka.core.domain.TradingExportRules
@@ -273,6 +274,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val accountSheet = accountSheetId?.let { id -> MoneyAccountList.sheet(v, id) }
     // Accounts' rest: which MORE row's sheet is open (side hustle, shared costs, or import, export and delete).
     var moreSheet by rememberSaveable { mutableStateOf<MoneyMoreKind?>(null) }
+    // Net worth's typed things (Money review, layout rule (e)): the sheet with them and the field to add one.
+    var otherSheet by rememberSaveable { mutableStateOf(false) }
+    val otherOpen = v.worth?.takeIf { otherSheet }
     val paydayOpen = v.payday?.takeIf { paydaySheet }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -739,9 +743,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "worth") {
                 WorthBlock(w, Modifier.animateItem().appear(rememberAppearance(4)),
-                    onAdd = { text -> scope.launch { runCatching { core.moneyWorthAdd(text) }.getOrNull()?.let(say) } },
-                    onRemove = { id -> scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } },
-                    onBalance = { id, text -> scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) } })
+                    onOther = { haptics.tick(); said = null; otherSheet = true })
             }
         }
         // Money review (Meka 2026-10-26 22:12), Accounts: one clean list under net worth, each row opening its sheet.
@@ -943,6 +945,13 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     scope.launch { runCatching { core.deleteAllMoney() }.getOrNull()?.let(say) }
                 })
         }
+        SheetSaid(said)
+    }
+    // Net worth's typed things: each with Remove (Undo in the said line), and the field to add or update one.
+    MoneyDetailSheet(otherOpen, title = { MoneyWorthOther.TITLE }, tag = "money-other-sheet", done = MoneyWorthOther.DONE, onClose = { otherSheet = false }) { w ->
+        WorthOtherDetails(w,
+            onAdd = { text -> scope.launch { runCatching { core.moneyWorthAdd(text) }.getOrNull()?.let(say) } },
+            onRemove = { id -> haptics.tick(); scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } })
         SheetSaid(said)
     }
     MoneyDetailSheet(paydayOpen, title = { it.head.lowercase().replaceFirstChar { ch -> ch.uppercase() } }, tag = "money-payday-sheet",
@@ -1967,15 +1976,13 @@ private fun ForecastRow(r: MoneyForecastRow) {
 }
 
 /**
- * Slice 8: NET WORTH — the total (big), have/owe, the change since last month, the month-by-month line, each account,
- * card and typed thing (an account with no balance gets a field; a typed thing has Remove), and a field to add one.
+ * Slice 8: NET WORTH — the total (big), have/owe, the change since last month and the month-by-month line. Money review
+ * (layout rule (e)): what he typed outside his accounts is one row ("Outside these accounts", the names, the total, or
+ * "Add…"), opening its sheet; the accounts, cards and trading are the list under this card.
  */
 @Composable
-private fun WorthBlock(
-    w: MoneyWorthView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit, onBalance: (String, String) -> Unit,
-) {
+private fun WorthBlock(w: MoneyWorthView, modifier: Modifier, onOther: () -> Unit) {
     val reduced = Meka.reducedMotion
-    var adding by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         w.total?.let { t ->
             Column(Modifier.semantics(mergeDescendants = true) { contentDescription = w.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -1997,31 +2004,63 @@ private fun WorthBlock(
         w.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
         if (w.points.size >= 2) WorthLine(w.points)
         w.chartLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        // Money review, Accounts: the accounts, cards and trading are the list under this card; here only what he typed.
-        MoneyAccountList.typedRows(w).forEach { r -> WorthRow(r, onRemove = { onRemove(r.id) }, onBalance = { t -> onBalance(r.id, t) }) }
         w.missingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Field(w.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        MoneyWorthOther.row(w)?.let { r -> WorthOtherRow(r, onOther) }
         Text(w.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
+/** Net worth's one row for what he typed: the title over the names (or what to add), the total or "Add…" in the accent, ›. */
 @Composable
-private fun WorthRow(r: MoneyWorthRow, onRemove: () -> Unit, onBalance: (String) -> Unit) {
-    var balance by rememberSaveable(r.id) { mutableStateOf("") }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
-                Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
-                Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-            }
-            if (r.amount.isNotEmpty()) Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
-            if (r.removable) {
-                Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
-                        .semantics { contentDescription = "Remove ${r.name} from your net worth" }.minTouch().padding(MekaSpace.xs))
+private fun WorthOtherRow(r: MoneyWorthOtherRow, onOpen: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = r.spoken }
+            .padding(vertical = MekaSpace.xs).testTag("money-worth-other"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-line") { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (r.needsBalance) Field(MoneyWorth.BALANCE_HINT, value = balance, onValue = { balance = it }) { balance = ""; onBalance(it) }
+        Crossfade(r.amount ?: MoneyWorthOther.ADD, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-amount") { a ->
+            Text(a, style = if (r.add) MekaType.caption else MekaType.metaStrong,
+                color = when { r.add -> Meka.colors.accent; r.owes -> Meka.colors.approval; else -> Meka.colors.textPrimary }, maxLines = 1)
+        }
+        Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
+    }
+}
+
+/** The typed things' sheet: each with its amount and Remove, then the field (typing a name again updates it). */
+@Composable
+private fun WorthOtherDetails(w: MoneyWorthView, onAdd: (String) -> Unit, onRemove: (String) -> Unit) {
+    var adding by rememberSaveable { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        MoneyWorthOther.rows(w).forEach { r -> key(r.id) { WorthRow(r, onRemove = { onRemove(r.id) }) } }
+        Field(MoneyWorthOther.HINT, modifier = Modifier.testTag("money-worth-add"), value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        Text(MoneyWorthOther.LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+@Composable
+private fun WorthRow(r: MoneyWorthRow, onRemove: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+            Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        if (r.amount.isNotEmpty()) Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+        if (r.removable) {
+            Text(MoneyWorthOther.REMOVE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
+                    .semantics { contentDescription = "Remove ${r.name} from your net worth" }.minTouch().padding(MekaSpace.xs)
+                    .testTag("money-worth-remove-${r.id}"))
+        }
     }
 }
 

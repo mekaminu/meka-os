@@ -2066,6 +2066,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(p?.owes, true)
         XCTAssertEqual(p?.pence, 320_000)
         XCTAssertNil(MoneyView.companion.LOCKED.worth)
+        // Net worth's typed things leave the card for a popover: one row, "Add…" with nothing typed.
+        XCTAssertEqual(MoneyWorthOther.shared.TITLE, "Outside these accounts")
+        XCTAssertNil(MoneyWorthOther.shared.row(w: nil))
+        XCTAssertTrue(MoneyWorthOther.shared.rows(w: nil).isEmpty)
     }
 
     func testMoneyRefundsReachSwift() {
