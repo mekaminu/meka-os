@@ -81,6 +81,9 @@ object MoneySave {
 
     fun rateLabel(bp: Int): String = if (bp == 0) "No interest" else "At ${pct(bp)} a year"
 
+    /** The chip's short label (the cover screen fits three): "No interest", "At 4%". */
+    fun rateChip(bp: Int): String = if (bp == 0) "No interest" else "At ${pct(bp)}"
+
     private fun pct(bp: Int): String = if (bp % 100 == 0) "${bp / 100}%" else "${bp / 100}.${(bp % 100).toString().padStart(2, '0').trimEnd('0')}%"
 
     /** Obi's line: whether [amountPence] a month fits his average month, and whether it's lit (it doesn't fit). */
@@ -126,7 +129,7 @@ object MoneySave {
             MoneySaveChip(m, "$m months", m == n, "$m months" + if (m == n) ", selected" else "")
         }
         val rateChips = RATES_BP.map { r ->
-            MoneySaveChip(r, rateLabel(r), r == bp, rateLabel(r) + if (r == bp) ", selected" else "")
+            MoneySaveChip(r, rateChip(r), r == bp, rateLabel(r) + if (r == bp) ", selected" else "")
         }
         val totalText = fmt(roundPound(total))
         return MoneySaveView(

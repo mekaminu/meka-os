@@ -236,8 +236,9 @@ class MoneyAccountsScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-worth-other-sheet"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-worth-other-sheet")
         tap("money-worth-remove-n-pension")
-        runBlocking { core.tick() }
-        settle()
+        // Remove runs on the core and the money view is rebuilt off the main thread: give it a moment.
+        fun gone() = core.moneyView.value.worth?.rows?.none { it.id == "n-pension" } == true
+        repeat(40) { if (!gone()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         if (core.moneyView.value.worth?.rows?.any { it.id == "n-pension" } == true) fail("Remove didn't take the pension off")
         assertTrue(shows("money-other-sheet"), "the sheet closed on Remove")
         tap("money-other-sheet-done")

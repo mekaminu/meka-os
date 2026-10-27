@@ -52,7 +52,7 @@ struct MoneySaveCardView: View {
                     pill(c) { rate = c.value }
                 }
             }
-            HStack(alignment: .bottom, spacing: 3) {
+            HStack(alignment: .bottom, spacing: MekaSpace.xxs) {
                 ForEach(Array(v.bars.enumerated()), id: \.offset) { _, b in
                     GeometryReader { g in
                         VStack(spacing: 0) {
@@ -79,7 +79,7 @@ struct MoneySaveCardView: View {
                 Circle()
                     .fill(RadialGradient(colors: [palette.accent, palette.accent.opacity(0.35)], center: .topLeading, startRadius: 1, endRadius: 14))
                     .frame(width: 18, height: 18)
-                    .padding(.top, 2)
+                    .padding(.top, MekaSpace.xxs)
                 Text(v.obi).font(MekaType.caption).foregroundStyle(v.obiLit ? palette.money3 : palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)

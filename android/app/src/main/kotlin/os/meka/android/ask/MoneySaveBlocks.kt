@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,6 +57,7 @@ import os.meka.core.domain.MoneySaveBar
  * Motion: the bars grow to their heights on the appear spring when anything changes (snap with reduced motion); the
  * amount, total and Obi's line cross-fade; chips light on the appear tween.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, onTick: () -> Unit, onGoal: (Long, Int, Int) -> Unit) {
     val reduced = Meka.reducedMotion
@@ -86,12 +89,12 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
             ),
             modifier = Modifier.testTag("money-save-slider").semantics { contentDescription = "Amount to save each month, ${v.amount}" },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             for (c in v.months) TripPill(c.label, on = c.on, tag = "money-save-months-${c.value}", description = c.spoken) {
                 if (!c.on) { onTick(); months = c.value }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             for (c in v.rates) TripPill(c.label, on = c.on, tag = "money-save-rate-${c.value}", description = c.spoken) {
                 if (!c.on) { onTick(); rate = c.value }
             }
@@ -100,7 +103,7 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
             Modifier.fillMaxWidth().height(96.dp).padding(top = MekaSpace.xs)
                 .semantics(mergeDescendants = true) { contentDescription = v.bars.joinToString(", ") { it.label } },
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             v.bars.forEachIndexed { i, b -> SaveBar(b, i, reduced, Modifier.weight(1f)) }
         }
@@ -117,7 +120,7 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             Box(
-                Modifier.padding(top = 2.dp).size(18.dp).clip(CircleShape)
+                Modifier.padding(top = MekaSpace.xxs).size(18.dp).clip(CircleShape)
                     .background(Brush.radialGradient(listOf(Meka.colors.accent, Meka.colors.accent.copy(alpha = 0.35f)))),
             )
             Crossfade(v.obi, animationSpec = MekaMotion.appear(reduced), label = "money-save-obi-line", modifier = Modifier.weight(1f)) { o ->

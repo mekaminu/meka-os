@@ -138,8 +138,9 @@ class MoneySaveScreensTest {
         assertTrue(showsText("Once two whole months"), "Obi can't say whether it fits before two whole months are in")
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-plan-save-cover.png")
         tap("money-save-goal")
-        assertTrue(showsText("Made a goal: Save £2,400 by Oct 2027"), "Make it a goal says what it made")
-        val goals = core.goalsView.value
-        assertTrue(goals.goals.any { it.title == "Save £2,400 by Oct 2027" && it.metric?.unit == "£" }, "the goal is in Goals with a £ number")
+        // The goal is made on the core (off the main thread): give it a moment, then it's in Goals with a £ number.
+        fun made() = core.goalsView.value.goals.any { it.title == "Save £2,400 by Oct 2027" && it.metric?.unit == "£" }
+        repeat(40) { if (!made()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+        assertTrue(made(), "Make it a goal didn't put the goal in Goals with a £ number")
     }
 }

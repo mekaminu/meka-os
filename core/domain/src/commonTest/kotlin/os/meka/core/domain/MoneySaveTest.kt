@@ -36,7 +36,8 @@ class MoneySaveTest {
         assertTrue(b.last() in 122_100..122_300, "got ${b.last()}")
         val v = MoneySave.view(10_000, 12, 400, base(null))
         assertTrue("interest about £20" in v.split, v.split)
-        assertTrue(v.rates.single { it.on }.label == "At 4% a year")
+        assertEquals("At 4%", v.rates.single { it.on }.label)
+        assertEquals("At 4% a year, selected", v.rates.single { it.on }.spoken)
     }
 
     @Test
