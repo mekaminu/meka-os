@@ -263,6 +263,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     // Slice 3: one of his own categories' sheet (Accounts → YOUR CATEGORIES), found again in each view.
     var ownSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val ownRow = ownSheetId?.let { id -> v.ownRows.firstOrNull { it.id == id } }
+    // Money review, Bills: the card whose sheet is open (found again in each view; Not a card closes it) and Until payday's.
+    var cardSheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val cardRow = cardSheetId?.let { id -> v.cards?.rows?.firstOrNull { it.id == id } }
+    var paydaySheet by rememberSaveable { mutableStateOf(false) }
+    val paydayOpen = v.payday?.takeIf { paydaySheet }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val name = account
@@ -502,36 +507,29 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
                 }
             }
-            // Slice 6: payday, what's still to go out before it and what's safe to spend (this month only).
+            // Slice 6: payday and what's safe to spend (this month only). Money review (Meka 2026-10-26 22:12): one row on
+            // Bills, opening its sheet (since payday, the balance and its field), so no field sits open on the page.
             v.payday?.takeIf { has(MoneySection.PAYDAY) }?.let { p ->
                 item(key = "payday-head") {
                     Text(p.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "payday") {
-                    PaydayBlock(p, Modifier.animateItem().appear(rememberAppearance(4)), withRows = MoneyTabs.paydayRows(v)) { text ->
-                        val id = p.account ?: return@PaydayBlock
-                        scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) }
+                    MoneyPaydayRow(MoneyPayday.brief(p), Modifier.animateItem().appear(rememberAppearance(4))) {
+                        haptics.tick(); said = null; paydaySheet = true
                     }
                 }
             }
-            // Slice 7: his cards — due, statement, limit used, 0% ending, fees (this month only).
+            // Slice 7: his cards (this month only). Money review: one card of one-line rows ("due ? · tap to add"), each
+            // opening the card's sheet with its details, Paid and the fields; the accounts that could be a card are on Accounts.
             v.cards?.takeIf { has(MoneySection.CARDS) }?.let { cv ->
                 item(key = "cards-head") {
                     Text(cv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
-                cv.rows.forEachIndexed { i, c ->
-                    item(key = "card-${c.id}") {
-                        CardCard(c, Modifier.animateItem().appear(rememberAppearance(4 + i)),
-                            onPaid = { scope.launch { runCatching { core.moneyCardPaid(c.id) }.getOrNull()?.let(say) } },
-                            onField = { field, text -> scope.launch { runCatching { core.moneyCardField(c.id, field, text) }.getOrNull()?.let(say) } },
-                            onKind = { card, charge -> scope.launch { runCatching { core.moneyCardKind(c.id, card, charge) }.getOrNull()?.let(say) } })
-                    }
-                }
-                item(key = "cards-offers") {
-                    CardOffers(cv, Modifier.animateItem()) { id ->
-                        scope.launch { runCatching { core.moneyCardKind(id, card = true, charge = false) }.getOrNull()?.let(say) }
+                item(key = "cards") {
+                    MoneyCardsBriefCard(MoneyCards.briefs(cv), Modifier.animateItem().appear(rememberAppearance(5))) { id ->
+                        haptics.tick(); said = null; cardSheetId = id
                     }
                 }
             }
@@ -838,6 +836,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // Money review: the accounts he could mark as a card, a one-time setup moved here from Bills.
+        v.cards?.takeIf { has(MoneySection.CARD_OFFERS) }?.let { cv ->
+            item(key = "card-offers-head") {
+                Text(MoneyCards.OFFERS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "card-offers") {
+                CardOffers(cv, Modifier.animateItem().testTag("money-card-offers")) { id ->
+                    haptics.tick()
+                    scope.launch { runCatching { core.moneyCardKind(id, card = true, charge = false) }.getOrNull()?.let(say) }
+                }
+            }
+        }
         if (has(MoneySection.FOOT)) item(key = "foot") {
             Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(MoneyRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -928,6 +939,33 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         onClose = { ownSheetId = null },
         onCap = { text -> ownRow?.let { o -> haptics.tick(); scope.launch { runCatching { core.capMoneyCategory(o.id, text) }.getOrNull()?.let(say) } } },
     )
+    MoneyDetailSheet(cardRow, title = { it.name }, tag = "money-card-sheet", done = MoneyCards.DONE, onClose = { cardSheetId = null }) { c ->
+        CardDetails(c, said,
+            onPaid = { scope.launch { runCatching { core.moneyCardPaid(c.id) }.getOrNull()?.let(say) } },
+            onField = { field, text -> scope.launch { runCatching { core.moneyCardField(c.id, field, text) }.getOrNull()?.let(say) } },
+            onKind = { card, charge ->
+                if (!card) cardSheetId = null
+                scope.launch { runCatching { core.moneyCardKind(c.id, card, charge) }.getOrNull()?.let(say) }
+            })
+    }
+    MoneyDetailSheet(paydayOpen, title = { it.head.lowercase().replaceFirstChar { ch -> ch.uppercase() } }, tag = "money-payday-sheet",
+        done = MoneyPayday.DONE, onClose = { paydaySheet = false }) { p ->
+        PaydayBlock(p, Modifier, withRows = MoneyTabs.paydayRows(v)) { text ->
+            val id = p.account ?: return@PaydayBlock
+            scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) }
+        }
+        SheetSaid(said)
+    }
+    }
+}
+
+/** A sheet's own "said" line (the page's is under the dim): what the last write did, lit when refused. */
+@Composable
+private fun SheetSaid(said: MoneySaved?) {
+    val reduced = Meka.reducedMotion
+    Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-sheet-said") { s ->
+        if (s != null) Text(s.line, style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
+            modifier = Modifier.testTag("money-sheet-said"))
     }
 }
 
@@ -1763,25 +1801,21 @@ private fun RefundCard(r: MoneyRefundRow, modifier: Modifier, onClose: () -> Uni
 }
 
 /**
- * Slice 7: one card — due (lit three days out) with Paid, the statement and minimum, the limit used, 0% ending and
- * fees; Edit details opens the fields typed off the statement, Charge card and Not a card.
+ * Slice 7, in the card's sheet (Money review, Meka 2026-10-26 22:12: "collapse to one card row that opens a sheet"): due
+ * (lit three days out) with Paid, the statement and minimum, the limit used, 0% ending and fees; then the fields typed off
+ * the statement, Charge card and Not a card, and the foot.
  */
 @Composable
-private fun CardCard(
-    c: MoneyCardRow, modifier: Modifier, onPaid: () -> Unit, onField: (String, String) -> Unit, onKind: (Boolean, Boolean) -> Unit,
+private fun CardDetails(
+    c: MoneyCardRow, said: MoneySaved?, onPaid: () -> Unit, onField: (String, String) -> Unit, onKind: (Boolean, Boolean) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
-    var open by rememberSaveable(c.id) { mutableStateOf(c.statementLine == null) }
     var texts by remember(c.id) { mutableStateOf(mapOf<String, String>()) }
     val dueColor by animateColorAsState(if (c.dueLit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "money-card-due-${c.id}")
     val useColor by animateColorAsState(if (c.useLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-card-use-${c.id}")
     val promoColor by animateColorAsState(if (c.promoLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-card-promo-${c.id}")
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-    ) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(c.name, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             Text(c.kindLine, style = MekaType.caption, color = Meka.colors.textTertiary)
             Crossfade(c.dueLine, animationSpec = MekaMotion.appear(reduced), label = "money-card-due-line-${c.id}") { l ->
                 Text(l, style = MekaType.body, color = dueColor)
@@ -1800,33 +1834,27 @@ private fun CardCard(
             c.promoLine?.let { l -> Text(l, style = MekaType.caption, color = promoColor) }
             c.feesLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.accent) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
-            if (c.canPay) {
-                Text(MoneyCards.PAID, style = MekaType.caption, color = Meka.colors.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPaid)
-                        .semantics { contentDescription = "Mark ${c.name}'s payment paid" }.minTouch())
-            }
-            Text(if (open) "Done editing" else "Edit details", style = MekaType.caption, color = Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { open = !open }.minTouch())
+        if (c.canPay) {
+            Text(MoneyCards.PAID, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPaid)
+                    .semantics { contentDescription = "Mark ${c.name}'s payment paid" }.minTouch().testTag("money-card-paid"))
         }
-        if (open) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs), modifier = Modifier.appear(rememberAppearance(0))) {
-                c.fields.forEach { f ->
-                    val hint = if (f.value.isEmpty()) f.hint else "${f.label} · now ${f.value}"
-                    Field(hint, value = texts[f.key] ?: "", onValue = { t -> texts = texts + (f.key to t) }) { t ->
-                        texts = texts - f.key
-                        onField(f.key, t)
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-                    Text(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", style = MekaType.caption,
-                        color = if (c.charge) Meka.colors.accent else Meka.colors.textSecondary,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onKind(true, !c.charge) }.minTouch())
-                    Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onKind(false, false) }.minTouch())
-                }
+        SheetSaid(said)
+        c.fields.forEach { f ->
+            val hint = if (f.value.isEmpty()) f.hint else "${f.label} · now ${f.value}"
+            Field(hint, value = texts[f.key] ?: "", onValue = { t -> texts = texts + (f.key to t) }) { t ->
+                texts = texts - f.key
+                onField(f.key, t)
             }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Text(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", style = MekaType.caption,
+                color = if (c.charge) Meka.colors.accent else Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onKind(true, !c.charge) }.minTouch())
+            Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onKind(false, false) }.minTouch())
+        }
+        Text(MoneyCards.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -1834,7 +1862,7 @@ private fun CardCard(
 @Composable
 private fun CardOffers(cv: MoneyCardsView, modifier: Modifier, onMark: (String) -> Unit) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        cv.offerLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        Text(MoneyCards.OFFERS_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
         // Quality gate slice 13: a current or savings account waits behind "Show 1 more account".
         var showOthers by rememberSaveable { mutableStateOf(false) }
         (cv.offers.take(4) + if (showOthers) cv.others else emptyList()).forEach { o ->
@@ -1850,7 +1878,6 @@ private fun CardOffers(cv: MoneyCardsView, modifier: Modifier, onMark: (String) 
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { showOthers = true }
                     .minTouch().padding(vertical = MekaSpace.xs))
         }
-        if (cv.rows.isNotEmpty()) Text(cv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

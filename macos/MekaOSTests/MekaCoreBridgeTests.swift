@@ -3956,4 +3956,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .year), MoneyTab.accounts)
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .tips), MoneyTab.plan)
     }
+
+    /// Money review, Bills: a card's one row and Until payday's line cross the bridge; the offers live on Accounts.
+    func testMoneyBillsRowsOnTheMac() {
+        let row = MoneyCards.shared.row(c: MoneyCard(id: "c1", name: "Platinum Card", kind: MoneyCards.shared.CREDIT, limitPence: nil, statementPence: nil,
+            minPence: nil, dueDayOfMonth: nil, promoEndDay: nil, paidFor: nil), today: 20000, lines: [])
+        let b = MoneyCards.shared.brief(c: row)
+        XCTAssertEqual(b.line, MoneyCards.shared.ADD_DETAILS)
+        XCTAssertNil(b.amount)
+        XCTAssertEqual(MoneySection.cardOffers.name, "CARD_OFFERS")
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .cardOffers), MoneyTab.accounts)
+    }
 }

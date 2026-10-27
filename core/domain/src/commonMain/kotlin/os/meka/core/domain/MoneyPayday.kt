@@ -45,6 +45,13 @@ data class MoneyPaydayView(
     val bills: MoneyBillsView? = null,
 )
 
+/**
+ * Money review (Meka 2026-10-26 22:12, Bills): Until payday as one line on Bills, "Payday Fri 30 Oct · in 3 days" over
+ * "Safe to spend … about £410"; a tap opens its sheet (since payday, the pay account's balance with its field, the
+ * foot), so the balance field never sits open on the page. [lit] when the safe-to-spend line is the low-balance warning.
+ */
+data class MoneyPaydayBrief(val title: String, val line: String?, val lit: Boolean, val spoken: String)
+
 /** A line of the statements for the payday view: its account, day, signed pence, merchant key and category. */
 data class MoneyPayLine(val account: String, val day: Long, val pence: Long, val merchant: String, val category: MoneyCategory)
 
@@ -60,6 +67,12 @@ object MoneyPayday {
     fun foot(source: MoneySource): String =
         if (source == MoneySource.FILES) FOOT else FOOT.replaceFirst("From your statements", source.from)
     const val BALANCE_HINT = "Balance now: £1,240 (−£50 if overdrawn)"
+    /** Until payday's row before payday is found. */
+    const val NOT_FOUND = "Payday not found yet"
+    const val HOW_FOUND = "tap to see how it's found"
+    /** Until payday's row while the pay account's balance isn't in. */
+    const val ADD_BALANCE = "Add the balance to see what's safe to spend"
+    const val DONE = "Done"
     const val BALANCE_BAD = "Type the balance, e.g. £1,240.50, or −£50 if it's overdrawn."
     const val BALANCE_CLEARED = "Balance cleared · type it again any time"
     const val PAY_MIN_PENCE = 20_000L
@@ -74,6 +87,18 @@ object MoneyPayday {
 
     /** Pence rounded to whole pounds. */
     private fun pounds(p: Long): Long = (p / 100.0).roundToLong() * 100
+
+    /** Until payday's one row on Bills ([MoneyPaydayBrief]). */
+    fun brief(p: MoneyPaydayView): MoneyPaydayBrief {
+        val title = p.payLine ?: NOT_FOUND
+        val line = when {
+            p.payLine == null -> HOW_FOUND
+            p.safe != null -> p.safe
+            p.account != null && !p.balanceKnown -> ADD_BALANCE
+            else -> p.sinceLine
+        }
+        return MoneyPaydayBrief(title, line, p.safe != null && p.safeLit, listOfNotNull(title, line).joinToString(", ") + ", opens Until payday")
+    }
 
     /** "£1,240", "−£50"; "£1,240.50" stays exact; blank → 0 means cleared. Null when it isn't an amount. */
     fun parseBalance(text: String): Long? {

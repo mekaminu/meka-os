@@ -16,14 +16,15 @@ enum class MoneySection {
     // (Money review, Meka 2026-10-26 22:12: the year moved to Accounts and the tips to Plan's money check.)
     MONTH, TRAVEL_BANNER, REVIEW, ALERTS, CATEGORIES, UNSORTED, PAYMENTS,
     // Bills: the card and the month's bills by date (B3), payday and safe to spend, the cards' due dates, refunds on the
-    // way, the regular payments.
+    // way, the regular payments (only while the Bills card isn't there to list them: Money review, Meka 2026-10-26 22:12).
     BILLS, PAYDAY, CARDS, REFUNDS, REGULAR,
     // Plan: tips from his numbers (the money check's ideas lead), the forecast at his pace, money goals, challenges, paying abroad.
     TIPS, FORECAST, GOALS, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
     TRADING,
-    // Accounts: his banks, net worth, the year in review, the side hustle, shared costs, his own categories (slice 3), import, the accounts list, delete and the foot.
-    BANK, WORTH, YEAR, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, ACCOUNTS, FOOT,
+    // Accounts: his banks, net worth, the year in review, the side hustle, shared costs, his own categories (slice 3), import, the accounts list,
+    // the accounts he could mark as a card (one-time setup, moved off Bills by the Money review), delete and the foot.
+    BANK, WORTH, YEAR, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, ACCOUNTS, CARD_OFFERS, FOOT,
 }
 
 object MoneyTabs {
@@ -46,7 +47,7 @@ object MoneyTabs {
         MoneySection.TIPS, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
         MoneySection.BANK, MoneySection.WORTH, MoneySection.YEAR, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.OWN_CATEGORIES,
-        MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.FOOT -> MoneyTab.ACCOUNTS
+        MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.CARD_OFFERS, MoneySection.FOOT -> MoneyTab.ACCOUNTS
     }
 
     /** Whether [v] has anything for section [s]. Import and the foot are always there (Accounts is never empty). */
@@ -62,9 +63,11 @@ object MoneyTabs {
         MoneySection.PAYMENTS -> v.month?.txns?.isNotEmpty() == true
         MoneySection.BILLS -> v.month != null && v.bills != null
         MoneySection.PAYDAY -> v.month != null && v.payday != null
-        MoneySection.CARDS -> v.month != null && v.cards?.shown == true
+        // Money review (Meka 2026-10-26 22:12): Bills shows his cards as one-line rows; the accounts he could mark as a
+        // card are a one-time setup on Accounts, and the regular payments are already the Bills card's list.
+        MoneySection.CARDS -> v.month != null && v.cards?.rows?.isNotEmpty() == true
         MoneySection.REFUNDS -> v.month != null && v.refunds != null
-        MoneySection.REGULAR -> v.month != null && v.regular != null
+        MoneySection.REGULAR -> v.month != null && v.regular != null && v.bills == null
         MoneySection.FORECAST -> v.month != null && v.forecast != null
         MoneySection.GOALS -> v.month != null && v.goals != null
         MoneySection.CHALLENGES -> v.month != null && v.challenges != null
@@ -77,6 +80,7 @@ object MoneyTabs {
         MoneySection.OWN_CATEGORIES -> v.ownRows.isNotEmpty()
         MoneySection.IMPORT_STATEMENT, MoneySection.FOOT -> true
         MoneySection.ACCOUNTS -> v.accounts.isNotEmpty()
+        MoneySection.CARD_OFFERS -> v.cards?.let { it.offers.isNotEmpty() || it.others.isNotEmpty() } == true
     }
 
     /** What [tab] shows of [v], in the screen's order; nothing while Money is locked or still opening. */

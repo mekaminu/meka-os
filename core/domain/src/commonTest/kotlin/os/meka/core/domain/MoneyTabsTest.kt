@@ -64,9 +64,30 @@ class MoneyTabsTest {
             listOf(MoneyBills.Due("r-a", "Streamly", 10, 1_099, MoneyBillKind.REGULAR)), emptyList(), "Fri 30 Oct", 5,
         )
         val v = open().copy(bills = bills)
-        assertEquals(listOf(MoneySection.BILLS, MoneySection.REFUNDS, MoneySection.REGULAR), MoneyTabs.sections(MoneyTab.BILLS, v))
+        // Money review (Meka 2026-10-26 22:12): the regular payments are the Bills card's list, so they don't repeat.
+        assertEquals(listOf(MoneySection.BILLS, MoneySection.REFUNDS), MoneyTabs.sections(MoneyTab.BILLS, v))
         assertTrue(!MoneyTabs.paydayRows(v))
         assertTrue(MoneyTabs.paydayRows(open()))
+    }
+
+    @Test
+    fun billsShowsOnlyCardsAndTheAccountsThatCouldBeOneMoveToAccounts() {
+        val card = MoneyCards.row(MoneyCard("a-card", "Platinum Card", MoneyCards.CREDIT), 100, emptyList())
+        val offer = MoneyCardOffer("a-saver", "Easy Saver")
+        val onlyOffers = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, emptyList(), MoneyCards.OFFER_FIRST, listOf(offer), MoneyCards.FOOT))
+        assertTrue(MoneySection.CARDS !in MoneyTabs.sections(MoneyTab.BILLS, onlyOffers))
+        assertEquals(MoneyTab.ACCOUNTS, MoneyTabs.tabOf(MoneySection.CARD_OFFERS))
+        assertEquals(
+            listOf(MoneySection.BANK, MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.CARD_OFFERS, MoneySection.FOOT),
+            MoneyTabs.sections(MoneyTab.ACCOUNTS, onlyOffers),
+        )
+        val both = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, listOf(card), MoneyCards.OFFER_MORE, listOf(offer), MoneyCards.FOOT))
+        assertTrue(MoneySection.CARDS in MoneyTabs.sections(MoneyTab.BILLS, both))
+        assertTrue(MoneySection.CARD_OFFERS in MoneyTabs.sections(MoneyTab.ACCOUNTS, both))
+        // A saver kept back behind "Show 1 more account" still counts.
+        val hidden = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, listOf(card), null, emptyList(), MoneyCards.FOOT, listOf(offer), "Show 1 more account"))
+        assertTrue(MoneySection.CARD_OFFERS in MoneyTabs.sections(MoneyTab.ACCOUNTS, hidden))
+        assertTrue(MoneySection.CARD_OFFERS !in MoneyTabs.sections(MoneyTab.ACCOUNTS, open()))
     }
 
     @Test

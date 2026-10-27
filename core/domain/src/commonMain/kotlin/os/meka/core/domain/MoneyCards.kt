@@ -62,6 +62,14 @@ data class MoneyCardRow(
     val charge: Boolean, val fields: List<MoneyCardField>, val spoken: String,
 )
 
+/**
+ * Money review (Meka 2026-10-26 22:12, Bills): a card as one row on Bills, "Amex Platinum · Due Fri 30 Oct · in 3 days ·
+ * £640", or "due ? · tap to add" before its due day is in; a tap opens the card's sheet (the lines, Paid and the typed
+ * fields), so no form ever sits open on the page. [lit] when it's due within three days, near its limit, near the end
+ * of 0% or charged a fee; [amount] is the statement, when typed.
+ */
+data class MoneyCardBrief(val id: String, val name: String, val line: String, val lit: Boolean, val amount: String?, val spoken: String)
+
 /** An account he could mark as a card. */
 data class MoneyCardOffer(val id: String, val name: String)
 
@@ -97,6 +105,15 @@ object MoneyCards {
     const val BAD_PROMO = "Type the day 0% ends, e.g. 1 Feb 2027 or 01/02/2027."
     const val NOT_A_CARD = "That account isn't marked as a card."
     const val NO_DUE = "Type the day of the month the payment is due"
+    /** A card row before its due day is in (Money review: "Amex Platinum · due ? · tap to add"). */
+    const val ADD_DETAILS = "Due ? · tap to add"
+    /** A card row with its due day but no statement yet. */
+    const val ADD_STATEMENT = "tap to add the statement"
+    /** Accounts: the one-time setup that used to sit under the cards on Bills. */
+    const val OFFERS_HEAD = "IS ONE OF THESE A CARD?"
+    const val OFFERS_LINE = "Mark it once and its due date, statement and limit show on Bills."
+    /** The card sheet's button that closes it. */
+    const val DONE = "Done"
     /** A reminder this many days before the due date. */
     const val REMIND_DAYS = 3
     const val NOTICE_MIN = 9 * 60
@@ -262,6 +279,23 @@ object MoneyCards {
         val offerLine = if (offers.isEmpty()) null else if (rows.isEmpty()) OFFER_FIRST else OFFER_MORE
         return MoneyCardsView(HEAD, rows, offerLine, offers, FOOT, others, others.takeIf { it.isNotEmpty() }?.let { othersLabel(it.size) })
     }
+
+    /** The card's one row on Bills ([MoneyCardBrief]): due, or paid, or what to add; the statement on the right. */
+    fun brief(c: MoneyCardRow): MoneyCardBrief {
+        val amount = c.fields.firstOrNull { it.key == STATEMENT }?.value?.takeIf { it.isNotEmpty() }
+        val line = when {
+            c.dueLine == NO_DUE -> ADD_DETAILS
+            c.paidLine != null && !c.canPay -> c.paidLine
+            c.statementLine == null -> "${c.dueLine} · $ADD_STATEMENT"
+            else -> c.dueLine
+        }
+        val lit = c.dueLit || c.useLit || c.promoLit || c.feesLine != null
+        val spoken = listOfNotNull(c.name, line, amount?.let { "statement $it" }).joinToString(", ") + ", opens its details"
+        return MoneyCardBrief(c.id, c.name, line, lit, amount, spoken)
+    }
+
+    /** Every card's row on Bills, soonest due first (the view's order). */
+    fun briefs(cv: MoneyCardsView): List<MoneyCardBrief> = cv.rows.map(::brief)
 
     fun markedSaid(name: String): String = "$name is a card · type what its statement says"
     fun unmarkedSaid(name: String): String = "$name is no longer a card here · its transactions stay"
