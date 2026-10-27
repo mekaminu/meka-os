@@ -19,8 +19,9 @@ enum class MoneySection {
     // way, the regular payments (only while the Bills card isn't there to list them: Money review, Meka 2026-10-26 22:12).
     BILLS, PAYDAY, CARDS, REFUNDS, REGULAR,
     // Plan: tips from his numbers (the money check's ideas lead), What if I save… ([MoneySave], the mockup's Plan), the
-    // forecast at his pace, money goals, challenges, paying abroad.
-    TIPS, SAVE, CLEAR, FORECAST, GOALS, CHALLENGES, TRAVEL,
+    // forecast at his pace, money goals, challenges, paying abroad. (Plan's goals card, 2026-10-27: goals follow Clear my
+    // cards, as the mockup.)
+    TIPS, SAVE, CLEAR, GOALS, FORECAST, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
     TRADING,
     // Accounts: his banks, net worth, then the accounts as one clean list (Money review, Meka 2026-10-26 22:12: a tap opens

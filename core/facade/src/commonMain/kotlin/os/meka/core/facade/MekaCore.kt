@@ -1159,7 +1159,7 @@ class MekaCore(
                 // Slice 13c: the side hustle's money in his Business mail, checked against the statements.
                 business = v.business?.let { b -> b.copy(mail = moneyBusinessMail(businessFinds, accounts, txns, rules, bizAccounts, bizMerchants, today)) },
                 goals = if (v.locked || goalList == null) null
-                else os.meka.core.domain.MoneyGoals.view(goalList, accounts, cards.map { it.id }.toSet()),
+                else os.meka.core.domain.MoneyGoals.view(goalList, accounts, cards.map { it.id }.toSet(), today),
             )
         }
         moneyJob = scope.launch(moneyBuilder) {

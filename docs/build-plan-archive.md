@@ -4259,3 +4259,18 @@ never clears), Undo `mclear|<id>` deletes it. Fold `MoneyClearBlocks.MoneyClearC
 Help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyClearTest (10), MoneyCardsTest (APR field),
 MoneyClearScreensTest (Roborazzi money-plan-clear-cover/-unfolded), MekaCoreBridgeTests.testMoneyClearMyCardsOnTheMac.
 No server change, no migration. Mac checked nightly. Not yet: Track it monthly, a tap on a card row opening its sheet.
+
+### Money redesign, Plan slice 3: the goals card (2026-10-27)
+
+GOALS on Plan (mockup `docs/design/money/`) is one card right after Clear my cards (MoneySection.GOALS moved ahead of
+FORECAST). Each open £ goal from Goals is a row: its name, "£240 of £600", a bar in its own money colour (tones in turn) and
+one pace note from `MoneyGoals.note`: what's left over the whole months left, rounded up to the pound ("£180 a month to
+15 Dec"), then "on track" or "£60 behind" against a straight line from its start to its due day (amber); "£400 to go · no
+date yet", "£400 to go · was due 1 Oct", or Reached. A tap opens the goal's sheet (Mac: popover) with where it stands, the
+note, which account it follows and the chips to change that, and the foot; the chips and the foot left the page (layout
+rule (e)). Core MoneyGoals (note, dayMonth, monthsLeft, the row's amount/share/note/behind/tone/followsName, additive
+defaults; view takes today), facade passes today. Fold MoneyGoalBlocks (MoneyGoalsCard, MoneyGoalDetails) in MoneyPane;
+Mac MoneySheet.moneyGoals/goalRow/goalPopover. Help money.md (HelpIndex regenerated), motion catalogue. Tests:
+MoneyGoalsTest, MoneyGoalsScreensTest (Roborazzi money-plan-goals-cover/unfolded, money-plan-goal-sheet-cover),
+MekaCoreBridgeTests.testMoneyGoalsCardOnTheMac. No server change, no migration. Mac checked nightly. Not yet: "See all"
+past five goals (he has fewer), Remind me on payday.

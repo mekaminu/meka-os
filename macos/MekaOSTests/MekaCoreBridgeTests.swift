@@ -4036,4 +4036,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyCards.shared.parseApr(text: "24.9%")?.int32Value, 2_490)
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .clear), MoneyTab.plan)
     }
+    /// Plan's goals card: the pace note's date and months, and GOALS on the Plan tab right after Clear my cards.
+    func testMoneyGoalsCardOnTheMac() {
+        let today = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 27)
+        let due = CivilDate.shared.toEpochDay(year: 2026, month: 12, day: 15)
+        XCTAssertEqual(MoneyGoals.shared.dayMonth(day: due), "15 Dec")
+        XCTAssertEqual(MoneyGoals.shared.monthsLeft(today: today, due: due), 2)
+        XCTAssertEqual(MoneyGoals.shared.HEAD, "GOALS")
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .goals), MoneyTab.plan)
+    }
 }

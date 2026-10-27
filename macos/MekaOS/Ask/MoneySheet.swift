@@ -52,6 +52,8 @@ struct MoneySheet: View {
     @State private var capText = ""
     @State private var tradingText = ""
     @State private var exporting = false
+    /// Plan's goals card: the goal whose popover is open.
+    @State private var goalOpenId: String? = nil
     /// Net worth's typed things (Money review, layout rule (e)): whether their popover is open.
     @State private var worthOtherOpen = false
     /// Slice 18: the year in review opened or folded by him, per year (else January's finished year opens by itself).
@@ -602,57 +604,108 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
     }
 
-    /// Money manager (6): MONEY GOALS — each £ goal from Goals with where it stands (a bar), which account it follows and
-    /// a chip per account (the chosen one in brass; click it again to stop following). Lines cross-fade as they change.
+    /// Money redesign, Plan's goals card (mockup), like the Fold's MoneyGoalsCard: GOALS as one card, each £ goal's name
+    /// and "£240 of £600", a bar in its own colour and its pace note (amber when behind). A click opens the goal's
+    /// popover, where it can follow an account's balance (the chips were open on the page before). The bar glides and
+    /// the lines cross-fade (snap with Reduce Motion).
     private func moneyGoals(_ gv: MoneyGoalsView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(gv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
-            if let e = gv.empty {
-                Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
-            }
-            ForEach(gv.rows, id: \.id) { r in
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(r.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                        Text(r.line).font(MekaType.body).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(palette.surfaceRaised)
-                                Capsule().fill(palette.accent).frame(width: geo.size.width * CGFloat(min(max(Int(r.pct), 0), 100)) / 100)
-                            }
-                        }
-                        .frame(height: 4)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: r.pct)
-                        Text(r.follows ?? "Follow an account's balance:").font(MekaType.caption)
-                            .foregroundStyle(r.follows != nil ? palette.accent : palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .contentTransition(.opacity)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(r.spoken)
-                    ScrollView(.horizontal) {
-                        HStack(spacing: MekaSpace.xs) {
-                            ForEach(r.choices, id: \.accountId) { c in
-                                Button {
-                                    let gid = r.id
-                                    let aid: String? = c.picked ? nil : c.accountId
-                                    Task { said = await model.moneyGoalFollow(goalId: gid, accountId: aid) }
-                                } label: {
-                                    Text(c.name + (c.picked ? " ✓" : "")).font(MekaType.caption)
-                                        .foregroundStyle(c.picked ? palette.accent : palette.textSecondary)
-                                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                                        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                                }
-                                .buttonStyle(MekaPressStyle())
-                                .accessibilityLabel(c.picked ? "Stop following \(c.name)" : "Follow \(c.name)")
-                            }
-                        }
-                    }
-                    .scrollIndicators(.never)
+            VStack(alignment: .leading, spacing: MekaSpace.m) {
+                if gv.rows.isEmpty {
+                    Text(gv.empty ?? MoneyGoals.shared.EMPTY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: r.follows)
+                ForEach(gv.rows, id: \.id) { r in goalRow(r) }
             }
-            Text(gv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            .padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.l))
+        }
+    }
+
+    private func goalRow(_ r: MoneyGoalRow) -> some View {
+        let id = r.id
+        return Button {
+            MekaHaptics.tick()
+            said = nil
+            goalOpenId = id
+        } label: {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Spacer()
+                    Text(r.amount).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                    Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(palette.surfaceRaised)
+                        Capsule().fill(palette.moneyTone(r.tone)).frame(width: geo.size.width * CGFloat(min(max(r.share, 0), 1)))
+                    }
+                }
+                .frame(height: 6)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: r.share)
+                Text(r.note).font(MekaType.caption).foregroundStyle(r.behind ? palette.money3 : palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(r.spoken)
+        .popover(isPresented: Binding(get: { goalOpenId == id }, set: { if !$0 && goalOpenId == id { goalOpenId = nil } }), arrowEdge: .trailing) {
+            goalPopover(id)
+        }
+    }
+
+    /// A goal's popover: where it stands and its pace, then a chip per account to follow (the chosen one in brass; click
+    /// it again to stop) and the foot. Found again in each view; it closes when the goal goes.
+    @ViewBuilder
+    private func goalPopover(_ id: String) -> some View {
+        if let gv = model.money?.goals, let r = gv.rows.first(where: { $0.id == id }) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(r.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
+                Text(r.line).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                Text(r.note).font(MekaType.caption).foregroundStyle(r.behind ? palette.money3 : palette.textSecondary)
+                Text(MoneyGoals.shared.FOLLOW).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                Text(r.follows ?? MoneyGoals.shared.NOT_FOLLOWING).font(MekaType.caption)
+                    .foregroundStyle(r.follows != nil ? palette.accent : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                if r.choices.isEmpty {
+                    Text(MoneyGoals.shared.NO_ACCOUNTS).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ScrollView(.horizontal) {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(r.choices, id: \.accountId) { c in
+                            Button {
+                                let aid: String? = c.picked ? nil : c.accountId
+                                MekaHaptics.tick()
+                                Task { said = await model.moneyGoalFollow(goalId: id, accountId: aid) }
+                            } label: {
+                                Text(c.name + (c.picked ? " ✓" : "")).font(MekaType.caption)
+                                    .foregroundStyle(c.picked ? palette.accent : palette.textSecondary)
+                                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                    .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityLabel(c.picked ? "Stop following \(c.name)" : "Follow \(c.name)")
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+                Text(gv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+                if let s = said { saidLine(s) }
+                HStack {
+                    Spacer()
+                    Button(MoneyGoals.shared.DONE) { goalOpenId = nil }.keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 360)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: r.follows)
         }
     }
 
