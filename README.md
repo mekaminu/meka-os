@@ -236,6 +236,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/money/cover-dark-own-category.png](docs/screens/fold/money/cover-dark-own-category.png)
 - [fold/money/cover-dark-payment-sheet.png](docs/screens/fold/money/cover-dark-payment-sheet.png)
 - [fold/money/cover-dark-plan.png](docs/screens/fold/money/cover-dark-plan.png)
+- [fold/money/cover-dark-sorter.png](docs/screens/fold/money/cover-dark-sorter.png)
 - [fold/money/cover-dark-trading.png](docs/screens/fold/money/cover-dark-trading.png)
 - [fold/money/cover-light-many.png](docs/screens/fold/money/cover-light-many.png)
 - [fold/money/cover-light-payment-sheet.png](docs/screens/fold/money/cover-light-payment-sheet.png)
