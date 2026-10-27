@@ -4238,3 +4238,24 @@ so dragging never rebuilds the money view. Fold `MoneySaveBlocks.MoneySaveCard`;
 Help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneySaveTest, MoneySaveScreensTest (Roborazzi
 money-plan-save-cover), MekaCoreBridgeTests.testMoneySaveOnTheMac. No server change, no migration. Not yet: Remind me on
 payday, Clear my cards, the goals card, Obi's money check.
+
+### Money redesign, Plan slice 2: Clear my cards (2026-10-27)
+
+Mockup `docs/design/money/` (Plan, approved 2026-10-25). Core `MoneyClear` (pure): the credit cards that owe something
+(statement, else the account's balance as owed, as net worth counts it; charge cards left out), biggest first; each
+card's rate is the APR typed in its sheet, else worked out from its latest interest line within two months over what it
+owes × 12 ("about", kept between 1% and 60%), else unknown (counted as 0%, row lit "APR ? · tap it on Bills to add",
+Obi asks for it); a 0% period counts no interest through its month. `run` each month: interest, every card's minimum
+(2.5%, at least £25, as the mockup), the rest to one card at a time (Highest interest first, or Smallest balance first);
+capped at 600 months ("Not at this pace", lit). `view`: rows ("24.9% APR · clear by Mar 2027", owed), "Pay each month,
+both cards", the slider (from the minimums rounded up to £25, to a sixth of the total within £1,500–£5,000; starts at a
+twelfth), the order chips (two or more cards), Debt-free and Interest tiles, "Paying only the minimums: …", Obi's line
+(which order costs less, whether it fits the average month, the missing APR, a balance transfer when interest ≥ £100),
+Use this plan's goal title. `MoneyCardFields.APR` (`cardAprBp`, additive LWW, ADR-008 addendum), `MoneyCard.aprBp`,
+`MoneyCards.APR` field in a credit card's sheet (`parseApr`, `aprText`, `BAD_APR`), `Money.setCardField` APR branch
+(Undo through the card snapshot). `MoneyView.clear: MoneyClearBase?` (this month), `MoneySection.CLEAR` on Plan after
+SAVE. Facade `moneyClearGoal(payPence, order)` → "Clear my cards by …" in Goals due the month's last day (refused when it
+never clears), Undo `mclear|<id>` deletes it. Fold `MoneyClearBlocks.MoneyClearCard`; Mac `MoneyClearViews.MoneyClearCardView`.
+Help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyClearTest (10), MoneyCardsTest (APR field),
+MoneyClearScreensTest (Roborazzi money-plan-clear-cover/-unfolded), MekaCoreBridgeTests.testMoneyClearMyCardsOnTheMac.
+No server change, no migration. Mac checked nightly. Not yet: Track it monthly, a tap on a card row opening its sheet.

@@ -939,8 +939,8 @@ class MekaCore(
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
         if (!moneyOpen) return@onCore false
         if (token.startsWith(os.meka.core.domain.TradingTracker.UNDO)) return@onCore trading.undo(token).also { refreshMoney() }
-        if (token.startsWith(moneySaveGoalUndoPrefix)) {
-            val gid = token.removePrefix(moneySaveGoalUndoPrefix)
+        if (token.startsWith(moneySaveGoalUndoPrefix) || token.startsWith(moneyClearGoalUndoPrefix)) {
+            val gid = token.removePrefix(moneySaveGoalUndoPrefix).removePrefix(moneyClearGoalUndoPrefix)
             if (!goals.goalExists(gid)) return@onCore false
             if (runCatching { goals.deleteGoal(gid) }.isFailure) return@onCore false
             refresh()
@@ -1245,6 +1245,27 @@ class MekaCore(
         refreshMoney()
         refresh()
         os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneySave.goalSaid(v.goalTitle), undo = moneySaveGoalUndoPrefix + id)
+    }
+
+    private val moneyClearGoalUndoPrefix = "mclear|"
+
+    /**
+     * Plan's Clear my cards → Use this plan: "Clear my cards by Mar 2027" in Goals, due the last day of the month the cards
+     * clear at [payPence] a month in [order] ([os.meka.core.domain.MoneyClear]), worked out from the money view's base.
+     * Refused when they don't clear at that amount. Undo (by [undoMoneyCategory]) deletes it. Only while Money is open.
+     */
+    suspend fun moneyClearGoal(payPence: Long, order: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val base = _money.value.clear ?: return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        val v = os.meka.core.domain.MoneyClear.view(payPence, order, base)
+        val title = v.goalTitle ?: return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyClear.NOT_AT_PACE, refused = true)
+        val due = os.meka.core.domain.MoneyClear.goalDueDay(payPence, order, base)
+            ?: return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyClear.NOT_AT_PACE, refused = true)
+        val today = os.meka.core.domain.CivilDate.toEpochDay(base.thisMonth / 12, base.thisMonth % 12 + 1, 1)
+        val id = goals.addGoal(title, null, os.meka.core.domain.MoneyClear.horizon(due, today), dueDay = due)
+        refreshMoney()
+        refresh()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyClear.goalSaid(title), undo = moneyClearGoalUndoPrefix + id)
     }
 
     suspend fun moneyGoalFollow(goalId: String, accountId: String?): os.meka.core.domain.MoneySaved = onCore {

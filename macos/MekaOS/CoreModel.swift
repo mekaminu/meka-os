@@ -4956,6 +4956,17 @@ final class CoreModel {
         }
     }
 
+    /// Plan's Clear my cards → Use this plan: "Clear my cards by …" in Goals, Undo deletes it (MoneyClear in the core).
+    func moneyClearGoal(payPence: Int64, order: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyClearGoal(payPence: payPence, order: order))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func moneyGoalFollow(goalId: String, accountId: String?) async -> MoneySaid? {
         guard let core else { return nil }
         do {

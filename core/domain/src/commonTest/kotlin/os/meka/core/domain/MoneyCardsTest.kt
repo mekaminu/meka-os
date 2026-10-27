@@ -34,7 +34,7 @@ class MoneyCardsTest {
         assertTrue(r.promoLit)
         assertNull(r.feesLine)
         assertEquals(MoneyCards.FIELDS, r.fields.map { it.key })
-        assertEquals(listOf("£640", "£25", "19th", "£2,000", "5 Nov 2026"), r.fields.map { it.value })
+        assertEquals(listOf("£640", "£25", "19th", "£2,000", "5 Nov 2026", ""), r.fields.map { it.value })
         assertTrue(r.spoken.startsWith("Credit card, Credit card, Due Mon 19 Oct"))
     }
 

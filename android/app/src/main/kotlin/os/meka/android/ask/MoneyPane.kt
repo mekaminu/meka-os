@@ -101,6 +101,7 @@ import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneyOwnCategories
 import os.meka.core.domain.MoneyAccountList
 import os.meka.core.domain.MoneySave
+import os.meka.core.domain.MoneyClear
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneySheetMark
@@ -614,6 +615,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     MoneySaveCard(b, Modifier.animateItem().appear(rememberAppearance(4)), onTick = { haptics.tick() }) { amount, months, rate ->
                         haptics.light()
                         scope.launch { runCatching { core.moneySaveGoal(amount, months, rate) }.getOrNull()?.let(say) }
+                    }
+                }
+            }
+            // Money redesign, Plan (mockup): Clear my cards — one amount a month across his cards, worked out here as he slides.
+            v.clear?.takeIf { has(MoneySection.CLEAR) }?.let { b ->
+                item(key = "clear-head") {
+                    Text(MoneyClear.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "clear") {
+                    MoneyClearCard(b, Modifier.animateItem().appear(rememberAppearance(5)), onTick = { haptics.tick() }) { pay, order ->
+                        scope.launch { runCatching { core.moneyClearGoal(pay, order) }.getOrNull()?.let(say) }
                     }
                 }
             }

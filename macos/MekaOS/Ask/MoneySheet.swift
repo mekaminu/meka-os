@@ -286,6 +286,14 @@ struct MoneySheet: View {
                 }
                 .transition(.opacity)
             }
+            // Money redesign, Plan (mockup): Clear my cards — one amount a month across his cards, worked out here as he slides.
+            if let b = v.clear, has(.clear, v) {
+                Text(MoneyClear.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                MoneyClearCardView(base: b, palette: palette, reduced: reduceMotion) { pay, order in
+                    Task { said = await model.moneyClearGoal(payPence: pay, order: order) }
+                }
+                .transition(.opacity)
+            }
             if let r = v.regular, has(.regular, v) {
                 Text("REGULAR PAYMENTS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)

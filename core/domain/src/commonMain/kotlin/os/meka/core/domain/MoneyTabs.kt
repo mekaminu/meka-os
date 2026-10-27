@@ -20,7 +20,7 @@ enum class MoneySection {
     BILLS, PAYDAY, CARDS, REFUNDS, REGULAR,
     // Plan: tips from his numbers (the money check's ideas lead), What if I save… ([MoneySave], the mockup's Plan), the
     // forecast at his pace, money goals, challenges, paying abroad.
-    TIPS, SAVE, FORECAST, GOALS, CHALLENGES, TRAVEL,
+    TIPS, SAVE, CLEAR, FORECAST, GOALS, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
     TRADING,
     // Accounts: his banks, net worth, then the accounts as one clean list (Money review, Meka 2026-10-26 22:12: a tap opens
@@ -48,7 +48,7 @@ object MoneyTabs {
         MoneySection.MONTH, MoneySection.TRAVEL_BANNER, MoneySection.REVIEW, MoneySection.ALERTS,
         MoneySection.CATEGORIES, MoneySection.UNSORTED, MoneySection.PAYMENTS -> MoneyTab.SPENDING
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
-        MoneySection.TIPS, MoneySection.SAVE, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
+        MoneySection.TIPS, MoneySection.SAVE, MoneySection.CLEAR, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
         MoneySection.BANK, MoneySection.WORTH, MoneySection.ACCOUNTS, MoneySection.YEAR,
         MoneySection.OWN_CATEGORIES, MoneySection.MORE, MoneySection.FOOT -> MoneyTab.ACCOUNTS
@@ -63,6 +63,7 @@ object MoneyTabs {
         MoneySection.YEAR -> v.month != null && v.year != null
         MoneySection.TIPS -> v.month != null && (v.tips.isNotEmpty() || v.hiddenTips != null)
         MoneySection.SAVE -> v.month != null && v.save != null
+        MoneySection.CLEAR -> v.month != null && v.clear != null
         MoneySection.CATEGORIES -> v.month?.categories?.isNotEmpty() == true
         MoneySection.UNSORTED -> v.month?.unsorted != null
         MoneySection.PAYMENTS -> v.month?.txns?.isNotEmpty() == true

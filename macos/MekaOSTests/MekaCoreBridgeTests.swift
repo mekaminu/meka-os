@@ -4019,4 +4019,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneySave.shared.snap(pence: 31_000), 30_000)
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .save), MoneyTab.plan)
     }
+    /// Plan's Clear my cards: the two orders, the dates and Obi's line cross the bridge; the Plan tab shows it.
+    func testMoneyClearMyCardsOnTheMac() {
+        let cards = [
+            MoneyClearCard(id: "a", name: "Card ••09", owedPence: 420_000, aprBp: KotlinInt(value: 2_490), estimated: false, promoEndMonth: nil),
+            MoneyClearCard(id: "b", name: "Card ••01", owedPence: 180_000, aprBp: KotlinInt(value: 2_290), estimated: false, promoEndMonth: nil),
+        ]
+        let base = MoneyClearBase(cards: cards, leftPence: KotlinLong(value: 95_000), thisMonth: 2026 * 12 + 9, minPence: 15_000, maxPence: 150_000, startPence: 50_000)
+        let v = MoneyClear.shared.view(payPence: 60_000, order: MoneyClear.shared.BY_RATE, base: base)
+        XCTAssertEqual(v.pay, "£600")
+        XCTAssertEqual(v.payLabel, "Pay each month, both cards")
+        XCTAssertEqual(v.orders.count, 2)
+        XCTAssertTrue(v.obi.hasPrefix("Clearing Card ••09 first saves about"))
+        XCTAssertNotNil(v.goalTitle)
+        XCTAssertEqual(MoneyClear.shared.snap(pence: 61_000, base: base), 60_000)
+        XCTAssertEqual(MoneyCards.shared.parseApr(text: "24.9%")?.int32Value, 2_490)
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .clear), MoneyTab.plan)
+    }
 }

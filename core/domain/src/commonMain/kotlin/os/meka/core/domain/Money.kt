@@ -490,6 +490,8 @@ data class MoneyView(
     val ownRows: List<MoneyOwnRow> = emptyList(),
     /** Plan's What if I save… ([MoneySave]): what the apps need to work it out on the device; this month only. */
     val save: MoneySaveBase? = null,
+    /** Plan's Clear my cards ([MoneyClear]): his credit cards that owe something, for the apps to work it out; this month only. */
+    val clear: MoneyClearBase? = null,
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -803,6 +805,7 @@ object MoneyRules {
                 cur.filter { cat(it).spend }.map { t -> MoneyNeedLine(ownOf(t)?.name ?: cat(t).label, -t.pence, isNeed(t)) }, spent,
             ),
         )
+        val cardLines = if (partial) mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) } else emptyList()
         val forecastView = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null
         return MoneyView(
             false, summary, null, month.copy(spending = spending), accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
@@ -815,8 +818,10 @@ object MoneyRules {
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
             payday = paydayView,
             bills = billsView,
-            cards = if (partial) MoneyCards.view(
-                cards.filter { it.id in names }, counted, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
+            cards = if (partial) MoneyCards.view(cards.filter { it.id in names }, counted, cardLines, today) else null,
+            clear = if (partial) MoneyClear.base(
+                cards.filter { it.id in names }, counted.mapNotNull { a -> a.balance?.let { a.id to it.pence } }.toMap(), cardLines,
+                forecastView?.takeIf { it.notReady == null }?.leftPence, today,
             ) else null,
             worth = if (partial) worth else null,
             bank = bank,
@@ -942,6 +947,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             limitPence = e[MoneyCardFields.LIMIT].longOrNull, statementPence = e[MoneyCardFields.STATEMENT].longOrNull,
             minPence = e[MoneyCardFields.MINIMUM].longOrNull, dueDayOfMonth = e[MoneyCardFields.DUE].longOrNull?.toInt()?.takeIf { it in 1..31 },
             promoEndDay = e[MoneyCardFields.PROMO_END].longOrNull, paidFor = e[MoneyCardFields.PAID_FOR].longOrNull,
+            aprBp = e[MoneyCardFields.APR].longOrNull?.toInt()?.takeIf { it in 1..9_999 },
         )
     }
 
@@ -987,6 +993,10 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             MoneyCards.PROMO -> {
                 val d = if (blank) null else MoneyCards.parsePromo(text, today) ?: return MoneySaved(MoneyCards.BAD_PROMO, refused = true)
                 Triple(MoneyCardFields.PROMO_END, d?.fv() ?: FieldValue.Null, d?.let { MoneyRules.dayMonth(it) })
+            }
+            MoneyCards.APR -> {
+                val bp = if (blank) null else MoneyCards.parseApr(text) ?: return MoneySaved(MoneyCards.BAD_APR, refused = true)
+                Triple(MoneyCardFields.APR, bp?.toLong()?.fv() ?: FieldValue.Null, bp?.let(MoneyCards::aprText))
             }
             else -> return MoneySaved(MoneyRules.GONE, refused = true)
         }

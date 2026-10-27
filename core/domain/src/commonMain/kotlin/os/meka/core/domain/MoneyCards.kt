@@ -33,8 +33,10 @@ object MoneyCardFields {
     const val PROMO_END = "cardPromoEndDay"
     /** The epoch day of the due date he marked Paid. */
     const val PAID_FOR = "cardPaidFor"
+    /** Plan's Clear my cards: the card's APR (purchase rate) in hundredths of a percent, as he typed it ("24.9%" → 2490). */
+    const val APR = "cardAprBp"
 
-    val ALL = listOf(KIND, LIMIT, STATEMENT, MINIMUM, DUE, PROMO_END, PAID_FOR)
+    val ALL = listOf(KIND, LIMIT, STATEMENT, MINIMUM, DUE, PROMO_END, PAID_FOR, APR)
 }
 
 /** One card as stored: its account [id] and [name], [kind] and what he typed (null where he hasn't). */
@@ -42,6 +44,8 @@ data class MoneyCard(
     val id: String, val name: String, val kind: String,
     val limitPence: Long? = null, val statementPence: Long? = null, val minPence: Long? = null,
     val dueDayOfMonth: Int? = null, val promoEndDay: Long? = null, val paidFor: Long? = null,
+    /** Clear my cards: the APR he typed, in hundredths of a percent. */
+    val aprBp: Int? = null,
 ) {
     val charge: Boolean get() = kind == MoneyCards.CHARGE
 }
@@ -103,6 +107,7 @@ object MoneyCards {
     const val BAD_AMOUNT = "Type an amount, e.g. £640 or £25.50."
     const val BAD_DUE = "Type the day of the month it's due, e.g. 23 or 23rd."
     const val BAD_PROMO = "Type the day 0% ends, e.g. 1 Feb 2027 or 01/02/2027."
+    const val BAD_APR = "Type the card's APR, e.g. 24.9%."
     const val NOT_A_CARD = "That account isn't marked as a card."
     const val NO_DUE = "Type the day of the month the payment is due"
     /** A card row before its due day is in (Money review: "Amex Platinum · due ? · tap to add"). */
@@ -128,7 +133,8 @@ object MoneyCards {
     const val MINIMUM = "minimum"
     const val DUE = "due"
     const val PROMO = "promo"
-    val FIELDS = listOf(STATEMENT, MINIMUM, DUE, LIMIT, PROMO)
+    const val APR = "apr"
+    val FIELDS = listOf(STATEMENT, MINIMUM, DUE, LIMIT, PROMO, APR)
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 
@@ -149,6 +155,18 @@ object MoneyCards {
         val a = kotlin.math.abs(p)
         return if (a > MAX_PENCE) null else a
     }
+
+    /** "24.9%", "24.9", "24.9% APR", "APR 22%": hundredths of a percent (0.1%–99.9%), or null. */
+    fun parseApr(text: String): Int? {
+        val t = text.replace(Regex("apr", RegexOption.IGNORE_CASE), " ").trim()
+        val m = Regex("""^(\d{1,2}(?:[.,]\d{1,2})?)\s*%?$""").find(t) ?: return null
+        val v = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: return null
+        val bp = (v * 100).roundToInt()
+        return bp.takeIf { it in 10..9_990 }
+    }
+
+    /** "24.9%", "22%" from hundredths of a percent. */
+    fun aprText(bp: Int): String = if (bp % 100 == 0) "${bp / 100}%" else "${bp / 100}.${(bp % 100).toString().padStart(2, '0').trimEnd('0')}%"
 
     /** "23", "23rd", "the 23rd", "23 each month": 1–31, or null. */
     fun parseDue(text: String): Int? {
@@ -210,6 +228,8 @@ object MoneyCards {
         MoneyCardField(DUE, "Due on the", "Due on the… e.g. 23rd", c.dueDayOfMonth?.let { ordinal(it) }.orEmpty()),
         MoneyCardField(LIMIT, "Credit limit", if (c.charge) "Spending limit, if it has one" else "Credit limit, e.g. £2,000", c.limitPence?.let(::fmt).orEmpty()),
         MoneyCardField(PROMO, "0% ends", "0% ends, e.g. 1 Feb 2027 (if it has one)", c.promoEndDay?.let { MoneyRules.dayMonth(it) }.orEmpty()),
+    ) + if (c.charge) emptyList() else listOf(
+        MoneyCardField(APR, "APR", "APR, e.g. 24.9% (for Clear my cards on Plan)", c.aprBp?.let(::aprText).orEmpty()),
     )
 
     fun ordinal(n: Int): String = "$n" + when {
@@ -308,6 +328,7 @@ object MoneyCards {
             MINIMUM -> "minimum payment"
             DUE -> "due day"
             LIMIT -> "limit"
+            APR -> "APR"
             else -> "0% end"
         }
         return if (value == null) "$name's $label cleared" else "$name's $label is $value"
