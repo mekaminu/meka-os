@@ -151,6 +151,27 @@ struct StudySheet: View {
     @State private var tapFinish: Int64?
     @State private var tapSession: Int32?
     @State private var tapSlots: [String: Bool] = [:]
+    /// Study fixes: the lesson or module being renamed (and the typed name), the module "+ Add lesson" is open on, the new
+    /// module's fields, what a Delete is asking about, and Recently deleted unfolded.
+    @State private var renameId: String?
+    @State private var renameModule: String?
+    @State private var renameText = ""
+    @State private var addInto: String?
+    @State private var addText = ""
+    @State private var addingModule = false
+    @State private var moduleName = ""
+    @State private var moduleLessons = ""
+    @State private var asking: StudyAsk?
+    @State private var showDeleted = false
+
+    /// What a Delete confirm is about: a lesson (its id), a module (its name) or the course; [question] is the core's line.
+    struct StudyAsk: Identifiable, Equatable {
+        enum Kind { case lesson, module, course }
+        let kind: Kind
+        let key: String
+        let question: String
+        var id: String { "\(kind)-\(key)" }
+    }
 
     var body: some View {
         let c = model.study?.course(id: courseId)
@@ -272,18 +293,18 @@ struct StudySheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, MekaSpace.xs)
                 }
+                let names = c.modules.map { $0.name }
                 ForEach(c.modules, id: \.key) { m in
-                    module(m, open: opened[m.key] ?? (m.key == firstOpen))
+                    module(m, open: opened[m.key] ?? (m.key == firstOpen), names: names)
                 }
-                Text(StudyRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                addModuleRow
+                if !c.deleted.isEmpty { deletedSection(c.deleted) }
+                Text(StudyRules.shared.NOTE + " Right-click a lesson or a module to rename, move or delete it.")
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, MekaSpace.m)
                 Button("Remove course") {
-                    Task {
-                        if let u = await model.removeStudyCourse(courseId) {
-                            onRemoved(u)
-                            onClose()
-                        }
-                    }
+                    asking = StudyAsk(kind: .course, key: courseId, question: StudyRules.shared.confirmRemoveCourse(title: c.title, n: Int32(c.total)))
                 }
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.itemMeta)
@@ -292,8 +313,105 @@ struct StudySheet: View {
             }
             .animation(MekaMotion.expand(reduced: reduceMotion), value: pending)
             .animation(MekaMotion.expand(reduced: reduceMotion), value: opened)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: renameId)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: addInto)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: showDeleted)
         }
         .frame(maxHeight: 420)
+        .confirmationDialog(asking?.question ?? "", isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { a in
+            Button(a.kind == .course ? "Remove" : StudyRules.shared.DELETE, role: .destructive) { confirm(a) }
+            Button(StudyRules.shared.CANCEL, role: .cancel) { asking = nil }
+        }
+    }
+
+    /// The confirm said yes: only now is anything deleted (with Undo, and Recently deleted for lessons).
+    private func confirm(_ a: StudyAsk) {
+        asking = nil
+        let key = a.key
+        let course = courseId
+        Task {
+            switch a.kind {
+            case .lesson: if let u = await model.removeStudyLesson(key) { removed = u }
+            case .module: if let u = await model.removeStudyModule(course, module: key) { removed = u }
+            case .course:
+                if let u = await model.removeStudyCourse(course) {
+                    onRemoved(u)
+                    onClose()
+                }
+            }
+        }
+    }
+
+    /// "+ Add module": its name, then its first lessons (one a line).
+    @ViewBuilder
+    private var addModuleRow: some View {
+        Button(StudyRules.shared.ADD_MODULE) { addingModule.toggle() }
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(palette.accent)
+            .padding(.top, MekaSpace.xs)
+            .accessibilityLabel("Add a module")
+        if addingModule {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                TextField(StudyRules.shared.ADD_MODULE_HINT, text: $moduleName).textFieldStyle(.roundedBorder)
+                TextField(StudyRules.shared.ADD_MODULE_LESSONS_HINT, text: $moduleLessons, axis: .vertical)
+                    .lineLimit(1...6)
+                    .textFieldStyle(.roundedBorder)
+                Button("Add module") {
+                    let name = moduleName
+                    let text = moduleLessons
+                    let course = courseId
+                    Task {
+                        let r = await model.addStudyModule(course, name: name, text)
+                        said = r
+                        if let r, !r.refused { moduleName = ""; moduleLessons = ""; addingModule = false }
+                    }
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.captionStrong)
+                .foregroundStyle(palette.accent)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    /// Recently deleted, folded: each lesson with "From <module>" and Restore.
+    @ViewBuilder
+    private func deletedSection(_ rows: [StudyDeletedRow]) -> some View {
+        Button {
+            MekaHaptics.tick()
+            showDeleted.toggle()
+        } label: {
+            HStack {
+                Text("\(StudyRules.shared.RECENT_LABEL) · \(rows.count)").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Spacer()
+                Image(systemName: "chevron.down").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .rotationEffect(.degrees(showDeleted ? 180 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .padding(.top, MekaSpace.m)
+        .accessibilityLabel("\(StudyRules.shared.RECENT_LABEL), \(rows.count)")
+        if showDeleted {
+            ForEach(rows, id: \.id) { d in
+                HStack(spacing: MekaSpace.xs) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(d.title).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                        Text(d.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                    Spacer()
+                    let id = d.id
+                    Button(StudyRules.shared.RESTORE) { model.restoreStudyLesson(id) }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.captionStrong)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel("Restore \(d.title)")
+                }
+                .padding(.leading, MekaSpace.m)
+                .transition(.opacity)
+            }
+        }
     }
 
     /// YOUR PLAN (slice 2a), like the Fold's: FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips, then sessions a
@@ -385,7 +503,7 @@ struct StudySheet: View {
     }
 
     @ViewBuilder
-    private func module(_ m: StudyModule, open: Bool) -> some View {
+    private func module(_ m: StudyModule, open: Bool, names: [String]) -> some View {
         let done = m.lessons.filter { isDone($0) }.count
         let count = StudyRules.shared.moduleCount(done: Int32(done), total: Int32(m.lessons.count))
         let allDone = done == m.lessons.count
@@ -408,15 +526,76 @@ struct StudySheet: View {
         .buttonStyle(MekaPressStyle())
         .padding(.top, MekaSpace.xs)
         .accessibilityLabel("\(m.name), \(count)")
+        .contextMenu {
+            let name = m.name
+            let n = m.lessons.count
+            Button("\(StudyRules.shared.RENAME)…") { renameText = name; renameId = nil; renameModule = name }
+            Divider()
+            Button("\(StudyRules.shared.DELETE_MODULE)…") {
+                asking = StudyAsk(kind: .module, key: name, question: StudyRules.shared.confirmDeleteModule(name: name, n: Int32(n)))
+            }
+        }
+        if renameModule == m.name {
+            renameField("Rename \(m.name)") { text in
+                let name = m.name
+                model.renameStudyModule(courseId, module: name, text)
+            }
+        }
         if open {
             ForEach(m.lessons, id: \.id) { l in
-                lesson(l)
+                lesson(l, module: m.name, names: names)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                if renameId == l.id {
+                    renameField("Rename \(l.title)") { text in
+                        let id = l.id
+                        model.renameStudyLesson(id, text)
+                    }
+                }
+            }
+            if addInto == m.name {
+                TextField(StudyRules.shared.ADD_LESSON_HINT, text: $addText, axis: .vertical)
+                    .lineLimit(1...6)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.leading, MekaSpace.m)
+                    .accessibilityLabel("Add lessons to \(m.name)")
+                    .onSubmit {
+                        let text = addText
+                        let name = m.name
+                        let course = courseId
+                        Task {
+                            let r = await model.addStudyLessonsTo(course, module: name, text)
+                            said = r
+                            if let r, !r.refused { addText = ""; addInto = nil }
+                        }
+                    }
+            } else {
+                Button(StudyRules.shared.ADD_LESSON) { addText = ""; addInto = m.name }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .padding(.leading, MekaSpace.m)
+                    .accessibilityLabel("Add a lesson to \(m.name)")
             }
         }
     }
 
-    private func lesson(_ l: StudyLessonRow) -> some View {
+    /// A field starting from the name; Return renames, Escape leaves it.
+    private func renameField(_ label: String, _ done: @escaping (String) -> Void) -> some View {
+        TextField(label, text: $renameText)
+            .textFieldStyle(.roundedBorder)
+            .padding(.leading, MekaSpace.m)
+            .accessibilityLabel(label)
+            .onSubmit {
+                let text = renameText
+                renameId = nil
+                renameModule = nil
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { done(text) }
+            }
+            .onExitCommand { renameId = nil; renameModule = nil }
+            .transition(.opacity)
+    }
+
+    private func lesson(_ l: StudyLessonRow, module: String, names: [String]) -> some View {
         let done = isDone(l)
         let id = l.id
         return Button {
@@ -444,8 +623,22 @@ struct StudySheet: View {
         .accessibilityLabel(l.title)
         .accessibilityValue(done ? "Done" : "Not done")
         .contextMenu {
-            Button("Remove") {
-                Task { if let u = await model.removeStudyLesson(id) { removed = u } }
+            let title = l.title
+            Button("\(StudyRules.shared.RENAME)…") { renameText = title; renameModule = nil; renameId = id }
+            if names.count > 1 {
+                Menu(StudyRules.shared.MOVE_LABEL) {
+                    ForEach(names.filter { $0 != module }, id: \.self) { name in
+                        Button(name) { model.moveStudyLesson(id, module: name) }
+                    }
+                }
+            }
+            Button(done ? StudyRules.shared.MARK_UNDONE : StudyRules.shared.MARK_DONE) {
+                pending[id] = !done
+                Task { if !(await model.tickStudyLesson(id, done: !done)) { pending[id] = nil } }
+            }
+            Divider()
+            Button("\(StudyRules.shared.DELETE)…") {
+                asking = StudyAsk(kind: .lesson, key: id, question: StudyRules.shared.confirmDelete(title: title))
             }
         }
     }

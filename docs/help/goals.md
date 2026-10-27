@@ -1,7 +1,7 @@
 ---
 id: goals
 title: Goals and habits
-keywords: goals, goals and habits, study, study plan, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
+keywords: goals, goals and habits, study, study plan, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
 data: yes
 fold: GOALS
 fold_where: Ask → Life → Goals and habits
@@ -18,4 +18,6 @@ tip: Money challenges you set in Money (no-spend days, fun money, a category cap
 tip: A reading goal set in Reading ("12 books this year") shows under READING GOAL with how many you've finished and your pace; tap it to open Reading.
 tip: Under STUDY, add a course you're working through, open it and paste its outline: one lesson a line, a line like "Module 2: Core skills" starts a module, and "45 min" at the end says how long a lesson takes. Navilife splits it into modules and lessons; nothing leaves your data.
 tip: In a course, YOUR PLAN asks when you want to finish, how long a session is and when you can study (train mornings, Thursday after work, Saturday morning, evenings, nights). It works out how many sessions a week that takes, whether it fits the times you picked (and what would make it fit), and shows under the course's name whether you're on track or how many lessons behind.
-tip: Tick a lesson when you've done it: the ring and "5 of 24 lessons · about 18 h left" move at once, on the Fold and the Mac, and a module reads Done once all its lessons are ticked. Press and hold a lesson (right-click on the Mac) to remove it, with Undo.
+tip: Tick a lesson when you've done it: the ring and "5 of 24 lessons · about 18 h left" move at once, on the Fold and the Mac, and a module reads Done once all its lessons are ticked.
+tip: Press and hold a lesson (right-click on the Mac) to rename it, move it to another module, mark it done or delete it; Delete always asks first, and Undo or Recently deleted under the course brings it back for 30 days.
+tip: Press and hold a module's heading to rename or delete it. "+ Add lesson" at the foot of an open module adds into that module (one, or paste several lines); "+ Add module" adds a module with its first lessons.

@@ -145,6 +145,75 @@ class StudyTest {
         assertEquals(2, sFold.view(0L).course(id)!!.total)
     }
 
+    // ---- Study fixes (Meka 2026-10-26 23:21) ----
+
+    @Test
+    fun aLessonIsRenamedAndMovedToAnotherModuleOnBothDevices() {
+        val id = sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome\nSetup\nModule 2: Core skills\nPivot tables").courseId!!
+        val setup = sFold.view(0L).course(id)!!.modules[0].lessons[1]
+        assertTrue(sFold.renameLesson(setup.id, "  setting up excel "))
+        assertFalse(sFold.renameLesson(setup.id, "Setting up excel"))
+        assertFalse(sFold.renameLesson(setup.id, " - "))
+        assertTrue(sFold.moveLesson(setup.id, "2 · Core skills"))
+        assertFalse(sFold.moveLesson(setup.id, "2 · core skills"))
+        sync()
+        val v = sMac.view(0L).course(id)!!
+        assertEquals(listOf("Welcome"), v.modules[0].lessons.map { it.title })
+        assertEquals(listOf("Pivot tables", "Setting up excel"), v.modules[1].lessons.map { it.title })
+        // Back into the first module: it goes at that module's end, before the next module.
+        assertTrue(sMac.moveLesson(setup.id, "1 · Foundations"))
+        assertEquals(listOf("Welcome", "Setting up excel"), sMac.view(0L).course(id)!!.modules[0].lessons.map { it.title })
+    }
+
+    @Test
+    fun lessonsGoIntoTheModuleChosenAndANewModuleNeedsAFirstLesson() {
+        val id = sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome\nModule 2: Core skills\nPivot tables").courseId!!
+        assertEquals("Added 2 lessons to 1 · Foundations", sFold.addLessons(id, "Shortcuts\nCharts 20 min", into = "1 · Foundations").line)
+        var v = sFold.view(0L).course(id)!!
+        assertEquals(listOf("Welcome", "Shortcuts", "Charts"), v.modules[0].lessons.map { it.title })
+        assertEquals(StudyRules.MODULE_NEEDS_LESSON, sFold.addModule(id, "Dashboards", "").line)
+        assertEquals(StudyRules.MODULE_NOT_READ, sFold.addModule(id, " ", "Intro").line)
+        assertEquals("Added Layout to 3 · Dashboards", sFold.addModule(id, "Module 3: Dashboards", "Layout").line)
+        v = sFold.view(0L).course(id)!!
+        assertEquals(listOf("1 · Foundations", "2 · Core skills", "3 · Dashboards"), v.modules.map { it.name })
+        assertTrue(sFold.renameModule(id, "3 · Dashboards", "Reports"))
+        assertEquals("Reports", sFold.view(0L).course(id)!!.modules[2].name)
+    }
+
+    @Test
+    fun deletedLessonsWaitUnderRecentlyDeletedAndCanBeRestored() {
+        val id = sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome\nSetup\nModule 2: Core skills\nPivot tables\nCharts").courseId!!
+        val welcome = sFold.view(0L).course(id)!!.modules[0].lessons[0]
+        sFold.tick(welcome.id, true)
+        assertNotNull(sFold.removeLesson(welcome.id))
+        var v = sFold.view(0L).course(id)!!
+        assertEquals(listOf("Welcome"), v.deleted.map { it.title })
+        assertEquals("From 1 · Foundations", v.deleted.single().line)
+        sync()
+        val onMac = sMac.view(0L).course(id)!!
+        assertEquals(1, onMac.deleted.size)
+        assertTrue(sMac.restoreLesson(onMac.deleted.single().id))
+        assertFalse(sMac.restoreLesson(onMac.deleted.single().id))
+        sync()
+        v = sFold.view(0L).course(id)!!
+        assertTrue(v.deleted.isEmpty())
+        assertEquals(listOf("Welcome", "Setup"), v.modules[0].lessons.map { it.title })
+        assertTrue(v.modules[0].lessons[0].done)
+
+        // A whole module: one Undo brings every lesson back; deleted lessons older than 30 days drop off the list.
+        val mod = assertNotNull(sFold.removeModule(id, "2 · Core skills"))
+        assertEquals("Removed 2 · Core skills", mod.line)
+        assertEquals(1, sFold.view(0L).course(id)!!.modules.size)
+        assertEquals(2, sFold.view(0L).course(id)!!.deleted.size)
+        assertTrue(sFold.undoRemove(mod.token))
+        assertEquals(listOf("Pivot tables", "Charts"), sFold.view(0L).course(id)!!.modules[1].lessons.map { it.title })
+        val old = StudyDeletedLesson("x", id, "Old", "1 · Foundations", 0L)
+        assertTrue(StudyRules.deletedRows(id, listOf(old), 31L * 86_400_000L).isEmpty())
+        assertEquals(1, StudyRules.deletedRows(id, listOf(old.copy(deletedAtMs = null)), 31L * 86_400_000L).size)
+        assertEquals("Delete \u201CWelcome\u201D?", StudyRules.confirmDelete("Welcome"))
+        assertEquals("Delete \u201C2 · Core skills\u201D and its 2 lessons?", StudyRules.confirmDeleteModule("2 · Core skills", 2))
+    }
+
     // ---- Slice 2a: the plan ----
 
     private val today = 20_752L // Mon 26 Oct 2026

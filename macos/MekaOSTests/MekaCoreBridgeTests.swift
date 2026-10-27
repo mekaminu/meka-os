@@ -3047,6 +3047,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(plan, tapped)
         XCTAssertNotNil(plan.perWeek)
         XCTAssertEqual(plan.slots.filter(\.on).map(\.key), ["sat"])
+
+        // Study fixes: lessons added into a module, a new module, rename and move, a delete waiting under Recently
+        // deleted and Restore; only Strings cross.
+        let into = try await core.addStudyLessonsTo(courseId: id, module: "1 · Foundations", text: "Shortcuts")
+        XCTAssertEqual(into.line, "Added Shortcuts to 1 · Foundations")
+        let mod = try await core.addStudyModule(courseId: id, name: "Dashboards", text: "Layout")
+        XCTAssertFalse(mod.refused)
+        let shortcuts = try XCTUnwrap(core.studyView.value.course(id: id)?.modules.first?.lessons.last).id
+        let renamed = try await core.renameStudyLesson(id: shortcuts, text: "Keyboard shortcuts")
+        XCTAssertTrue(renamed.boolValue)
+        let moved = try await core.moveStudyLesson(id: shortcuts, module: "Dashboards")
+        XCTAssertTrue(moved.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.modules.last?.lessons.map(\.title), ["Layout", "Keyboard shortcuts"])
+        _ = try await core.removeStudyLesson(id: shortcuts)
+        let gone = try XCTUnwrap(core.studyView.value.course(id: id)?.deleted.first)
+        XCTAssertEqual(gone.line, "From Dashboards")
+        let restored = try await core.restoreStudyLesson(id: gone.id)
+        XCTAssertTrue(restored.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.deleted.count, 0)
+        XCTAssertEqual(StudyRules.shared.confirmDelete(title: "Layout"), "Delete \u{201C}Layout\u{201D}?")
     }
 
     func testTripListsReachSwift() async throws {

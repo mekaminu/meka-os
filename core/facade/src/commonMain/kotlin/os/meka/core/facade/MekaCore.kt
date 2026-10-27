@@ -5059,8 +5059,35 @@ class MekaCore(
     /** Removes a course and its lessons: "Removed Data analytics" with Undo's token; null when it isn't there. */
     suspend fun removeStudyCourse(id: String): os.meka.core.domain.StudyRemoved? = onCore { study.removeCourse(id) }
 
-    /** Undo after [removeStudyLesson] or [removeStudyCourse]: it comes back as it was. */
+    /** Undo after [removeStudyLesson], [removeStudyModule] or [removeStudyCourse]: it comes back as it was. */
     suspend fun undoStudyRemoval(token: String): Boolean = onCore { study.undoRemove(token) }
+
+    // ---- Study fixes (Meka 2026-10-26 23:21): a long press opens a sheet, never deletes ----
+
+    /** Adds lessons into the module [module] (a module's "+ Add lesson"; one a line, or one). */
+    suspend fun addStudyLessonsTo(courseId: String, module: String, text: String): os.meka.core.domain.StudyAdded =
+        onCore { study.addLessons(courseId, text, into = module) }
+
+    /** "+ Add module": a new module named [name] with its first lessons from [text]; refused without a lesson. */
+    suspend fun addStudyModule(courseId: String, name: String, text: String): os.meka.core.domain.StudyAdded =
+        onCore { study.addModule(courseId, name, text) }
+
+    /** The lesson sheet: a new name; false when nothing changed. */
+    suspend fun renameStudyLesson(id: String, text: String): Boolean = onCore { study.renameLesson(id, text) }
+
+    /** The lesson sheet: moves it to the end of another module of its course. */
+    suspend fun moveStudyLesson(id: String, module: String): Boolean = onCore { study.moveLesson(id, module) }
+
+    /** The module sheet: renames a module (every lesson in it). */
+    suspend fun renameStudyModule(courseId: String, module: String, text: String): Boolean =
+        onCore { study.renameModule(courseId, module, text) }
+
+    /** The module sheet, after the app's confirm: deletes its lessons with one Undo ([undoStudyRemoval]). */
+    suspend fun removeStudyModule(courseId: String, module: String): os.meka.core.domain.StudyRemoved? =
+        onCore { study.removeModule(courseId, module) }
+
+    /** Recently deleted → Restore: the lesson comes back where it was, ticked as it was. */
+    suspend fun restoreStudyLesson(id: String): Boolean = onCore { study.restoreLesson(id) }
 
     // ---- Study plan, slice 2a (2026-10-26): the plan card ----
 
@@ -12838,8 +12865,9 @@ class MekaCore(
         } }
         val studyCourses = study.courses()
         val studyLessons = study.lessons()
-        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, todayDay)) {
-            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay)
+        val studyDeleted = study.deleted()
+        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, studyDeleted, todayDay)) {
+            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs())
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

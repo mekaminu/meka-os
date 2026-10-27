@@ -5998,6 +5998,58 @@ final class CoreModel {
 
     func undoStudyRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoStudyRemoval(token: token) } }
 
+    // MARK: Study fixes (Meka 2026-10-26 23:21): a right-click or long press opens a sheet, never deletes. Only Strings cross.
+
+    /// "+ Add lesson" in a module: one lesson, or several lines, into that module.
+    func addStudyLessonsTo(_ courseId: String, module: String, _ text: String) async -> StudySaid? {
+        guard let core, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        do {
+            let r = try await core.addStudyLessonsTo(courseId: courseId, module: module, text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return StudySaid(line: r.line, refused: r.refused, courseId: r.courseId)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// "+ Add module": its name and its first lessons.
+    func addStudyModule(_ courseId: String, name: String, _ text: String) async -> StudySaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.addStudyModule(courseId: courseId, name: name, text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return StudySaid(line: r.line, refused: r.refused, courseId: r.courseId)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func renameStudyLesson(_ id: String, _ text: String) { MekaHaptics.light(); run { _ = try await $0.renameStudyLesson(id: id, text: text) } }
+
+    func moveStudyLesson(_ id: String, module: String) { MekaHaptics.light(); run { _ = try await $0.moveStudyLesson(id: id, module: module) } }
+
+    func renameStudyModule(_ courseId: String, module: String, _ text: String) {
+        MekaHaptics.light(); run { _ = try await $0.renameStudyModule(courseId: courseId, module: module, text: text) }
+    }
+
+    /// Deletes a module's lessons (after the sheet's confirm), with one Undo.
+    func removeStudyModule(_ courseId: String, module: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let r = try await core.removeStudyModule(courseId: courseId, module: module) else { return nil }
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Recently deleted → Restore.
+    func restoreStudyLesson(_ id: String) { MekaHaptics.light(); run { _ = try await $0.restoreStudyLesson(id: id) } }
+
     // MARK: Study plan (slice 2a): the plan card. Only Strings and numbers cross; the sheet already shows the tap.
 
     func setStudyFinish(_ courseId: String, day: Int64) async -> Bool {

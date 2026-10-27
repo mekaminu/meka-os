@@ -63,6 +63,35 @@ class StudyFacadeTest {
     }
 
     @Test
+    fun aLessonDeletedOnTheFoldIsRestoredFromRecentlyDeletedOnTheMac() = runTest {
+        // Study fixes (Meka 2026-10-26 23:21): nothing is lost; lessons go into the module chosen; a sheet renames and moves.
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome\nModule 2: Core skills\nPivot tables").courseId!!
+        assertEquals("Added Shortcuts to 1 · Foundations", fold.addStudyLessonsTo(id, "1 · Foundations", "Shortcuts").line)
+        assertEquals("Added Layout to Dashboards", fold.addStudyModule(id, "Dashboards", "Layout").line)
+        val shortcuts = fold.studyView.value.course(id)!!.modules[0].lessons[1].id
+        assertTrue(fold.renameStudyLesson(shortcuts, "Keyboard shortcuts"))
+        assertTrue(fold.moveStudyLesson(shortcuts, "Dashboards"))
+        assertTrue(fold.renameStudyModule(id, "Dashboards", "Reports"))
+        val removed = assertNotNull(fold.removeStudyLesson(shortcuts))
+        assertEquals("Removed Keyboard shortcuts", removed.line)
+        fold.syncNow(); mac.syncNow()
+        val onMac = mac.studyView.value.course(id)!!
+        assertEquals(listOf("Keyboard shortcuts"), onMac.deleted.map { it.title })
+        assertEquals("From Reports", onMac.deleted.single().line)
+        assertTrue(mac.restoreStudyLesson(onMac.deleted.single().id))
+        mac.syncNow(); fold.syncNow()
+        val back = fold.studyView.value.course(id)!!
+        assertTrue(back.deleted.isEmpty())
+        assertEquals(listOf("Layout", "Keyboard shortcuts"), back.modules[2].lessons.map { it.title })
+        val mod = assertNotNull(fold.removeStudyModule(id, "Reports"))
+        assertEquals(2, fold.studyView.value.course(id)!!.modules.size)
+        assertTrue(fold.undoStudyRemoval(mod.token))
+        assertEquals(3, fold.studyView.value.course(id)!!.modules.size)
+    }
+
+    @Test
     fun aPlanSetOnTheFoldShowsOnTheMac() = runTest {
         val fold = core("android")
         val mac = core("mac")

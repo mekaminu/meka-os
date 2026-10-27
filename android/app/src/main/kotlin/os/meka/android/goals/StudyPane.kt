@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import os.meka.android.ask.TripPill
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -82,6 +84,7 @@ import os.meka.core.domain.StudyChip
 import os.meka.core.domain.StudyPlanInput
 import os.meka.core.domain.StudyPlanView
 import os.meka.core.domain.StudyCourseView
+import os.meka.core.domain.StudyDeletedRow
 import os.meka.core.domain.StudyLessonRow
 import os.meka.core.domain.StudyModule
 import os.meka.core.domain.StudyRemoved
@@ -184,13 +187,17 @@ private fun UndoLine(r: StudyRemoved, onUndo: () -> Unit) {
  * share done, the course's name, "5 of 24 lessons · about 18 h left" and the next lesson; LESSONS with the outline field
  * (paste the course outline: one lesson a line, "Module 2: Core skills" starts a module, "45 min" its length) and each
  * module folding on a tap with its count ("2 of 6", "Done" in green), its lessons in course order. A tick shows in the
- * same frame and moves the ring (the core's write runs after); a long press removes a lesson with Undo. Remove course
- * at the foot (Undo on Goals). Synced with the Mac.
+ * same frame and moves the ring (the core's write runs after). Study fixes (Meka 2026-10-26 23:21: a long press had
+ * deleted a lesson): a long press opens the lesson's sheet under it (rename, move to module, mark done, Delete after a
+ * confirm, with Undo) or a module's menu (rename, delete after a confirm); "+ Add lesson" at the foot of each open module
+ * and "+ Add module" (its name and first lessons) after the modules; Recently deleted (folded, Restore) under them.
+ * Remove course asks first (Undo on Goals). Synced with the Mac.
  *
  * Motion: the header, ring and lessons stagger in; the ring sweeps round from the top on appear and glides on a tick
  * (appear spring); modules fold on the expand spring with the chevron turning; the ring of a lesson draws its check
  * (TickRing) and the title fades; the line under the field cross-fades (refused lit in the accent). Haptics: light on a
- * tick and an add, a tick on a fold or a remove. Reduced motion: cross-fades only, the ring set at once.
+ * tick and an add, a tick on a fold or a remove; sheets and confirms unfold on the expand spring. Reduced motion:
+ * cross-fades only, the ring set at once.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -209,7 +216,13 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     val opened = remember { mutableStateMapOf<String, Boolean>() }
     // Slice 2a: the plan's chips tapped here, worked out at once until the view says the same.
     var planTap by remember(courseId) { mutableStateOf(PlanTap()) }
-    BackHandler(onBack = onClose)
+    // Study fixes: the lesson whose sheet is open, the module whose menu is open, Recently deleted unfolded, and the
+    // Remove course confirm.
+    var sheet by remember(courseId) { mutableStateOf<String?>(null) }
+    var moduleMenu by remember(courseId) { mutableStateOf<String?>(null) }
+    var showDeleted by remember(courseId) { mutableStateOf(false) }
+    var confirmCourse by remember(courseId) { mutableStateOf(false) }
+    BackHandler(onBack = { if (sheet != null || moduleMenu != null) { sheet = null; moduleMenu = null } else onClose() })
     LaunchedEffect(c) {
         val shown = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.done }
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
@@ -228,6 +241,10 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             if (r?.refused == false) { haptics.light(); outline = "" } else haptics.reject()
             said = r
         }
+    }
+    val added: (StudyAdded?) -> Unit = { r ->
+        if (r?.refused == false) haptics.light() else haptics.reject()
+        said = r
     }
     val choose: (PlanTap, suspend () -> Boolean) -> Unit = { next, write ->
         haptics.light()
@@ -321,33 +338,91 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             }
         }
         val firstOpen = c.modules.firstOrNull { m -> m.lessons.any { !(pending[it.id] ?: it.done) } }?.key
+        val moduleNames = c.modules.map { it.name }
         for (m in c.modules) {
             val open = opened[m.key] ?: (m.key == firstOpen)
             item(key = "module-${m.key}") {
-                ModuleHead(m, open, pending, Modifier.animateItem()) { haptics.tick(); opened[m.key] = !open }
+                ModuleHead(
+                    m, open, pending, Modifier.animateItem(),
+                    onToggle = { haptics.tick(); opened[m.key] = !open },
+                    onHold = { haptics.tick(); sheet = null; moduleMenu = if (moduleMenu == m.key) null else m.key },
+                )
+            }
+            if (moduleMenu == m.key) item(key = "module-menu-${m.key}") {
+                ModuleMenu(
+                    m, Modifier.animateItem(),
+                    onRename = { name -> scope.launch { if (runCatching { core.renameStudyModule(courseId, m.name, name) }.getOrNull() == true) haptics.light() else haptics.reject() }; moduleMenu = null },
+                    onDelete = {
+                        haptics.tick(); moduleMenu = null
+                        scope.launch { runCatching { core.removeStudyModule(courseId, m.name) }.getOrNull()?.let { removed = it } }
+                    },
+                    onDone = { moduleMenu = null },
+                )
             }
             if (open) {
-                items(m.lessons, key = { "lesson-${it.id}" }) { row ->
-                    LessonRow(
-                        row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) },
-                        onRemove = {
-                            haptics.tick()
-                            scope.launch { runCatching { core.removeStudyLesson(row.id) }.getOrNull()?.let { removed = it } }
-                        },
-                    )
+                for (row in m.lessons) {
+                    item(key = "lesson-${row.id}") {
+                        LessonRow(
+                            row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) },
+                            onHold = { haptics.tick(); moduleMenu = null; sheet = if (sheet == row.id) null else row.id },
+                        )
+                    }
+                    if (sheet == row.id) item(key = "lesson-sheet-${row.id}") {
+                        LessonSheet(
+                            row, m.name, moduleNames, pending[row.id] ?: row.done, Modifier.animateItem(),
+                            onName = { name -> scope.launch { if (runCatching { core.renameStudyLesson(row.id, name) }.getOrNull() == true) haptics.light() else haptics.reject() } },
+                            onModule = { to -> haptics.light(); sheet = null; opened[StudyRules.moduleKey(courseId, to)] = true; scope.launch { runCatching { core.moveStudyLesson(row.id, to) } } },
+                            onTick = { tick(row, it) },
+                            onDelete = {
+                                haptics.tick(); sheet = null
+                                scope.launch { runCatching { core.removeStudyLesson(row.id) }.getOrNull()?.let { removed = it } }
+                            },
+                            onDone = { sheet = null },
+                        )
+                    }
+                }
+                item(key = "add-into-${m.key}") {
+                    AddInto(m, Modifier.animateItem()) { text ->
+                        scope.launch { added(runCatching { core.addStudyLessonsTo(courseId, m.name, text) }.getOrNull()) }
+                    }
+                }
+            }
+        }
+        item(key = "add-module") {
+            AddModule(Modifier.animateItem().padding(top = MekaSpace.xs)) { name, text ->
+                scope.launch {
+                    val r = runCatching { core.addStudyModule(courseId, name, text) }.getOrNull()
+                    added(r)
+                    r?.refused == false
+                }
+            }
+        }
+        if (c.deleted.isNotEmpty()) {
+            item(key = "deleted-head") {
+                DeletedHead(c.deleted.size, showDeleted, Modifier.animateItem().padding(top = MekaSpace.l)) { haptics.tick(); showDeleted = !showDeleted }
+            }
+            if (showDeleted) items(c.deleted, key = { "deleted-${it.id}" }) { d ->
+                DeletedRow(d, Modifier.animateItem()) {
+                    haptics.light()
+                    scope.launch { runCatching { core.restoreStudyLesson(d.id) } }
                 }
             }
         }
         item(key = "note") {
             Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Text(StudyRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(StudyRules.NOTE + " " + StudyRules.HOLD_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
                 Text(
                     "Remove course", style = MekaType.itemMeta, color = Meka.colors.critical,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                        haptics.tick()
-                        scope.launch { runCatching { core.removeStudyCourse(courseId) }.getOrNull()?.let { onRemoved(it); onClose() } }
+                        haptics.tick(); confirmCourse = !confirmCourse
                     }.semantics { contentDescription = "Remove ${c.title} and its lessons" }.minTouch().testTag("study-remove-course"),
                 )
+                AnimatedVisibility(confirmCourse, enter = unfold(), exit = fold()) {
+                    ConfirmRow(StudyRules.confirmRemoveCourse(c.title, c.total), "Remove", "study-remove-course-confirm", onYes = {
+                        haptics.tick(); confirmCourse = false
+                        scope.launch { runCatching { core.removeStudyCourse(courseId) }.getOrNull()?.let { onRemoved(it); onClose() } }
+                    }, onNo = { confirmCourse = false })
+                }
             }
         }
     }
@@ -451,13 +526,17 @@ private fun PlanChip(chip: StudyChip, modifier: Modifier, onClick: () -> Unit) {
 
 /** A multi-line field for an outline (a paste keeps its lines); Add appears once something is typed. */
 @Composable
-private fun OutlineField(value: String, onValue: (String) -> Unit, onAdd: () -> Unit) {
+private fun OutlineField(
+    value: String, onValue: (String) -> Unit, onAdd: () -> Unit,
+    hint: String = StudyRules.ADD_LESSONS_HINT, description: String = StudyRules.ADD_LESSONS_DESCRIPTION,
+    action: String = "Add lessons", tag: String = "study-outline", always: Boolean = false,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
                 .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
         ) {
-            if (value.isEmpty()) Text(StudyRules.ADD_LESSONS_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
+            if (value.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
             BasicTextField(
                 value = value,
                 onValueChange = onValue,
@@ -465,18 +544,19 @@ private fun OutlineField(value: String, onValue: (String) -> Unit, onAdd: () -> 
                 cursorBrush = SolidColor(Meka.colors.accent),
                 maxLines = 8,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp)
-                    .semantics { contentDescription = StudyRules.ADD_LESSONS_DESCRIPTION }.testTag("study-outline"),
+                    .semantics { contentDescription = description }.testTag(tag),
             )
         }
-        AnimatedVisibility(value.isNotBlank(), enter = unfold(), exit = fold()) {
-            Action("Add lessons") { onAdd() }
+        AnimatedVisibility(always || value.isNotBlank(), enter = unfold(), exit = fold()) {
+            Action(action) { onAdd() }
         }
     }
 }
 
 /** A module's head: its name, its count ("2 of 6", "Done" in green) and a chevron; a tap folds it. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onToggle: () -> Unit) {
+private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onToggle: () -> Unit, onHold: () -> Unit) {
     val reduced = Meka.reducedMotion
     val done = m.lessons.count { pending[it.id] ?: it.done }
     val count = StudyRules.moduleCount(done, m.lessons.size)
@@ -484,7 +564,7 @@ private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boole
     val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "study-module-chev")
     Row(
         modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onToggle)
+            .combinedClickable(role = Role.Button, onClick = onToggle, onLongClick = onHold, onLongClickLabel = "Rename or delete the module")
             .semantics(mergeDescendants = true) { contentDescription = "${m.name}, $count, " + if (open) "tap to fold" else "tap to open" }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("study-module-${m.key}"),
         verticalAlignment = Alignment.CenterVertically,
@@ -499,12 +579,12 @@ private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boole
 /** One lesson: the ring (22 dp in a 48 dp target), its name (faded once ticked) and how long it takes. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LessonRow(row: StudyLessonRow, done: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onRemove: () -> Unit) {
+private fun LessonRow(row: StudyLessonRow, done: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onHold: () -> Unit) {
     val reduced = Meka.reducedMotion
     val fade by animateFloatAsState(if (done) 0.5f else 1f, MekaMotion.appear(reduced), label = "study-lesson-fade")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .combinedClickable(role = Role.Checkbox, onClick = { onTick(!done) }, onLongClick = onRemove, onLongClickLabel = "Remove")
+            .combinedClickable(role = Role.Checkbox, onClick = { onTick(!done) }, onLongClick = onHold, onLongClickLabel = "Rename, move or delete")
             .semantics(mergeDescendants = true) {
                 contentDescription = row.spoken.removeSuffix(", done")
                 stateDescription = if (done) "Done" else "Not done"
@@ -517,5 +597,163 @@ private fun LessonRow(row: StudyLessonRow, done: Boolean, modifier: Modifier, on
         Text(row.title, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).alpha(fade))
         if (row.mins.isNotEmpty()) Text(row.mins, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade).padding(end = MekaSpace.xs))
+    }
+}
+
+/** "Delete “Welcome”?" with [yes] (in the critical colour) and Cancel: nothing is deleted without it. */
+@Composable
+private fun ConfirmRow(question: String, yes: String, tag: String, onYes: () -> Unit, onNo: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs).testTag(tag),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(question, style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Text(yes, style = MekaType.itemMeta, color = Meka.colors.critical,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onYes)
+                .semantics { contentDescription = "$yes: $question" }.minTouch().padding(MekaSpace.xs).testTag("$tag-yes"))
+        Text(StudyRules.CANCEL, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onNo)
+                .minTouch().padding(MekaSpace.xs).testTag("$tag-no"))
+    }
+}
+
+/**
+ * Study fixes: a lesson's sheet (a long press), under its row: its name (type a new one), the module it's in (another
+ * chip moves it there), Mark done / not done, and Delete, which asks first (then Undo, and Recently deleted).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LessonSheet(
+    row: StudyLessonRow, module: String, modules: List<String>, done: Boolean, modifier: Modifier,
+    onName: (String) -> Unit, onModule: (String) -> Unit, onTick: (Boolean) -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
+) {
+    var confirming by remember(row.id) { mutableStateOf(false) }
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(MekaSpace.m).testTag("study-lesson-sheet"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(StudyRules.RENAME, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        Field(row.title, description = "Rename ${row.title}", modifier = Modifier.testTag("study-lesson-name")) { onName(it) }
+        if (modules.size > 1) {
+            Text(StudyRules.MOVE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                for (name in modules) TripPill(name, on = name == module, tag = "study-lesson-module-$name", description = "Move to $name") { if (name != module) onModule(name) }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            TripPill(if (done) StudyRules.MARK_UNDONE else StudyRules.MARK_DONE, tag = "study-lesson-mark") { onTick(!done) }
+            TripPill(StudyRules.DELETE, on = confirming, tag = "study-lesson-delete", description = "Delete ${row.title}") { confirming = !confirming }
+            Spacer(Modifier.weight(1f))
+            Text(StudyRules.DONE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onDone)
+                    .minTouch().padding(MekaSpace.xs).testTag("study-lesson-done"))
+        }
+        AnimatedVisibility(confirming, enter = unfold(), exit = fold()) {
+            ConfirmRow(StudyRules.confirmDelete(row.title), StudyRules.DELETE, "study-lesson-confirm", onYes = onDelete, onNo = { confirming = false })
+        }
+    }
+}
+
+/** Study fixes: a module's menu (a long press on its head): Rename (a field starting from its name) and Delete module, asked first. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ModuleMenu(m: StudyModule, modifier: Modifier, onRename: (String) -> Unit, onDelete: () -> Unit, onDone: () -> Unit) {
+    var confirming by remember(m.key) { mutableStateOf(false) }
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(MekaSpace.m).testTag("study-module-menu"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(StudyRules.RENAME, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        Field(m.name, description = "Rename ${m.name}", modifier = Modifier.testTag("study-module-name")) { onRename(it) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            TripPill(StudyRules.DELETE_MODULE, on = confirming, tag = "study-module-delete", description = "Delete ${m.name}") { confirming = !confirming }
+            Spacer(Modifier.weight(1f))
+            Text(StudyRules.DONE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onDone)
+                    .minTouch().padding(MekaSpace.xs).testTag("study-module-done"))
+        }
+        AnimatedVisibility(confirming, enter = unfold(), exit = fold()) {
+            ConfirmRow(StudyRules.confirmDeleteModule(m.name, m.lessons.size), StudyRules.DELETE, "study-module-confirm", onYes = onDelete, onNo = { confirming = false })
+        }
+    }
+}
+
+/** Study fixes: "+ Add lesson" at the foot of an open module: a field (one lesson, or paste several lines) that adds into it. */
+@Composable
+private fun AddInto(m: StudyModule, modifier: Modifier, onAdd: (String) -> Unit) {
+    var open by rememberSaveable(m.key) { mutableStateOf(false) }
+    var text by rememberSaveable(m.key) { mutableStateOf("") }
+    Column(modifier.padding(start = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(StudyRules.ADD_LESSON, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { open = !open }
+                .semantics { contentDescription = "Add a lesson to ${m.name}" }.minTouch().padding(MekaSpace.xs).testTag("study-add-into-${m.key}"))
+        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+            OutlineField(
+                text, { text = it }, { if (text.isNotBlank()) { onAdd(text); text = ""; open = false } },
+                hint = StudyRules.ADD_LESSON_HINT, description = "Add lessons to ${m.name}", action = "Add to ${m.name}",
+                tag = "study-add-into-field-${m.key}",
+            )
+        }
+    }
+}
+
+/** Study fixes: "+ Add module" after the modules: its name, then its first lessons; [onAdd] says whether it was added. */
+@Composable
+private fun AddModule(modifier: Modifier, onAdd: (String, String) -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var text by rememberSaveable { mutableStateOf("") }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(StudyRules.ADD_MODULE, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { open = !open }
+                .semantics { contentDescription = "Add a module" }.minTouch().padding(MekaSpace.xs).testTag("study-add-module"))
+        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Field(StudyRules.ADD_MODULE_HINT, value = name, onValue = { name = it }, modifier = Modifier.testTag("study-add-module-name")) { }
+                OutlineField(
+                    text, { text = it }, {
+                        if (name.isNotBlank() && text.isNotBlank()) { onAdd(name, text); name = ""; text = ""; open = false }
+                    },
+                    hint = StudyRules.ADD_MODULE_LESSONS_HINT, description = StudyRules.ADD_MODULE_LESSONS_HINT, action = "Add module",
+                    tag = "study-add-module-lessons",
+                )
+            }
+        }
+    }
+}
+
+/** Study fixes: Recently deleted, folded: "Recently deleted · 2" and a chevron. */
+@Composable
+private fun DeletedHead(n: Int, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "study-deleted-chev")
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onToggle)
+            .semantics(mergeDescendants = true) { contentDescription = "${StudyRules.RECENT_LABEL}, $n, " + if (open) "tap to fold" else "tap to open" }
+            .minTouch().padding(horizontal = MekaSpace.xs).testTag("study-deleted-head"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text("${StudyRules.RECENT_LABEL} · $n", style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+    }
+}
+
+/** One deleted lesson: its name, "From 1 · Foundations" and Restore. */
+@Composable
+private fun DeletedRow(d: StudyDeletedRow, modifier: Modifier, onRestore: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().padding(start = MekaSpace.m).testTag("study-deleted-${d.id}"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(d.title, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(d.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        Text(StudyRules.RESTORE, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRestore)
+                .semantics { contentDescription = "Restore ${d.title}" }.minTouch().padding(MekaSpace.xs).testTag("study-restore-${d.id}"))
     }
 }

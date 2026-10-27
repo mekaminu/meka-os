@@ -13,7 +13,13 @@ import os.meka.core.sync.fv
  * 2026-10-26): `study_course` and `study_lesson`.
  *
  * Slice 2a: the plan (finish by, session length, when he studies → sessions a week, whether it fits, on track or behind;
- * [StudyRules.plan]). Still to come (the board): slice 2b, sessions on the Week board, Start/Done, the 10-minute nudge and
+ * [StudyRules.plan]).
+ *
+ * Study fixes (Meka 2026-10-26 23:21: "when I hold an item it deletes automatically, I just lost an item"; "how do I add
+ * an item in a module"): a long press opens a lesson's sheet (rename, move to another module, mark done, delete after a
+ * confirm) instead of deleting; a module can be renamed or deleted (after a confirm, with Undo), lessons are added into
+ * a chosen module, and a new module is added with its first lessons; every lesson deleted in the last
+ * [StudyRules.RECENT_DAYS] days (and any deleted before deletion times were kept) shows under Recently deleted with Restore. Still to come (the board): slice 2b, sessions on the Week board, Start/Done, the 10-minute nudge and
  * the Sunday check-in; slice 3, the outline from a screenshot.
  */
 object StudyCourseFields {
@@ -50,6 +56,8 @@ object StudyLessonFields {
     const val DELETED = ActionableFields.DELETED
     /** Set on a removed lesson once Undo has put a copy back, so a second Undo adds nothing. */
     const val RESTORED = "restored"
+    /** Study fixes (2026-10-26): when it was deleted, for Recently deleted (LWW, absent on lessons deleted before). */
+    const val DELETED_AT = "deletedAtMs"
 }
 
 data class StudyCourse(
@@ -114,6 +122,12 @@ data class StudyLesson(
 /** One line of an outline ([StudyRules.readOutline]). */
 data class StudyEntry(val module: String, val title: String, val mins: Int?)
 
+/** A deleted lesson still on the replica (its removal is TrueWins; Restore puts a copy back). */
+data class StudyDeletedLesson(val id: String, val courseId: String, val title: String, val module: String, val deletedAtMs: Long?)
+
+/** One row of Recently deleted: its title, "From 1 · Foundations", and the id Restore takes. */
+data class StudyDeletedRow(val id: String, val title: String, val line: String, val spoken: String)
+
 /** One lesson's row: "Lesson 3" · "45 min", [done] drawn faded with its ring ticked. */
 data class StudyLessonRow(val id: String, val title: String, val mins: String, val done: Boolean, val spoken: String)
 
@@ -142,6 +156,8 @@ data class StudyCourseView(
     /** Slice 2a: the plan card and what it's worked out from. */
     val plan: StudyPlanView,
     val planInput: StudyPlanInput,
+    /** Study fixes: Recently deleted, newest first. */
+    val deleted: List<StudyDeletedRow> = emptyList(),
 )
 
 data class StudyView(val courses: List<StudyCourseView>) {
@@ -178,6 +194,57 @@ object StudyRules {
     const val GONE = "That course has gone."
     const val NOTE = "Ticks show on the Fold and the Mac."
     const val OPEN = "Open"
+
+    // Study fixes (2026-10-26): the lesson and module sheets, adding into a module, and Recently deleted.
+    const val RECENT_DAYS = 30
+    const val RECENT_LABEL = "Recently deleted"
+    const val RESTORE = "Restore"
+    const val RENAME = "Rename"
+    const val MOVE_LABEL = "Move to module"
+    const val MARK_DONE = "Mark done"
+    const val MARK_UNDONE = "Mark not done"
+    const val DELETE = "Delete"
+    const val CANCEL = "Cancel"
+    const val DONE = "Done"
+    const val DELETE_MODULE = "Delete module"
+    const val ADD_LESSON = "+ Add lesson"
+    const val ADD_LESSON_HINT = "Lesson name, or paste several lines"
+    const val ADD_MODULE = "+ Add module"
+    const val ADD_MODULE_HINT = "Module name"
+    const val ADD_MODULE_LESSONS_HINT = "Its first lessons, one a line"
+    const val MODULE_NOT_READ = "Type the module's name."
+    const val MODULE_NEEDS_LESSON = "Type the module's first lesson too."
+    const val NAME_NOT_READ = "Type a name."
+    const val HOLD_NOTE = "Press and hold a lesson or a module to rename, move or delete it."
+
+    fun confirmDelete(title: String): String = "Delete \u201C$title\u201D?"
+    fun confirmDeleteModule(name: String, n: Int): String = "Delete \u201C$name\u201D and its ${if (n == 1) "lesson" else "$n lessons"}?"
+    fun confirmRemoveCourse(title: String, n: Int): String =
+        "Remove \u201C$title\u201D" + (if (n == 0) "?" else " and its ${if (n == 1) "lesson" else "$n lessons"}?")
+
+    /** A module's typed name, tidied ("Module 3: Dashboards" reads as "3 · Dashboards"); null with nothing to name it. */
+    fun moduleName(text: String): String? {
+        val t = text.trim()
+        if (t.none { it.isLetterOrDigit() }) return null
+        return moduleOf(t) ?: clean(t, MAX_MODULE).takeIf { n -> n.any { it.isLetterOrDigit() } }
+    }
+
+    /** A lesson's typed name, tidied (a time at the end is dropped here; the sheet only renames). */
+    fun lessonName(text: String): String? = clean(text, MAX_LESSON).takeIf { n -> n.any { it.isLetterOrDigit() } }
+
+    fun deletedLessons(entities: Map<String, Map<String, FieldValue>>): List<StudyDeletedLesson> = entities.mapNotNull { (id, s) ->
+        if (s.f(StudyLessonFields.DELETED).boolOrNull != true || s.f(StudyLessonFields.RESTORED).boolOrNull == true) return@mapNotNull null
+        val course = s.f(StudyLessonFields.COURSE).textOrNull ?: return@mapNotNull null
+        val title = s.f(StudyLessonFields.TITLE).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        StudyDeletedLesson(id, course, title, s.f(StudyLessonFields.MODULE).textOrNull?.takeIf { it.isNotBlank() } ?: DEFAULT_MODULE,
+            s.f(StudyLessonFields.DELETED_AT).longOrNull)
+    }
+
+    /** Recently deleted for [courseId]: the last [RECENT_DAYS] days (and any without a time), newest first. */
+    fun deletedRows(courseId: String, deleted: List<StudyDeletedLesson>, nowMs: Long): List<StudyDeletedRow> =
+        deleted.filter { it.courseId == courseId && (it.deletedAtMs == null || nowMs - it.deletedAtMs <= RECENT_DAYS * 86_400_000L) }
+            .sortedWith(compareByDescending<StudyDeletedLesson> { it.deletedAtMs ?: 0L }.thenBy { it.title })
+            .map { StudyDeletedRow(it.id, it.title, "From ${it.module}", "${it.title}, deleted, from ${it.module}") }
 
     // After the number: nothing, a separator ("Module 1: Foundations") or a capital ("Week 2 Pivot tables"); "Part 2 of
     // the setup" stays a lesson.
@@ -334,7 +401,10 @@ object StudyRules {
     /** "2 of 6", or "Done" once every lesson is ticked. */
     fun moduleCount(done: Int, total: Int): String = if (total > 0 && done == total) "Done" else "$done of $total"
 
-    fun view(course: StudyCourse, all: List<StudyLesson>, today: Long): StudyCourseView {
+    fun view(
+        course: StudyCourse, all: List<StudyLesson>, today: Long,
+        deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L,
+    ): StudyCourseView {
         val lessons = all.filter { it.courseId == course.id }
         val done = lessons.count { it.done }
         val total = lessons.size
@@ -378,11 +448,14 @@ object StudyRules {
             modules = modules, lastModule = lastModule,
             spoken = "${course.title}, $pct percent, $line" + (next?.let { ", $it" } ?: ""),
             plan = plan(input), planInput = input,
+            deleted = deletedRows(course.id, deleted, nowMs),
         )
     }
 
-    fun view(courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long): StudyView =
-        StudyView(courses.map { view(it, lessons, today) })
+    fun view(
+        courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long,
+        deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L,
+    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs) })
 
     // ---- The plan (slice 2a) ----
 
@@ -535,7 +608,10 @@ class Study(
     fun lessons(): List<StudyLesson> =
         StudyRules.lessons(replica.entities(EntityTypes.STUDY_LESSON).associate { it.ref.entityId to it.fields })
 
-    fun view(today: Long): StudyView = StudyRules.view(courses(), lessons(), today)
+    fun deleted(): List<StudyDeletedLesson> =
+        StudyRules.deletedLessons(replica.entities(EntityTypes.STUDY_LESSON, includeDeleted = true).associate { it.ref.entityId to it.fields })
+
+    fun view(today: Long): StudyView = StudyRules.view(courses(), lessons(), today, deleted(), nowMs())
 
     private fun exists(courseId: String): Boolean = courses().any { it.id == courseId }
 
@@ -554,12 +630,15 @@ class Study(
         return StudyAdded(if (added > 0) "Added $title with $added lessons" else "Added $title", added, refused = false, courseId = id)
     }
 
-    /** Adds the lessons [text] lists to the course ([StudyRules.readOutline]), after its last lesson. */
-    fun addLessons(courseId: String, text: String): StudyAdded {
+    /**
+     * Adds the lessons [text] lists to the course ([StudyRules.readOutline]), after its last lesson; with [into] (a
+     * module's "+ Add lesson") they go at the end of that module unless the text names another.
+     */
+    fun addLessons(courseId: String, text: String, into: String? = null): StudyAdded {
         if (!exists(courseId)) return StudyAdded(StudyRules.GONE, 0, refused = true)
         val mine = lessons().filter { it.courseId == courseId }
         val last = mine.maxByOrNull { it.pos }
-        val entries = StudyRules.readOutline(text, last?.module)
+        val entries = StudyRules.readOutline(text, into?.takeIf { it.isNotBlank() } ?: last?.module)
         if (entries.isEmpty()) return StudyAdded(StudyRules.NOT_READ, 0, refused = true)
         var pos = (last?.pos ?: 0L)
         val now = nowMs()
@@ -620,12 +699,73 @@ class Study(
         return true
     }
 
-    /** Removes one lesson, with Undo's token (its id); null when it isn't there. */
+    /** Removes one lesson, with Undo's token (its id); null when it isn't there. It stays under Recently deleted. */
     fun removeLesson(id: String): StudyRemoved? {
         val l = lessons().firstOrNull { it.id == id } ?: return null
-        replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.DELETED to true.fv()))
+        replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.DELETED to true.fv(), StudyLessonFields.DELETED_AT to nowMs().fv()))
         return StudyRemoved("Removed ${l.title}", LESSON + id)
     }
+
+    /** Study fixes: renames a lesson; false when it isn't there, the name is empty or already so. */
+    fun renameLesson(id: String, text: String): Boolean {
+        val l = lessons().firstOrNull { it.id == id } ?: return false
+        val name = StudyRules.lessonName(text) ?: return false
+        if (name == l.title) return false
+        replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.TITLE to name.fv()))
+        return true
+    }
+
+    /** A place at the end of [module] in [mine] (between its last lesson and the next one), else after everything. */
+    private fun endOf(mine: List<StudyLesson>, module: String, except: String? = null): Long {
+        val others = mine.filter { it.id != except }
+        val last = others.maxOfOrNull { it.pos } ?: 0L
+        val inModule = others.filter { it.module.equals(module, ignoreCase = true) }.maxOfOrNull { it.pos } ?: return last + GAP
+        val next = others.map { it.pos }.filter { it > inModule }.minOrNull() ?: return inModule + GAP
+        return if (next - inModule >= 2) inModule + (next - inModule) / 2 else last + GAP
+    }
+
+    /** Study fixes: moves a lesson to the end of another module of its course; false when nothing changed. */
+    fun moveLesson(id: String, module: String): Boolean {
+        val l = lessons().firstOrNull { it.id == id } ?: return false
+        val target = StudyRules.moduleName(module) ?: return false
+        if (l.module.equals(target, ignoreCase = true)) return false
+        val mine = lessons().filter { it.courseId == l.courseId }
+        val name = mine.firstOrNull { it.module.equals(target, ignoreCase = true) }?.module ?: target
+        replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(
+            StudyLessonFields.MODULE to name.fv(),
+            StudyLessonFields.POS to endOf(mine, name, except = id).fv(),
+        ))
+        return true
+    }
+
+    /** Study fixes: a new module named [name] with its first lessons from [text], at the course's end. */
+    fun addModule(courseId: String, name: String, text: String): StudyAdded {
+        if (!exists(courseId)) return StudyAdded(StudyRules.GONE, 0, refused = true)
+        val module = StudyRules.moduleName(name) ?: return StudyAdded(StudyRules.MODULE_NOT_READ, 0, refused = true)
+        if (StudyRules.readOutline(text, module).isEmpty()) return StudyAdded(StudyRules.MODULE_NEEDS_LESSON, 0, refused = true)
+        return addLessons(courseId, text, into = module)
+    }
+
+    /** Study fixes: renames a module (every lesson in it); false when nothing changed. */
+    fun renameModule(courseId: String, module: String, text: String): Boolean {
+        val name = StudyRules.moduleName(text) ?: return false
+        val inIt = lessons().filter { it.courseId == courseId && it.module.equals(module, ignoreCase = true) }
+        if (inIt.isEmpty() || inIt.all { it.module == name }) return false
+        for (l in inIt) replica.commitLocal(EntityTypes.STUDY_LESSON, l.id, mapOf(StudyLessonFields.MODULE to name.fv()))
+        return true
+    }
+
+    /** Study fixes: deletes a module's lessons (after the app's confirm), with one Undo for them all. */
+    fun removeModule(courseId: String, module: String): StudyRemoved? {
+        val inIt = lessons().filter { it.courseId == courseId && it.module.equals(module, ignoreCase = true) }
+        if (inIt.isEmpty()) return null
+        val now = nowMs()
+        for (l in inIt) replica.commitLocal(EntityTypes.STUDY_LESSON, l.id, mapOf(StudyLessonFields.DELETED to true.fv(), StudyLessonFields.DELETED_AT to now.fv()))
+        return StudyRemoved("Removed ${inIt.first().module}", MODULE + inIt.joinToString(",") { it.id })
+    }
+
+    /** Study fixes: Recently deleted → Restore puts the lesson back where it was, ticked as it was. */
+    fun restoreLesson(id: String): Boolean = undoRemove(LESSON + id)
 
     /** Removes a course (its lessons go with it), with Undo's token; null when it isn't there. */
     fun removeCourse(id: String): StudyRemoved? {
@@ -646,11 +786,17 @@ class Study(
             replica.commitLocal(EntityTypes.STUDY_COURSE, id, mapOf(StudyCourseFields.REMOVED to false.fv()))
             return true
         }
-        val id = token.removePrefix(LESSON)
+        if (token.startsWith(MODULE)) {
+            return token.removePrefix(MODULE).split(',').filter { it.isNotBlank() }.map { restoreCopy(it) }.any { it }
+        }
+        return restoreCopy(token.removePrefix(LESSON))
+    }
+
+    private fun restoreCopy(id: String): Boolean {
         val f = replica.entity(EntityTypes.STUDY_LESSON, id)?.fields ?: return false
         if (f[StudyLessonFields.DELETED]?.boolOrNull != true || f[StudyLessonFields.RESTORED]?.boolOrNull == true) return false
         replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.RESTORED to true.fv()))
-        replica.commitLocal(EntityTypes.STUDY_LESSON, newId(), f - StudyLessonFields.DELETED - StudyLessonFields.RESTORED)
+        replica.commitLocal(EntityTypes.STUDY_LESSON, newId(), f - StudyLessonFields.DELETED - StudyLessonFields.RESTORED - StudyLessonFields.DELETED_AT)
         return true
     }
 
@@ -659,5 +805,6 @@ class Study(
         const val GAP = 1024L
         private const val COURSE = "course:"
         private const val LESSON = "lesson:"
+        private const val MODULE = "module:"
     }
 }

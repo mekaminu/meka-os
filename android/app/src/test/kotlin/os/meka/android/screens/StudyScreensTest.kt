@@ -15,6 +15,8 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -37,7 +39,8 @@ import kotlin.test.assertEquals
 /**
  * Study plan, slice 1: a course's page on the Fold's cover and inner screens (Dark, and Light on the cover), read for
  * nonsense and words broken in two, saved under `study/`; and a lesson's tick shows in the next frame. Slice 2a: the
- * plan card with a date and slots picked (cover Dark and Light), and a chip answering in the next frame. Invented course
+ * plan card with a date and slots picked (cover Dark and Light), and a chip answering in the next frame. Study fixes: a
+ * long press opens the lesson's sheet and never deletes; Delete asks first; Recently deleted restores. Invented course
  * (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -180,5 +183,38 @@ class StudyScreensTest {
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.first().done }
         assertEquals(4, core.studyView.value.course(id)!!.done)
+    }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun aLongPressOpensTheSheetAndNeverDeletes() {
+        // Study fixes (Meka 2026-10-26 23:21: "when I hold an item it deletes automatically, I just lost an item").
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        val pivot = core.studyView.value.course(id)!!.modules[1].lessons.first()
+        compose.mainClock.autoAdvance = true
+        scrollTo(hasTestTag("study-lesson-${pivot.id}"))
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("study-lesson-${pivot.id}").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("study-lesson-sheet").assertExists()
+        assertEquals(8, core.studyView.value.course(id)!!.total)
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-sheet"))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-lesson-sheet"))
+        ScreenShots.assertSensible(compose, "cover-dark-lesson-sheet")
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-lesson-sheet")
+        // Delete asks first; only "Delete" in the confirm deletes, and Recently deleted brings it back.
+        compose.onNodeWithTag("study-lesson-delete").performClick()
+        compose.waitForIdle()
+        assertEquals(8, core.studyView.value.course(id)!!.total)
+        compose.onNodeWithTag("study-lesson-confirm-yes").performClick()
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.total == 7 }
+        val deleted = core.studyView.value.course(id)!!.deleted.single()
+        assertEquals("Pivot tables", deleted.title)
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-deleted-head"))
+        compose.onNodeWithTag("study-deleted-head").performClick()
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-restore-${deleted.id}"))
+        compose.onNodeWithTag("study-restore-${deleted.id}").performClick()
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.total == 8 }
     }
 }
