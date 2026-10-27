@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Week board folded</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .3s cubic-bezier(.2,.8,.2,1) both}
+.pill{transition:background .2s,color .2s}
+button{cursor:pointer}
+@media (prefers-reduced-motion:reduce){.in{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;padding:16px 16px 0;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden">
+
+<div style="display:flex;align-items:center;gap:8px">
+<div style="flex:1;display:flex;align-items:baseline;gap:8px"><span style="font-size:24px;font-weight:700">October</span><span style="font-size:13px;color:#8f897f">Week 43</span></div>
+<button type="button" aria-label="Previous week" style="border:0;background:#121214;color:#a8a29a;width:40px;height:40px;border-radius:20px;font-size:18px">‹</button>
+<button type="button" aria-label="Next week" style="border:0;background:#121214;color:#a8a29a;width:40px;height:40px;border-radius:20px;font-size:18px">›</button>
+<button type="button" aria-label="More: agenda view, plan or review the week, goals, lists" onClick="{{toggleMenu}}" style="border:0;background:#121214;color:#a8a29a;width:40px;height:40px;border-radius:20px;font-size:18px;line-height:1">⋯</button>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px">
+<sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+<button type="button" class="pill" onClick="{{d.pick}}" style="{{d.style}}">
+<span style="font-size:11px;opacity:.8">{{d.w}}</span>
+<span style="font-size:17px;font-weight:600">{{d.n}}</span>
+<span style="{{d.dots}}"></span>
+</button>
+</sc-for>
+</div>
+
+<div class="in" style="display:flex;align-items:center;gap:10px">
+<span style="flex:1;font-size:15px;font-weight:600">{{day.title}}</span>
+<span style="font-size:12.5px;color:#a8a29a">{{day.plan}}</span>
+</div>
+<div style="height:4px;border-radius:2px;background:#1c1c1f;overflow:hidden;margin-top:-8px"><div style="{{day.bar}}"></div></div>
+
+<div style="display:flex;align-items:center;gap:10px;background:#121214;border-radius:14px;padding:10px 12px">
+<span style="width:22px;height:22px;border-radius:11px;background:radial-gradient(circle at 35% 35%,#f3dfaa,#7a6438);flex-shrink:0"></span>
+<span style="font-size:13.5px;color:#d8d2c6">{{day.obi}}</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px;overflow:hidden">
+<sc-for list="{{day.items}}" as="it" hint-placeholder-count="3">
+<button type="button" class="in" onClick="{{it.open}}" style="border:0;color:#ededed;font-family:DM Sans,sans-serif;text-align:left;width:100%;background:#121214;border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start">
+<span style="{{it.tick}}"></span>
+<span style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
+<span style="font-size:15px;line-height:1.3">{{it.title}}</span>
+<span style="font-size:12.5px;color:#8f897f;display:flex;gap:6px;align-items:center"><span style="{{it.dot}}"></span>{{it.meta}}</span>
+</span>
+<span style="font-size:12.5px;color:#a8a29a;white-space:nowrap">{{it.time}}</span>
+</button>
+</sc-for>
+<div style="font-size:12px;color:#8f897f;padding:0 2px">Tap a task to move it · or hold it and drag onto a day above · swipe right = tomorrow</div>
+<button type="button" style="border:1px dashed #2e2e32;background:transparent;color:#8f897f;border-radius:12px;height:40px;font:500 13.5px DM Sans,sans-serif;text-align:left;padding:0 14px">+ Add to {{day.short}}</button>
+</div>
+
+<sc-if value="{{sheet}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end">
+<div class="in" style="width:100%;background:#151517;border-radius:22px 22px 0 0;padding:16px 16px 26px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px">
+<div style="width:40px;height:4px;border-radius:2px;background:#3a3a3e;align-self:center"></div>
+<div style="font-size:17px;font-weight:600">{{sheet.title}}</div>
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Move to</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{sheet.moves}}" as="m" hint-placeholder-count="8"><button type="button" onClick="{{m.go}}" style="{{m.style}}">{{m.name}}</button></sc-for></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<button type="button" onClick="{{sheet.done}}" style="border:0;background:#c9b37e;color:#111;border-radius:12px;height:44px;font:600 13.5px DM Sans,sans-serif">Done</button>
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:44px;font:500 13.5px DM Sans,sans-serif">Edit</button>
+<button type="button" onClick="{{sheet.close}}" style="border:0;background:transparent;color:#8f897f;border-radius:12px;height:44px;font:500 13.5px DM Sans,sans-serif">Close</button>
+</div>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:16px;right:16px;bottom:20px;background:#2a2721;color:#f0e6cf;border-radius:14px;padding:12px 14px;font-size:13.5px">{{toast}}</div></sc-if>
+<sc-if value="{{menu}}" hint-placeholder-val="{{false}}">
+<div class="in" style="position:absolute;top:64px;right:16px;width:240px;background:#1a1a1d;border-radius:16px;padding:6px;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.6)">
+<sc-for list="{{menuItems}}" as="m" hint-placeholder-count="6">
+<button type="button" onClick="{{toggleMenu}}" style="border:0;background:transparent;color:#ededed;text-align:left;padding:12px;font:500 14.5px DM Sans,sans-serif;border-radius:10px;display:flex;justify-content:space-between"><span>{{m.a}}</span><span style="color:#8f897f;font-size:12.5px">{{m.b}}</span></button>
+</sc-for>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={sel:6,menu:false,moved:{},done:{},open:null,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var W=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],N=[19,20,21,22,23,24,25];
+var data=[
+{plan:'Work day',obi:'Office day: leave 07:40, home about 18:50.',items:[{t:'Work',m:'Work · 09:00–17:30',time:'8h 30',c:'#8a9bd1'}]},
+{plan:'Work day',obi:'Office day. Nothing else planned.',items:[{t:'Work',m:'Work · 09:00–17:30',time:'8h 30',c:'#8a9bd1'}]},
+{plan:'2h planned',obi:'Two training sessions after work: leave by 16:30.',items:[{t:'Training',m:'Football · Hertfordshire FA',time:'16:55',c:'#7fb3a8'},{t:'Training · 3G',m:'Football · Stratton School',time:'18:00',c:'#7fb3a8'}]},
+{plan:'1h planned',obi:'Early finish today: 15:30.',items:[{t:'Training',m:'Football · Stratton School',time:'18:00',c:'#7fb3a8'}]},
+{plan:'Nothing yet',obi:'A free evening.',items:[]},
+{plan:'1h planned',obi:'Quiet Saturday.',items:[{t:'Test2',m:'Personal',time:'11:00',c:'#b38fd1'}]},
+{plan:'3h 30 of 9h 30',obi:'Match at 09:10, then free until the game at 8.',items:[{id:'k1',t:'Set up a call with two contacts',m:'Todoist · any time',time:'',c:'#7fb3a8',task:true},{id:'k2',t:'Do feedback for all',m:'Work · any time',time:'',c:'#8a9bd1',task:true},{id:'k3',t:'Review plan for DL',m:'Work · any time',time:'',c:'#8a9bd1',task:true},{t:'U10s Reds v Eagles U10 Reds',m:'Football · Personal',time:'09:10',c:'#b38fd1'},{t:'Barça v Real Madrid',m:'LaLiga · on TV',time:'20:00',c:'#d18a6b'}]}
+];
+var all=[];data.forEach(function(dd,i){dd.items.forEach(function(it){all.push({it:it,day:it.id&&s.moved[it.id]!==undefined?s.moved[it.id]:i});});});
+var itemsOf=function(i){return all.filter(function(x){return x.day===i&&!(x.it.id&&s.done[x.it.id]);}).map(function(x){return x.it;});};
+var d={plan:data[s.sel].plan,obi:data[s.sel].obi,items:itemsOf(s.sel)};
+var days=W.map(function(w,i){var on=i===s.sel,today=i===6;var n=itemsOf(i).length;
+return {w:w.charAt(0),n:N[i],pick:function(){self.setState({sel:i});},
+style:'border:0;border-radius:14px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-family:DM Sans,sans-serif;'+(on?'background:#c9b37e;color:#111':'background:#121214;color:'+(today?'#e8cf93':'#ededed')),
+dots:'width:'+(n?Math.min(n,3)*5:0)+'px;height:4px;border-radius:2px;margin-top:2px;background:'+(on?'#111':'#c9b37e')+';opacity:'+(n?'.8':'0')};});
+var pct=s.sel===6?37:(d.items.length?20:0);
+return {
+days:days,
+day:{title:W[s.sel]+' '+N[s.sel]+' October'+(s.sel===6?' · today':''),short:W[s.sel],plan:d.plan,obi:d.obi,
+bar:'width:'+pct+'%;height:100%;background:#c9b37e;border-radius:2px',
+items:d.items.map(function(it){return {title:it.t,meta:it.m,time:it.time,open:function(){if(it.task)self.setState({open:it.id,toast:''});else self.setState({toast:'Events move in your calendar: tap Edit'});},
+dot:'width:7px;height:7px;border-radius:4px;background:'+it.c+';flex-shrink:0',
+tick:it.task?'width:20px;height:20px;border-radius:10px;border:2px solid #5a5650;flex-shrink:0;margin-top:1px':'width:4px;align-self:stretch;border-radius:2px;background:'+it.c+';flex-shrink:0'};})},
+sheet:(function(){if(!s.open)return null;var it=all.filter(function(x){return x.it.id===s.open;})[0];if(!it)return null;
+var cur=it.day;var chip=function(on){return 'border:0;border-radius:999px;padding:9px 13px;font:500 13.5px DM Sans,sans-serif;'+(on?'background:#c9b37e;color:#111':'background:#1d1d20;color:#ededed');};
+var opts=[['Tomorrow',(cur+1)%7]].concat(W.map(function(w,i){return [w+' '+N[i],i];}));
+var moves=opts.map(function(o){return {name:o[0],style:chip(o[1]===cur&&o[0]!=='Tomorrow'),go:function(){var m=Object.assign({},s.moved);m[s.open]=o[1];self.setState({moved:m,open:null,sel:s.sel,toast:'Moved to '+W[o[1]]+' '+N[o[1]]+' · Undo'});}};});
+moves.push({name:'Someday',style:chip(false),go:function(){var m=Object.assign({},s.moved);m[s.open]=-1;self.setState({moved:m,open:null,toast:'Moved to Someday · Undo'});}});
+return {title:it.it.t,moves:moves,close:function(){self.setState({open:null});},done:function(){var dn=Object.assign({},s.done);dn[s.open]=1;self.setState({done:dn,open:null,toast:'Done · Undo'});}};})(),
+toast:s.toast,
+menu:s.menu,toggleMenu:function(){self.setState({menu:!s.menu});},
+menuItems:[{a:'Agenda view',b:''},{a:'Timeline',b:'for today'},{a:'Plan your week',b:'Obi helps'},{a:'Review the week',b:''},{a:'Goals',b:'up to 3'},{a:'Lists',b:'No day yet · Someday'}]
+};
+}
+}
+</script>
+</body>
+</html>
