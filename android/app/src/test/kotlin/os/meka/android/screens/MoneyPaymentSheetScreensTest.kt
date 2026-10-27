@@ -85,9 +85,14 @@ class MoneyPaymentSheetScreensTest {
         return core
     }
 
+    /** Lets the main looper run between frames (a tap's state change recomposes from there), as BriefScreensTest does. */
     private fun settle() {
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        repeat((SETTLE_MS / 100).toInt()) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
         compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(100)
     }
 
     private fun tapNewest(core: MekaCore): String {
