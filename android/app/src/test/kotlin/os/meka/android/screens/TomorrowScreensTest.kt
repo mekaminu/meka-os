@@ -77,11 +77,13 @@ class TomorrowScreensTest {
             gym to school
         }
         compose.mainClock.autoAdvance = false
+        // Read once, outside composition: the peek as Today would draw it.
+        val peek = core.shutdownView.value.peek
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
                     Column {
-                        core.shutdownView.value.peek?.let { TomorrowPeekCard(it, onOpen = {}) }
+                        peek?.let { TomorrowPeekCard(it, onOpen = {}) }
                         TomorrowPane(core, onClose = {})
                     }
                 }
