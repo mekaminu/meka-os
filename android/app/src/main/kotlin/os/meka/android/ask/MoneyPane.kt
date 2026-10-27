@@ -29,8 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -47,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -98,6 +97,7 @@ import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
+import os.meka.core.domain.MoneySheetMark
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.domain.MoneySpending
@@ -241,6 +241,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
     }
+    // The payment sheet (Meka 2026-10-26 23:18): the payment it's open on, found again in each view so its chips follow.
+    var sheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val sheetRow = sheetId?.let { id ->
+        v.month?.txns?.firstOrNull { it.id == id } ?: v.month?.spending?.latest?.firstNotNullOfOrNull { d -> d.rows.firstOrNull { it.id == id } }
+    }
+    val openSheet: (String) -> Unit = { id -> haptics.tick(); said = null; sheetId = id }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val name = account
@@ -308,6 +314,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(MekaSpace.gutter),
@@ -642,11 +649,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     d.rows.forEach { t ->
                         item(key = "latest-${t.id}") {
                             TxnRow(t, Modifier.animateItem(), chip = MoneySpending.icon(t.category) to MoneySpending.txnTone(sp, t.category), showDay = false,
-                                onBusiness = { on -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) } },
-                                onShared = { on -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) } },
-                                onAlways = { on -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) } }) { key ->
-                                payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) }
-                            }
+                                onOpen = { openSheet(t.id) })
                         }
                     }
                 }
@@ -667,11 +670,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
                         TxnRow(t, Modifier.animateItem(), chip = sp?.let { MoneySpending.icon(t.category) to MoneySpending.txnTone(it, t.category) },
-                            onBusiness = { on -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) } },
-                            onShared = { on -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) } },
-                            onAlways = { on -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) } }) { key ->
-                            payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) }
-                        }
+                            onOpen = { openSheet(t.id) })
                     }
                 }
                 if (m.more > 0) {
@@ -805,6 +804,22 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+    }
+    PaymentSheet(
+        row = sheetRow, order = v.categoryOrder, said = said,
+        onCategory = { key -> sheetRow?.let { t -> payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) } } },
+        onMark = { mark, on ->
+            sheetRow?.let { t ->
+                when (mark) {
+                    MoneySheetMark.PAYMENT_SHARED -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) }
+                    MoneySheetMark.PAYEE_SHARED -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) }
+                    MoneySheetMark.SIDE_HUSTLE -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) }
+                }
+            }
+        },
+        onUndo = { u -> scope.launch { runCatching { core.undoMoneyCategory(u) }; haptics.light(); said = null } },
+        onClose = { sheetId = null },
+    )
     }
 }
 
@@ -1158,56 +1173,29 @@ private fun CategoryRow(c: MoneyCategoryRow, modifier: Modifier) {
 
 @Composable
 private fun TxnRow(
-    t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> Unit = {}, onShared: (Boolean) -> Unit = {},
-    onAlways: (Boolean) -> Unit = {},
+    t: MoneyTxnRow, modifier: Modifier,
     /** Money redesign (B2): the category's icon chip in its colour this month, and whether the sub-line names the day. */
     chip: Pair<os.meka.core.domain.MoneyIcon, Int>? = null, showDay: Boolean = true,
-    onCategory: (String) -> Unit,
+    /** The payment sheet (Meka 2026-10-26 23:18): a tap opens it ([PaymentSheet]), never a dropdown. */
+    onOpen: () -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
-    Box(modifier) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { menu = true }
-                .semantics(mergeDescendants = true) { contentDescription = t.spoken + ". Change category" }
-                .minTouch().padding(vertical = MekaSpace.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (chip != null) Arrangement.spacedBy(MekaSpace.m) else Arrangement.Start,
-        ) {
-            chip?.let { (icon, tone) -> MoneyIconChip(icon, tone) }
-            Column(Modifier.weight(1f)) {
-                Text(t.merchant, style = if (chip != null) MekaType.taskTitle else MekaType.body, color = Meka.colors.textPrimary)
-                Text((if (showDay) "${t.day} · " else "") + t.categoryLabel + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
-                    style = MekaType.caption, color = Meka.colors.textSecondary)                // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
-                t.receipt?.let { r -> Text(r, style = MekaType.caption, color = Meka.colors.textSecondary) }
-                t.receiptDetail?.let { d -> Text(d, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }
-            }
-            Text(t.amount, style = MekaType.body, color = if (t.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = t.spoken + ". Open to change its category" }
+            .minTouch().padding(vertical = MekaSpace.xs).testTag("money-txn-${t.id}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (chip != null) Arrangement.spacedBy(MekaSpace.m) else Arrangement.Start,
+    ) {
+        chip?.let { (icon, tone) -> MoneyIconChip(icon, tone) }
+        Column(Modifier.weight(1f)) {
+            Text(t.merchant, style = if (chip != null) MekaType.taskTitle else MekaType.body, color = Meka.colors.textPrimary)
+            Text((if (showDay) "${t.day} · " else "") + t.categoryLabel + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
+                style = MekaType.caption, color = Meka.colors.textSecondary)
+            // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
+            t.receipt?.let { r -> Text(r, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            t.receiptDetail?.let { d -> Text(d, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            // Slice 13: the payer counts as the side hustle's (or not), on every account.
-            DropdownMenuItem(
-                text = { Text(if (t.business) MoneyBusiness.MENU_ON else MoneyBusiness.MENU_OFF, style = MekaType.body,
-                    color = if (t.business) Meka.colors.accent else Meka.colors.textPrimary) },
-                onClick = { menu = false; onBusiness(!t.business) },
-            )
-            // Slice 14: this payment, or every payment to this payer, shared with his partner.
-            DropdownMenuItem(
-                text = { Text(if (t.shared) MoneyShared.MENU_ON else MoneyShared.MENU_OFF, style = MekaType.body,
-                    color = if (t.shared) Meka.colors.accent else Meka.colors.textPrimary) },
-                onClick = { menu = false; onShared(!t.shared) },
-            )
-            DropdownMenuItem(
-                text = { Text(if (t.sharedAlways) MoneyShared.MENU_ALWAYS_ON else MoneyShared.MENU_ALWAYS_OFF, style = MekaType.body,
-                    color = if (t.sharedAlways) Meka.colors.accent else Meka.colors.textPrimary) },
-                onClick = { menu = false; onAlways(!t.sharedAlways) },
-            )
-            MoneyRules.CHOICES.forEach { c ->
-                DropdownMenuItem(
-                    text = { Text(c.label, style = MekaType.body, color = if (c.key == t.category) Meka.colors.accent else Meka.colors.textPrimary) },
-                    onClick = { menu = false; if (c.key != t.category) onCategory(c.key) },
-                )
-            }
-        }
+        Text(t.amount, style = MekaType.body, color = if (t.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
     }
 }
 

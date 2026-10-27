@@ -123,6 +123,9 @@ class MoneyFacadeTest {
         val costa = fold.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
         val saved = fold.setMoneyCategory(costa.id, "eating_out")
         assertEquals("Costa Coffee is Eating out from now on", saved.line)
+        // The payment sheet's chips: his own pick first, Income and Transfers last.
+        assertEquals("eating_out", fold.moneyView.value.categoryOrder.first())
+        assertEquals(listOf("income", "transfers"), fold.moneyView.value.categoryOrder.takeLast(2))
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.moneyView.value.locked)
         assertEquals("Current account · updated Fri 16 Oct", mac.lifeLines.value.of(LifeTile.MONEY)?.text)

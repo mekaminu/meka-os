@@ -175,7 +175,7 @@ class MoneyTest {
         // Teach a category, Undo it.
         val costa = money.txns().first { it.text == "COSTA" }
         val saved = money.setCategory(costa.id, "eating_out")
-        assertEquals("Costa is Eating out from now on · 2 payments", saved.line)
+        assertEquals("Moved 2 payments from Costa to Eating out", saved.line)
         assertEquals(MoneyCategory.EATING_OUT, money.rules()["COSTA"])
         assertTrue(money.undoCategory(saved.undo!!))
         assertNull(money.rules()["COSTA"])

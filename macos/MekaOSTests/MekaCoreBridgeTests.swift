@@ -3870,4 +3870,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(obi.isFocusTitle(title: "Focus time"))
         XCTAssertEqual(ObiCardKind.approve.label, "Needs your yes")
     }
+
+    /// The payment sheet: the Mac draws the same chips, toggles and moved line as the Fold.
+    func testThePaymentSheetOnTheMac() {
+        let sheet = MoneyPaymentSheet.shared
+        let order = sheet.order(use: ["coffee": KotlinInt(int: 5), "transfers": KotlinInt(int: 9)], taught: Set(["fun"]))
+        XCTAssertEqual(order.first, "fun")
+        XCTAssertEqual(order.last, "transfers")
+        let chips = sheet.chips(order: order, current: "coffee")
+        XCTAssertEqual(chips.filter { $0.on }.map { $0.key }, ["coffee"])
+        XCTAssertEqual(sheet.movedLine(merchant: "Corner Shop", category: MoneyCategory.shopping, count: 14), "Moved 14 payments from Corner Shop to Shopping")
+        XCTAssertEqual(MoneySheetMark.sideHustle.name, "SIDE_HUSTLE")
+    }
 }

@@ -61,6 +61,8 @@ struct MoneySheet: View {
     @State private var focus: String?
     @State private var allCats = false
     @State private var allPays = false
+    /// The payment sheet: the payment whose popover is open.
+    @State private var sheetTxn: String?
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -1077,32 +1079,13 @@ struct MoneySheet: View {
         .accessibilityLabel(c.spoken)
     }
 
+    /// The payment sheet (Meka 2026-10-26 23:18): a click opens it as a popover under the row, never a menu.
     private func txn(_ t: MoneyTxnRow, chip: MoneySpendingView? = nil, showDay: Bool = true) -> some View {
-        Menu {
-            // Slice 13: the payer counts as the side hustle's (or not), on every account.
-            Button(t.business ? MoneyBusiness.shared.MENU_ON : MoneyBusiness.shared.MENU_OFF) {
-                let id = t.id
-                let on = !t.business
-                Task { said = await model.moneyBusinessMerchant(txnId: id, on: on) }
-            }
-            // Slice 14: this payment, or every payment to this payer, shared with his partner.
-            Button(t.shared ? MoneyShared.shared.MENU_ON : MoneyShared.shared.MENU_OFF) {
-                let id = t.id
-                let on = !t.shared
-                Task { said = await model.moneySharedTxn(txnId: id, on: on) }
-            }
-            Button(t.sharedAlways ? MoneyShared.shared.MENU_ALWAYS_ON : MoneyShared.shared.MENU_ALWAYS_OFF) {
-                let id = t.id
-                let on = !t.sharedAlways
-                Task { said = await model.moneySharedMerchant(txnId: id, on: on) }
-            }
-            Divider()
-            ForEach(MoneyRules.shared.CHOICES, id: \.key) { choice in
-                Button(choice.key == t.category ? "✓ \(choice.label)" : choice.label) {
-                    guard choice.key != t.category else { return }
-                    Task { said = await model.setMoneyCategory(txnId: t.id, category: choice.key) }
-                }
-            }
+        let id = t.id
+        return Button {
+            MekaHaptics.tick()
+            said = nil
+            sheetTxn = id
         } label: {
             HStack(spacing: chip == nil ? nil : MekaSpace.m) {
                 if let sp = chip {
@@ -1125,9 +1108,101 @@ struct MoneySheet: View {
             }
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .accessibilityLabel(t.spoken + ". Change category")
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(t.spoken + ". Open to change its category")
+        .popover(isPresented: Binding(get: { sheetTxn == id }, set: { if !$0 && sheetTxn == id { sheetTxn = nil } }), arrowEdge: .bottom) {
+            paymentSheet(id)
+        }
+    }
+
+    /// The payment as the view has it now (so the sheet follows each click), from the month's rows or Spending's latest.
+    private func sheetRow(_ id: String) -> MoneyTxnRow? {
+        guard let m = model.money?.month else { return nil }
+        if let r = m.txns.first(where: { $0.id == id }) { return r }
+        for d in m.spending?.latest ?? [] {
+            if let r = d.rows.first(where: { $0.id == id }) { return r }
+        }
+        return nil
+    }
+
+    /// The payment sheet: payee and amount, day and account, category chips in his order, what a pick does, the last
+    /// change with Undo, Shared · Always shared · Side hustle, and Done. Esc or a click outside closes it.
+    @ViewBuilder
+    private func paymentSheet(_ id: String) -> some View {
+        if let r = sheetRow(id) {
+            let order = model.money?.categoryOrder ?? []
+            VStack(alignment: .leading, spacing: MekaSpace.s) {
+                HStack(alignment: .top) {
+                    Text(r.merchant).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    Text(r.amount).font(MekaType.nowTitle).foregroundStyle(r.moneyIn ? palette.accent : palette.textPrimary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(MoneyPaymentSheet.shared.spoken(row: r))
+                .accessibilityAddTraits(.isHeader)
+                Text(MoneyPaymentSheet.shared.sub(row: r)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(MoneyPaymentSheet.shared.CATEGORY_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.xs)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(MoneyPaymentSheet.shared.chips(order: order, current: r.category), id: \.key) { c in
+                        sheetPill(c.label, on: c.on, spoken: c.spoken) {
+                            guard !c.on else { return }
+                            let key = c.key
+                            Task { said = await model.setMoneyCategory(txnId: id, category: key) }
+                        }
+                    }
+                }
+                Text(MoneyPaymentSheet.shared.ruleLine(row: r)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let s = said { saidLine(s).transition(.opacity) }
+                Text(MoneyPaymentSheet.shared.MARKS_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.xs)
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(MoneyPaymentSheet.shared.toggles(row: r), id: \.label) { t in
+                        sheetPill(t.label, on: t.on, spoken: t.spoken) {
+                            let on = !t.on
+                            // A plain number crosses into the Task, never the Kotlin enum.
+                            let which = t.mark == MoneySheetMark.paymentShared ? 0 : (t.mark == MoneySheetMark.payeeShared ? 1 : 2)
+                            Task {
+                                if which == 0 {
+                                    said = await model.moneySharedTxn(txnId: id, on: on)
+                                } else if which == 1 {
+                                    said = await model.moneySharedMerchant(txnId: id, on: on)
+                                } else {
+                                    said = await model.moneyBusinessMerchant(txnId: id, on: on)
+                                }
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button(MoneyPaymentSheet.shared.DONE) { sheetTxn = nil }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.metaStrong)
+                        .foregroundStyle(palette.onAccent)
+                        .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
+                        .background(palette.accent, in: Capsule())
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 380)
+            .background(palette.surface)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+        }
+    }
+
+    private func sheetPill(_ label: String, on: Bool, spoken: String, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.caption)
+            .lineLimit(1)
+            .foregroundStyle(on ? palette.onAccent : palette.textPrimary)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(on ? palette.accent : palette.surfaceRaised, in: Capsule())
+            .accessibilityLabel(spoken)
+            .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private func saidLine(_ s: CoreModel.MoneySaid) -> some View {

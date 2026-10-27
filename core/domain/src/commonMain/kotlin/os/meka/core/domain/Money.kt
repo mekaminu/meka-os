@@ -463,6 +463,8 @@ data class MoneyView(
     val opening: String? = null,
     /** Speed: the first open of a session before any view is built — the title and [opening] only, nothing to tap. */
     val skeleton: Boolean = false,
+    /** The payment sheet: every category's key in chip order ([MoneyPaymentSheet.order]); empty before any payment is in. */
+    val categoryOrder: List<String> = emptyList(),
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -758,6 +760,7 @@ object MoneyRules {
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
             year = if (partial) MoneyYear.view(yearLines, today, source) else null,
             review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }, source),
+            categoryOrder = MoneyPaymentSheet.order(mine.groupingBy { cat(it).key }.eachCount(), rules.values.mapTo(HashSet()) { it.key }),
         )
     }
 
@@ -797,8 +800,7 @@ object MoneyRules {
         }
     }
 
-    fun movedLine(merchant: String, category: MoneyCategory, count: Int): String =
-        "$merchant is ${category.label} from now on" + (if (count > 1) " · $count payments" else "")
+    fun movedLine(merchant: String, category: MoneyCategory, count: Int): String = MoneyPaymentSheet.movedLine(merchant, category, count)
 
     fun removedLine(name: String, count: Int): String = "Removed $name · $count transaction${if (count == 1) "" else "s"}"
 }
