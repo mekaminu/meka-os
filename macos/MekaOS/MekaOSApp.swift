@@ -65,6 +65,10 @@ struct MekaOSApp: App {
                 .onOpenURL { model.handle(url: $0) }
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
                 .animation(MekaMotion.themeBlend(reduced: MotionSetting.reduced), value: appearance)
+                // Menus, context menus, popovers and alerts follow the chosen appearance too, not only the window
+                // (Meka 2026-10-26 23:18, (5): no white menus with light text).
+                .onAppear { MekaAppearance.applyToApp(appearance) }
+                .onChange(of: appearance) { MekaAppearance.applyToApp(appearance) }
         }
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
@@ -170,6 +174,13 @@ enum MekaAppearance: String, CaseIterable, Identifiable {
     /// nil follows macOS.
     var scheme: ColorScheme? { switch self { case .dark: .dark; case .light: .light; case .system: nil } }
     var next: MekaAppearance { let all = Self.allCases; return all[(all.firstIndex(of: self)! + 1) % all.count] }
+    /// The whole app's AppKit appearance (menus, popovers, alerts); nil follows macOS.
+    var nsAppearance: NSAppearance? {
+        switch self { case .dark: NSAppearance(named: .darkAqua); case .light: NSAppearance(named: .aqua); case .system: nil }
+    }
+    @MainActor static func applyToApp(_ raw: String) {
+        NSApp.appearance = (MekaAppearance(rawValue: raw) ?? .dark).nsAppearance
+    }
 }
 
 /// Taps feel instant, part (4): when this launch began (system uptime), read first thing in the app's init.

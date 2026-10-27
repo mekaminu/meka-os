@@ -33,8 +33,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMaterialShapes
+import os.meka.android.designsystem.mekaColorScheme
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.today.SectionLabel
@@ -359,13 +359,8 @@ private fun ChipRow(label: String?, chips: @Composable () -> Unit) {
 @Composable
 internal fun DayPickerDialog(initialDay: Long, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
     val c = Meka.colors
-    val base = if (c.background.luminance() < 0.5f) darkColorScheme() else lightColorScheme()
-    val scheme = base.copy(
-        primary = c.accent, onPrimary = c.onAccent, surface = c.surfaceRaised, onSurface = c.textPrimary,
-        onSurfaceVariant = c.textSecondary, surfaceContainerHigh = c.surfaceRaised, outline = c.hairline,
-        secondaryContainer = c.surface, onSecondaryContainer = c.textPrimary,
-    )
-    MaterialTheme(colorScheme = scheme) {
+    // MekaTheme already themes Material app-wide; kept here so the picker is right in any composition (shots, sheets).
+    MaterialTheme(colorScheme = mekaColorScheme(c, c.background.luminance() < 0.5f), shapes = MekaMaterialShapes) {
         val state = rememberDatePickerState(initialSelectedDateMillis = initialDay * CivilDate.DAY_MS)
         DatePickerDialog(
             onDismissRequest = onDismiss,

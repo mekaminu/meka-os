@@ -49,6 +49,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import os.meka.android.calendar.EventActionHandlers
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.mekaMenuBorder
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -281,7 +282,10 @@ internal fun AllDayRow(
             }
         }
         if (handlers != null) {
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenu(
+                expanded = menu, onDismissRequest = { menu = false },
+                containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+            ) {
                 @Composable
                 fun entry(label: String, onClick: () -> Unit) = DropdownMenuItem(
                     text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },

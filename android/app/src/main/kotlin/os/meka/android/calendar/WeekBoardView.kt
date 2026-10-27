@@ -123,6 +123,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.mekaMenuBorder
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -1426,7 +1427,10 @@ private fun BoardCardRow(
             },
         )
         if (card.canMove) {
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenu(
+                expanded = menu, onDismissRequest = { menu = false },
+                containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+            ) {
                 @Composable
                 fun entry(label: String, onClick: () -> Unit) = DropdownMenuItem(
                     text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
@@ -2274,7 +2278,10 @@ private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Re
                 }
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        DropdownMenu(
+            expanded = menu, onDismissRequest = { menu = false },
+            containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+        ) {
             DropdownMenuItem(
                 text = { Text(BoardGoalRules.OFF_WEEK, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
                 onClick = { menu = false; onOff() },
@@ -2331,7 +2338,10 @@ private fun AddGoalChip(
                 Text(BoardGoalRules.EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        DropdownMenu(
+            expanded = menu, onDismissRequest = { menu = false },
+            containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+        ) {
             offers.forEach { o ->
                 DropdownMenuItem(
                     text = {

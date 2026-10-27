@@ -50,6 +50,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.mekaMenuBorder
 import os.meka.android.designsystem.MekaChoreography
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MotionMath
@@ -296,7 +297,10 @@ private fun EventActionsMenu(event: CalendarEvent, handlers: EventActionHandlers
         text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
         onClick = onClick,
     )
-    DropdownMenu(expanded = page != EventMenu.CLOSED, onDismissRequest = { set(EventMenu.CLOSED) }) {
+    DropdownMenu(
+        expanded = page != EventMenu.CLOSED, onDismissRequest = { set(EventMenu.CLOSED) },
+        containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+    ) {
         when (page) {
             EventMenu.MAIN -> {
                 if (remindChoices.isNotEmpty() || remind != 0) {
