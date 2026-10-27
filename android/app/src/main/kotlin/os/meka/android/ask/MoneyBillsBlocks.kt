@@ -164,7 +164,7 @@ internal fun MoneyPaydayRow(b: MoneyPaydayBrief, modifier: Modifier = Modifier, 
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = b.spoken }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("money-payday-row"),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-payday-row"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
