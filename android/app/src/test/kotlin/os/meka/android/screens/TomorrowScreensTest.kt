@@ -33,6 +33,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.TomorrowPane
 import os.meka.android.today.TomorrowPeekCard
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -123,7 +124,8 @@ class TomorrowScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", name))
         val peek = assertNotNull(core.shutdownView.value.peek)
         assertTrue(peek.line.endsWith("2 tasks · first 07:40 Gym before work"), peek.line)
-        assertTrue(shows("2 tasks · first 07:40"), "$name: the peek isn't shown")
+        // Lines are drawn through LoneWordGlue (the last words held together), so look for them as drawn.
+        assertTrue(shows(LoneWordGlue.kept(peek.line)), "$name: the peek isn't shown")
         assertTrue(shows("Gym before work") && shows("Ring the school about the trip"), "$name: tomorrow's tasks aren't listed")
         assertTouchTargets(name)
 
@@ -133,8 +135,9 @@ class TomorrowScreensTest {
         compose.onAllNodes(hasText("Today") and hasClickAction(), useUnmergedTree = true)[1].performSemanticsAction(SemanticsActions.OnClick)
         until { core.shutdownView.value.tomorrow.rows.none { it.id == "t-$school" } }
         assertTrue(core.shutdownView.value.left.any { it.task.id == school })
-        until { shows("Moved “Ring the school about the trip” to Today") }
-        assertTrue(shows("Moved “Ring the school about the trip” to Today"), "$name: the move isn't said")
+        val moved = LoneWordGlue.kept("Moved “Ring the school about the trip” to Today")
+        until { shows(moved) }
+        assertTrue(shows(moved), "$name: the move isn't said")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-moved"))
         assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.map { it.id })
     }
