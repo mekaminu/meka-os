@@ -120,4 +120,26 @@ class MoneyRefundsTest {
         assertEquals(MoneyRefunds.BACK, now.refunds!!.rows.single().state)
         assertNull(MoneyRules.view(accounts, txns, emptyMap(), today, cal, 1, refundWaits = listOf(w)).refunds)
     }
+
+    @Test
+    fun compactRowsSayTheirStateInAFewWordsAndFoldAfterThree() {
+        // Layout rules on Bills (Meka 2026-10-26 22:18): one line per refund, what · its state, three then "N more ›".
+        val back = wait("w1", "Refund · Amazon order · £40", "Amazon", today - 6)
+        val late = wait("w2", "Refund · Lamp Store · £18", "Lamp Store", today - 20)
+        val fresh = wait("w3", "Refund · Kettle Co", "Kettle Co", today)
+        val chased = wait("w4", "Refund · Book Barn", "Book Barn", today - 5, chasedDay = today - 2)
+        val v = MoneyRefunds.view(listOf(back, late, fresh, chased),
+            listOf(line(today - 1, 4000, "AMAZON.CO.UK REFUND"), line(today, -300, "PRET")), today, cal, names)!!
+        val by = v.rows.associateBy { it.id }
+        assertEquals("Refund · Amazon order · £40", by.getValue("w1").name)
+        assertEquals("Back · +£40", by.getValue("w1").brief)
+        assertEquals("Late · 20 days · chase it", by.getValue("w2").brief)
+        assertEquals("Waiting · since today", by.getValue("w3").brief)
+        assertEquals("Chased ${CivilDate.shortLabel(today - 2)} · 5 days", by.getValue("w4").brief)
+        assertEquals(3, MoneyRefunds.shown(v.rows, open = false).size)
+        assertEquals("1 more ›", MoneyRefunds.moreLabel(v.rows.size, open = false))
+        assertEquals(MoneyRefunds.FEWER, MoneyRefunds.moreLabel(v.rows.size, open = true))
+        assertNull(MoneyRefunds.moreLabel(3, open = false))
+        assertEquals(4, MoneyRefunds.shown(v.rows, open = true).size)
+    }
 }

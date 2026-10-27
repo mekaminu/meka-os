@@ -28,6 +28,9 @@ data class MoneyRefundRow(
     /** The chase he can copy and send himself; only when late and not chased lately. */
     val chase: String?,
     val spoken: String,
+    /** Layout rules (2026-10-27): the compact row's name ("Refund · Amazon order · £40") and short state ("Back · +£40"). */
+    val name: String = title,
+    val brief: String = line,
 )
 
 data class MoneyRefundsView(val head: String, val rows: List<MoneyRefundRow>, val foot: String?)
@@ -47,6 +50,19 @@ object MoneyRefunds {
     const val LATE = "late"
     const val WAITING = "waiting"
     const val NOTE = "Navilife never sends it · paste it into the shop's chat or email"
+    /** Layout rules (Money review, Meka 2026-10-26 22:18): Bills shows this many compact rows, then "2 more ›". */
+    const val SHOWN = 3
+    const val FEWER = "Fewer"
+
+    /** The compact rows shown: the first [SHOWN] until "more" opens them. */
+    fun shown(rows: List<MoneyRefundRow>, open: Boolean): List<MoneyRefundRow> = if (open) rows else rows.take(SHOWN)
+
+    /** "2 more ›" folded, [FEWER] open; null when every row already shows. */
+    fun moreLabel(rows: Int, open: Boolean): String? = when {
+        rows <= SHOWN -> null
+        open -> FEWER
+        else -> "${rows - SHOWN} more ›"
+    }
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 
@@ -107,7 +123,8 @@ object MoneyRefunds {
                     "+${fmt(hit.pence)} from ${MoneyCategoryRules.merchantLabel(hit.merchant)} on ${CivilDate.shortLabel(hit.day)}",
                     names[hit.account].orEmpty(),
                 ).filter { it.isNotEmpty() }.joinToString(" · ")
-                MoneyRefundRow(w.id, BACK, title, line, lit = false, chase = null, spoken = "$title. $line")
+                MoneyRefundRow(w.id, BACK, title, line, lit = false, chase = null, spoken = "$title. $line",
+                    name = w.title, brief = "Back · +${fmt(hit.pence)}")
             } else {
                 val days = (today - since).coerceAtLeast(0)
                 val dayWord = "$days day${if (days == 1L) "" else "s"}"
@@ -120,7 +137,15 @@ object MoneyRefunds {
                     else "Not in your statements yet · $dayWord since ${CivilDate.shortLabel(since)}") +
                     (chasedDay?.let { " · chased ${CivilDate.shortLabel(it)}" } ?: "")
                 val lit = late && !chasedLately
-                MoneyRefundRow(w.id, state, w.title, line, lit, chase = if (lit) chase(w, want, since) else null, spoken = "${w.title}. $line")
+                val ago = if (days == 0L) "since today" else dayWord
+                val brief = when {
+                    lit -> "Late · $dayWord · chase it"
+                    chasedDay != null -> "Chased ${CivilDate.shortLabel(chasedDay)} · $ago"
+                    late -> "Late · $dayWord"
+                    else -> "Waiting · $ago"
+                }
+                MoneyRefundRow(w.id, state, w.title, line, lit, chase = if (lit) chase(w, want, since) else null, spoken = "${w.title}. $line",
+                    name = w.title, brief = brief)
             }
         }.sortedBy { when (it.state) { BACK -> 0; LATE -> 1; else -> 2 } }.take(MAX_ROWS)
         val foot = if (stale && rows.any { it.state != BACK }) (lastDay?.let { "Your statements end ${CivilDate.shortLabel(it)} · import a newer one to see if it's come" }) else null

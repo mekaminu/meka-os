@@ -37,6 +37,19 @@ object MoneyBills {
     const val NOTHING = "nothing left"
     /** At most this many rows (to come first); the rest are rare. */
     const val SHOWN = 12
+    /** Layout rule (d): the Bills card lists this many bills, then "See all N ›". */
+    const val FOLDED = 5
+    const val FEWER = "Fewer"
+
+    /** The bills shown in the card: the first [FOLDED] (still to come first) until "See all" opens them. */
+    fun shownRows(v: MoneyBillsView, open: Boolean): List<MoneyBillRow> = if (open) v.rows else v.rows.take(FOLDED)
+
+    /** "See all 9 ›" folded, [FEWER] open; null when every bill already shows. */
+    fun allLabel(rows: Int, open: Boolean): String? = when {
+        rows <= FOLDED -> null
+        open -> FEWER
+        else -> "See all $rows ›"
+    }
 
     /** One bill: what it is, when, how much, and whether it's already paid this month. */
     data class Due(val key: String, val title: String, val day: Long, val pence: Long, val kind: MoneyBillKind, val rise: Long = 0L, val paid: Boolean = false)

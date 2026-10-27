@@ -91,4 +91,16 @@ class MoneyBillsTest {
         // And the payday view without pay says not ready, so Money falls back to this.
         assertNull(payday(regulars).bills)
     }
+
+    @Test
+    fun theBillsCardShowsFiveThenSeeAll() {
+        // Layout rule (d): five bills, then "See all N ›".
+        val dues = (1..7).map { MoneyBills.Due("r-$it", "Bill $it", today + it, 1_000L * it, MoneyBillKind.REGULAR) }
+        val v = MoneyBills.view(dues, emptyList(), "Fri 30 Oct", today)!!
+        assertEquals(5, MoneyBills.shownRows(v, open = false).size)
+        assertEquals(v.rows.size, MoneyBills.shownRows(v, open = true).size)
+        assertEquals("See all ${v.rows.size} ›", MoneyBills.allLabel(v.rows.size, open = false))
+        assertEquals(MoneyBills.FEWER, MoneyBills.allLabel(v.rows.size, open = true))
+        assertEquals(null, MoneyBills.allLabel(5, open = false))
+    }
 }

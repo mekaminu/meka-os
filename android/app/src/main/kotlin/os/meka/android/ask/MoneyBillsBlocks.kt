@@ -57,6 +57,8 @@ import os.meka.core.domain.MoneyBillRow
 import os.meka.core.domain.MoneyBillsView
 import os.meka.core.domain.MoneyCardBrief
 import os.meka.core.domain.MoneyPaydayBrief
+import os.meka.core.domain.MoneyRefundRow
+import os.meka.core.domain.MoneyRefunds
 
 /**
  * Money redesign (B3), the Bills tab in the approved mockup's look (docs/design/money/Main.dc.html, `tab` Bills): one
@@ -232,6 +234,60 @@ internal fun <T : Any> MoneyDetailSheet(
                     Text(done, style = MekaType.metaStrong, color = Meka.colors.onAccent)
                 }
             }
+        }
+    }
+}
+
+/**
+ * Layout rules on Bills (Meka 2026-10-26 22:18: "it's sentences and text, not segmented, boxed, grouped"): the month's
+ * bills as one card of rows (still to come first, paid greyed), five then "See all N ›" (Fewer folds them again).
+ */
+@Composable
+internal fun MoneyBillsListCard(rows: List<MoneyBillRow>, more: String?, modifier: Modifier = Modifier, onMore: () -> Unit) {
+    MoneyCard(modifier, tag = "money-bills-list") {
+        rows.forEach { r -> MoneyBillRowView(r) }
+        more?.let { l ->
+            Text(l, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMore)
+                    .minTouch().testTag("money-bills-more"))
+        }
+    }
+}
+
+/**
+ * Layout rules on Bills: refunds on the way as compact one-line rows in one card (what · its state · ›), a late one's
+ * state in the accent; three then "2 more ›". A tap opens the refund's sheet (Close it, or the chase to copy).
+ */
+@Composable
+internal fun MoneyRefundsCard(
+    rows: List<MoneyRefundRow>, more: String?, modifier: Modifier = Modifier, onOpen: (String) -> Unit, onMore: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    MoneyCard(modifier, tag = "money-refunds-card") {
+        rows.forEach { r ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen(r.id) }
+                    .semantics(mergeDescendants = true) { contentDescription = r.spoken }
+                    .minTouch().padding(vertical = MekaSpace.xxs).testTag("money-refund-${r.id}"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+            ) {
+                Text(r.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f))
+                Crossfade(r.brief, animationSpec = MekaMotion.appear(reduced), label = "money-refund-brief-${r.id}") { b ->
+                    Text(b, style = MekaType.caption, maxLines = 1,
+                        color = when {
+                            r.lit -> Meka.colors.accent
+                            r.state == MoneyRefunds.BACK -> Meka.colors.success
+                            else -> Meka.colors.textSecondary
+                        })
+                }
+                Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
+            }
+        }
+        more?.let { l ->
+            Text(l, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMore)
+                    .minTouch().testTag("money-refunds-more"))
         }
     }
 }

@@ -35,7 +35,7 @@ class MoneyTabsTest {
     fun eachTabShowsOnlyItsOwnSectionsInOrder() {
         val v = open()
         assertEquals(listOf(MoneySection.MONTH, MoneySection.ALERTS, MoneySection.CATEGORIES, MoneySection.PAYMENTS, MoneySection.SPEND_FOOT), MoneyTabs.sections(MoneyTab.SPENDING, v))
-        assertEquals(listOf(MoneySection.REFUNDS, MoneySection.REGULAR), MoneyTabs.sections(MoneyTab.BILLS, v))
+        assertEquals(listOf(MoneySection.REFUNDS, MoneySection.REGULAR, MoneySection.BILLS_FOOT), MoneyTabs.sections(MoneyTab.BILLS, v))
         assertEquals(
             listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.MORE, MoneySection.FOOT),
             MoneyTabs.sections(MoneyTab.ACCOUNTS, v),
@@ -62,6 +62,21 @@ class MoneyTabsTest {
     }
 
     @Test
+    fun billsEndsOnTheSameFootLineWhoseInfoSaysWhereBillsCardsAndRefundsComeFrom() {
+        val v = open()
+        assertEquals(MoneySection.BILLS_FOOT, MoneyTabs.sections(MoneyTab.BILLS, v).last())
+        val info = assertNotNull(MoneyTabs.info(MoneyTab.BILLS, v))
+        assertEquals(MoneyTabs.BILLS_FROM, info.first())
+        assertTrue(MoneyTabs.REFUNDS_FROM in info, "refunds are on Bills, so the ⓘ says where they come from")
+        assertTrue(MoneyTabs.CARDS_FROM !in info, "no cards, no cards line")
+        assertEquals(MoneyRules.FOOT, info.last())
+        // An empty Bills keeps its empty line and has no foot.
+        val nothing = open().copy(regular = null, refunds = null)
+        assertTrue(MoneyTabs.sections(MoneyTab.BILLS, nothing).isEmpty())
+        assertEquals(MoneyTabs.EMPTY_BILLS, MoneyTabs.empty(MoneyTab.BILLS, nothing))
+    }
+
+    @Test
     fun theYearMovesToAccountsAndTheTipsToPlan() {
         // Money review (Meka 2026-10-26 22:12): "2026 so far" and "Tips from your numbers" leave Spending.
         val tip = MoneyTip("t1", "habit", "Coffee adds up", "£64 this month", false, "Coffee adds up")
@@ -80,7 +95,7 @@ class MoneyTabsTest {
         )
         val v = open().copy(bills = bills)
         // Money review (Meka 2026-10-26 22:12): the regular payments are the Bills card's list, so they don't repeat.
-        assertEquals(listOf(MoneySection.BILLS, MoneySection.REFUNDS), MoneyTabs.sections(MoneyTab.BILLS, v))
+        assertEquals(listOf(MoneySection.BILLS, MoneySection.REFUNDS, MoneySection.BILLS_FOOT), MoneyTabs.sections(MoneyTab.BILLS, v))
         assertTrue(!MoneyTabs.paydayRows(v))
         assertTrue(MoneyTabs.paydayRows(open()))
     }

@@ -84,6 +84,10 @@ struct MoneySheet: View {
     /// while the write runs.
     @State private var openLook: String?
     @State private var allLooks = false
+    /// Layout rules on Bills: "See all" on the bills card, "2 more" on the refunds, and the refund whose popover is open.
+    @State private var allBills = false
+    @State private var allRefunds = false
+    @State private var refundOpenId: String? = nil
     @State private var finedLooks: Set<String> = []
     /// Money review: the quick sorter's popover, the payees skipped and the ones picked while the write runs.
     @State private var sorting = false
@@ -259,16 +263,38 @@ struct MoneySheet: View {
             // Money redesign (B3): the Bills tab's card, then the month's bills by date (to come first, paid greyed).
             if let b = v.bills, has(.bills, v) {
                 MoneyBillsCardView(bills: b, palette: palette, reduced: reduceMotion).padding(.top, MekaSpace.xs).transition(.opacity)
-                ForEach(b.rows, id: \.key) { r in MoneyBillRowView(row: r, palette: palette).transition(.opacity) }
-                Text(b.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+                // Layout rules (a) and (d): the month's bills in one card, five then "See all N ›"; where they're found
+                // from is behind the tab's ⓘ at the foot.
+                if !b.rows.isEmpty {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(MoneyBills.shared.shownRows(v: b, open: allBills), id: \.key) { r in
+                            MoneyBillRowView(row: r, palette: palette).transition(.opacity)
+                        }
+                        if let more = MoneyBills.shared.allLabel(rows: Int32(b.rows.count), open: allBills) {
+                            Button(more) { MekaHaptics.tick(); allBills.toggle() }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                    }
+                    .moneyCard(palette)
+                }
             }
             if let p = v.payday, has(.payday, v) { paydayRow(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
             if let c = v.cards, has(.cards, v) { cards(c).transition(.opacity) }
             if let r = v.refunds, has(.refunds, v) {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
-                ForEach(r.rows, id: \.id) { row in refund(row).transition(.opacity) }
-                if let f = r.foot { Text(f).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+                // Layout rules (b) and (d): compact rows (what · its state · ›), three then "2 more ›"; a click opens the
+                // refund's popover with Close it or the chase to copy.
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    ForEach(MoneyRefunds.shared.shown(rows: r.rows, open: allRefunds), id: \.id) { row in
+                        refundRow(row, foot: r.foot).transition(.opacity)
+                    }
+                    if let more = MoneyRefunds.shared.moreLabel(rows: Int32(r.rows.count), open: allRefunds) {
+                        Button(more) { MekaHaptics.tick(); allRefunds.toggle() }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    }
+                }
+                .moneyCard(palette)
             }
             if has(.tips, v) && !v.tips.isEmpty {
                 Text("TIPS FROM YOUR NUMBERS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
@@ -302,6 +328,15 @@ struct MoneySheet: View {
                 Text("REGULAR PAYMENTS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
                 ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
+            }
+            // Layout rule (c): Bills says "read-only · not financial advice" once, at its foot; where it's from behind ⓘ.
+            if has(.billsFoot, v), let lines = MoneyTabs.shared.info(tab: MoneyTab.bills, v: v) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    infoButton("foot-bills", title: MoneyTabs.shared.INFO_TITLE, lines: lines)
+                }
+                .padding(.top, MekaSpace.m)
             }
             if let f = v.forecast, has(.forecast, v) { forecast(f).transition(.opacity) }
             if has(.categories, v), let full = m.spending {
@@ -782,7 +817,7 @@ struct MoneySheet: View {
             Text(MoneyTabs.shared.INFO).font(MekaType.body).foregroundStyle(palette.textTertiary)
         }
         .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(id == "foot" ? MoneyTabs.shared.INFO_SPOKEN : "About \(title.lowercased())")
+        .accessibilityLabel(id.hasPrefix("foot") ? MoneyTabs.shared.INFO_SPOKEN : "About \(title.lowercased())")
         .popover(isPresented: Binding(get: { infoOpen == id }, set: { if !$0 && infoOpen == id { infoOpen = nil } }), arrowEdge: .trailing) {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 Text(title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -1392,6 +1427,34 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: sortDone)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: sortSkipped)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: makingCategory)
+    }
+
+    /// Layout rules on Bills: one refund as a compact row (what · its state · ›), a late one's state in brass; a click
+    /// opens its popover with the full line, Close it or the chase to copy, and the statements' note when they're old.
+    private func refundRow(_ r: MoneyRefundRow, foot: String?) -> some View {
+        let id = r.id
+        return Button { MekaHaptics.tick(); said = nil; refundOpenId = id } label: {
+            HStack(spacing: MekaSpace.m) {
+                Text(r.name).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Spacer(minLength: MekaSpace.xs)
+                Text(r.brief).font(MekaType.caption).lineLimit(1).contentTransition(.opacity)
+                    .foregroundStyle(r.lit ? palette.accent : (r.state == MoneyRefunds.shared.BACK ? palette.success : palette.textSecondary))
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(r.spoken)
+        .popover(isPresented: Binding(get: { refundOpenId == id }, set: { if !$0 && refundOpenId == id { refundOpenId = nil } }), arrowEdge: .trailing) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(r.name).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                refund(r)
+                if let f = foot { Text(f).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true) }
+                Button(MoneyCards.shared.DONE) { refundOpenId = nil }.keyboardShortcut(.defaultAction)
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 360)
+        }
     }
 
     /// Slice 5: one refund on Waiting for, checked against his statements: Close it when it's back (Undo in the line

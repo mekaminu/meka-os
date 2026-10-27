@@ -4051,4 +4051,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTabs.shared.FOOT_SHORT, "Read-only · not financial advice")
         XCTAssertEqual(MoneyTabs.shared.INFO, "ⓘ")
     }
+    /// Money's layout rules on Bills: compact refund rows that fold after three, five bills then See all, and one foot line.
+    func testMoneyBillsLayoutOnTheMac() {
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .billsFoot), MoneyTab.bills)
+        XCTAssertEqual(MoneyRefunds.shared.SHOWN, 3)
+        XCTAssertEqual(MoneyRefunds.shared.moreLabel(rows: 4, open: false), "1 more ›")
+        XCTAssertNil(MoneyRefunds.shared.moreLabel(rows: 3, open: false))
+        XCTAssertEqual(MoneyBills.shared.allLabel(rows: 7, open: false), "See all 7 ›")
+        XCTAssertEqual(MoneyBills.shared.FOLDED, 5)
+    }
 }

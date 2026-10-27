@@ -81,6 +81,7 @@ import os.meka.core.domain.MoneyMoreKind
 import os.meka.core.domain.MoneySorter
 import os.meka.core.domain.MoneyBank
 import os.meka.core.domain.MoneyBankView
+import os.meka.core.domain.MoneyBills
 import os.meka.core.domain.MoneyCardRow
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyCardsView
@@ -272,6 +273,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var cardSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val cardRow = cardSheetId?.let { id -> v.cards?.rows?.firstOrNull { it.id == id } }
     var paydaySheet by rememberSaveable { mutableStateOf(false) }
+    // Layout rules on Bills: "See all" on the bills card, "2 more" on the refunds, and the refund whose sheet is open
+    // (found again in each view; Close it takes it off Waiting for, which closes the sheet).
+    var allBills by rememberSaveable { mutableStateOf(false) }
+    var allRefunds by rememberSaveable { mutableStateOf(false) }
+    var refundSheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val refundOpen = refundSheetId?.let { id -> v.refunds?.rows?.firstOrNull { it.id == id } }
     // Money review, Accounts: the account whose sheet is open.
     var accountSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val accountSheet = accountSheetId?.let { id -> MoneyAccountList.sheet(v, id) }
@@ -528,11 +535,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 item(key = "bills-card") {
                     MoneyBillsCard(b, Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(3)))
                 }
-                b.rows.forEachIndexed { i, r ->
-                    item(key = "bill-${r.key}") { MoneyBillRowView(r, Modifier.animateItem().appear(rememberAppearance(4 + i))) }
-                }
-                item(key = "bills-foot") {
-                    Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                // Layout rules (a) and (d): the month's bills in one card, five then "See all N ›"; where they're found from
+                // is behind the tab's ⓘ at the foot.
+                if (b.rows.isNotEmpty()) item(key = "bills-list") {
+                    MoneyBillsListCard(MoneyBills.shownRows(b, allBills), MoneyBills.allLabel(b.rows.size, allBills),
+                        Modifier.animateItem().appear(rememberAppearance(4))) { haptics.tick(); allBills = !allBills }
                 }
             }
             // Slice 6: payday and what's safe to spend (this month only). Money review (Meka 2026-10-26 22:12): one row on
@@ -569,21 +576,13 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         Text(h, style = MekaType.caption, color = Meka.colors.textTertiary)
                     }
                 }
-                rf.rows.forEachIndexed { i, r ->
-                    item(key = "refund-${r.id}") {
-                        RefundCard(r, Modifier.animateItem().appear(rememberAppearance(4 + i)),
-                            onClose = { scope.launch { runCatching { core.moneyRefundClose(r.id) }.getOrNull()?.let(say) } },
-                            onCopy = { chase ->
-                                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Refund chase", chase))
-                                scope.launch { runCatching { core.moneyRefundChased(r.id) }.getOrNull()?.let(say) }
-                            })
-                    }
-                }
-                rf.foot?.let { f ->
-                    item(key = "refunds-foot") {
-                        Text(f, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
-                    }
+                // Layout rules (b) and (d): compact rows (what · its state · ›), three then "2 more ›"; a tap opens the
+                // refund's sheet with Close it or the chase to copy.
+                item(key = "refunds") {
+                    MoneyRefundsCard(MoneyRefunds.shown(rf.rows, allRefunds), MoneyRefunds.moreLabel(rf.rows.size, allRefunds),
+                        Modifier.animateItem().appear(rememberAppearance(5)),
+                        onOpen = { id -> haptics.tick(); said = null; refundSheetId = id },
+                        onMore = { haptics.tick(); allRefunds = !allRefunds })
                 }
             }
             // Slice 2: tips from his own numbers, then his regular payments (this month only).
@@ -659,6 +658,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 r.rows.forEach { row ->
                     item(key = "regular-${row.key}") { RegularRow(row, Modifier.animateItem()) }
+                }
+            }
+            // Layout rule (c): Bills says "read-only · not financial advice" once, at its foot; where it's from behind ⓘ.
+            if (has(MoneySection.BILLS_FOOT)) item(key = "bills-foot") {
+                MoneyTabFoot(Modifier.animateItem()) {
+                    haptics.tick(); MoneyTabs.info(MoneyTab.BILLS, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
                 }
             }
             // Slice 4: the forecast at his pace, with what-ifs on this phone only (this month only).
@@ -1005,6 +1010,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 scope.launch { runCatching { core.moneyGoalFollow(r.id, accountId) }.getOrNull()?.let(say) }
             }
         }
+        SheetSaid(said)
+    }
+    // Layout rules on Bills: a refund's sheet, its full line and Close it or the chase to copy (he sends it himself).
+    MoneyDetailSheet(refundOpen, title = { it.name }, tag = "money-refund-sheet", done = MoneyCards.DONE, onClose = { refundSheetId = null }) { r ->
+        RefundCard(r, Modifier,
+            onClose = { scope.launch { runCatching { core.moneyRefundClose(r.id) }.getOrNull()?.let(say) } },
+            onCopy = { chase ->
+                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Refund chase", chase))
+                scope.launch { runCatching { core.moneyRefundChased(r.id) }.getOrNull()?.let(say) }
+            })
+        v.refunds?.foot?.let { f -> Text(f, style = MekaType.caption, color = Meka.colors.textTertiary) }
         SheetSaid(said)
     }
     // Layout rule (c): what an ⓘ says (the month in review's sentences, where Spending's numbers came from).
@@ -1772,11 +1789,11 @@ private fun RefundCard(r: MoneyRefundRow, modifier: Modifier, onClose: () -> Uni
     val reduced = Meka.reducedMotion
     val c by animateColorAsState(if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-refund-${r.id}")
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
-            Text(r.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            if (r.title != r.name) Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-refund-line-${r.id}") { l ->
                 Text(l, style = MekaType.caption, color = c)
             }

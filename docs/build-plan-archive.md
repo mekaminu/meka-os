@@ -4290,3 +4290,21 @@ review/infoButton and the `moneyCard` modifier. Help money.md (HelpIndex regener
 MoneyMonthReviewTest, MoneyTabsTest, MoneyLayoutScreensTest (Roborazzi money-layout-review-cover, -review-info-cover,
 -foot-cover, -spending-unfolded), MekaCoreBridgeTests.testMoneySpendingFootOnTheMac. No server change, no migration. Mac
 checked nightly. Not yet: the same rules on Bills (its foot and refunds as compact rows), Plan and Accounts.
+
+### Money redesign, layout rules slice 2: Bills in cards, compact refunds and one foot line (2026-10-27)
+
+Layout rules (Meka 2026-10-26 22:18) on Bills. (a)/(d) The month's bills (still to come first, paid greyed) sit in one
+card under the Bills card, five then "See all N ›" (Fewer folds them); the bills' source line left the page. (b)/(d)
+Refunds on the way are one card of compact rows: the refund's name, its short state ("Back · +£40" in green, "Late · 16
+days · chase it" in the accent, "Chased Fri 23 Oct · 5 days", "Waiting · since today") and ›, three then "2 more ›"; a tap
+opens the refund's sheet (Mac: popover) with its full line, Close it or the chase with Copy the chase and the note, and the
+old-statements note. (c) Bills ends on the same "Read-only · not financial advice" line as Spending; its ⓘ says where the
+bills, cards (when there are any) and refunds come from, the old-statements note and Money's read-only line. Core:
+MoneySection.BILLS_FOOT (only under something of Bills' own, so an empty Bills keeps its empty line), MoneyTabs.info(BILLS)
+with BILLS_FROM/CARDS_FROM/REFUNDS_FROM, MoneyRefundRow.name/brief (additive defaults), MoneyRefunds.SHOWN/shown/moreLabel,
+MoneyBills.FOLDED/shownRows/allLabel. Fold MoneyBillsBlocks (MoneyBillsListCard, MoneyRefundsCard), MoneyPane's refund
+sheet through MoneyDetailSheet (RefundCard without its own box); Mac MoneySheet bills card, refundRow with its popover and
+the foot. Help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyRefundsTest, MoneyBillsTest, MoneyTabsTest,
+MoneyBillsLayoutScreensTest (Roborazzi money cover-dark-bills-layout, inner-dark-bills-layout),
+MekaCoreBridgeTests.testMoneyBillsLayoutOnTheMac. No server change, no migration. Mac checked nightly. Not yet: the same
+rules on Plan and Accounts.
