@@ -34,6 +34,9 @@ enum class MoneySection {
     // hustle, shared costs, his own categories (slice 3), Import a statement (one row opening a sheet) and the foot.
     // Accounts' rest (2026-10-27, mockup): the side hustle, shared costs and Import, export and delete are one MORE card
     // of three rows, each opening a sheet ([MoneyMore]), after his own categories.
+    // Layout rules on Accounts (2026-10-27): his banks, net worth and the year are each one card, and the tab ends on the
+    // same one foot line ([FOOT] now draws [MoneyTabs.FOOT_SHORT]), its ⓘ saying where the accounts, the banks, net
+    // worth and the year come from; net worth's and the year's source lines left their cards.
     BANK, WORTH, ACCOUNTS, YEAR, OWN_CATEGORIES, MORE, FOOT,
 }
 
@@ -172,12 +175,22 @@ object MoneyTabs {
             v.travel?.foot,
             MoneyRules.FOOT,
         )
-        else -> null
+        MoneyTab.ACCOUNTS -> listOfNotNull(
+            ACCOUNTS_FROM,
+            BANK_FROM.takeIf { v.bank != null },
+            v.worth?.foot,
+            v.year?.foot,
+            MoneyRules.FOOT,
+        )
+        MoneyTab.TRADING -> null
     }
 
     const val BILLS_FROM = "Bills are found from payments that repeat each month, Lists → Renewals and your cards' due dates. Until payday counts a card due before payday by its statement."
     const val CARDS_FROM = "Cards show what you type off each statement, with a reminder 3 days before each payment and before 0% ends."
     const val REFUNDS_FROM = "Refunds on the way are the refunds on Waiting for, checked against your statements. A chase is only copied for you to send yourself."
+
+    const val ACCOUNTS_FROM = "Accounts lists each account from your statements and your banks. A card's balance counts as owed, and an account without a balance leaves net worth partial."
+    const val BANK_FROM = "Your banks fill Money through Lunch Flow, read-only, every few hours and when you tap Refresh; Navilife never logs in to your bank."
 
     const val PLAN_FROM = "Plan works from your own statements: your average month, your cards and your goals. Nothing here moves or pays money."
 

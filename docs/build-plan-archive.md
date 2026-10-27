@@ -4330,3 +4330,19 @@ Money's layout rules (Meka 2026-10-26 22:18) on Plan, both apps:
 - Tests: MoneyPlanLayoutTest, MoneySaveTest, MoneyClearTest, MoneyPlanLayoutScreensTest (cover + open Fold),
   MekaCoreBridgeTests.testMoneyPlanLayoutOnTheMac. Help money.md (HelpIndex regenerated), motion catalogue row. No server
   change, no migration. Mac checked nightly.
+
+### Money redesign, layout rules slice 4: Accounts in cards, one foot line (2026-10-27)
+
+Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
+- **FROM YOUR BANKS**, **NET WORTH** and the **year in review** are each one card under their small caps label (the
+  accounts list, YOUR CATEGORIES and MORE already were).
+- Net worth's source line ("Past months work each account's balance back…") and the year's ("From your statements, …
+  Everything you spent…") left their cards.
+- Accounts ends on the same **"Read-only · not financial advice"** line as the other tabs instead of the long read-only
+  paragraph; its ⓘ says where the accounts come from (`MoneyTabs.ACCOUNTS_FROM`), how the banks are read
+  (`BANK_FROM`, only when connected), net worth's and the year's source lines, then Money's read-only line.
+- Core `MoneyTabs.info(ACCOUNTS)` (Trading still has none). Fold MoneyPane (MoneyCard around BankBlock, WorthBlock,
+  YearBlock; MoneyTabFoot); Mac MoneySheet (bankCard, worthCard, yearCard with `.moneyCard`, the foot's ⓘ popover). Help
+  money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyTabsTest, MoneyAccountsLayoutScreensTest (Roborazzi
+  money cover-dark-accounts-layout, inner-dark-accounts-layout), MekaCoreBridgeTests.testMoneyAccountsLayoutOnTheMac. No
+  server change, no migration. Mac checked nightly. With this every Money tab but Trading follows the layout rules.

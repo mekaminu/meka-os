@@ -56,9 +56,25 @@ class MoneyTabsTest {
         assertEquals("From your banks through Lunch Flow. Worked out on this device.", info.first())
         assertTrue(info.last() == MoneyRules.FOOT)
         assertEquals("Read-only · not financial advice", MoneyTabs.FOOT_SHORT)
-        // No month, no foot; Accounts keeps its own.
+        // No month, no foot; Trading has no foot of its own.
         assertTrue(MoneySection.SPEND_FOOT !in MoneyTabs.sections(MoneyTab.SPENDING, open(m = null)))
-        assertNull(MoneyTabs.info(MoneyTab.ACCOUNTS, v))
+        assertNull(MoneyTabs.info(MoneyTab.TRADING, v))
+    }
+
+    @Test
+    fun accountsEndsOnTheSameFootLineWhoseInfoSaysWhereAccountsBanksWorthAndTheYearComeFrom() {
+        // Layout rules on Accounts: the long read-only line and net worth's and the year's source lines live behind ⓘ.
+        val v = open()
+        assertEquals(MoneySection.FOOT, MoneyTabs.sections(MoneyTab.ACCOUNTS, v).last())
+        val info = assertNotNull(MoneyTabs.info(MoneyTab.ACCOUNTS, v))
+        assertEquals(MoneyTabs.ACCOUNTS_FROM, info.first())
+        assertTrue(MoneyTabs.BANK_FROM in info, "his banks are connected, so the ⓘ says how they're read")
+        assertEquals(MoneyRules.FOOT, info.last())
+        // No bank, no worth, no year: only what's there is said.
+        val bare = assertNotNull(MoneyTabs.info(MoneyTab.ACCOUNTS, open().copy(bank = null)))
+        assertEquals(listOf(MoneyTabs.ACCOUNTS_FROM, MoneyRules.FOOT), bare)
+        // Nothing on Accounts at all still ends on the foot (Import, export and delete is always there).
+        assertEquals(MoneySection.FOOT, MoneyTabs.sections(MoneyTab.ACCOUNTS, open(m = null).copy(accounts = emptyList(), bank = null)).last())
     }
 
     @Test

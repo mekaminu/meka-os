@@ -428,17 +428,20 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
+            // Layout rules on Accounts (a): his banks in one card under their label.
             item(key = "bank") {
-                BankBlock(b, Modifier.animateItem().appear(rememberAppearance(2)),
-                    onRefresh = { scope.launch { runCatching { core.moneyBankRefresh() }.getOrNull()?.let(say) } },
-                    onRestore = { scope.launch { runCatching { core.moneyBankRestore() }.getOrNull()?.let(say) } },
-                    onOpen = {
-                        haptics.light()
-                        runCatching {
-                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(MoneyBank.LUNCH_FLOW_URL))
-                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                        }
-                    })
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(2)), tag = "money-bank-card") {
+                    BankBlock(b, Modifier,
+                        onRefresh = { scope.launch { runCatching { core.moneyBankRefresh() }.getOrNull()?.let(say) } },
+                        onRestore = { scope.launch { runCatching { core.moneyBankRestore() }.getOrNull()?.let(say) } },
+                        onOpen = {
+                            haptics.light()
+                            runCatching {
+                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(MoneyBank.LUNCH_FLOW_URL))
+                                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                            }
+                        })
+                }
             }
         }
         // Trading tracker: TRADING · HYPERLIQUID (whatever month is shown), from his public addresses only; it leads once
@@ -810,9 +813,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 Text(w.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
+            // Layout rules on Accounts (a), (c): net worth in one card; where it's from behind the tab's foot ⓘ.
             item(key = "worth") {
-                WorthBlock(w, Modifier.animateItem().appear(rememberAppearance(4)),
-                    onOther = { haptics.tick(); said = null; otherSheet = true })
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-worth-card") {
+                    WorthBlock(w, Modifier, onOther = { haptics.tick(); said = null; otherSheet = true })
+                }
             }
         }
         // Money review (Meka 2026-10-26 22:12), Accounts: one clean list under net worth, each row opening its sheet.
@@ -836,7 +841,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 Text(yv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
-            item(key = "year") { YearBlock(yv, Modifier.animateItem().appear(rememberAppearance(4)), onToggle = { haptics.tick() }) }
+            // Layout rules on Accounts (a), (c): the year in one card; what it covers behind the tab's foot ⓘ.
+            item(key = "year") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-year-card") {
+                    YearBlock(yv, Modifier, onToggle = { haptics.tick() })
+                }
+            }
         }
         // Slice 3: YOUR CATEGORIES, the ones he made, each opening its sheet (Accounts).
         if (has(MoneySection.OWN_CATEGORIES)) {
@@ -882,9 +892,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // Layout rule (c): Accounts says "read-only · not financial advice" once, at its foot; where the accounts, banks,
+        // net worth and the year come from behind ⓘ.
         if (has(MoneySection.FOOT)) item(key = "foot") {
-            Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Text(MoneyRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+            MoneyTabFoot(Modifier.animateItem()) {
+                haptics.tick(); MoneyTabs.info(MoneyTab.ACCOUNTS, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
             }
         }
     }
@@ -1690,7 +1702,7 @@ private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier,
                 }
                 yv.monthsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
                 yv.biggest?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-                Text(yv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+                // Layout rule (c): what the year covers is said behind Accounts' foot ⓘ (MoneyTabs.info).
             }
         }
     }
@@ -2064,7 +2076,7 @@ private fun WorthBlock(w: MoneyWorthView, modifier: Modifier, onOther: () -> Uni
         w.chartLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         w.missingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         MoneyWorthOther.row(w)?.let { r -> WorthOtherRow(r, onOther) }
-        Text(w.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+        // Layout rule (c): how net worth is worked out is said behind Accounts' foot ⓘ (MoneyTabs.info).
     }
 }
 

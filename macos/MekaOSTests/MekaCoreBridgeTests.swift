@@ -4069,4 +4069,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyPlanLayout.shared.WHAT_IF_ROW, "What if…")
         XCTAssertEqual(MoneyPlanLayout.shared.SET_CHALLENGE, "Set a challenge")
     }
+    /// Money's layout rules on Accounts: one foot line at Accounts' end, its ⓘ led by where the accounts come from.
+    func testMoneyAccountsLayoutOnTheMac() {
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .foot), MoneyTab.accounts)
+        XCTAssertTrue(MoneyTabs.shared.ACCOUNTS_FROM.hasPrefix("Accounts lists"))
+        XCTAssertNil(MoneyTabs.shared.info(tab: MoneyTab.trading, v: MoneyView.companion.LOCKED))
+        XCTAssertEqual(MoneyTabs.shared.info(tab: MoneyTab.accounts, v: MoneyView.companion.LOCKED)?.first, MoneyTabs.shared.ACCOUNTS_FROM)
+    }
 }

@@ -879,9 +879,16 @@ struct MoneySheet: View {
     /// what was spent and came in, left over, against the year before, each category with its bar, the busiest and
     /// quietest months and the biggest payment. Unfolds on the expand spring.
     private func year(_ yv: MoneyYearView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(yv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            // Layout rules on Accounts (a), (c): the year in one card; what it covers behind the tab's foot ⓘ.
+            yearCard(yv)
+        }
+    }
+
+    private func yearCard(_ yv: MoneyYearView) -> some View {
         let open = yearOpen[yv.year] ?? yv.unfolded
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(yv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
             Button {
                 let y = yv.year
                 withAnimation(MekaMotion.expand(reduced: reduceMotion)) { yearOpen[y] = !open }
@@ -920,11 +927,11 @@ struct MoneySheet: View {
                     }
                     if let ml = yv.monthsLine { Text(ml).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
                     if let b = yv.biggest { Text(b).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
-                    Text(yv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
                 }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
+        .moneyCard(palette)
     }
 
     /// Slice 15: one allowance or cap — its title and amount, a bar to its share (brass from 90%), what's left and Remove.
@@ -1135,6 +1142,13 @@ struct MoneySheet: View {
     private func worth(_ w: MoneyWorthView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(w.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            // Layout rules on Accounts (a), (c): net worth in one card; how it's worked out behind the tab's foot ⓘ.
+            worthCard(w)
+        }
+    }
+
+    private func worthCard(_ w: MoneyWorthView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let t = w.total {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(t).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
@@ -1152,8 +1166,8 @@ struct MoneySheet: View {
             if let m = w.missingLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             // Money review (layout rule (e)): what he typed outside his accounts is one row opening its popover.
             if let r = MoneyWorthOther.shared.row(w: w) { worthOtherRow(r) }
-            Text(w.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
+        .moneyCard(palette)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: w.total)
     }
 
@@ -2030,6 +2044,13 @@ struct MoneySheet: View {
     private func bank(_ b: MoneyBankView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(b.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            // Layout rules on Accounts (a): his banks in one card under their label.
+            bankCard(b)
+        }
+    }
+
+    private func bankCard(_ b: MoneyBankView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(b.line).font(MekaType.body).foregroundStyle(b.lit ? palette.accent : palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
@@ -2060,6 +2081,7 @@ struct MoneySheet: View {
                 }
             }
         }
+        .moneyCard(palette)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.refreshing)
     }
@@ -2661,10 +2683,18 @@ struct MoneySheet: View {
         }
     }
 
+    /// Layout rule (c): Accounts says "read-only · not financial advice" once, at its foot; where the accounts, banks,
+    /// net worth and the year come from behind ⓘ.
+    @ViewBuilder
     private func foot(_ v: MoneyView) -> some View {
-        Text(MoneyRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
+        if let lines = MoneyTabs.shared.info(tab: MoneyTab.accounts, v: v) {
+            HStack(spacing: MekaSpace.xs) {
+                Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Spacer()
+                infoButton("foot-accounts", title: MoneyTabs.shared.INFO_TITLE, lines: lines)
+            }
             .padding(.top, MekaSpace.m)
+        }
     }
 }
 
