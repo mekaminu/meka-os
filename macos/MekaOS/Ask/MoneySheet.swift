@@ -1131,7 +1131,7 @@ struct MoneySheet: View {
     private func paymentSheet(_ id: String) -> some View {
         if let r = sheetRow(id) {
             let order = model.money?.categoryOrder ?? []
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 HStack(alignment: .top) {
                     Text(r.merchant).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
                     Spacer()

@@ -93,7 +93,7 @@ internal fun PaymentSheet(
                     .navigationBarsPadding()
                     .padding(MekaSpace.m)
                     .testTag("money-sheet"),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 Row(
                     Modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading(); contentDescription = MoneyPaymentSheet.spoken(r) },
@@ -132,7 +132,7 @@ internal fun PaymentSheet(
                 }
                 Box(
                     Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
-                        .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.s).testTag("money-sheet-done"),
+                        .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.xs).testTag("money-sheet-done"),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(MoneyPaymentSheet.DONE, style = MekaType.metaStrong, color = Meka.colors.onAccent)

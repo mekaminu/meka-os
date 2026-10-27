@@ -1,5 +1,6 @@
 package os.meka.android.screens
 
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.MoneyPane
@@ -91,7 +93,11 @@ class MoneyPaymentSheetScreensTest {
     private fun tapNewest(core: MekaCore): String {
         val row = core.moneyView.value.month?.spending?.latest?.firstOrNull()?.rows?.firstOrNull() ?: fail("no latest payment")
         val tag = "money-txn-${row.id}"
+        // A lazy list's scroll waits for a frame, so the clock runs while it scrolls (as BriefScreensTest does).
+        compose.mainClock.autoAdvance = true
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(tag))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
         settle()
         compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
         settle()
@@ -112,7 +118,12 @@ class MoneyPaymentSheetScreensTest {
         compose.onNodeWithTag("money-sheet-cat-fun", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         settle()
         // The write runs on the core's own thread; wait for it to land in the view.
-        compose.waitUntil(10_000) { core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.category == "fun" }
+        var i = 0
+        while (core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.category != "fun" && i++ < 80) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
         settle()
         val moved = core.moneyView.value.month?.txns?.first { it.id == id } ?: fail("the payment went")
         assertEquals("fun", moved.category)
