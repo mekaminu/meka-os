@@ -223,6 +223,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/mail/cover-light-many.png](docs/screens/fold/mail/cover-light-many.png)
 - [fold/mail/inner-dark-empty.png](docs/screens/fold/mail/inner-dark-empty.png)
 - [fold/mail/inner-dark-many.png](docs/screens/fold/mail/inner-dark-many.png)
+- [fold/money-plan-save-cover.png](docs/screens/fold/money-plan-save-cover.png)
 - [fold/money/cover-dark-account-sheet.png](docs/screens/fold/money/cover-dark-account-sheet.png)
 - [fold/money/cover-dark-accounts-data-sheet.png](docs/screens/fold/money/cover-dark-accounts-data-sheet.png)
 - [fold/money/cover-dark-accounts-list.png](docs/screens/fold/money/cover-dark-accounts-list.png)
