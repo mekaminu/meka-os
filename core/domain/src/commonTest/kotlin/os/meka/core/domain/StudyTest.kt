@@ -356,10 +356,30 @@ class StudyTest {
     }
 
     @Test
+    fun severalLessonsArePlannedAtOnceForAnyDayUpToAYearAhead() {
+        // Study fixes (3) slice 3: "Select several" → Plan for…, and Pick a day… past this week.
+        val today = 20_752L
+        val chips = StudyRules.selectChips(today)
+        assertEquals(listOf(StudyRules.PICK_DAY, StudyRules.NOT_PLANNED), chips.takeLast(2).map { it.label })
+        assertTrue(chips.none { it.on })
+        assertTrue(StudyRules.plannable(today, today))
+        assertTrue(StudyRules.plannable(today + 365, today))
+        assertFalse(StudyRules.plannable(today - 1, today))
+        assertFalse(StudyRules.plannable(today + 366, today))
+        assertEquals("Pick lessons", StudyRules.selectedLine(0))
+        assertEquals("1 lesson selected", StudyRules.selectedLine(1))
+        assertEquals("3 lessons selected", StudyRules.selectedLine(3))
+        assertEquals("Planned 3 lessons for tomorrow", StudyRules.plannedManySaid(3, today + 1, today))
+        assertEquals("Planned 1 lesson for Thu 12 Nov", StudyRules.plannedManySaid(1, today + 17, today))
+        assertEquals("2 lessons are no longer planned", StudyRules.plannedManySaid(2, null, today))
+    }
+
+    @Test
     fun thePlanForChipsOfferTheWeekAndNotPlannedOnceItIs() {
         val today = 20_752L
         val chips = StudyRules.planChips(today, null)
-        assertEquals(listOf("Today", "Tomorrow", "Wed 28 Oct", "Thu 29 Oct", "Fri 30 Oct", "Sat 31 Oct", "Sun 1 Nov"), chips.map { it.label })
+        assertEquals(listOf("Today", "Tomorrow", "Wed 28 Oct", "Thu 29 Oct", "Fri 30 Oct", "Sat 31 Oct", "Sun 1 Nov", StudyRules.PICK_DAY), chips.map { it.label })
+        assertEquals(StudyRules.PICK_KEY, chips.last().key)
         assertTrue(chips.none { it.on })
         val planned = StudyRules.planChips(today, today + 2)
         assertEquals("Wed 28 Oct", planned.single { it.on }.label)

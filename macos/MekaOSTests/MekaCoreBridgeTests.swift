@@ -3084,6 +3084,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(restored.boolValue)
         XCTAssertEqual(core.studyView.value.course(id: id)?.deleted.count, 0)
         XCTAssertEqual(StudyRules.shared.confirmDelete(title: "Layout"), "Delete \u{201C}Layout\u{201D}?")
+
+        // Study fixes (3) slice 3: several lessons planned at once for a day picked past the week; [String] and an
+        // optional epoch day cross, and Pick a day… is a chip whose key is never planned.
+        let today = core.todayEpochDay()
+        XCTAssertEqual(StudyRules.shared.planChips(today: today, plannedDay: nil).last?.key, StudyRules.shared.PICK_KEY)
+        let ids = try XCTUnwrap(core.studyView.value.course(id: id)).modules.flatMap { $0.lessons.map(\.id) }
+        let line = try await core.planStudyLessons(ids: ids, epochDay: KotlinLong(longLong: today + 20))
+        XCTAssertEqual(line, "Planned \(ids.count) lessons for " + StudyRules.shared.plannedLabel(day: today + 20, today: today))
+        let past = try await core.planStudyLessons(ids: ids, epochDay: KotlinLong(longLong: today - 1))
+        XCTAssertNil(past)
     }
 
     func testTripListsReachSwift() async throws {

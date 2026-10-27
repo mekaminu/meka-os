@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
@@ -251,6 +252,37 @@ class StudyScreensTest {
         ScreenShots.assertSensible(compose, "cover-dark-lesson-planned")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-lesson-planned")
         ScreenShots.assertShows(compose, "cover-dark-lesson-planned", "Tomorrow")
+    }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun severalLessonsSelectedArePlannedForADayTogether() {
+        // Study fixes (3) slice 3: "Select several" in a lesson's sheet, pick another, then Plan for… → Tomorrow.
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        val (pivot, charts) = core.studyView.value.course(id)!!.modules[1].lessons
+        scrollTo(hasTestTag("study-lesson-${pivot.id}"))
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("study-lesson-${pivot.id}").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-select"))
+        compose.onNodeWithTag("study-lesson-select").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("study-select-bar").assertExists()
+        compose.onNodeWithTag("study-selected").assertTextEquals("1 lesson selected")
+        // While selecting, a tap picks a lesson and never ticks it.
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-${charts.id}"))
+        compose.onNodeWithTag("study-lesson-${charts.id}").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("study-selected").assertTextEquals("2 lessons selected")
+        assertEquals(false, core.studyView.value.course(id)!!.modules[1].lessons[1].done)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-lessons-selected"))
+        ScreenShots.assertSensible(compose, "cover-dark-lessons-selected")
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-lessons-selected")
+        compose.onNodeWithTag("study-select-plan-Tomorrow").performClick()
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.take(2).all { it.plannedDay == 20_753L } }
+        compose.waitForIdle()
+        compose.onNodeWithTag("study-select-bar").assertDoesNotExist()
     }
 
     @Test

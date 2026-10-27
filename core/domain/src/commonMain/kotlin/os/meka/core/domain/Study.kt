@@ -513,11 +513,45 @@ object StudyRules {
         return buildList {
             days.forEach { d -> add(StudyChip(d.toString(), plannedLabel(d, today), d == on, "Plan for ${CivilDate.longLabel(d)}")) }
             extra?.let { add(StudyChip(it.toString(), plannedLabel(it, today), true, "Planned for ${CivilDate.longLabel(it)}")) }
+            add(StudyChip(PICK_KEY, PICK_DAY, false, "Pick a day from the calendar"))
             if (plannedDay != null) add(StudyChip(NOT_PLANNED_KEY, NOT_PLANNED, false, "Not planned for a day"))
         }
     }
 
     const val NOT_PLANNED_KEY = "none"
+
+    // ---- Study fixes (3) slice 3: pick any day, and plan several lessons at once ----
+
+    /** The chip that opens a date picker for a day past the week (key [PICK_KEY]); the apps never plan with its key. */
+    const val PICK_DAY = "Pick a day\u2026"
+    const val PICK_KEY = "pick"
+    /** How far ahead a lesson can be planned: a year from today. */
+    const val PICK_MAX_DAYS = 365
+    const val SELECT = "Select several"
+    const val PLAN_SELECTED = "Plan for\u2026"
+    const val SELECT_HINT = "Tap lessons to pick them, then choose a day."
+    const val PICK_REFUSED = "Pick a day from today to a year ahead"
+
+    /** Whether [day] can be planned: today up to [PICK_MAX_DAYS] ahead (a day gone by can't be). */
+    fun plannable(day: Long, today: Long): Boolean = day in today..(today + PICK_MAX_DAYS)
+
+    /** The chips for several lessons at once: the week, Pick a day… and Not planned (some of them may be planned). */
+    fun selectChips(today: Long): List<StudyChip> =
+        planChips(today, null) + StudyChip(NOT_PLANNED_KEY, NOT_PLANNED, false, "Not planned for a day")
+
+    /** "1 lesson selected", "3 lessons selected"; "Pick lessons" when none is. */
+    fun selectedLine(n: Int): String = when (n) {
+        0 -> "Pick lessons"
+        1 -> "1 lesson selected"
+        else -> "$n lessons selected"
+    }
+
+    /** What planning several says: "Planned 3 lessons for tomorrow", "Planned 2 lessons for Thu 12 Nov", "3 lessons are no longer planned". */
+    fun plannedManySaid(n: Int, day: Long?, today: Long): String {
+        val what = if (n == 1) "1 lesson" else "$n lessons"
+        return if (day == null) "$what ${if (n == 1) "is" else "are"} no longer planned"
+        else "Planned $what for " + plannedLabel(day, today).let { if (it == TODAY || it == TOMORROW) it.lowercase() else it }
+    }
 
     /** What planning says on the bar: "Planned “Pivot tables” for Tomorrow", "“Pivot tables” is no longer planned". */
     fun plannedSaid(title: String, day: Long?, today: Long): String =
@@ -874,6 +908,9 @@ class Study(
         replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.PLANNED_DAY to (day?.fv() ?: FieldValue.Null)))
         return true
     }
+
+    /** Plans each of [ids] for [day] (null: off the plan); how many changed. Lessons not there are skipped. */
+    fun planLessons(ids: List<String>, day: Long?): Int = ids.distinct().count { planLesson(it, day) }
 
     /** Removes one lesson, with Undo's token (its id); null when it isn't there. It stays under Recently deleted. */
     fun removeLesson(id: String): StudyRemoved? {

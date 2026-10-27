@@ -9,6 +9,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -77,6 +80,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.lists.DayPickerDialog
 import os.meka.android.lists.Field
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.StudyAdded
@@ -225,7 +229,17 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     var moduleMenu by remember(courseId) { mutableStateOf<String?>(null) }
     var showDeleted by remember(courseId) { mutableStateOf(false) }
     var confirmCourse by remember(courseId) { mutableStateOf(false) }
-    BackHandler(onBack = { if (sheet != null || moduleMenu != null) { sheet = null; moduleMenu = null } else onClose() })
+    // Study fixes (3) slice 3: the lessons picked under "Select several" (null when not selecting), and the lessons a
+    // "Pick a day…" date picker is open for.
+    var selecting by remember(courseId) { mutableStateOf<Set<String>?>(null) }
+    var pickFor by remember(courseId) { mutableStateOf<List<String>?>(null) }
+    BackHandler(onBack = {
+        when {
+            selecting != null -> selecting = null
+            sheet != null || moduleMenu != null -> { sheet = null; moduleMenu = null }
+            else -> onClose()
+        }
+    })
     LaunchedEffect(c) {
         val shown = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.done }
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
@@ -257,6 +271,21 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         planTap = next
         scope.launch { if (runCatching { write() }.isFailure) planTap = before }
     }
+    // Plan a lesson (or several) for a day: shown at once, the core's line on the bar after; a failed write puts it back.
+    val planDay: (List<String>, Long?) -> Unit = { ids, day ->
+        if (day != null && !StudyRules.plannable(day, today)) {
+            haptics.reject()
+            said = StudyAdded(StudyRules.PICK_REFUSED, 0, refused = true)
+        } else if (ids.isNotEmpty()) {
+            haptics.light()
+            ids.forEach { plannedTap[it] = day }
+            scope.launch {
+                val line = runCatching { if (ids.size == 1) core.planStudyLesson(ids.single(), day) else core.planStudyLessons(ids, day) }
+                line.getOrNull()?.let { said = StudyAdded(it, 0, refused = false) }
+                if (line.isFailure) ids.forEach { plannedTap.remove(it) }
+            }
+        }
+    }
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "study-said",
     )
@@ -265,7 +294,7 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     Box(Modifier.fillMaxSize().background(Meka.colors.background), contentAlignment = Alignment.TopCenter) {
     LazyColumn(
         Modifier.widthIn(max = 600.dp).fillMaxHeight().testTag("study-pane"),
-        contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.l),
+        contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.l, bottom = if (selecting != null) 220.dp else MekaSpace.l),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         item(key = "back") {
@@ -370,23 +399,21 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
                         LessonRow(
                             row, pending[row.id] ?: row.done,
                             if (plannedTap.containsKey(row.id)) plannedTap[row.id]?.let { StudyRules.plannedLabel(it, today) } else row.planned,
-                            row.late && !plannedTap.containsKey(row.id), Modifier.animateItem(), onTick = { tick(row, it) },
+                            row.late && !plannedTap.containsKey(row.id), Modifier.animateItem(),
+                            onTick = { tick(row, it) },
                             onHold = { haptics.tick(); moduleMenu = null; sheet = if (sheet == row.id) null else row.id },
+                            selected = selecting?.let { row.id in it },
+                            onSelect = { haptics.tick(); selecting = selecting?.let { if (row.id in it) it - row.id else it + row.id } },
                         )
                     }
                     if (sheet == row.id) item(key = "lesson-sheet-${row.id}") {
                         LessonSheet(
                             row, m.name, moduleNames, pending[row.id] ?: row.done, StudyRules.planChips(today, if (plannedTap.containsKey(row.id)) plannedTap[row.id] else row.plannedDay), Modifier.animateItem(),
                             onPlan = { chip ->
-                                haptics.light()
-                                val day = chip.key.toLongOrNull()
-                                plannedTap[row.id] = day
-                                scope.launch {
-                                    val line = runCatching { core.planStudyLesson(row.id, day) }
-                                    line.getOrNull()?.let { said = StudyAdded(it, 0, refused = false) }
-                                    if (line.isFailure) plannedTap.remove(row.id)
-                                }
+                                if (chip.key == StudyRules.PICK_KEY) { haptics.tick(); pickFor = listOf(row.id) }
+                                else planDay(listOf(row.id), chip.key.toLongOrNull())
                             },
+                            onSelect = { haptics.tick(); sheet = null; moduleMenu = null; selecting = setOf(row.id) },
                             onName = { name -> scope.launch { if (runCatching { core.renameStudyLesson(row.id, name) }.getOrNull() == true) haptics.light() else haptics.reject() } },
                             onModule = { to -> haptics.light(); sheet = null; opened[StudyRules.moduleKey(courseId, to)] = true; scope.launch { runCatching { core.moveStudyLesson(row.id, to) } } },
                             onTick = { tick(row, it) },
@@ -443,6 +470,61 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             }
         }
     }
+    // Study fixes (3) slice 3: the selection bar slides up from the foot while lessons are being picked.
+    AnimatedVisibility(
+        visible = selecting != null && c != null,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else fadeIn() + slideInVertically { it },
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else fadeOut() + slideOutVertically { it },
+    ) {
+        val picked = selecting.orEmpty()
+        SelectBar(
+            picked.size, StudyRules.selectChips(today),
+            onChip = { chip ->
+                when {
+                    picked.isEmpty() -> haptics.reject()
+                    chip.key == StudyRules.PICK_KEY -> { haptics.tick(); pickFor = picked.toList() }
+                    else -> { planDay(picked.toList(), chip.key.toLongOrNull()); selecting = null }
+                }
+            },
+            onCancel = { haptics.tick(); selecting = null },
+        )
+    }
+    }
+    pickFor?.let { ids ->
+        DayPickerDialog(
+            initialDay = today + StudyRules.PLAN_DAYS,
+            onPick = { day -> planDay(ids, day); if (StudyRules.plannable(day, today)) selecting = null },
+            onDismiss = { pickFor = null },
+        )
+    }
+}
+
+/**
+ * Study fixes (3) slice 3: the bar under the lessons while several are picked: "3 lessons selected" and Cancel, then
+ * PLAN FOR… as chips (the week, Pick a day…, Not planned). 48 dp targets; a chip with nothing picked is refused.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelectBar(n: Int, chips: List<StudyChip>, onChip: (StudyChip) -> Unit, onCancel: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
+            .background(Meka.colors.surfaceRaised).padding(MekaSpace.m).testTag("study-select-bar"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(StudyRules.selectedLine(n), animationSpec = MekaMotion.appear(reduced), label = "study-selected", modifier = Modifier.weight(1f)) { line ->
+                Text(line, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.testTag("study-selected"))
+            }
+            Text(StudyRules.CANCEL, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onCancel)
+                    .semantics { contentDescription = "Stop selecting" }.minTouch().padding(MekaSpace.xs).testTag("study-select-cancel"))
+        }
+        Text(if (n == 0) StudyRules.SELECT_HINT else StudyRules.PLAN_SELECTED, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (chip in chips) TripPill(chip.label, on = false, tag = "study-select-plan-${chip.label}", description = "${chip.spoken}, $n lessons") { onChip(chip) }
+        }
     }
 }
 
@@ -596,21 +678,31 @@ private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boole
 /** One lesson: the ring (22 dp in a 48 dp target), its name (faded once ticked) and how long it takes. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LessonRow(row: StudyLessonRow, done: Boolean, planned: String?, late: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onHold: () -> Unit) {
+private fun LessonRow(
+    row: StudyLessonRow, done: Boolean, planned: String?, late: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onHold: () -> Unit,
+    selected: Boolean? = null, onSelect: () -> Unit = {},
+) {
     val reduced = Meka.reducedMotion
     val fade by animateFloatAsState(if (done) 0.5f else 1f, MekaMotion.appear(reduced), label = "study-lesson-fade")
+    // Study fixes (3) slice 3: while selecting, a tap (or a hold) picks the lesson instead of ticking it; the row lights.
+    val bg by animateColorAsState(if (selected == true) Meka.colors.surfaceRaised else Meka.colors.background, MekaMotion.appear(reduced), label = "study-lesson-selected")
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .combinedClickable(role = Role.Checkbox, onClick = { onTick(!done) }, onLongClick = onHold, onLongClickLabel = "Rename, move or delete")
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)
+            .combinedClickable(
+                role = Role.Checkbox,
+                onClick = { if (selected != null) onSelect() else onTick(!done) },
+                onLongClick = { if (selected != null) onSelect() else onHold() },
+                onLongClickLabel = if (selected != null) null else "Rename, move, plan or delete",
+            )
             .semantics(mergeDescendants = true) {
                 contentDescription = row.spoken.removeSuffix(", done")
-                stateDescription = if (done) "Done" else "Not done"
+                stateDescription = when (selected) { null -> if (done) "Done" else "Not done"; true -> "Selected"; false -> "Not selected" }
             }
             .minTouch().padding(start = MekaSpace.m).testTag("study-lesson-${row.id}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        TickRing(done, Modifier.size(22.dp))
+        if (selected != null) SelectDot(selected) else TickRing(done, Modifier.size(22.dp))
         Text(row.title, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).alpha(fade))
         // Plan a lesson for a day: its date chip ("Today", "Tomorrow", "Thu 29 Oct"; in the accent once it rolled over).
@@ -621,6 +713,18 @@ private fun LessonRow(row: StudyLessonRow, done: Boolean, planned: String?, late
         }
         if (row.mins.isNotEmpty()) Text(row.mins, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade).padding(end = MekaSpace.xs))
     }
+}
+
+/** A selection mark in place of the tick ring while selecting: an outlined circle, filled in the accent with a check once picked. */
+@Composable
+private fun SelectDot(on: Boolean) {
+    val fill by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.appear(Meka.reducedMotion), label = "study-select-dot")
+    Box(
+        Modifier.size(22.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+            .border(1.5.dp, if (on) Meka.colors.accent else Meka.colors.textTertiary, RoundedCornerShape(MekaRadius.pill))
+            .testTag(if (on) "study-select-on" else "study-select-off"),
+        contentAlignment = Alignment.Center,
+    ) { if (on) Text("✓", style = MekaType.caption, color = Meka.colors.onAccent) }
 }
 
 /** "Delete “Welcome”?" with [yes] (in the critical colour) and Cancel: nothing is deleted without it. */
@@ -649,7 +753,7 @@ private fun ConfirmRow(question: String, yes: String, tag: String, onYes: () -> 
 @Composable
 private fun LessonSheet(
     row: StudyLessonRow, module: String, modules: List<String>, done: Boolean, planChips: List<StudyChip>, modifier: Modifier,
-    onPlan: (StudyChip) -> Unit, onName: (String) -> Unit, onModule: (String) -> Unit, onTick: (Boolean) -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
+    onPlan: (StudyChip) -> Unit, onSelect: () -> Unit, onName: (String) -> Unit, onModule: (String) -> Unit, onTick: (Boolean) -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
 ) {
     var confirming by remember(row.id) { mutableStateOf(false) }
     Column(
@@ -661,6 +765,7 @@ private fun LessonSheet(
         Text(StudyRules.PLAN_FOR, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             for (chip in planChips) TripPill(chip.label, on = chip.on, tag = "study-lesson-plan-${chip.label}", description = chip.spoken) { if (!chip.on) onPlan(chip) }
+            TripPill(StudyRules.SELECT, tag = "study-lesson-select", description = "Select several lessons to plan together") { onSelect() }
         }
         Text(StudyRules.RENAME, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         Field(row.title, description = "Rename ${row.title}", modifier = Modifier.testTag("study-lesson-name")) { onName(it) }

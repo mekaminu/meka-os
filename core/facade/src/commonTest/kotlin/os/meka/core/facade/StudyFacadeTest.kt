@@ -146,4 +146,27 @@ class StudyFacadeTest {
         assertEquals("Study · done", mac.weekBoard.value.day(today)?.study?.text)
         assertEquals(null, mac.weekBoard.value.day(today + 1)?.study)
     }
+
+    @Test
+    fun severalLessonsPlannedAtOnceOnTheFoldShowOnThatDayOnTheMac() = runTest {
+        // Study fixes (3) slice 3: select several lessons → Plan for…, including a day picked past this week.
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nPivot tables 1 h\nDashboards 30 min").courseId!!
+        val ls = fold.studyView.value.course(id)!!.modules.single().lessons
+        val today = fold.todayEpochDay()
+        val ids = ls.map { it.id }
+        assertEquals("Planned 3 lessons for tomorrow", fold.planStudyLessons(ids, today + 1))
+        assertEquals(null, fold.planStudyLessons(ids, today + 1))
+        // A day gone by, or more than a year ahead, isn't planned.
+        assertEquals(null, fold.planStudyLessons(ids, today - 1))
+        assertEquals(null, fold.planStudyLesson(ls[0].id, today + 400))
+        assertEquals("Planned 2 lessons for " + StudyRules.plannedLabel(today + 20, today), fold.planStudyLessons(ids.drop(1), today + 20))
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        val planned = mac.studyView.value.course(id)!!.modules.single().lessons.map { it.plannedDay }
+        assertEquals(listOf(today + 1, today + 20, today + 20), planned)
+        assertEquals("Study · 1 lesson · about 15 min · Welcome", mac.shutdownView.value.tomorrow.study?.text)
+        assertEquals("3 lessons are no longer planned", mac.planStudyLessons(ids, null))
+    }
 }

@@ -5110,7 +5110,21 @@ class MekaCore(
      */
     suspend fun planStudyLesson(id: String, epochDay: Long?): String? = onCore {
         val title = study.lessons().firstOrNull { it.id == id }?.title
-        if (title != null && study.planLesson(id, epochDay)) os.meka.core.domain.StudyRules.plannedSaid(title, epochDay, todayEpochDay()) else null
+        val today = todayEpochDay()
+        if (epochDay != null && !os.meka.core.domain.StudyRules.plannable(epochDay, today)) return@onCore null
+        if (title != null && study.planLesson(id, epochDay)) os.meka.core.domain.StudyRules.plannedSaid(title, epochDay, today) else null
+    }
+
+    /**
+     * Study fixes (3) slice 3: plans several lessons at once ("Select several" → Plan for…) for [epochDay] (a week chip
+     * or a day picked from the calendar, up to a year ahead), or off the plan with null. The bar's line ("Planned 3
+     * lessons for tomorrow"), or null when nothing changed or the day can't be planned.
+     */
+    suspend fun planStudyLessons(ids: List<String>, epochDay: Long?): String? = onCore {
+        val today = todayEpochDay()
+        if (epochDay != null && !os.meka.core.domain.StudyRules.plannable(epochDay, today)) return@onCore null
+        val n = study.planLessons(ids, epochDay)
+        if (n == 0) null else os.meka.core.domain.StudyRules.plannedManySaid(n, epochDay, today)
     }
 
     /** Picks or drops a time he can study (a WHEN YOU CAN STUDY chip's key). */

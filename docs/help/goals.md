@@ -22,4 +22,6 @@ tip: Tick a lesson when you've done it: the ring and "5 of 24 lessons · about 1
 tip: Press and hold a lesson (right-click on the Mac) to rename it, move it to another module, mark it done or delete it; Delete always asks first, and Undo or Recently deleted under the course brings it back for 30 days.
 tip: Press and hold a module's heading to rename or delete it. "+ Add lesson" at the foot of an open module adds into that module (one, or paste several lines); "+ Add module" adds a module with its first lessons.
 tip: To plan a lesson for a day, press and hold it (right-click on the Mac) and pick Today, Tomorrow or a day this week under Plan for. It shows on Today ("Study today · 2 lessons · about 1 h · next: Pivot tables"), in Tomorrow, and on the course with a date chip; a lesson not done on its day moves on to today, marked "from Mon". Not planned takes it off.
+tip: For a day past this week, pick "Pick a day…" under Plan for and choose it on the calendar (up to a year ahead).
+tip: To plan several lessons at once, press and hold one (right-click on the Mac) and pick Select several, tap the others, then pick a day under Plan for… at the foot (Pick a day… for one further ahead).
 tip: Planned lessons also show under their day on the Week board ("Study · 2 lessons · about 1 h"); tap the line to open the course.

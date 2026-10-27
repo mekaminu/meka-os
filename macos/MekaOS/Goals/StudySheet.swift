@@ -165,6 +165,11 @@ struct StudySheet: View {
     @State private var showDeleted = false
     /// Plan a lesson for a day: the chip picked here ("" = not planned), shown at once until the write is in.
     @State private var plannedTap: [String: String] = [:]
+    /// Study fixes (3) slice 3: the lessons picked under "Select several" (nil when not selecting), the lessons a
+    /// "Pick a day…" field is open for, and the day it shows.
+    @State private var selecting: Set<String>?
+    @State private var picking: [String]?
+    @State private var pickDate = Date()
 
     /// What a Delete confirm is about: a lesson (its id), a module (its name) or the course; [question] is the core's line.
     struct StudyAsk: Identifiable, Equatable {
@@ -287,6 +292,8 @@ struct StudySheet: View {
                 if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.removed = nil } }
             }
         }
+        if let picked = selecting { selectBar(picked) }
+        if let ids = picking { pickRow(ids) }
         let firstOpen = c.modules.first { m in m.lessons.contains { !isDone($0) } }?.key
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -324,6 +331,86 @@ struct StudySheet: View {
             Button(a.kind == .course ? "Remove" : StudyRules.shared.DELETE, role: .destructive) { confirm(a) }
             Button(StudyRules.shared.CANCEL, role: .cancel) { asking = nil }
         }
+    }
+
+    /// Plans `ids` for `key` (a chip's key: an epoch day, or Not planned), shown at once, the core's line after.
+    private func planKey(_ ids: [String], key: String, label: String) {
+        guard !ids.isEmpty else { return }
+        for id in ids { plannedTap[id] = label }
+        let day = Int64(key)
+        Task {
+            let line: String?
+            if ids.count == 1 { line = await model.planStudyLesson(ids[0], key: key) } else { line = await model.planStudyLessons(ids, day: day) }
+            if let line { said = CoreModel.StudySaid(line: line, refused: false, courseId: nil) }
+            for id in ids { plannedTap[id] = nil }
+        }
+    }
+
+    /// Study fixes (3) slice 3: "3 lessons selected", Plan for… (the week, Pick a day…, Not planned) and Cancel.
+    private func selectBar(_ picked: Set<String>) -> some View {
+        HStack(spacing: MekaSpace.xs) {
+            Text(StudyRules.shared.selectedLine(n: Int32(picked.count))).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                .contentTransition(.opacity)
+            Spacer()
+            Menu(StudyRules.shared.PLAN_SELECTED) {
+                ForEach(StudyRules.shared.selectChips(today: model.todayEpochDay), id: \.key) { chip in
+                    let key = chip.key
+                    let label = chip.label == StudyRules.shared.NOT_PLANNED ? "" : chip.label
+                    Button(chip.label) {
+                        let ids = Array(picked)
+                        if key == StudyRules.shared.PICK_KEY {
+                            pickDate = CoreModel.date(ofEpochDay: model.todayEpochDay + Int64(StudyRules.shared.PLAN_DAYS))
+                            picking = ids
+                        } else {
+                            planKey(ids, key: key, label: label)
+                            selecting = nil
+                        }
+                    }
+                }
+            }
+            .fixedSize()
+            .disabled(picked.isEmpty)
+            Button(StudyRules.shared.CANCEL) { selecting = nil; picking = nil }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .accessibilityLabel("Stop selecting")
+        }
+        .padding(MekaSpace.xs)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+    }
+
+    /// Study fixes (3) slice 3: Pick a day… for `ids`: a date from today to a year ahead, then Plan.
+    private func pickRow(_ ids: [String]) -> some View {
+        let today = model.todayEpochDay
+        let range = CoreModel.date(ofEpochDay: today)...CoreModel.date(ofEpochDay: today + Int64(StudyRules.shared.PICK_MAX_DAYS))
+        return HStack(spacing: MekaSpace.xs) {
+            DatePicker(StudyRules.shared.PLAN_FOR, selection: $pickDate, in: range, displayedComponents: .date)
+                .datePickerStyle(.field)
+                .fixedSize()
+            Spacer()
+            Button("Plan") {
+                let day = CoreModel.epochDay(of: pickDate)
+                picking = nil
+                guard StudyRules.shared.plannable(day: day, today: today) else {
+                    said = CoreModel.StudySaid(line: StudyRules.shared.PICK_REFUSED, refused: true, courseId: nil)
+                    return
+                }
+                planKey(ids, key: String(day), label: StudyRules.shared.plannedLabel(day: day, today: today))
+                selecting = nil
+            }
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.captionStrong)
+            .foregroundStyle(palette.accent)
+            Button(StudyRules.shared.CANCEL) { picking = nil }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.textSecondary)
+        }
+        .padding(MekaSpace.xs)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .transition(.opacity)
     }
 
     /// The confirm said yes: only now is anything deleted (with Undo, and Recently deleted for lessons).
@@ -600,7 +687,15 @@ struct StudySheet: View {
     private func lesson(_ l: StudyLessonRow, module: String, names: [String]) -> some View {
         let done = isDone(l)
         let id = l.id
+        let picked = selecting?.contains(id)
         return Button {
+            // Study fixes (3) slice 3: while selecting, a click picks the lesson instead of ticking it.
+            if var s = selecting {
+                MekaHaptics.tick()
+                if s.contains(id) { s.remove(id) } else { s.insert(id) }
+                selecting = s
+                return
+            }
             pending[id] = !done
             MekaHaptics.light()
             Task {
@@ -608,7 +703,13 @@ struct StudySheet: View {
             }
         } label: {
             HStack(spacing: MekaSpace.xs) {
-                TickRingView(done: done, palette: palette).frame(width: 18, height: 18)
+                if let picked {
+                    Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(picked ? palette.accent : palette.textTertiary)
+                        .frame(width: 18, height: 18)
+                } else {
+                    TickRingView(done: done, palette: palette).frame(width: 18, height: 18)
+                }
                 Text(l.title).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
                 Spacer()
                 // Plan a lesson for a day: its date chip ("Today", "Tomorrow", "Thu 29 Oct"; in the accent once it rolled over).
@@ -632,7 +733,7 @@ struct StudySheet: View {
         }
         .buttonStyle(MekaPressStyle())
         .accessibilityLabel(l.planned.map { "\(l.title), planned for \($0)" } ?? l.title)
-        .accessibilityValue(done ? "Done" : "Not done")
+        .accessibilityValue(picked.map { $0 ? "Selected" : "Not selected" } ?? (done ? "Done" : "Not done"))
         .contextMenu {
             let title = l.title
             // Plan a lesson for a day: Today, Tomorrow or a day this week; it then shows on Today and in the Tomorrow sheet.
@@ -642,14 +743,16 @@ struct StudySheet: View {
                     let label = chip.label == StudyRules.shared.NOT_PLANNED ? "" : chip.label
                     Button(chip.on ? "\(chip.label) ✓" : chip.label) {
                         guard !chip.on else { return }
-                        plannedTap[id] = label
-                        Task {
-                            if let line = await model.planStudyLesson(id, key: key) { said = CoreModel.StudySaid(line: line, refused: false, courseId: nil) }
-                            plannedTap[id] = nil
+                        if key == StudyRules.shared.PICK_KEY {
+                            pickDate = CoreModel.date(ofEpochDay: l.plannedDay?.int64Value ?? (model.todayEpochDay + Int64(StudyRules.shared.PLAN_DAYS)))
+                            picking = [id]
+                        } else {
+                            planKey([id], key: key, label: label)
                         }
                     }
                 }
             }
+            Button(StudyRules.shared.SELECT) { picking = nil; selecting = [id] }
             Button("\(StudyRules.shared.RENAME)…") { renameText = title; renameModule = nil; renameId = id }
             if names.count > 1 {
                 Menu(StudyRules.shared.MOVE_LABEL) {

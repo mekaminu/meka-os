@@ -6070,6 +6070,16 @@ final class CoreModel {
         }
     }
 
+    /// Study fixes (3) slice 3: plans several lessons at once for `day` (nil: off the plan); the bar's line, or nil.
+    func planStudyLessons(_ ids: [String], day: Int64?) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do { return try await core.planStudyLessons(ids: ids, epochDay: day.map { KotlinLong(longLong: $0) }) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func renameStudyLesson(_ id: String, _ text: String) { MekaHaptics.light(); run { _ = try await $0.renameStudyLesson(id: id, text: text) } }
 
     func moveStudyLesson(_ id: String, module: String) { MekaHaptics.light(); run { _ = try await $0.moveStudyLesson(id: id, module: module) } }
