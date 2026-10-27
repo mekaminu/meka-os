@@ -60,6 +60,8 @@ class MoneyBillsLayoutScreensTest {
     private companion object {
         const val SETTLE_MS = 3_000L
         const val CURRENT = "Date,Description,Amount\n" +
+            "01/08/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
+            "15/08/2026,STREAMLY.COM,-10.99\n" +
             "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
             "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
             "15/09/2026,STREAMLY.COM,-10.99\n" +
