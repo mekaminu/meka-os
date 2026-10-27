@@ -60,7 +60,7 @@ internal fun TomorrowPeekCard(peek: TomorrowPeek, onOpen: () -> Unit, modifier: 
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.minTouch()
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s)
+            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs)
             .semantics { contentDescription = peek.spoken },
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -21,7 +21,7 @@ struct TomorrowPeekView: View {
                 Text("›").font(MekaType.itemMeta).foregroundStyle(palette.accent)
             }
             .padding(.horizontal, MekaSpace.l)
-            .padding(.vertical, MekaSpace.s)
+            .padding(.vertical, MekaSpace.xs)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
             .contentShape(Rectangle())

@@ -1105,17 +1105,21 @@ class AskMekaFacadeTest {
         val c = core()
         c.addTask("Create CR")
         server.reply = AskReply.Answered("Here.", listOf(AskRawAction("add_task", title = "Ring the school", date = "2026-10-09")))
-        val card = assertIs<AskOutcome.Answered>(c.askMeka("add ring the school for tomorrow")).answer.cards.single()
-        assertEquals("Added “Ring the school” · Tomorrow · see it under Tomorrow on Today", c.doAsk(card).line)
+        val cards = assertIs<AskOutcome.Answered>(c.askMeka("do things")).answer.cards
+        assertEquals(1, cards.size, cards.toString())
+        assertEquals("Added “Ring the school” · Tomorrow · see it under Tomorrow on Today", c.doAsk(cards[0]).line)
+        c.tick()
         val v = c.shutdownView.value
         assertEquals(listOf("Create CR"), v.left.map { it.task.title })
         assertTrue(v.cardLine.endsWith("1 planned for tomorrow"), v.cardLine)
         assertEquals("Tomorrow · Fri 9 Oct · 1 task", v.peek?.line)
-        val row = v.tomorrow.rows.single()
+        assertEquals(1, v.tomorrow.rows.size, v.tomorrow.rows.toString())
+        val row = v.tomorrow.rows[0]
         val id = assertNotNull(ShutdownRules.taskIdOf(row))
 
         // From the Tomorrow sheet: to Today, then it's left from today and tomorrow is empty again.
         assertEquals("Moved “Ring the school” to Today", c.moveTomorrowTask(id, toToday = true))
+        c.tick()
         val after = c.shutdownView.value
         assertTrue(after.tomorrow.rows.isEmpty())
         assertEquals(listOf("Create CR", "Ring the school"), after.left.map { it.task.title }.sorted())
