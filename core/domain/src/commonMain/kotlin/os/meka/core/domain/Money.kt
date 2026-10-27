@@ -465,6 +465,8 @@ data class MoneyView(
     val skeleton: Boolean = false,
     /** The payment sheet: every category's key in chip order ([MoneyPaymentSheet.order]); empty before any payment is in. */
     val categoryOrder: List<String> = emptyList(),
+    /** His own categories ([MoneyOwnCategories]), oldest first: the sheet's chips, Spending's rows and the New category form. */
+    val ownCategories: List<MoneyOwnCategory> = emptyList(),
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -594,6 +596,8 @@ object MoneyRules {
         abroadNow: Boolean = false, trip: Pair<String, Long>? = null,
         /** Money at a glance: priced receipt and order emails from his tidies ([MoneyReceipts.fromTidies]). */
         receipts: List<MoneyReceiptMail> = emptyList(),
+        /** His own categories ([MoneyOwnCategories]) and the payees he put in one (merchant key → its id). */
+        own: List<MoneyOwnCategory> = emptyList(), ownRules: Map<String, String> = emptyMap(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -608,6 +612,11 @@ object MoneyRules {
         // Money bugs (A1): card repayments and moves between his own accounts are transfers, out of spent and in.
         val moves = MoneyTransfers.ids(accounts, mine, rules)
         fun cat(t: MoneyTxn): MoneyCategory = cats.getOrPut(t.id) { MoneyTransfers.categoryOf(t, keyOf(t), rules, moves) }
+        // His own categories: a payee he put in one counts as Other underneath and shows as his own on Spending.
+        val ownById = own.associateBy { it.id }
+        fun ownOf(t: MoneyTxn): MoneyOwnCategory? =
+            if (ownRules.isEmpty()) null else ownRules[keyOf(t)]?.let { ownById[it] }?.takeIf { cat(t) == MoneyCategory.OTHER }
+        fun shownKey(t: MoneyTxn): String = ownOf(t)?.key ?: cat(t).key
         val accountRows = accounts.sortedBy { it.name.lowercase() }.map { a ->
             val ts = mine.filter { it.account == a.id }
             val span = if (ts.isEmpty()) "no transactions" else
@@ -628,22 +637,26 @@ object MoneyRules {
         fun sharedLine(t: MoneyTxn) = MoneySharedLine(t.id, t.day, t.pence, keyOf(t), cat(t))
         val shared = MoneyShared.view(accounts.isNotEmpty(), mine.map { sharedLine(it) }, sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner, today)
         fun isShared(t: MoneyTxn) = MoneyShared.counts(sharedLine(t), sharedTxns, sharedMerchants)
-        if (mine.isEmpty()) return MoneyView(false, EMPTY_SUMMARY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared)
+        if (mine.isEmpty()) return MoneyView(false, EMPTY_SUMMARY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared, ownCategories = own)
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })
         val shown = (thisMonth - offset.coerceAtLeast(0)).coerceAtLeast(firstMonth)
         val byMonth = mine.groupBy { monthOf(it.day) }
         fun spendOf(ts: List<MoneyTxn>): Map<MoneyCategory, Long> = ts.groupBy { cat(it) }
             .filterKeys { it.spend }.mapValues { (_, l) -> -l.sumOf { it.pence } }
+        // Spending's rows: as [spendOf], with his own categories split out of Other.
+        fun shownSpendOf(ts: List<MoneyTxn>): Map<String, Long> = ts.filter { cat(it).spend }.groupBy { shownKey(it) }
+            .mapValues { (_, l) -> -l.sumOf { it.pence } }
         val cur = byMonth[shown].orEmpty()
         val spend = spendOf(cur)
         val spent = spend.values.filter { it > 0 }.sum()
         val income = cur.filter { cat(it) == MoneyCategory.INCOME }.sumOf { it.pence }
         // The 6 whole months before the one shown that have statements.
         val prior = (1..6).map { shown - it }.filter { it >= firstMonth }
-        val avg: Map<MoneyCategory, Long> = if (prior.isEmpty()) emptyMap() else {
-            val sums = prior.map { spendOf(byMonth[it].orEmpty()) }
-            MoneyCategory.entries.filter { it.spend }.associateWith { c -> sums.sumOf { it[c] ?: 0L } / prior.size }
+        val avg: Map<String, Long> = if (prior.isEmpty()) emptyMap() else {
+            val sums = prior.map { shownSpendOf(byMonth[it].orEmpty()) }
+            (MoneyCategory.entries.filter { it.spend }.map { it.key } + own.map { it.key })
+                .associateWith { c -> sums.sumOf { it[c] ?: 0L } / prior.size }
         }
         val avgTotal = if (prior.isEmpty()) null else prior.sumOf { m -> spendOf(byMonth[m].orEmpty()).values.filter { it > 0 }.sum() } / prior.size
         // Quality gate: the average is named by the months it really covers ("your 2-month average", or "September").
@@ -651,9 +664,13 @@ object MoneyRules {
         val partial = shown == thisMonth
         val label = if (partial) "${CivilDate.MONTH_LONG[shown % 12]} so far" else monthLabel(shown)
         val spendCats = ArrayList<MoneySpendCat>()
-        val catRows = spend.filter { it.value > 0 }.entries.sortedByDescending { it.value }.map { (c, p) ->
-            val n = cur.count { cat(it) == c && it.pence < 0 }
-            val a = avg[c]
+        val shownSpend = if (ownRules.isEmpty()) spend.mapKeys { it.key.key } else shownSpendOf(cur)
+        val catRows = shownSpend.filter { it.value > 0 }.entries.sortedByDescending { it.value }.mapNotNull { (k, p) ->
+            val ownC = MoneyOwnCategories.idOf(k)?.let { ownById[it] }
+            val c = MoneyCategory.of(k) ?: if (ownC != null) MoneyCategory.OTHER else return@mapNotNull null
+            val label = ownC?.name ?: c.label
+            val n = cur.count { shownKey(it) == k && it.pence < 0 }
+            val a = avg[k]
             val over = !partial && a != null && p - a >= OVER_MIN_PENCE && p > a * (1 + OVER_SHARE)
             val vs = when {
                 a == null || partial -> null
@@ -663,9 +680,9 @@ object MoneyRules {
                 else -> if (prior.size == 1) "about the same as $avgName" else "about $avgName"
             }
             val line = listOfNotNull("$n payment${if (n == 1) "" else "s"}", vs).joinToString(" · ")
-            spendCats += MoneySpendCat(c, p, line, over, under = !partial && a != null && a > 0 && a - p >= OVER_MIN_PENCE)
-            MoneyCategoryRow(c.key, c.label, fmt(p), if (spent > 0) (p.toFloat() / spent).coerceIn(0f, 1f) else 0f, line, over,
-                "${c.label}, ${fmt(p)}, $line")
+            spendCats += MoneySpendCat(c, p, line, over, under = !partial && a != null && a > 0 && a - p >= OVER_MIN_PENCE, own = ownC)
+            MoneyCategoryRow(k, label, fmt(p), if (spent > 0) (p.toFloat() / spent).coerceIn(0f, 1f) else 0f, line, over,
+                "$label, ${fmt(p)}, $line")
         }
         val vsLine = when {
             avgTotal == null -> null
@@ -682,13 +699,16 @@ object MoneyRules {
         )
         val rows = sorted.take(SHOWN_TXNS).map { t ->
             val c = cat(t)
+            val ownC = ownOf(t)
+            val shownCat = ownC?.key ?: c.key
+            val shownLabel = ownC?.name ?: c.label
             val key = keyOf(t)
             val merchant = MoneyCategoryRules.merchantLabel(key)
             val r = receiptOf[t.id]
             MoneyTxnRow(
                 id = t.id, day = CivilDate.shortLabel(t.day), merchant = merchant, amount = signed(t.pence), moneyIn = t.pence > 0,
-                category = c.key, categoryLabel = c.label, account = names[t.account].orEmpty(), taught = key in rules,
-                spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, ${c.label}" +
+                category = shownCat, categoryLabel = shownLabel, account = names[t.account].orEmpty(), taught = key in rules,
+                spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, $shownLabel" +
                     (if (isBiz(t)) ", business" else "") + (if (isShared(t)) ", shared" else "") + (r?.let { MoneyReceipts.spoken(it) } ?: ""),
                 business = isBiz(t),
                 shared = isShared(t),
@@ -760,7 +780,12 @@ object MoneyRules {
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
             year = if (partial) MoneyYear.view(yearLines, today, source) else null,
             review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }, source),
-            categoryOrder = MoneyPaymentSheet.order(mine.groupingBy { cat(it).key }.eachCount(), rules.values.mapTo(HashSet()) { it.key }),
+            categoryOrder = MoneyPaymentSheet.order(
+                mine.groupingBy { shownKey(it) }.eachCount(),
+                rules.entries.mapTo(HashSet()) { (m, c) -> ownRules[m]?.let { MoneyOwnCategories.PREFIX + it } ?: c.key },
+                own,
+            ),
+            ownCategories = own,
         )
     }
 
@@ -809,7 +834,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -979,9 +1004,68 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     fun rules(): Map<String, MoneyCategory> = replica.entities(EntityTypes.MONEY_RULE).mapNotNull { e ->
         val m = e[MoneyRuleFields.MERCHANT].textOrNull ?: return@mapNotNull null
-        val c = MoneyCategory.of(e[MoneyRuleFields.CATEGORY].textOrNull) ?: return@mapNotNull null
+        val raw = e[MoneyRuleFields.CATEGORY].textOrNull
+        // A payee in one of his own categories is Other underneath ([MoneyOwnCategories]), while that category is there.
+        val c = MoneyCategory.of(raw)
+            ?: MoneyOwnCategories.idOf(raw)?.takeIf { ownLive(it) }?.let { MoneyCategory.OTHER }
+            ?: return@mapNotNull null
         m to c
     }.toMap()
+
+    /** His own categories, oldest first (then by name). */
+    fun ownCategories(): List<MoneyOwnCategory> = replica.entities(EntityTypes.MONEY_CATEGORY)
+        .mapNotNull { e -> MoneyOwnCategories.read(e.ref.entityId, e.fields) }
+        .sortedWith(compareBy<MoneyOwnCategory> { it.createdAtMs }.thenBy { it.name.lowercase() })
+
+    private fun ownLive(id: String): Boolean =
+        replica.entity(EntityTypes.MONEY_CATEGORY, id)?.let { MoneyOwnCategories.read(id, it.fields) } != null
+
+    /** The payees he put in one of his own categories: merchant key → the category's id (live ones only). */
+    fun ownRules(): Map<String, String> {
+        val live = ownCategories().mapTo(HashSet()) { it.id }
+        if (live.isEmpty()) return emptyMap()
+        return replica.entities(EntityTypes.MONEY_RULE).mapNotNull { e ->
+            val m = e[MoneyRuleFields.MERCHANT].textOrNull ?: return@mapNotNull null
+            val id = MoneyOwnCategories.idOf(e[MoneyRuleFields.CATEGORY].textOrNull)?.takeIf { it in live } ?: return@mapNotNull null
+            m to id
+        }.toMap()
+    }
+
+    /**
+     * Makes one of his own categories ([name], [tone], [icon]), on both devices, and puts [txnId]'s payee in it (past and
+     * future) when given. A name that is a built-in category is refused; one he already has is reused (a removed one comes
+     * back). Undo by [undoCategory] puts the payee back and takes away a category this made.
+     */
+    fun addOwnCategory(name: String, tone: Int, icon: MoneyIcon, txnId: String?): MoneySaved {
+        val clean = MoneyOwnCategories.clean(name) ?: return MoneySaved(MoneyOwnCategories.NO_NAME, refused = true)
+        MoneyOwnCategories.builtIn(clean)?.let { return MoneySaved(MoneyOwnCategories.alreadyLine(it), refused = true) }
+        val t = txnId?.let { id -> txns().firstOrNull { it.id == id } ?: return MoneySaved(MoneyRules.GONE, refused = true) }
+        val id = MoneyOwnCategories.idFor(clean)
+        val existing = replica.entity(EntityTypes.MONEY_CATEGORY, id)?.let { MoneyOwnCategories.read(id, it.fields) }
+        val made = existing == null
+        val c = existing ?: MoneyOwnCategory(id, clean, tone.coerceIn(0, MoneySpending.TONES - 1), icon.takeIf { it in MoneyOwnCategories.ICONS } ?: MoneyIcon.DOTS, nowMs())
+        var ruleUndo = ""
+        var count = 0
+        var merchant: String? = null
+        replica.batched {
+            if (made) replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(
+                MoneyOwnFields.NAME to c.name.fv(), MoneyOwnFields.TONE to c.tone.toLong().fv(), MoneyOwnFields.ICON to c.icon.name.fv(),
+                MoneyOwnFields.CREATED_AT to c.createdAtMs.fv(), MoneyOwnFields.DELETED to false.fv(),
+            ))
+            if (t != null) {
+                val key = MoneyCategoryRules.merchantKey(t.text)
+                val rid = MoneyRules.ruleId(key)
+                val before = replica.entity(EntityTypes.MONEY_RULE, rid)?.get(MoneyRuleFields.CATEGORY)?.textOrNull
+                replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.MERCHANT to key.fv(), MoneyRuleFields.CATEGORY to c.key.fv()))
+                ruleUndo = "$rid|${before.orEmpty()}"
+                count = txns().count { MoneyCategoryRules.merchantKey(it.text) == key }
+                merchant = MoneyCategoryRules.merchantLabel(key)
+            }
+        }
+        val line = if (made) MoneyOwnCategories.madeLine(c.name, merchant, count)
+        else merchant?.let { MoneyPaymentSheet.movedLine(it, c.name, count) } ?: "${c.name} is already yours"
+        return MoneySaved(line, undo = OWN_UNDO + id + "|" + (if (made) "1" else "0") + "|" + ruleUndo)
+    }
 
     /** Slice 13: the accounts he marked as his side hustle's. */
     fun businessAccounts(): Set<String> = replica.entities(EntityTypes.MONEY_ACCOUNT)
@@ -1229,17 +1313,35 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     /** Puts every payment to [txnId]'s merchant in [categoryKey] from now on; Undo hands back the old choice. */
     fun setCategory(txnId: String, categoryKey: String): MoneySaved {
         val t = txns().firstOrNull { it.id == txnId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
-        val c = MoneyCategory.of(categoryKey) ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        // A built-in category, or one of his own that is still there.
+        val label = MoneyCategory.of(categoryKey)?.label
+            ?: MoneyOwnCategories.idOf(categoryKey)?.let { id -> replica.entity(EntityTypes.MONEY_CATEGORY, id)?.let { MoneyOwnCategories.read(id, it.fields) } }?.name
+            ?: return MoneySaved(MoneyRules.GONE, refused = true)
         val key = MoneyCategoryRules.merchantKey(t.text)
         val rid = MoneyRules.ruleId(key)
         val before = replica.entity(EntityTypes.MONEY_RULE, rid)?.get(MoneyRuleFields.CATEGORY)?.textOrNull
-        replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.MERCHANT to key.fv(), MoneyRuleFields.CATEGORY to c.key.fv()))
+        replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.MERCHANT to key.fv(), MoneyRuleFields.CATEGORY to categoryKey.fv()))
         val count = txns().count { MoneyCategoryRules.merchantKey(it.text) == key }
-        return MoneySaved(MoneyRules.movedLine(MoneyCategoryRules.merchantLabel(key), c, count), undo = "$rid|${before.orEmpty()}")
+        return MoneySaved(MoneyPaymentSheet.movedLine(MoneyCategoryRules.merchantLabel(key), label, count), undo = "$rid|${before.orEmpty()}")
     }
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(OWN_UNDO)) {
+            val parts = token.removePrefix(OWN_UNDO).split('|')
+            val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
+            val made = parts.getOrNull(1) == "1"
+            val rid = parts.getOrNull(2).orEmpty()
+            replica.batched {
+                if (rid.isNotEmpty() && replica.entity(EntityTypes.MONEY_RULE, rid) != null) {
+                    replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.CATEGORY to parts.getOrNull(3).orEmpty().ifEmpty { null }.fv()))
+                }
+                if (made && replica.entity(EntityTypes.MONEY_CATEGORY, id) != null) {
+                    replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(MoneyOwnFields.DELETED to true.fv()))
+                }
+            }
+            return true
+        }
         if (token.startsWith(CHALLENGE_UNDO)) {
             val parts = token.removePrefix(CHALLENGE_UNDO).split('|')
             val fields = when (parts.getOrNull(0)) {
@@ -1395,6 +1497,12 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
             replica.entities(EntityTypes.MONEY_ALERT).forEach { replica.commitLocal(EntityTypes.MONEY_ALERT, it.ref.entityId, mapOf(MoneyAlertFields.FINE to FieldValue.Null)) }
+            replica.entities(EntityTypes.MONEY_CATEGORY, includeDeleted = true).forEach {
+                replica.commitLocal(EntityTypes.MONEY_CATEGORY, it.ref.entityId, mapOf(
+                    MoneyOwnFields.DELETED to true.fv(), MoneyOwnFields.NAME to FieldValue.Null, MoneyOwnFields.TONE to FieldValue.Null,
+                    MoneyOwnFields.ICON to FieldValue.Null, MoneyOwnFields.CREATED_AT to FieldValue.Null,
+                ))
+            }
             rules.forEach {
                 replica.commitLocal(EntityTypes.MONEY_RULE, it.ref.entityId, mapOf(
                     MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null, MoneyBusinessFields.MERCHANT to FieldValue.Null,

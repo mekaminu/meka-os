@@ -43,7 +43,18 @@ data class MoneySpendingView(
 )
 
 /** A spend category's month for [MoneySpending.view]: its pence out, the note and whether it's over or under usual. */
-data class MoneySpendCat(val category: MoneyCategory, val pence: Long, val line: String, val over: Boolean, val under: Boolean)
+data class MoneySpendCat(
+    val category: MoneyCategory, val pence: Long, val line: String, val over: Boolean, val under: Boolean,
+    /** One of his own categories ([MoneyOwnCategories]): its name, icon and colour instead of [category]'s (which is Other). */
+    val own: MoneyOwnCategory? = null,
+) {
+    val key: String get() = own?.key ?: category.key
+    val label: String get() = own?.name ?: category.label
+    /** Other is always quiet; his own categories never are. */
+    val quiet: Boolean get() = own == null && category == MoneyCategory.OTHER
+    /** Ties go in the usual order, his own after the built-in ones. */
+    val order: Int get() = if (own != null) MoneyCategory.entries.size else category.ordinal
+}
 
 /** A payment for [MoneySpending.view]: its row, day and signed pence (newest first). */
 data class MoneySpendTxn(val row: MoneyTxnRow, val day: Long, val pence: Long)
@@ -116,6 +127,9 @@ object MoneySpending {
     /** The tone a payment's chip wears: its category's colour this month, else quiet. */
     fun txnTone(v: MoneySpendingView, category: String): Int = v.rows.firstOrNull { it.key == category }?.tone ?: REST
 
+    /** The icon a payment's chip wears: its row's (so his own categories show theirs), else the category's. */
+    fun txnIcon(v: MoneySpendingView?, category: String): MoneyIcon = v?.rows?.firstOrNull { it.key == category }?.icon ?: icon(category)
+
     /**
      * The view. [partial] while the month is this month ([dayOfMonth] of [daysInMonth] gone); [avgTotal] the usual
      * month's spending (null with nothing to compare) named [usual] ("usual", or "September" with one month before);
@@ -127,19 +141,31 @@ object MoneySpending {
         txns: List<MoneySpendTxn>, allTxns: Int, today: Long,
     ): MoneySpendingView {
         val spent = spentPence.coerceAtLeast(0)
-        val sorted = cats.filter { it.pence > 0 }.sortedWith(compareByDescending<MoneySpendCat> { it.pence }.thenBy { it.category.ordinal })
-        // Colours go to the biggest categories in turn; Other is always quiet, as is everything past the palette.
-        val tones = HashMap<MoneyCategory, Int>()
+        val sorted = cats.filter { it.pence > 0 }.sortedWith(compareByDescending<MoneySpendCat> { it.pence }.thenBy { it.order }.thenBy { it.label })
+        // Colours go to the biggest categories in turn; Other is always quiet, as is everything past the palette. His own
+        // categories wear the colour he picked, and the rest skip it so two slices never share one.
+        val tones = HashMap<String, Int>()
+        val picked = sorted.mapNotNullTo(HashSet()) { it.own?.tone }
         var next = 0
-        sorted.forEach { c -> tones[c.category] = if (c.category == MoneyCategory.OTHER || next >= TONES) REST else next++ }
+        sorted.forEach { c ->
+            val o = c.own
+            tones[c.key] = when {
+                o != null -> o.tone
+                c.quiet -> REST
+                else -> {
+                    while (next in picked) next++
+                    if (next >= TONES) REST else next++
+                }
+            }
+        }
         val slices = ArrayList<MoneyRingSlice>()
         var at = 0f
         var restSweep = 0f
         sorted.forEach { c ->
             val sweep = if (spent > 0) (c.pence.toFloat() / spent).coerceIn(0f, 1f) else 0f
-            val tone = tones.getValue(c.category)
-            if (tone == REST && c.category != MoneyCategory.OTHER) restSweep += sweep
-            else { slices += MoneyRingSlice(c.category.key, c.category.label, at, sweep, tone); at += sweep }
+            val tone = tones.getValue(c.key)
+            if (tone == REST && !c.quiet) restSweep += sweep
+            else { slices += MoneyRingSlice(c.key, c.label, at, sweep, tone); at += sweep }
         }
         if (restSweep > 0f) slices += MoneyRingSlice(REST_KEY, REST_LABEL, at, restSweep, REST)
         val biggest = sorted.firstOrNull()?.pence ?: 0L
@@ -148,9 +174,9 @@ object MoneySpending {
             val pct = pct(share)
             val tone = when { c.over -> MoneyTone.OVER; c.under -> MoneyTone.GOOD; else -> MoneyTone.QUIET }
             MoneySpendRow(
-                c.category.key, c.category.label, MoneyRules.fmt(c.pence), pct,
+                c.key, c.label, MoneyRules.fmt(c.pence), pct,
                 if (biggest > 0) (c.pence.toFloat() / biggest).coerceIn(0.02f, 1f) else 0f, c.line, tone,
-                tones.getValue(c.category), icon(c.category.key), "${c.category.label}, ${MoneyRules.fmt(c.pence)}, $pct of spending, ${c.line}",
+                tones.getValue(c.key), c.own?.icon ?: icon(c.key), "${c.label}, ${MoneyRules.fmt(c.pence)}, $pct of spending, ${c.line}",
             )
         }
         val centre = centre(partial, monthName, spent, avgTotal, usual, dayOfMonth, daysInMonth)

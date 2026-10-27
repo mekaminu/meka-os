@@ -3874,12 +3874,29 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// The payment sheet: the Mac draws the same chips, toggles and moved line as the Fold.
     func testThePaymentSheetOnTheMac() {
         let sheet = MoneyPaymentSheet.shared
-        let order = sheet.order(use: ["coffee": KotlinInt(int: 5), "transfers": KotlinInt(int: 9)], taught: Set(["fun"]))
+        let order = sheet.order(use: ["coffee": KotlinInt(int: 5), "transfers": KotlinInt(int: 9)], taught: Set(["fun"]), own: [])
         XCTAssertEqual(order.first, "fun")
         XCTAssertEqual(order.last, "transfers")
-        let chips = sheet.chips(order: order, current: "coffee")
+        let chips = sheet.chips(order: order, current: "coffee", own: [])
         XCTAssertEqual(chips.filter { $0.on }.map { $0.key }, ["coffee"])
         XCTAssertEqual(sheet.movedLine(merchant: "Corner Shop", category: MoneyCategory.shopping, count: 14), "Moved 14 payments from Corner Shop to Shopping")
         XCTAssertEqual(MoneySheetMark.sideHustle.name, "SIDE_HUSTLE")
+    }
+
+    /// His own categories: the Mac draws the same chip, colours and icons as the Fold.
+    func testHisOwnCategoriesOnTheMac() {
+        let own = MoneyOwnCategories.shared
+        let treats = MoneyOwnCategory(id: own.idFor(name: "Treats"), name: "Treats", tone: 3, icon: MoneyIcon.cup, createdAtMs: 0)
+        XCTAssertEqual(treats.key, "own:" + treats.id)
+        let order = MoneyPaymentSheet.shared.order(use: [:], taught: Set(), own: [treats])
+        XCTAssertEqual(order.first, treats.key)
+        let chip = MoneyPaymentSheet.shared.chips(order: order, current: treats.key, own: [treats]).first
+        XCTAssertEqual(chip?.label, "Treats")
+        XCTAssertEqual(chip?.on, true)
+        XCTAssertEqual(own.TONES.count, 7)
+        XCTAssertEqual(own.nextTone(own: [treats]), 0)
+        XCTAssertNil(own.clean(raw: "   "))
+        XCTAssertEqual(own.ICONS.first?.name, "DOTS")
+        XCTAssertEqual(MoneyPaymentSheet.shared.movedLine(merchant: "Corner Shop", label: "Treats", count: 2), "Moved 2 payments from Corner Shop to Treats")
     }
 }

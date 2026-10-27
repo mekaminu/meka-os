@@ -648,7 +648,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     item(key = "day-${d.label}") { MoneyDayHead(d, Modifier.animateItem()) }
                     d.rows.forEach { t ->
                         item(key = "latest-${t.id}") {
-                            TxnRow(t, Modifier.animateItem(), chip = MoneySpending.icon(t.category) to MoneySpending.txnTone(sp, t.category), showDay = false,
+                            TxnRow(t, Modifier.animateItem(), chip = MoneySpending.txnIcon(sp, t.category) to MoneySpending.txnTone(sp, t.category), showDay = false,
                                 onOpen = { openSheet(t.id) })
                         }
                     }
@@ -669,7 +669,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
-                        TxnRow(t, Modifier.animateItem(), chip = sp?.let { MoneySpending.icon(t.category) to MoneySpending.txnTone(it, t.category) },
+                        TxnRow(t, Modifier.animateItem(), chip = sp?.let { MoneySpending.txnIcon(it, t.category) to MoneySpending.txnTone(it, t.category) },
                             onOpen = { openSheet(t.id) })
                     }
                 }
@@ -819,6 +819,10 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         },
         onUndo = { u -> scope.launch { runCatching { core.undoMoneyCategory(u) }; haptics.light(); said = null } },
         onClose = { sheetId = null },
+        own = v.ownCategories,
+        onNewCategory = { name, tone, icon ->
+            sheetRow?.let { t -> scope.launch { runCatching { core.addMoneyCategory(name, tone, icon.name, t.id) }.getOrNull()?.let(say) } }
+        },
     )
     }
 }

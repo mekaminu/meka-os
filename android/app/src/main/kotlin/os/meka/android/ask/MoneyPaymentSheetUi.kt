@@ -1,6 +1,25 @@
 package os.meka.android.ask
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
+import os.meka.android.designsystem.moneyTone
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.lists.Field
+import os.meka.core.domain.MoneyIcon
+import os.meka.core.domain.MoneyOwnCategories
+import os.meka.core.domain.MoneyOwnCategory
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -64,6 +83,8 @@ import os.meka.core.domain.MoneyTxnRow
 internal fun PaymentSheet(
     row: MoneyTxnRow?, order: List<String>, said: MoneySaved?,
     onCategory: (String) -> Unit, onMark: (MoneySheetMark, Boolean) -> Unit, onUndo: (String) -> Unit, onClose: () -> Unit,
+    own: List<MoneyOwnCategory> = emptyList(),
+    onNewCategory: (name: String, tone: Int, icon: MoneyIcon) -> Unit = { _, _, _ -> },
 ) {
     val reduced = Meka.reducedMotion
     // The last row shown, so the sheet keeps its content while it slides away.
@@ -72,6 +93,8 @@ internal fun PaymentSheet(
     BackHandler(enabled = row != null, onBack = onClose)
     AnimatedVisibility(visible = row != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
         val r = row ?: shown[0] ?: return@AnimatedVisibility
+        // "+ New category": the form takes the chips' place until Create or Cancel (motion: Expand / collapse).
+        var making by rememberSaveable(r.id) { mutableStateOf(false) }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Box(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
@@ -106,12 +129,24 @@ internal fun PaymentSheet(
                 r.receipt?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
                 Text(MoneyPaymentSheet.CATEGORY_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.xs))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    for (c in MoneyPaymentSheet.chips(order, r.category)) {
-                        TripPill(c.label, on = c.on, tag = "money-sheet-cat-${c.key}", description = c.spoken) { if (!c.on) onCategory(c.key) }
+                AnimatedContent(
+                    making, label = "money-sheet-new",
+                    transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
+                ) { form ->
+                    if (form) NewCategoryForm(
+                        own = own,
+                        onCreate = { name, tone, icon -> making = false; onNewCategory(name, tone, icon) },
+                        onCancel = { making = false },
+                    ) else Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            for (c in MoneyPaymentSheet.chips(order, r.category, own)) {
+                                TripPill(c.label, on = c.on, tag = "money-sheet-cat-${c.key}", description = c.spoken) { if (!c.on) onCategory(c.key) }
+                            }
+                            if (!r.moneyIn) TripPill(MoneyOwnCategories.NEW, tag = "money-sheet-new", description = MoneyOwnCategories.NEW_SPOKEN) { making = true }
+                        }
+                        Text(MoneyPaymentSheet.ruleLine(r), style = MekaType.caption, color = Meka.colors.textTertiary)
                     }
                 }
-                Text(MoneyPaymentSheet.ruleLine(r), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-sheet-said") { s ->
                     if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text(s.line, style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
@@ -137,6 +172,75 @@ internal fun PaymentSheet(
                 ) {
                     Text(MoneyPaymentSheet.DONE, style = MekaType.metaStrong, color = Meka.colors.onAccent)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The New category form in the payment sheet: a name, one of the money palette's seven colours
+ * (swatches, the chosen one ringed) and an icon (the money set, drawn in the chosen colour), then Create (which also puts
+ * this payment's payee in it) or Cancel. A swatch or icon tap ticks; nothing is written until Create.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NewCategoryForm(own: List<MoneyOwnCategory>, onCreate: (String, Int, MoneyIcon) -> Unit, onCancel: () -> Unit) {
+    val haptics = rememberMekaHaptics()
+    var name by rememberSaveable { mutableStateOf("") }
+    var tone by rememberSaveable { mutableStateOf(MoneyOwnCategories.nextTone(own)) }
+    var icon by rememberSaveable { mutableStateOf(MoneyIcon.DOTS) }
+    val create = { MoneyOwnCategories.clean(name)?.let { onCreate(it, tone, icon) } }
+    Column(Modifier.fillMaxWidth().testTag("money-new-category"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(MoneyOwnCategories.TITLE, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
+        Field(
+            MoneyOwnCategories.NAME_HINT, value = name, onValue = { name = it.take(MoneyOwnCategories.MAX_NAME) },
+            modifier = Modifier.testTag("money-new-name"),
+        ) { create() }
+        Text(MoneyOwnCategories.COLOUR_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (t in MoneyOwnCategories.TONES) {
+                val on = t.tone == tone
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.RadioButton) { tone = t.tone; haptics.tick() }
+                        .semantics { contentDescription = MoneyOwnCategories.toneSpoken(t, on); selected = on }
+                        .testTag("money-new-tone-${t.tone}"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.size(28.dp).clip(CircleShape).background(Meka.colors.moneyTone(t.tone))
+                            .then(if (on) Modifier.border(2.dp, Meka.colors.textPrimary, CircleShape) else Modifier),
+                    )
+                }
+            }
+        }
+        Text(MoneyOwnCategories.ICON_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (i in MoneyOwnCategories.ICONS) {
+                val on = i == icon
+                Box(
+                    Modifier.size(48.dp).clip(RoundedCornerShape(MekaRadius.s))
+                        .then(if (on) Modifier.border(2.dp, Meka.colors.moneyTone(tone), RoundedCornerShape(MekaRadius.s)) else Modifier)
+                        .clickable(role = Role.RadioButton) { icon = i; haptics.tick() }
+                        .semantics(mergeDescendants = true) { contentDescription = MoneyOwnCategories.iconSpoken(i, on); selected = on }
+                        .testTag("money-new-icon-${i.name.lowercase()}"),
+                    contentAlignment = Alignment.Center,
+                ) { MoneyIconChip(i, tone) }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Text(MoneyOwnCategories.CANCEL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onCancel)
+                    .minTouch().padding(MekaSpace.xs).testTag("money-new-cancel"))
+            Spacer(Modifier.weight(1f))
+            val ready = MoneyOwnCategories.clean(name) != null
+            Box(
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(if (ready) Meka.colors.accent else Meka.colors.surfaceRaised)
+                    .clickable(role = Role.Button, enabled = ready) { create() }
+                    .semantics { if (!ready) stateDescription = MoneyOwnCategories.NO_NAME }
+                    .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs).testTag("money-new-create"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(MoneyOwnCategories.CREATE, style = MekaType.metaStrong, color = if (ready) Meka.colors.onAccent else Meka.colors.textTertiary)
             }
         }
     }

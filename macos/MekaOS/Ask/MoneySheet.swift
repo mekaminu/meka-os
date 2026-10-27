@@ -63,6 +63,11 @@ struct MoneySheet: View {
     @State private var allPays = false
     /// The payment sheet: the payment whose popover is open.
     @State private var sheetTxn: String?
+    /// His own categories: the New category form in the payment's popover, its name, colour (a tone) and icon (by name).
+    @State private var makingCategory = false
+    @State private var newCategoryName = ""
+    @State private var newCategoryTone: Int32 = 0
+    @State private var newCategoryIcon = "DOTS"
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -1089,7 +1094,7 @@ struct MoneySheet: View {
         } label: {
             HStack(spacing: chip == nil ? nil : MekaSpace.m) {
                 if let sp = chip {
-                    MoneyIconChip(icon: MoneySpending.shared.icon(key: t.category), tone: MoneySpending.shared.txnTone(v: sp, category: t.category), palette: palette)
+                    MoneyIconChip(icon: MoneySpending.shared.txnIcon(v: sp, category: t.category), tone: MoneySpending.shared.txnTone(v: sp, category: t.category), palette: palette)
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(t.merchant).font(chip == nil ? MekaType.body : MekaType.taskTitle).foregroundStyle(palette.textPrimary)
@@ -1110,7 +1115,7 @@ struct MoneySheet: View {
         }
         .buttonStyle(MekaPressStyle())
         .accessibilityLabel(t.spoken + ". Open to change its category")
-        .popover(isPresented: Binding(get: { sheetTxn == id }, set: { if !$0 && sheetTxn == id { sheetTxn = nil } }), arrowEdge: .bottom) {
+        .popover(isPresented: Binding(get: { sheetTxn == id }, set: { if !$0 && sheetTxn == id { sheetTxn = nil; makingCategory = false } }), arrowEdge: .bottom) {
             paymentSheet(id)
         }
     }
@@ -1131,6 +1136,7 @@ struct MoneySheet: View {
     private func paymentSheet(_ id: String) -> some View {
         if let r = sheetRow(id) {
             let order = model.money?.categoryOrder ?? []
+            let own = model.money?.ownCategories ?? []
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 HStack(alignment: .top) {
                     Text(r.merchant).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
@@ -1143,17 +1149,31 @@ struct MoneySheet: View {
                 Text(MoneyPaymentSheet.shared.sub(row: r)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 Text(MoneyPaymentSheet.shared.CATEGORY_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
-                    ForEach(MoneyPaymentSheet.shared.chips(order: order, current: r.category), id: \.key) { c in
-                        sheetPill(c.label, on: c.on, spoken: c.spoken) {
-                            guard !c.on else { return }
-                            let key = c.key
-                            Task { said = await model.setMoneyCategory(txnId: id, category: key) }
+                if makingCategory {
+                    newCategoryForm(txnId: id)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(MoneyPaymentSheet.shared.chips(order: order, current: r.category, own: own), id: \.key) { c in
+                            sheetPill(c.label, on: c.on, spoken: c.spoken) {
+                                guard !c.on else { return }
+                                let key = c.key
+                                Task { said = await model.setMoneyCategory(txnId: id, category: key) }
+                            }
+                        }
+                        if !r.moneyIn {
+                            sheetPill(MoneyOwnCategories.shared.NEW, on: false, spoken: MoneyOwnCategories.shared.NEW_SPOKEN) {
+                                MekaHaptics.tick()
+                                newCategoryName = ""
+                                newCategoryTone = MoneyOwnCategories.shared.nextTone(own: own)
+                                newCategoryIcon = "DOTS"
+                                makingCategory = true
+                            }
                         }
                     }
+                    Text(MoneyPaymentSheet.shared.ruleLine(row: r)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(MoneyPaymentSheet.shared.ruleLine(row: r)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
                 if let s = said { saidLine(s).transition(.opacity) }
                 Text(MoneyPaymentSheet.shared.MARKS_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs)
@@ -1190,7 +1210,78 @@ struct MoneySheet: View {
             .frame(width: 380)
             .background(palette.surface)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: makingCategory)
         }
+    }
+
+    /// The New category form: a name, one of the seven money colours, an icon (drawn in that colour), then Create (which
+    /// also puts this payment's payee in it, with Undo) or Cancel (Esc). Nothing is written until Create.
+    private func newCategoryForm(txnId: String) -> some View {
+        let tones = MoneyOwnCategories.shared.TONES
+        let icons = MoneyOwnCategories.shared.ICONS
+        let ready = MoneyOwnCategories.shared.clean(raw: newCategoryName) != nil
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(MoneyOwnCategories.shared.TITLE).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            TextField(MoneyOwnCategories.shared.NAME_HINT, text: $newCategoryName)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { createCategory(txnId: txnId) }
+                .onChange(of: newCategoryName) { _, n in
+                    let most = Int(MoneyOwnCategories.shared.MAX_NAME)
+                    if n.count > most { newCategoryName = String(n.prefix(most)) }
+                }
+            Text(MoneyOwnCategories.shared.COLOUR_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(tones, id: \.tone) { t in
+                    let on = t.tone == newCategoryTone
+                    let tone = t.tone
+                    Button { newCategoryTone = tone; MekaHaptics.tick() } label: {
+                        Circle().fill(palette.moneyTone(tone)).frame(width: 22, height: 22)
+                            .overlay(Circle().strokeBorder(on ? palette.textPrimary : Color.clear, lineWidth: 2))
+                            .frame(width: 32, height: 32).contentShape(Rectangle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel(MoneyOwnCategories.shared.toneSpoken(t: t, on: on))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            Text(MoneyOwnCategories.shared.ICON_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 36), spacing: MekaSpace.xs)], alignment: .leading, spacing: MekaSpace.xs) {
+                ForEach(icons, id: \.name) { i in
+                    let name = i.name
+                    let on = name == newCategoryIcon
+                    Button { newCategoryIcon = name; MekaHaptics.tick() } label: {
+                        MoneyIconChip(icon: i, tone: newCategoryTone, palette: palette)
+                            .overlay(RoundedRectangle(cornerRadius: MekaRadius.s, style: .continuous)
+                                .strokeBorder(on ? palette.moneyTone(newCategoryTone) : Color.clear, lineWidth: 2))
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel(MoneyOwnCategories.shared.iconSpoken(icon: i, on: on))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            HStack {
+                Button(MoneyOwnCategories.shared.CANCEL) { makingCategory = false }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(MoneyOwnCategories.shared.CREATE) { createCategory(txnId: txnId) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.metaStrong)
+                    .foregroundStyle(ready ? palette.onAccent : palette.textTertiary)
+                    .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
+                    .background(ready ? palette.accent : palette.surfaceRaised, in: Capsule())
+                    .disabled(!ready)
+            }
+        }
+    }
+
+    private func createCategory(txnId: String) {
+        guard let name = MoneyOwnCategories.shared.clean(raw: newCategoryName) else { return }
+        let tone = newCategoryTone
+        let icon = newCategoryIcon
+        makingCategory = false
+        Task { said = await model.addMoneyCategory(name: name, tone: tone, icon: icon, txnId: txnId) }
     }
 
     private func sheetPill(_ label: String, on: Bool, spoken: String, action: @escaping () -> Void) -> some View {

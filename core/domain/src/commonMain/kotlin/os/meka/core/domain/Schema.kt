@@ -163,6 +163,8 @@ object EntityTypes {
     const val STUDY_COURSE = "study_course"
     /** Study plan, slice 1 (2026-10-26): one lesson of a course, in its module (see [Study]). */
     const val STUDY_LESSON = "study_lesson"
+    /** Money, his own categories (2026-10-27): one category he made ("Vape"), id `k<hash of the name>` (see [MoneyOwnCategories]). */
+    const val MONEY_CATEGORY = "money_category"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -175,7 +177,7 @@ object EntityTypes {
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
         TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM, TRIP_TEMPLATE,
-        STUDY_COURSE, STUDY_LESSON,
+        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY,
     )
 }
 
@@ -607,6 +609,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.MONEY_ALERT -> MergePolicy.Lww
         entityType == EntityTypes.MONEY_WORTH -> MergePolicy.Lww
         entityType == EntityTypes.MONEY_SHARED -> MergePolicy.Lww
+        // His own categories: a removal and a re-make (or an Undo), the latest wins.
+        entityType == EntityTypes.MONEY_CATEGORY -> MergePolicy.Lww
         entityType == EntityTypes.TRADING_WALLET -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal

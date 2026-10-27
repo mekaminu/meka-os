@@ -145,6 +145,36 @@ class MoneyFacadeTest {
         assertTrue(mac.lifeLines.value.needsSetUp(LifeTile.MONEY))
     }
     @Test
+    fun aCategoryOfHisOwnMadeOnTheFoldShowsOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Locked: nothing is made.
+        assertTrue(fold.addMoneyCategory("Treats", 2, "CUP", null).refused)
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        val costa = fold.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        val made = fold.addMoneyCategory("Treats", 2, "CUP", costa.id)
+        assertEquals("Made Treats · Costa Coffee is Treats from now on", made.line)
+        val v = fold.moneyView.value
+        val own = v.ownCategories.single()
+        assertEquals("Treats", own.name)
+        assertEquals(own.key, v.categoryOrder.first())
+        assertEquals(listOf("Groceries", "Treats"), v.month!!.categories.map { it.label })
+        assertEquals("Treats", v.month!!.txns.first { it.merchant == "Costa Coffee" }.categoryLabel)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals(listOf("Treats"), mac.moneyView.value.ownCategories.map { it.name })
+        assertEquals(listOf("Groceries", "Treats"), mac.moneyView.value.month!!.categories.map { it.label })
+        // Undo on the Fold: Costa is Coffee again and the category is gone on both.
+        assertTrue(fold.undoMoneyCategory(made.undo!!))
+        assertTrue(fold.moneyView.value.ownCategories.isEmpty())
+        fold.syncNow(); mac.syncNow()
+        mac.moneyStep(0)
+        assertEquals(listOf("Groceries", "Coffee"), mac.moneyView.value.month!!.categories.map { it.label })
+        assertTrue(mac.moneyView.value.ownCategories.isEmpty())
+    }
+
+    @Test
     fun bankLinesFromTheServerShowOnTheFoldAndRefreshAsksForMore() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         fold.openMoney()

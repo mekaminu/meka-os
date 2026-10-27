@@ -24,7 +24,10 @@ object MoneyPaymentSheet {
      * within each, the most used ([use]: how many of his payments are in it) first, ties in the usual order; Income and
      * Transfers always last.
      */
-    fun order(use: Map<String, Int>, taught: Set<String>): List<String> {
+    fun order(use: Map<String, Int>, taught: Set<String>, own: List<MoneyOwnCategory> = emptyList()): List<String> {
+        // His own categories lead, the most used first (then the oldest).
+        val mine = own.withIndex().sortedWith(compareByDescending<IndexedValue<MoneyOwnCategory>> { use[it.value.key] ?: 0 }.thenBy { it.index })
+            .map { it.value.key }
         val all = MoneyCategory.entries.map { it.key }
         val index = all.withIndex().associate { (i, k) -> k to i }
         val spend = all.filter { it !in LAST }.sortedWith(
@@ -32,15 +35,18 @@ object MoneyPaymentSheet {
                 .thenByDescending { use[it] ?: 0 }
                 .thenBy { index[it] ?: 0 },
         )
-        return spend + all.filter { it in LAST }
+        return mine + spend + all.filter { it in LAST }
     }
 
     /** The chips for a payment in [current]: [order] (or the usual order before any view has one), its own one lit. */
-    fun chips(order: List<String>, current: String): List<MoneySheetChip> {
-        val keys = order.ifEmpty { MoneyCategory.entries.map { it.key } }
-        return keys.mapNotNull { MoneyCategory.of(it) }.map { c ->
-            val on = c.key == current
-            MoneySheetChip(c.key, c.label, on, if (on) "${c.label}, chosen" else "Put it in ${c.label}")
+    fun chips(order: List<String>, current: String, own: List<MoneyOwnCategory> = emptyList()): List<MoneySheetChip> {
+        val byId = own.associateBy { it.id }
+        val keys = order.ifEmpty { own.map { it.key } + MoneyCategory.entries.map { it.key } }
+        return keys.mapNotNull { k ->
+            val mine = MoneyOwnCategories.idOf(k)?.let { byId[it] }
+            val label = mine?.name ?: MoneyCategory.of(k)?.label ?: return@mapNotNull null
+            val on = k == current
+            MoneySheetChip(k, label, on, if (on) "$label, chosen" else "Put it in $label", own = mine)
         }
     }
 
@@ -65,12 +71,19 @@ object MoneyPaymentSheet {
     fun spoken(row: MoneyTxnRow): String = "${row.merchant}, ${row.amount}, ${sub(row)}, ${row.categoryLabel}"
 
     /** The line after a pick: "Moved 14 payments from News ON The to Shopping", or "Costa Coffee is Eating out from now on". */
-    fun movedLine(merchant: String, category: MoneyCategory, count: Int): String =
-        if (count > 1) "Moved $count payments from $merchant to ${category.label}" else "$merchant is ${category.label} from now on"
+    fun movedLine(merchant: String, category: MoneyCategory, count: Int): String = movedLine(merchant, category.label, count)
+
+    /** As above for any category's [label], his own included. */
+    fun movedLine(merchant: String, label: String, count: Int): String =
+        if (count > 1) "Moved $count payments from $merchant to $label" else "$merchant is $label from now on"
 }
 
 /** One category chip on the payment sheet. */
-data class MoneySheetChip(val key: String, val label: String, val on: Boolean, val spoken: String)
+data class MoneySheetChip(
+    val key: String, val label: String, val on: Boolean, val spoken: String,
+    /** One of his own categories: the chip shows its icon in its colour. */
+    val own: MoneyOwnCategory? = null,
+)
 
 /** What a toggle on the payment sheet marks. */
 enum class MoneySheetMark { PAYMENT_SHARED, PAYEE_SHARED, SIDE_HUSTLE }

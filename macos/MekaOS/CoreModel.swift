@@ -4633,6 +4633,18 @@ final class CoreModel {
         }
     }
 
+    /// His own categories: makes one (name, a money colour, an icon by name) on both devices and puts that payment's
+    /// payee in it, past and future (Undo with `undoMoneyCategory`).
+    func addMoneyCategory(name: String, tone: Int32, icon: String, txnId: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.addMoneyCategory(name: name, tone: tone, icon: icon, txnId: txnId))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Money as drawn: the core's view with the payment chips still on their way (taps feel instant).
     private func showMoneyView() {
         guard let coreMoney else { money = nil; return }

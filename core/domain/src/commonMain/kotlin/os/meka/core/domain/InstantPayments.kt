@@ -46,7 +46,7 @@ object InstantPaymentRules {
         var txns = month.txns
         for (tap in taps) {
             val payer = txns.firstOrNull { it.id == tap.txnId }?.merchant ?: continue
-            txns = txns.map { t -> if (t.id == tap.txnId || (tap.kind != PaymentTapKind.SHARED && t.merchant == payer)) apply(t, tap) else t }
+            txns = txns.map { t -> if (t.id == tap.txnId || (tap.kind != PaymentTapKind.SHARED && t.merchant == payer)) apply(t, tap, view.ownCategories) else t }
         }
         if (txns == month.txns) return view
         // Money redesign (B2): the latest payments by day show the same tap at once.
@@ -57,10 +57,10 @@ object InstantPaymentRules {
         return view.copy(month = month.copy(txns = txns, spending = spending))
     }
 
-    private fun apply(t: MoneyTxnRow, tap: PaymentTap): MoneyTxnRow = when (tap.kind) {
+    private fun apply(t: MoneyTxnRow, tap: PaymentTap, own: List<MoneyOwnCategory>): MoneyTxnRow = when (tap.kind) {
         PaymentTapKind.CATEGORY -> {
             val key = tap.category
-            val label = MoneyRules.CHOICES.firstOrNull { it.key == key }?.label
+            val label = MoneyRules.CHOICES.firstOrNull { it.key == key }?.label ?: own.firstOrNull { it.key == key }?.name
             if (key == null || label == null || key == t.category) t
             else t.copy(category = key, categoryLabel = label, taught = true)
         }

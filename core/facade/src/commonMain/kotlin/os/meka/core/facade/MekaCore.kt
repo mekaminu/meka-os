@@ -892,6 +892,16 @@ class MekaCore(
         if (!moneyOpen) moneyLocked() else money.setCategory(txnId, category).also { refreshMoney() }
     }
 
+    /**
+     * Money, his own categories: makes one ([name], a colour [tone] 0–6 and an [icon] from MoneyOwnCategories.ICONS by
+     * name) on both devices and puts [txnId]'s payee in it, past and future, when given. Undo by [undoMoneyCategory].
+     */
+    suspend fun addMoneyCategory(name: String, tone: Int, icon: String, txnId: String?): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val i = os.meka.core.domain.MoneyOwnCategories.ICONS.firstOrNull { it.name == icon } ?: os.meka.core.domain.MoneyIcon.DOTS
+        money.addOwnCategory(name, tone, i, txnId).also { refreshMoney() }
+    }
+
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
         if (!moneyOpen) return@onCore false
         if (token.startsWith(os.meka.core.domain.TradingTracker.UNDO)) return@onCore trading.undo(token).also { refreshMoney() }
@@ -1049,6 +1059,7 @@ class MekaCore(
         val sharedTxns = money.sharedTxns(); val sharedMerchants = money.sharedMerchants(); val sharedEntries = money.sharedEntries()
         val sharedSetting = money.sharedSetting(); val partner = aboutYou.profile().partnerName
         val challenges = money.challenges(); val abroad = moneyAbroadNow()
+        val own = money.ownCategories(); val ownRules = money.ownRules()
         val inputs = listOf(
             accounts, txns, rules, today, tz, offset, hiddenTips, fineAlerts,
             whatIf, waiting, bills, holidays, cards, worth,
@@ -1057,7 +1068,7 @@ class MekaCore(
             now / os.meka.core.domain.MoneyViewMemo.MINUTE_MS, wallets,
             bizAccounts, bizMerchants, setAside,
             sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner,
-            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds,
+            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules,
         )
         // The same build is already on its way.
         if (moneyJob?.isActive == true && moneyPendingFrom == inputs) return
@@ -1083,6 +1094,7 @@ class MekaCore(
                 abroad, os.meka.core.domain.MoneyTravel.tripNear(tripItems, today),
                 // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
                 receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, cal),
+                own = own, ownRules = ownRules,
             )
             v.copy(
                 trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts),

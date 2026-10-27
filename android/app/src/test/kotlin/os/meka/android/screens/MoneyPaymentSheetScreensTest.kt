@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -148,5 +151,44 @@ class MoneyPaymentSheetScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-light-payment-sheet"))
         assertTrue(shows("money-sheet"), "the payment sheet didn't open")
         ScreenShots.assertNoBrokenWords(compose, "cover-light-payment-sheet")
+    }
+
+    private fun tap(tag: String) {
+        compose.onNodeWithTag(tag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+    }
+
+    /** His own categories (Meka 2026-10-26 23:18, "a Vape category"): + New category, name, colour, icon, Create. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun aNewCategoryOfHisOwnTakesThePayee() {
+        val core = open(ThemeChoice.DARK)
+        val id = tapNewest(core)
+        assertTrue(shows("money-sheet-new"), "no + New category chip")
+        tap("money-sheet-new")
+        assertTrue(shows("money-new-category"), "the New category form didn't open")
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("money-new-name")), useUnmergedTree = true).performTextInput("Treats")
+        settle()
+        tap("money-new-tone-3")
+        tap("money-new-icon-cup")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-new-category"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-new-category")
+        tap("money-new-create")
+        var i = 0
+        while (core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.categoryLabel != "Treats" && i++ < 80) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        settle()
+        val v = core.moneyView.value
+        val own = v.ownCategories.singleOrNull() ?: fail("the category wasn't made")
+        assertEquals("Treats", own.name)
+        assertEquals(3, own.tone)
+        assertEquals("Treats", v.month!!.txns.first { it.id == id }.categoryLabel)
+        // The form closed and the chips are back with his category lit.
+        if (shows("money-new-category")) fail("the form stayed open after Create")
+        assertTrue(shows("money-sheet-cat-${own.key}"), "no chip for his new category")
+        assertTrue(shows("money-sheet-undo"), "no Undo after making it")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-new-category-made"))
     }
 }
