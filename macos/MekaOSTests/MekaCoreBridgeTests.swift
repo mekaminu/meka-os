@@ -3972,7 +3972,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyAccountNames.shared.shortName(name: "HSBC Current Account"), "HSBC current")
         XCTAssertEqual(MoneyAccountList.shared.initials(name: "HSBC current"), "HS")
         let v = MoneyView(locked: false, summary: "", empty: nil, month: nil,
-            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil)],
+            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: nil)],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
             review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [])
@@ -3983,5 +3983,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNotNil(sheet)
         XCTAssertNil(sheet?.sideHustle)
         XCTAssertEqual(sheet?.canType, true)
+    }
+
+    /// Accounts' rest: a name he gives an account shows in the list and its popover, and the MORE card always has
+    /// Import, export and delete.
+    func testAccountsRestOnTheMac() {
+        let v = MoneyView(locked: false, summary: "", empty: nil, month: nil,
+            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: "Rainy day")],
+            earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
+            bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [])
+        XCTAssertEqual(MoneyAccountList.shared.items(v: v).map { $0.name }, ["Rainy day"])
+        let sheet = MoneyAccountList.shared.sheet(v: v, id: "a1")
+        XCTAssertEqual(sheet?.title, "Rainy day")
+        XCTAssertEqual(sheet?.nick, "Rainy day")
+        let rows = MoneyMore.shared.rows(v: v)
+        XCTAssertEqual(rows.map { $0.kind }, [MoneyMoreKind.data])
+        XCTAssertEqual(MoneyMore.shared.title(kind: MoneyMoreKind.data, v: v), MoneyMore.shared.DATA)
+        XCTAssertTrue(MoneyTabs.shared.shows(tab: MoneyTab.accounts, s: MoneySection.more, v: v))
     }
 }

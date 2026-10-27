@@ -993,6 +993,23 @@ class MekaCore(
         os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRefunds.chasedSaid(todayEpochDay()))
     }
 
+    /**
+     * Money review, Accounts' rest: [accountId] goes by [text] on both devices (blank gives it back its own name); Undo
+     * by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun renameMoneyAccount(accountId: String, text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.renameAccount(accountId, text).also { refreshMoney() }
+    }
+
+    /**
+     * Money review, Accounts' rest: **Export all payments** — every line as a CSV to save, made here from his own data;
+     * nothing is sent or stored. Only while Money is open.
+     */
+    suspend fun moneyExport(): os.meka.core.domain.TradingExportResult = onCore {
+        if (!moneyOpen) os.meka.core.domain.TradingExportResult(moneyLocked())
+        else os.meka.core.domain.MoneyExport.result(money.accounts(), money.txns(), money.rules(), todayEpochDay())
+    }
+
     /** Takes [accountId] and its transactions off every device. */
     suspend fun removeMoneyAccount(accountId: String): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else money.removeAccount(accountId).also { refreshMoney() }

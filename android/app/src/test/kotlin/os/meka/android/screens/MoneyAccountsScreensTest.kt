@@ -37,6 +37,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.MoneyAccountList
 import os.meka.core.domain.MoneyBusiness
 import os.meka.core.domain.MoneyCards
+import os.meka.core.domain.MoneyMore
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyTab
@@ -171,14 +172,45 @@ class MoneyAccountsScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun importIsOneRowWithItsFieldInASheet() {
-        open()
+    fun importExportAndDeleteLiveInTheMoreCardsSheet() {
+        // Accounts' rest (mockup): Side hustle and tax, Shared costs, and Import, export and delete are one card of rows.
+        val core = open()
         pick(MoneyTab.ACCOUNTS)
-        scrollTo("money-import-row")
-        tap("money-import-row")
-        assertTrue(shows("money-import-sheet"), "Import a statement's sheet didn't open")
+        scrollTo("money-more-card")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-more"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-more")
+        assertTrue(showsText(MoneyMore.DATA), "no Import, export and delete row")
+        if (showsText(MoneyRules.DELETE_ALL)) fail("Delete all money data still sits on the page")
+        if (showsText(MoneyBusiness.HEAD)) fail("the side hustle's block still sits open on the page")
+        tap("money-more-data")
+        assertTrue(shows("money-more-sheet"), "Import, export and delete's sheet didn't open")
         assertTrue(showsText(MoneyRules.ACCOUNT_HINT), "the sheet has no account field")
-        tap("money-import-sheet-done")
-        if (shows("money-import-sheet")) fail("Done didn't close the import sheet")
+        assertTrue(shows("money-export-all"), "the sheet has no Export")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-data-sheet"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-data-sheet")
+        // Delete all asks first, and Cancel keeps everything.
+        tap("money-delete-all")
+        assertTrue(showsText(MoneyRules.DELETE_ASK), "Delete all didn't ask first")
+        assertTrue(core.moneyView.value.accounts.isNotEmpty(), "Delete all deleted before asking")
+        tap("money-more-sheet-done")
+        if (shows("money-more-sheet")) fail("Done didn't close the sheet")
+        assertTrue(core.moneyView.value.accounts.isNotEmpty(), "closing the sheet deleted the money data")
+        // The side hustle's row opens its year in a sheet.
+        tap("money-more-side_hustle")
+        assertTrue(shows("money-more-sheet") && showsText(MoneyMore.SIDE_HUSTLE), "the side hustle's sheet didn't open")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun anAccountCanBeRenamedInItsSheet() {
+        val core = open()
+        pick(MoneyTab.ACCOUNTS)
+        scrollTo("money-accounts-card")
+        val current = core.moneyView.value.accounts.first { it.name == "Current account" }
+        tap("money-account-${current.id}")
+        assertTrue(shows("money-account-name"), "no Name field in the account's sheet")
+        runBlocking { check(!core.renameMoneyAccount(current.id, "Joint bills").refused); core.tick() }
+        settle()
+        assertTrue(showsText("Joint bills"), "the new name doesn't show")
+        assertTrue(MoneyAccountList.items(core.moneyView.value).any { it.name == "Joint bills" }, "the list didn't take the new name")
     }
 }

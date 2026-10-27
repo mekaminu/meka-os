@@ -5135,6 +5135,29 @@ final class CoreModel {
         return ok
     }
 
+    /// Accounts' rest: the account goes by `text` on both devices (blank: its own name); Undo with `undoMoneyCategory`.
+    func renameMoneyAccount(id: String, text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.renameMoneyAccount(accountId: id, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Accounts' rest: Export all payments, a CSV made on this Mac from his own lines, to save where he picks.
+    func moneyExport() async -> TradingExportFile? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.moneyExport()
+            return TradingExportFile(said: moneySaid(r.said), csv: r.csv, fileName: r.fileName)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func removeMoneyAccount(id: String) async -> MoneySaid? {
         guard let core else { return nil }
         do {

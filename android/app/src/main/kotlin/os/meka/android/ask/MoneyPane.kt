@@ -76,6 +76,8 @@ import os.meka.android.security.FoldBiometric
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.MoneyLook
+import os.meka.core.domain.MoneyMore
+import os.meka.core.domain.MoneyMoreKind
 import os.meka.core.domain.MoneySorter
 import os.meka.core.domain.MoneyBank
 import os.meka.core.domain.MoneyBankView
@@ -194,7 +196,6 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val v = remember(coreView, payTaps) { InstantPaymentRules.shown(coreView, payTaps) }
     var account by rememberSaveable { mutableStateOf("") }
     var said by remember { mutableStateOf<MoneySaved?>(null) }
-    var deleting by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     // Money redesign (B), slice 1: the tab shown; Money opens on Spending each time the pane opens.
     var tab by rememberSaveable { mutableStateOf(MoneyTabs.FIRST) }
@@ -267,10 +268,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var cardSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val cardRow = cardSheetId?.let { id -> v.cards?.rows?.firstOrNull { it.id == id } }
     var paydaySheet by rememberSaveable { mutableStateOf(false) }
-    // Money review, Accounts: the account whose sheet is open, and the Import a statement sheet.
+    // Money review, Accounts: the account whose sheet is open.
     var accountSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val accountSheet = accountSheetId?.let { id -> MoneyAccountList.sheet(v, id) }
-    var importSheet by rememberSaveable { mutableStateOf(false) }
+    // Accounts' rest: which MORE row's sheet is open (side hustle, shared costs, or import, export and delete).
+    var moreSheet by rememberSaveable { mutableStateOf<MoneyMoreKind?>(null) }
     val paydayOpen = v.payday?.takeIf { paydaySheet }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -311,6 +313,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             val r = runCatching { core.tradingExport(key) }.getOrNull()
             exporting = false
             if (r == null) return@launch
+            say(r.said)
+            if (r.csv != null && r.fileName != null) { exportCsv = r.csv; runCatching { saveCsv.launch(r.fileName!!) } }
+        }
+    }
+    // Accounts' rest: Export all payments — made on the phone from his own lines, then the same save sheet.
+    val exportAll: () -> Unit = {
+        if (!exporting) scope.launch {
+            val r = runCatching { core.moneyExport() }.getOrNull() ?: return@launch
             say(r.said)
             if (r.csv != null && r.fileName != null) { exportCsv = r.csv; runCatching { saveCsv.launch(r.fileName!!) } }
         }
@@ -757,33 +767,6 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "year") { YearBlock(yv, Modifier.animateItem().appear(rememberAppearance(4)), onToggle = { haptics.tick() }) }
         }
-        // Slice 13: the side hustle's tax year, the share to put aside and Self Assessment dates (whatever month).
-        v.business?.takeIf { has(MoneySection.BUSINESS) }?.let { b ->
-            item(key = "business-head") {
-                Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            item(key = "business") {
-                BusinessBlock(b, Modifier.animateItem().appear(rememberAppearance(4)),
-                    onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } },
-                    onExport = exportBusiness,
-                    onBusinessTxn = { txnId -> haptics.tick(); scope.launch { runCatching { core.moneyBusinessMerchant(txnId, true) }.getOrNull()?.let(say) } })
-            }
-        }
-        // Slice 14: shared costs with his partner and who paid what (whatever month).
-        v.shared?.takeIf { has(MoneySection.SHARED_COSTS) }?.let { sh ->
-            item(key = "shared-head") {
-                Text(sh.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            item(key = "shared") {
-                SharedBlock(sh, Modifier.animateItem().appear(rememberAppearance(4)),
-                    onShare = { key -> haptics.tick(); scope.launch { runCatching { core.moneySharedShare(key) }.getOrNull()?.let(say) } },
-                    onAdd = { text -> scope.launch { runCatching { core.moneySharedAdd(text) }.getOrNull()?.let(say) } },
-                    onRemove = { id -> scope.launch { runCatching { core.moneySharedRemove(id) }.getOrNull()?.let(say) } },
-                    onSettle = { scope.launch { runCatching { core.moneySharedSettle() }.getOrNull()?.let(say) } })
-            }
-        }
         // Slice 3: YOUR CATEGORIES, the ones he made, each opening its sheet (Accounts).
         if (has(MoneySection.OWN_CATEGORIES)) {
             item(key = "own-head") {
@@ -792,6 +775,22 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "own") {
                 OwnCategoriesCard(v.ownRows, Modifier.animateItem().appear(rememberAppearance(4))) { id -> haptics.tick(); said = null; ownSheetId = id }
+            }
+        }
+        // Accounts' rest (mockup): Side hustle and tax, Shared with his partner, and Import, export and delete as one card
+        // of rows, each opening its sheet; what sat open on the page lives in those sheets now.
+        v.empty?.takeIf { has(MoneySection.MORE) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(top = MekaSpace.m)) } }
+        if (has(MoneySection.MORE)) {
+            item(key = "more-head") {
+                Text(MoneyMore.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "more") {
+                MoneyMoreCard(MoneyMore.rows(v), Modifier.animateItem().appear(rememberAppearance(4))) { kind ->
+                    haptics.tick(); said = null
+                    if (kind == MoneyMoreKind.DATA) account = ""
+                    moreSheet = kind
+                }
             }
         }
         item(key = "said") {
@@ -812,35 +811,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
-        // Money review, Accounts: Import a statement is one row; its field lives in a sheet (inputs never sit open on the page).
-        v.empty?.takeIf { has(MoneySection.IMPORT_STATEMENT) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(top = MekaSpace.m)) } }
-        if (has(MoneySection.IMPORT_STATEMENT)) item(key = "import") {
-            MoneyImportRow(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(4))) {
-                haptics.tick(); said = null; account = ""; importSheet = true
-            }
-        }
         if (has(MoneySection.FOOT)) item(key = "foot") {
             Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(MoneyRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
-                if (v.accounts.isNotEmpty() || v.worth?.rows?.any { it.removable } == true) {
-                    Crossfade(deleting, animationSpec = MekaMotion.appear(reduced), label = "money-delete") { asking ->
-                        if (!asking) {
-                            Text(MoneyRules.DELETE_ALL, style = MekaType.caption, color = Meka.colors.textSecondary,
-                                modifier = Modifier.clickable(role = Role.Button) { deleting = true; haptics.tick() }.minTouch())
-                        } else Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            Text(MoneyRules.DELETE_ASK, style = MekaType.caption, color = Meka.colors.textSecondary)
-                            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-                                Text("Delete", style = MekaType.itemMeta, color = Meka.colors.accent,
-                                    modifier = Modifier.clickable(role = Role.Button) {
-                                        deleting = false
-                                        scope.launch { runCatching { core.deleteAllMoney() }.getOrNull()?.let(say) }
-                                    }.minTouch())
-                                Text("Cancel", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                                    modifier = Modifier.clickable(role = Role.Button) { deleting = false }.minTouch())
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -931,19 +904,45 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             onRemove = {
                 accountSheetId = null
                 scope.launch { runCatching { core.removeMoneyAccount(a.id) }.getOrNull()?.let(say) }
-            })
+            },
+            onRename = { text -> haptics.tick(); scope.launch { runCatching { core.renameMoneyAccount(a.id, text) }.getOrNull()?.let(say) } })
         SheetSaid(said)
     }
-    // Import a statement for a new account (or an existing one by its name): the field and the file picker.
-    MoneyDetailSheet(if (importSheet) Unit else null, title = { MoneyAccountList.IMPORT_HEAD }, tag = "money-import-sheet",
-        done = MoneyAccountList.DONE, onClose = { importSheet = false }) {
-        Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = { account = it }) { account = it }
-        Text(if (busy) "Reading the file…" else MoneyRules.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button, enabled = !busy) {
-                if (account.isBlank()) say(MoneySaved(MoneyRules.NO_ACCOUNT, refused = true))
-                else pick.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
-            }.minTouch().testTag("money-import-file"))
-        if (v.bank == null) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
+    // Accounts' rest: the MORE card's sheets — the side hustle's tax year, the shared costs, and Import, export and delete
+    // (the field and file picker for a statement, Export all payments, and Delete all money data, which asks first).
+    val moreOpen = moreSheet?.takeIf { k ->
+        when (k) { MoneyMoreKind.SIDE_HUSTLE -> v.business != null; MoneyMoreKind.SHARED_COSTS -> v.shared != null; MoneyMoreKind.DATA -> true }
+    }
+    MoneyDetailSheet(moreOpen, title = { MoneyMore.title(it, v) }, tag = "money-more-sheet", done = MoneyMore.DONE, onClose = { moreSheet = null }) { kind ->
+        when (kind) {
+            MoneyMoreKind.SIDE_HUSTLE -> v.business?.let { b ->
+                BusinessBlock(b, Modifier,
+                    onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } },
+                    onExport = exportBusiness,
+                    onBusinessTxn = { txnId -> haptics.tick(); scope.launch { runCatching { core.moneyBusinessMerchant(txnId, true) }.getOrNull()?.let(say) } })
+            }
+            MoneyMoreKind.SHARED_COSTS -> v.shared?.let { sh ->
+                SharedBlock(sh, Modifier,
+                    onShare = { key -> haptics.tick(); scope.launch { runCatching { core.moneySharedShare(key) }.getOrNull()?.let(say) } },
+                    onAdd = { text -> scope.launch { runCatching { core.moneySharedAdd(text) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.moneySharedRemove(id) }.getOrNull()?.let(say) } },
+                    onSettle = { scope.launch { runCatching { core.moneySharedSettle() }.getOrNull()?.let(say) } })
+            }
+            MoneyMoreKind.DATA -> MoneyDataDetails(
+                account = account, busy = busy,
+                canDelete = v.accounts.isNotEmpty() || v.worth?.rows?.any { it.removable } == true,
+                connectLater = v.bank == null,
+                onAccount = { account = it },
+                onPick = {
+                    if (account.isBlank()) say(MoneySaved(MoneyRules.NO_ACCOUNT, refused = true))
+                    else pick.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
+                },
+                onExport = { haptics.tick(); exportAll() },
+                onDeleteAll = {
+                    moreSheet = null
+                    scope.launch { runCatching { core.deleteAllMoney() }.getOrNull()?.let(say) }
+                })
+        }
         SheetSaid(said)
     }
     MoneyDetailSheet(paydayOpen, title = { it.head.lowercase().replaceFirstChar { ch -> ch.uppercase() } }, tag = "money-payday-sheet",

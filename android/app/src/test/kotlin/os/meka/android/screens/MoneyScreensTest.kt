@@ -148,7 +148,7 @@ class MoneyScreensTest {
             if (compose.onAllNodesWithContentDescription(spoken, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
                 fail("$name: no \"$spoken\" pill")
         }
-        val importShown = compose.onAllNodesWithText(MoneyAccountList.IMPORT_ROW).fetchSemanticsNodes().isNotEmpty()
+        val importShown = compose.onAllNodesWithText(os.meka.core.domain.MoneyMore.DATA).fetchSemanticsNodes().isNotEmpty()
         // (A lazy list only lays out what's on screen, so Import is only required on Accounts with nothing above it.)
         if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")
         if (!importShown && tab == MoneyTab.ACCOUNTS && fill == Fill.EMPTY) fail("$name: Import a statement is missing from Accounts")

@@ -76,4 +76,16 @@ object MoneyAccountNames {
 
     /** True when [text] would show something [shown] hides (a test helper and a check for anything about to be shown). */
     fun revealsNumber(text: String): Boolean = shown(text) != text.trim().replace(Regex("\\s+"), " ")
+
+    /** The longest name he can give an account. */
+    const val NICK_MAX = 40
+    const val RENAME = "Name"
+    const val RENAME_HINT = "Call it something else"
+
+    /** What he typed as an account's name, tidied (one line, at most [NICK_MAX], numbers masked); null when blank. */
+    fun cleanNick(text: String): String? =
+        text.replace(Regex("\\s+"), " ").trim().take(NICK_MAX).trim().takeIf { it.isNotEmpty() }?.let(::shown)
+
+    fun renamedLine(name: String): String = "Now called $name"
+    fun ownNameLine(name: String): String = "Back to its own name · $name"
 }

@@ -36,7 +36,7 @@ class MoneyTabsTest {
         assertEquals(listOf(MoneySection.MONTH, MoneySection.ALERTS, MoneySection.CATEGORIES, MoneySection.PAYMENTS), MoneyTabs.sections(MoneyTab.SPENDING, v))
         assertEquals(listOf(MoneySection.REFUNDS, MoneySection.REGULAR), MoneyTabs.sections(MoneyTab.BILLS, v))
         assertEquals(
-            listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.IMPORT_STATEMENT, MoneySection.FOOT),
+            listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.MORE, MoneySection.FOOT),
             MoneyTabs.sections(MoneyTab.ACCOUNTS, v),
         )
         // Nothing appears on two tabs: the long page is gone.
@@ -78,7 +78,7 @@ class MoneyTabsTest {
         assertTrue(MoneySection.CARDS !in MoneyTabs.sections(MoneyTab.BILLS, onlyOffers))
         // Money review, Accounts: "Is one of these a card?" left the page; each account's sheet has It's a card.
         assertEquals(
-            listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.IMPORT_STATEMENT, MoneySection.FOOT),
+            listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.MORE, MoneySection.FOOT),
             MoneyTabs.sections(MoneyTab.ACCOUNTS, onlyOffers),
         )
         val both = open().copy(cards = MoneyCardsView(MoneyCards.HEAD, listOf(card), MoneyCards.OFFER_MORE, listOf(offer), MoneyCards.FOOT))
@@ -109,7 +109,7 @@ class MoneyTabsTest {
         assertEquals(MoneyTabs.EMPTY_SPENDING, MoneyTabs.empty(MoneyTab.SPENDING, nothing))
         assertEquals(MoneyTabs.EMPTY_BILLS, MoneyTabs.empty(MoneyTab.BILLS, nothing))
         assertNull(MoneyTabs.empty(MoneyTab.ACCOUNTS, nothing))
-        assertTrue(MoneySection.IMPORT_STATEMENT in MoneyTabs.sections(MoneyTab.ACCOUNTS, nothing))
+        assertTrue(MoneySection.MORE in MoneyTabs.sections(MoneyTab.ACCOUNTS, nothing))
         // This-month sections never show without a month.
         assertTrue(MoneyTabs.sections(MoneyTab.BILLS, open(m = null)).isEmpty())
     }

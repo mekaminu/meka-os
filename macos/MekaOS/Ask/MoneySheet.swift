@@ -88,7 +88,9 @@ struct MoneySheet: View {
     @State private var accountSheet: String?
     @State private var accountBalance = ""
     @State private var askingRemove = false
-    @State private var importOpen = false
+    /// Accounts' rest: the MORE row whose popover is open, and the Name field in an account's popover.
+    @State private var moreOpen: MoneyMoreKind?
+    @State private var accountName = ""
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -128,11 +130,11 @@ struct MoneySheet: View {
                         if has(.accounts, v) { accounts(v).staggeredAppear(3) }
                         // Money review: the year in review lives on Accounts, under net worth.
                         if let yv = v.year, has(.year, v) { year(yv).transition(.opacity) }
-                        if let b = v.business, has(.business, v) { business(b).staggeredAppear(3) }
-                        if let sh = v.shared, has(.sharedCosts, v) { shared(sh).staggeredAppear(3) }
                         if has(.ownCategories, v) { ownCategories(v).staggeredAppear(3) }
+                        // Accounts' rest (mockup): Side hustle and tax, Shared costs, and Import, export and delete as
+                        // one card of rows, each opening its popover.
+                        if has(.more, v) { more(v).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
-                        if has(.importStatement, v) { importer(v).staggeredAppear(3) }
                         if has(.foot, v) { foot(v) }
                     }
                     .id(tab.name)
@@ -2027,48 +2029,142 @@ struct MoneySheet: View {
     }
 
     /// Money review, Accounts: Import a statement is one row; its field and button live in a popover.
-    private func importer(_ v: MoneyView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+    /// Accounts' rest: the MORE card — each row is its title over its line and ›, opening a popover with what used to
+    /// sit open on the page.
+    private func more(_ v: MoneyView) -> some View {
+        let rows = MoneyMore.shared.rows(v: v)
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let e = v.empty {
                 Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
-            Button {
-                MekaHaptics.tick()
-                said = nil
-                account = ""
-                importOpen = true
-            } label: {
-                HStack(spacing: MekaSpace.m) {
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(MoneyAccountList.shared.IMPORT_ROW).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(MoneyAccountList.shared.IMPORT_ROW_SUB).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    }
-                    Spacer()
-                    Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
-                }
-                .padding(MekaSpace.m)
-                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
-                .contentShape(Rectangle())
+            Text(MoneyMore.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                ForEach(rows, id: \.title) { r in moreRow(r, v) }
             }
-            .buttonStyle(MekaPressStyle())
-            .accessibilityLabel("\(MoneyAccountList.shared.IMPORT_ROW). \(MoneyAccountList.shared.IMPORT_ROW_SUB)")
-            .popover(isPresented: $importOpen, arrowEdge: .trailing) {
-                VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    Text(MoneyAccountList.shared.IMPORT_HEAD).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
-                    TextField(MoneyRules.shared.ACCOUNT_HINT, text: $account).textFieldStyle(.roundedBorder)
-                    Button(busy ? "Reading the file…" : MoneyRules.shared.IMPORT + "…") { chooseFile() }
-                        .disabled(busy)
-                    if v.bank == nil {
-                        Text(MoneyRules.shared.CONNECT_LATER).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let s = said {
-                        Text(s.line).font(MekaType.caption).foregroundStyle(s.refused ? palette.accent : palette.textSecondary)
-                    }
-                    Button(MoneyAccountList.shared.DONE) { importOpen = false }.keyboardShortcut(.defaultAction)
+            .padding(MekaSpace.m)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
+        }
+    }
+
+    private func moreRow(_ r: MoneyMoreRow, _ v: MoneyView) -> some View {
+        let kind = r.kind
+        return Button {
+            MekaHaptics.tick()
+            said = nil
+            deleting = false
+            if kind == MoneyMoreKind.data { account = "" }
+            moreOpen = kind
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(r.line).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textSecondary)
+                        .lineLimit(2).contentTransition(.opacity)
                 }
-                .padding(MekaSpace.m)
-                .frame(width: 360)
+                Spacer()
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(r.spoken)
+        .popover(isPresented: Binding(get: { moreOpen == kind }, set: { if !$0 && moreOpen == kind { moreOpen = nil } }), arrowEdge: .trailing) {
+            morePopover(kind)
+        }
+    }
+
+    /// A MORE row's popover: the side hustle's year, the shared costs, or Import, export and delete. Found again in each
+    /// view, so it closes once its block has gone.
+    @ViewBuilder
+    private func morePopover(_ kind: MoneyMoreKind) -> some View {
+        if let v = model.money {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(MoneyMore.shared.title(kind: kind, v: v)).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        if kind == MoneyMoreKind.sideHustle, let b = v.business { business(b) }
+                        if kind == MoneyMoreKind.sharedCosts, let sh = v.shared { shared(sh) }
+                        if kind == MoneyMoreKind.data { dataTools(v) }
+                    }
+                }
+                .scrollIndicators(.never)
+                .frame(maxHeight: 480)
+                if let s = said {
+                    Text(s.line).font(MekaType.caption).foregroundStyle(s.refused ? palette.accent : palette.textSecondary)
+                }
+                Button(MoneyMore.shared.DONE) { moreOpen = nil }.keyboardShortcut(.defaultAction)
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 420)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: deleting)
+        }
+    }
+
+    /// Import, export and delete: the statement's account and Choose file, Export all payments, and Delete all money
+    /// data, which asks first.
+    private func dataTools(_ v: MoneyView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(MoneyAccountList.shared.IMPORT_HEAD.uppercased()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(MoneyAccountList.shared.IMPORT_ROW_SUB).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField(MoneyRules.shared.ACCOUNT_HINT, text: $account).textFieldStyle(.roundedBorder)
+            Button(busy ? "Reading the file…" : MoneyRules.shared.IMPORT + "…") { chooseFile() }
+                .disabled(busy)
+            if v.bank == nil {
+                Text(MoneyRules.shared.CONNECT_LATER).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("EXPORT").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.s)
+            Text(MoneyMore.shared.EXPORT_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(MoneyMore.shared.EXPORT + "…") { MekaHaptics.tick(); exportAll() }
+                .disabled(exporting)
+            if !v.accounts.isEmpty || (v.worth?.rows.contains { $0.removable } ?? false) {
+                if deleting {
+                    Text(MoneyRules.shared.DELETE_ASK).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, MekaSpace.s)
+                    HStack {
+                        Button("Delete") {
+                            deleting = false
+                            moreOpen = nil
+                            Task { said = await model.deleteAllMoney() }
+                        }
+                        Button("Cancel") { deleting = false }
+                    }
+                } else {
+                    Button(MoneyRules.shared.DELETE_ALL) { deleting = true; MekaHaptics.tick() }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .padding(.top, MekaSpace.s)
+                }
+            }
+        }
+    }
+
+    /// Export all payments: the CSV made on this Mac, saved where he picks.
+    private func exportAll() {
+        guard !exporting else { return }
+        exporting = true
+        Task {
+            let file = await model.moneyExport()
+            exporting = false
+            guard let file else { return }
+            said = file.said
+            guard let csv = file.csv, let name = file.fileName else { return }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.commaSeparatedText]
+            panel.nameFieldStringValue = name
+            panel.message = "Where to save the spreadsheet of your payments"
+            panel.prompt = "Save"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do {
+                try csv.write(to: url, atomically: true, encoding: .utf8)
+                MekaHaptics.light()
+                said = CoreModel.MoneySaid(line: "Saved the spreadsheet · open it in Numbers or Excel", refused: false, undo: nil)
+            } catch {
+                MekaHaptics.tick()
+                said = CoreModel.MoneySaid(line: "Couldn't save the spreadsheet there · try another place", refused: true, undo: nil)
             }
         }
     }
@@ -2123,6 +2219,7 @@ struct MoneySheet: View {
                 said = nil
                 askingRemove = false
                 accountBalance = ""
+                accountName = model.money.flatMap { MoneyAccountList.shared.sheet(v: $0, id: id) }.map { $0.nick ?? $0.title } ?? ""
                 accountSheet = id
             } else {
                 withAnimation(MekaMotion.appear(reduced: reduceMotion)) { tab = MoneyTab.trading }
@@ -2160,6 +2257,15 @@ struct MoneySheet: View {
                 Text(a.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
                 if let f = a.fullName { Text(f).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1) }
                 Text(a.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                // Accounts' rest: Name — type what to call it and press Return; clear it for its own name.
+                Text(MoneyAccountNames.shared.RENAME.uppercased()).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                TextField(MoneyAccountNames.shared.RENAME_HINT, text: $accountName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        let text = accountName
+                        MekaHaptics.tick()
+                        Task { said = await model.renameMoneyAccount(id: id, text: text) }
+                    }
                 Text(MoneyAccountList.shared.BALANCE).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 Text(a.amount ?? MoneyAccountList.shared.ADD_BALANCE)
                     .font(a.amount != nil ? MekaType.nowTitle : MekaType.body)
@@ -2230,25 +2336,9 @@ struct MoneySheet: View {
     }
 
     private func foot(_ v: MoneyView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(MoneyRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            if !v.accounts.isEmpty || (v.worth?.rows.contains { $0.removable } ?? false) {
-                if deleting {
-                    Text(MoneyRules.shared.DELETE_ASK).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    HStack {
-                        Button("Delete") { deleting = false; Task { said = await model.deleteAllMoney() } }
-                        Button("Cancel") { deleting = false }
-                    }
-                } else {
-                    Button(MoneyRules.shared.DELETE_ALL) { deleting = true; MekaHaptics.tick() }
-                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                }
-            }
-        }
-        .padding(.top, MekaSpace.m)
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: deleting)
+        Text(MoneyRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, MekaSpace.m)
     }
 }
 

@@ -50,6 +50,8 @@ data class MoneyAccountSheet(
     /** "Remove Amex Platinum and its 312 transactions?" */
     val removeAsk: String,
     val spoken: String,
+    /** Accounts' rest: the name he gave it (the Name field starts with it), or null while it goes by its own. */
+    val nick: String? = null,
 )
 
 object MoneyAccountList {
@@ -85,7 +87,7 @@ object MoneyAccountList {
         val biz = v.business?.accounts.orEmpty().filter { it.on }.map { it.id }.toSet()
         val accounts = v.accounts.map { a ->
             val w = worth[a.id]
-            val short = MoneyAccountNames.shortName(a.name)
+            val short = a.nick ?: MoneyAccountNames.shortName(a.name)
             val isCard = a.id in marked || w?.kind == MoneyWorth.CARD
             val brief = briefs[a.id]
             val parts = mutableListOf<String>()
@@ -124,7 +126,7 @@ object MoneyAccountList {
     fun sheet(v: MoneyView, id: String): MoneyAccountSheet? {
         val a = v.accounts.firstOrNull { it.id == id } ?: return null
         val w = v.worth?.rows?.firstOrNull { it.id == id }
-        val short = MoneyAccountNames.shortName(a.name)
+        val short = a.nick ?: MoneyAccountNames.shortName(a.name)
         val card = v.cards?.rows?.any { it.id == id } == true
         val looksCard = card || w?.kind == MoneyWorth.CARD
         val side = v.business?.accounts?.firstOrNull { it.id == id }?.on ?: v.business?.let { false }
@@ -135,6 +137,7 @@ object MoneyAccountList {
             canType = !looksCard && (!a.bank || amount == null), card = card, sideHustle = side,
             removeAsk = "Remove $short and $txns? Navilife forgets them on both devices.",
             spoken = "$short. " + (amount ?: "No balance yet") + ". ${a.line}",
+            nick = a.nick,
         )
     }
 }

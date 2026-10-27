@@ -25,7 +25,9 @@ enum class MoneySection {
     // Accounts: his banks, net worth, then the accounts as one clean list (Money review, Meka 2026-10-26 22:12: a tap opens
     // an account's sheet, where It's a card, Side hustle account, Import and Remove now live), the year in review, the side
     // hustle, shared costs, his own categories (slice 3), Import a statement (one row opening a sheet) and the foot.
-    BANK, WORTH, ACCOUNTS, YEAR, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, FOOT,
+    // Accounts' rest (2026-10-27, mockup): the side hustle, shared costs and Import, export and delete are one MORE card
+    // of three rows, each opening a sheet ([MoneyMore]), after his own categories.
+    BANK, WORTH, ACCOUNTS, YEAR, OWN_CATEGORIES, MORE, FOOT,
 }
 
 object MoneyTabs {
@@ -47,8 +49,8 @@ object MoneyTabs {
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
         MoneySection.TIPS, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
-        MoneySection.BANK, MoneySection.WORTH, MoneySection.ACCOUNTS, MoneySection.YEAR, MoneySection.BUSINESS, MoneySection.SHARED_COSTS,
-        MoneySection.OWN_CATEGORIES, MoneySection.IMPORT_STATEMENT, MoneySection.FOOT -> MoneyTab.ACCOUNTS
+        MoneySection.BANK, MoneySection.WORTH, MoneySection.ACCOUNTS, MoneySection.YEAR,
+        MoneySection.OWN_CATEGORIES, MoneySection.MORE, MoneySection.FOOT -> MoneyTab.ACCOUNTS
     }
 
     /** Whether [v] has anything for section [s]. Import and the foot are always there (Accounts is never empty). */
@@ -76,10 +78,8 @@ object MoneyTabs {
         MoneySection.TRADING -> v.trading != null
         MoneySection.BANK -> v.bank != null
         MoneySection.WORTH -> v.worth != null
-        MoneySection.BUSINESS -> v.business != null
-        MoneySection.SHARED_COSTS -> v.shared != null
         MoneySection.OWN_CATEGORIES -> v.ownRows.isNotEmpty()
-        MoneySection.IMPORT_STATEMENT, MoneySection.FOOT -> true
+        MoneySection.MORE, MoneySection.FOOT -> true
         MoneySection.ACCOUNTS -> v.accounts.isNotEmpty() || v.worth?.rows?.any { it.kind == MoneyWorth.TRADING } == true
     }
 

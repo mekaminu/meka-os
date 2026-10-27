@@ -43,7 +43,12 @@ import os.meka.android.lists.Field
 import os.meka.core.domain.MoneyAccountItem
 import os.meka.core.domain.MoneyAccountList
 import os.meka.core.domain.MoneyAccountSheet
+import os.meka.core.domain.MoneyAccountNames
 import os.meka.core.domain.MoneyBusiness
+import os.meka.core.domain.MoneyMore
+import os.meka.core.domain.MoneyMoreKind
+import os.meka.core.domain.MoneyMoreRow
+import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyWorth
 
 /**
@@ -96,22 +101,83 @@ internal fun MoneyAccountsCard(items: List<MoneyAccountItem>, modifier: Modifier
     }
 }
 
-/** Money review, Accounts: Import a statement as one row in a card ("A CSV file from any bank or card …" ›). */
+/**
+ * Accounts' rest (mockup, the card under the accounts): Side hustle and tax, Shared with his partner, and Import, export
+ * and delete as one-line rows (title over its line, ›), each opening its sheet. Motion: the card appears with the
+ * screen's stagger; a changed line cross-fades; rows press like every row.
+ */
 @Composable
-internal fun MoneyImportRow(modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    Row(
+internal fun MoneyMoreCard(rows: List<MoneyMoreRow>, modifier: Modifier = Modifier, onOpen: (MoneyMoreKind) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onOpen)
-            .semantics(mergeDescendants = true) { contentDescription = "${MoneyAccountList.IMPORT_ROW}. ${MoneyAccountList.IMPORT_ROW_SUB}" }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-import-row"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-more-card"),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(MoneyAccountList.IMPORT_ROW, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(MoneyAccountList.IMPORT_ROW_SUB, style = MekaType.caption, color = Meka.colors.textSecondary)
+        for (r in rows) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button) { onOpen(r.kind) }
+                    .semantics(mergeDescendants = true) { contentDescription = r.spoken }
+                    .padding(vertical = MekaSpace.xs).testTag("money-more-${r.kind.name.lowercase()}"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-more-line-${r.kind}") { l ->
+                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
+            }
         }
-        Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Import, export and delete's sheet: IMPORT A STATEMENT (the account's name and Choose file), EXPORT (all payments as a
+ * CSV to save) and Delete all money data, which asks first. The file picker and the save sheet are the caller's.
+ */
+@Composable
+internal fun MoneyDataDetails(
+    account: String, busy: Boolean, canDelete: Boolean, connectLater: Boolean,
+    onAccount: (String) -> Unit, onPick: () -> Unit, onExport: () -> Unit, onDeleteAll: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    var asking by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(MoneyAccountList.IMPORT_HEAD.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        Text(MoneyAccountList.IMPORT_ROW_SUB, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = onAccount) { onAccount(it) }
+        Text(if (busy) "Reading the file…" else MoneyRules.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, enabled = !busy, onClick = onPick)
+                .minTouch().padding(vertical = MekaSpace.xs).testTag("money-import-file"))
+        if (connectLater) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text("EXPORT", style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.s))
+        Text(MoneyMore.EXPORT_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(MoneyMore.EXPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onExport)
+                .minTouch().padding(vertical = MekaSpace.xs).testTag("money-export-all"))
+        if (canDelete) AnimatedContent(
+            asking, label = "money-delete-all", modifier = Modifier.padding(top = MekaSpace.s),
+            transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
+        ) { ask ->
+            if (!ask) Text(MoneyRules.DELETE_ALL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = true }
+                    .minTouch().padding(vertical = MekaSpace.xs).testTag("money-delete-all"))
+            else Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(MoneyRules.DELETE_ASK, style = MekaType.body, color = Meka.colors.textPrimary)
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                    Text("Delete", style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = false; onDeleteAll() }
+                            .minTouch().padding(MekaSpace.xs).testTag("money-delete-all-yes"))
+                    Text(MoneyAccountList.CANCEL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = false }
+                            .minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
     }
 }
 
@@ -124,14 +190,19 @@ internal fun MoneyImportRow(modifier: Modifier = Modifier, onOpen: () -> Unit) {
 internal fun MoneyAccountDetails(
     a: MoneyAccountSheet, busy: Boolean,
     onBalance: (String) -> Unit, onCard: (Boolean) -> Unit, onSideHustle: (Boolean) -> Unit,
-    onImport: () -> Unit, onRemove: () -> Unit,
+    onImport: () -> Unit, onRemove: () -> Unit, onRename: (String) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     var asking by rememberSaveable(a.id) { mutableStateOf(false) }
     var balance by rememberSaveable(a.id) { mutableStateOf("") }
+    var name by rememberSaveable(a.id) { mutableStateOf(a.nick ?: a.title) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         a.fullName?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         Text(a.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        // Accounts' rest: Name — type what to call it and press Done on the keyboard; clear it for its own name.
+        Text(MoneyAccountNames.RENAME.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+        Field(MoneyAccountNames.RENAME_HINT, modifier = Modifier.testTag("money-account-name"), value = name,
+            onValue = { name = it.take(MoneyAccountNames.NICK_MAX) }, description = "${MoneyAccountNames.RENAME} of ${a.title}") { onRename(it) }
         Text(MoneyAccountList.BALANCE, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
         Crossfade(a.amount ?: MoneyAccountList.ADD_BALANCE, animationSpec = MekaMotion.appear(reduced), label = "money-account-sheet-amount") { t ->
             Text(t, style = if (a.amount != null) MekaType.nowTitle else MekaType.body,

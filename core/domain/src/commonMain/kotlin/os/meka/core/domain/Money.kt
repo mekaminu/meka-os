@@ -35,6 +35,12 @@ object MoneyAccountFields {
     const val BALANCE_DAY = "balanceDay"
     /** Slice 6: true when he typed it, false when a statement file gave it. */
     const val BALANCE_TYPED = "balanceTyped"
+    /**
+     * Money review, Accounts' rest (2026-10-27): the name he gave the account (Text, Null = the bank's or file's own name).
+     * Shown on Accounts, Bills and the card nudges; the stored [NAME] stays as it came, so transfers between his accounts
+     * are still found by the bank's words. Additive LWW field (ADR-008 addendum); an older app ignores it.
+     */
+    const val NICK = "nick"
 }
 
 object MoneyTxnFields {
@@ -115,6 +121,8 @@ data class MoneyAccount(
     val id: String, val name: String, val source: String, val importedAtMs: Long?, val balance: MoneyBalance? = null,
     /** Bank sync: [MoneyBank.OK] or [MoneyBank.RECONNECT] for an account from his banks; null for a statement file's. */
     val bankStatus: String? = null,
+    /** The name he gave it ([MoneyAccountFields.NICK]), or null. */
+    val nick: String? = null,
 )
 
 /**
@@ -405,6 +413,8 @@ data class MoneyAccountRow(
     val id: String, val name: String, val line: String,
     /** Money review, Accounts: how many lines it has, whether it comes from his bank (and needs reconnecting), and "26 Oct" it was last updated or imported. */
     val txns: Int = 0, val bank: Boolean = false, val reconnect: Boolean = false, val updated: String? = null,
+    /** Accounts' rest: the name he gave it, shown instead of the short name; null for its own. */
+    val nick: String? = null,
 )
 
 /**
@@ -639,7 +649,7 @@ object MoneyRules {
             val when_ = a.importedAtMs?.let { " · ${if (a.source == MoneyBank.SOURCE) "updated" else "imported"} ${CivilDate.shortLabel(cal.epochDayOf(it))}" } ?: ""
             val same = merged.sameAs[a.id]?.let { b -> " · the same account as ${names[b]} from your bank, so lines in both count once" } ?: ""
             MoneyAccountRow(a.id, a.name, bankLine + span + when_ + same, txns = ts.size, bank = a.source == MoneyBank.SOURCE,
-                reconnect = a.bankStatus == MoneyBank.RECONNECT, updated = a.importedAtMs?.let { CivilDate.shortLabel(cal.epochDayOf(it)) })
+                reconnect = a.bankStatus == MoneyBank.RECONNECT, updated = a.importedAtMs?.let { CivilDate.shortLabel(cal.epochDayOf(it)) }, nick = a.nick)
         }
         // Slice 8: net worth from balances, cards and what he typed (also before any statement is in).
         val liveCards = cards.filter { it.id in names }
@@ -867,7 +877,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|"; const val NEED_UNDO = "need|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|"; const val NEED_UNDO = "need|"; const val NICK_UNDO = "nick|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -880,7 +890,21 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         val bd = e[MoneyAccountFields.BALANCE_DAY].longOrNull
         MoneyAccount(e.ref.entityId, name, e[MoneyAccountFields.SOURCE].textOrNull ?: "csv", e[MoneyAccountFields.IMPORTED_AT].longOrNull,
             if (bp != null && bd != null) MoneyBalance(bp, bd, e[MoneyAccountFields.BALANCE_TYPED].boolOrNull == true) else null,
-            e[MoneyBankAccountFields.STATUS].textOrNull)
+            e[MoneyBankAccountFields.STATUS].textOrNull,
+            nick = e[MoneyAccountFields.NICK].textOrNull?.let(MoneyAccountNames::cleanNick))
+    }
+
+    /**
+     * Money review, Accounts' rest: [accountId] goes by [text] on both devices ("Joint bills"); blank gives it back its
+     * own name. Refused for a gone account. Undo (by [undoCategory]) puts the name before back.
+     */
+    fun renameAccount(accountId: String, text: String): MoneySaved {
+        val a = accounts().firstOrNull { it.id == accountId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val nick = MoneyAccountNames.cleanNick(text)
+        if (nick == a.nick) return MoneySaved(MoneyAccountNames.renamedLine(nick ?: a.name))
+        replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(MoneyAccountFields.NICK to (nick?.fv() ?: FieldValue.Null)))
+        return MoneySaved(if (nick == null) MoneyAccountNames.ownNameLine(a.name) else MoneyAccountNames.renamedLine(nick),
+            undo = NICK_UNDO + accountId + "|" + a.nick.orEmpty())
     }
 
     /**
@@ -908,8 +932,9 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     fun cards(): List<MoneyCard> = replica.entities(EntityTypes.MONEY_ACCOUNT).mapNotNull { e ->
         val kind = e[MoneyCardFields.KIND].textOrNull?.takeIf { it == MoneyCards.CREDIT || it == MoneyCards.CHARGE } ?: return@mapNotNull null
         val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let(MoneyAccountNames::shown) ?: return@mapNotNull null
+        val nick = e[MoneyAccountFields.NICK].textOrNull?.let(MoneyAccountNames::cleanNick)
         MoneyCard(
-            e.ref.entityId, name, kind,
+            e.ref.entityId, nick ?: name, kind,
             limitPence = e[MoneyCardFields.LIMIT].longOrNull, statementPence = e[MoneyCardFields.STATEMENT].longOrNull,
             minPence = e[MoneyCardFields.MINIMUM].longOrNull, dueDayOfMonth = e[MoneyCardFields.DUE].longOrNull?.toInt()?.takeIf { it in 1..31 },
             promoEndDay = e[MoneyCardFields.PROMO_END].longOrNull, paidFor = e[MoneyCardFields.PAID_FOR].longOrNull,
@@ -1599,6 +1624,14 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             replica.commitLocal(EntityTypes.MONEY_ACCOUNT, id, fields)
             return true
         }
+        if (token.startsWith(NICK_UNDO)) {
+            val parts = token.removePrefix(NICK_UNDO).split('|', limit = 2)
+            val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
+            if (accounts().none { it.id == id }) return false
+            val before = parts.getOrNull(1)?.let(MoneyAccountNames::cleanNick)
+            replica.commitLocal(EntityTypes.MONEY_ACCOUNT, id, mapOf(MoneyAccountFields.NICK to (before?.fv() ?: FieldValue.Null)))
+            return true
+        }
         if (token.startsWith(BALANCE_UNDO)) {
             val parts = token.removePrefix(BALANCE_UNDO).split('|')
             val id = parts.getOrNull(0) ?: return false
@@ -1633,7 +1666,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         replica.batched {
             ts.forEach { clear(it.id) }
             replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(
-                os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
+                os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.IMPORTED_AT to FieldValue.Null, MoneyAccountFields.NICK to FieldValue.Null,
                 MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
                 MoneyBusinessFields.ACCOUNT to FieldValue.Null,
             ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
@@ -1651,7 +1684,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             ts.forEach { clear(it.id) }
             accounts.forEach {
                 replica.commitLocal(EntityTypes.MONEY_ACCOUNT, it.id, mapOf(
-                    os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.NAME to FieldValue.Null, MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
+                    os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.NAME to FieldValue.Null, MoneyAccountFields.NICK to FieldValue.Null, MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
                     MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
                     MoneyBusinessFields.ACCOUNT to FieldValue.Null,
                 ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
