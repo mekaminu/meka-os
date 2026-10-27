@@ -99,6 +99,7 @@ import os.meka.core.domain.MoneyOwnCategories
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneySheetMark
+import os.meka.core.domain.MoneyNeeds
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.domain.MoneySpending
@@ -199,6 +200,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val has: (MoneySection) -> Boolean = { s -> MoneyTabs.shows(tab, s, v) }
     // Money redesign (B2): the category picked on Spending's ring, and whether all categories / all payments show.
     var focus by rememberSaveable { mutableStateOf<String?>(null) }
+    // Needs and wants: Spending's view chips (Categories · Needs vs wants) swap the ring and the rows.
+    var needsView by rememberSaveable { mutableStateOf(false) }
     var allCats by rememberSaveable { mutableStateOf(false) }
     var allPays by rememberSaveable { mutableStateOf(false) }
 
@@ -397,10 +400,17 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             val sp = m.spending
-            if (has(MoneySection.MONTH) && sp != null) {
+            // The ring and rows as the view chip has them; payment chips keep their categories' colours ([sp]).
+            val ringSp = sp?.let { MoneyNeeds.shown(it, needsView) }
+            if (has(MoneySection.MONTH) && sp != null && ringSp != null) {
+                if (sp.needs != null) item(key = "needs-views") {
+                    MoneyViewChips(needsView, Modifier.animateItem().appear(rememberAppearance(3))) { on ->
+                        if (on != needsView) { haptics.tick(); needsView = on; focus = null }
+                    }
+                }
                 item(key = "ring") {
                     Box(Modifier.fillMaxWidth().animateItem().appear(rememberAppearance(3)), contentAlignment = Alignment.Center) {
-                        MoneyRing(sp, focus) { focus = null }
+                        MoneyRing(ringSp, focus) { focus = null }
                     }
                 }
                 if (sp.tiles.isNotEmpty()) item(key = "tiles") { MoneyTiles(sp.tiles, Modifier.animateItem().appear(rememberAppearance(4))) }
@@ -623,11 +633,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
             }
-            if (has(MoneySection.CATEGORIES) && sp != null) {
+            if (has(MoneySection.CATEGORIES) && ringSp != null) {
                 item(key = "cats-head") {
-                    MoneyHeadWithLink("WHERE IT WENT", MoneySpending.allLabel(sp.rows.size, allCats), Modifier.animateItem()) { allCats = !allCats }
+                    MoneyHeadWithLink("WHERE IT WENT", MoneySpending.allLabel(ringSp.rows.size, allCats), Modifier.animateItem()) { allCats = !allCats }
                 }
-                MoneySpending.shownRows(sp, allCats).forEachIndexed { i, r ->
+                MoneySpending.shownRows(ringSp, allCats).forEachIndexed { i, r ->
                     item(key = "spend-${r.key}") {
                         MoneySpendRowView(r, picked = focus == r.key, modifier = Modifier.animateItem().appear(rememberAppearance(4 + i))) {
                             haptics.tick(); focus = if (focus == r.key) null else r.key
@@ -828,6 +838,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     MoneySheetMark.PAYMENT_SHARED -> payTap(InstantPaymentRules.sharedTap(t.id, on)) { core.moneySharedTxn(t.id, on) }
                     MoneySheetMark.PAYEE_SHARED -> payTap(InstantPaymentRules.alwaysTap(t.id, on)) { core.moneySharedMerchant(t.id, on) }
                     MoneySheetMark.SIDE_HUSTLE -> payTap(InstantPaymentRules.businessTap(t.id, on)) { core.moneyBusinessMerchant(t.id, on) }
+                    MoneySheetMark.NEED -> payTap(InstantPaymentRules.needTap(t.id, on)) { core.moneyNeedMerchant(t.id, on) }
                 }
             }
         },

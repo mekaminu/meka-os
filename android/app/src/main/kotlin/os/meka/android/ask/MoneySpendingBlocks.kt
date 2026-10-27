@@ -234,3 +234,16 @@ internal fun MoneyDayHead(d: MoneyPayDay, modifier: Modifier = Modifier) {
         d.total?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
+
+/**
+ * Needs and wants: the view chips over Spending's ring (the mockup's Categories · Needs vs wants). Each is a 44 dp pill,
+ * the picked one lit; the ring and rows cross-fade between the views (they're keyed by category, so the list animates).
+ */
+@Composable
+internal fun MoneyViewChips(needs: Boolean, modifier: Modifier = Modifier, onPick: (Boolean) -> Unit) {
+    Row(modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        for (c in os.meka.core.domain.MoneyNeeds.views(needs)) {
+            TripPill(c.label, on = c.on, tag = "money-view-${if (c.needs) "needs" else "categories"}", description = c.spoken) { onPick(c.needs) }
+        }
+    }
+}

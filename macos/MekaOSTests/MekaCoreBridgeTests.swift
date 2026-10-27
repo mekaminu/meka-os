@@ -3912,4 +3912,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(own.HEAD, "YOUR CATEGORIES")
         XCTAssertEqual(MoneySection.ownCategories.name, "OWN_CATEGORIES")
     }
+
+    /// Needs and wants: the Need toggle's enum and the view chips cross the bridge as the Mac reads them.
+    func testNeedsAndWantsOnTheMac() {
+        let n = MoneyNeeds.shared
+        XCTAssertEqual(MoneySheetMark.need.name, "NEED")
+        XCTAssertEqual(PaymentTapKind.need.name, "NEED")
+        let chips = n.views(needs: true)
+        XCTAssertEqual(chips.map { $0.label }, ["Categories", "Needs vs wants"])
+        XCTAssertTrue(chips[1].on && chips[1].needs)
+        XCTAssertEqual(n.said(merchant: "Tesco", need: true), "Tesco counts as a need")
+        let v = n.view(lines: [MoneyNeedLine(label: "Groceries", pence: 3000, need: true), MoneyNeedLine(label: "Coffee", pence: 1000, need: false)], spent: 4000)
+        XCTAssertEqual(v?.rows.map { $0.amount }, ["£30", "£10"])
+        XCTAssertEqual(v?.rows.first?.pct, "75%")
+    }
 }

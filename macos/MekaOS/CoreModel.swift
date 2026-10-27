@@ -4883,6 +4883,22 @@ final class CoreModel {
         }
     }
 
+    /// Needs and wants: every payment to this payer counts as a need (or a want), synced; Undo through undoMoneyCategory.
+    func moneyNeedMerchant(txnId: String, on: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        let tap = InstantPaymentRules.shared.needTap(txnId: txnId, on: on)
+        holdPaymentTap(tap)
+        do {
+            let said = moneySaid(try await core.moneyNeedMerchant(txnId: txnId, on: on))
+            landPaymentTap(tap)
+            return said
+        } catch {
+            landPaymentTap(tap)
+            lastError = InstantPaymentRules.shared.failedLine(tap: tap, reason: error.localizedDescription)
+            return nil
+        }
+    }
+
     /// Money slice 15: counting no-spend days on or off (synced; Undo through undoMoneyCategory).
     func moneyNoSpend(on: Bool) async -> MoneySaid? {
         guard let core else { return nil }

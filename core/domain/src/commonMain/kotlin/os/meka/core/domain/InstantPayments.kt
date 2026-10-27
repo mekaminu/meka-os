@@ -1,6 +1,6 @@
 package os.meka.core.domain
 
-enum class PaymentTapKind { CATEGORY, SHARED, SHARED_ALWAYS, BUSINESS }
+enum class PaymentTapKind { CATEGORY, SHARED, SHARED_ALWAYS, BUSINESS, NEED }
 
 /** One payment chip on its way ([InstantPaymentRules]): [txnId]'s [kind] set [on] (for CATEGORY, [category] is the key). */
 data class PaymentTap(val txnId: String, val kind: PaymentTapKind, val on: Boolean = true, val category: String? = null)
@@ -21,6 +21,7 @@ object InstantPaymentRules {
     fun sharedTap(txnId: String, on: Boolean) = PaymentTap(txnId, PaymentTapKind.SHARED, on)
     fun alwaysTap(txnId: String, on: Boolean) = PaymentTap(txnId, PaymentTapKind.SHARED_ALWAYS, on)
     fun businessTap(txnId: String, on: Boolean) = PaymentTap(txnId, PaymentTapKind.BUSINESS, on)
+    fun needTap(txnId: String, on: Boolean) = PaymentTap(txnId, PaymentTapKind.NEED, on)
 
     /** [taps] with [tap] added; a newer tap of the same kind on the same payment replaces the older one. */
     fun add(taps: List<PaymentTap>, tap: PaymentTap): List<PaymentTap> = taps.filterNot { it.txnId == tap.txnId && it.kind == tap.kind } + tap
@@ -35,6 +36,7 @@ object InstantPaymentRules {
             PaymentTapKind.SHARED -> "Shared"
             PaymentTapKind.SHARED_ALWAYS -> "Always shared"
             PaymentTapKind.BUSINESS -> "Business"
+            PaymentTapKind.NEED -> "Need"
         },
         reason,
     )
@@ -67,5 +69,6 @@ object InstantPaymentRules {
         PaymentTapKind.SHARED -> if (t.shared == tap.on) t else t.copy(shared = tap.on)
         PaymentTapKind.SHARED_ALWAYS -> if (t.sharedAlways == tap.on && t.shared == tap.on) t else t.copy(sharedAlways = tap.on, shared = tap.on)
         PaymentTapKind.BUSINESS -> if (t.business == tap.on) t else t.copy(business = tap.on)
+        PaymentTapKind.NEED -> if (t.need == tap.on && t.needMarked) t else t.copy(need = tap.on, needMarked = true)
     }
 }

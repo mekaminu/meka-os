@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -235,5 +236,37 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(core.moneyView.value.ownRows.isEmpty(), "the category wasn't deleted")
         assertEquals("Other", core.moneyView.value.month!!.txns.first { it.id == costa.id }.categoryLabel)
         if (shows("money-own-sheet")) fail("the sheet stayed open after Delete")
+    }
+
+    /** Needs and wants: the sheet's Need toggle marks the payee; Spending's "Needs vs wants" chip splits the month in two. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theNeedToggleAndTheNeedsView() {
+        val core = open(ThemeChoice.DARK)
+        val id = tapNewest(core)
+        assertTrue(shows("money-sheet-mark-need"), "no Need toggle")
+        val was = core.moneyView.value.month!!.txns.first { it.id == id }.need
+        tap("money-sheet-mark-need")
+        waitFor(core) { core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.needMarked == true }
+        val now = core.moneyView.value.month!!.txns.first { it.id == id }
+        assertEquals(!was, now.need, "Need didn't flip")
+        assertTrue(now.needMarked)
+        assertTrue(shows("money-sheet-undo"), "no Undo after Need")
+        tap("money-sheet-done")
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-view-needs"))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        assertTrue(shows("money-view-needs"), "no Needs vs wants chip on Spending")
+        tap("money-view-needs")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-needs-wants"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-needs-wants")
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("Wants, ", substring = true))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        assertTrue(compose.onAllNodes(hasContentDescription("Needs, ", substring = true)).fetchSemanticsNodes().isNotEmpty(), "no Needs row")
+        tap("money-view-categories")
     }
 }

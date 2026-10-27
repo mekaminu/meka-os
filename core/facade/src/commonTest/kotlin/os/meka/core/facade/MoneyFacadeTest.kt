@@ -683,6 +683,28 @@ class MoneyFacadeTest {
         assertEquals(os.meka.core.domain.MoneyChallenges.INTRO, fold.moneyView.value.challenges!!.intro)
     }
 
+    /** Needs and wants: Need on the Fold moves the payee's payments to Needs, on the Mac too; Undo takes it back. */
+    @Test
+    fun aNeedMarkedOnTheFoldShowsOnTheMacWithUndo() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        val costa = fold.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        assertFalse(costa.need)
+        val wantsBefore = fold.moneyView.value.month!!.spending!!.needs!!.rows[1].amount
+        val r = fold.moneyNeedMerchant(costa.id, true)
+        assertEquals("Costa Coffee counts as a need", r.line)
+        assertTrue(fold.moneyView.value.month!!.txns.first { it.id == costa.id }.need)
+        assertTrue(fold.moneyView.value.month!!.spending!!.needs!!.rows[1].amount != wantsBefore)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertTrue(mac.moneyView.value.month!!.txns.first { it.id == costa.id }.need)
+        assertTrue(fold.undoMoneyCategory(r.undo!!))
+        assertFalse(fold.moneyView.value.month!!.txns.first { it.id == costa.id }.need)
+        assertEquals(wantsBefore, fold.moneyView.value.month!!.spending!!.needs!!.rows[1].amount)
+    }
+
     @Test
     fun sharedCostsMarkedOnTheFoldAddUpWithWhatSheTypedOnTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")

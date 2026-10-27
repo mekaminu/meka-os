@@ -4,7 +4,7 @@ package os.meka.core.domain
  * Money: the payment sheet (Meka 2026-10-26 23:18, two screenshots: tapping a payment opened an unthemed white dropdown
  * with near-invisible light text). A tap on a payment now opens the mockup's sheet (docs/design/money, Main.dc.html):
  * the payee and amount, the day and account, category chips (the ones he uses most first, his own choices before the
- * rest, Income and Transfers last), then Shared · Always shared · Side hustle as toggles and Done. Picking a category
+ * rest, Income and Transfers last), then Need · Shared · Always shared · Side hustle as toggles and Done. Picking a category
  * puts every payment from that payee in it, past and future (the rule [Money.setCategory] already keeps), and says
  * "Moved 14 payments from News ON The to Shopping" with Undo. Both apps draw the sheet from here.
  */
@@ -58,8 +58,10 @@ object MoneyPaymentSheet {
         if (row.taught) "${row.merchant} is always ${row.categoryLabel} · pick another to move every payment from them"
         else "Picking one moves every payment from ${row.merchant}, past and future"
 
-    /** Shared (this payment), Always shared (every payment to this payee) and Side hustle (this payee). */
-    fun toggles(row: MoneyTxnRow): List<MoneySheetToggle> = listOf(
+    /** Need (this payee), Shared (this payment), Always shared (every payment to this payee) and Side hustle (this payee). */
+    fun toggles(row: MoneyTxnRow): List<MoneySheetToggle> = listOfNotNull(
+        // Needs and wants: money in has no need to mark.
+        if (row.moneyIn) null else MoneySheetToggle(MoneySheetMark.NEED, MoneyNeeds.NEED, row.need, MoneyNeeds.spoken(row.merchant, row.need)),
         MoneySheetToggle(MoneySheetMark.PAYMENT_SHARED, SHARED, row.shared, if (row.shared) "Shared, on" else "Mark it shared"),
         MoneySheetToggle(MoneySheetMark.PAYEE_SHARED, ALWAYS_SHARED, row.sharedAlways,
             if (row.sharedAlways) "Always shared, on" else "Share every payment to ${row.merchant}"),
@@ -86,7 +88,7 @@ data class MoneySheetChip(
 )
 
 /** What a toggle on the payment sheet marks. */
-enum class MoneySheetMark { PAYMENT_SHARED, PAYEE_SHARED, SIDE_HUSTLE }
+enum class MoneySheetMark { PAYMENT_SHARED, PAYEE_SHARED, SIDE_HUSTLE, NEED }
 
 /** One toggle on the payment sheet. */
 data class MoneySheetToggle(val mark: MoneySheetMark, val label: String, val on: Boolean, val spoken: String)

@@ -42,7 +42,9 @@ class MoneyPaymentSheetTest {
         assertEquals("Picking one moves every payment from Corner Shop, past and future", MoneyPaymentSheet.ruleLine(row))
         assertEquals("Corner Shop is always Groceries · pick another to move every payment from them",
             MoneyPaymentSheet.ruleLine(row.copy(taught = true)))
-        val t = MoneyPaymentSheet.toggles(row)
+        // Needs and wants: Need leads the toggles for money out.
+        assertEquals(listOf("Need", "Shared", "Always shared", "Side hustle"), MoneyPaymentSheet.toggles(row).map { it.label })
+        val t = MoneyPaymentSheet.toggles(row).drop(1)
         assertEquals(listOf("Shared", "Always shared", "Side hustle"), t.map { it.label })
         assertTrue(t[0].on)
         assertFalse(t[1].on)

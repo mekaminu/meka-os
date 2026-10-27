@@ -396,6 +396,9 @@ data class MoneyTxnRow(
     /** Money at a glance: its receipt or order email ([MoneyReceipts.line]) and the preview's detail, when matched. */
     val receipt: String? = null,
     val receiptDetail: String? = null,
+    /** Needs and wants ([MoneyNeeds]): a need (his mark on the payer, else its category's default); [needMarked] when he marked the payer. */
+    val need: Boolean = false,
+    val needMarked: Boolean = false,
 )
 
 data class MoneyAccountRow(val id: String, val name: String, val line: String)
@@ -600,6 +603,8 @@ object MoneyRules {
         receipts: List<MoneyReceiptMail> = emptyList(),
         /** His own categories ([MoneyOwnCategories]) and the payees he put in one (merchant key → its id). */
         own: List<MoneyOwnCategory> = emptyList(), ownRules: Map<String, String> = emptyMap(),
+        /** Needs and wants: the payers he marked a need (true) or a want (false), by merchant key ([MoneyNeeds]). */
+        needMerchants: Map<String, Boolean> = emptyMap(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -619,6 +624,7 @@ object MoneyRules {
         fun ownOf(t: MoneyTxn): MoneyOwnCategory? =
             if (ownRules.isEmpty()) null else ownRules[keyOf(t)]?.let { ownById[it] }?.takeIf { cat(t) == MoneyCategory.OTHER }
         fun shownKey(t: MoneyTxn): String = ownOf(t)?.key ?: cat(t).key
+        fun isNeed(t: MoneyTxn): Boolean = MoneyNeeds.isNeed(cat(t), needMerchants[keyOf(t)], own = ownOf(t) != null)
         val accountRows = accounts.sortedBy { it.name.lowercase() }.map { a ->
             val ts = mine.filter { it.account == a.id }
             val span = if (ts.isEmpty()) "no transactions" else
@@ -717,6 +723,8 @@ object MoneyRules {
                 sharedAlways = sharedMerchants[key] == true,
                 receipt = r?.let { MoneyReceipts.line(it) },
                 receiptDetail = r?.let { MoneyReceipts.detail(it) },
+                need = isNeed(t),
+                needMarked = needMerchants.containsKey(key),
             )
         }
         val month = MoneyMonth(
@@ -760,6 +768,11 @@ object MoneyRules {
             leftPence = income - spent,
             txns = sorted.take(MoneySpending.LATEST).mapNotNull { t -> rows.firstOrNull { it.id == t.id }?.let { MoneySpendTxn(it, t.day, t.pence) } },
             allTxns = sorted.size, today = today,
+        ).copy(
+            // Needs and wants: the same month split in two, for the view chips over the ring.
+            needs = MoneyNeeds.view(
+                cur.filter { cat(it).spend }.map { t -> MoneyNeedLine(ownOf(t)?.name ?: cat(t).label, -t.pence, isNeed(t)) }, spent,
+            ),
         )
         return MoneyView(
             false, summary, null, month.copy(spending = spending), accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
@@ -837,7 +850,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|"; const val NEED_UNDO = "need|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -1166,6 +1179,26 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         return MoneySaved(MoneyBusiness.merchantSaid(MoneyCategoryRules.merchantLabel(key), on), undo = BIZ_UNDO + "m|" + rid + "|" + (before?.toString() ?: ""))
     }
 
+    /** Needs and wants: payers he marked a need (true) or a want (false), by merchant key. */
+    fun needMerchants(): Map<String, Boolean> = replica.entities(EntityTypes.MONEY_RULE).mapNotNull { e ->
+        val m = e[MoneyRuleFields.MERCHANT].textOrNull ?: return@mapNotNull null
+        val b = e[MoneyNeedFields.MERCHANT].boolOrNull ?: return@mapNotNull null
+        m to b
+    }.toMap()
+
+    /**
+     * Needs and wants: every payment to [txnId]'s payer counts as a need ([on]) or a want, past and future, on every
+     * account and both devices; Undo by [undoCategory].
+     */
+    fun setNeedMerchant(txnId: String, on: Boolean): MoneySaved {
+        val t = txns().firstOrNull { it.id == txnId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val key = MoneyCategoryRules.merchantKey(t.text)
+        val rid = MoneyRules.ruleId(key)
+        val before = replica.entity(EntityTypes.MONEY_RULE, rid)?.get(MoneyNeedFields.MERCHANT)?.boolOrNull
+        replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.MERCHANT to key.fv(), MoneyNeedFields.MERCHANT to on.fv()))
+        return MoneySaved(MoneyNeeds.said(MoneyCategoryRules.merchantLabel(key), on), undo = NEED_UNDO + rid + "|" + (before?.toString() ?: ""))
+    }
+
     /** Slice 14: payments he marked shared (true) or kept out (false), by line id. */
     fun sharedTxns(): Map<String, Boolean> = replica.entities(EntityTypes.MONEY_TXN).mapNotNull { e ->
         e[MoneySharedFields.TXN].boolOrNull?.let { e.ref.entityId to it }
@@ -1478,6 +1511,14 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             }
             return true
         }
+        if (token.startsWith(NEED_UNDO)) {
+            val parts = token.removePrefix(NEED_UNDO).split('|')
+            val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
+            if (replica.entity(EntityTypes.MONEY_RULE, id) == null) return false
+            val bool: FieldValue = when (parts.getOrNull(1)) { "true" -> true.fv(); "false" -> false.fv(); else -> FieldValue.Null }
+            replica.commitLocal(EntityTypes.MONEY_RULE, id, mapOf(MoneyNeedFields.MERCHANT to bool))
+            return true
+        }
         if (token.startsWith(BIZ_UNDO)) {
             val parts = token.removePrefix(BIZ_UNDO).split('|')
             val id = parts.getOrNull(1) ?: return false
@@ -1595,7 +1636,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             rules.forEach {
                 replica.commitLocal(EntityTypes.MONEY_RULE, it.ref.entityId, mapOf(
                     MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null, MoneyBusinessFields.MERCHANT to FieldValue.Null,
-                    MoneySharedFields.MERCHANT to FieldValue.Null,
+                    MoneySharedFields.MERCHANT to FieldValue.Null, MoneyNeedFields.MERCHANT to FieldValue.Null,
                 ))
             }
         }

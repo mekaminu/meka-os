@@ -59,6 +59,8 @@ struct MoneySheet: View {
     @State private var tab: MoneyTab = MoneyTabs.shared.FIRST
     /// Money redesign (B2): the category picked on Spending's ring, and whether all categories / all payments show.
     @State private var focus: String?
+    /// Needs and wants: Spending's view chips (Categories · Needs vs wants) swap the ring and the rows.
+    @State private var needsView = false
     @State private var allCats = false
     @State private var allPays = false
     /// The payment sheet: the payment whose popover is open.
@@ -186,7 +188,21 @@ struct MoneySheet: View {
                 Spacer()
                 Button("›") { model.moneyStep(1) }.disabled(!v.later).accessibilityLabel("Month after")
             }
-            if let sp = m.spending {
+            if let full = m.spending {
+                // Needs and wants: the view chips, then the ring as they have it.
+                let sp = MoneyNeeds.shared.shown(v: full, needs: needsView)
+                if full.needs != nil {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(MoneyNeeds.shared.views(needs: needsView), id: \.label) { c in
+                            let wantsNeeds = c.needs
+                            sheetPill(c.label, on: c.on, spoken: c.spoken) {
+                                guard wantsNeeds != needsView else { return }
+                                MekaHaptics.tick()
+                                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { needsView = wantsNeeds; focus = nil }
+                            }
+                        }
+                    }
+                }
                 // Money redesign (B2): the ring with the month's total in the middle, then the tiles.
                 MoneyRingView(spending: sp, focus: focus, palette: palette, reduced: reduceMotion) { focus = nil }
                 if !sp.tiles.isEmpty { MoneyTilesView(tiles: sp.tiles, palette: palette) }
@@ -242,7 +258,8 @@ struct MoneySheet: View {
                 ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
             }
             if let f = v.forecast, has(.forecast, v) { forecast(f).transition(.opacity) }
-            if has(.categories, v), let sp = m.spending {
+            if has(.categories, v), let full = m.spending {
+                let sp = MoneyNeeds.shared.shown(v: full, needs: needsView)
                 MoneyHeadWithLink(head: "WHERE IT WENT", link: MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats), palette: palette) {
                     allCats.toggle()
                 }
@@ -1181,14 +1198,17 @@ struct MoneySheet: View {
                 if let s = said { saidLine(s).transition(.opacity) }
                 Text(MoneyPaymentSheet.shared.MARKS_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs)
-                HStack(spacing: MekaSpace.xs) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
                     ForEach(MoneyPaymentSheet.shared.toggles(row: r), id: \.label) { t in
                         sheetPill(t.label, on: t.on, spoken: t.spoken) {
                             let on = !t.on
                             // A plain number crosses into the Task, never the Kotlin enum.
-                            let which = t.mark == MoneySheetMark.paymentShared ? 0 : (t.mark == MoneySheetMark.payeeShared ? 1 : 2)
+                            let which = t.mark == MoneySheetMark.need ? 3
+                                : (t.mark == MoneySheetMark.paymentShared ? 0 : (t.mark == MoneySheetMark.payeeShared ? 1 : 2))
                             Task {
-                                if which == 0 {
+                                if which == 3 {
+                                    said = await model.moneyNeedMerchant(txnId: id, on: on)
+                                } else if which == 0 {
                                     said = await model.moneySharedTxn(txnId: id, on: on)
                                 } else if which == 1 {
                                     said = await model.moneySharedMerchant(txnId: id, on: on)

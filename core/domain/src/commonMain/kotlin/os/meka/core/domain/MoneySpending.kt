@@ -40,6 +40,8 @@ data class MoneyPayDay(val label: String, val total: String?, val rows: List<Mon
 data class MoneySpendingView(
     val centre: MoneyRingCentre, val slices: List<MoneyRingSlice>, val rows: List<MoneySpendRow>, val tiles: List<MoneyTile>,
     val latest: List<MoneyPayDay>, val seeAll: String?,
+    /** Needs and wants: the month as two lines for the "Needs vs wants" view chip ([MoneyNeeds.shown]); null with nothing spent. */
+    val needs: MoneyNeedsView? = null,
 )
 
 /** A spend category's month for [MoneySpending.view]: its pence out, the note and whether it's over or under usual. */

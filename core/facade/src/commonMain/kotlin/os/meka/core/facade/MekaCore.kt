@@ -1084,7 +1084,7 @@ class MekaCore(
         val sharedTxns = money.sharedTxns(); val sharedMerchants = money.sharedMerchants(); val sharedEntries = money.sharedEntries()
         val sharedSetting = money.sharedSetting(); val partner = aboutYou.profile().partnerName
         val challenges = money.challenges(); val abroad = moneyAbroadNow()
-        val own = money.ownCategories(); val ownRules = money.ownRules()
+        val own = money.ownCategories(); val ownRules = money.ownRules(); val needMerchants = money.needMerchants()
         val inputs = listOf(
             accounts, txns, rules, today, tz, offset, hiddenTips, fineAlerts,
             whatIf, waiting, bills, holidays, cards, worth,
@@ -1093,7 +1093,7 @@ class MekaCore(
             now / os.meka.core.domain.MoneyViewMemo.MINUTE_MS, wallets,
             bizAccounts, bizMerchants, setAside,
             sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner,
-            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules,
+            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules, needMerchants,
         )
         // The same build is already on its way.
         if (moneyJob?.isActive == true && moneyPendingFrom == inputs) return
@@ -1119,7 +1119,7 @@ class MekaCore(
                 abroad, os.meka.core.domain.MoneyTravel.tripNear(tripItems, today),
                 // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
                 receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, cal),
-                own = own, ownRules = ownRules,
+                own = own, ownRules = ownRules, needMerchants = needMerchants,
             )
             v.copy(
                 trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts),
@@ -1453,6 +1453,11 @@ class MekaCore(
      */
     suspend fun moneyBusinessMerchant(txnId: String, on: Boolean): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else money.setBusinessMerchant(txnId, on).also { refreshMoney() }
+    }
+
+    /** Needs and wants: every payment to [txnId]'s payer counts as a need ([on]) or a want, synced; Undo by [undoMoneyCategory]. */
+    suspend fun moneyNeedMerchant(txnId: String, on: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setNeedMerchant(txnId, on).also { refreshMoney() }
     }
 
     /** Slice 13: the share of the side hustle's profit to put aside ([key] "10" · "20" · "25" · "30" · "40"), synced; Undo by [undoMoneyCategory]. */
