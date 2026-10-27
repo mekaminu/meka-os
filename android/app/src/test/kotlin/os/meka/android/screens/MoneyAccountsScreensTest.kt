@@ -147,7 +147,9 @@ class MoneyAccountsScreensTest {
         // Nothing scattered on the page any more.
         if (showsText("Remove it?") || compose.onAllNodesWithText("Remove", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
             fail("a Remove link is still on the page")
-        if (showsText(MoneyBusiness.SWITCH)) fail("a Side hustle account switch is still on the page")
+        // (Exact text: the side hustle's intro line names the switch, which is fine.)
+        if (compose.onAllNodesWithText(MoneyBusiness.SWITCH, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() ||
+            showsText(MoneyBusiness.SWITCH + " ✓")) fail("a Side hustle account switch is still on the page")
         if (showsText(MoneyRules.ACCOUNT_HINT)) fail("the Which account? field sits open on the page")
         if (showsText(MoneyWorth.BALANCE_HINT)) fail("a balance field sits open on the page")
         val current = v.accounts.first { it.name == "Current account" }
