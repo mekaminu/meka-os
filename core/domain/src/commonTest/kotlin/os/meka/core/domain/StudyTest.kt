@@ -371,4 +371,52 @@ class StudyTest {
         assertEquals("Planned \u201CPivot tables\u201D for Thu 29 Oct", StudyRules.plannedSaid("Pivot tables", today + 3, today))
         assertEquals("\u201CPivot tables\u201D is no longer planned", StudyRules.plannedSaid("Pivot tables", null, today))
     }
+
+    @Test
+    fun plannedLessonsShowUnderTheirDayOnTheWeekBoard() {
+        // Meka 2026-10-26 23:21: planned lessons show "on the Week board under that day".
+        val today = 20_753L // Tue 27 Oct 2026
+        sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nSpreadsheets 45 min\nPivot tables 1 h\nCharts 30 min")
+        val ls = sFold.lessons()
+        assertTrue(sFold.planLesson(ls[0].id, today - 1)) // Monday's, not done: rolls to today
+        assertTrue(sFold.planLesson(ls[1].id, today))
+        assertTrue(sFold.planLesson(ls[2].id, today + 2))
+        assertTrue(sFold.planLesson(ls[3].id, today - 1))
+        val doneDay: (Long) -> Long = { today - 1 }
+        assertTrue(sFold.tick(ls[3].id, true)) // ticked on Monday (doneDay says so)
+        sync()
+        fun day(d: Long) = BoardDay(
+            d, "Day", "${d - today}", isToday = d == today, isPast = d < today, place = null, placeLabel = null,
+            chips = emptyList(), moreChips = 0, cards = emptyList(), countLine = "Nothing planned", accessibilityLabel = "Day $d",
+        )
+        val board = WeekBoard(today, listOf(BoardWeek(today - 1, "This week", "26 Oct – 1 Nov", (today - 1..today + 5).map(::day))))
+        val shown = StudyRules.onBoard(board, sMac.lessons(), sMac.courses(), doneDay)
+        val mon = shown.day(today - 1)!!.study!!
+        assertEquals("Study · 1 done", mon.text) // only what was ticked that day; the other rolled on
+        assertNull(BoardMatchRules.pastEmpty(shown.day(today - 1)!!))
+        val tue = shown.day(today)!!.study!!
+        assertEquals("Study · 2 lessons · about 1 h · 1 from Mon", tue.text)
+        assertTrue(tue.lit)
+        assertEquals("Study, 2 lessons, about 1 h, 1 from Mon: Welcome, Spreadsheets", tue.spoken)
+        assertEquals(ls[0].courseId, tue.courseId)
+        assertTrue(shown.day(today)!!.accessibilityLabel.endsWith(tue.spoken))
+        assertEquals("Study · 1 lesson · about 1 h", shown.day(today + 2)!!.study!!.text)
+        assertFalse(shown.day(today + 2)!!.study!!.lit)
+        assertNull(shown.day(today + 1)!!.study)
+
+        // Ticked today: "1 of 2 done"; both: "all 2 done".
+        val monMs = world.clock.nowMs
+        world.clock.nowMs += 60_000L
+        val byTick: (Long) -> Long = { ms -> if (ms <= monMs) today - 1 else today }
+        assertTrue(sMac.tick(ls[0].id, true))
+        val ticked = StudyRules.onBoard(board, sMac.lessons(), sMac.courses(), byTick)
+        assertEquals("Study · 1 of 2 done · about 45 min", ticked.day(today)!!.study!!.text)
+        assertTrue(sMac.tick(ls[1].id, true))
+        val all = StudyRules.onBoard(board, sMac.lessons(), sMac.courses(), byTick)
+        assertEquals("Study · all 2 done", all.day(today)!!.study!!.text)
+
+        // Nothing planned: the board comes back as it was.
+        val bare = Study(world.device("other").replica, { "x${n++}" }, { world.clock.nowMs })
+        assertEquals(board, StudyRules.onBoard(board, bare.lessons(), bare.courses(), doneDay))
+    }
 }

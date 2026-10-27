@@ -434,6 +434,8 @@ private struct BoardColumnView: View {
     let onTarget: (Bool) -> Void
     /// By hand, slice 8 (the quality gate's findings): how wide the lane is drawn, so a narrow one fits its words.
     @State private var laneWidth: CGFloat = CGFloat(BoardTidyRules.shared.MAX_LANE_DP)
+    /// Plan a lesson for a day: the course a click on the day's study line opens, as a sheet over the board.
+    @State private var studyCourse: String? = nil
 
     var body: some View {
         let glow = targeted && day.canDrop
@@ -479,6 +481,23 @@ private struct BoardColumnView: View {
                 }
             }
 
+            // Plan a lesson for a day: "Study · 2 lessons · about 1 h" under the events (the accent when one rolled
+            // over); a click opens the course.
+            if let study = day.study {
+                Button {
+                    MekaHaptics.light()
+                    studyCourse = study.courseId
+                } label: {
+                    Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption)
+                        .foregroundStyle(study.lit ? palette.accent : palette.textSecondary)
+                        .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open the course")
+                .accessibilityLabel(study.spoken)
+                .transition(.opacity)
+            }
+
             // Free time shows only while a card is held over the day, as the drop targets that block time.
             if glow && !day.freeTimes.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
@@ -516,6 +535,12 @@ private struct BoardColumnView: View {
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m)
             .strokeBorder(palette.calendar3.opacity(0.7), lineWidth: day.pressure != nil && !glow ? 1 : 0))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: day.pressure?.short)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: day.study?.text)
+        .sheet(isPresented: Binding(get: { studyCourse != nil }, set: { if !$0 { studyCourse = nil } })) {
+            if let id = studyCourse {
+                StudySheet(courseId: id, palette: palette, onClose: { studyCourse = nil }, onRemoved: { _ in studyCourse = nil })
+            }
+        }
         .scaleEffect(glow && !reduceMotion ? 1.01 : 1)
         .opacity(day.isPast ? 0.6 : 1)
         .animation(MekaMotion.approve(reduced: reduceMotion), value: glow)

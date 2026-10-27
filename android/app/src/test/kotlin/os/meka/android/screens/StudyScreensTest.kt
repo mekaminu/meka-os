@@ -31,6 +31,11 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.StudyPane
+import os.meka.android.calendar.EventUndo
+import os.meka.android.calendar.STUDY_NOTE_TAG
+import os.meka.android.calendar.WeekBoardView
+import os.meka.android.shell.ShellDestination
+import androidx.compose.ui.test.onAllNodesWithTag
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -246,5 +251,41 @@ class StudyScreensTest {
         ScreenShots.assertSensible(compose, "cover-dark-lesson-planned")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-lesson-planned")
         ScreenShots.assertShows(compose, "cover-dark-lesson-planned", "Tomorrow")
+    }
+
+    @Test
+    @Config(qualifiers = ScreenShots.INNER)
+    fun plannedLessonsShowUnderTheirDayOnTheWeekBoardAndOpenTheCourse() {
+        // Meka 2026-10-26 23:21: planned lessons show "on the Week board under that day".
+        val (core, id) = filled(ThemeChoice.DARK)
+        val lessons = core.studyView.value.course(id)!!.modules[1].lessons
+        runBlocking {
+            core.planStudyLesson(lessons[0].id, 20_752L) // Pivot tables, today (Mon 26 Oct)
+            core.planStudyLesson(lessons[1].id, 20_753L) // Charts, tomorrow
+            core.tick()
+        }
+        assertEquals("Study · 1 lesson · about 1 h", core.weekBoard.value.day(20_752L)!!.study!!.text)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(3_000L)
+        compose.waitForIdle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "inner-dark-board-study"))
+        ScreenShots.assertSensible(compose, "inner-dark-board-study")
+        ScreenShots.assertNoBrokenWords(compose, "inner-dark-board-study")
+        ScreenShots.assertShows(compose, "inner-dark-board-study", os.meka.core.domain.LoneWordGlue.kept("Study · 1 lesson · about 1 h"))
+        ScreenShots.assertShows(compose, "inner-dark-board-study", os.meka.core.domain.LoneWordGlue.kept("Study · 1 lesson · about 40 min"))
+        // A tap opens the course on Goals.
+        val app = ApplicationProvider.getApplicationContext<ShotApplication>()
+        compose.mainClock.autoAdvance = true
+        compose.onAllNodesWithTag(STUDY_NOTE_TAG, useUnmergedTree = true)[0].performClick()
+        compose.waitForIdle()
+        assertEquals(id, app.openStudy.value)
+        assertEquals(ShellDestination.GOALS, app.openDestination.value)
     }
 }

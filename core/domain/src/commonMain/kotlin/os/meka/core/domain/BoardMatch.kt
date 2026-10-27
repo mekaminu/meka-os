@@ -230,5 +230,5 @@ object BoardMatchRules {
 
     /** [NOTHING_PLANNED] for a past day with no cards and no events; null otherwise (today and later have "+ add"). */
     fun pastEmpty(day: BoardDay): String? =
-        if (day.isPast && day.cards.isEmpty() && day.chips.isEmpty() && day.moreChips == 0) NOTHING_PLANNED else null
+        if (day.isPast && day.cards.isEmpty() && day.chips.isEmpty() && day.moreChips == 0 && day.study == null) NOTHING_PLANNED else null
 }

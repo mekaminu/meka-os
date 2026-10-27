@@ -84,6 +84,8 @@ data class BoardDay(
     val pressure: DayPressure? = null,
     /** Slice 9: the day's free stretches, its timeline's drop targets for blocking time (none before today). */
     val freeTimes: List<BoardFreeTime> = emptyList(),
+    /** Study, planned lessons under their day: "Study · 2 lessons · about 1 h" ([StudyRules.onBoard]); null with none. */
+    val study: StudyDayLine? = null,
 ) {
     /** "Today" · "Mon 19" */
     val title: String get() = if (isToday) "Today" else "$weekday $number"

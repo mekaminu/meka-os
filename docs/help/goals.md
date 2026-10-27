@@ -1,7 +1,7 @@
 ---
 id: goals
 title: Goals and habits
-keywords: goals, goals and habits, study, study plan, plan a lesson, study today, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
+keywords: goals, goals and habits, study, study plan, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
 data: yes
 fold: GOALS
 fold_where: Ask → Life → Goals and habits
@@ -22,3 +22,4 @@ tip: Tick a lesson when you've done it: the ring and "5 of 24 lessons · about 1
 tip: Press and hold a lesson (right-click on the Mac) to rename it, move it to another module, mark it done or delete it; Delete always asks first, and Undo or Recently deleted under the course brings it back for 30 days.
 tip: Press and hold a module's heading to rename or delete it. "+ Add lesson" at the foot of an open module adds into that module (one, or paste several lines); "+ Add module" adds a module with its first lessons.
 tip: To plan a lesson for a day, press and hold it (right-click on the Mac) and pick Today, Tomorrow or a day this week under Plan for. It shows on Today ("Study today · 2 lessons · about 1 h · next: Pivot tables"), in Tomorrow, and on the course with a date chip; a lesson not done on its day moves on to today, marked "from Mon". Not planned takes it off.
+tip: Planned lessons also show under their day on the Week board ("Study · 2 lessons · about 1 h"); tap the line to open the course.

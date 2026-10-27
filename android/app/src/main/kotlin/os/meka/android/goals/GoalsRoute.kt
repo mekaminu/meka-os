@@ -132,6 +132,13 @@ fun GoalsRoute(core: MekaCore) {
     var studyRemoved by remember { mutableStateOf<os.meka.core.domain.StudyRemoved?>(null) }
     LaunchedEffect(studyRemoved) { if (studyRemoved != null) { kotlinx.coroutines.delay(os.meka.core.domain.TripRules.UNDO_MS); studyRemoved = null } }
     val openStudy: (String) -> Unit = { id -> studyShown = id; studyOpen = id }
+    // The Week board's study line: Goals opens with that course up.
+    val boardStudy by app.openStudy.collectAsState()
+    LaunchedEffect(boardStudy) {
+        val id = boardStudy ?: return@LaunchedEffect
+        openStudy(id)
+        app.openStudy.value = null
+    }
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background),

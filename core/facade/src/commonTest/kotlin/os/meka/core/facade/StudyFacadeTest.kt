@@ -132,6 +132,10 @@ class StudyFacadeTest {
         assertEquals("Study today · 1 lesson · about 15 min · next: Welcome", mac.today.value.study?.text)
         assertEquals("Study · 1 lesson · about 1 h · Pivot tables", mac.shutdownView.value.tomorrow.study?.text)
         assertEquals(listOf("Today", "Tomorrow"), mac.studyView.value.course(id)!!.modules.single().lessons.map { it.planned })
+        // And under their days on the Week board, a tap away from the course.
+        assertEquals("Study · 1 lesson · about 15 min", mac.weekBoard.value.day(today)?.study?.text)
+        assertEquals("Study · 1 lesson · about 1 h", mac.weekBoard.value.day(today + 1)?.study?.text)
+        assertEquals(id, mac.weekBoard.value.day(today + 1)?.study?.courseId)
 
         // Ticked on the Mac: Today says it's done; taken off the plan, tomorrow has nothing to study.
         assertTrue(mac.tickStudyLesson(welcome.id, true))
@@ -139,5 +143,7 @@ class StudyFacadeTest {
         mac.tick()
         assertEquals("Study today · done", mac.today.value.study?.text)
         assertEquals(null, mac.shutdownView.value.tomorrow.study)
+        assertEquals("Study · done", mac.weekBoard.value.day(today)?.study?.text)
+        assertEquals(null, mac.weekBoard.value.day(today + 1)?.study)
     }
 }

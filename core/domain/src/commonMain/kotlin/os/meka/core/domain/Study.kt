@@ -149,7 +149,11 @@ data class StudyLessonRow(
  * Tomorrow sheet ("Study · 2 lessons · about 1 h · Pivot tables, Dashboards"). [left] lessons not yet done, [done] of
  * them ticked that day; [lit] when one rolled over from an earlier day.
  */
-data class StudyDayLine(val text: String, val spoken: String, val left: Int, val done: Int, val lit: Boolean)
+data class StudyDayLine(
+    val text: String, val spoken: String, val left: Int, val done: Int, val lit: Boolean,
+    /** The course a tap opens (the Week board's line): the next lesson's, else the first one's; null elsewhere. */
+    val courseId: String? = null,
+)
 
 /** One module: "1 · Foundations" · "2 of 6" (or "Done", [allDone]), its lessons in course order. */
 data class StudyModule(val key: String, val name: String, val count: String, val allDone: Boolean, val lessons: List<StudyLessonRow>)
@@ -570,6 +574,52 @@ object StudyRules {
         val names = left.take(2).map { it.title } + listOfNotNull((left.size - 2).takeIf { it > 0 }?.let { "+ $it more" })
         val text = listOfNotNull("Study", plural(left.size, "lesson"), aboutLabel(mins).takeIf { mins > 0 }, names.joinToString(", ")).joinToString(" · ")
         return StudyDayLine(text, text.replace(" · ", ", "), left.size, 0, lit = false)
+    }
+
+    /**
+     * The Week board's line under a day's events: "Study · 2 lessons · about 1 h" ("· 1 from Mon", lit, on today when
+     * one rolled over); "Study · 1 of 3 done · about 30 min"; "Study · all 3 done"; before today only what was ticked
+     * that day, "Study · 2 done". [on] is [onDay] for that day (rolled over for today). Null with nothing to show.
+     */
+    fun boardLine(on: List<StudyLesson>, day: Long, today: Long): StudyDayLine? {
+        val shown = if (day < today) on.filter { it.done } else on
+        if (shown.isEmpty()) return null
+        val left = shown.filter { !it.done }
+        val done = shown.size - left.size
+        val mins = left.mapNotNull { it.mins }.sum()
+        val late = if (day == today) left.filter { (it.plannedDay ?: today) < today } else emptyList()
+        val bits = buildList {
+            when {
+                day < today -> add("$done done")
+                left.isEmpty() -> add(if (shown.size == 1) "done" else "all ${shown.size} done")
+                done > 0 -> add("$done of ${shown.size} done")
+                else -> add(plural(left.size, "lesson"))
+            }
+            if (left.isNotEmpty() && mins > 0) add(aboutLabel(mins))
+            if (late.isNotEmpty()) {
+                val from = late.minOf { it.plannedDay ?: today }
+                add("${late.size} from ${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(from) - 1]}")
+            }
+        }
+        val text = "Study · " + bits.joinToString(" · ")
+        val names = (left.ifEmpty { shown }).take(3).joinToString(", ") { it.title }
+        val spoken = text.replace(" · ", ", ") + ": " + names
+        return StudyDayLine(text, spoken, left.size, done, lit = late.isNotEmpty(), courseId = (left.firstOrNull() ?: shown.first()).courseId)
+    }
+
+    /**
+     * The Week board with each day's study line ([boardLine], Meka 2026-10-26 23:21: planned lessons under their day);
+     * the day's screen-reader label says it too. [doneDay] turns a tick's time into its day.
+     */
+    fun onBoard(board: WeekBoard, lessons: List<StudyLesson>, courses: List<StudyCourse>, doneDay: (Long) -> Long): WeekBoard {
+        if (lessons.none { it.plannedDay != null }) return board
+        val today = board.todayEpochDay
+        return board.copy(weeks = board.weeks.map { w ->
+            w.copy(days = w.days.map { d ->
+                val line = boardLine(onDay(lessons, courses, d.epochDay, rollOver = d.epochDay == today, doneDay = doneDay), d.epochDay, today)
+                if (line == null) d else d.copy(study = line, accessibilityLabel = d.accessibilityLabel + ", " + line.spoken)
+            })
+        })
     }
 
     // ---- The plan (slice 2a) ----

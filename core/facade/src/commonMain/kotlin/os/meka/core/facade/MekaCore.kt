@@ -12847,13 +12847,17 @@ class MekaCore(
             // calendars' colours or the minute changes (a new email or a chat's Done no longer rebuilds eight weeks).
             viewMemo.keep(
                 "Week board",
-                listOf(all, boardEvents, boardWork, marks.hidden, boardAgenda, boardGoals, boardWeekGoals, boardBills, minuteNow(), timeZone()),
+                listOf(all, boardEvents, boardWork, marks.hidden, boardAgenda, boardGoals, boardWeekGoals, boardBills, studyLessonsNow, studyCoursesNow, minuteNow(), timeZone()),
             ) {
-                os.meka.core.domain.WeekBoardRules.build(
-                    all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
-                    marks.hidden, boardAgenda::toneOf,
-                    goals = boardGoals, weekGoals = boardWeekGoals,
-                    bills = boardBills,
+                // Plan a lesson for a day: the lessons planned for each day as a "Study · 2 lessons" line under its events.
+                os.meka.core.domain.StudyRules.onBoard(
+                    os.meka.core.domain.WeekBoardRules.build(
+                        all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
+                        marks.hidden, boardAgenda::toneOf,
+                        goals = boardGoals, weekGoals = boardWeekGoals,
+                        bills = boardBills,
+                    ),
+                    studyLessonsNow, studyCoursesNow, studyDoneDay,
                 )
             }
         }

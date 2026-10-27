@@ -1243,6 +1243,9 @@ private fun DayColumn(
                 day.moreLabel?.let { Text(it, style = MekaType.micro, color = Meka.colors.textTertiary) }
             }
         }
+        // Plan a lesson for a day: "Study · 2 lessons · about 1 h" under the day's events (lit when one rolled over);
+        // a tap opens the course on Goals.
+        day.study?.let { StudyNote(it) }
         // Free time shows only while a card is held (unfolded), as the drop targets that block time.
         androidx.compose.animation.AnimatedVisibility(
             visible = showFree && dragging != null && day.freeTimes.isNotEmpty(),
@@ -1282,6 +1285,34 @@ private fun DayColumn(
     }
     }
 }
+
+/**
+ * Plan a lesson for a day: the day's study line, a quiet caption ("Study · 2 lessons · about 1
+ * h"), in the accent when a lesson rolled over. A tap opens its course on Goals (light haptic). Cross-fades as lessons
+ * are ticked (reduced motion: the same fade).
+ */
+@Composable
+private fun StudyNote(line: os.meka.core.domain.StudyDayLine) {
+    val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
+    val haptics = rememberMekaHaptics()
+    androidx.compose.animation.Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "board-study") { l ->
+        Text(
+            os.meka.core.domain.LoneWordGlue.kept(l.text), style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = MekaSpace.xs).fillMaxWidth()
+                .clip(RoundedCornerShape(MekaRadius.s))
+                .clickable(enabled = l.courseId != null, onClickLabel = "Open the course") {
+                    haptics.light()
+                    app?.openStudy?.value = l.courseId
+                    app?.openDestination?.value = os.meka.android.shell.ShellDestination.GOALS
+                }
+                .heightIn(min = 32.dp).padding(vertical = MekaSpace.xxs)
+                .semantics { contentDescription = l.spoken }.testTag(STUDY_NOTE_TAG),
+        )
+    }
+}
+
+internal const val STUDY_NOTE_TAG = "board-study"
 
 /** By hand, slice 8: the lane being drawn is compact (BoardFitRules); trays and the folded page are roomy. */
 internal val LocalBoardCompact = staticCompositionLocalOf { false }
