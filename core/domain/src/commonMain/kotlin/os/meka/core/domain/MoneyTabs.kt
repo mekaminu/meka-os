@@ -21,8 +21,8 @@ enum class MoneySection {
     FORECAST, GOALS, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
     TRADING,
-    // Accounts: his banks, net worth, the side hustle, shared costs, import, the accounts list, delete and the foot.
-    BANK, WORTH, BUSINESS, SHARED_COSTS, IMPORT_STATEMENT, ACCOUNTS, FOOT,
+    // Accounts: his banks, net worth, the side hustle, shared costs, his own categories (slice 3), import, the accounts list, delete and the foot.
+    BANK, WORTH, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, ACCOUNTS, FOOT,
 }
 
 object MoneyTabs {
@@ -44,8 +44,8 @@ object MoneyTabs {
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
         MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
-        MoneySection.BANK, MoneySection.WORTH, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.IMPORT_STATEMENT,
-        MoneySection.ACCOUNTS, MoneySection.FOOT -> MoneyTab.ACCOUNTS
+        MoneySection.BANK, MoneySection.WORTH, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.OWN_CATEGORIES,
+        MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.FOOT -> MoneyTab.ACCOUNTS
     }
 
     /** Whether [v] has anything for section [s]. Import and the foot are always there (Accounts is never empty). */
@@ -72,6 +72,7 @@ object MoneyTabs {
         MoneySection.WORTH -> v.worth != null
         MoneySection.BUSINESS -> v.business != null
         MoneySection.SHARED_COSTS -> v.shared != null
+        MoneySection.OWN_CATEGORIES -> v.ownRows.isNotEmpty()
         MoneySection.IMPORT_STATEMENT, MoneySection.FOOT -> true
         MoneySection.ACCOUNTS -> v.accounts.isNotEmpty()
     }

@@ -95,6 +95,7 @@ import os.meka.core.domain.MoneyRefundRow
 import os.meka.core.domain.MoneyRefunds
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
+import os.meka.core.domain.MoneyOwnCategories
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneySheetMark
@@ -247,6 +248,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         v.month?.txns?.firstOrNull { it.id == id } ?: v.month?.spending?.latest?.firstNotNullOfOrNull { d -> d.rows.firstOrNull { it.id == id } }
     }
     val openSheet: (String) -> Unit = { id -> haptics.tick(); said = null; sheetId = id }
+    // Slice 3: one of his own categories' sheet (Accounts → YOUR CATEGORIES), found again in each view.
+    var ownSheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val ownRow = ownSheetId?.let { id -> v.ownRows.firstOrNull { it.id == id } }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val name = account
@@ -721,6 +725,16 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     onSettle = { scope.launch { runCatching { core.moneySharedSettle() }.getOrNull()?.let(say) } })
             }
         }
+        // Slice 3: YOUR CATEGORIES, the ones he made, each opening its sheet (Accounts).
+        if (has(MoneySection.OWN_CATEGORIES)) {
+            item(key = "own-head") {
+                Text(MoneyOwnCategories.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "own") {
+                OwnCategoriesCard(v.ownRows, Modifier.animateItem().appear(rememberAppearance(4))) { id -> haptics.tick(); said = null; ownSheetId = id }
+            }
+        }
         item(key = "said") {
             val c by animateColorAsState(if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-said")
             Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-said-line") { s ->
@@ -823,6 +837,15 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         onNewCategory = { name, tone, icon ->
             sheetRow?.let { t -> scope.launch { runCatching { core.addMoneyCategory(name, tone, icon.name, t.id) }.getOrNull()?.let(say) } }
         },
+    )
+    OwnCategorySheet(
+        row = ownRow, own = v.ownCategories, said = said,
+        onSave = { name, tone, icon -> ownRow?.let { o -> scope.launch { runCatching { core.editMoneyCategory(o.id, name, tone, icon.name) }.getOrNull()?.let(say) } } },
+        onHide = { on -> ownRow?.let { o -> haptics.tick(); scope.launch { runCatching { core.hideMoneyCategory(o.id, on) }.getOrNull()?.let(say) } } },
+        onMerge = { key -> ownRow?.let { o -> ownSheetId = null; scope.launch { runCatching { core.mergeMoneyCategory(o.id, key) }.getOrNull()?.let(say) } } },
+        onDelete = { ownRow?.let { o -> ownSheetId = null; scope.launch { runCatching { core.deleteMoneyCategory(o.id) }.getOrNull()?.let(say) } } },
+        onUndo = { u -> scope.launch { runCatching { core.undoMoneyCategory(u) }; haptics.light(); said = null } },
+        onClose = { ownSheetId = null },
     )
     }
 }

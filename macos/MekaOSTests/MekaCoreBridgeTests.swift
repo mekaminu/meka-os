@@ -3886,7 +3886,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// His own categories: the Mac draws the same chip, colours and icons as the Fold.
     func testHisOwnCategoriesOnTheMac() {
         let own = MoneyOwnCategories.shared
-        let treats = MoneyOwnCategory(id: own.idFor(name: "Treats"), name: "Treats", tone: 3, icon: MoneyIcon.cup, createdAtMs: 0)
+        let treats = MoneyOwnCategory(id: own.idFor(name: "Treats"), name: "Treats", tone: 3, icon: MoneyIcon.cup, createdAtMs: 0, hidden: false)
         XCTAssertEqual(treats.key, "own:" + treats.id)
         let order = MoneyPaymentSheet.shared.order(use: [:], taught: Set(), own: [treats])
         XCTAssertEqual(order.first, treats.key)
@@ -3898,5 +3898,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(own.clean(raw: "   "))
         XCTAssertEqual(own.ICONS.first?.name, "DOTS")
         XCTAssertEqual(MoneyPaymentSheet.shared.movedLine(merchant: "Corner Shop", label: "Treats", count: 2), "Moved 2 payments from Corner Shop to Treats")
+    }
+
+    /// Slice 3: YOUR CATEGORIES on the Mac's Accounts: the rows, merge targets and Delete's question come from the core.
+    func testHisCategoriesManagedOnTheMac() {
+        let own = MoneyOwnCategories.shared
+        let treats = MoneyOwnCategory(id: "k1", name: "Treats", tone: 3, icon: MoneyIcon.cup, createdAtMs: 0, hidden: true)
+        let rows = own.rows(own: [treats], ownRules: ["CORNER SHOP": "k1"])
+        XCTAssertEqual(rows.first?.line, "1 payee · hidden from the ring")
+        XCTAssertEqual(rows.first?.payees, 1)
+        XCTAssertEqual(own.mergeTargets(own: [treats], id: "k1").first?.label, "Groceries")
+        XCTAssertEqual(own.deleteAsk(name: "Treats", payees: 2), "Delete Treats? Its 2 payees go to Other.")
+        XCTAssertEqual(own.HEAD, "YOUR CATEGORIES")
+        XCTAssertEqual(MoneySection.ownCategories.name, "OWN_CATEGORIES")
     }
 }

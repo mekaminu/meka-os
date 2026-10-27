@@ -467,6 +467,8 @@ data class MoneyView(
     val categoryOrder: List<String> = emptyList(),
     /** His own categories ([MoneyOwnCategories]), oldest first: the sheet's chips, Spending's rows and the New category form. */
     val ownCategories: List<MoneyOwnCategory> = emptyList(),
+    /** Slice 3: YOUR CATEGORIES on Accounts, one row per category of his with its payees ([MoneyOwnCategories.rows]). */
+    val ownRows: List<MoneyOwnRow> = emptyList(),
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -637,7 +639,7 @@ object MoneyRules {
         fun sharedLine(t: MoneyTxn) = MoneySharedLine(t.id, t.day, t.pence, keyOf(t), cat(t))
         val shared = MoneyShared.view(accounts.isNotEmpty(), mine.map { sharedLine(it) }, sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner, today)
         fun isShared(t: MoneyTxn) = MoneyShared.counts(sharedLine(t), sharedTxns, sharedMerchants)
-        if (mine.isEmpty()) return MoneyView(false, EMPTY_SUMMARY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared, ownCategories = own)
+        if (mine.isEmpty()) return MoneyView(false, EMPTY_SUMMARY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared, ownCategories = own, ownRows = MoneyOwnCategories.rows(own, ownRules))
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })
         val shown = (thisMonth - offset.coerceAtLeast(0)).coerceAtLeast(firstMonth)
@@ -786,6 +788,7 @@ object MoneyRules {
                 own,
             ),
             ownCategories = own,
+            ownRows = MoneyOwnCategories.rows(own, ownRules),
         )
     }
 
@@ -834,7 +837,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -1040,8 +1043,10 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         val clean = MoneyOwnCategories.clean(name) ?: return MoneySaved(MoneyOwnCategories.NO_NAME, refused = true)
         MoneyOwnCategories.builtIn(clean)?.let { return MoneySaved(MoneyOwnCategories.alreadyLine(it), refused = true) }
         val t = txnId?.let { id -> txns().firstOrNull { it.id == id } ?: return MoneySaved(MoneyRules.GONE, refused = true) }
-        val id = MoneyOwnCategories.idFor(clean)
-        val existing = replica.entity(EntityTypes.MONEY_CATEGORY, id)?.let { MoneyOwnCategories.read(id, it.fields) }
+        // One he renamed keeps its first id, so look for the name among the live ones first.
+        val live = ownCategories().firstOrNull { MoneyOwnCategories.sameName(it.name, clean) }
+        val id = live?.id ?: MoneyOwnCategories.idFor(clean)
+        val existing = live ?: replica.entity(EntityTypes.MONEY_CATEGORY, id)?.let { MoneyOwnCategories.read(id, it.fields) }
         val made = existing == null
         val c = existing ?: MoneyOwnCategory(id, clean, tone.coerceIn(0, MoneySpending.TONES - 1), icon.takeIf { it in MoneyOwnCategories.ICONS } ?: MoneyIcon.DOTS, nowMs())
         var ruleUndo = ""
@@ -1050,7 +1055,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         replica.batched {
             if (made) replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(
                 MoneyOwnFields.NAME to c.name.fv(), MoneyOwnFields.TONE to c.tone.toLong().fv(), MoneyOwnFields.ICON to c.icon.name.fv(),
-                MoneyOwnFields.CREATED_AT to c.createdAtMs.fv(), MoneyOwnFields.DELETED to false.fv(),
+                MoneyOwnFields.CREATED_AT to c.createdAtMs.fv(), MoneyOwnFields.DELETED to false.fv(), MoneyOwnFields.HIDDEN to false.fv(),
             ))
             if (t != null) {
                 val key = MoneyCategoryRules.merchantKey(t.text)
@@ -1066,6 +1071,57 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         else merchant?.let { MoneyPaymentSheet.movedLine(it, c.name, count) } ?: "${c.name} is already yours"
         return MoneySaved(line, undo = OWN_UNDO + id + "|" + (if (made) "1" else "0") + "|" + ruleUndo)
     }
+
+    private fun ownLiveOf(id: String): MoneyOwnCategory? =
+        replica.entity(EntityTypes.MONEY_CATEGORY, id)?.let { MoneyOwnCategories.read(id, it.fields) }
+
+    /**
+     * Slice 3: renames [id] and changes its colour and icon, on both devices. A built-in name, or the name of another of
+     * his, is refused. Undo by [undoCategory] puts the old name, colour and icon back.
+     */
+    fun editOwnCategory(id: String, name: String, tone: Int, icon: MoneyIcon): MoneySaved {
+        val c = ownLiveOf(id) ?: return MoneySaved(MoneyOwnCategories.GONE, refused = true)
+        val clean = MoneyOwnCategories.clean(name) ?: return MoneySaved(MoneyOwnCategories.NO_NAME, refused = true)
+        MoneyOwnCategories.builtIn(clean)?.let { return MoneySaved("${it.label} is already a category", refused = true) }
+        ownCategories().firstOrNull { it.id != id && MoneyOwnCategories.sameName(it.name, clean) }
+            ?.let { return MoneySaved(MoneyOwnCategories.takenLine(it.name), refused = true) }
+        val t = tone.coerceIn(0, MoneySpending.TONES - 1)
+        val i = icon.takeIf { it in MoneyOwnCategories.ICONS } ?: MoneyIcon.DOTS
+        replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(
+            MoneyOwnFields.NAME to clean.fv(), MoneyOwnFields.TONE to t.toLong().fv(), MoneyOwnFields.ICON to i.name.fv(),
+        ))
+        return MoneySaved(MoneyOwnCategories.renamedLine(c.name, clean), undo = "$OWN_EDIT_UNDO$id|${c.tone}|${c.icon.name}|${c.name}")
+    }
+
+    /** Slice 3: hides [id] from Spending's ring (its slice drawn quiet, like Other) or shows it again. Undo flips it back. */
+    fun hideOwnCategory(id: String, hidden: Boolean): MoneySaved {
+        val c = ownLiveOf(id) ?: return MoneySaved(MoneyOwnCategories.GONE, refused = true)
+        replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(MoneyOwnFields.HIDDEN to hidden.fv()))
+        return MoneySaved(MoneyOwnCategories.hiddenLine(c.name, hidden), undo = "$OWN_HIDE_UNDO$id|${if (c.hidden) "1" else "0"}")
+    }
+
+    /**
+     * Slice 3: merges [id] into [intoKey] (a built-in spending category, or another of his own): its payees move there,
+     * past and future, and [id] goes. [MoneyCategory.OTHER] is Delete. Undo brings the category and its payees back.
+     */
+    fun mergeOwnCategory(id: String, intoKey: String): MoneySaved {
+        val c = ownLiveOf(id) ?: return MoneySaved(MoneyOwnCategories.GONE, refused = true)
+        val intoLabel = MoneyCategory.of(intoKey)?.takeIf { it.spend }?.label
+            ?: MoneyOwnCategories.idOf(intoKey)?.takeIf { it != id }?.let { ownLiveOf(it) }?.name
+            ?: return MoneySaved(MoneyOwnCategories.GONE, refused = true)
+        val mine = c.key
+        val moved = replica.entities(EntityTypes.MONEY_RULE).filter { it[MoneyRuleFields.CATEGORY].textOrNull == mine }.map { it.ref.entityId }
+        replica.batched {
+            moved.forEach { replica.commitLocal(EntityTypes.MONEY_RULE, it, mapOf(MoneyRuleFields.CATEGORY to intoKey.fv())) }
+            replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(MoneyOwnFields.DELETED to true.fv()))
+        }
+        val line = if (intoKey == MoneyCategory.OTHER.key) MoneyOwnCategories.deletedLine(c.name, moved.size)
+        else MoneyOwnCategories.mergedLine(c.name, intoLabel, moved.size)
+        return MoneySaved(line, undo = "$OWN_MOVE_UNDO$id|${moved.joinToString(",")}")
+    }
+
+    /** Slice 3: deletes [id]; its payees go to Other (past and future). Undo brings it back with its payees. */
+    fun deleteOwnCategory(id: String): MoneySaved = mergeOwnCategory(id, MoneyCategory.OTHER.key)
 
     /** Slice 13: the accounts he marked as his side hustle's. */
     fun businessAccounts(): Set<String> = replica.entities(EntityTypes.MONEY_ACCOUNT)
@@ -1327,6 +1383,39 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(OWN_EDIT_UNDO)) {
+            val parts = token.removePrefix(OWN_EDIT_UNDO).split('|', limit = 4)
+            val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
+            if (replica.entity(EntityTypes.MONEY_CATEGORY, id) == null) return false
+            val name = parts.getOrNull(3)?.let { MoneyOwnCategories.clean(it) } ?: return false
+            replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(
+                MoneyOwnFields.NAME to name.fv(), MoneyOwnFields.TONE to (parts.getOrNull(1)?.toLongOrNull() ?: 0L).fv(),
+                MoneyOwnFields.ICON to (parts.getOrNull(2) ?: MoneyIcon.DOTS.name).fv(),
+            ))
+            return true
+        }
+        if (token.startsWith(OWN_HIDE_UNDO)) {
+            val parts = token.removePrefix(OWN_HIDE_UNDO).split('|')
+            val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
+            if (replica.entity(EntityTypes.MONEY_CATEGORY, id) == null) return false
+            replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(MoneyOwnFields.HIDDEN to (parts.getOrNull(1) == "1").fv()))
+            return true
+        }
+        if (token.startsWith(OWN_MOVE_UNDO)) {
+            val parts = token.removePrefix(OWN_MOVE_UNDO).split('|')
+            val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
+            if (replica.entity(EntityTypes.MONEY_CATEGORY, id) == null) return false
+            val key = MoneyOwnCategories.PREFIX + id
+            replica.batched {
+                replica.commitLocal(EntityTypes.MONEY_CATEGORY, id, mapOf(MoneyOwnFields.DELETED to false.fv()))
+                parts.getOrNull(1).orEmpty().split(',').filter { it.isNotEmpty() }.forEach { rid ->
+                    if (replica.entity(EntityTypes.MONEY_RULE, rid) != null) {
+                        replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.CATEGORY to key.fv()))
+                    }
+                }
+            }
+            return true
+        }
         if (token.startsWith(OWN_UNDO)) {
             val parts = token.removePrefix(OWN_UNDO).split('|')
             val id = parts.getOrNull(0)?.takeIf { it.isNotEmpty() } ?: return false
@@ -1500,7 +1589,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             replica.entities(EntityTypes.MONEY_CATEGORY, includeDeleted = true).forEach {
                 replica.commitLocal(EntityTypes.MONEY_CATEGORY, it.ref.entityId, mapOf(
                     MoneyOwnFields.DELETED to true.fv(), MoneyOwnFields.NAME to FieldValue.Null, MoneyOwnFields.TONE to FieldValue.Null,
-                    MoneyOwnFields.ICON to FieldValue.Null, MoneyOwnFields.CREATED_AT to FieldValue.Null,
+                    MoneyOwnFields.ICON to FieldValue.Null, MoneyOwnFields.CREATED_AT to FieldValue.Null, MoneyOwnFields.HIDDEN to FieldValue.Null,
                 ))
             }
             rules.forEach {

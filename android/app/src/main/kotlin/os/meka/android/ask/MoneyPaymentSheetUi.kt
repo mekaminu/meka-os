@@ -184,14 +184,19 @@ internal fun PaymentSheet(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun NewCategoryForm(own: List<MoneyOwnCategory>, onCreate: (String, Int, MoneyIcon) -> Unit, onCancel: () -> Unit) {
+internal fun NewCategoryForm(
+    own: List<MoneyOwnCategory>, onCreate: (String, Int, MoneyIcon) -> Unit, onCancel: () -> Unit,
+    // Slice 3: the same form edits one of his (Accounts → YOUR CATEGORIES), starting from its name, colour and icon.
+    title: String = MoneyOwnCategories.TITLE, action: String = MoneyOwnCategories.CREATE,
+    startName: String = "", startTone: Int = MoneyOwnCategories.nextTone(own), startIcon: MoneyIcon = MoneyIcon.DOTS,
+) {
     val haptics = rememberMekaHaptics()
-    var name by rememberSaveable { mutableStateOf("") }
-    var tone by rememberSaveable { mutableStateOf(MoneyOwnCategories.nextTone(own)) }
-    var icon by rememberSaveable { mutableStateOf(MoneyIcon.DOTS) }
+    var name by rememberSaveable(startName) { mutableStateOf(startName) }
+    var tone by rememberSaveable(startTone) { mutableStateOf(startTone) }
+    var icon by rememberSaveable(startIcon) { mutableStateOf(startIcon) }
     val create = { MoneyOwnCategories.clean(name)?.let { onCreate(it, tone, icon) } }
     Column(Modifier.fillMaxWidth().testTag("money-new-category"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(MoneyOwnCategories.TITLE, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
+        Text(title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
         Field(
             MoneyOwnCategories.NAME_HINT, value = name, onValue = { name = it.take(MoneyOwnCategories.MAX_NAME) },
             modifier = Modifier.testTag("money-new-name"),
@@ -240,7 +245,7 @@ private fun NewCategoryForm(own: List<MoneyOwnCategory>, onCreate: (String, Int,
                     .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs).testTag("money-new-create"),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(MoneyOwnCategories.CREATE, style = MekaType.metaStrong, color = if (ready) Meka.colors.onAccent else Meka.colors.textTertiary)
+                Text(action, style = MekaType.metaStrong, color = if (ready) Meka.colors.onAccent else Meka.colors.textTertiary)
             }
         }
     }

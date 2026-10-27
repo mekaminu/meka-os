@@ -4,6 +4,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.LifeTile
 import os.meka.core.domain.MoneyRules
+import os.meka.core.domain.MoneySection
+import os.meka.core.domain.MoneyTab
+import os.meka.core.domain.MoneyTabs
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.SyncService
@@ -172,6 +175,34 @@ class MoneyFacadeTest {
         mac.moneyStep(0)
         assertEquals(listOf("Groceries", "Coffee"), mac.moneyView.value.month!!.categories.map { it.label })
         assertTrue(mac.moneyView.value.ownCategories.isEmpty())
+    }
+
+    @Test
+    fun hisCategoriesAreRenamedHiddenAndDeletedFromAccountsOnBothDevices() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.deleteMoneyCategory("knope").refused)
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        val costa = fold.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        fold.addMoneyCategory("Treats", 2, "CUP", costa.id)
+        val row = fold.moneyView.value.ownRows.single()
+        assertEquals("1 payee", row.line)
+        assertTrue(MoneyTabs.shows(MoneyTab.ACCOUNTS, MoneySection.OWN_CATEGORIES, fold.moneyView.value))
+        assertEquals("Renamed Treats to Snacks", fold.editMoneyCategory(row.id, "Snacks", 4, "GIFT").line)
+        assertEquals("Snacks", fold.moneyView.value.ownRows.single().name)
+        assertEquals("Snacks is hidden from the ring", fold.hideMoneyCategory(row.id, true).line)
+        assertEquals("1 payee · hidden from the ring", fold.moneyView.value.ownRows.single().line)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals(listOf("Snacks"), mac.moneyView.value.ownRows.map { it.name })
+        assertTrue(mac.moneyView.value.ownRows.single().hidden)
+        val gone = mac.deleteMoneyCategory(row.id)
+        assertEquals("Deleted Snacks · its payee is in Other", gone.line)
+        assertTrue(mac.moneyView.value.ownRows.isEmpty())
+        assertEquals("Other", mac.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }.categoryLabel)
+        assertTrue(mac.undoMoneyCategory(gone.undo!!))
+        assertEquals("Snacks", mac.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }.categoryLabel)
     }
 
     @Test

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -36,6 +37,8 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.MoneyTab
+import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 
@@ -190,5 +193,47 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(shows("money-sheet-cat-${own.key}"), "no chip for his new category")
         assertTrue(shows("money-sheet-undo"), "no Undo after making it")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-new-category-made"))
+    }
+
+    private fun waitFor(core: MekaCore, done: () -> Boolean) {
+        var i = 0
+        while (!done() && i++ < 80) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        settle()
+    }
+
+    /** Slice 3: Accounts → YOUR CATEGORIES; a tap opens the category's sheet: edit, hide from the ring, merge, delete. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun hisCategoriesAreManagedFromAccounts() {
+        val core = open(ThemeChoice.DARK)
+        val costa = core.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        runBlocking { check(!core.addMoneyCategory("Treats", 3, "CUP", costa.id).refused) }
+        settle()
+        compose.onNodeWithContentDescription(MoneyTabs.spoken(MoneyTab.ACCOUNTS, false)).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        val own = core.moneyView.value.ownRows.single()
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-own-card"))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        assertTrue(shows("money-own-${own.id}"), "no row for his category on Accounts")
+        tap("money-own-${own.id}")
+        assertTrue(shows("money-own-sheet"), "the category's sheet didn't open")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-own-category"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-own-category")
+        tap("money-own-hide")
+        waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.hidden == true }
+        assertTrue(core.moneyView.value.ownRows.single().hidden, "Hide from the ring didn't land")
+        tap("money-own-delete")
+        assertTrue(shows("money-own-delete-yes"), "Delete didn't ask first")
+        tap("money-own-delete-yes")
+        waitFor(core) { core.moneyView.value.ownRows.isEmpty() }
+        assertTrue(core.moneyView.value.ownRows.isEmpty(), "the category wasn't deleted")
+        assertEquals("Other", core.moneyView.value.month!!.txns.first { it.id == costa.id }.categoryLabel)
+        if (shows("money-own-sheet")) fail("the sheet stayed open after Delete")
     }
 }

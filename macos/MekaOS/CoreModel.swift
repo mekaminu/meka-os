@@ -4645,6 +4645,50 @@ final class CoreModel {
         }
     }
 
+    /// His own categories, slice 3 (Accounts → YOUR CATEGORIES): rename and recolour one (Undo with `undoMoneyCategory`).
+    func editMoneyCategory(id: String, name: String, tone: Int32, icon: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.editMoneyCategory(id: id, name: name, tone: tone, icon: icon))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 3: hide one from Spending's ring (quiet, like Other) or show it again.
+    func hideMoneyCategory(id: String, hidden: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.hideMoneyCategory(id: id, hidden: hidden))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 3: merge one into another category (a built-in key or `own:<id>`); its payees move there.
+    func mergeMoneyCategory(id: String, intoKey: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.mergeMoneyCategory(id: id, intoKey: intoKey))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 3: delete one; its payees go to Other (Undo brings them back).
+    func deleteMoneyCategory(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.deleteMoneyCategory(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Money as drawn: the core's view with the payment chips still on their way (taps feel instant).
     private func showMoneyView() {
         guard let coreMoney else { money = nil; return }

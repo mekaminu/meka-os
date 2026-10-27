@@ -21,13 +21,31 @@ object MoneyOwnFields {
     const val ICON = "icon"
     const val CREATED_AT = "createdAtMs"
     const val DELETED = "deleted"
+    /** Slice 3 (2026-10-27, additive): drawn quiet on Spending's ring, like Other, instead of in its own colour. */
+    const val HIDDEN = "hidden"
 }
 
 /** One of his own categories: [id] (`k<hash>`), [name] ("Vape"), [tone] its colour in the ring, [icon]. */
-data class MoneyOwnCategory(val id: String, val name: String, val tone: Int, val icon: MoneyIcon, val createdAtMs: Long = 0L) {
+data class MoneyOwnCategory(
+    val id: String, val name: String, val tone: Int, val icon: MoneyIcon, val createdAtMs: Long = 0L,
+    /** Hidden from the ring ([MoneyOwnFields.HIDDEN]): its slice is quiet; its row and chip stay. */
+    val hidden: Boolean = false,
+) {
     /** Its key wherever a category key goes (chips, rows, rules): `own:<id>`. */
     val key: String get() = MoneyOwnCategories.PREFIX + id
 }
+
+/**
+ * A row of YOUR CATEGORIES on Money → Accounts (slice 3): [line] "2 payees · hidden from the ring"; a tap opens its sheet
+ * (rename, colour and icon, merge into another, hide from the ring, delete).
+ */
+data class MoneyOwnRow(
+    val id: String, val key: String, val name: String, val tone: Int, val icon: MoneyIcon, val hidden: Boolean,
+    val payees: Int, val line: String, val spoken: String,
+)
+
+/** A category his own can be merged into: [key] (built-in, or `own:<id>`) and its [label]. */
+data class MoneyOwnTarget(val key: String, val label: String)
 
 /** A colour to pick on the New category form: its [tone] and how a screen reader names it. */
 data class MoneyOwnTone(val tone: Int, val name: String)
@@ -44,6 +62,19 @@ object MoneyOwnCategories {
     const val CANCEL = "Cancel"
     const val CREATE = "Create"
     const val NO_NAME = "Give it a name first"
+
+    // Slice 3 (Meka 2026-10-26 23:18, (3)): his categories are managed in Money → Accounts.
+    const val HEAD = "YOUR CATEGORIES"
+    const val EDIT_TITLE = "Edit category"
+    const val SAVE = "Save"
+    const val MERGE_LABEL = "MERGE INTO"
+    const val MERGE_HINT = "Its payees move there, past and future, and this one goes."
+    const val HIDE = "Hide from the ring"
+    const val DELETE = "Delete category"
+    const val DELETE_YES = "Delete"
+    const val KEEP = "Keep it"
+    const val DONE = "Done"
+    const val GONE = "That category has gone"
 
     /** The icons he can pick from (the money set's, drawn on both apps already). */
     val ICONS: List<MoneyIcon> = listOf(
@@ -81,6 +112,9 @@ object MoneyOwnCategories {
     /** The id for a name: the same name on both devices is the same category ("vape", "Vape " → one). */
     fun idFor(name: String): String = "k" + ActivityRules.fnv64("moneycat:" + fold(name))
 
+    /** Whether [a] and [b] are the same name to him ("vape", "Vape ") . */
+    fun sameName(a: String, b: String): Boolean = fold(a) == fold(b)
+
     private fun fold(name: String): String = name.trim().lowercase().replace(Regex("\\s+"), " ")
 
     /** [raw] tidied: spaces collapsed, at most [MAX_NAME] characters; null when nothing is left. */
@@ -102,8 +136,52 @@ object MoneyOwnCategories {
         val tone = ((fields[MoneyOwnFields.TONE] as? FieldValue.Int64)?.value ?: 0L).toInt().coerceIn(0, MoneySpending.TONES - 1)
         val icon = (fields[MoneyOwnFields.ICON] as? FieldValue.Text)?.value?.let { n -> ICONS.firstOrNull { it.name == n } } ?: MoneyIcon.DOTS
         val at = (fields[MoneyOwnFields.CREATED_AT] as? FieldValue.Int64)?.value ?: 0L
-        return MoneyOwnCategory(id, name, tone, icon, at)
+        val hidden = (fields[MoneyOwnFields.HIDDEN] as? FieldValue.Bool)?.value == true
+        return MoneyOwnCategory(id, name, tone, icon, at, hidden)
     }
+
+    /** "2 payees · hidden from the ring", "No payees yet". */
+    fun line(payees: Int, hidden: Boolean): String = listOfNotNull(
+        when (payees) { 0 -> "No payees yet"; 1 -> "1 payee"; else -> "$payees payees" },
+        "hidden from the ring".takeIf { hidden },
+    ).joinToString(" · ")
+
+    /** YOUR CATEGORIES' rows, in [own]'s order, each with how many payees [ownRules] put in it. */
+    fun rows(own: List<MoneyOwnCategory>, ownRules: Map<String, String>): List<MoneyOwnRow> {
+        val counts = ownRules.values.groupingBy { it }.eachCount()
+        return own.map { c ->
+            val n = counts[c.id] ?: 0
+            val l = line(n, c.hidden)
+            MoneyOwnRow(c.id, c.key, c.name, c.tone, c.icon, c.hidden, n, l, "${c.name}, $l, opens its settings")
+        }
+    }
+
+    /** Where [id] can be merged: his other categories first, then the built-in spending ones (Other is Delete). */
+    fun mergeTargets(own: List<MoneyOwnCategory>, id: String): List<MoneyOwnTarget> =
+        own.filter { it.id != id }.map { MoneyOwnTarget(it.key, it.name) } +
+            MoneyCategory.entries.filter { it.spend && it != MoneyCategory.OTHER }.map { MoneyOwnTarget(it.key, it.label) }
+
+    /** "Delete Vape? Its 2 payees go to Other." */
+    fun deleteAsk(name: String, payees: Int): String = when (payees) {
+        0 -> "Delete $name?"
+        1 -> "Delete $name? Its payee goes to Other."
+        else -> "Delete $name? Its $payees payees go to Other."
+    }
+
+    fun renamedLine(old: String, name: String): String = if (old == name) "Saved $name" else "Renamed $old to $name"
+    fun hiddenLine(name: String, hidden: Boolean): String =
+        if (hidden) "$name is hidden from the ring" else "$name shows in the ring again"
+    fun mergedLine(name: String, into: String, payees: Int): String = when (payees) {
+        0 -> "Merged $name into $into"
+        1 -> "Merged $name into $into · 1 payee moved"
+        else -> "Merged $name into $into · $payees payees moved"
+    }
+    fun deletedLine(name: String, payees: Int): String = when (payees) {
+        0 -> "Deleted $name"
+        1 -> "Deleted $name · its payee is in Other"
+        else -> "Deleted $name · its $payees payees are in Other"
+    }
+    fun takenLine(name: String): String = "You already have $name"
 
     /** "Made Vape · moved 14 payments from News ON The", or "Made Vape · News ON The is Vape from now on". */
     fun madeLine(name: String, merchant: String?, count: Int): String = when {

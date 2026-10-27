@@ -50,8 +50,8 @@ data class MoneySpendCat(
 ) {
     val key: String get() = own?.key ?: category.key
     val label: String get() = own?.name ?: category.label
-    /** Other is always quiet; his own categories never are. */
-    val quiet: Boolean get() = own == null && category == MoneyCategory.OTHER
+    /** Other is always quiet, as is one of his own he hid from the ring (slice 3); the rest of his never are. */
+    val quiet: Boolean get() = if (own != null) own.hidden else category == MoneyCategory.OTHER
     /** Ties go in the usual order, his own after the built-in ones. */
     val order: Int get() = if (own != null) MoneyCategory.entries.size else category.ordinal
 }
@@ -145,13 +145,13 @@ object MoneySpending {
         // Colours go to the biggest categories in turn; Other is always quiet, as is everything past the palette. His own
         // categories wear the colour he picked, and the rest skip it so two slices never share one.
         val tones = HashMap<String, Int>()
-        val picked = sorted.mapNotNullTo(HashSet()) { it.own?.tone }
+        val picked = sorted.mapNotNullTo(HashSet()) { it.own?.takeIf { o -> !o.hidden }?.tone }
         var next = 0
         sorted.forEach { c ->
             val o = c.own
             tones[c.key] = when {
-                o != null -> o.tone
                 c.quiet -> REST
+                o != null -> o.tone
                 else -> {
                     while (next in picked) next++
                     if (next >= TONES) REST else next++

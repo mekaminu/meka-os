@@ -168,4 +168,88 @@ class MoneyOwnCategoriesTest {
         val v = view(m)
         assertEquals("other", v.month!!.txns.first { it.merchant == "Corner News" }.category)
     }
+
+    @Test
+    fun renameKeepsItsPayeesAndRefusesTakenNames() {
+        val m = money()
+        val news = m.txns().first { it.text == "CORNER NEWS" }
+        m.addOwnCategory("Vape", 0, MoneyIcon.BAG, news.id)
+        m.addOwnCategory("Treats", 1, MoneyIcon.CUP, null)
+        val vape = m.ownCategories().first { it.name == "Vape" }
+        assertEquals("You already have Treats", m.editOwnCategory(vape.id, " treats ", 2, MoneyIcon.GIFT).line)
+        assertTrue(m.editOwnCategory(vape.id, "Groceries", 2, MoneyIcon.GIFT).refused)
+        assertTrue(m.editOwnCategory(vape.id, " ", 2, MoneyIcon.GIFT).refused)
+        val saved = m.editOwnCategory(vape.id, "Smokes", 5, MoneyIcon.GIFT)
+        assertEquals("Renamed Vape to Smokes", saved.line)
+        val now = m.ownCategories().first { it.id == vape.id }
+        assertEquals("Smokes" to 5, now.name to now.tone)
+        assertEquals(MoneyIcon.GIFT, now.icon)
+        assertEquals(vape.id, m.ownRules()["CORNER NEWS"])
+        // Making "Smokes" again from a sheet finds the renamed one, not a second.
+        m.addOwnCategory("smokes", 3, MoneyIcon.BAG, m.txns().first { it.text == "MYSTERY LTD" }.id)
+        assertEquals(2, m.ownCategories().size)
+        assertEquals(listOf(vape.id, vape.id), m.ownRules().values.toList())
+        // Undo puts the old name, colour and icon back.
+        assertTrue(m.undoCategory(saved.undo!!))
+        val back = m.ownCategories().first { it.id == vape.id }
+        assertEquals(MoneyOwnCategory(vape.id, "Vape", 0, MoneyIcon.BAG, vape.createdAtMs), back)
+        val rows = MoneyOwnCategories.rows(m.ownCategories(), m.ownRules())
+        assertEquals(listOf("Treats" to "No payees yet", "Vape" to "2 payees"), rows.map { it.name to it.line })
+    }
+
+    @Test
+    fun aHiddenCategoryIsQuietInTheRing() {
+        val m = money()
+        val news = m.txns().first { it.text == "CORNER NEWS" }
+        m.addOwnCategory("Vape", 3, MoneyIcon.CUP, news.id)
+        val id = m.ownCategories().single().id
+        val shown = view(m).month!!.spending!!
+        assertEquals(3, shown.rows.first { it.label == "Vape" }.tone)
+        val hid = m.hideOwnCategory(id, true)
+        assertEquals("Vape is hidden from the ring", hid.line)
+        assertTrue(m.ownCategories().single().hidden)
+        val quiet = view(m).month!!.spending!!
+        assertEquals(MoneySpending.REST, quiet.rows.first { it.label == "Vape" }.tone)
+        assertEquals("1 payee · hidden from the ring", view(m).ownRows.single().line)
+        assertTrue(m.undoCategory(hid.undo!!))
+        assertFalse(m.ownCategories().single().hidden)
+    }
+
+    @Test
+    fun mergeAndDeleteMoveThePayeesAndUndoBringsThemBack() {
+        val m = money()
+        val news = m.txns().first { it.text == "CORNER NEWS" }
+        m.addOwnCategory("Vape", 0, MoneyIcon.BAG, news.id)
+        m.addOwnCategory("Treats", 1, MoneyIcon.CUP, m.txns().first { it.text == "MYSTERY LTD" }.id)
+        val vape = m.ownCategories().first { it.name == "Vape" }
+        val treats = m.ownCategories().first { it.name == "Treats" }
+        // Targets: his others first, then the built-in spending ones, never Other, Income or itself.
+        val targets = MoneyOwnCategories.mergeTargets(m.ownCategories(), vape.id)
+        assertEquals(treats.key, targets.first().key)
+        assertTrue(targets.none { it.key == vape.key || it.key == "other" || it.key == "income" })
+        val merged = m.mergeOwnCategory(vape.id, treats.key)
+        assertEquals("Merged Vape into Treats · 1 payee moved", merged.line)
+        assertEquals(listOf("Treats"), m.ownCategories().map { it.name })
+        assertEquals(treats.id, m.ownRules()["CORNER NEWS"])
+        assertTrue(m.undoCategory(merged.undo!!))
+        assertEquals(vape.id, m.ownRules()["CORNER NEWS"])
+        // Into a built-in category.
+        val toShop = m.mergeOwnCategory(vape.id, "shopping")
+        assertEquals("Merged Vape into Shopping · 1 payee moved", toShop.line)
+        assertEquals(MoneyCategory.SHOPPING, m.rules()["CORNER NEWS"])
+        assertTrue(m.undoCategory(toShop.undo!!))
+        // Delete: payees to Other, past and future, with Undo.
+        assertEquals("Delete Vape? Its payee goes to Other.", MoneyOwnCategories.deleteAsk("Vape", 1))
+        val gone = m.deleteOwnCategory(vape.id)
+        assertEquals("Deleted Vape · its payee is in Other", gone.line)
+        assertEquals(MoneyCategory.OTHER, m.rules()["CORNER NEWS"])
+        assertNull(m.ownRules()["CORNER NEWS"])
+        assertEquals("Other", view(m).month!!.txns.first { it.merchant == "Corner News" }.categoryLabel)
+        assertTrue(m.undoCategory(gone.undo!!))
+        assertEquals(vape.id, m.ownRules()["CORNER NEWS"])
+        // Refusals: gone, into itself, into Income.
+        assertTrue(m.mergeOwnCategory("knope", "shopping").refused)
+        assertTrue(m.mergeOwnCategory(vape.id, vape.key).refused)
+        assertTrue(m.mergeOwnCategory(vape.id, "income").refused)
+    }
 }

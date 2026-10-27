@@ -902,6 +902,31 @@ class MekaCore(
         money.addOwnCategory(name, tone, i, txnId).also { refreshMoney() }
     }
 
+    /** Money, his own categories, slice 3: renames [id] and sets its colour [tone] 0–6 and [icon] (by name). Undo by [undoMoneyCategory]. */
+    suspend fun editMoneyCategory(id: String, name: String, tone: Int, icon: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val i = os.meka.core.domain.MoneyOwnCategories.ICONS.firstOrNull { it.name == icon } ?: os.meka.core.domain.MoneyIcon.DOTS
+        money.editOwnCategory(id, name, tone, i).also { refreshMoney() }
+    }
+
+    /** Slice 3: hides [id] from Spending's ring (quiet, like Other) or shows it again. Undo by [undoMoneyCategory]. */
+    suspend fun hideMoneyCategory(id: String, hidden: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        money.hideOwnCategory(id, hidden).also { refreshMoney() }
+    }
+
+    /** Slice 3: merges [id] into [intoKey] (a built-in key or `own:<id>`); its payees move there. Undo by [undoMoneyCategory]. */
+    suspend fun mergeMoneyCategory(id: String, intoKey: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        money.mergeOwnCategory(id, intoKey).also { refreshMoney() }
+    }
+
+    /** Slice 3: deletes [id]; its payees go to Other. Undo by [undoMoneyCategory]. */
+    suspend fun deleteMoneyCategory(id: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        money.deleteOwnCategory(id).also { refreshMoney() }
+    }
+
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
         if (!moneyOpen) return@onCore false
         if (token.startsWith(os.meka.core.domain.TradingTracker.UNDO)) return@onCore trading.undo(token).also { refreshMoney() }
