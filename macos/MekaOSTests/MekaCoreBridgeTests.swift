@@ -3964,7 +3964,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// Money review, Bills: a card's one row and Until payday's line cross the bridge; the offers live on Accounts.
     func testMoneyBillsRowsOnTheMac() {
         let row = MoneyCards.shared.row(c: MoneyCard(id: "c1", name: "Platinum Card", kind: MoneyCards.shared.CREDIT, limitPence: nil, statementPence: nil,
-            minPence: nil, dueDayOfMonth: nil, promoEndDay: nil, paidFor: nil), today: 20000, lines: [])
+            minPence: nil, dueDayOfMonth: nil, promoEndDay: nil, paidFor: nil, aprBp: nil), today: 20000, lines: [])
         let b = MoneyCards.shared.brief(c: row)
         XCTAssertEqual(b.line, MoneyCards.shared.ADD_DETAILS)
         XCTAssertNil(b.amount)
@@ -3979,7 +3979,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: nil)],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
-            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil)
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files)
         let items = MoneyAccountList.shared.items(v: v)
         XCTAssertEqual(items.map { $0.name }, ["Oakbank saver"])
         XCTAssertEqual(items.first?.amount, MoneyAccountList.shared.ADD_BALANCE)
@@ -3996,7 +3996,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: "Rainy day")],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
-            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil)
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files)
         XCTAssertEqual(MoneyAccountList.shared.items(v: v).map { $0.name }, ["Rainy day"])
         let sheet = MoneyAccountList.shared.sheet(v: v, id: "a1")
         XCTAssertEqual(sheet?.title, "Rainy day")
