@@ -1315,6 +1315,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         let shown = InstantTaskRules.shared.tomorrow(rows: [task, event], taps: ["gym": TaskMove.dayAfter])
         XCTAssertEqual(shown.map(\.id), ["e-1"])
         XCTAssertEqual(InstantTaskRules.shared.what(move: TaskMove.today), "Today")
+        // Tomorrow on Today, slice 3: the sheet's editor finds nothing once the task isn't tomorrow's; the Fold's swipe rule.
+        XCTAssertNil(ShutdownRules.shared.taskOf(p: ShutdownView.companion.EMPTY.tomorrow, taskId: "gym"))
+        XCTAssertTrue(ShutdownRules.shared.swipePages(dragDp: -80, velocityDp: 0, widthDp: 360, toTomorrow: true))
+        XCTAssertFalse(ShutdownRules.shared.swipePages(dragDp: 80, velocityDp: 0, widthDp: 360, toTomorrow: true))
     }
 
     /// Morning brief read aloud: every headline shown is read ("From BBC Sport: …"), and a long read keeps MEKA's voice.

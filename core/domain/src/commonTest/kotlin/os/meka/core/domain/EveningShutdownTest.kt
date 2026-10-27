@@ -411,6 +411,49 @@ class EveningShutdownTest {
         assertEquals("Day after", InstantTaskRules.what(TaskMove.DAY_AFTER))
     }
 
+    @Test
+    fun aTaskInTheTomorrowSheetOpensForEditingAndFollowsEachEdit() {
+        // Tomorrow on Today, slice 3 (Meka 2026-10-26: tick, move "and edit" from the sheet).
+        val day = today()
+        val gym = ta.create(NewTask("Gym", scheduledAtMs = at(day + 1, 7, 40)))
+        val ring = ta.create(NewTask("Ring the school"))
+        ta.setWhen(ring, day + 1, null)
+        ta.create(NewTask("Left today"))
+        val p = view().tomorrow
+        assertEquals(setOf(gym, ring), p.tasks.map { it.id }.toSet())
+        assertEquals("Gym", ShutdownRules.taskOf(p, gym)?.title)
+        assertNull(ShutdownRules.taskOf(p, null))
+        // An edit shows in the open editor and on its row.
+        ta.edit(gym, TaskEdit(title = "Gym, legs"))
+        val renamed = view().tomorrow
+        assertEquals("Gym, legs", ShutdownRules.taskOf(renamed, gym)?.title)
+        assertEquals("Gym, legs", renamed.rows.first().title)
+        // Moved to another day (or done), it's no longer tomorrow's and the editor closes.
+        ta.setWhen(ring, day + 3, null)
+        assertNull(ShutdownRules.taskOf(view().tomorrow, ring))
+        ta.complete(gym)
+        assertNull(ShutdownRules.taskOf(view().tomorrow, gym))
+    }
+
+    @Test
+    fun aSidewaysSwipePagesToTomorrowAndBackOnlyWhenItMeansIt() {
+        val phone = 360f
+        val fold = 840f
+        // Left on Today pages to Tomorrow; right on the sheet back to Today.
+        assertTrue(ShutdownRules.swipePages(-80f, 0f, phone, toTomorrow = true))
+        assertTrue(ShutdownRules.swipePages(80f, 0f, phone, toTomorrow = false))
+        // The wrong way never pages, however far.
+        assertFalse(ShutdownRules.swipePages(300f, 2000f, phone, toTomorrow = true))
+        assertFalse(ShutdownRules.swipePages(-300f, -2000f, phone, toTomorrow = false))
+        // A nudge doesn't; on the open Fold it takes a fifth of the width (168 dp).
+        assertFalse(ShutdownRules.swipePages(-40f, -100f, phone, toTomorrow = true))
+        assertFalse(ShutdownRules.swipePages(-120f, 0f, fold, toTomorrow = true))
+        assertTrue(ShutdownRules.swipePages(-170f, 0f, fold, toTomorrow = true))
+        // A quick flick pages once it has moved a little.
+        assertTrue(ShutdownRules.swipePages(-30f, -900f, fold, toTomorrow = true))
+        assertFalse(ShutdownRules.swipePages(-10f, -900f, fold, toTomorrow = true))
+    }
+
     private fun bill(id: String, title: String, due: Long, pence: Long?, cancelBy: Long? = null) = RenewalItem(
         id = id, title = title, kind = ObligationKind.BILL, subject = null, notes = null, dueDay = due, cancelByDay = cancelBy,
         leadDays = 3, costPence = pence, repeats = RenewalRepeat.MONTHLY, repeatLabel = "", state = RenewalState.LATER, meta = "",

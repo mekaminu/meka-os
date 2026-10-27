@@ -82,6 +82,11 @@ data class TomorrowPreview(
     val bills: TomorrowBills? = null,
     /** Lessons planned for tomorrow ([StudyRules.tomorrowLine]): "Study · 2 lessons · about 1 h · …"; set by the facade. */
     val study: StudyDayLine? = null,
+    /**
+     * Tomorrow on Today, slice 3: tomorrow's open tasks themselves, so a task in the sheet opens its full detail (title,
+     * when, reminder, repeat, notes, checklist) and every edit shows at once. Same tasks as the rows, any order.
+     */
+    val tasks: List<Task> = emptyList(),
 )
 
 data class ShutdownView(
@@ -311,6 +316,31 @@ object ShutdownRules {
         return TomorrowBills(dueLine, cancelLine, due.size + cancel.size, spoken)
     }
 
+    /**
+     * Tomorrow on Today, slice 3: the task the sheet opens for editing, while it is still tomorrow's (moved to another
+     * day, done or deleted, it's null and the editor closes).
+     */
+    fun taskOf(p: TomorrowPreview, taskId: String?): Task? = taskId?.let { id -> p.tasks.firstOrNull { it.id == id } }
+
+    /** Swipe across Today to Tomorrow (left) and back on the Tomorrow sheet (right): the least travel, in dp. */
+    const val SWIPE_MIN_DP = 64f
+    /** …or a fifth of the screen's width when that's more (the open Fold), so a sideways nudge while scrolling never pages. */
+    const val SWIPE_WIDTH_SHARE = 0.2f
+    /** A quick flick pages from this speed (dp/s) once it has travelled [SWIPE_FLICK_MIN_DP]. */
+    const val SWIPE_FLICK_DP_S = 800f
+    const val SWIPE_FLICK_MIN_DP = 24f
+
+    /**
+     * Whether a sideways drag pages: [dragDp] and [velocityDp] are signed (left is negative); [toTomorrow] is Today →
+     * Tomorrow (a left swipe), else the sheet back to Today (a right swipe). A drag the wrong way never pages.
+     */
+    fun swipePages(dragDp: Float, velocityDp: Float, widthDp: Float, toTomorrow: Boolean): Boolean {
+        val d = if (toTomorrow) -dragDp else dragDp
+        val v = if (toTomorrow) -velocityDp else velocityDp
+        if (d <= 0f) return false
+        return d >= maxOf(SWIPE_MIN_DP, widthDp * SWIPE_WIDTH_SHARE) || (v >= SWIPE_FLICK_DP_S && d >= SWIPE_FLICK_MIN_DP)
+    }
+
     /** The task behind a Tomorrow row ("t-<id>"), so the sheet can tick or move it; null for an event. */
     fun taskIdOf(r: TomorrowRow): String? = if (!r.isEvent && r.id.startsWith("t-")) r.id.removePrefix("t-") else null
 
@@ -504,6 +534,7 @@ class EveningShutdown(
             summary = summary,
             first = firstRow,
             glance = ShutdownRules.glance(rows, firstRow, dayEvents.size, dayTasks.size),
+            tasks = dayTasks,
         )
     }
 

@@ -1,7 +1,7 @@
 ---
 id: shut-down
 title: Shut down the day
-keywords: shut down the day, shut down, shutdown, done for the day, end of day, wake alarm, how are you feeling, tired, stretched, lighten tomorrow, shattered, hold alerts, see tomorrow, tomorrow's tasks, tomorrow peek
+keywords: shut down the day, shut down, shutdown, done for the day, end of day, wake alarm, how are you feeling, tired, stretched, lighten tomorrow, shattered, hold alerts, see tomorrow, tomorrow's tasks, tomorrow peek, swipe to tomorrow, edit tomorrow's task
 fold: SHUTDOWN
 fold_where: Ask → Daily → Shut down the day
 mac: SHUTDOWN
@@ -16,6 +16,7 @@ tip: Not ready yet? Later on the card (or its heads-up) puts it off an hour, nev
 tip: Say "shut down the day" to Talk to open it. On the Galaxy Watch the evening shows "6 done · 2 left for tomorrow" with Shut down and Later.
 tip: How are you feeling? Pick Good, Tired or Stretched. Tired offers to lighten tomorrow, moving up to two of its tasks (evening ones first) to lighter days; Stretched also names one that could wait on Someday. Nothing moves until you tap, with Undo, and how you felt stays on that device only, for a week.
 tip: Or just tell Obi: "I'm shattered", "I'm knackered" or "I've got too much on" keeps how you feel and he says what he'd move; the taps wait in Shut down the day. Stretched can also hold mail and call alerts that can wait (the ten-minute inbox, parcels, notes about strangers' calls) for a day; urgent calls and Always notify still come through, and Resume ends it.
-tip: To see tomorrow, tap the date under the greeting on Today (any time), or from 5pm the Tomorrow card on Today ("Tomorrow · Thu 22 Oct · 2 tasks · first 07:40 Gym"). Tick a task there, or move it to Today or the Day after; its time comes with it. A task you ask Obi to add for tomorrow is there, and Shut down counts it ("1 planned for tomorrow").
+tip: To see tomorrow, swipe left across Today on the Fold or tap the date under the greeting (any time), or from 5pm tap the Tomorrow card on Today ("Tomorrow · Thu 22 Oct · 2 tasks · first 07:40 Gym"); swipe right to come back. Tick a task there, or move it to Today or the Day after; its time comes with it.
+tip: In Tomorrow, tap a task (or Edit) to change its title, time, reminder, repeat, notes or checklist, as on Today. A task you ask Obi to add for tomorrow is there, and Shut down counts it ("1 planned for tomorrow").
 tip: Bills and renewals due tomorrow from Lists → Renewals show in Tomorrow ("Due tomorrow · Water bill £32.50"), and a last day to cancel shows in gold; the Tomorrow card counts them ("1 bill due").
 tip: Lessons you planned for tomorrow (press and hold a lesson in a course under Goals) show in Tomorrow ("Study · 2 lessons · about 1 h"), and the Tomorrow card counts them ("2 lessons to study").

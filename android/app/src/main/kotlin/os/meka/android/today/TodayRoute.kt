@@ -234,6 +234,7 @@ private fun TodayRouteContent(
     var showWeekAhead by rememberSaveable { mutableStateOf(false) }
     // The Tomorrow sheet: from the Tomorrow peek (17:00 on) or the date under the greeting (any time).
     var showTomorrow by rememberSaveable { mutableStateOf(false) }
+    val pageHaptics = rememberMekaHaptics()
     /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
     var showActivity by rememberSaveable { mutableStateOf(false) }
     // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
@@ -402,7 +403,8 @@ private fun TodayRouteContent(
                 twoPane,
                 detailShare = if (twoPane) CommandCentreRules.sideShare(layout) else CommandCentreRules.SIDE_SHARE_TWO,
                 list = { m ->
-                    key(openings) { TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
+                    // Swipe left across Today for Tomorrow, any time of day (Meka 2026-10-26); right on the sheet comes back.
+                    key(openings) { TodayPane(today, sync, actions, m.swipePages(toTomorrow = true) { pageHaptics.tick(); showTomorrow = true }, connect, openPlan, !introPlayed, rowMotion,
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         openDayRing = { showDayRing = true },
                         openQueue = { showQueue = true },

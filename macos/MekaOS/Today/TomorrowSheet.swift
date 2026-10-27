@@ -43,8 +43,34 @@ struct TomorrowSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    /// Tomorrow on Today, slice 3: the task open for editing (its full detail in place of the list) while it's still
+    /// tomorrow's; moved to another day, done or deleted, the list comes back.
+    @State private var editingID: String?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let v = model.shutdown, let task = ShutdownRules.shared.taskOf(p: v.tomorrow, taskId: editingID) {
+                Button("‹ Tomorrow") { editingID = nil }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                    .keyboardShortcut(.cancelAction)
+                DetailView(task: task, palette: palette)
+                    .frame(height: 480)
+                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .trailing).combined(with: .opacity))
+            } else {
+                list
+                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .leading).combined(with: .opacity))
+            }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: editingID)
+        .padding(MekaSpace.l)
+        .frame(width: 480)
+    }
+
+    @ViewBuilder private var list: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Tomorrow").font(MekaType.upNextTitle).staggeredAppear(0)
             if let v = model.shutdown {
@@ -100,7 +126,7 @@ struct TomorrowSheet: View {
                         ForEach(rows, id: \.id) { r in
                             Group {
                                 if let id = ShutdownRules.shared.taskIdOf(r: r) {
-                                    TomorrowTaskRow(row: r, taskId: id, palette: palette)
+                                    TomorrowTaskRow(row: r, taskId: id, palette: palette, edit: { editingID = id })
                                 } else {
                                     TomorrowLine(row: r, palette: palette)
                                 }
@@ -117,22 +143,17 @@ struct TomorrowSheet: View {
             } else {
                 SkeletonRows(count: 4, palette: palette)
             }
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
         }
-        .padding(MekaSpace.l)
-        .frame(width: 480)
     }
 }
 
-/// One of tomorrow's tasks: a tick, its time and title, and Today · Day after.
+/// One of tomorrow's tasks: a tick, its time and title (click to edit), and Today · Day after · Edit.
 private struct TomorrowTaskRow: View {
     @Environment(CoreModel.self) private var model
     let row: TomorrowRow
     let taskId: String
     let palette: MekaPalette
+    let edit: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: MekaSpace.m) {
@@ -142,14 +163,23 @@ private struct TomorrowTaskRow: View {
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel("Complete \(row.title)")
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                let meta = [row.time, row.detail].compactMap { $0 }.joined(separator: " · ")
-                if !meta.isEmpty {
-                    Text(LoneWordGlue.shared.kept(line: meta)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                Button(action: edit) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        let meta = [row.time, row.detail].compactMap { $0 }.joined(separator: " · ")
+                        if !meta.isEmpty {
+                            Text(LoneWordGlue.shared.kept(line: meta)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityHint("Edit")
                 HStack(spacing: MekaSpace.m) {
                     Button("Today") { model.moveTomorrowTask(taskId, toToday: true) }
                     Button("Day after") { model.moveTomorrowTask(taskId, toToday: false) }
+                    Button("Edit", action: edit)
                 }
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 .padding(.top, MekaSpace.xxs)

@@ -147,6 +147,20 @@ class TomorrowScreensTest {
         assertTrue(shows(moved), "$name: the move isn't said")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-moved"))
         assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.map { it.id })
+
+        // Tomorrow on Today, slice 3: Edit opens the task's full detail over the sheet; an edit shows in it at once,
+        // and once the task is no longer tomorrow's (done here) the detail closes.
+        assertTrue(!shows("Close"), "$name: a detail is open before Edit")
+        compose.onAllNodes(hasText("Edit") and hasClickAction(), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { shows("Close") }
+        assertTrue(shows("Close"), "$name: Edit didn't open the task")
+        runBlocking { core.rename(gym, "Gym, legs day") }
+        until { shows("Gym, legs day") }
+        assertTrue(shows("Gym, legs day"), "$name: the edit isn't shown")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-edit"))
+        runBlocking { core.complete(gym) }
+        until { !shows("Close") }
+        assertTrue(!shows("Close"), "$name: the detail stayed open after the task left tomorrow")
     }
 
     @Test fun tomorrowDark() = run(ThemeChoice.DARK, "fold-dark")
