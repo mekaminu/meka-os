@@ -51,7 +51,12 @@ import kotlin.math.roundToInt
  * Screen readers get a "Done with …" action instead.
  */
 @Composable
-internal fun SwipeToDone(label: String, onDone: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun SwipeToDone(
+    label: String, onDone: () -> Unit, modifier: Modifier = Modifier,
+    /** The backdrop's word (Money's Worth a look says "That's fine"). */
+    action: String = AfterWorkDone.DONE,
+    content: @Composable () -> Unit,
+) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -65,7 +70,7 @@ internal fun SwipeToDone(label: String, onDone: () -> Unit, modifier: Modifier =
         val progress = MotionMath.swipeProgress(with(LocalDensity.current) { dx.toDp().value })
         SwipeBackdrop(
             side = if (dx > 0) 1 else if (dx < 0) -1 else 0, progress = progress, armed = armed != 0, glyph = SwipeGlyph.CHECK,
-            label = AfterWorkDone.DONE, fill = Meka.colors.accent, content = Meka.colors.onAccent,
+            label = action, fill = Meka.colors.accent, content = Meka.colors.onAccent,
         )
         androidx.compose.foundation.layout.Box(
             Modifier.fillMaxWidth()

@@ -688,6 +688,27 @@ class MoneyFacadeTest {
         assertEquals(os.meka.core.domain.MoneyChallenges.INTRO, fold.moneyView.value.challenges!!.intro)
     }
 
+    /** Money review: "N payments without a category · Sort them" — a pick on the Fold sorts the payee on the Mac too; Undo brings it back. */
+    @Test
+    fun theSorterSortsAPayeeOnTheFoldAndTheMacSeesFewerLeft() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement + "06/10/2026,QWERTY HOLDINGS,-12.00\n07/10/2026,QWERTY HOLDINGS,-8.00\n")
+        val u = fold.moneyView.value.month!!.unsorted!!
+        assertEquals("Qwerty Holdings", u.items.first().row.merchant)
+        assertEquals(2, u.items.first().count)
+        assertTrue(MoneySection.UNSORTED in MoneyTabs.sections(MoneyTab.SPENDING, fold.moneyView.value))
+        val r = fold.setMoneyCategory(u.items.first().row.id, "shopping")
+        assertFalse(r.refused)
+        assertTrue(fold.moneyView.value.month!!.unsorted?.items.orEmpty().none { it.row.merchant == "Qwerty Holdings" })
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertTrue(mac.moneyView.value.month!!.unsorted?.items.orEmpty().none { it.row.merchant == "Qwerty Holdings" })
+        assertTrue(fold.undoMoneyCategory(r.undo!!))
+        assertEquals("Qwerty Holdings", fold.moneyView.value.month!!.unsorted!!.items.first().row.merchant)
+    }
+
     /** Needs and wants: Need on the Fold moves the payee's payments to Needs, on the Mac too; Undo takes it back. */
     @Test
     fun aNeedMarkedOnTheFoldShowsOnTheMacWithUndo() = runTest(timeout = SLOW_RUNNER) {

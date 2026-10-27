@@ -3942,4 +3942,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v?.rows.map { $0.amount }, ["£30", "£10"])
         XCTAssertEqual(v?.rows.first?.pct, "75%")
     }
+
+    /// Money review: Worth a look's compact rows and the quick sorter's words cross the bridge as the Mac reads them.
+    func testMoneyLookAndSorterOnTheMac() {
+        let a = MoneyAlert(id: "w1", kind: "large", title: "Bigger than usual · Gadget Barn £480", line: "Usually about £45", lit: false, spoken: "x")
+        let r = MoneyLook.shared.row(a: a)
+        XCTAssertEqual(r.name, "Bigger than usual · Gadget Barn")
+        XCTAssertEqual(r.amount, "£480")
+        XCTAssertEqual(MoneyLook.shared.moreLabel(rows: 5, open: false), "2 more ›")
+        XCTAssertEqual(MoneySorter.shared.head(left: 3), "SORT YOUR PAYMENTS · 3 LEFT")
+        XCTAssertEqual(MoneySorter.shared.doneLine(skipped: 0), MoneySorter.shared.ALL_DONE)
+        XCTAssertEqual(MoneySection.unsorted.name, "UNSORTED")
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .year), MoneyTab.accounts)
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .tips), MoneyTab.plan)
+    }
 }

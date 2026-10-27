@@ -75,7 +75,8 @@ import os.meka.android.lists.Field
 import os.meka.android.security.FoldBiometric
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
-import os.meka.core.domain.MoneyAlert
+import os.meka.core.domain.MoneyLook
+import os.meka.core.domain.MoneySorter
 import os.meka.core.domain.MoneyBank
 import os.meka.core.domain.MoneyBankView
 import os.meka.core.domain.MoneyCardRow
@@ -204,6 +205,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var needsView by rememberSaveable { mutableStateOf(false) }
     var allCats by rememberSaveable { mutableStateOf(false) }
     var allPays by rememberSaveable { mutableStateOf(false) }
+    // Money review: Worth a look's open row, whether all rows show, and the ones put away while the write runs.
+    var openLook by rememberSaveable { mutableStateOf<String?>(null) }
+    var allLooks by rememberSaveable { mutableStateOf(false) }
+    var finedLooks by remember { mutableStateOf(emptySet<String>()) }
+    // Money review: the quick sorter (one payee at a time), the payees skipped and the ones picked while the write runs.
+    var sorting by rememberSaveable { mutableStateOf(false) }
+    var sortSkipped by remember { mutableStateOf(emptySet<String>()) }
+    var sortDone by remember { mutableStateOf(emptySet<String>()) }
 
     val unlock: () -> Unit = {
         FoldBiometric.unlock(context, MoneyRules.UNLOCK_REASON, "Your spending, read-only") { ok ->
@@ -454,15 +463,31 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         Text(h, style = MekaType.caption, color = Meka.colors.textTertiary)
                     }
                 }
-                v.alerts.forEachIndexed { i, a ->
-                    item(key = "alert-${a.id}") {
-                        AlertCard(a, Modifier.animateItem().appear(rememberAppearance(4 + i))) {
-                            scope.launch { runCatching { core.moneyAlertFine(a.id) }.getOrNull()?.let(say) }
+                // Money review (Meka 2026-10-26 22:12): compact one-line rows (what · amount · ›), three then "2 more ›"; a tap
+                // opens one in place with That's fine, a swipe either way is That's fine.
+                val looks = MoneyLook.rows(v.alerts).filter { it.id !in finedLooks }
+                MoneyLook.shown(looks, allLooks).forEachIndexed { i, r ->
+                    item(key = "alert-${r.id}") {
+                        MoneyLookRowView(
+                            r, open = openLook == r.id, modifier = Modifier.animateItem().appear(rememberAppearance(4 + i)),
+                            onToggle = { haptics.tick(); openLook = if (openLook == r.id) null else r.id },
+                        ) {
+                            // Instant: the row leaves in this frame; a refused or failed write brings it back with the reason.
+                            finedLooks = finedLooks + r.id
+                            scope.launch {
+                                val res = runCatching { core.moneyAlertFine(r.id) }.getOrNull()
+                                if (res == null || res.refused) finedLooks = finedLooks - r.id
+                                res?.let(say)
+                            }
                         }
                     }
                 }
-                item(key = "alerts-foot") {
-                    Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                MoneyLook.moreLabel(looks.size, allLooks)?.let { more ->
+                    item(key = "alerts-more") {
+                        Text(more, style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.animateItem().clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { haptics.tick(); allLooks = !allLooks }.minTouch().testTag("money-looks-more"))
+                    }
                 }
             }
             // Money redesign (B3): the Bills tab's card, then the month's bills by date (to come first, paid greyed).
@@ -509,14 +534,6 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         scope.launch { runCatching { core.moneyCardKind(id, card = true, charge = false) }.getOrNull()?.let(say) }
                     }
                 }
-            }
-            // Slice 18: the year in review — last year, open, in January; this year so far, folded, after (this month only).
-            v.year?.takeIf { has(MoneySection.YEAR) }?.let { yv ->
-                item(key = "year-head") {
-                    Text(yv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-                }
-                item(key = "year") { YearBlock(yv, Modifier.animateItem().appear(rememberAppearance(4)), onToggle = { haptics.tick() }) }
             }
             // Slice 5: refunds on Waiting for, checked against his statements (this month only).
             v.refunds?.takeIf { has(MoneySection.REFUNDS) }?.let { rf ->
@@ -645,6 +662,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
+            // Money review: "52 payments without a category · Sort them" under the rows opens the quick sorter.
+            m.unsorted?.takeIf { has(MoneySection.UNSORTED) }?.let { u ->
+                item(key = "unsorted") {
+                    MoneyUnsortedRow(u, Modifier.animateItem().appear(rememberAppearance(5))) {
+                        haptics.tick(); said = null; sortSkipped = emptySet(); sortDone = emptySet(); sorting = true
+                    }
+                }
+            }
             if (has(MoneySection.CATEGORIES) && sp == null) {
                 item(key = "cats-head") {
                     Text("BY CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -706,6 +731,15 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     onRemove = { id -> scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } },
                     onBalance = { id, text -> scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) } })
             }
+        }
+        // Slice 18: the year in review — last year, open, in January; this year so far, folded, after. Money review
+        // (Meka 2026-10-26 22:12): it lives on Accounts, under net worth, not on Spending.
+        v.year?.takeIf { has(MoneySection.YEAR) }?.let { yv ->
+            item(key = "year-head") {
+                Text(yv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "year") { YearBlock(yv, Modifier.animateItem().appear(rememberAppearance(4)), onToggle = { haptics.tick() }) }
         }
         // Slice 13: the side hustle's tax year, the share to put aside and Self Assessment dates (whatever month).
         v.business?.takeIf { has(MoneySection.BUSINESS) }?.let { b ->
@@ -848,6 +882,41 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         onNewCategory = { name, tone, icon ->
             sheetRow?.let { t -> scope.launch { runCatching { core.addMoneyCategory(name, tone, icon.name, t.id) }.getOrNull()?.let(say) } }
         },
+    )
+    // Money review: the quick sorter — the payment sheet on one payee at a time; a pick moves the payee and the next
+    // comes up in the same frame, Skip leaves one for later, and the last one says All sorted.
+    val sortV = v.month?.unsorted
+    val sortItem = if (sorting) MoneySorter.current(sortV, sortSkipped, sortDone) else null
+    val sortLeft = MoneySorter.left(sortV, sortSkipped, sortDone)
+    // The last payee sorted (or skipped): the sorter closes and says so.
+    LaunchedEffect(sorting, sortItem == null) {
+        if (sorting && sortItem == null) { sorting = false; said = MoneySaved(MoneySorter.doneLine(sortSkipped.count { k -> sortV?.items?.any { it.key == k } == true })) }
+    }
+    PaymentSheet(
+        row = sortItem?.row, order = v.categoryOrder, said = said,
+        onCategory = { key ->
+            sortItem?.let { it ->
+                haptics.light()
+                sortDone = sortDone + it.key
+                scope.launch {
+                    val r = runCatching { core.setMoneyCategory(it.row.id, key) }.getOrNull()
+                    if (r == null || r.refused) sortDone = sortDone - it.key
+                    r?.let(say)
+                }
+            }
+        },
+        onMark = { _, _ -> },
+        onUndo = { u -> scope.launch { runCatching { core.undoMoneyCategory(u) }; haptics.light(); said = null; sortDone = emptySet() } },
+        onClose = { sorting = false },
+        own = v.ownCategories,
+        onNewCategory = { name, tone, icon ->
+            sortItem?.let { it ->
+                sortDone = sortDone + it.key
+                scope.launch { runCatching { core.addMoneyCategory(name, tone, icon.name, it.row.id) }.getOrNull()?.let(say) }
+            }
+        },
+        sort = sortItem?.let { MoneySortHead(MoneySorter.head(sortLeft), it.line, MoneySorter.spoken(it, sortLeft)) },
+        onSkip = { sortItem?.let { haptics.tick(); sortSkipped = sortSkipped + it.key } },
     )
     OwnCategorySheet(
         row = ownRow, own = v.ownCategories, said = said,
@@ -1660,23 +1729,6 @@ private fun RegularRow(r: MoneyRegularRow, modifier: Modifier) {
             Text(r.line, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
         }
         Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
-    }
-}
-
-@Composable
-private fun AlertCard(a: MoneyAlert, modifier: Modifier, onFine: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val c by animateColorAsState(if (a.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-alert-${a.id}")
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-    ) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = a.spoken }) {
-            Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-            Text(a.line, style = MekaType.caption, color = c)
-        }
-        Text(MoneyWatch.FINE, style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFine).minTouch())
     }
 }
 

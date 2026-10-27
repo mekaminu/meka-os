@@ -67,6 +67,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.MoneyPaymentSheet
+import os.meka.core.domain.MoneySorter
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneySheetMark
 import os.meka.core.domain.MoneyTxnRow
@@ -85,8 +86,13 @@ internal fun PaymentSheet(
     onCategory: (String) -> Unit, onMark: (MoneySheetMark, Boolean) -> Unit, onUndo: (String) -> Unit, onClose: () -> Unit,
     own: List<MoneyOwnCategory> = emptyList(),
     onNewCategory: (name: String, tone: Int, icon: MoneyIcon) -> Unit = { _, _, _ -> },
+    /** Money review: the quick sorter's heading ("SORT YOUR PAYMENTS · 12 LEFT") and the payee's month; null for one payment. */
+    sort: MoneySortHead? = null,
+    onSkip: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
+    val shownSort = remember { arrayOfNulls<MoneySortHead>(1) }
+    if (row != null) shownSort[0] = sort
     // The last row shown, so the sheet keeps its content while it slides away.
     val shown = remember { arrayOfNulls<MoneyTxnRow>(1) }
     if (row != null) shown[0] = row
@@ -118,14 +124,31 @@ internal fun PaymentSheet(
                     .testTag("money-sheet"),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                Row(
-                    Modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading(); contentDescription = MoneyPaymentSheet.spoken(r) },
-                    verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
-                ) {
-                    Text(r.merchant, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                    Text(r.amount, style = MekaType.nowTitle, color = if (r.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
+                val so = sort ?: shownSort[0].takeIf { row == null }
+                so?.let { h ->
+                    Crossfade(h.head, animationSpec = MekaMotion.appear(reduced), label = "money-sort-head") { t ->
+                        Text(t, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-sort-head"))
+                    }
                 }
-                Text(MoneyPaymentSheet.sub(r), style = MekaType.caption, color = Meka.colors.textSecondary)
+                // In the sorter the next payee cross-fades in after a pick or Skip.
+                AnimatedContent(
+                    r, label = "money-sheet-payee",
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) using SizeTransform(clip = false) },
+                    contentKey = { it.id },
+                ) { p ->
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Row(
+                            Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                                heading(); contentDescription = so?.spoken ?: MoneyPaymentSheet.spoken(p)
+                            },
+                            verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+                        ) {
+                            Text(p.merchant, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                            if (so == null) Text(p.amount, style = MekaType.nowTitle, color = if (p.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
+                        }
+                        Text(so?.line ?: MoneyPaymentSheet.sub(p), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
                 r.receipt?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
                 Text(MoneyPaymentSheet.CATEGORY_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.xs))
@@ -158,11 +181,22 @@ internal fun PaymentSheet(
                         }
                     }
                 }
-                Text(MoneyPaymentSheet.MARKS_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(top = MekaSpace.xs))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    for (t in MoneyPaymentSheet.toggles(r)) {
-                        TripPill(t.label, on = t.on, tag = "money-sheet-mark-${t.mark.name.lowercase()}", description = t.spoken) { onMark(t.mark, !t.on) }
+                if (so == null) {
+                    Text(MoneyPaymentSheet.MARKS_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(top = MekaSpace.xs))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        for (t in MoneyPaymentSheet.toggles(r)) {
+                            TripPill(t.label, on = t.on, tag = "money-sheet-mark-${t.mark.name.lowercase()}", description = t.spoken) { onMark(t.mark, !t.on) }
+                        }
+                    }
+                } else {
+                    // The sorter: Skip leaves this payee for later (it stays in Other) and the next one comes up.
+                    Box(
+                        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button, onClick = onSkip).minTouch().padding(MekaSpace.xs).testTag("money-sort-skip"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(MoneySorter.SKIP, style = MekaType.metaStrong, color = Meka.colors.textPrimary)
                     }
                 }
                 Box(
@@ -250,3 +284,6 @@ internal fun NewCategoryForm(
         }
     }
 }
+
+/** The quick sorter's heading over the payment sheet: [head] ("SORT YOUR PAYMENTS · 12 LEFT"), the payee's [line] and [spoken]. */
+internal data class MoneySortHead(val head: String, val line: String, val spoken: String)

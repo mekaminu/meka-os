@@ -75,6 +75,15 @@ struct MoneySheet: View {
     @State private var askingDelete = false
     /// His categories in caps (2026-10-27): what he is typing in a category's MONTHLY CAP field.
     @State private var ownCapText = ""
+    /// Money review (Meka 2026-10-26 22:12): Worth a look's open row, whether all its rows show, and the ones put away
+    /// while the write runs.
+    @State private var openLook: String?
+    @State private var allLooks = false
+    @State private var finedLooks: Set<String> = []
+    /// Money review: the quick sorter's popover, the payees skipped and the ones picked while the write runs.
+    @State private var sorting = false
+    @State private var sortSkipped: Set<String> = []
+    @State private var sortDone: Set<String> = []
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -110,6 +119,8 @@ struct MoneySheet: View {
                         if let ch = v.challenges, has(.challenges, v) { challenges(ch).staggeredAppear(3) }
                         if let tv = v.travel, has(.travel, v) { travel(tv).transition(.opacity) }
                         if let w = v.worth, has(.worth, v) { worth(w).staggeredAppear(3) }
+                        // Money review: the year in review lives on Accounts, under net worth.
+                        if let yv = v.year, has(.year, v) { year(yv).transition(.opacity) }
                         if let b = v.business, has(.business, v) { business(b).staggeredAppear(3) }
                         if let sh = v.shared, has(.sharedCosts, v) { shared(sh).staggeredAppear(3) }
                         if has(.ownCategories, v) { ownCategories(v).staggeredAppear(3) }
@@ -224,8 +235,13 @@ struct MoneySheet: View {
             if has(.alerts, v) {
                 Text(MoneyWatch.shared.head(n: Int32(v.alerts.count))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
-                ForEach(v.alerts, id: \.id) { a in alert(a).transition(.opacity) }
-                Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                // Money review: compact one-line rows, three then "2 more ›"; a click opens one with That's fine.
+                let looks = MoneyLook.shared.rows(alerts: v.alerts).filter { !finedLooks.contains($0.id) }
+                ForEach(MoneyLook.shared.shown(rows: looks, open: allLooks), id: \.id) { r in lookRow(r).transition(.opacity) }
+                if let more = MoneyLook.shared.moreLabel(rows: Int32(looks.count), open: allLooks) {
+                    Button(more) { MekaHaptics.tick(); allLooks.toggle() }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
             }
             // Money redesign (B3): the Bills tab's card, then the month's bills by date (to come first, paid greyed).
             if let b = v.bills, has(.bills, v) {
@@ -235,7 +251,6 @@ struct MoneySheet: View {
             }
             if let p = v.payday, has(.payday, v) { payday(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
             if let c = v.cards, has(.cards, v) { cards(c).transition(.opacity) }
-            if let yv = v.year, has(.year, v) { year(yv).transition(.opacity) }
             if let r = v.refunds, has(.refunds, v) {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -273,7 +288,9 @@ struct MoneySheet: View {
                     }
                     .transition(.opacity)
                 }
-            } else if has(.categories, v) {
+            }
+            if let u = m.unsorted, has(.unsorted, v) { unsortedRow(u) }
+            if has(.categories, v), m.spending == nil {
                 Text("BY CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(m.categories, id: \.key) { c in category(c).transition(.opacity) }
             }
@@ -1002,24 +1019,175 @@ struct MoneySheet: View {
         .accessibilityLabel(c.spoken)
     }
 
-    /// Slice 3: one payment worth a look, with That's fine (Undo in the line below).
-    private func alert(_ a: MoneyAlert) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(a.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                Text(a.line).font(MekaType.caption).foregroundStyle(a.lit ? palette.accent : palette.textSecondary)
+    /// Money review (Meka 2026-10-26 22:12): one payment worth a look as a compact row (what it is, the amount, a
+    /// chevron); a click opens it on the expand spring with when and where, That's fine and the never-acts line (the
+    /// row's context menu has That's fine too). It leaves in the same frame; a refused write brings it back.
+    private func lookRow(_ r: MoneyLookRow) -> some View {
+        let id = r.id
+        let open = openLook == id
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Button {
+                MekaHaptics.tick()
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { openLook = open ? nil : id }
+            } label: {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(r.name).font(MekaType.body).foregroundStyle(r.lit ? palette.accent : palette.textPrimary).lineLimit(1)
+                    Spacer()
+                    if !r.amount.isEmpty { Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary) }
+                    Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary).rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .contentShape(Rectangle())
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(a.spoken)
-            Button(MoneyWatch.shared.FINE) {
-                let id = a.id
-                Task { said = await model.moneyAlertFine(alertId: id) }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(r.spoken)
+            if open {
+                Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                Button(MoneyWatch.shared.FINE) { fineLook(id) }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .accessibilityLabel(MoneyLook.shared.FINE_SPOKEN)
+                Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
             }
-            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
         }
-        .padding(MekaSpace.m)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .contextMenu { Button(MoneyWatch.shared.FINE) { fineLook(id) } }
+    }
+
+    private func fineLook(_ id: String) {
+        MekaHaptics.light()
+        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { _ = finedLooks.insert(id) }
+        Task {
+            let r = await model.moneyAlertFine(alertId: id)
+            if r == nil || r?.refused == true { finedLooks.remove(id) }
+            if let r { said = r }
+        }
+    }
+
+    /// Money review: "52 payments without a category · Sort them ›" under the category rows; a click opens the quick
+    /// sorter as a popover (one payee at a time).
+    private func unsortedRow(_ u: MoneyUnsortedView) -> some View {
+        Button {
+            MekaHaptics.tick()
+            said = nil
+            sortSkipped = []
+            sortDone = []
+            makingCategory = false
+            sorting = true
+        } label: {
+            HStack {
+                Text(u.line).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                Spacer()
+                Text(MoneySorter.shared.ACTION + " ›").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+            }
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(u.spoken)
+        .popover(isPresented: $sorting, arrowEdge: .bottom) { sorter() }
+    }
+
+    /// The payee the sorter shows: the first not skipped and not picked (while its write runs).
+    private func sortItem() -> MoneySortItem? {
+        model.money?.month?.unsorted?.items.first { !sortSkipped.contains($0.key) && !sortDone.contains($0.key) }
+    }
+
+    /// The quick sorter: SORT YOUR PAYMENTS · N LEFT, the payee and its month, category chips (a click moves every
+    /// payment from the payee, past and future, and the next comes up at once), New category, the last change with Undo,
+    /// Skip and Done. When none are left it says so.
+    @ViewBuilder
+    private func sorter() -> some View {
+        let items = model.money?.month?.unsorted?.items ?? []
+        let left = items.filter { !sortSkipped.contains($0.key) && !sortDone.contains($0.key) }.count
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let it = sortItem() {
+                let id = it.row.id
+                let key = it.key
+                let order = model.money?.categoryOrder ?? []
+                let own = model.money?.ownCategories ?? []
+                Text(MoneySorter.shared.head(left: Int32(left))).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                    .contentTransition(.opacity)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(it.row.merchant).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                    Text(it.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+                .id(key)
+                .transition(.opacity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(MoneySorter.shared.spoken(item: it, left: Int32(left)))
+                .accessibilityAddTraits(.isHeader)
+                Text(MoneyPaymentSheet.shared.CATEGORY_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.xs)
+                if makingCategory {
+                    newCategoryForm(txnId: id).transition(.opacity)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(MoneyPaymentSheet.shared.chips(order: order, current: it.row.category, own: own), id: \.key) { c in
+                            sheetPill(c.label, on: c.on, spoken: c.spoken) {
+                                guard !c.on else { return }
+                                let cat = c.key
+                                MekaHaptics.light()
+                                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { _ = sortDone.insert(key) }
+                                Task {
+                                    let r = await model.setMoneyCategory(txnId: id, category: cat)
+                                    if r == nil || r?.refused == true { sortDone.remove(key) }
+                                    if let r { said = r }
+                                }
+                            }
+                        }
+                        sheetPill(MoneyOwnCategories.shared.NEW, on: false, spoken: MoneyOwnCategories.shared.NEW_SPOKEN) {
+                            MekaHaptics.tick()
+                            newCategoryName = ""
+                            newCategoryTone = MoneyOwnCategories.shared.nextTone(own: own)
+                            newCategoryIcon = "DOTS"
+                            makingCategory = true
+                        }
+                    }
+                    Text(MoneyPaymentSheet.shared.ruleLine(row: it.row)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let s = said { saidLine(s).transition(.opacity) }
+                HStack {
+                    Button(MoneySorter.shared.SKIP) {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { _ = sortSkipped.insert(key) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                    .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
+                    .background(palette.surfaceRaised, in: Capsule())
+                    Spacer()
+                    Button(MoneyPaymentSheet.shared.DONE) { sorting = false }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.metaStrong).foregroundStyle(palette.onAccent)
+                        .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
+                        .background(palette.accent, in: Capsule())
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding(.top, MekaSpace.xs)
+            } else {
+                let skipped = items.filter { sortSkipped.contains($0.key) }.count
+                Text(MoneySorter.shared.doneLine(skipped: Int32(skipped))).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let s = said { saidLine(s) }
+                HStack {
+                    Spacer()
+                    Button(MoneyPaymentSheet.shared.DONE) { sorting = false }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.metaStrong).foregroundStyle(palette.onAccent)
+                        .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
+                        .background(palette.accent, in: Capsule())
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 380)
+        .background(palette.surface)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: sortDone)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: sortSkipped)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: makingCategory)
     }
 
     /// Slice 5: one refund on Waiting for, checked against his statements: Close it when it's back (Undo in the line

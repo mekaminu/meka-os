@@ -47,6 +47,18 @@ class MoneyTabsTest {
     }
 
     @Test
+    fun theYearMovesToAccountsAndTheTipsToPlan() {
+        // Money review (Meka 2026-10-26 22:12): "2026 so far" and "Tips from your numbers" leave Spending.
+        val tip = MoneyTip("t1", "habit", "Coffee adds up", "£64 this month", false, "Coffee adds up")
+        val v = open().copy(tips = listOf(tip))
+        assertEquals(MoneyTab.ACCOUNTS, MoneyTabs.tabOf(MoneySection.YEAR))
+        assertEquals(MoneyTab.PLAN, MoneyTabs.tabOf(MoneySection.TIPS))
+        assertTrue(MoneySection.TIPS !in MoneyTabs.sections(MoneyTab.SPENDING, v))
+        assertEquals(MoneySection.TIPS, MoneyTabs.sections(MoneyTab.PLAN, v).first())
+        assertEquals(MoneyTab.SPENDING, MoneyTabs.tabOf(MoneySection.UNSORTED))
+    }
+
+    @Test
     fun theBillsCardLeadsTheBillsTabAndThePaydayBlockStopsListingTheSameRows() {
         val bills = MoneyBills.view(
             listOf(MoneyBills.Due("r-a", "Streamly", 10, 1_099, MoneyBillKind.REGULAR)), emptyList(), "Fri 30 Oct", 5,

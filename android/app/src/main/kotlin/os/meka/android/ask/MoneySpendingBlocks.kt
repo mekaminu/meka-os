@@ -48,7 +48,21 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.moneyTone
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextOverflow
+import os.meka.android.work.SwipeToDone
 import os.meka.core.domain.MoneyIcon
+import os.meka.core.domain.MoneyLook
+import os.meka.core.domain.MoneyLookRow
+import os.meka.core.domain.MoneySorter
+import os.meka.core.domain.MoneyUnsortedView
+import os.meka.core.domain.MoneyWatch
 import os.meka.core.domain.MoneyPayDay
 import os.meka.core.domain.MoneySpendRow
 import os.meka.core.domain.MoneySpending
@@ -245,5 +259,67 @@ internal fun MoneyViewChips(needs: Boolean, modifier: Modifier = Modifier, onPic
         for (c in os.meka.core.domain.MoneyNeeds.views(needs)) {
             TripPill(c.label, on = c.on, tag = "money-view-${if (c.needs) "needs" else "categories"}", description = c.spoken) { onPick(c.needs) }
         }
+    }
+}
+
+/**
+ * Money review (Meka 2026-10-26 22:12): one payment worth a look as a compact row on the raised surface — what it is
+ * (one line), the amount and a chevron. A tap opens it in place on the expand spring (when and where, That's fine, and
+ * that Navilife never acts) with a tick haptic; a swipe either way is That's fine (the brass layer, tick when armed,
+ * light haptic on letting go). Reduced motion: it opens and goes at once. Screen readers get a "That's fine" action.
+ */
+@Composable
+internal fun MoneyLookRowView(r: MoneyLookRow, open: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit, onFine: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    SwipeToDone(MoneyLook.FINE_SPOKEN, onFine, modifier.testTag("money-look-${r.id}"), action = MoneyWatch.FINE) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                .clickable(role = Role.Button, onClick = onToggle)
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().minTouch().semantics(mergeDescendants = true) { contentDescription = r.spoken },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                Text(r.name, style = MekaType.body, color = if (r.lit) Meka.colors.accent else Meka.colors.textPrimary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (r.amount.isNotEmpty()) Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+                val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.expand(reduced), label = "money-look-chevron")
+                Text("›", style = MekaType.body, color = Meka.colors.textTertiary,
+                    modifier = Modifier.graphicsLayer { rotationZ = turn })
+            }
+            AnimatedVisibility(
+                open,
+                enter = if (reduced) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(),
+                exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(),
+            ) {
+                Column(Modifier.padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(MoneyWatch.FINE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFine)
+                            .minTouch().testTag("money-look-fine-${r.id}"))
+                    Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Money review: under Spending's category rows, "52 payments without a category" with Sort them in the accent, as one
+ * card row; a tap opens the quick sorter (the payment sheet, one payee at a time).
+ */
+@Composable
+internal fun MoneyUnsortedRow(u: MoneyUnsortedView, modifier: Modifier = Modifier, onSort: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button, onClick = onSort).minTouch()
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .semantics(mergeDescendants = true) { contentDescription = u.spoken }
+            .testTag("money-unsorted"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(u.line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        Text(MoneySorter.ACTION + " ›", style = MekaType.itemMeta, color = Meka.colors.accent)
     }
 }

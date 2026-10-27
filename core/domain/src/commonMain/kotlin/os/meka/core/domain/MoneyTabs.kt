@@ -12,17 +12,18 @@ enum class MoneyTab(val label: String) {
 
 /** One part of the Money screen, in the order the screen draws them. */
 enum class MoneySection {
-    // Spending: the month, its review, payments worth a look, the year, tips, categories and the payments.
-    MONTH, TRAVEL_BANNER, REVIEW, ALERTS, YEAR, TIPS, CATEGORIES, PAYMENTS,
+    // Spending: the month, its review, payments worth a look, categories, the payments without one, and the payments.
+    // (Money review, Meka 2026-10-26 22:12: the year moved to Accounts and the tips to Plan's money check.)
+    MONTH, TRAVEL_BANNER, REVIEW, ALERTS, CATEGORIES, UNSORTED, PAYMENTS,
     // Bills: the card and the month's bills by date (B3), payday and safe to spend, the cards' due dates, refunds on the
     // way, the regular payments.
     BILLS, PAYDAY, CARDS, REFUNDS, REGULAR,
-    // Plan: the forecast at his pace, money goals, challenges, paying abroad.
-    FORECAST, GOALS, CHALLENGES, TRAVEL,
+    // Plan: tips from his numbers (the money check's ideas lead), the forecast at his pace, money goals, challenges, paying abroad.
+    TIPS, FORECAST, GOALS, CHALLENGES, TRAVEL,
     // Trading: Hyperliquid by public address.
     TRADING,
-    // Accounts: his banks, net worth, the side hustle, shared costs, his own categories (slice 3), import, the accounts list, delete and the foot.
-    BANK, WORTH, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, ACCOUNTS, FOOT,
+    // Accounts: his banks, net worth, the year in review, the side hustle, shared costs, his own categories (slice 3), import, the accounts list, delete and the foot.
+    BANK, WORTH, YEAR, BUSINESS, SHARED_COSTS, OWN_CATEGORIES, IMPORT_STATEMENT, ACCOUNTS, FOOT,
 }
 
 object MoneyTabs {
@@ -39,12 +40,12 @@ object MoneyTabs {
 
     /** Which tab a section lives on. */
     fun tabOf(s: MoneySection): MoneyTab = when (s) {
-        MoneySection.MONTH, MoneySection.TRAVEL_BANNER, MoneySection.REVIEW, MoneySection.ALERTS, MoneySection.YEAR,
-        MoneySection.TIPS, MoneySection.CATEGORIES, MoneySection.PAYMENTS -> MoneyTab.SPENDING
+        MoneySection.MONTH, MoneySection.TRAVEL_BANNER, MoneySection.REVIEW, MoneySection.ALERTS,
+        MoneySection.CATEGORIES, MoneySection.UNSORTED, MoneySection.PAYMENTS -> MoneyTab.SPENDING
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
-        MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
+        MoneySection.TIPS, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
-        MoneySection.BANK, MoneySection.WORTH, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.OWN_CATEGORIES,
+        MoneySection.BANK, MoneySection.WORTH, MoneySection.YEAR, MoneySection.BUSINESS, MoneySection.SHARED_COSTS, MoneySection.OWN_CATEGORIES,
         MoneySection.IMPORT_STATEMENT, MoneySection.ACCOUNTS, MoneySection.FOOT -> MoneyTab.ACCOUNTS
     }
 
@@ -57,6 +58,7 @@ object MoneyTabs {
         MoneySection.YEAR -> v.month != null && v.year != null
         MoneySection.TIPS -> v.month != null && (v.tips.isNotEmpty() || v.hiddenTips != null)
         MoneySection.CATEGORIES -> v.month?.categories?.isNotEmpty() == true
+        MoneySection.UNSORTED -> v.month?.unsorted != null
         MoneySection.PAYMENTS -> v.month?.txns?.isNotEmpty() == true
         MoneySection.BILLS -> v.month != null && v.bills != null
         MoneySection.PAYDAY -> v.month != null && v.payday != null

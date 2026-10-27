@@ -415,6 +415,8 @@ data class MoneyMonth(
     val receiptsLine: String? = null,
     /** Money redesign (B2): the Spending tab's ring, tiles, category rows and latest payments by day ([MoneySpending]). */
     val spending: MoneySpendingView? = null,
+    /** Money review: the month's payments without a category, by payee, for Spending's "Sort them" ([MoneySorter]). */
+    val unsorted: MoneyUnsortedView? = null,
 )
 
 /**
@@ -707,7 +709,7 @@ object MoneyRules {
             mine.map { MoneyReceiptLine(it.id, it.day, it.pence, keyOf(it)) },
             receipts,
         )
-        val rows = sorted.take(SHOWN_TXNS).map { t ->
+        fun rowOf(t: MoneyTxn): MoneyTxnRow {
             val c = cat(t)
             val ownC = ownOf(t)
             val shownCat = ownC?.key ?: c.key
@@ -715,7 +717,7 @@ object MoneyRules {
             val key = keyOf(t)
             val merchant = MoneyCategoryRules.merchantLabel(key)
             val r = receiptOf[t.id]
-            MoneyTxnRow(
+            return MoneyTxnRow(
                 id = t.id, day = CivilDate.shortLabel(t.day), merchant = merchant, amount = signed(t.pence), moneyIn = t.pence > 0,
                 category = shownCat, categoryLabel = shownLabel, account = names[t.account].orEmpty(), taught = key in rules,
                 spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, $shownLabel" +
@@ -729,12 +731,20 @@ object MoneyRules {
                 needMarked = needMerchants.containsKey(key),
             )
         }
+        val rows = sorted.take(SHOWN_TXNS).map { rowOf(it) }
+        // Money review: the month's money out still in Other (not his own pick of Other, not one of his categories), by payee.
+        val unsorted = MoneySorter.view(
+            sorted.filter { it.pence < 0 && cat(it) == MoneyCategory.OTHER && ownOf(it) == null && keyOf(it) !in rules }
+                .groupBy { keyOf(it) }
+                .map { (k, ts) -> MoneySortPayee(k, rowOf(ts.first()), ts.size, -ts.sumOf { it.pence }) },
+        )
         val month = MoneyMonth(
             offset = thisMonth - shown, label = label,
             spentLine = "Spent ${fmt(spent)}" + (if (income > 0) " · in ${fmt(income)}" else ""),
             vsLine = vsLine, vsLit = !partial && avgTotal != null && spent - avgTotal >= OVER_MIN_PENCE,
             categories = catRows, txns = rows, more = (sorted.size - rows.size).coerceAtLeast(0),
             receiptsLine = MoneyReceipts.monthLine(cur.count { it.id in receiptOf }, CivilDate.MONTH_LONG[shown % 12]),
+            unsorted = unsorted,
         )
         val summary = "${accounts.size} account${if (accounts.size == 1) "" else "s"} · ${mine.size} transactions" +
             (if (merged.hidden > 0) " · ${merged.hidden} in a statement and from your bank, counted once" else "")
