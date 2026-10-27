@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -236,6 +237,34 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(core.moneyView.value.ownRows.isEmpty(), "the category wasn't deleted")
         assertEquals("Other", core.moneyView.value.month!!.txns.first { it.id == costa.id }.categoryLabel)
         if (shows("money-own-sheet")) fail("the sheet stayed open after Delete")
+    }
+
+    /** His categories in caps: MONTHLY CAP in the category's sheet; "£10" caps it and its bar shows this month against it. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun aMonthlyCapOnHisCategory() {
+        val core = open(ThemeChoice.DARK)
+        val costa = core.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        runBlocking { check(!core.addMoneyCategory("Treats", 3, "CUP", costa.id).refused) }
+        settle()
+        compose.onNodeWithContentDescription(MoneyTabs.spoken(MoneyTab.ACCOUNTS, false)).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        val own = core.moneyView.value.ownRows.single()
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-own-card"))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        tap("money-own-${own.id}")
+        assertTrue(shows("money-own-cap-field"), "no MONTHLY CAP field in the category's sheet")
+        val field = hasSetTextAction() and hasAnyAncestor(hasTestTag("money-own-cap-field"))
+        compose.onNode(field, useUnmergedTree = true).performTextInput("£10")
+        compose.onNode(field, useUnmergedTree = true).performImeAction()
+        waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.cap != null }
+        val cap = core.moneyView.value.ownRows.single().cap ?: fail("the cap didn't land")
+        assertEquals("£3.40 of £10", cap.amount)
+        assertTrue(shows("money-own-cap"), "the cap's bar didn't show in the sheet")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-own-category-cap"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-own-category-cap")
     }
 
     /** Needs and wants: the sheet's Need toggle marks the payee; Spending's "Needs vs wants" chip splits the month in two. */

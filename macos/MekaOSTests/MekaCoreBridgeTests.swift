@@ -3913,6 +3913,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneySection.ownCategories.name, "OWN_CATEGORIES")
     }
 
+    /// His categories in caps: the popover's MONTHLY CAP reads its bar and words from the core.
+    func testHisCategoryCapOnTheMac() {
+        let own = MoneyOwnCategories.shared
+        let ch = MoneyChallenges.shared
+        let treats = MoneyOwnCategory(id: "k1", name: "Treats", tone: 3, icon: MoneyIcon.cup, createdAtMs: 0, hidden: false)
+        let day = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 3)
+        let lines = [MoneyChallengeLine(day: day, pence: -320, category: MoneyCategory.other, own: "k1")]
+        let setting = MoneyChallengeSetting(noSpend: false, funPence: nil, caps: [:], ownCaps: ["k1": KotlinLong(value: 1000)])
+        let bars = ch.ownCapBars(lines: lines, setting: setting, own: [treats], today: day + 13)
+        XCTAssertEqual(bars["k1"]?.amount, "£3.20 of £10")
+        let rows = own.rows(own: [treats], ownRules: ["CORNER SHOP": "k1"], caps: bars)
+        XCTAssertEqual(rows.first?.line, "1 payee · £3.20 of £10 this month")
+        XCTAssertEqual(ch.OWN_CAP_LABEL, "MONTHLY CAP")
+        XCTAssertEqual(ch.parseAmount(text: "£60")?.int64Value, 6000)
+    }
+
     /// Needs and wants: the Need toggle's enum and the view chips cross the bridge as the Mac reads them.
     func testNeedsAndWantsOnTheMac() {
         let n = MoneyNeeds.shared

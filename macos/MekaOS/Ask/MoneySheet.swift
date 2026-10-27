@@ -73,6 +73,8 @@ struct MoneySheet: View {
     /// Slice 3: the category of his whose popover is open (Accounts → YOUR CATEGORIES), and whether Delete is asking.
     @State private var ownSheet: String?
     @State private var askingDelete = false
+    /// His categories in caps (2026-10-27): what he is typing in a category's MONTHLY CAP field.
+    @State private var ownCapText = ""
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -1375,6 +1377,23 @@ struct MoneySheet: View {
                     Task { said = await model.hideMoneyCategory(id: id, hidden: hide) }
                 }
                 .padding(.top, MekaSpace.xs)
+                // His categories in caps (2026-10-27): a monthly cap on this one, counting its payees.
+                Text(MoneyChallenges.shared.OWN_CAP_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.xs)
+                if let cap = r.cap {
+                    challengeBar(cap).transition(.opacity)
+                } else {
+                    TextField(MoneyChallenges.shared.OWN_CAP_HINT, text: $ownCapText)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("\(MoneyChallenges.shared.OWN_CAP_HINT) for \(r.name)")
+                        .onSubmit {
+                            let text = ownCapText
+                            ownCapText = ""
+                            MekaHaptics.tick()
+                            Task { said = await model.capMoneyCategory(id: id, text: text) }
+                        }
+                        .transition(.opacity)
+                }
                 Text(MoneyOwnCategories.shared.MERGE_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs)
                 Text(MoneyOwnCategories.shared.MERGE_HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -1422,6 +1441,7 @@ struct MoneySheet: View {
             .background(palette.surface)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
             .animation(MekaMotion.expand(reduced: reduceMotion), value: askingDelete)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: r.cap == nil)
         }
     }
 

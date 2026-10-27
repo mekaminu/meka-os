@@ -4656,6 +4656,17 @@ final class CoreModel {
         }
     }
 
+    /// His categories in caps (2026-10-27): a monthly cap on one of his categories ("£60"; blank takes it off).
+    func capMoneyCategory(id: String, text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.capMoneyCategory(id: id, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 3: hide one from Spending's ring (quiet, like Other) or show it again.
     func hideMoneyCategory(id: String, hidden: Bool) async -> MoneySaid? {
         guard let core else { return nil }

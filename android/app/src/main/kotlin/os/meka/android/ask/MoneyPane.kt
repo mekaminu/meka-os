@@ -857,6 +857,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         onDelete = { ownRow?.let { o -> ownSheetId = null; scope.launch { runCatching { core.deleteMoneyCategory(o.id) }.getOrNull()?.let(say) } } },
         onUndo = { u -> scope.launch { runCatching { core.undoMoneyCategory(u) }; haptics.light(); said = null } },
         onClose = { ownSheetId = null },
+        onCap = { text -> ownRow?.let { o -> haptics.tick(); scope.launch { runCatching { core.capMoneyCategory(o.id, text) }.getOrNull()?.let(say) } } },
     )
     }
 }
@@ -1542,7 +1543,7 @@ private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier,
 
 /** Slice 15: one allowance or cap — its title and amount, a bar that grows to its share (brass from 90%), what's left and Remove. */
 @Composable
-private fun ChallengeBar(b: MoneyChallengeBar, onRemove: (String) -> Unit) {
+internal fun ChallengeBar(b: MoneyChallengeBar, onRemove: (String) -> Unit) {
     val reduced = Meka.reducedMotion
     var shown by remember { mutableStateOf(if (reduced) b.share else 0f) }
     LaunchedEffect(b.share) { shown = b.share }

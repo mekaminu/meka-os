@@ -42,6 +42,8 @@ data class MoneyOwnCategory(
 data class MoneyOwnRow(
     val id: String, val key: String, val name: String, val tone: Int, val icon: MoneyIcon, val hidden: Boolean,
     val payees: Int, val line: String, val spoken: String,
+    /** Its monthly cap this month ("£42 of £60", "£18 left"), when he set one (MONTHLY CAP on its sheet). */
+    val cap: MoneyChallengeBar? = null,
 )
 
 /** A category his own can be merged into: [key] (built-in, or `own:<id>`) and its [label]. */
@@ -140,19 +142,23 @@ object MoneyOwnCategories {
         return MoneyOwnCategory(id, name, tone, icon, at, hidden)
     }
 
-    /** "2 payees · hidden from the ring", "No payees yet". */
-    fun line(payees: Int, hidden: Boolean): String = listOfNotNull(
+    /** "2 payees · hidden from the ring", "No payees yet", "2 payees · £42 of £60 this month". */
+    fun line(payees: Int, hidden: Boolean, cap: MoneyChallengeBar? = null): String = listOfNotNull(
         when (payees) { 0 -> "No payees yet"; 1 -> "1 payee"; else -> "$payees payees" },
+        cap?.let { "${it.amount} this month" },
         "hidden from the ring".takeIf { hidden },
     ).joinToString(" · ")
 
-    /** YOUR CATEGORIES' rows, in [own]'s order, each with how many payees [ownRules] put in it. */
-    fun rows(own: List<MoneyOwnCategory>, ownRules: Map<String, String>): List<MoneyOwnRow> {
+    /** YOUR CATEGORIES' rows, in [own]'s order, each with how many payees [ownRules] put in it and its cap ([caps] by id). */
+    fun rows(own: List<MoneyOwnCategory>, ownRules: Map<String, String>): List<MoneyOwnRow> = rows(own, ownRules, emptyMap())
+
+    fun rows(own: List<MoneyOwnCategory>, ownRules: Map<String, String>, caps: Map<String, MoneyChallengeBar>): List<MoneyOwnRow> {
         val counts = ownRules.values.groupingBy { it }.eachCount()
         return own.map { c ->
             val n = counts[c.id] ?: 0
-            val l = line(n, c.hidden)
-            MoneyOwnRow(c.id, c.key, c.name, c.tone, c.icon, c.hidden, n, l, "${c.name}, $l, opens its settings")
+            val cap = caps[c.id]
+            val l = line(n, c.hidden, cap)
+            MoneyOwnRow(c.id, c.key, c.name, c.tone, c.icon, c.hidden, n, l, "${c.name}, $l, opens its settings", cap)
         }
     }
 

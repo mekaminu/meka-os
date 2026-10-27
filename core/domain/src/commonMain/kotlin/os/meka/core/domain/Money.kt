@@ -655,6 +655,8 @@ object MoneyRules {
         // Spending's rows: as [spendOf], with his own categories split out of Other.
         fun shownSpendOf(ts: List<MoneyTxn>): Map<String, Long> = ts.filter { cat(it).spend }.groupBy { shownKey(it) }
             .mapValues { (_, l) -> -l.sumOf { it.pence } }
+        // Challenges and the caps on his own categories (this month, whatever month is shown).
+        val challengeLines = mine.map { MoneyChallengeLine(it.day, it.pence, cat(it), ownOf(it)?.id) }
         val cur = byMonth[shown].orEmpty()
         val spend = spendOf(cur)
         val spent = spend.values.filter { it > 0 }.sum()
@@ -791,7 +793,7 @@ object MoneyRules {
             bank = bank,
             business = business,
             shared = shared,
-            challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
+            challenges = if (partial) MoneyChallenges.view(challengeLines, challenges, today, own) else null,
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
             year = if (partial) MoneyYear.view(yearLines, today, source) else null,
             review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }, source),
@@ -801,7 +803,7 @@ object MoneyRules {
                 own,
             ),
             ownCategories = own,
-            ownRows = MoneyOwnCategories.rows(own, ownRules),
+            ownRows = MoneyOwnCategories.rows(own, ownRules, MoneyChallenges.ownCapBars(challengeLines, challenges, own, today)),
         )
     }
 
@@ -1311,15 +1313,36 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Slice 15: a category's cap a month ([text] "Eating out £150"), on both devices; Undo by [undoCategory]. */
     fun setCap(text: String): MoneySaved {
+        // His own categories first ("Vape £60"); none of his has a built-in name.
+        MoneyChallenges.parseOwnCap(text, ownCategories())?.let { (o, pence) -> return setOwnCap(o.id, pence) }
         val (c, pence) = MoneyChallenges.parseCap(text) ?: return MoneySaved(MoneyChallenges.BAD_CAP, refused = true)
         val before = challengeField(MoneyChallengeFields.cap(c))?.longOrNull
         replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.capFields(c, pence, nowMs()))
         return MoneySaved(MoneyChallenges.capSaid(c, pence), undo = CHALLENGE_UNDO + "c|" + c.key + "|" + (before?.toString() ?: ""))
     }
 
-    /** Slice 15: takes a cap ([key] the category's) or fun money ([MoneyChallenges.FUN_KEY]) off; Undo by [undoCategory]. */
+    /**
+     * His own categories: a monthly cap on [id] ([text] "£60"; blank or null takes it off), counting the payees he put in
+     * it, on both devices. Undo by [undoCategory].
+     */
+    fun capOwnCategory(id: String, text: String?): MoneySaved {
+        ownLiveOf(id) ?: return MoneySaved(MoneyOwnCategories.GONE, refused = true)
+        val pence = if (text.isNullOrBlank()) null else MoneyChallenges.parseAmount(text) ?: return MoneySaved(MoneyChallenges.BAD_AMOUNT, refused = true)
+        return setOwnCap(id, pence)
+    }
+
+    private fun setOwnCap(id: String, pence: Long?): MoneySaved {
+        val c = ownLiveOf(id) ?: return MoneySaved(MoneyOwnCategories.GONE, refused = true)
+        val before = challengeField(MoneyChallengeFields.ownCap(id))?.longOrNull
+        if (pence == null && before == null) return MoneySaved(MoneyRules.GONE, refused = true)
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.ownCapFields(id, pence, nowMs()))
+        return MoneySaved(MoneyChallenges.capSaid(c.name, pence), undo = CHALLENGE_UNDO + "o|" + id + "|" + (before?.toString() ?: ""))
+    }
+
+    /** Slice 15: takes a cap ([key] the category's, or `own:<id>`) or fun money ([MoneyChallenges.FUN_KEY]) off; Undo by [undoCategory]. */
     fun removeChallenge(key: String): MoneySaved {
         if (key == MoneyChallenges.FUN_KEY) return setFunMoney(null)
+        MoneyOwnCategories.idOf(key)?.let { return setOwnCap(it, null) }
         val c = MoneyCategory.of(key)?.takeIf { it.spend } ?: return MoneySaved(MoneyRules.GONE, refused = true)
         val before = challengeField(MoneyChallengeFields.cap(c))?.longOrNull ?: return MoneySaved(MoneyRules.GONE, refused = true)
         replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.capFields(c, null, nowMs()))
@@ -1473,6 +1496,10 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                     val c = MoneyCategory.of(parts.getOrNull(1))?.takeIf { it.spend } ?: return false
                     MoneyChallenges.capFields(c, parts.getOrNull(2)?.toLongOrNull(), nowMs())
                 }
+                "o" -> {
+                    val id = parts.getOrNull(1)?.takeIf { it.isNotEmpty() } ?: return false
+                    MoneyChallenges.ownCapFields(id, parts.getOrNull(2)?.toLongOrNull(), nowMs())
+                }
                 else -> return false
             }
             replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, fields)
@@ -1620,7 +1647,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID, mapOf(MoneySharedFields.MY_PCT to FieldValue.Null) + MoneyShared.settleFields(null, null, nowMs()))
             }
             if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID) != null) {
-                replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.clearFields(nowMs()))
+                replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.clearFields(nowMs(), challenges().ownCaps.keys))
             }
             if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID) != null) {
                 replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, mapOf(MoneyBusinessFields.SET_ASIDE to FieldValue.Null))

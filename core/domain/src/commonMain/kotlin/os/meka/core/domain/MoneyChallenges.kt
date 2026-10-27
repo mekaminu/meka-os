@@ -16,6 +16,10 @@ import os.meka.core.sync.fv
  *
  * All three live on one synced `context_mode` entity [ENTITY_ID] ([MoneyChallengeFields]; ADR-008 addendum 2026-10-17,
  * additive, no migration): `noSpend`, `funPence`, `cap_<category key>` (pence a month), `changedAtMs`.
+ *
+ * His own categories (Meka 2026-10-26 23:18, "Vape"; 2026-10-27, additive): `cap_own_<id>` caps one of his categories a
+ * month, counting the payees he put in it ([MoneyChallengeLine.own]); a cap on a category he deleted waits unseen and comes
+ * back with Undo. An older app ignores the field.
  */
 object MoneyChallengeFields {
     const val NO_SPEND = "noSpend"
@@ -23,18 +27,26 @@ object MoneyChallengeFields {
     const val CAP_PREFIX = "cap_"
     const val CHANGED_AT = "changedAtMs"
     fun cap(c: MoneyCategory): String = CAP_PREFIX + c.key
+    const val OWN_CAP_PREFIX = "cap_own_"
+    fun ownCap(id: String): String = OWN_CAP_PREFIX + id
 }
 
 /** One statement line as the challenges see it. */
-data class MoneyChallengeLine(val day: Long, val pence: Long, val category: MoneyCategory)
+data class MoneyChallengeLine(
+    val day: Long, val pence: Long, val category: MoneyCategory,
+    /** The id of his own category this payee is in ([MoneyOwnCategories]), if any; underneath it still counts as [category]. */
+    val own: String? = null,
+)
 
 /** What he set: no-spend days on, fun money a week, and a monthly cap per category (pence). */
 data class MoneyChallengeSetting(
     val noSpend: Boolean = false,
     val funPence: Long? = null,
     val caps: Map<MoneyCategory, Long> = emptyMap(),
+    /** Caps on his own categories: its id → pence a month. */
+    val ownCaps: Map<String, Long> = emptyMap(),
 ) {
-    val any: Boolean get() = noSpend || funPence != null || caps.isNotEmpty()
+    val any: Boolean get() = noSpend || funPence != null || caps.isNotEmpty() || ownCaps.isNotEmpty()
 }
 
 /** No-spend days this month: [days] one per day from the 1st to the last day his statements reach, true = no spending. */
@@ -117,6 +129,11 @@ object MoneyChallenges {
             noSpend = fields[MoneyChallengeFields.NO_SPEND]?.boolOrNull == true,
             funPence = fields[MoneyChallengeFields.FUN]?.longOrNull?.takeIf { it > 0 },
             caps = caps,
+            ownCaps = fields.entries.mapNotNull { (k, v) ->
+                val id = k.takeIf { it.startsWith(MoneyChallengeFields.OWN_CAP_PREFIX) }
+                    ?.removePrefix(MoneyChallengeFields.OWN_CAP_PREFIX)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                v.longOrNull?.takeIf { it > 0 }?.let { id to it }
+            }.toMap(),
         )
     }
 
@@ -129,10 +146,15 @@ object MoneyChallenges {
     fun capFields(c: MoneyCategory, pence: Long?, nowMs: Long): Map<String, FieldValue> =
         mapOf(MoneyChallengeFields.cap(c) to (pence?.fv() ?: FieldValue.Null), MoneyChallengeFields.CHANGED_AT to nowMs.fv())
 
-    /** Every challenge off (Delete all money data). */
-    fun clearFields(nowMs: Long): Map<String, FieldValue> =
+    /** A cap on his own category [id] (pence a month; null takes it off). */
+    fun ownCapFields(id: String, pence: Long?, nowMs: Long): Map<String, FieldValue> =
+        mapOf(MoneyChallengeFields.ownCap(id) to (pence?.fv() ?: FieldValue.Null), MoneyChallengeFields.CHANGED_AT to nowMs.fv())
+
+    /** Every challenge off (Delete all money data), including the caps on his own categories [ownIds]. */
+    fun clearFields(nowMs: Long, ownIds: Collection<String> = emptyList()): Map<String, FieldValue> =
         mapOf(MoneyChallengeFields.NO_SPEND to FieldValue.Null, MoneyChallengeFields.FUN to FieldValue.Null) +
-            CAPPABLE.associate { MoneyChallengeFields.cap(it) to FieldValue.Null } + (MoneyChallengeFields.CHANGED_AT to nowMs.fv())
+            CAPPABLE.associate { MoneyChallengeFields.cap(it) to FieldValue.Null } +
+            ownIds.associate { MoneyChallengeFields.ownCap(it) to FieldValue.Null } + (MoneyChallengeFields.CHANGED_AT to nowMs.fv())
 
     private val AMOUNT = Regex("""£?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(k)?\b""", RegexOption.IGNORE_CASE)
     private val MONTHLY = Regex("""\b(a|per|each|every)\s+month\b|\bmonthly\b|/\s*m(onth)?\b""", RegexOption.IGNORE_CASE)
@@ -152,6 +174,32 @@ object MoneyChallenges {
 
     /** "Eating out £150", "takeaways 60", "£40 coffee": the category and its cap a month; null when either is missing. */
     fun parseCap(text: String): Pair<MoneyCategory, Long>? {
+        val (words, p) = splitCap(text) ?: return null
+        return categoryNamed(words)?.let { it to p }
+    }
+
+    /** "Vape £60": one of his own categories ([own]) and its cap a month; null when no name of his matches. */
+    fun parseOwnCap(text: String, own: List<MoneyOwnCategory>): Pair<MoneyOwnCategory, Long>? {
+        if (own.isEmpty()) return null
+        val (words, p) = splitCap(text) ?: return null
+        val c = own.firstOrNull { MoneyOwnCategories.sameName(it.name, words) }
+            ?: own.firstOrNull { words.endsWith("s") && MoneyOwnCategories.sameName(it.name, words.removeSuffix("s")) }
+            ?: own.firstOrNull { words.length >= 3 && it.name.lowercase().startsWith(words) }
+            ?: return null
+        return c to p
+    }
+
+    /** An amount alone ("£60", "60 a month") for the cap on one of his categories, from its sheet; null without one. */
+    fun parseAmount(text: String): Long? = amountOf(text.trim())
+
+    const val OWN_CAP_LABEL = "MONTHLY CAP"
+    const val OWN_CAP_HINT = "Cap it a month, e.g. £60"
+    const val OWN_CAP_SET = "Set cap"
+    const val OWN_CAP_REMOVE = "Remove cap"
+    const val BAD_AMOUNT = "Type an amount for the month, e.g. £60."
+
+    /** The words (lower case, fillers gone) and the amount of a cap he typed; null without either. */
+    private fun splitCap(text: String): Pair<String, Long>? {
         val t = text.trim().replace(Regex("\\s+"), " ")
         val m = AMOUNT.findAll(t).lastOrNull() ?: return null
         val p = amountOf(t) ?: return null
@@ -159,7 +207,7 @@ object MoneyChallenges {
             .replace(MONTHLY, " ").replace(Regex("""\b(cap|on|for|at|a|per|max|limit)\b""", RegexOption.IGNORE_CASE), " ")
             .trim().trim(':', '-', '·', ',').trim().lowercase().replace(Regex("\\s+"), " ")
         if (words.isEmpty()) return null
-        return categoryNamed(words)?.let { it to p }
+        return words to p
     }
 
     /** A category from what he typed: its label or key, the start of its label, or a few words people say. */
@@ -185,8 +233,9 @@ object MoneyChallenges {
         if (on) "Counting no-spend days · on both devices" else "Stopped counting no-spend days"
     fun funSaid(pence: Long?): String =
         if (pence != null) "Fun money · ${MoneyRules.fmt(pence)} a week, Monday to Sunday · on both devices" else "Fun money stopped"
-    fun capSaid(c: MoneyCategory, pence: Long?): String =
-        if (pence != null) "${c.label} capped at ${MoneyRules.fmt(pence)} a month · on both devices" else "${c.label} cap removed"
+    fun capSaid(c: MoneyCategory, pence: Long?): String = capSaid(c.label, pence)
+    fun capSaid(name: String, pence: Long?): String =
+        if (pence != null) "$name capped at ${MoneyRules.fmt(pence)} a month · on both devices" else "$name cap removed"
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
     private fun n(k: Int, one: String, many: String = one + "s") = "$k ${if (k == 1) one else many}"
@@ -199,10 +248,31 @@ object MoneyChallenges {
 
     /** Spending in [cats] (null = every spend category) between [from] and [to] inclusive, refunds netted. */
     private fun spent(lines: List<MoneyChallengeLine>, from: Long, to: Long, cats: Set<MoneyCategory>?): Long =
-        (-lines.filter { it.day in from..to && it.category.spend && (cats == null || it.category in cats) }.sumOf { it.pence }).coerceAtLeast(0)
+        spentWhere(lines, from, to) { cats == null || it.category in cats }
 
-    fun view(lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, today: Long): MoneyChallengesView? {
+    private fun spentWhere(lines: List<MoneyChallengeLine>, from: Long, to: Long, keep: (MoneyChallengeLine) -> Boolean): Long =
+        (-lines.filter { it.day in from..to && it.category.spend && keep(it) }.sumOf { it.pence }).coerceAtLeast(0)
+
+    /**
+     * The caps on his own categories that are still live ([own]): category id → its bar ("£42 of £60", "£18 left"), for
+     * CHALLENGES and the category's own sheet. Empty without statements.
+     */
+    fun ownCapBars(lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, own: List<MoneyOwnCategory>, today: Long): Map<String, MoneyChallengeBar> {
+        if (lines.isEmpty() || setting.ownCaps.isEmpty()) return emptyMap()
+        val first = lines.minOf { it.day }
+        val through = minOf(today, lines.maxOf { it.day })
+        val byId = own.associateBy { it.id }
+        return setting.ownCaps.mapNotNull { (id, cap) ->
+            val c = byId[id] ?: return@mapNotNull null
+            id to capBar(lines, MoneyOwnCategories.PREFIX + id, c.name, cap, today, through, first) { it.own == id }
+        }.toMap()
+    }
+
+    fun view(lines: List<MoneyChallengeLine>, setting0: MoneyChallengeSetting, today: Long, own: List<MoneyOwnCategory> = emptyList()): MoneyChallengesView? {
         if (lines.isEmpty()) return null
+        // A cap on a category he deleted waits unseen (Undo brings the category and its cap back).
+        val live = own.mapTo(HashSet()) { it.id }
+        val setting = setting0.copy(ownCaps = setting0.ownCaps.filterKeys { it in live })
         val first = lines.minOf { it.day }
         val through = minOf(today, lines.maxOf { it.day })
         val throughLine = if (through < today) "Your statements reach ${CivilDate.shortLabel(through)}, so that's as far as these count" else null
@@ -210,8 +280,8 @@ object MoneyChallenges {
 
         val noSpend = if (!setting.noSpend) null else noSpendView(lines, today, through, first)
         val funMoney = setting.funPence?.let { funView(lines, it, today, through, first) }
-        val caps = setting.caps.map { (c, cap) -> capView(lines, c, cap, today, through, first) }
-            .sortedByDescending { it.share }
+        val caps = (setting.caps.map { (c, cap) -> capView(lines, c, cap, today, through, first) } +
+            ownCapBars(lines, setting, own, today).values).sortedByDescending { it.share }
         return MoneyChallengesView(HEAD, null, setting.noSpend, noSpend, funMoney, caps, throughLine, FUN_HINT, CAP_HINT, FOOT)
     }
 
@@ -268,10 +338,16 @@ object MoneyChallenges {
             "Fun money this week, $amount, $line", run)
     }
 
-    private fun capView(lines: List<MoneyChallengeLine>, c: MoneyCategory, cap: Long, today: Long, through: Long, first: Long): MoneyChallengeBar {
+    private fun capView(lines: List<MoneyChallengeLine>, c: MoneyCategory, cap: Long, today: Long, through: Long, first: Long): MoneyChallengeBar =
+        capBar(lines, c.key, c.label, cap, today, through, first) { it.category == c }
+
+    private fun capBar(
+        lines: List<MoneyChallengeLine>, key: String, label: String, cap: Long, today: Long, through: Long, first: Long,
+        inIt: (MoneyChallengeLine) -> Boolean,
+    ): MoneyChallengeBar {
         val d = CivilDate.fromEpochDay(today)
         val monthStart = CivilDate.toEpochDay(d.year, d.month, 1)
-        val spentNow = spent(lines, monthStart, through, setOf(c))
+        val spentNow = spentWhere(lines, monthStart, through, inIt)
         val left = cap - spentNow
         var run = 0
         var y = d.year; var m = d.month
@@ -280,7 +356,7 @@ object MoneyChallenges {
             val s = CivilDate.toEpochDay(y, m, 1)
             val e = CivilDate.toEpochDay(y, m, CivilDate.lengthOfMonth(y, m))
             if (s < CivilDate.toEpochDay(CivilDate.fromEpochDay(first).year, CivilDate.fromEpochDay(first).month, 1) || e > through) break
-            if (spent(lines, s, e, setOf(c)) <= cap) run++ else break
+            if (spentWhere(lines, s, e, inIt) <= cap) run++ else break
         }
         val share = if (cap > 0) spentNow.toFloat() / cap else 0f
         val head = if (left >= 0) "${fmt(left)} left" else "${fmt(-left)} over"
@@ -291,8 +367,8 @@ object MoneyChallenges {
         }
         val line = listOfNotNull(head, runLine).joinToString(" · ")
         val amount = "${fmt(spentNow)} of ${fmt(cap)}"
-        return MoneyChallengeBar(c.key, "${c.label} this month", amount, share, line, share >= LIT_SHARE,
-            "${c.label} this month, $amount, $line", run)
+        return MoneyChallengeBar(key, "$label this month", amount, share, line, share >= LIT_SHARE,
+            "$label this month, $amount, $line", run)
     }
 
     const val STREAKS_HEAD = "MONEY CHALLENGES"
@@ -306,9 +382,9 @@ object MoneyChallenges {
      * 9 this month", "Within it 3 weeks in a row · on track this week"), lit while a run is going. Null with none set or no
      * statements; never an amount.
      */
-    fun streaks(lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, today: Long): MoneyStreaksView? {
+    fun streaks(lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, today: Long, own: List<MoneyOwnCategory> = emptyList()): MoneyStreaksView? {
         if (!setting.any) return null
-        val v = view(lines, setting, today) ?: return null
+        val v = view(lines, setting, today, own) ?: return null
         val rows = buildList {
             v.noSpend?.takeIf { it.days.isNotEmpty() }?.let { ns ->
                 val month = CivilDate.MONTH_LONG[CivilDate.fromEpochDay(today).month - 1]
@@ -320,10 +396,7 @@ object MoneyChallenges {
                 add(MoneyStreak("nospend", SWITCH, line, ns.streak >= LIT_DAYS, "No-spend days, $line"))
             }
             v.funMoney?.let { add(barStreak(it, "Fun money", "week")) }
-            v.caps.forEach { b ->
-                val c = CAPPABLE.first { it.key == b.key }
-                add(barStreak(b, "${c.label} cap", "month"))
-            }
+            v.caps.forEach { b -> add(barStreak(b, "${b.title.removeSuffix(" this month")} cap", "month")) }
         }
         if (rows.isEmpty()) return null
         val through = minOf(today, lines.maxOf { it.day })

@@ -54,6 +54,8 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.minTouch
+import os.meka.android.lists.Field
+import os.meka.core.domain.MoneyChallenges
 import os.meka.core.domain.MoneyIcon
 import os.meka.core.domain.MoneyOwnCategories
 import os.meka.core.domain.MoneyOwnCategory
@@ -92,7 +94,8 @@ internal fun OwnCategoriesCard(rows: List<MoneyOwnRow>, modifier: Modifier = Mod
 /**
  * One of his categories' sheet: rises from the bottom over a 50 % dim (motion catalogue: Sheets and panes; reduced motion
  * cross-fades). The edit form (name, colour, icon, Save), Hide from the ring, MERGE INTO chips (his others first) and
- * Delete category, which asks first ("Delete Vape? Its 2 payees go to Other."). Merge and Delete close the sheet; the line
+ * Delete category, which asks first ("Delete Vape? Its 2 payees go to Other."). MONTHLY CAP: a field ("£60") caps it a
+ * month, then its bar this month ("£17.50 of £20 · £2.50 left") with Remove cap. Merge and Delete close the sheet; the line
  * with Undo shows on the page. A tap on the dim, Back or Done closes it.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalAnimationApi::class)
@@ -100,7 +103,7 @@ internal fun OwnCategoriesCard(rows: List<MoneyOwnRow>, modifier: Modifier = Mod
 internal fun OwnCategorySheet(
     row: MoneyOwnRow?, own: List<MoneyOwnCategory>, said: MoneySaved?,
     onSave: (String, Int, MoneyIcon) -> Unit, onHide: (Boolean) -> Unit, onMerge: (String) -> Unit, onDelete: () -> Unit,
-    onUndo: (String) -> Unit, onClose: () -> Unit,
+    onUndo: (String) -> Unit, onClose: () -> Unit, onCap: (String) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     val shown = remember { arrayOfNulls<MoneyOwnRow>(1) }
@@ -161,6 +164,21 @@ internal fun OwnCategorySheet(
                 FlowRow(Modifier.padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     TripPill(MoneyOwnCategories.HIDE, on = r.hidden, tag = "money-own-hide",
                         description = MoneyOwnCategories.HIDE + if (r.hidden) ", on" else ", off") { onHide(!r.hidden) }
+                }
+                // Money, his categories in caps (2026-10-27): a monthly cap on this one, counting its payees.
+                Text(MoneyChallenges.OWN_CAP_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(top = MekaSpace.xs))
+                AnimatedContent(
+                    r.cap, label = "money-own-cap",
+                    transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
+                    contentKey = { it != null },
+                ) { cap ->
+                    if (cap != null) Column(Modifier.testTag("money-own-cap")) {
+                        ChallengeBar(cap) { onCap("") }
+                    } else Field(
+                        MoneyChallenges.OWN_CAP_HINT, modifier = Modifier.testTag("money-own-cap-field"),
+                        description = "${MoneyChallenges.OWN_CAP_HINT} for ${r.name}",
+                    ) { onCap(it) }
                 }
                 Text(MoneyOwnCategories.MERGE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.xs))

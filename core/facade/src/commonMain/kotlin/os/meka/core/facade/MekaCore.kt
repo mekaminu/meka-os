@@ -915,6 +915,15 @@ class MekaCore(
         money.hideOwnCategory(id, hidden).also { refreshMoney() }
     }
 
+    /**
+     * His own categories: a monthly cap on [id] ([text] "£60"; blank takes it off), counting the payees he put in it,
+     * synced; Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun capMoneyCategory(id: String, text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        money.capOwnCategory(id, text).also { refreshMoney() }
+    }
+
     /** Slice 3: merges [id] into [intoKey] (a built-in key or `own:<id>`); its payees move there. Undo by [undoMoneyCategory]. */
     suspend fun mergeMoneyCategory(id: String, intoKey: String): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) return@onCore moneyLocked()
@@ -1261,9 +1270,14 @@ class MekaCore(
     private fun moneyStreaks(): os.meka.core.domain.MoneyStreaksView? {
         val setting = money.challenges()
         if (!setting.any) return null
+        val own = money.ownCategories()
+        val ownRules = if (setting.ownCaps.isEmpty()) emptyMap() else money.ownRules()
         val lines = os.meka.core.domain.MoneyRules.askLines(money.accounts(), money.txns(), money.rules())
-            .map { os.meka.core.domain.MoneyChallengeLine(it.day, it.pence, it.category) }
-        return os.meka.core.domain.MoneyChallenges.streaks(lines, setting, todayEpochDay())
+            .map { l ->
+                val o = ownRules[l.merchant]?.takeIf { l.category == os.meka.core.domain.MoneyCategory.OTHER }
+                os.meka.core.domain.MoneyChallengeLine(l.day, l.pence, l.category, o)
+            }
+        return os.meka.core.domain.MoneyChallenges.streaks(lines, setting, todayEpochDay(), own)
     }
 
     private fun moneyAbroadNow(): Boolean = runCatching {
