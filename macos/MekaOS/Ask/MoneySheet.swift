@@ -2115,7 +2115,7 @@ struct MoneySheet: View {
                 Text(MoneyRules.shared.CONNECT_LATER).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("EXPORT").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.s)
+            Text("EXPORT").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
             Text(MoneyMore.shared.EXPORT_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(MoneyMore.shared.EXPORT + "…") { MekaHaptics.tick(); exportAll() }
@@ -2124,7 +2124,7 @@ struct MoneySheet: View {
                 if deleting {
                     Text(MoneyRules.shared.DELETE_ASK).font(MekaType.body).foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, MekaSpace.s)
+                        .padding(.top, MekaSpace.m)
                     HStack {
                         Button("Delete") {
                             deleting = false
@@ -2136,7 +2136,7 @@ struct MoneySheet: View {
                 } else {
                     Button(MoneyRules.shared.DELETE_ALL) { deleting = true; MekaHaptics.tick() }
                         .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .padding(.top, MekaSpace.s)
+                        .padding(.top, MekaSpace.m)
                 }
             }
         }

@@ -154,13 +154,13 @@ internal fun MoneyDataDetails(
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, enabled = !busy, onClick = onPick)
                 .minTouch().padding(vertical = MekaSpace.xs).testTag("money-import-file"))
         if (connectLater) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
-        Text("EXPORT", style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.s))
+        Text("EXPORT", style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.m))
         Text(MoneyMore.EXPORT_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
         Text(MoneyMore.EXPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onExport)
                 .minTouch().padding(vertical = MekaSpace.xs).testTag("money-export-all"))
         if (canDelete) AnimatedContent(
-            asking, label = "money-delete-all", modifier = Modifier.padding(top = MekaSpace.s),
+            asking, label = "money-delete-all", modifier = Modifier.padding(top = MekaSpace.m),
             transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
         ) { ask ->
             if (!ask) Text(MoneyRules.DELETE_ALL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
