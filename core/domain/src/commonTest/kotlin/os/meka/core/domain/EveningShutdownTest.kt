@@ -410,4 +410,36 @@ class EveningShutdownTest {
         assertEquals("Today", InstantTaskRules.what(TaskMove.TODAY))
         assertEquals("Day after", InstantTaskRules.what(TaskMove.DAY_AFTER))
     }
+
+    private fun bill(id: String, title: String, due: Long, pence: Long?, cancelBy: Long? = null) = RenewalItem(
+        id = id, title = title, kind = ObligationKind.BILL, subject = null, notes = null, dueDay = due, cancelByDay = cancelBy,
+        leadDays = 3, costPence = pence, repeats = RenewalRepeat.MONTHLY, repeatLabel = "", state = RenewalState.LATER, meta = "",
+        doneLabel = "Paid", stopLabel = "Stop tracking", hasConflict = false,
+    )
+
+    @Test
+    fun tomorrowsBillsShowInTheSheetAndThePeek() {
+        val day = 20_000L
+        assertNull(ShutdownRules.bills(listOf(bill("a", "Water", day + 2, 3000)), day + 1))
+        val b = ShutdownRules.bills(
+            listOf(
+                bill("a", "Netflix", day + 1, 1099), bill("b", "Car tax", day + 1, 19000), bill("c", "Window cleaner", day + 1, null),
+                bill("d", "Phone", day + 1, 2500), bill("e", "Gym", day + 9, 3500, cancelBy = day + 1), bill("f", "Water", day + 2, 3000),
+            ),
+            day + 1,
+        )!!
+        assertEquals("Due tomorrow · Car tax £190 · Netflix £10.99 · Phone £25 · + 1 more", b.due)
+        assertEquals("Last day to cancel · Gym £35", b.cancel)
+        assertEquals(5, b.count)
+        assertEquals("Due tomorrow: Car tax £190, Netflix £10.99, Phone £25, Window cleaner. Last day to cancel: Gym £35", b.spoken)
+        val label = CivilDate.shortLabel(day + 1)
+        // A bill alone is something planned; with tasks it's counted beside them.
+        val empty = TomorrowPreview("Tomorrow", null, emptyList(), 0, 0, "Nothing planned yet")
+        val one = ShutdownRules.bills(listOf(bill("a", "Netflix", day + 1, 1099)), day + 1)
+        assertEquals("Tomorrow · $label · 1 bill due", ShutdownRules.peek(empty.copy(bills = one), label).line)
+        val task = TomorrowRow("t-1", "07:40", "Gym", false, null)
+        val p = empty.copy(rows = listOf(task), taskCount = 1, first = task, bills = b)
+        assertEquals("Tomorrow · $label · 1 task · 5 bills due · first 07:40 Gym", ShutdownRules.peek(p, label).line)
+        assertEquals("Tomorrow · $label · nothing planned yet", ShutdownRules.peek(empty, label).line)
+    }
 }

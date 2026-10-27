@@ -124,7 +124,7 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
                     color = if (line == failed) Meka.colors.critical else Meka.colors.textSecondary)
             }
         }
-        if (rows.isEmpty()) {
+        if (rows.isEmpty() && v.tomorrow.bills == null) {
             item(key = "empty") {
                 Text("Nothing planned for tomorrow yet.", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().appear(rememberAppearance(2)))

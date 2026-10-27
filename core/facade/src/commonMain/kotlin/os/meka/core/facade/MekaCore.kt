@@ -12486,21 +12486,26 @@ class MekaCore(
         val receiptNow = viewMemo.keepReading("Receipt", replica, listOf(minuteNow(), timeZone())) {
             os.meka.core.domain.ReceiptRules.receipt(activity.items(), nowMs(), cal)
         }
+        val tomorrowNow = shutdownRaw.tomorrow.copy(
+            weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
+            school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
+            // Done for the day, the first train: "First train · the 07:42 · leave by 07:32" before an office day.
+            train = firstTrainTomorrow(workState, todayDay + 1, cal),
+            // Annual leave, slice 2: "Annual leave · no work · back Mon 2 Nov" on the evening before leave.
+            // The commute counts everywhere, slice 4: "Work 09:00–17:30 · leave 07:40 · home about 18:50" before an office day.
+            workLine = os.meka.core.domain.CommuteRules.withDayLine(
+                os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay),
+                hoursOf(workState, todayDay + 1), todayDay + 1, cal,
+            ),
+            // Tomorrow on Today, slice 2: bills and renewals due tomorrow (and last days to cancel), from Lists → Renewals.
+            bills = os.meka.core.domain.ShutdownRules.bills(listsNow.renewals.all, tomorrowWindow.epochDay),
+        )
         val shutdownNow = shutdownRaw.copy(
             // Daily receipt: what MEKA handled today, from the activity log (Today's evening line opens Activity).
             receipt = receiptNow,
-            tomorrow = shutdownRaw.tomorrow.copy(
-                weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
-                school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
-                // Done for the day, the first train: "First train · the 07:42 · leave by 07:32" before an office day.
-                train = firstTrainTomorrow(workState, todayDay + 1, cal),
-                // Annual leave, slice 2: "Annual leave · no work · back Mon 2 Nov" on the evening before leave.
-                // The commute counts everywhere, slice 4: "Work 09:00–17:30 · leave 07:40 · home about 18:50" before an office day.
-                workLine = os.meka.core.domain.CommuteRules.withDayLine(
-                    os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay),
-                    hoursOf(workState, todayDay + 1), todayDay + 1, cal,
-                ),
-            ),
+            tomorrow = tomorrowNow,
+            // The peek counts tomorrow's bills too ("· 1 bill due").
+            peek = shutdownRaw.peek?.let { os.meka.core.domain.ShutdownRules.peek(tomorrowNow, os.meka.core.domain.CivilDate.shortLabel(tomorrowWindow.epochDay)) },
         )
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
         // A running fast also shows as the Day ring's inner arc (Living Today, slice 3); once the day is shut down the

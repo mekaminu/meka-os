@@ -287,6 +287,13 @@ internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
         // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent so the kit gets packed.
         p.school?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.semantics { contentDescription = it.spoken }) }
+        // Tomorrow on Today, slice 2: bills and renewals due tomorrow, and a last day to cancel (in the accent).
+        p.bills?.let { b ->
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = b.spoken }) {
+                b.due?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
+                b.cancel?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent) }
+            }
+        }
         // The summary rolls over to its new value as items are carried in.
         AnimatedContent(
             targetState = p.summary,

@@ -47,6 +47,14 @@ data class TomorrowRow(val id: String, val time: String?, val title: String, val
  */
 data class TomorrowPeek(val line: String, val spoken: String)
 
+/**
+ * Tomorrow on Today, slice 2 (Meka 2026-10-26: the Tomorrow sheet should show "bills due"): what from Lists → Renewals
+ * falls tomorrow. [due] "Due tomorrow · Car tax £190 · Netflix £10.99" (bills and renewals due that day), [cancel]
+ * "Last day to cancel · Gym £35" (a cancel-by day tomorrow); either may be null. [count] is how many in all, for the peek.
+ * Read from the renewals radar he keeps on Lists (not the locked Money tab), so nothing new shows on Today unlocked.
+ */
+data class TomorrowBills(val due: String?, val cancel: String?, val count: Int, val spoken: String)
+
 data class TomorrowPreview(
     /** "Tomorrow · Wed 7 Oct" */
     val label: String,
@@ -70,6 +78,8 @@ data class TomorrowPreview(
      * an office day, from the trains he took on recent mornings ([FirstTrainRules.line]); set by the facade.
      */
     val train: FirstTrainLine? = null,
+    /** Bills and renewals due tomorrow, and cancel-by days ([ShutdownRules.bills]); set by the facade from Lists → Renewals. */
+    val bills: TomorrowBills? = null,
 )
 
 data class ShutdownView(
@@ -238,10 +248,12 @@ object ShutdownRules {
      */
     fun peek(p: TomorrowPreview, dayLabel: String): TomorrowPeek {
         val head = "Tomorrow · $dayLabel"
-        if (p.rows.isEmpty()) return TomorrowPeek("$head · nothing planned yet", "Tomorrow, $dayLabel: nothing planned yet")
+        val bills = p.bills?.count ?: 0
+        if (p.rows.isEmpty() && bills == 0) return TomorrowPeek("$head · nothing planned yet", "Tomorrow, $dayLabel: nothing planned yet")
         val bits = listOfNotNull(
             count(p.eventCount, "event").takeIf { p.eventCount > 0 },
             count(p.taskCount, "task").takeIf { p.taskCount > 0 },
+            "${count(bills, "bill")} due".takeIf { bills > 0 },
             p.first?.let { "first ${it.time} ${shorten(it.title)}" },
         )
         return TomorrowPeek("$head · " + bits.joinToString(" · "), "Tomorrow, $dayLabel: " + bits.joinToString(", "))
@@ -270,6 +282,30 @@ object ShutdownRules {
     /** The bar's line after a move from the Tomorrow sheet: "Moved “Gym” to Today" · "Moved “Gym” to Thu 29 Oct". */
     fun movedLine(title: String, toDay: Long, today: Long): String =
         "Moved “${title.trim()}” to " + (if (toDay == today) "Today" else CivilDate.shortLabel(toDay))
+
+    /** The Tomorrow sheet names this many bills on a line before "+ N more". */
+    const val BILLS_SHOWN = 3
+
+    /**
+     * Tomorrow's bills from the renewals radar ([RenewalsView.all]): those due on [tomorrowDay] ("Due tomorrow · Car tax
+     * £190 · Netflix £10.99 · + 1 more") and those whose last day to cancel is [tomorrowDay] ("Last day to cancel · Gym
+     * £35"); null when neither. A cost shows only when he gave one.
+     */
+    fun bills(items: List<RenewalItem>, tomorrowDay: Long): TomorrowBills? {
+        val due = items.filter { it.dueDay == tomorrowDay }.sortedBy { it.title.lowercase() }
+        val cancel = items.filter { it.cancelByDay == tomorrowDay && it.dueDay != tomorrowDay }.sortedBy { it.title.lowercase() }
+        if (due.isEmpty() && cancel.isEmpty()) return null
+        fun bit(r: RenewalItem) = shorten(r.title) + (r.costPence?.takeIf { it > 0 }?.let { " " + RenewalRules.formatPence(it) } ?: "")
+        fun names(rs: List<RenewalItem>) = rs.take(BILLS_SHOWN).map(::bit) +
+            listOfNotNull((rs.size - BILLS_SHOWN).takeIf { it > 0 }?.let { "+ $it more" })
+        val dueLine = due.takeIf { it.isNotEmpty() }?.let { "Due tomorrow · " + names(it).joinToString(" · ") }
+        val cancelLine = cancel.takeIf { it.isNotEmpty() }?.let { "Last day to cancel · " + names(it).joinToString(" · ") }
+        val spoken = listOfNotNull(
+            due.takeIf { it.isNotEmpty() }?.let { "Due tomorrow: " + it.joinToString(", ", transform = ::bit) },
+            cancel.takeIf { it.isNotEmpty() }?.let { "Last day to cancel: " + it.joinToString(", ", transform = ::bit) },
+        ).joinToString(". ")
+        return TomorrowBills(dueLine, cancelLine, due.size + cancel.size, spoken)
+    }
 
     /** The task behind a Tomorrow row ("t-<id>"), so the sheet can tick or move it; null for an event. */
     fun taskIdOf(r: TomorrowRow): String? = if (!r.isEvent && r.id.startsWith("t-")) r.id.removePrefix("t-") else null

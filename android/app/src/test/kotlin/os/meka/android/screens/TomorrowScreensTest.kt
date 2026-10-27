@@ -34,6 +34,8 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.TomorrowPane
 import os.meka.android.today.TomorrowPeekCard
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.ObligationKind
+import os.meka.core.domain.RenewalRepeat
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -73,6 +75,8 @@ class TomorrowScreensTest {
             core.setWhen(gym, tomorrow, 7 * 60 + 40)
             val school = core.addTask("Ring the school about the trip")
             core.setWhen(school, tomorrow, null)
+            // Tomorrow on Today, slice 2: a bill due tomorrow from Lists → Renewals.
+            core.addRenewal("Water bill", ObligationKind.BILL, tomorrow, RenewalRepeat.MONTHLY, "32.50", null)
             core.tick()
             gym to school
         }
@@ -125,10 +129,11 @@ class TomorrowScreensTest {
         val (gym, school) = ids
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", name))
         val peek = assertNotNull(core.shutdownView.value.peek)
-        assertTrue(peek.line.endsWith("2 tasks · first 07:40 Gym before work"), peek.line)
+        assertTrue(peek.line.endsWith("2 tasks · 1 bill due · first 07:40 Gym before work"), peek.line)
         // Lines are drawn through LoneWordGlue (the last words held together), so look for them as drawn.
         assertTrue(shows(LoneWordGlue.kept(peek.line)), "$name: the peek isn't shown")
         assertTrue(shows("Gym before work") && shows("Ring the school about the trip"), "$name: tomorrow's tasks aren't listed")
+        assertTrue(shows(LoneWordGlue.kept("Due tomorrow · Water bill £32.50")), "$name: tomorrow's bill isn't shown")
         assertTouchTargets(name)
 
         // Today on the school task: it leaves tomorrow and the sheet says where it went.

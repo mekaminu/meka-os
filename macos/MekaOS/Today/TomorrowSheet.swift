@@ -71,11 +71,23 @@ struct TomorrowSheet: View {
                             Text(LoneWordGlue.shared.kept(line: school.text)).font(MekaType.caption).foregroundStyle(palette.accent)
                                 .accessibilityLabel(school.spoken).staggeredAppear(1)
                         }
+                        // Tomorrow on Today, slice 2: bills and renewals due tomorrow, and a last day to cancel (in the accent).
+                        if let bills = p.bills {
+                            VStack(alignment: .leading, spacing: 0) {
+                                if let due = bills.due {
+                                    Text(LoneWordGlue.shared.kept(line: due)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                }
+                                if let cancel = bills.cancel {
+                                    Text(LoneWordGlue.shared.kept(line: cancel)).font(MekaType.caption).foregroundStyle(palette.accent)
+                                }
+                            }
+                            .accessibilityElement(children: .ignore).accessibilityLabel(bills.spoken).staggeredAppear(1)
+                        }
                         if let said = model.tomorrowSaid {
                             Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                 .transition(.opacity)
                         }
-                        if rows.isEmpty {
+                        if rows.isEmpty && p.bills == nil {
                             Text("Nothing planned for tomorrow yet.")
                                 .font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                                 .transition(.opacity)

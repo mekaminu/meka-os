@@ -76,6 +76,18 @@ struct ShutdownSheet: View {
                             Text(LoneWordGlue.shared.kept(line: school.text)).font(MekaType.caption).foregroundStyle(palette.accent)
                                 .accessibilityLabel(school.spoken).staggeredAppear(2)
                         }
+                        // Tomorrow on Today, slice 2: bills and renewals due tomorrow, and a last day to cancel.
+                        if let bills = v.tomorrow.bills {
+                            VStack(alignment: .leading, spacing: 0) {
+                                if let due = bills.due {
+                                    Text(LoneWordGlue.shared.kept(line: due)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                }
+                                if let cancel = bills.cancel {
+                                    Text(LoneWordGlue.shared.kept(line: cancel)).font(MekaType.caption).foregroundStyle(palette.accent)
+                                }
+                            }
+                            .accessibilityElement(children: .ignore).accessibilityLabel(bills.spoken).staggeredAppear(2)
+                        }
                         Text(LoneWordGlue.shared.kept(line: v.tomorrow.summary))
                             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
