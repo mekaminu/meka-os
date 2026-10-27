@@ -271,7 +271,7 @@ private fun LeftRow(
 }
 
 @Composable
-private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
+internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
     val p = v.tomorrow
     val reduced = Meka.reducedMotion
     Column(modifier) {

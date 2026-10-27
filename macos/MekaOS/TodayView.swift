@@ -137,8 +137,14 @@ struct TodayView: View {
                     GreetingText(text: greeting, play: ringPlay ?? .still, palette: palette)
                         .staggeredAppear(0, play: play)
                     if let date = model.today?.timeline.dateLabel, !date.isEmpty {
-                        Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                            .staggeredAppear(0, play: play)
+                        // Click the date: tomorrow, any time of day (Meka 2026-10-26).
+                        Button { model.openTomorrow() } label: {
+                            Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .help("See tomorrow")
+                        .accessibilityHint("Opens tomorrow")
+                        .staggeredAppear(0, play: play)
                     }
                     // Weather for home: "14° · light rain from 16:00", cross-fading as the day moves on; on an office day
                     // both places (Places item 2), so it may take a second line.
@@ -557,9 +563,16 @@ struct TodayView: View {
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
                                 .padding(.bottom, MekaSpace.l)
                                 .staggeredAppear(step(.cards), play: play)
-                        } else if s.evening || s.doneLine != nil {
-                            // Tomorrow at a glance once the evening starts (after shutting down, or while still at work).
-                            TomorrowGlanceView(doneLine: s.doneLine, glance: s.evening ? s.tomorrow.glance : nil, palette: palette)
+                        } else if (s.evening && s.peek == nil) || s.doneLine != nil {
+                            // Tomorrow at a glance once the evening starts (after shutting down, or while still at work);
+                            // with the Tomorrow peek up, only "Day shut down" stays.
+                            TomorrowGlanceView(doneLine: s.doneLine, glance: s.evening && s.peek == nil ? s.tomorrow.glance : nil, palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .transition(.opacity)
+                        }
+                        // The Tomorrow peek (Meka 2026-10-26): from 17:00 or once shut down; clicking opens the Tomorrow sheet.
+                        if let peek = s.peek {
+                            TomorrowPeekView(peek: peek, palette: palette)
                                 .padding(.bottom, MekaSpace.l)
                                 .transition(.opacity)
                         }

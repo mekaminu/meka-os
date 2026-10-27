@@ -6,6 +6,7 @@ import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -131,7 +132,7 @@ class EveningShutdownTest {
         // Planned keeps its time of day; the loose end comes with no time.
         assertEquals(listOf("14:00" to "Planned", null to "Loose end"), v.tomorrow.rows.map { it.time to it.title })
         assertEquals("2 tasks · first at 14:00", v.tomorrow.summary)
-        assertEquals("Nothing left · tomorrow: 2 tasks, first at 14:00", v.cardLine)
+        assertEquals("Nothing left · 2 planned for tomorrow · first at 14:00", v.cardLine)
 
         // Tomorrow they are Today's again.
         world.clock.advance(dayMs)
@@ -334,5 +335,79 @@ class EveningShutdownTest {
         assertEquals(DayRingLiveMode.MINUTE, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = false, quiet = false, night = true))
         assertEquals(DayRingLiveMode.SWEEP, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = false, quiet = false, night = false))
         assertEquals(DayRingLiveMode.STILL, WatchFaceRules.liveMode(reduced = true, powerSave = false, bedside = false, quiet = false, night = true))
+    }
+
+    @Test
+    fun aTaskDatedTomorrowIsCountedOnTheCardAndNotLeftFromToday() {
+        // Meka 2026-10-26: Ask added a task for tomorrow, the card said "5 left · nothing planned for tomorrow yet".
+        val day = today()
+        repeat(2) { ta.create(NewTask("Left $it")) }
+        val asked = ta.create(NewTask("Ring the school"))
+        ta.setWhen(asked, day + 1, null) // how Ask, Live and the Board date a task
+        val timed = ta.create(NewTask("Gym"))
+        ta.setWhen(timed, day + 1, 7 * 60 + 40)
+        val v = view()
+        assertEquals(listOf("Left 0", "Left 1"), v.left.map { it.task.title })
+        assertEquals(listOf("Gym", "Ring the school"), v.tomorrow.rows.map { it.title })
+        assertEquals("2 left · 2 planned for tomorrow · first at 07:40", v.cardLine)
+        assertEquals(listOf(timed, asked), v.tomorrow.rows.map { ShutdownRules.taskIdOf(it) })
+        assertNull(ShutdownRules.taskIdOf(TomorrowRow("e-1", "09:00", "Standup", true, null)))
+        // One task: "1 planned for tomorrow".
+        ta.complete(timed)
+        assertEquals("2 left · 1 planned for tomorrow", view().cardLine)
+    }
+
+    @Test
+    fun theTomorrowPeekShowsFromFivePmOrOnceShutDown() {
+        val day = today()
+        world.clock.nowMs = at(day, 16, 59)
+        assertNull(view().peek)
+        world.clock.nowMs = at(day, 17, 0)
+        val label = CivilDate.shortLabel(day + 1)
+        assertEquals("Tomorrow · $label · nothing planned yet", view().peek?.line)
+        val gym = ta.create(NewTask("Gym"))
+        ta.setWhen(gym, day + 1, 7 * 60 + 40)
+        ta.create(NewTask("Pay rent", dueAtMs = at(day + 1, 12)))
+        val events = listOf(event("s", "Standup", at(day + 1, 9, 30), at(day + 1, 9, 45)))
+        val p = view(events = events).peek!!
+        assertEquals("Tomorrow · $label · 1 event · 2 tasks · first 07:40 Gym", p.line)
+        assertEquals("Tomorrow, $label: 1 event, 2 tasks, first 07:40 Gym", p.spoken)
+        // Shown beside the shutdown card (work ends 17:30), and after shutting down.
+        world.clock.nowMs = at(day, 17, 30)
+        assertTrue(view().offered)
+        assertNotNull(view().peek)
+        sa.shutDown()
+        assertNotNull(view().peek)
+        // In the morning, after a shutdown the night before: gone until 17:00.
+        world.clock.nowMs = at(day + 1, 8)
+        assertNull(view().peek)
+        // A work day ending at 16:00 brings it at 16:00.
+        assertTrue(ShutdownRules.peekShown(16 * 60, 16 * 60, doneToday = false))
+        assertFalse(ShutdownRules.peekShown(15 * 60 + 59, 16 * 60, doneToday = false))
+    }
+
+    @Test
+    fun theTomorrowSheetMovesKeepTheTimeAndTicksLeaveAtOnce() {
+        val day = today() // Tuesday 18:30 UTC
+        val gym = ta.get(ta.create(NewTask("Gym", scheduledAtMs = at(day + 1, 7, 40))))!!
+        val loose = ta.get(ta.create(NewTask("Loose end")))!!
+        val cal = LocalCalendar.UTC
+        // Today: 07:40 has gone, so no time; 19:00 is still ahead, so it stays.
+        assertNull(ShutdownRules.movedMinute(gym, day, day, 18 * 60 + 30, cal))
+        val late = ta.get(ta.create(NewTask("Call Sam", scheduledAtMs = at(day + 1, 19))))!!
+        assertEquals(19 * 60, ShutdownRules.movedMinute(late, day, day, 18 * 60 + 30, cal))
+        // The day after keeps it; a task with no time has none.
+        assertEquals(7 * 60 + 40, ShutdownRules.movedMinute(gym, day + 2, day, 18 * 60 + 30, cal))
+        assertNull(ShutdownRules.movedMinute(loose, day + 2, day, 18 * 60 + 30, cal))
+        assertEquals("Moved “Gym” to Today", ShutdownRules.movedLine("Gym ", day, day))
+        assertEquals("Moved “Gym” to ${CivilDate.shortLabel(day + 2)}", ShutdownRules.movedLine("Gym", day + 2, day))
+
+        val rows = view().tomorrow.rows
+        assertEquals(listOf("Gym", "Call Sam"), rows.map { it.title })
+        val event = TomorrowRow("e-1", "09:00", "Standup", true, null)
+        val shown = InstantTaskRules.tomorrow(rows + event, mapOf(gym.id to TaskMove.DONE))
+        assertEquals(listOf("Call Sam", "Standup"), shown.map { it.title })
+        assertEquals("Today", InstantTaskRules.what(TaskMove.TODAY))
+        assertEquals("Day after", InstantTaskRules.what(TaskMove.DAY_AFTER))
     }
 }

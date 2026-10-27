@@ -5587,6 +5587,19 @@ class MekaCore(
 
     /** Carries one item over to tomorrow (the same "Tomorrow" as in the task detail). */
     suspend fun carryOver(taskId: String) = onCore { tasks.snoozeOccurrence(taskId, 1); followBlocks(listOf(taskId)); Unit }
+    /**
+     * The Tomorrow sheet (Today's Tomorrow peek, Meka 2026-10-26): one of tomorrow's tasks brought to today ([toToday])
+     * or put on the day after tomorrow, its time kept (today only while it's still ahead). Returns the bar's line.
+     */
+    suspend fun moveTomorrowTask(taskId: String, toToday: Boolean): String = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val t = tasks.get(taskId)?.takeIf { !it.lifecycle.isTerminal } ?: throw os.meka.core.domain.ValidationException("That task isn't open any more")
+        val day = if (toToday) today else today + 2
+        tasks.setWhen(taskId, day, os.meka.core.domain.ShutdownRules.movedMinute(t, day, today, cal.minuteOfDay(nowMs()), cal))
+        followBlocks(listOf(taskId))
+        os.meka.core.domain.ShutdownRules.movedLine(t.title, day, today)
+    }
     /** "Move the rest to tomorrow": everything still left from today waits for tomorrow. */
     suspend fun carryAllToTomorrow() = onCore {
         val left = os.meka.core.domain.ShutdownRules.left(tasks.all(), dayWindow(nowMs())).map { it.id }

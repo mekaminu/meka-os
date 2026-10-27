@@ -1304,6 +1304,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(MorningBriefView.companion.EMPTY.dayLines.isEmpty)
     }
 
+    /// The Tomorrow peek and sheet (Meka 2026-10-26): when the peek shows, a row's task, and a move's rows leave at once.
+    func testTomorrowPeekAndSheetReachSwift() {
+        XCTAssertTrue(ShutdownRules.shared.peekShown(minute: 17 * 60, startMinute: 17 * 60 + 30, doneToday: false))
+        XCTAssertFalse(ShutdownRules.shared.peekShown(minute: 16 * 60 + 59, startMinute: 17 * 60 + 30, doneToday: false))
+        let task = TomorrowRow(id: "t-gym", time: "07:40", title: "Gym", isEvent: false, detail: nil)
+        let event = TomorrowRow(id: "e-1", time: "09:30", title: "Standup", isEvent: true, detail: nil)
+        XCTAssertEqual(ShutdownRules.shared.taskIdOf(r: task), "gym")
+        XCTAssertNil(ShutdownRules.shared.taskIdOf(r: event))
+        let shown = InstantTaskRules.shared.tomorrow(rows: [task, event], taps: ["gym": TaskMove.dayAfter])
+        XCTAssertEqual(shown.map(\.id), ["e-1"])
+        XCTAssertEqual(InstantTaskRules.shared.what(move: TaskMove.today), "Today")
+    }
+
     /// Morning brief read aloud: every headline shown is read ("From BBC Sport: …"), and a long read keeps MEKA's voice.
     func testBriefReadsEveryHeadlineInMekasVoice() {
         let shown = [

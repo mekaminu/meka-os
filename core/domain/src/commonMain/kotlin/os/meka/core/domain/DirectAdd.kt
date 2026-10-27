@@ -191,7 +191,8 @@ object DirectAddRules {
 
     /** The answer's line with Undo: "Added “Call the garage” · Tomorrow" / "Added milk and eggs to shopping". */
     fun doneLine(p: AskProposal, today: Long): String = when (p) {
-        is AskProposal.AddTask -> AskRules.doneLine(p, today) + (p.day?.let { " · " + TaskWhenRules.label(it, p.minute, today) } ?: "")
+        // Its own short line (the quick add's bar is narrow): "Added “Call the garage” · Tomorrow".
+        is AskProposal.AddTask -> "Added “${p.title}”" + (p.day?.let { " · " + TaskWhenRules.label(it, p.minute, today) } ?: "")
         else -> AskRules.doneLine(p, today)
     }
 }

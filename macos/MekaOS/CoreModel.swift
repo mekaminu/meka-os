@@ -292,6 +292,10 @@ final class CoreModel {
     @ObservationIgnored private var coreShutdown: ShutdownView?
     private(set) var taskTaps: [String: TaskMove] = [:]
     var showShutdown = false
+    /// The Tomorrow sheet: from Today's Tomorrow peek (17:00 on) or the date under the greeting (any time).
+    var showTomorrow = false
+    /// What the Tomorrow sheet's last move did ("Moved “Gym” to Today"), or why it didn't.
+    private(set) var tomorrowSaid: String?
     /// The smart wake alarm (Alarms, slice 1): the next morning's suggested time and the alarm if set. Synced with the Fold.
     private(set) var wake: WakeView?
     /// Quick alarms and timers typed into capture (Alarms, slice 2), soonest first. Synced with the Fold.
@@ -2111,6 +2115,34 @@ final class CoreModel {
         let ids = InstantTaskRules.shared.carried(taps: taskTaps, v: v)
         taskTaps = InstantTaskRules.shared.carryAll(taps: taskTaps, v: v)
         landTaskMove(ids, .tomorrow) { try await $0.carryAllToTomorrow() }
+    }
+
+    /// The Tomorrow sheet's rows as drawn: a task ticked or moved there leaves at once (events stay).
+    func tomorrowRows(_ rows: [TomorrowRow]) -> [TomorrowRow] {
+        taskTaps.isEmpty ? rows : InstantTaskRules.shared.tomorrow(rows: rows, taps: taskTaps)
+    }
+
+    /// The Tomorrow sheet: one of tomorrow's tasks to Today (its time kept while still ahead) or the day after.
+    func moveTomorrowTask(_ id: String, toToday: Bool) {
+        MekaHaptics.tick()
+        let move: TaskMove = toToday ? .today : .dayAfter
+        taskTaps = InstantTaskRules.shared.move(taps: taskTaps, id: id, move: move)
+        showShutdownView()
+        guard let core else { forgetTaskMove([id], move); return }
+        Task {
+            do {
+                tomorrowSaid = try await core.moveTomorrowTask(taskId: id, toToday: toToday)
+            } catch {
+                tomorrowSaid = InstantTapRules.shared.failedLine(what: InstantTaskRules.shared.what(move: move), reason: error.localizedDescription)
+            }
+            forgetTaskMove([id], move)
+        }
+    }
+
+    /// Opening the Tomorrow sheet starts it without an old move's line.
+    func openTomorrow() {
+        tomorrowSaid = nil
+        showTomorrow = true
     }
 
     /// The brief's Focus and Today rows as drawn: a task ticked here leaves at once.

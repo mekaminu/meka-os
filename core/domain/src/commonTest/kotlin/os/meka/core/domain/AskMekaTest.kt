@@ -161,7 +161,11 @@ class AskMekaTest {
         assertEquals("Couldn't ask just now", AskRules.unavailableLine("failed", null))
         val today = CivilDate.toEpochDay(2026, 10, 8)
         assertEquals("Added “Milk”", AskRules.doneLine(AskProposal.AddTask("Milk", null, null), today))
-        assertEquals("Moved “CR” to Tomorrow · 09:00", AskRules.doneLine(AskProposal.MoveTask("x", "CR", today + 1, 540), today))
+        assertEquals("Moved “CR” to Tomorrow · 09:00 · see it under Tomorrow on Today", AskRules.doneLine(AskProposal.MoveTask("x", "CR", today + 1, 540), today))
+        // Where to find a dated task (Meka 2026-10-26): tomorrow's on Today's Tomorrow card, later ones on the Week board.
+        assertEquals("Added “Ring the school” · Tomorrow · see it under Tomorrow on Today", AskRules.doneLine(AskProposal.AddTask("Ring the school", today + 1, null), today))
+        assertEquals("Added “Gym” · Today · 18:00", AskRules.doneLine(AskProposal.AddTask("Gym", today, 18 * 60), today))
+        assertEquals("Added “MOT” · ${CivilDate.shortLabel(today + 3)} · see it on the Week board", AskRules.doneLine(AskProposal.AddTask("MOT", today + 3, null), today))
         assertEquals("Started a 2 days fast", AskRules.doneLine(AskProposal.StartFast(48), today))
         assertEquals("Alarm set · 06:30", AskRules.doneLine(AskProposal.Alarm(390), today))
     }

@@ -1,7 +1,7 @@
 package os.meka.core.domain
 
 /** What a tap did to a task on the shutdown or the brief, shown before the core's write lands. */
-enum class TaskMove { DONE, TOMORROW, SKIP, SOMEDAY }
+enum class TaskMove { DONE, TOMORROW, SKIP, SOMEDAY, TODAY, DAY_AFTER }
 
 /**
  * Taps feel instant for task moves in the evening shutdown and the morning brief (Meka 2026-10-25 01:45: "it should be
@@ -61,12 +61,18 @@ object InstantTaskRules {
     fun lines(lines: List<BriefDayLine>, taps: Map<String, TaskMove>): List<BriefDayLine> =
         if (taps.isEmpty()) lines else lines.filter { it.taskId == null || it.taskId !in taps }
 
+    /** The Tomorrow sheet's rows as drawn: a task ticked or moved there leaves at once (events stay). */
+    fun tomorrow(rows: List<TomorrowRow>, taps: Map<String, TaskMove>): List<TomorrowRow> =
+        if (taps.isEmpty()) rows else rows.filter { r -> ShutdownRules.taskIdOf(r)?.let { it !in taps } ?: true }
+
     /** The bar's word for a failed [move]. */
     fun what(move: TaskMove): String = when (move) {
         TaskMove.DONE -> "Done"
         TaskMove.TOMORROW -> "Tomorrow"
         TaskMove.SKIP -> "Skip"
         TaskMove.SOMEDAY -> "Someday"
+        TaskMove.TODAY -> "Today"
+        TaskMove.DAY_AFTER -> "Day after"
     }
 
     const val JUST_NOW = "now"

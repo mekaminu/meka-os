@@ -625,11 +625,24 @@ object AskRules {
     const val OFFLINE_LINE = "Couldn't reach Navilife · try again when you're online"
     const val NOT_CONNECTED_LINE = "Ask works once this device is connected"
 
+    /**
+     * Where a dated task can be seen (Meka 2026-10-26: "it added a task for tomorrow, but how do I see tomorrow's
+     * stuff?"): tomorrow's is on Today's Tomorrow card (from 17:00, or any time from the date under the greeting);
+     * a later day's on the Week board; today's needs nothing.
+     */
+    fun findIt(day: Long, today: Long): String = when {
+        day == today + 1 -> " · $FIND_TOMORROW"
+        day > today + 1 -> " · $FIND_LATER"
+        else -> ""
+    }
+    const val FIND_TOMORROW = "see it under Tomorrow on Today"
+    const val FIND_LATER = "see it on the Week board"
+
     /** The undo bar's line once a card is done ("Added “Milk”", "Timer set · 20 min"). */
     fun doneLine(p: AskProposal, today: Long): String = when (p) {
-        is AskProposal.AddTask -> "Added “${p.title}”"
+        is AskProposal.AddTask -> "Added “${p.title}”" + (p.day?.let { " · " + TaskWhenRules.label(it, p.minute, today) + findIt(it, today) } ?: "")
         is AskProposal.CompleteTask -> "Ticked off “${p.title}”"
-        is AskProposal.MoveTask -> "Moved “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)}"
+        is AskProposal.MoveTask -> "Moved “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)}" + findIt(p.day, today)
         is AskProposal.MoveEvent -> "Moving “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)} in ${CalendarEditRules.providerName(p.provider)}"
         is AskProposal.StartFast -> "Started a ${fastLabel(p.hours)} fast"
         is AskProposal.Timer -> "Timer set · ${durationLabel(p.minutes)}"

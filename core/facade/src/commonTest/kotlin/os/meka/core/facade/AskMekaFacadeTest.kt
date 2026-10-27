@@ -2,6 +2,7 @@ package os.meka.core.facade
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
+import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.AboutField
 import os.meka.core.domain.AskContext
 import os.meka.core.domain.AskItemKind
@@ -161,7 +162,7 @@ class AskMekaFacadeTest {
         assertEquals("Move “Book dentist” to Tomorrow · 09:00", card.line)
         // Nothing happened until the tap.
         assertEquals(id, c.today.value.upNext?.id)
-        assertEquals("Moved “Book dentist” to Tomorrow · 09:00", c.doAsk(card).line)
+        assertEquals("Moved “Book dentist” to Tomorrow · 09:00 · see it under Tomorrow on Today", c.doAsk(card).line)
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
     }
 
@@ -1098,6 +1099,33 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun aTaskAskAddsForTomorrowIsOnTheTomorrowPeekAndShutDownCountsIt() = runTest {
+        // Meka 2026-10-26: "I asked the AI to add a task for tomorrow, it did, but on this screen how do I see
+        // tomorrow's stuff?" and Shut down said "nothing planned for tomorrow yet". 17:15: the peek is up.
+        val c = core()
+        c.addTask("Create CR")
+        server.reply = AskReply.Answered("Here.", listOf(AskRawAction("add_task", title = "Ring the school", date = "2026-10-09")))
+        val card = assertIs<AskOutcome.Answered>(c.askMeka("add ring the school for tomorrow")).answer.cards.single()
+        assertEquals("Added “Ring the school” · Tomorrow · see it under Tomorrow on Today", c.doAsk(card).line)
+        val v = c.shutdownView.value
+        assertEquals(listOf("Create CR"), v.left.map { it.task.title })
+        assertTrue(v.cardLine.endsWith("1 planned for tomorrow"), v.cardLine)
+        assertEquals("Tomorrow · Fri 9 Oct · 1 task", v.peek?.line)
+        val row = v.tomorrow.rows.single()
+        val id = assertNotNull(ShutdownRules.taskIdOf(row))
+
+        // From the Tomorrow sheet: to Today, then it's left from today and tomorrow is empty again.
+        assertEquals("Moved “Ring the school” to Today", c.moveTomorrowTask(id, toToday = true))
+        val after = c.shutdownView.value
+        assertTrue(after.tomorrow.rows.isEmpty())
+        assertEquals(listOf("Create CR", "Ring the school"), after.left.map { it.task.title }.sorted())
+        assertEquals("Tomorrow · Fri 9 Oct · nothing planned yet", after.peek?.line)
+        // And on to the day after tomorrow from there isn't offered for today's tasks; a done task can't move.
+        c.complete(id)
+        assertFailsWith<ValidationException> { c.moveTomorrowTask(id, toToday = false) }
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")
@@ -1238,7 +1266,7 @@ class AskMekaFacadeTest {
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
         step = TalkFlow.did(step.session, todo.cards.map { it.proposal }, done.map { it.line }, 0, c.todayEpochDay())
         assertEquals(TalkEffect.Speak("Right, done. Moved Book dentist to tomorrow at 09:00. Anything else?"), step.effects.single())
-        assertEquals(listOf("Moved “Book dentist” to Tomorrow · 09:00"), step.session.conversation.turns.last().done)
+        assertEquals(listOf("Moved “Book dentist” to Tomorrow · 09:00 · see it under Tomorrow on Today"), step.session.conversation.turns.last().done)
         // The undo chip still takes it back.
         assertTrue(c.undoAsk(done.single().undo!!))
 

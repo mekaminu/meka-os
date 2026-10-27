@@ -1,7 +1,7 @@
 ---
 id: shut-down
 title: Shut down the day
-keywords: shut down the day, shut down, shutdown, done for the day, end of day, wake alarm, how are you feeling, tired, stretched, lighten tomorrow, shattered, hold alerts
+keywords: shut down the day, shut down, shutdown, done for the day, end of day, wake alarm, how are you feeling, tired, stretched, lighten tomorrow, shattered, hold alerts, see tomorrow, tomorrow's tasks, tomorrow peek
 fold: SHUTDOWN
 fold_where: Ask → Daily → Shut down the day
 mac: SHUTDOWN
@@ -16,3 +16,4 @@ tip: Not ready yet? Later on the card (or its heads-up) puts it off an hour, nev
 tip: Say "shut down the day" to Talk to open it. On the Galaxy Watch the evening shows "6 done · 2 left for tomorrow" with Shut down and Later.
 tip: How are you feeling? Pick Good, Tired or Stretched. Tired offers to lighten tomorrow, moving up to two of its tasks (evening ones first) to lighter days; Stretched also names one that could wait on Someday. Nothing moves until you tap, with Undo, and how you felt stays on that device only, for a week.
 tip: Or just tell Obi: "I'm shattered", "I'm knackered" or "I've got too much on" keeps how you feel and he says what he'd move; the taps wait in Shut down the day. Stretched can also hold mail and call alerts that can wait (the ten-minute inbox, parcels, notes about strangers' calls) for a day; urgent calls and Always notify still come through, and Resume ends it.
+tip: To see tomorrow, tap the date under the greeting on Today (any time), or from 5pm the Tomorrow card on Today ("Tomorrow · Thu 22 Oct · 2 tasks · first 07:40 Gym"). Tick a task there, or move it to Today or the Day after; its time comes with it. A task you ask Obi to add for tomorrow is there, and Shut down counts it ("1 planned for tomorrow").

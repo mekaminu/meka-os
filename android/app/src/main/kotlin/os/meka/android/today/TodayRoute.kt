@@ -232,6 +232,8 @@ private fun TodayRouteContent(
     /** The Fasting screen over Today, from the live Fasting card (Fasting rebuild slice 4). */
     var showFasting by rememberSaveable { mutableStateOf(false) }
     var showWeekAhead by rememberSaveable { mutableStateOf(false) }
+    // The Tomorrow sheet: from the Tomorrow peek (17:00 on) or the date under the greeting (any time).
+    var showTomorrow by rememberSaveable { mutableStateOf(false) }
     /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
     var showActivity by rememberSaveable { mutableStateOf(false) }
     // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
@@ -406,6 +408,7 @@ private fun TodayRouteContent(
                         openQueue = { showQueue = true },
                         openFasting = { showFasting = true },
                         openWeekAhead = { showWeekAhead = true },
+                        openTomorrow = { showTomorrow = true },
                         openActivity = { showActivity = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
@@ -484,6 +487,8 @@ private fun TodayRouteContent(
             MekaPane(visible = showFasting) { os.meka.android.goals.FastingPane(core, onClose = { showFasting = false }, backLabel = "‹ Today") }
             MekaPane(visible = showQueue) { TrainQueuePane(core, onClose = { showQueue = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showWeekAhead) { WeekAheadPane(core, onClose = { showWeekAhead = false }, closeLabel = "‹ Today") }
+            BackHandler(enabled = showTomorrow) { showTomorrow = false }
+            MekaPane(visible = showTomorrow) { TomorrowPane(core, onClose = { showTomorrow = false }) }
             MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {
@@ -757,6 +762,8 @@ private fun TodayPane(
     openDayRing: () -> Unit = {},
     /** Tapping "For the train" opens the train queue. */
     openQueue: () -> Unit = {},
+    /** The Tomorrow peek and the date under the greeting open the Tomorrow sheet. */
+    openTomorrow: () -> Unit = {},
     /** Tapping the live Fasting card opens the Fasting screen. */
     openFasting: () -> Unit = {},
     /** Tapping "Your week ahead · …" (Sunday from 18:00) opens the week ahead. */
@@ -894,8 +901,10 @@ private fun TodayPane(
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
                     GreetingText(greeting(core, callName), if (now == null) ringPlay else DayRingPlay.STILL)
                     if (today.timeline.dateLabel.isNotEmpty()) {
+                        // Tap the date: tomorrow, any time of day (Meka 2026-10-26).
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                            modifier = Modifier.padding(top = MekaSpace.xxs))
+                            modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.s))
+                                .clickable(role = Role.Button, onClickLabel = "See tomorrow") { openTomorrow() })
                     }
                     // "14° · light rain from 16:00": cross-fades as the day moves on; nothing until a forecast arrives. On
                     // an office day it says both places (Places item 2), so it may take a second line.
@@ -1221,14 +1230,21 @@ private fun TodayPane(
                     ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.SHUTDOWN), !shutdownOpen), onLater = laterShutdownCard)
                 }
-            } else if (shutdown.evening || shutdown.doneLine != null) {
+            } else if ((shutdown.evening && shutdown.peek == null) || shutdown.doneLine != null) {
                 // Tomorrow at a glance once the evening starts (after shutting down, or while still at work); tapping
-                // opens the shutdown pane with tomorrow in full.
+                // opens the shutdown pane with tomorrow in full. With the Tomorrow peek up, only "Day shut down" stays.
                 item(key = "shutdown-done") {
                     TomorrowGlance(
-                        shutdown.doneLine, shutdown.tomorrow.glance.takeIf { shutdown.evening }, openShutdown,
+                        shutdown.doneLine, shutdown.tomorrow.glance.takeIf { shutdown.evening && shutdown.peek == null }, openShutdown,
                         Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                     )
+                }
+            }
+            // The Tomorrow peek (Meka 2026-10-26): from 17:00 or once shut down, "Tomorrow · Tue 27 Oct · 2 tasks ·
+            // first 07:40 Gym ›", opening the Tomorrow sheet.
+            shutdown.peek?.let { peek ->
+                item(key = "tomorrow-peek") {
+                    TomorrowPeekCard(peek, openTomorrow, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
             // Daily receipt: in the evening, what MEKA handled today; tapping opens Activity over Today.

@@ -40,6 +40,13 @@ data class DoneRow(val id: String, val title: String, val time: String)
 /** One line of tomorrow: an event or a task. [time] is "All day", "09:30", or null for a task with no time. */
 data class TomorrowRow(val id: String, val time: String?, val title: String, val isEvent: Boolean, val detail: String?)
 
+/**
+ * The Tomorrow peek on Today (Meka 2026-10-26: "on this screen how do I see tomorrow's stuff?"): a slim card from
+ * [ShutdownRules.PEEK_FROM_MIN] (or once the day is shut down), "Tomorrow · Tue 27 Oct · 2 tasks · first 07:40 Gym",
+ * that opens the Tomorrow sheet. [spoken] is the same for TalkBack and VoiceOver.
+ */
+data class TomorrowPeek(val line: String, val spoken: String)
+
 data class TomorrowPreview(
     /** "Tomorrow · Wed 7 Oct" */
     val label: String,
@@ -80,7 +87,7 @@ data class ShutdownView(
     /** "3 left from today" · "Nothing left from today" */
     val leftLine: String,
     val tomorrow: TomorrowPreview,
-    /** The card's second line: "3 left · tomorrow: 2 events, first at 09:30". */
+    /** The card's second line: "3 left · 4 planned for tomorrow · first at 09:30". */
     val cardLine: String,
     /**
      * The evening has started ([startMinute] has passed today), so Today shows tomorrow at a glance
@@ -114,6 +121,8 @@ data class ShutdownView(
     val cardOff: Boolean = false,
     /** Today is booked as annual leave: no evening card or heads-up unless he opens the pane himself. */
     val onLeave: Boolean = false,
+    /** The Tomorrow peek ([TomorrowPeek]) when Today shows it: from 17:00 (or the evening's start if earlier), or once shut down. */
+    val peek: TomorrowPeek? = null,
 ) {
     companion object {
         val EMPTY = ShutdownView(
@@ -217,6 +226,53 @@ object ShutdownRules {
     fun firstLine(first: TomorrowRow?): String? = first?.let { "Tomorrow starts at ${it.time} · ${shorten(it.title)}" }
 
     fun count(n: Int, one: String, many: String = one + "s") = if (n == 1) "1 $one" else "$n $many"
+
+    /** The Tomorrow peek shows on Today from 17:00 (Meka 2026-10-26), or from the evening's start when that is earlier. */
+    const val PEEK_FROM_MIN = 17 * 60
+
+    fun peekShown(minute: Int, startMinute: Int, doneToday: Boolean): Boolean = doneToday || minute >= minOf(PEEK_FROM_MIN, startMinute)
+
+    /**
+     * The peek's line: "Tomorrow · Tue 27 Oct · 1 event · 2 tasks · first 07:40 Gym", or "Tomorrow · Tue 27 Oct ·
+     * nothing planned yet".
+     */
+    fun peek(p: TomorrowPreview, dayLabel: String): TomorrowPeek {
+        val head = "Tomorrow · $dayLabel"
+        if (p.rows.isEmpty()) return TomorrowPeek("$head · nothing planned yet", "Tomorrow, $dayLabel: nothing planned yet")
+        val bits = listOfNotNull(
+            count(p.eventCount, "event").takeIf { p.eventCount > 0 },
+            count(p.taskCount, "task").takeIf { p.taskCount > 0 },
+            p.first?.let { "first ${it.time} ${shorten(it.title)}" },
+        )
+        return TomorrowPeek("$head · " + bits.joinToString(" · "), "Tomorrow, $dayLabel: " + bits.joinToString(", "))
+    }
+
+    /**
+     * Shut down's card line about tomorrow (Meka 2026-10-26: it said "nothing planned for tomorrow yet" beside a task
+     * he'd just added for tomorrow): "1 planned for tomorrow · first at 09:30", counting tomorrow's events and every
+     * open task dated tomorrow, whoever made it (Ask, Live, the Board, a carry-over).
+     */
+    fun tomorrowBit(p: TomorrowPreview): String = when {
+        p.rows.isEmpty() -> "nothing planned for tomorrow yet"
+        else -> "${p.rows.size} planned for tomorrow" + (p.first?.let { " · first at ${it.time}" } ?: "")
+    }
+
+    /**
+     * The Tomorrow sheet's moves: "Today" brings a task of tomorrow's to today (keeping its time while that is still
+     * ahead), "Day after" puts it on the day after tomorrow (keeping its time). The minute to keep, or null.
+     */
+    fun movedMinute(task: Task, toDay: Long, today: Long, nowMinute: Int, calendar: LocalCalendar): Int? {
+        val at = task.scheduledAtMs ?: return null
+        val m = calendar.minuteOfDay(at)
+        return if (toDay == today && m <= nowMinute) null else m
+    }
+
+    /** The bar's line after a move from the Tomorrow sheet: "Moved “Gym” to Today" · "Moved “Gym” to Thu 29 Oct". */
+    fun movedLine(title: String, toDay: Long, today: Long): String =
+        "Moved “${title.trim()}” to " + (if (toDay == today) "Today" else CivilDate.shortLabel(toDay))
+
+    /** The task behind a Tomorrow row ("t-<id>"), so the sheet can tick or move it; null for an event. */
+    fun taskIdOf(r: TomorrowRow): String? = if (!r.isEvent && r.id.startsWith("t-")) r.id.removePrefix("t-") else null
 
     const val GLANCE_EMPTY = "Tomorrow: nothing planned yet"
     /** Titles in the glance are cut at a word to keep it one line on the Fold's cover screen. */
@@ -333,10 +389,7 @@ class EveningShutdown(
         val preview = preview(all, events, schedule, tomorrow, left.map { it.task.id }.toSet(), holidays)
 
         val leftLine = if (left.isEmpty()) "Nothing left from today" else "${left.size} left from today"
-        val tomorrowBit = when {
-            preview.rows.isEmpty() -> "nothing planned for tomorrow yet"
-            else -> "tomorrow: " + preview.summary.replaceFirstChar { it.lowercase() }.replace(" · ", ", ")
-        }
+        val tomorrowBit = ShutdownRules.tomorrowBit(preview)
         val cardLine = (if (left.isEmpty()) "Nothing left" else "${left.size} left") + " · " + tomorrowBit
         return ShutdownView(
             offered = !doneToday && !atWork && minute >= start && now >= later && !off && !onLeave,
@@ -359,6 +412,7 @@ class EveningShutdown(
                 ShutdownRules.laterMinute(minute) != null,
             cardOff = off,
             onLeave = onLeave,
+            peek = if (ShutdownRules.peekShown(minute, start, doneToday)) ShutdownRules.peek(preview, CivilDate.shortLabel(tomorrow.epochDay)) else null,
         )
     }
 
