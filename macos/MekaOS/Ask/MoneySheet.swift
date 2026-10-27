@@ -52,6 +52,8 @@ struct MoneySheet: View {
     @State private var capText = ""
     @State private var tradingText = ""
     @State private var exporting = false
+    /// Layout rule (c): the ⓘ whose popover is open ("review" or "foot").
+    @State private var infoOpen: String? = nil
     /// Plan's goals card: the goal whose popover is open.
     @State private var goalOpenId: String? = nil
     /// Net worth's typed things (Money review, layout rule (e)): whether their popover is open.
@@ -307,14 +309,18 @@ struct MoneySheet: View {
                 MoneyHeadWithLink(head: "WHERE IT WENT", link: MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats), palette: palette) {
                     allCats.toggle()
                 }
-                ForEach(MoneySpending.shared.shownRows(v: sp, open: allCats), id: \.key) { r in
-                    let key = r.key
-                    MoneySpendRowView(row: r, picked: focus == key, palette: palette, reduced: reduceMotion) {
-                        MekaHaptics.tick()
-                        focus = focus == key ? nil : key
+                // Layout rule (a): the category rows in one card under their label.
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(MoneySpending.shared.shownRows(v: sp, open: allCats), id: \.key) { r in
+                        let key = r.key
+                        MoneySpendRowView(row: r, picked: focus == key, palette: palette, reduced: reduceMotion) {
+                            MekaHaptics.tick()
+                            focus = focus == key ? nil : key
+                        }
+                        .transition(.opacity)
                     }
-                    .transition(.opacity)
                 }
+                .moneyCard(palette)
             }
             if let u = m.unsorted, has(.unsorted, v) { unsortedRow(u) }
             if has(.categories, v), m.spending == nil {
@@ -323,10 +329,14 @@ struct MoneySheet: View {
             }
             if has(.payments, v), let sp = m.spending, !allPays {
                 MoneyHeadWithLink(head: MoneySpending.shared.LATEST_HEAD, link: sp.seeAll, palette: palette) { allPays = true }
-                ForEach(sp.latest, id: \.label) { d in
-                    MoneyDayHead(day: d, palette: palette)
-                    ForEach(d.rows, id: \.id) { t in txn(t, chip: sp, showDay: false) }
+                // Layout rule (a): the latest payments, by day, in one card.
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(sp.latest, id: \.label) { d in
+                        MoneyDayHead(day: d, palette: palette)
+                        ForEach(d.rows, id: \.id) { t in txn(t, chip: sp, showDay: false) }
+                    }
                 }
+                .moneyCard(palette)
             } else if has(.payments, v) {
                 if m.spending != nil {
                     MoneyHeadWithLink(head: "ALL PAYMENTS THIS MONTH", link: MoneySpending.shared.SEE_ALL_CLOSE, palette: palette) { allPays = false }
@@ -339,6 +349,15 @@ struct MoneySheet: View {
                 if m.more > 0 {
                     Text("and \(m.more) more this month").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
+            }
+            // Layout rule (c): "read-only · not financial advice" once, at the foot of Spending; where it's from behind ⓘ.
+            if has(.spendFoot, v), let lines = MoneyTabs.shared.info(tab: MoneyTab.spending, v: v) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    infoButton("foot", title: MoneyTabs.shared.INFO_TITLE, lines: lines)
+                }
+                .padding(.top, MekaSpace.m)
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: m.label)
@@ -737,19 +756,46 @@ struct MoneySheet: View {
 
     /// Money manager (7): the month in review — a few plain sentences (the first in brass when more went out than came
     /// in), then where it's from; the finished month shown, or last month leading this one for its first days.
+    /// Layout rules (Meka 2026-10-26 22:18): one card of Spent · Came in · Left and at most two short lines; the
+    /// sentences and where they came from behind its ⓘ (a popover).
     private func review(_ rv: MoneyMonthReviewView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(rv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
-            ForEach(Array(rv.sentences.enumerated()), id: \.offset) { i, l in
-                Text(l).font(MekaType.body)
-                    .foregroundStyle(i == 0 ? (rv.firstLit ? palette.accent : palette.textPrimary) : palette.textSecondary)
+            HStack {
+                Text(rv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Spacer()
+                infoButton("review", title: rv.infoTitle, lines: rv.info)
+            }
+            if !rv.tiles.isEmpty { MoneyTilesView(tiles: rv.tiles, palette: palette) }
+            ForEach(rv.lines, id: \.self) { l in
+                Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
             }
-            Text(rv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(rv.spoken)
+        .moneyCard(palette)
+        .padding(.top, MekaSpace.xs)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: rv.month)
+    }
+
+    /// Layout rule (c): a small ⓘ whose popover says [lines] under [title].
+    private func infoButton(_ id: String, title: String, lines: [String]) -> some View {
+        Button { MekaHaptics.tick(); infoOpen = id } label: {
+            Text(MoneyTabs.shared.INFO).font(MekaType.body).foregroundStyle(palette.textTertiary)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(id == "foot" ? MoneyTabs.shared.INFO_SPOKEN : "About \(title.lowercased())")
+        .popover(isPresented: Binding(get: { infoOpen == id }, set: { if !$0 && infoOpen == id { infoOpen = nil } }), arrowEdge: .trailing) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                ForEach(Array(lines.enumerated()), id: \.offset) { i, l in
+                    Text(l).font(i == 0 ? MekaType.body : MekaType.caption)
+                        .foregroundStyle(i == 0 ? palette.textPrimary : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button(MoneyTabs.shared.INFO_DONE) { infoOpen = nil }.keyboardShortcut(.defaultAction)
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 340)
+        }
     }
 
     /// Slice 18: the year in review — the folded line with Open/Fold (January's finished year opens by itself), then

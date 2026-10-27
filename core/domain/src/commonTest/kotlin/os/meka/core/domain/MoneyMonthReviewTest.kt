@@ -65,6 +65,24 @@ class MoneyMonthReviewTest {
     }
 
     @Test
+    fun theCardShowsTilesAndAtMostTwoShortLinesAndTheSentencesGoBehindTheInfo() {
+        // Layout rules (Money review, Meka 2026-10-26 22:18): numbers as tiles, at most two short lines, the rest behind ⓘ.
+        val v = assertNotNull(MoneyMonthReview.view(lines(), month(2026, 9), day(2026, 10, 17)))
+        assertEquals(listOf("Spent" to "£1,460", "Came in" to "£2,500", "Left" to "£1,040"), v.tiles.map { it.label to it.value })
+        assertTrue(v.tiles.none { it.lit })
+        assertEquals(listOf("£80 over your 6-month average", "Eating out £120 over its usual"), v.lines)
+        assertEquals("September in review", v.infoTitle)
+        assertEquals(v.sentences + v.foot, v.info)
+
+        // More out than in: Left is negative and lit; no average yet still gives a line (where most went).
+        val ls = lines().filter { it.day >= day(2026, 9, 1) } + l(2026, 9, 25, -200_000, "SKYLINE AIRWAYS", MoneyCategory.TRAVEL)
+        val w = assertNotNull(MoneyMonthReview.view(ls, month(2026, 9), day(2026, 10, 17)))
+        assertEquals("−£960", w.tiles.last().value)
+        assertTrue(w.tiles.last().lit)
+        assertEquals(listOf("Most on Travel · £2,000"), w.lines)
+    }
+
+    @Test
     fun nothingForThisMonthOrAThinMonth() {
         assertNull(MoneyMonthReview.view(lines(), month(2026, 10), day(2026, 10, 17)))
         assertNull(MoneyMonthReview.view(lines().take(3), month(2026, 2), day(2026, 10, 17)))

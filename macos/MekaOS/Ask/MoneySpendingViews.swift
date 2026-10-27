@@ -220,3 +220,12 @@ struct MoneyDayHead: View {
         .padding(.top, MekaSpace.xs)
     }
 }
+
+/// Money's layout rule (a) (Meka 2026-10-26 22:18): a section is a card, rounded and raised on the sheet, 16 pt in.
+extension View {
+    func moneyCard(_ palette: MekaPalette) -> some View {
+        self.padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
+    }
+}

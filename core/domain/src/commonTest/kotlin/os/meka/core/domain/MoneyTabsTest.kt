@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -33,7 +34,7 @@ class MoneyTabsTest {
     @Test
     fun eachTabShowsOnlyItsOwnSectionsInOrder() {
         val v = open()
-        assertEquals(listOf(MoneySection.MONTH, MoneySection.ALERTS, MoneySection.CATEGORIES, MoneySection.PAYMENTS), MoneyTabs.sections(MoneyTab.SPENDING, v))
+        assertEquals(listOf(MoneySection.MONTH, MoneySection.ALERTS, MoneySection.CATEGORIES, MoneySection.PAYMENTS, MoneySection.SPEND_FOOT), MoneyTabs.sections(MoneyTab.SPENDING, v))
         assertEquals(listOf(MoneySection.REFUNDS, MoneySection.REGULAR), MoneyTabs.sections(MoneyTab.BILLS, v))
         assertEquals(
             listOf(MoneySection.BANK, MoneySection.ACCOUNTS, MoneySection.MORE, MoneySection.FOOT),
@@ -44,6 +45,20 @@ class MoneyTabsTest {
         assertEquals(all.size, all.toSet().size)
         assertTrue(MoneyTabs.shows(MoneyTab.BILLS, MoneySection.REGULAR, v))
         assertTrue(!MoneyTabs.shows(MoneyTab.SPENDING, MoneySection.REGULAR, v))
+    }
+
+    @Test
+    fun spendingEndsOnOneFootLineWhoseInfoSaysWhereTheNumbersCameFrom() {
+        // Layout rule (c): "read-only / not financial advice" once, at the foot of the tab; the source behind ⓘ.
+        val v = open().copy(source = MoneySource.BANK)
+        assertEquals(MoneySection.SPEND_FOOT, MoneyTabs.sections(MoneyTab.SPENDING, v).last())
+        val info = assertNotNull(MoneyTabs.info(MoneyTab.SPENDING, v))
+        assertEquals("From your banks through Lunch Flow. Worked out on this device.", info.first())
+        assertTrue(info.last() == MoneyRules.FOOT)
+        assertEquals("Read-only · not financial advice", MoneyTabs.FOOT_SHORT)
+        // No month, no foot; Accounts keeps its own.
+        assertTrue(MoneySection.SPEND_FOOT !in MoneyTabs.sections(MoneyTab.SPENDING, open(m = null)))
+        assertNull(MoneyTabs.info(MoneyTab.ACCOUNTS, v))
     }
 
     @Test

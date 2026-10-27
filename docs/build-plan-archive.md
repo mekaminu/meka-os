@@ -4274,3 +4274,19 @@ Mac MoneySheet.moneyGoals/goalRow/goalPopover. Help money.md (HelpIndex regenera
 MoneyGoalsTest, MoneyGoalsScreensTest (Roborazzi money-plan-goals-cover/unfolded, money-plan-goal-sheet-cover),
 MekaCoreBridgeTests.testMoneyGoalsCardOnTheMac. No server change, no migration. Mac checked nightly. Not yet: "See all"
 past five goals (he has fewer), Remind me on payday.
+
+### Money redesign, layout rules slice 1: Spending in cards, ⓘ and one foot line (2026-10-27)
+
+Layout rules (Meka 2026-10-26 22:18) on Spending. (a) The month in review, the category rows (WHERE IT WENT) and the
+latest payments each sit in one card. (b) The month in review is numbers, not sentences: Spent · Came in · Left as tiles
+(Left signed and lit when more went out) and at most two short lines (against the average, then the category furthest
+over its usual, else where most went); the full sentences and where they came from sit behind its ⓘ (a sheet; Mac: a
+popover). (c) Spending ends on one foot line, "Read-only · not financial advice", whose ⓘ says where the numbers came
+from (statement files, his banks through Lunch Flow, or both), that transfers are left out, and Money's read-only line.
+Core: MoneyMonthReviewView.tiles/lines/infoTitle/info (additive defaults), MoneySection.SPEND_FOOT, MoneyTabs.FOOT_SHORT/
+INFO/info(tab, v), MoneyView.source (additive). Fold MoneyLayoutBlocks (MoneyCard, MoneyInfoButton, MoneyHeadWithInfo,
+MoneyReviewCard, MoneyTabFoot, MoneyInfoLines) in MoneyPane, the ⓘ sheet through MoneyDetailSheet; Mac MoneySheet
+review/infoButton and the `moneyCard` modifier. Help money.md (HelpIndex regenerated), motion catalogue. Tests:
+MoneyMonthReviewTest, MoneyTabsTest, MoneyLayoutScreensTest (Roborazzi money-layout-review-cover, -review-info-cover,
+-foot-cover, -spending-unfolded), MekaCoreBridgeTests.testMoneySpendingFootOnTheMac. No server change, no migration. Mac
+checked nightly. Not yet: the same rules on Bills (its foot and refunds as compact rows), Plan and Accounts.

@@ -282,6 +282,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var goalSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val goalOpen = goalSheetId?.let { id -> v.goals?.rows?.firstOrNull { it.id == id } }
     var otherSheet by rememberSaveable { mutableStateOf(false) }
+    // Layout rule (c): the ⓘ sheet open, if any (not saved: it's rebuilt from the view on a tap).
+    var info by remember { mutableStateOf<MoneyInfo?>(null) }
     val otherOpen = v.worth?.takeIf { otherSheet }
     val paydayOpen = v.payday?.takeIf { paydaySheet }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -477,12 +479,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
             // Money manager (7): the month in review in plain sentences — the finished month shown, or last month leading
             // this one for its first days.
+            // Layout rules (Meka 2026-10-26 22:18): one card of Spent · Came in · Left and two short lines; the sentences
+            // and where they came from behind its ⓘ.
             v.review?.takeIf { has(MoneySection.REVIEW) }?.let { rv ->
-                item(key = "review-head-${rv.month}") {
-                    Text(rv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                item(key = "review-${rv.month}") {
+                    MoneyReviewCard(rv, Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(3))) {
+                        haptics.tick(); info = MoneyInfo(rv.infoTitle, rv.info)
+                    }
                 }
-                item(key = "review-${rv.month}") { ReviewBlock(rv, Modifier.animateItem().appear(rememberAppearance(3))) }
             }
             // Slice 3: payments worth a second look (this month only), before the tips.
             if (has(MoneySection.ALERTS)) {
@@ -698,10 +702,15 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 item(key = "cats-head") {
                     MoneyHeadWithLink("WHERE IT WENT", MoneySpending.allLabel(ringSp.rows.size, allCats), Modifier.animateItem()) { allCats = !allCats }
                 }
-                MoneySpending.shownRows(ringSp, allCats).forEachIndexed { i, r ->
-                    item(key = "spend-${r.key}") {
-                        MoneySpendRowView(r, picked = focus == r.key, modifier = Modifier.animateItem().appear(rememberAppearance(4 + i))) {
-                            haptics.tick(); focus = if (focus == r.key) null else r.key
+                // Layout rule (a): the category rows sit in one card under their label.
+                item(key = "spend-card") {
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-spend-card") {
+                        MoneySpending.shownRows(ringSp, allCats).forEach { r ->
+                            key(r.key) {
+                                MoneySpendRowView(r, picked = focus == r.key) {
+                                    haptics.tick(); focus = if (focus == r.key) null else r.key
+                                }
+                            }
                         }
                     }
                 }
@@ -727,12 +736,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 item(key = "latest-head") {
                     MoneyHeadWithLink(MoneySpending.LATEST_HEAD, sp.seeAll, Modifier.animateItem()) { allPays = true }
                 }
-                sp.latest.forEach { d ->
-                    item(key = "day-${d.label}") { MoneyDayHead(d, Modifier.animateItem()) }
-                    d.rows.forEach { t ->
-                        item(key = "latest-${t.id}") {
-                            TxnRow(t, Modifier.animateItem(), chip = MoneySpending.txnIcon(sp, t.category) to MoneySpending.txnTone(sp, t.category), showDay = false,
-                                onOpen = { openSheet(t.id) })
+                // Layout rule (a): the latest payments, by day, in one card.
+                item(key = "latest-card") {
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(5)), tag = "money-latest-card") {
+                        sp.latest.forEach { d ->
+                            key(d.label) {
+                                MoneyDayHead(d)
+                                d.rows.forEach { t ->
+                                    key(t.id) {
+                                        TxnRow(t, Modifier, chip = MoneySpending.txnIcon(sp, t.category) to MoneySpending.txnTone(sp, t.category), showDay = false,
+                                            onOpen = { openSheet(t.id) })
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -760,6 +776,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     item(key = "txns-more") {
                         Text("and ${m.more} more this month", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
                     }
+                }
+            }
+            // Layout rule (c): Spending says "read-only · not financial advice" once, here, with where it's from behind ⓘ.
+            if (has(MoneySection.SPEND_FOOT)) item(key = "spend-foot") {
+                MoneyTabFoot(Modifier.animateItem()) {
+                    haptics.tick(); MoneyTabs.info(MoneyTab.SPENDING, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
                 }
             }
         }
@@ -984,6 +1006,10 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         SheetSaid(said)
+    }
+    // Layout rule (c): what an ⓘ says (the month in review's sentences, where Spending's numbers came from).
+    MoneyDetailSheet(info, title = { it.title }, tag = "money-info-sheet", done = MoneyTabs.INFO_DONE, onClose = { info = null }) { i ->
+        MoneyInfoLines(i)
     }
     // Net worth's typed things: each with Remove (Undo in the said line), and the field to add or update one.
     MoneyDetailSheet(otherOpen, title = { MoneyWorthOther.TITLE }, tag = "money-other-sheet", done = MoneyWorthOther.DONE, onClose = { otherSheet = false }) { w ->
@@ -1572,28 +1598,6 @@ private fun TravelBlock(tv: os.meka.core.domain.MoneyTravelView, modifier: Modif
             }
         }
         Text(tv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
-    }
-}
-
-/**
- * Money manager (7): the month in review — a few plain sentences, the first in brass when more went out than came in,
- * then where it's from. Read as one paragraph by TalkBack. Appears with the month (MekaMotion.appear honours reduced
- * motion); the sentences cross-fade when he pages to another month.
- */
-@Composable
-private fun ReviewBlock(rv: os.meka.core.domain.MoneyMonthReviewView, modifier: Modifier) {
-    val reduced = Meka.reducedMotion
-    Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = rv.spoken },
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Crossfade(rv.sentences, animationSpec = MekaMotion.appear(reduced), label = "money-review") { lines ->
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                lines.forEachIndexed { i, l ->
-                    Text(l, style = MekaType.body,
-                        color = if (i == 0 && rv.firstLit) Meka.colors.accent else if (i == 0) Meka.colors.textPrimary else Meka.colors.textSecondary)
-                }
-            }
-        }
-        Text(rv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

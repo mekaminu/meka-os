@@ -492,6 +492,8 @@ data class MoneyView(
     val save: MoneySaveBase? = null,
     /** Plan's Clear my cards ([MoneyClear]): his credit cards that owe something, for the apps to work it out; this month only. */
     val clear: MoneyClearBase? = null,
+    /** Where the shown lines came from (statement files, his banks through Lunch Flow, or both), for the tabs' ⓘ. */
+    val source: MoneySource = MoneySource.FILES,
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -838,6 +840,7 @@ object MoneyRules {
             ),
             ownCategories = own,
             ownRows = MoneyOwnCategories.rows(own, ownRules, MoneyChallenges.ownCapBars(challengeLines, challenges, own, today)),
+            source = source,
         )
     }
 

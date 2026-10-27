@@ -14,7 +14,9 @@ enum class MoneyTab(val label: String) {
 enum class MoneySection {
     // Spending: the month, its review, payments worth a look, categories, the payments without one, and the payments.
     // (Money review, Meka 2026-10-26 22:12: the year moved to Accounts and the tips to Plan's money check.)
-    MONTH, TRAVEL_BANNER, REVIEW, ALERTS, CATEGORIES, UNSORTED, PAYMENTS,
+    // Layout rules (Money review, Meka 2026-10-26 22:18): Spending ends on one short foot line ("Read-only · not
+    // financial advice") with a small ⓘ opening where the numbers came from ([MoneyTabs.info]), said once per tab.
+    MONTH, TRAVEL_BANNER, REVIEW, ALERTS, CATEGORIES, UNSORTED, PAYMENTS, SPEND_FOOT,
     // Bills: the card and the month's bills by date (B3), payday and safe to spend, the cards' due dates, refunds on the
     // way, the regular payments (only while the Bills card isn't there to list them: Money review, Meka 2026-10-26 22:12).
     BILLS, PAYDAY, CARDS, REFUNDS, REGULAR,
@@ -47,7 +49,7 @@ object MoneyTabs {
     /** Which tab a section lives on. */
     fun tabOf(s: MoneySection): MoneyTab = when (s) {
         MoneySection.MONTH, MoneySection.TRAVEL_BANNER, MoneySection.REVIEW, MoneySection.ALERTS,
-        MoneySection.CATEGORIES, MoneySection.UNSORTED, MoneySection.PAYMENTS -> MoneyTab.SPENDING
+        MoneySection.CATEGORIES, MoneySection.UNSORTED, MoneySection.PAYMENTS, MoneySection.SPEND_FOOT -> MoneyTab.SPENDING
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR -> MoneyTab.BILLS
         MoneySection.TIPS, MoneySection.SAVE, MoneySection.CLEAR, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
@@ -68,6 +70,7 @@ object MoneyTabs {
         MoneySection.CATEGORIES -> v.month?.categories?.isNotEmpty() == true
         MoneySection.UNSORTED -> v.month?.unsorted != null
         MoneySection.PAYMENTS -> v.month?.txns?.isNotEmpty() == true
+        MoneySection.SPEND_FOOT -> v.month != null
         MoneySection.BILLS -> v.month != null && v.bills != null
         MoneySection.PAYDAY -> v.month != null && v.payday != null
         // Money review (Meka 2026-10-26 22:12): Bills shows his cards as one-line rows; the accounts he could mark as a
@@ -122,6 +125,23 @@ object MoneyTabs {
      * (the payday block then keeps payday, since payday, the balance and safe to spend).
      */
     fun paydayRows(v: MoneyView): Boolean = v.bills == null
+
+    /** Layout rule (c): the one foot line a tab ends on; its ⓘ opens [info]. */
+    const val FOOT_SHORT = "Read-only · not financial advice"
+    const val INFO = "ⓘ"
+    const val INFO_SPOKEN = "About these numbers"
+    const val INFO_TITLE = "About these numbers"
+    const val INFO_DONE = "Done"
+    const val TRANSFERS_LEFT_OUT = "Transfers between your accounts are left out of spent and came in."
+
+    /**
+     * What the ⓘ at the foot of [tab] says: where the numbers came from and how they were worked out, then Money's
+     * read-only line (layout rule (c): said once, at the foot, not under every card). Null for a tab with no foot of its own.
+     */
+    fun info(tab: MoneyTab, v: MoneyView): List<String>? = when (tab) {
+        MoneyTab.SPENDING -> listOf("${v.source.from}. ${v.source.worked}", TRANSFERS_LEFT_OUT, MoneyRules.FOOT)
+        else -> null
+    }
 
     /** What a screen reader says for a tab pill. */
     fun spoken(tab: MoneyTab, chosen: Boolean): String = tab.label + " tab" + if (chosen) ", selected" else ""

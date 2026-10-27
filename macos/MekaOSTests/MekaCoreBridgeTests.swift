@@ -4045,4 +4045,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyGoals.shared.HEAD, "GOALS")
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .goals), MoneyTab.plan)
     }
+    /// Money's layout rules on Spending: one foot line whose ⓘ says where the numbers came from, after the payments.
+    func testMoneySpendingFootOnTheMac() {
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .spendFoot), MoneyTab.spending)
+        XCTAssertEqual(MoneyTabs.shared.FOOT_SHORT, "Read-only · not financial advice")
+        XCTAssertEqual(MoneyTabs.shared.INFO, "ⓘ")
+    }
 }

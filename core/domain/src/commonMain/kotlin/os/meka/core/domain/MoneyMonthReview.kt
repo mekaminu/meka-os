@@ -34,7 +34,20 @@ data class MoneyMonthReviewView(
     val firstLit: Boolean,
     val foot: String,
     val spoken: String,
-)
+    /**
+     * Layout rules (Money review, Meka 2026-10-26 22:18: "numbers, not sentences"): Spent · Came in · Left as tiles, Left
+     * lit when more went out than came in.
+     */
+    val tiles: List<MoneyTile> = emptyList(),
+    /** At most [MoneyMonthReview.MAX_LINES] short lines under the tiles: against the average, and what moved (or where most went). */
+    val lines: List<String> = emptyList(),
+) {
+    /** The ⓘ sheet's title: "September in review". */
+    val infoTitle: String get() = head.lowercase().replaceFirstChar { it.uppercase() }
+
+    /** The ⓘ sheet: every sentence, then where the numbers came from (the card shows only the tiles and [lines]). */
+    val info: List<String> get() = sentences + foot
+}
 
 object MoneyMonthReview {
     /** Last month's review leads this month for this many days. */
@@ -54,6 +67,11 @@ object MoneyMonthReview {
     const val END_SLACK_DAYS = 4
     /** The footer's end, after where the lines came from ([MoneySource], Money bugs A4) and how they were worked out. */
     const val FOOT = "Transfers between your accounts left out. Not financial advice."
+    /** Layout rule (b): at most this many short lines under the review's tiles. */
+    const val MAX_LINES = 2
+    const val TILE_SPENT = "Spent"
+    const val TILE_IN = "Came in"
+    const val TILE_LEFT = "Left"
 
     private val NOT_EVERYDAY = setOf(MoneyCategory.BILLS, MoneyCategory.SUBSCRIPTIONS, MoneyCategory.FEES)
 
@@ -107,6 +125,12 @@ object MoneyMonthReview {
             else -> "In $mo you spent ${fmt(spent)} and ${fmt(income)} came in, about as much as went out."
         }
         val firstLit = income > 0 && -left >= SAME_PENCE
+        val tiles = listOf(
+            MoneyTile(TILE_SPENT, fmt(spent), lit = false),
+            MoneyTile(TILE_IN, fmt(income.coerceAtLeast(0)), lit = false),
+            MoneyTile(TILE_LEFT, MoneyRules.signedPlain(left), lit = firstLit),
+        )
+        val short = mutableListOf<String>()
 
         // 2. Against the 6 months before it that his statements cover.
         val byMonth = lines.groupBy { MoneyRules.monthOf(it.day) }
@@ -115,6 +139,11 @@ object MoneyMonthReview {
         val avgTotal = if (prior.isEmpty()) null else priorSpend.sumOf { it.values.sum() } / prior.size
         val span = if (prior.size == 6) "6-month" else "${prior.size}-month"
         avgTotal?.let { a ->
+            short += when {
+                spent - a >= SAME_PENCE -> "${fmt(spent - a)} over your $span average"
+                a - spent >= SAME_PENCE -> "${fmt(a - spent)} under your $span average"
+                else -> "About your $span average"
+            }
             out += when {
                 spent - a >= SAME_PENCE -> "That's ${fmt(spent - a)} more than your $span average."
                 a - spent >= SAME_PENCE -> "That's ${fmt(a - spent)} less than your $span average."
@@ -141,6 +170,7 @@ object MoneyMonthReview {
             fun moved(c: MoneyCategory, d: Long) = kotlin.math.abs(d) >= MOVE_PENCE && (usual[c] ?: 0L).let { u -> u == 0L || kotlin.math.abs(d) >= u * MOVE_SHARE }
             val up = diffs.filter { (c, d) -> d > 0 && (usual[c] ?: 0L) > 0 && moved(c, d) }.maxByOrNull { it.second }
             val down = diffs.filter { (c, d) -> d < 0 && moved(c, d) }.minByOrNull { it.second }
+            up?.let { short += "${it.first.label} ${fmt(it.second)} over its usual" }
             val upText = up?.let { "${it.first.label} was ${fmt(it.second)} over its usual" }
             val downText = down?.let { "${it.first.label} ${fmt(-it.second)} under" }
             when {
@@ -180,10 +210,13 @@ object MoneyMonthReview {
 
         val covered = if (from <= start && lastData >= end - END_SLACK_DAYS) "all of $mo" else "${CivilDate.shortLabel(from)} – ${CivilDate.shortLabel(to)}"
         val head = "${mo.uppercase()} IN REVIEW"
+        // Where most went, when nothing moved enough to say (or there's no average yet).
+        if (short.size < MAX_LINES && top.isNotEmpty()) short += "Most on ${top[0].key.label} · ${fmt(top[0].value)}"
         return MoneyMonthReviewView(
             month = month, head = head, lastMonth = false, sentences = out, firstLit = firstLit,
             foot = "${source.from}, $covered. ${source.worked} $FOOT",
             spoken = "$mo in review. " + out.joinToString(" "),
+            tiles = tiles, lines = short.take(MAX_LINES),
         )
     }
 
