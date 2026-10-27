@@ -4308,3 +4308,25 @@ the foot. Help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyR
 MoneyBillsLayoutScreensTest (Roborazzi money cover-dark-bills-layout, inner-dark-bills-layout),
 MekaCoreBridgeTests.testMoneyBillsLayoutOnTheMac. No server change, no migration. Mac checked nightly. Not yet: the same
 rules on Plan and Accounts.
+
+### Money redesign, layout rules slice 3: Plan in cards, what-ifs and challenges in sheets, one foot line (2026-10-27)
+
+Money's layout rules (Meka 2026-10-26 22:18) on Plan, both apps:
+- **Tips**: TIPS FROM YOUR NUMBERS is one card of one-line rows (the fact · ›, a lit one in the accent), three then
+  "2 more ›" (Fewer folds them); a tap opens the tip's sheet (Mac: popover) with what it means and Hide tips like this.
+  "Tips hidden" and Show them again sit in the same card.
+- **Forecast**: one card with the pace, what's left and the horizons; the what-ifs (Halve chips, trading at its pace, the
+  extra-a-month field and what it adds) moved behind one **What if… ›** row whose line says which are on (accent), into
+  a sheet that also shows the horizons moving.
+- **Challenges**: one card with the no-spend switch, the days and the bars; the fun money and cap fields moved into a
+  **Set a challenge ›** sheet.
+- **Paying abroad**: one card.
+- **One foot line** (`MoneySection.PLAN_FOOT`), its ⓘ (`MoneyTabs.info(PLAN)`): Plan's source, What if I save's and Clear
+  my cards' basis, the forecast's months, the challenges' and paying abroad's sources, Money's read-only line. Those lines
+  left the page.
+- Core `MoneyPlanLayout` (tipsShown/tipsMore/tipOf, whatIfBrief/whatIfOn/hasWhatIf, labels), `MoneySection.PLAN_FOOT`,
+  `MoneyTabs.PLAN_FROM`. Fold `MoneyPlanBlocks.kt` (MoneyTipsCard, MoneyLinkRow), MoneyPane (WhatIfBlock,
+  SetChallengeFields, the three sheets). Mac MoneySheet (tipRow, linkRow, forecastRows/whatIf, challengeFields, the foot).
+- Tests: MoneyPlanLayoutTest, MoneySaveTest, MoneyClearTest, MoneyPlanLayoutScreensTest (cover + open Fold),
+  MekaCoreBridgeTests.testMoneyPlanLayoutOnTheMac. Help money.md (HelpIndex regenerated), motion catalogue row. No server
+  change, no migration. Mac checked nightly.

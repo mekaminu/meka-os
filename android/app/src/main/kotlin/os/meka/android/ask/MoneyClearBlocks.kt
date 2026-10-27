@@ -123,7 +123,7 @@ internal fun MoneyClearCard(base: MoneyClearBase, modifier: Modifier = Modifier,
                 .testTag("money-clear-use")
                 .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         )
-        Text(v.basis, style = MekaType.micro, color = Meka.colors.textTertiary)
+        // Layout rule (c): how this is worked out is said once, behind Plan's foot ⓘ (MoneyTabs.info).
     }
 }
 

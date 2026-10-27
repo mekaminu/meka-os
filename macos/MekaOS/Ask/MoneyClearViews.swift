@@ -79,7 +79,7 @@ struct MoneyClearCardView: View {
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(goal != nil ? palette.accent : palette.surfaceRaised, in: Capsule())
             .accessibilityLabel("\(MoneyClear.shared.USE): \(goal ?? MoneyClear.shared.NOT_AT_PACE)")
-            Text(v.basis).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            // Layout rule (c): how this is worked out is said once, behind Plan's foot ⓘ (MoneyTabs.info).
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

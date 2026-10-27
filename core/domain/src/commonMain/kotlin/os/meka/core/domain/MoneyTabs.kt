@@ -24,8 +24,9 @@ enum class MoneySection {
     BILLS, PAYDAY, CARDS, REFUNDS, REGULAR, BILLS_FOOT,
     // Plan: tips from his numbers (the money check's ideas lead), What if I save… ([MoneySave], the mockup's Plan), the
     // forecast at his pace, money goals, challenges, paying abroad. (Plan's goals card, 2026-10-27: goals follow Clear my
-    // cards, as the mockup.)
-    TIPS, SAVE, CLEAR, GOALS, FORECAST, CHALLENGES, TRAVEL,
+    // cards, as the mockup.) Layout rules on Plan (2026-10-27, [MoneyPlanLayout]): the tab ends on the same one foot line,
+    // its ⓘ saying how What if I save, Clear my cards, the forecast, the challenges and paying abroad are worked out.
+    TIPS, SAVE, CLEAR, GOALS, FORECAST, CHALLENGES, TRAVEL, PLAN_FOOT,
     // Trading: Hyperliquid by public address.
     TRADING,
     // Accounts: his banks, net worth, then the accounts as one clean list (Money review, Meka 2026-10-26 22:12: a tap opens
@@ -53,7 +54,7 @@ object MoneyTabs {
         MoneySection.MONTH, MoneySection.TRAVEL_BANNER, MoneySection.REVIEW, MoneySection.ALERTS,
         MoneySection.CATEGORIES, MoneySection.UNSORTED, MoneySection.PAYMENTS, MoneySection.SPEND_FOOT -> MoneyTab.SPENDING
         MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR, MoneySection.BILLS_FOOT -> MoneyTab.BILLS
-        MoneySection.TIPS, MoneySection.SAVE, MoneySection.CLEAR, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL -> MoneyTab.PLAN
+        MoneySection.TIPS, MoneySection.SAVE, MoneySection.CLEAR, MoneySection.FORECAST, MoneySection.GOALS, MoneySection.CHALLENGES, MoneySection.TRAVEL, MoneySection.PLAN_FOOT -> MoneyTab.PLAN
         MoneySection.TRADING -> MoneyTab.TRADING
         MoneySection.BANK, MoneySection.WORTH, MoneySection.ACCOUNTS, MoneySection.YEAR,
         MoneySection.OWN_CATEGORIES, MoneySection.MORE, MoneySection.FOOT -> MoneyTab.ACCOUNTS
@@ -86,6 +87,8 @@ object MoneyTabs {
         MoneySection.GOALS -> v.month != null && v.goals != null
         MoneySection.CHALLENGES -> v.month != null && v.challenges != null
         MoneySection.TRAVEL -> v.month != null && v.travel != null
+        // The foot only under something of Plan's own, so an empty Plan keeps its one line.
+        MoneySection.PLAN_FOOT -> PLAN_OWN.any { present(it, v) }
         MoneySection.TRADING -> v.trading != null
         MoneySection.BANK -> v.bank != null
         MoneySection.WORTH -> v.worth != null
@@ -133,6 +136,12 @@ object MoneyTabs {
     /** The Bills sections that have their own content (the foot shows under any of them). */
     private val BILLS_OWN = listOf(MoneySection.BILLS, MoneySection.PAYDAY, MoneySection.CARDS, MoneySection.REFUNDS, MoneySection.REGULAR)
 
+    /** The Plan sections that have their own content (the foot shows under any of them). */
+    private val PLAN_OWN = listOf(
+        MoneySection.TIPS, MoneySection.SAVE, MoneySection.CLEAR, MoneySection.GOALS, MoneySection.FORECAST,
+        MoneySection.CHALLENGES, MoneySection.TRAVEL,
+    )
+
     /** Layout rule (c): the one foot line a tab ends on; its ⓘ opens [info]. */
     const val FOOT_SHORT = "Read-only · not financial advice"
     const val INFO = "ⓘ"
@@ -154,12 +163,23 @@ object MoneyTabs {
             v.refunds?.foot,
             MoneyRules.FOOT,
         )
+        MoneyTab.PLAN -> listOfNotNull(
+            PLAN_FROM,
+            MoneySave.BASIS.takeIf { v.save != null },
+            MoneyClear.BASIS.takeIf { v.clear != null },
+            v.forecast?.basis,
+            v.challenges?.foot,
+            v.travel?.foot,
+            MoneyRules.FOOT,
+        )
         else -> null
     }
 
     const val BILLS_FROM = "Bills are found from payments that repeat each month, Lists → Renewals and your cards' due dates. Until payday counts a card due before payday by its statement."
     const val CARDS_FROM = "Cards show what you type off each statement, with a reminder 3 days before each payment and before 0% ends."
     const val REFUNDS_FROM = "Refunds on the way are the refunds on Waiting for, checked against your statements. A chase is only copied for you to send yourself."
+
+    const val PLAN_FROM = "Plan works from your own statements: your average month, your cards and your goals. Nothing here moves or pays money."
 
     /** What a screen reader says for a tab pill. */
     fun spoken(tab: MoneyTab, chosen: Boolean): String = tab.label + " tab" + if (chosen) ", selected" else ""

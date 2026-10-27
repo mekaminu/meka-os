@@ -87,6 +87,12 @@ struct MoneySheet: View {
     /// Layout rules on Bills: "See all" on the bills card, "2 more" on the refunds, and the refund whose popover is open.
     @State private var allBills = false
     @State private var allRefunds = false
+    /// Layout rules on Plan: "2 more" on the tips, the tip whose popover is open, and the What if… and Set a challenge
+    /// popovers.
+    @State private var allTips = false
+    @State private var tipOpenId: String? = nil
+    @State private var whatIfOpen = false
+    @State private var setChallengeOpen = false
     @State private var refundOpenId: String? = nil
     @State private var finedLooks: Set<String> = []
     /// Money review: the quick sorter's popover, the payees skipped and the ones picked while the write runs.
@@ -134,6 +140,16 @@ struct MoneySheet: View {
                         if let g = v.goals, has(.goals, v) { moneyGoals(g).staggeredAppear(3) }
                         if let ch = v.challenges, has(.challenges, v) { challenges(ch).staggeredAppear(3) }
                         if let tv = v.travel, has(.travel, v) { travel(tv).transition(.opacity) }
+                        // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part
+                        // is worked out behind ⓘ.
+                        if has(.planFoot, v), let lines = MoneyTabs.shared.info(tab: MoneyTab.plan, v: v) {
+                            HStack(spacing: MekaSpace.xs) {
+                                Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                Spacer()
+                                infoButton("foot-plan", title: MoneyTabs.shared.INFO_TITLE, lines: lines)
+                            }
+                            .padding(.top, MekaSpace.m)
+                        }
                         if let w = v.worth, has(.worth, v) { worth(w).staggeredAppear(3) }
                         // Money review: the accounts as one clean list under net worth, each opening its popover.
                         if has(.accounts, v) { accounts(v).staggeredAppear(3) }
@@ -296,17 +312,26 @@ struct MoneySheet: View {
                 }
                 .moneyCard(palette)
             }
-            if has(.tips, v) && !v.tips.isEmpty {
-                Text("TIPS FROM YOUR NUMBERS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
-                ForEach(v.tips, id: \.id) { t in tip(t).transition(.opacity) }
-            }
-            if let h = v.hiddenTips, has(.tips, v) {
-                HStack {
-                    Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
-                    Spacer()
-                    Button(MoneyTips.shared.SHOW_AGAIN) { Task { said = await model.showMoneyTips() } }
-                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+            // Layout rules on Plan (a), (b), (d): the tips are one card of one-line rows, three then "2 more ›"; a click
+            // opens the tip's popover (what it means, Hide tips like this); "Tips hidden" and Show them again sit in it too.
+            if has(.tips, v) {
+                Text(MoneyPlanLayout.shared.TIPS_HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    ForEach(MoneyPlanLayout.shared.tipsShown(tips: v.tips, open: allTips), id: \.id) { t in tipRow(t).transition(.opacity) }
+                    if let more = MoneyPlanLayout.shared.tipsMore(tips: Int32(v.tips.count), open: allTips) {
+                        Button(more) { MekaHaptics.tick(); allTips.toggle() }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    }
+                    if let h = v.hiddenTips {
+                        HStack {
+                            Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
+                            Spacer()
+                            Button(MoneyTips.shared.SHOW_AGAIN) { Task { said = await model.showMoneyTips() } }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                    }
                 }
+                .moneyCard(palette)
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this Mac as he slides, Make it a goal.
             if let b = v.save, has(.save, v) {
@@ -639,6 +664,26 @@ struct MoneySheet: View {
             if let f = ch.funMoney { challengeBar(f) }
             ForEach(ch.caps, id: \.key) { c in challengeBar(c).transition(.opacity) }
             if let t = ch.throughLine { Text(t).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            // Layout rules on Plan (e): fun money and caps are set in a popover, not in fields on the page.
+            linkRow(MoneyPlanLayout.shared.SET_CHALLENGE, line: MoneyPlanLayout.shared.SET_CHALLENGE_LINE, lit: false) { setChallengeOpen = true }
+                .popover(isPresented: $setChallengeOpen, arrowEdge: .trailing) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        Text(MoneyPlanLayout.shared.SET_CHALLENGE_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        challengeFields(ch)
+                        if let s = said { Text(s.line).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                        Button(MoneyCards.shared.DONE) { setChallengeOpen = false }.keyboardShortcut(.defaultAction)
+                    }
+                    .padding(MekaSpace.m)
+                    .frame(width: 360)
+                }
+        }
+        .moneyCard(palette)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
+    }
+
+    /// Layout rules on Plan (e): the two challenge fields, only in the Set a challenge popover.
+    @ViewBuilder
+    private func challengeFields(_ ch: MoneyChallengesView) -> some View {
             TextField(ch.funHint, text: $funText)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
@@ -653,9 +698,6 @@ struct MoneySheet: View {
                     capText = ""
                     Task { said = await model.moneyCap(text: text) }
                 }
-            Text(ch.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
-        }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
     }
 
     /// Money redesign, Plan's goals card (mockup), like the Fold's MoneyGoalsCard: GOALS as one card, each £ goal's name
@@ -784,8 +826,8 @@ struct MoneySheet: View {
                 .accessibilityLabel(r.spoken)
                 .transition(.opacity)
             }
-            Text(tv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
+        .moneyCard(palette)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tv.rows.count)
     }
 
@@ -1200,6 +1242,30 @@ struct MoneySheet: View {
             if let n = f.notReady {
                 Text(n).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             } else {
+                // Layout rules on Plan (a), (e): the forecast in one card; the what-ifs behind its What if… row (a popover).
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    forecastRows(f)
+                    linkRow(MoneyPlanLayout.shared.WHAT_IF_ROW, line: MoneyPlanLayout.shared.whatIfBrief(f: f),
+                            lit: MoneyPlanLayout.shared.whatIfOn(f: f)) { whatIfOpen = true }
+                        .popover(isPresented: $whatIfOpen, arrowEdge: .trailing) {
+                            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                                Text(MoneyPlanLayout.shared.WHAT_IF_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                                whatIf(f)
+                                Button(MoneyCards.shared.DONE) { whatIfOpen = false }.keyboardShortcut(.defaultAction)
+                            }
+                            .padding(MekaSpace.m)
+                            .frame(width: 380)
+                        }
+                }
+                .moneyCard(palette)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: f.rows.map { $0.line })
+    }
+
+    /// The forecast's pace, what's left and each horizon (on the page, and in the What if… popover as he switches).
+    @ViewBuilder
+    private func forecastRows(_ f: MoneyForecastView) -> some View {
                 if let p = f.pace { Text(p).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
                 if let l = f.left {
                     Text(l).font(MekaType.caption).foregroundStyle(f.leftLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
@@ -1216,7 +1282,13 @@ struct MoneySheet: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(r.spoken)
                 }
-                Text(MoneyForecast.shared.WHAT_IF).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+    }
+
+    /// Layout rules on Plan (e): the forecast's what-ifs, only in the What if… popover — the cut chips, trading at the
+    /// pace it has gone, and the extra-a-month field with what it adds.
+    @ViewBuilder
+    private func whatIf(_ f: MoneyForecastView) -> some View {
+                forecastRows(f)
                 if !f.cuts.isEmpty {
                     HStack(spacing: MekaSpace.xs) {
                         ForEach(f.cuts, id: \.key) { c in cutChip(c) }
@@ -1234,12 +1306,51 @@ struct MoneySheet: View {
                         Task { said = await model.moneyForecastExtra(text) }
                     }
                 if let e = f.extraLine { Text(e).font(MekaType.caption).foregroundStyle(palette.accent) }
-                if let b = f.basis {
-                    Text(b).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// One row inside a Plan card that opens a popover (What if…, Set a challenge): its name over a short line (in the
+    /// accent when [lit]) and a chevron. Layout rule (e): fields live in the popover, never open on the page.
+    private func linkRow(_ title: String, line: String, lit: Bool, action: @escaping () -> Void) -> some View {
+        Button { MekaHaptics.tick(); said = nil; action() } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(line).font(MekaType.caption).foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                        .lineLimit(1).contentTransition(.opacity)
                 }
+                Spacer(minLength: MekaSpace.xs)
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
             }
+            .contentShape(Rectangle())
         }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: f.rows.map { $0.line })
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel("\(title), \(line)")
+        .padding(.top, MekaSpace.xs)
+    }
+
+    /// Layout rules on Plan: one tip as a compact row (the fact · ›, a lit one in brass); a click opens its popover with
+    /// what it means and Hide tips like this.
+    private func tipRow(_ t: MoneyTip) -> some View {
+        let id = t.id
+        return Button { MekaHaptics.tick(); said = nil; tipOpenId = id } label: {
+            HStack(spacing: MekaSpace.m) {
+                Text(t.title).font(MekaType.body).foregroundStyle(t.lit ? palette.accent : palette.textPrimary).lineLimit(1)
+                Spacer(minLength: MekaSpace.xs)
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(t.spoken)
+        .popover(isPresented: Binding(get: { tipOpenId == id }, set: { if !$0 && tipOpenId == id { tipOpenId = nil } }), arrowEdge: .trailing) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(MoneyPlanLayout.shared.TIP_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                tip(t)
+                Button(MoneyCards.shared.DONE) { tipOpenId = nil }.keyboardShortcut(.defaultAction)
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 360)
+        }
     }
 
     /// A what-if chip (a halved category, or slice 11's trading); a click turns it on or off on this Mac only.

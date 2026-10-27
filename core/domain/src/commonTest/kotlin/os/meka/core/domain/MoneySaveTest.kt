@@ -92,7 +92,7 @@ class MoneySaveTest {
     fun planShowsWhatIfISaveAfterTheTipsWhenThisMonthIsIn() {
         val m = MoneyMonth(0, "October so far", "Spent £1,234", null, false, emptyList(), emptyList(), 0)
         val v = MoneyView(false, "", null, m, emptyList(), earlier = false, later = false, save = base(95_000))
-        assertEquals(listOf(MoneySection.SAVE), MoneyTabs.sections(MoneyTab.PLAN, v))
+        assertEquals(listOf(MoneySection.SAVE, MoneySection.PLAN_FOOT), MoneyTabs.sections(MoneyTab.PLAN, v))
         assertEquals(MoneyTab.PLAN, MoneyTabs.tabOf(MoneySection.SAVE))
         assertFalse(MoneySection.SAVE in MoneyTabs.sections(MoneyTab.PLAN, v.copy(save = null)))
     }

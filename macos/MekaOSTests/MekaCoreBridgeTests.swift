@@ -4060,4 +4060,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyBills.shared.allLabel(rows: 7, open: false), "See all 7 ›")
         XCTAssertEqual(MoneyBills.shared.FOLDED, 5)
     }
+    /// Money's layout rules on Plan: tips fold after three, the What if… row's line, and one foot line at Plan's end.
+    func testMoneyPlanLayoutOnTheMac() {
+        XCTAssertEqual(MoneyTabs.shared.tabOf(s: .planFoot), MoneyTab.plan)
+        XCTAssertEqual(MoneyPlanLayout.shared.TIPS_SHOWN, 3)
+        XCTAssertEqual(MoneyPlanLayout.shared.tipsMore(tips: 5, open: false), "2 more ›")
+        XCTAssertNil(MoneyPlanLayout.shared.tipsMore(tips: 3, open: false))
+        XCTAssertEqual(MoneyPlanLayout.shared.WHAT_IF_ROW, "What if…")
+        XCTAssertEqual(MoneyPlanLayout.shared.SET_CHALLENGE, "Set a challenge")
+    }
 }

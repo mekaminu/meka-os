@@ -157,7 +157,7 @@ class MoneyClearTest {
     fun planShowsClearMyCardsWhenACardOwesSomething() {
         val m = MoneyMonth(0, "October so far", "Spent £1,234", null, false, emptyList(), emptyList(), 0)
         val v = MoneyView(false, "", null, m, emptyList(), earlier = false, later = false, clear = twoCards())
-        assertEquals(listOf(MoneySection.CLEAR), MoneyTabs.sections(MoneyTab.PLAN, v))
+        assertEquals(listOf(MoneySection.CLEAR, MoneySection.PLAN_FOOT), MoneyTabs.sections(MoneyTab.PLAN, v))
         assertEquals(MoneyTab.PLAN, MoneyTabs.tabOf(MoneySection.CLEAR))
         assertFalse(MoneySection.CLEAR in MoneyTabs.sections(MoneyTab.PLAN, v.copy(clear = null)))
     }

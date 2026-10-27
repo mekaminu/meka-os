@@ -82,6 +82,7 @@ import os.meka.core.domain.MoneySorter
 import os.meka.core.domain.MoneyBank
 import os.meka.core.domain.MoneyBankView
 import os.meka.core.domain.MoneyBills
+import os.meka.core.domain.MoneyPlanLayout
 import os.meka.core.domain.MoneyCardRow
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyCardsView
@@ -279,6 +280,13 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var allRefunds by rememberSaveable { mutableStateOf(false) }
     var refundSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val refundOpen = refundSheetId?.let { id -> v.refunds?.rows?.firstOrNull { it.id == id } }
+    // Layout rules on Plan: "2 more" on the tips, the tip whose sheet is open (Hide takes it away, which closes the
+    // sheet), and the What if… and Set a challenge sheets.
+    var allTips by rememberSaveable { mutableStateOf(false) }
+    var tipSheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val tipOpen = MoneyPlanLayout.tipOf(v.tips, tipSheetId)
+    var whatIfOpen by rememberSaveable { mutableStateOf(false) }
+    var setChallengeOpen by rememberSaveable { mutableStateOf(false) }
     // Money review, Accounts: the account whose sheet is open.
     var accountSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val accountSheet = accountSheetId?.let { id -> MoneyAccountList.sheet(v, id) }
@@ -586,30 +594,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 2: tips from his own numbers, then his regular payments (this month only).
-            if (has(MoneySection.TIPS) && v.tips.isNotEmpty()) {
+            // Layout rules on Plan (a), (b), (d): the tips are one card of one-line rows, three then "2 more ›"; a tap opens
+            // the tip's sheet (what it means, Hide tips like this); "Tips hidden" and Show them again sit in the same card.
+            if (has(MoneySection.TIPS)) {
                 item(key = "tips-head") {
-                    Text("TIPS FROM YOUR NUMBERS", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    Text(MoneyPlanLayout.TIPS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
-                v.tips.forEachIndexed { i, t ->
-                    item(key = "tip-${t.id}") {
-                        TipCard(t, Modifier.animateItem().appear(rememberAppearance(4 + i))) {
-                            scope.launch { runCatching { core.hideMoneyTips(t.kind) }.getOrNull()?.let(say) }
-                        }
-                    }
-                }
-            }
-            v.hiddenTips?.takeIf { has(MoneySection.TIPS) }?.let { h ->
-                item(key = "tips-hidden") {
-                    Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Crossfade(h, animationSpec = MekaMotion.appear(reduced), label = "money-tips-hidden", modifier = Modifier.weight(1f)) { l ->
-                            Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
-                        }
-                        Text(MoneyTips.SHOW_AGAIN, style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                                scope.launch { runCatching { core.showMoneyTips() }.getOrNull()?.let(say) }
-                            }.minTouch().padding(MekaSpace.xs))
-                    }
+                item(key = "tips") {
+                    MoneyTipsCard(MoneyPlanLayout.tipsShown(v.tips, allTips), MoneyPlanLayout.tipsMore(v.tips.size, allTips), v.hiddenTips,
+                        Modifier.animateItem().appear(rememberAppearance(4)),
+                        onOpen = { id -> haptics.tick(); said = null; tipSheetId = id },
+                        onMore = { haptics.tick(); allTips = !allTips },
+                        onShowAgain = { scope.launch { runCatching { core.showMoneyTips() }.getOrNull()?.let(say) } })
                 }
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this phone as he slides, Make it a goal.
@@ -675,10 +672,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 f.notReady?.let { n ->
                     item(key = "forecast-not-ready") { Text(n, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) }
                 }
+                // Layout rules on Plan (a), (e): the forecast in one card; the what-ifs behind its What if… row (a sheet).
                 if (f.notReady == null) item(key = "forecast") {
-                    ForecastBlock(f, Modifier.animateItem().appear(rememberAppearance(4)),
-                        onCut = { key -> haptics.tick(); scope.launch { runCatching { core.moneyForecastCut(key) } } },
-                        onExtra = { text -> scope.launch { runCatching { core.moneyForecastExtra(text) }.getOrNull()?.let(say) } })
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-forecast-card") {
+                        ForecastBlock(f, Modifier)
+                        MoneyLinkRow(MoneyPlanLayout.WHAT_IF_ROW, MoneyPlanLayout.whatIfBrief(f), MoneyPlanLayout.whatIfOn(f), "money-whatif-row") {
+                            haptics.tick(); said = null; whatIfOpen = true
+                        }
+                    }
                 }
             }
             // Slice 15: challenges he set himself — no-spend days, fun money for the week, category caps (this month only).
@@ -687,12 +688,16 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Text(ch.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
+                // Layout rules on Plan (a), (e): the challenges in one card; fun money and caps are set in a sheet.
                 item(key = "challenges") {
-                    ChallengesBlock(ch, Modifier.animateItem().appear(rememberAppearance(4)),
-                        onNoSpend = { on -> scope.launch { runCatching { core.moneyNoSpend(on) }.getOrNull()?.let(say) } },
-                        onFun = { text -> scope.launch { runCatching { core.moneyFunMoney(text) }.getOrNull()?.let(say) } },
-                        onCap = { text -> scope.launch { runCatching { core.moneyCap(text) }.getOrNull()?.let(say) } },
-                        onRemove = { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } })
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-challenges-card") {
+                        ChallengesBlock(ch, Modifier,
+                            onNoSpend = { on -> scope.launch { runCatching { core.moneyNoSpend(on) }.getOrNull()?.let(say) } },
+                            onRemove = { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } })
+                        MoneyLinkRow(MoneyPlanLayout.SET_CHALLENGE, MoneyPlanLayout.SET_CHALLENGE_LINE, false, "money-set-challenge-row") {
+                            haptics.tick(); said = null; setChallengeOpen = true
+                        }
+                    }
                 }
             }
             // Slice 17: PAYING ABROAD — which accounts charged foreign fees, and the one to use (Plan).
@@ -701,7 +706,16 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Text(tv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
-                item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
+                item(key = "travel") {
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-travel-card") { TravelBlock(tv, Modifier) }
+                }
+            }
+            // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part is worked
+            // out behind ⓘ.
+            if (has(MoneySection.PLAN_FOOT)) item(key = "plan-foot") {
+                MoneyTabFoot(Modifier.animateItem()) {
+                    haptics.tick(); MoneyTabs.info(MoneyTab.PLAN, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
+                }
             }
             if (has(MoneySection.CATEGORIES) && ringSp != null) {
                 item(key = "cats-head") {
@@ -1022,6 +1036,27 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 scope.launch { runCatching { core.moneyRefundChased(r.id) }.getOrNull()?.let(say) }
             })
         v.refunds?.foot?.let { f -> Text(f, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        SheetSaid(said)
+    }
+    // Layout rules on Plan: a tip's sheet (what it means, Hide tips like this).
+    MoneyDetailSheet(tipOpen, title = { MoneyPlanLayout.TIP_SHEET }, tag = "money-tip-sheet", done = MoneyCards.DONE, onClose = { tipSheetId = null }) { t ->
+        TipCard(t, Modifier) { scope.launch { runCatching { core.hideMoneyTips(t.kind) }.getOrNull()?.let(say) } }
+        SheetSaid(said)
+    }
+    // Layout rules on Plan (e): the forecast's what-ifs (cuts, trading at its pace, extra a month) in a sheet.
+    MoneyDetailSheet(v.forecast?.takeIf { whatIfOpen && MoneyPlanLayout.hasWhatIf(it) }, title = { MoneyPlanLayout.WHAT_IF_SHEET },
+        tag = "money-whatif-sheet", done = MoneyCards.DONE, onClose = { whatIfOpen = false }) { f ->
+        WhatIfBlock(f,
+            onCut = { key -> haptics.tick(); scope.launch { runCatching { core.moneyForecastCut(key) } } },
+            onExtra = { text -> scope.launch { runCatching { core.moneyForecastExtra(text) }.getOrNull()?.let(say) } })
+        SheetSaid(said)
+    }
+    // Layout rules on Plan (e): set fun money for the week or a category cap in a sheet.
+    MoneyDetailSheet(v.challenges?.takeIf { setChallengeOpen }, title = { MoneyPlanLayout.SET_CHALLENGE_SHEET },
+        tag = "money-set-challenge-sheet", done = MoneyCards.DONE, onClose = { setChallengeOpen = false }) { ch ->
+        SetChallengeFields(ch,
+            onFun = { text -> scope.launch { runCatching { core.moneyFunMoney(text) }.getOrNull()?.let(say) } },
+            onCap = { text -> scope.launch { runCatching { core.moneyCap(text) }.getOrNull()?.let(say) } })
         SheetSaid(said)
     }
     // Layout rule (c): what an ⓘ says (the month in review's sentences, where Spending's numbers came from).
@@ -1540,13 +1575,8 @@ private fun BusinessMailBlock(m: MoneyBusinessMailView, onBusinessTxn: (String) 
  * run; fields to set them. Bars grow on the appear spring and lines cross-fade (MekaMotion.appear honours reduced motion).
  */
 @Composable
-private fun ChallengesBlock(
-    ch: MoneyChallengesView, modifier: Modifier, onNoSpend: (Boolean) -> Unit, onFun: (String) -> Unit, onCap: (String) -> Unit,
-    onRemove: (String) -> Unit,
-) {
+private fun ChallengesBlock(ch: MoneyChallengesView, modifier: Modifier, onNoSpend: (Boolean) -> Unit, onRemove: (String) -> Unit) {
     val reduced = Meka.reducedMotion
-    var funText by rememberSaveable { mutableStateOf("") }
-    var capText by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         ch.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1580,10 +1610,16 @@ private fun ChallengesBlock(
         ch.funMoney?.let { ChallengeBar(it, onRemove) }
         ch.caps.forEach { ChallengeBar(it, onRemove) }
         ch.throughLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Field(ch.funHint, value = funText, onValue = { funText = it }) { funText = ""; onFun(it) }
-        Field(ch.capHint, value = capText, onValue = { capText = it }) { capText = ""; onCap(it) }
-        Text(ch.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
+}
+
+/** Layout rules on Plan (e): the two challenge fields, only in the Set a challenge sheet. */
+@Composable
+private fun SetChallengeFields(ch: MoneyChallengesView, onFun: (String) -> Unit, onCap: (String) -> Unit) {
+    var funText by rememberSaveable { mutableStateOf("") }
+    var capText by rememberSaveable { mutableStateOf("") }
+    Field(ch.funHint, value = funText, onValue = { funText = it }) { funText = ""; onFun(it) }
+    Field(ch.capHint, value = capText, onValue = { capText = it }) { capText = ""; onCap(it) }
 }
 
 /**
@@ -1614,7 +1650,6 @@ private fun TravelBlock(tv: os.meka.core.domain.MoneyTravelView, modifier: Modif
                 }
             }
         }
-        Text(tv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -1926,9 +1961,8 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolea
 }
 
 @Composable
-private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier, onCut: (String) -> Unit, onExtra: (String) -> Unit) {
+private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier) {
     val reduced = Meka.reducedMotion
-    var extra by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         f.pace?.let { p ->
             Crossfade(p, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-pace") { l ->
@@ -1942,9 +1976,18 @@ private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier, onCut: (Stri
             }
         }
         f.rows.forEach { r -> ForecastRow(r) }
-        if (f.cuts.isNotEmpty() || f.rows.isNotEmpty()) {
-            Text(MoneyForecast.WHAT_IF, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
-        }
+    }
+}
+
+/**
+ * Layout rules on Plan (e): the forecast's what-ifs, only in the What if… sheet — the cut chips, trading at the pace it
+ * has gone, and the extra-a-month field with what it adds. The horizons on the page move as each is switched.
+ */
+@Composable
+private fun WhatIfBlock(f: MoneyForecastView, onCut: (String) -> Unit, onExtra: (String) -> Unit) {
+    var extra by rememberSaveable { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        f.rows.forEach { r -> ForecastRow(r) }
         if (f.cuts.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 f.cuts.forEach { c -> CutChip(c, onCut) }
@@ -1955,7 +1998,6 @@ private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier, onCut: (Stri
         f.tradingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Field(MoneyForecast.EXTRA_HINT, value = extra, onValue = { extra = it }) { extra = it; onExtra(it) }
         f.extraLine?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.accent) }
-        f.basis?.let { b -> Text(b, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 

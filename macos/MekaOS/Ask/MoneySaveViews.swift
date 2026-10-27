@@ -97,7 +97,7 @@ struct MoneySaveCardView: View {
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(palette.accent, in: Capsule())
             .accessibilityLabel("\(MoneySave.shared.MAKE_GOAL): \(v.goalTitle)")
-            Text(v.basis).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            // Layout rule (c): how this is worked out is said once, behind Plan's foot ⓘ (MoneyTabs.info).
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
