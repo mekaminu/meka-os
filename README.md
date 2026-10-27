@@ -370,6 +370,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/speak-up/cover-light-many.png](docs/screens/fold/speak-up/cover-light-many.png)
 - [fold/speak-up/inner-dark-many.png](docs/screens/fold/speak-up/inner-dark-many.png)
 - [fold/study/cover-dark-course.png](docs/screens/fold/study/cover-dark-course.png)
+- [fold/study/cover-dark-lesson-planned.png](docs/screens/fold/study/cover-dark-lesson-planned.png)
 - [fold/study/cover-dark-lesson-sheet.png](docs/screens/fold/study/cover-dark-lesson-sheet.png)
 - [fold/study/cover-dark-plan.png](docs/screens/fold/study/cover-dark-plan.png)
 - [fold/study/cover-light-course.png](docs/screens/fold/study/cover-light-course.png)
