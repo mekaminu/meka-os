@@ -258,6 +258,8 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(shows("money-own-cap-field"), "no MONTHLY CAP field in the category's sheet")
         val field = hasSetTextAction() and hasAnyAncestor(hasTestTag("money-own-cap-field"))
         compose.onNode(field, useUnmergedTree = true).performTextInput("£10")
+        // The field's Done reads what was typed from the last composition, so let it recompose first.
+        settle()
         compose.onNode(field, useUnmergedTree = true).performImeAction()
         waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.cap != null }
         val cap = core.moneyView.value.ownRows.single().cap ?: fail("the cap didn't land")
