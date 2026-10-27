@@ -115,4 +115,29 @@ class StudyFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertEquals(c.plan, mac.studyView.value.course(id)!!.plan)
     }
+
+    @Test
+    fun aLessonPlannedOnTheFoldShowsOnTodayAndInTheTomorrowSheetOnTheMac() = runTest {
+        // Meka 2026-10-26 23:21: "how do you plan an item for today, tomorrow…"
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nPivot tables 1 h").courseId!!
+        val (welcome, pivot) = fold.studyView.value.course(id)!!.modules.single().lessons
+        val today = fold.todayEpochDay()
+        assertEquals("Planned \u201CWelcome\u201D for today", fold.planStudyLesson(welcome.id, today))
+        assertEquals("Planned \u201CPivot tables\u201D for tomorrow", fold.planStudyLesson(pivot.id, today + 1))
+        assertEquals(null, fold.planStudyLesson(pivot.id, today + 1))
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertEquals("Study today · 1 lesson · about 15 min · next: Welcome", mac.today.value.study?.text)
+        assertEquals("Study · 1 lesson · about 1 h · Pivot tables", mac.shutdownView.value.tomorrow.study?.text)
+        assertEquals(listOf("Today", "Tomorrow"), mac.studyView.value.course(id)!!.modules.single().lessons.map { it.planned })
+
+        // Ticked on the Mac: Today says it's done; taken off the plan, tomorrow has nothing to study.
+        assertTrue(mac.tickStudyLesson(welcome.id, true))
+        assertTrue(mac.planStudyLesson(pivot.id, null)!!.endsWith("is no longer planned"))
+        mac.tick()
+        assertEquals("Study today · done", mac.today.value.study?.text)
+        assertEquals(null, mac.shutdownView.value.tomorrow.study)
+    }
 }

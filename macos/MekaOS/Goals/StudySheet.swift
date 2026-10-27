@@ -163,6 +163,8 @@ struct StudySheet: View {
     @State private var moduleLessons = ""
     @State private var asking: StudyAsk?
     @State private var showDeleted = false
+    /// Plan a lesson for a day: the chip picked here ("" = not planned), shown at once until the write is in.
+    @State private var plannedTap: [String: String] = [:]
 
     /// What a Delete confirm is about: a lesson (its id), a module (its name) or the course; [question] is the core's line.
     struct StudyAsk: Identifiable, Equatable {
@@ -609,10 +611,19 @@ struct StudySheet: View {
                 TickRingView(done: done, palette: palette).frame(width: 18, height: 18)
                 Text(l.title).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
                 Spacer()
+                // Plan a lesson for a day: its date chip ("Today", "Tomorrow", "Thu 29 Oct"; in the accent once it rolled over).
+                if let planned = plannedTap[id].map({ $0.isEmpty ? nil : $0 }) ?? l.planned, !done {
+                    Text(planned).font(MekaType.caption)
+                        .foregroundStyle(l.late && plannedTap[id] == nil ? palette.accent : palette.textSecondary)
+                        .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                        .background(Capsule().fill(palette.surfaceRaised))
+                        .transition(.opacity)
+                }
                 if !l.mins.isEmpty {
                     Text(l.mins).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
             }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: plannedTap[id] ?? l.planned)
             .opacity(done ? 0.5 : 1)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: done)
             .padding(.vertical, MekaSpace.xxs)
@@ -620,10 +631,25 @@ struct StudySheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(l.title)
+        .accessibilityLabel(l.planned.map { "\(l.title), planned for \($0)" } ?? l.title)
         .accessibilityValue(done ? "Done" : "Not done")
         .contextMenu {
             let title = l.title
+            // Plan a lesson for a day: Today, Tomorrow or a day this week; it then shows on Today and in the Tomorrow sheet.
+            Menu(StudyRules.shared.PLAN_FOR) {
+                ForEach(StudyRules.shared.planChips(today: model.todayEpochDay, plannedDay: l.plannedDay), id: \.key) { chip in
+                    let key = chip.key
+                    let label = chip.label == StudyRules.shared.NOT_PLANNED ? "" : chip.label
+                    Button(chip.on ? "\(chip.label) ✓" : chip.label) {
+                        guard !chip.on else { return }
+                        plannedTap[id] = label
+                        Task {
+                            if let line = await model.planStudyLesson(id, key: key) { said = CoreModel.StudySaid(line: line, refused: false, courseId: nil) }
+                            plannedTap[id] = nil
+                        }
+                    }
+                }
+            }
             Button("\(StudyRules.shared.RENAME)…") { renameText = title; renameModule = nil; renameId = id }
             if names.count > 1 {
                 Menu(StudyRules.shared.MOVE_LABEL) {

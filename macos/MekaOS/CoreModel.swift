@@ -6058,6 +6058,18 @@ final class CoreModel {
         }
     }
 
+    /// Plan a lesson for a day: a PLAN FOR chip's key (its epoch day, or "none" for Not planned); the bar's line, or nil.
+    /// The day crosses as a fresh KotlinLong made for this one call.
+    func planStudyLesson(_ id: String, key: String) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        let day = Int64(key)
+        do { return try await core.planStudyLesson(id: id, epochDay: day.map { KotlinLong(longLong: $0) }) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func renameStudyLesson(_ id: String, _ text: String) { MekaHaptics.light(); run { _ = try await $0.renameStudyLesson(id: id, text: text) } }
 
     func moveStudyLesson(_ id: String, module: String) { MekaHaptics.light(); run { _ = try await $0.moveStudyLesson(id: id, module: module) } }

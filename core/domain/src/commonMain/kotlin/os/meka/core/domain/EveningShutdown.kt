@@ -80,6 +80,8 @@ data class TomorrowPreview(
     val train: FirstTrainLine? = null,
     /** Bills and renewals due tomorrow, and cancel-by days ([ShutdownRules.bills]); set by the facade from Lists → Renewals. */
     val bills: TomorrowBills? = null,
+    /** Lessons planned for tomorrow ([StudyRules.tomorrowLine]): "Study · 2 lessons · about 1 h · …"; set by the facade. */
+    val study: StudyDayLine? = null,
 )
 
 data class ShutdownView(
@@ -249,11 +251,13 @@ object ShutdownRules {
     fun peek(p: TomorrowPreview, dayLabel: String): TomorrowPeek {
         val head = "Tomorrow · $dayLabel"
         val bills = p.bills?.count ?: 0
-        if (p.rows.isEmpty() && bills == 0) return TomorrowPeek("$head · nothing planned yet", "Tomorrow, $dayLabel: nothing planned yet")
+        val lessons = p.study?.left ?: 0
+        if (p.rows.isEmpty() && bills == 0 && lessons == 0) return TomorrowPeek("$head · nothing planned yet", "Tomorrow, $dayLabel: nothing planned yet")
         val bits = listOfNotNull(
             count(p.eventCount, "event").takeIf { p.eventCount > 0 },
             count(p.taskCount, "task").takeIf { p.taskCount > 0 },
             "${count(bills, "bill")} due".takeIf { bills > 0 },
+            "${count(lessons, "lesson")} to study".takeIf { lessons > 0 },
             p.first?.let { "first ${it.time} ${shorten(it.title)}" },
         )
         return TomorrowPeek("$head · " + bits.joinToString(" · "), "Tomorrow, $dayLabel: " + bits.joinToString(", "))

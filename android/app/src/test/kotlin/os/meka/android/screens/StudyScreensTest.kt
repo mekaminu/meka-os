@@ -217,4 +217,31 @@ class StudyScreensTest {
         compose.onNodeWithTag("study-restore-${deleted.id}").performClick()
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.total == 8 }
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun planningALessonForTomorrowShowsItsChipInTheNextFrame() {
+        // Meka 2026-10-26 23:21: "how do you plan an item for today, tomorrow…"
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        val pivot = core.studyView.value.course(id)!!.modules[1].lessons.first()
+        scrollTo(hasTestTag("study-lesson-${pivot.id}"))
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("study-lesson-${pivot.id}").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-plan-Tomorrow"))
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("study-lesson-plan-Tomorrow").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag("study-lesson-plan-Tomorrow").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.first().plannedDay == 20_753L }
+        assertEquals("Tomorrow", core.studyView.value.course(id)!!.modules[1].lessons.first().planned)
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-${pivot.id}"))
+        compose.waitForIdle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-lesson-planned"))
+        ScreenShots.assertSensible(compose, "cover-dark-lesson-planned")
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-lesson-planned")
+        ScreenShots.assertShows(compose, "cover-dark-lesson-planned", "Tomorrow")
+    }
 }

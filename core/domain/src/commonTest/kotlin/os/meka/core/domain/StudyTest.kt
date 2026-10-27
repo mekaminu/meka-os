@@ -315,4 +315,60 @@ class StudyTest {
         val other = sFold.addCourse("Spanish\nGreetings\nNumbers 30 min\nFood 60 min").courseId!!
         assertEquals(135, StudyRules.leftMins(sFold.view(today).course(other)!!.planInput))
     }
+
+    @Test
+    fun aLessonPlannedForADayShowsOnThatDayAndRollsOverUntilDone() {
+        // Meka 2026-10-26 23:21: "how do you plan an item for today, tomorrow…"
+        val today = 20_752L // Mon 26 Oct 2026
+        val id = sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nSpreadsheets 45 min\nPivot tables 1 h").courseId!!
+        val ls = sFold.lessons()
+        assertTrue(sFold.planLesson(ls[0].id, today))
+        assertFalse(sFold.planLesson(ls[0].id, today))
+        assertTrue(sFold.planLesson(ls[1].id, today))
+        assertTrue(sFold.planLesson(ls[2].id, today + 1))
+        sync()
+        val onMac = sMac.lessons()
+        val doneDay: (Long) -> Long = { it / 86_400_000L }
+        val todays = StudyRules.onDay(onMac, sMac.courses(), today, rollOver = true, doneDay = doneDay)
+        assertEquals(listOf("Welcome", "Spreadsheets"), todays.map { it.title })
+        assertEquals("Study today · 2 lessons · about 1 h · next: Welcome", StudyRules.todayLine(todays, today)!!.text)
+        val tomorrow = StudyRules.onDay(onMac, sMac.courses(), today + 1, rollOver = false, doneDay = doneDay)
+        assertEquals("Study · 1 lesson · about 1 h · Pivot tables", StudyRules.tomorrowLine(tomorrow)!!.text)
+
+        // The course shows the date chips.
+        val rows = sMac.view(today).course(id)!!.modules.single().lessons
+        assertEquals(listOf("Today", "Today", "Tomorrow"), rows.map { it.planned })
+
+        // Ticked today: "1 of 2 done"; the next day the one not done rolls over, lit, and the done one has gone.
+        assertTrue(sMac.tick(ls[0].id, true))
+        val ticked = StudyRules.onDay(sMac.lessons(), sMac.courses(), today, true, { today })
+        assertEquals("Study today · 1 of 2 done · about 45 min · next: Spreadsheets", StudyRules.todayLine(ticked, today)!!.text)
+        val next = StudyRules.onDay(sMac.lessons(), sMac.courses(), today + 1, true, { today })
+        val line = StudyRules.todayLine(next, today + 1)!!
+        assertEquals("Study today · 2 lessons · about 2 h · next: Spreadsheets · 1 from Mon", line.text)
+        assertTrue(line.lit)
+        assertEquals("Today · from Mon", sMac.view(today + 1).course(id)!!.modules.single().lessons[1].planned)
+        assertNull(sMac.view(today + 1).course(id)!!.modules.single().lessons[0].planned) // done: no chip
+
+        // Not planned takes it off; nothing on the day then.
+        assertTrue(sMac.planLesson(ls[2].id, null))
+        assertNull(StudyRules.tomorrowLine(StudyRules.onDay(sMac.lessons(), sMac.courses(), today + 1, false, doneDay)))
+    }
+
+    @Test
+    fun thePlanForChipsOfferTheWeekAndNotPlannedOnceItIs() {
+        val today = 20_752L
+        val chips = StudyRules.planChips(today, null)
+        assertEquals(listOf("Today", "Tomorrow", "Wed 28 Oct", "Thu 29 Oct", "Fri 30 Oct", "Sat 31 Oct", "Sun 1 Nov"), chips.map { it.label })
+        assertTrue(chips.none { it.on })
+        val planned = StudyRules.planChips(today, today + 2)
+        assertEquals("Wed 28 Oct", planned.single { it.on }.label)
+        assertEquals(StudyRules.NOT_PLANNED, planned.last().label)
+        // A day gone by counts as today; a day past the week is added on.
+        assertEquals("Today", StudyRules.planChips(today, today - 3).single { it.on }.label)
+        assertEquals("Thu 12 Nov", StudyRules.planChips(today, today + 17).single { it.on }.label)
+        assertEquals("Planned \u201CPivot tables\u201D for tomorrow", StudyRules.plannedSaid("Pivot tables", today + 1, today))
+        assertEquals("Planned \u201CPivot tables\u201D for Thu 29 Oct", StudyRules.plannedSaid("Pivot tables", today + 3, today))
+        assertEquals("\u201CPivot tables\u201D is no longer planned", StudyRules.plannedSaid("Pivot tables", null, today))
+    }
 }

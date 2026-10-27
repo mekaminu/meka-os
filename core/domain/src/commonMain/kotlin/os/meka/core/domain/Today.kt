@@ -52,6 +52,8 @@ data class Today(
     val gifts: GiftLine? = null,
     /** Travel mode, slice 1: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · …" ([TripRules.todayLine]); set by the facade. */
     val trip: TripLine? = null,
+    /** Plan a lesson for a day: "Study today · 3 lessons · about 1 h 30 · next: Pivot tables" ([StudyRules.todayLine]); set by the facade. */
+    val study: StudyDayLine? = null,
     /** Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from shipping emails ([ParcelRules.todayLine]); set by the facade. */
     val parcels: ParcelLine? = null,
     /** Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can tidy" ([MailUnreadRules.todayLine]); set by the facade. */

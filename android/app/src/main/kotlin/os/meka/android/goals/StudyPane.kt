@@ -212,6 +212,9 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     var outline by rememberSaveable(courseId) { mutableStateOf("") }
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
+    // Plan a lesson for a day: the day picked here (null = not planned), shown at once until the view says the same.
+    val plannedTap = remember { mutableStateMapOf<String, Long?>() }
+    val today = remember(all) { core.todayEpochDay() }
     // Modules folded or opened by hand; untouched, the first module not yet done is open and the rest folded.
     val opened = remember { mutableStateMapOf<String, Boolean>() }
     // Slice 2a: the plan's chips tapped here, worked out at once until the view says the same.
@@ -226,6 +229,8 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     LaunchedEffect(c) {
         val shown = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.done }
         pending.keys.toList().forEach { id -> if (shown[id] == null || shown[id] == pending[id]) pending.remove(id) }
+        val days = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.plannedDay }
+        plannedTap.keys.toList().forEach { id -> if (id !in days || days[id] == plannedTap[id]) plannedTap.remove(id) }
         c?.planInput?.let { planTap = planTap.settled(it) }
     }
     LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
@@ -363,13 +368,25 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
                 for (row in m.lessons) {
                     item(key = "lesson-${row.id}") {
                         LessonRow(
-                            row, pending[row.id] ?: row.done, Modifier.animateItem(), onTick = { tick(row, it) },
+                            row, pending[row.id] ?: row.done,
+                            if (plannedTap.containsKey(row.id)) plannedTap[row.id]?.let { StudyRules.plannedLabel(it, today) } else row.planned,
+                            row.late && !plannedTap.containsKey(row.id), Modifier.animateItem(), onTick = { tick(row, it) },
                             onHold = { haptics.tick(); moduleMenu = null; sheet = if (sheet == row.id) null else row.id },
                         )
                     }
                     if (sheet == row.id) item(key = "lesson-sheet-${row.id}") {
                         LessonSheet(
-                            row, m.name, moduleNames, pending[row.id] ?: row.done, Modifier.animateItem(),
+                            row, m.name, moduleNames, pending[row.id] ?: row.done, StudyRules.planChips(today, if (plannedTap.containsKey(row.id)) plannedTap[row.id] else row.plannedDay), Modifier.animateItem(),
+                            onPlan = { chip ->
+                                haptics.light()
+                                val day = chip.key.toLongOrNull()
+                                plannedTap[row.id] = day
+                                scope.launch {
+                                    val line = runCatching { core.planStudyLesson(row.id, day) }
+                                    line.getOrNull()?.let { said = StudyAdded(it, 0, refused = false) }
+                                    if (line.isFailure) plannedTap.remove(row.id)
+                                }
+                            },
                             onName = { name -> scope.launch { if (runCatching { core.renameStudyLesson(row.id, name) }.getOrNull() == true) haptics.light() else haptics.reject() } },
                             onModule = { to -> haptics.light(); sheet = null; opened[StudyRules.moduleKey(courseId, to)] = true; scope.launch { runCatching { core.moveStudyLesson(row.id, to) } } },
                             onTick = { tick(row, it) },
@@ -579,7 +596,7 @@ private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boole
 /** One lesson: the ring (22 dp in a 48 dp target), its name (faded once ticked) and how long it takes. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LessonRow(row: StudyLessonRow, done: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onHold: () -> Unit) {
+private fun LessonRow(row: StudyLessonRow, done: Boolean, planned: String?, late: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onHold: () -> Unit) {
     val reduced = Meka.reducedMotion
     val fade by animateFloatAsState(if (done) 0.5f else 1f, MekaMotion.appear(reduced), label = "study-lesson-fade")
     Row(
@@ -596,6 +613,12 @@ private fun LessonRow(row: StudyLessonRow, done: Boolean, modifier: Modifier, on
         TickRing(done, Modifier.size(22.dp))
         Text(row.title, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).alpha(fade))
+        // Plan a lesson for a day: its date chip ("Today", "Tomorrow", "Thu 29 Oct"; in the accent once it rolled over).
+        AnimatedVisibility(planned != null && !done, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+            Text(planned.orEmpty(), style = MekaType.caption, color = if (late) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs).testTag("study-lesson-planned"))
+        }
         if (row.mins.isNotEmpty()) Text(row.mins, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade).padding(end = MekaSpace.xs))
     }
 }
@@ -625,8 +648,8 @@ private fun ConfirmRow(question: String, yes: String, tag: String, onYes: () -> 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LessonSheet(
-    row: StudyLessonRow, module: String, modules: List<String>, done: Boolean, modifier: Modifier,
-    onName: (String) -> Unit, onModule: (String) -> Unit, onTick: (Boolean) -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
+    row: StudyLessonRow, module: String, modules: List<String>, done: Boolean, planChips: List<StudyChip>, modifier: Modifier,
+    onPlan: (StudyChip) -> Unit, onName: (String) -> Unit, onModule: (String) -> Unit, onTick: (Boolean) -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
 ) {
     var confirming by remember(row.id) { mutableStateOf(false) }
     Column(
@@ -634,6 +657,11 @@ private fun LessonSheet(
             .padding(MekaSpace.m).testTag("study-lesson-sheet"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
+        // Plan a lesson for a day: Today, Tomorrow or a day this week; it then shows on Today and in the Tomorrow sheet.
+        Text(StudyRules.PLAN_FOR, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (chip in planChips) TripPill(chip.label, on = chip.on, tag = "study-lesson-plan-${chip.label}", description = chip.spoken) { if (!chip.on) onPlan(chip) }
+        }
         Text(StudyRules.RENAME, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         Field(row.title, description = "Rename ${row.title}", modifier = Modifier.testTag("study-lesson-name")) { onName(it) }
         if (modules.size > 1) {

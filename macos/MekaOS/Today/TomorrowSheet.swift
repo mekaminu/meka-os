@@ -83,11 +83,16 @@ struct TomorrowSheet: View {
                             }
                             .accessibilityElement(children: .ignore).accessibilityLabel(bills.spoken).staggeredAppear(1)
                         }
+                        // Plan a lesson for a day: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards".
+                        if let study = p.study {
+                            Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                .accessibilityLabel(study.spoken).staggeredAppear(1)
+                        }
                         if let said = model.tomorrowSaid {
                             Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                 .transition(.opacity)
                         }
-                        if rows.isEmpty && p.bills == nil {
+                        if rows.isEmpty && p.bills == nil && p.study == nil {
                             Text("Nothing planned for tomorrow yet.")
                                 .font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                                 .transition(.opacity)

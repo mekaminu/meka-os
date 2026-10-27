@@ -5102,6 +5102,17 @@ class MekaCore(
     /** Minutes in a session (an EACH SESSION chip's key). */
     suspend fun setStudySession(courseId: String, mins: Int): Boolean = onCore { study.setSession(courseId, mins) }
 
+    /**
+     * Plan a lesson for a day (Meka 2026-10-26 23:21): a PLAN FOR chip's key is its epoch day
+     * ([os.meka.core.domain.StudyRules.planChips]); [epochDay] null (the "Not planned" chip) takes it off the plan. It then
+     * shows on Today ("Study today · …"), in the Tomorrow sheet and on the course with a date chip. The bar's line, or
+     * null when nothing changed.
+     */
+    suspend fun planStudyLesson(id: String, epochDay: Long?): String? = onCore {
+        val title = study.lessons().firstOrNull { it.id == id }?.title
+        if (title != null && study.planLesson(id, epochDay)) os.meka.core.domain.StudyRules.plannedSaid(title, epochDay, todayEpochDay()) else null
+    }
+
     /** Picks or drops a time he can study (a WHEN YOU CAN STUDY chip's key). */
     suspend fun setStudySlot(courseId: String, key: String, on: Boolean): Boolean = onCore { study.setSlot(courseId, key, on) }
 
@@ -12486,6 +12497,16 @@ class MekaCore(
         val receiptNow = viewMemo.keepReading("Receipt", replica, listOf(minuteNow(), timeZone())) {
             os.meka.core.domain.ReceiptRules.receipt(activity.items(), nowMs(), cal)
         }
+        // Plan a lesson for a day (Meka 2026-10-26 23:21): the lessons planned for today (with any that rolled over) and tomorrow.
+        val studyCoursesNow = study.courses()
+        val studyLessonsNow = study.lessons()
+        val studyDoneDay: (Long) -> Long = { ms -> cal.epochDayOf(ms) }
+        val studyToday = os.meka.core.domain.StudyRules.todayLine(
+            os.meka.core.domain.StudyRules.onDay(studyLessonsNow, studyCoursesNow, todayDay, rollOver = true, doneDay = studyDoneDay), todayDay,
+        )
+        val studyTomorrow = os.meka.core.domain.StudyRules.tomorrowLine(
+            os.meka.core.domain.StudyRules.onDay(studyLessonsNow, studyCoursesNow, todayDay + 1, rollOver = false, doneDay = studyDoneDay),
+        )
         val tomorrowNow = shutdownRaw.tomorrow.copy(
             weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
             school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
@@ -12499,6 +12520,7 @@ class MekaCore(
             ),
             // Tomorrow on Today, slice 2: bills and renewals due tomorrow (and last days to cancel), from Lists → Renewals.
             bills = os.meka.core.domain.ShutdownRules.bills(listsNow.renewals.all, tomorrowWindow.epochDay),
+            study = studyTomorrow,
         )
         val shutdownNow = shutdownRaw.copy(
             // Daily receipt: what MEKA handled today, from the activity log (Today's evening line opens Activity).
@@ -12538,7 +12560,7 @@ class MekaCore(
             listOf(
                 all, dayEvents, marks.clubChildren, sessionsNow, fastingNow, goalsNow, listsNow, shutdownNow, forecast, workForecast,
                 office, rideNow, weekAheadNow, schoolToday, binItems, occasionItems, tripItems, lifeAdminNow, lifeAdminViewNow,
-                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, minuteNow(), timeZone(),
+                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, studyToday, minuteNow(), timeZone(),
             ),
         ) {
             val projected = project(all, dayEvents, marks.clubChildren)
@@ -12570,6 +12592,7 @@ class MekaCore(
                 bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
                 gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
                 trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
+                study = studyToday,
                 // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
                 // Deliveries completeness: lit with "you're at the office" on an office day, and yesterday's that didn't show.
                 parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay, officeDay = office != null),

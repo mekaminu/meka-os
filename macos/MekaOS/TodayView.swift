@@ -246,6 +246,16 @@ struct TodayView: View {
                             .accessibilityLabel(gifts.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Plan a lesson for a day: "Study today · 3 lessons · about 1 h 30 · next: Pivot tables" (lit in the
+                    // accent when one rolled over from an earlier day); cross-fades as lessons are ticked.
+                    if let study = model.today?.study {
+                        Text(study.text).font(MekaType.caption)
+                            .foregroundStyle(study.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: study.text)
+                            .accessibilityLabel(study.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Travel mode, slice 1: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · …"
                     // (lit when something is booked later today or the trip starts tomorrow); cross-fades.
                     if let trip = model.today?.trip {

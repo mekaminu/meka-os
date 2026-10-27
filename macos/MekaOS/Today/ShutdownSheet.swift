@@ -88,6 +88,11 @@ struct ShutdownSheet: View {
                             }
                             .accessibilityElement(children: .ignore).accessibilityLabel(bills.spoken).staggeredAppear(2)
                         }
+                        // Plan a lesson for a day: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards".
+                        if let study = v.tomorrow.study {
+                            Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                .accessibilityLabel(study.spoken).staggeredAppear(2)
+                        }
                         Text(LoneWordGlue.shared.kept(line: v.tomorrow.summary))
                             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)

@@ -58,6 +58,11 @@ object StudyLessonFields {
     const val RESTORED = "restored"
     /** Study fixes (2026-10-26): when it was deleted, for Recently deleted (LWW, absent on lessons deleted before). */
     const val DELETED_AT = "deletedAtMs"
+    /**
+     * Plan a lesson for a day (Meka 2026-10-26 23:21: "how do you plan an item for today, tomorrow…"): the epoch day he
+     * planned it for (LWW; Null when not planned). An un-done lesson planned for a day gone by rolls to today.
+     */
+    const val PLANNED_DAY = "plannedDay"
 }
 
 data class StudyCourse(
@@ -117,6 +122,8 @@ data class StudyPlanView(
 data class StudyLesson(
     val id: String, val courseId: String, val module: String, val title: String, val mins: Int?, val pos: Long,
     val done: Boolean, val doneAtMs: Long?,
+    /** The day he planned it for ([StudyLessonFields.PLANNED_DAY]), or null. */
+    val plannedDay: Long? = null,
 )
 
 /** One line of an outline ([StudyRules.readOutline]). */
@@ -128,8 +135,21 @@ data class StudyDeletedLesson(val id: String, val courseId: String, val title: S
 /** One row of Recently deleted: its title, "From 1 · Foundations", and the id Restore takes. */
 data class StudyDeletedRow(val id: String, val title: String, val line: String, val spoken: String)
 
-/** One lesson's row: "Lesson 3" · "45 min", [done] drawn faded with its ring ticked. */
-data class StudyLessonRow(val id: String, val title: String, val mins: String, val done: Boolean, val spoken: String)
+/**
+ * One lesson's row: "Lesson 3" · "45 min", [done] drawn faded with its ring ticked. [planned] is its date chip ("Today",
+ * "Tomorrow", "Thu 29 Oct", "Today · from Mon" when it rolled over; [late] then), null when not planned or done.
+ */
+data class StudyLessonRow(
+    val id: String, val title: String, val mins: String, val done: Boolean, val spoken: String,
+    val planned: String? = null, val plannedDay: Long? = null, val late: Boolean = false,
+)
+
+/**
+ * The lessons planned for a day, for Today ("Study today · 3 lessons · about 1 h 30 · next: Pivot tables") and the
+ * Tomorrow sheet ("Study · 2 lessons · about 1 h · Pivot tables, Dashboards"). [left] lessons not yet done, [done] of
+ * them ticked that day; [lit] when one rolled over from an earlier day.
+ */
+data class StudyDayLine(val text: String, val spoken: String, val left: Int, val done: Int, val lit: Boolean)
 
 /** One module: "1 · Foundations" · "2 of 6" (or "Done", [allDone]), its lessons in course order. */
 data class StudyModule(val key: String, val name: String, val count: String, val allDone: Boolean, val lessons: List<StudyLessonRow>)
@@ -370,6 +390,7 @@ object StudyRules {
             s.f(StudyLessonFields.POS).longOrNull ?: (s.f(StudyLessonFields.ADDED_AT).longOrNull ?: 0L),
             s.f(StudyLessonFields.DONE).boolOrNull == true,
             s.f(StudyLessonFields.DONE_AT).longOrNull,
+            s.f(StudyLessonFields.PLANNED_DAY).longOrNull,
         )
     }.sortedWith(compareBy<StudyLesson> { it.pos }.thenBy { it.id })
 
@@ -391,11 +412,14 @@ object StudyRules {
     /** The module key the apps fold by. */
     fun moduleKey(courseId: String, module: String): String = "$courseId:${module.lowercase()}"
 
-    private fun row(l: StudyLesson): StudyLessonRow {
+    private fun row(l: StudyLesson, today: Long): StudyLessonRow {
         val mins = minsLabel(l.mins)
-        val spoken = listOfNotNull(l.title, mins.takeIf { it.isNotEmpty() }?.replace(" min", " minutes")?.replace(" h", " hours"), if (l.done) "done" else null)
-            .joinToString(", ")
-        return StudyLessonRow(l.id, l.title, mins, l.done, spoken)
+        val planned = if (l.done) null else l.plannedDay?.let { plannedLabel(it, today) }
+        val spoken = listOfNotNull(
+            l.title, mins.takeIf { it.isNotEmpty() }?.replace(" min", " minutes")?.replace(" h", " hours"),
+            planned?.let { "planned for ${it.replace(" · ", ", ")}" }, if (l.done) "done" else null,
+        ).joinToString(", ")
+        return StudyLessonRow(l.id, l.title, mins, l.done, spoken, planned, l.plannedDay, late = !l.done && (l.plannedDay ?: today) < today)
     }
 
     /** "2 of 6", or "Done" once every lesson is ticked. */
@@ -413,7 +437,7 @@ object StudyRules {
             .sortedBy { ls -> ls.minOf { it.pos } }
             .map { ls ->
                 val d = ls.count { it.done }
-                StudyModule(moduleKey(course.id, ls.first().module), ls.first().module, moduleCount(d, ls.size), d == ls.size, ls.map(::row))
+                StudyModule(moduleKey(course.id, ls.first().module), ls.first().module, moduleCount(d, ls.size), d == ls.size, ls.map { row(it, today) })
             }
         val allMins = lessons.mapNotNull { it.mins }.sum()
         val leftMins = lessons.filter { !it.done }.mapNotNull { it.mins }.sum()
@@ -456,6 +480,97 @@ object StudyRules {
         courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long,
         deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L,
     ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs) })
+
+    // ---- Plan a lesson for a day (Meka 2026-10-26 23:21) ----
+
+    const val PLAN_FOR = "Plan for"
+    const val NOT_PLANNED = "Not planned"
+    const val TODAY = "Today"
+    const val TOMORROW = "Tomorrow"
+    /** The sheet offers today and the next [PLAN_DAYS] − 1 days. */
+    const val PLAN_DAYS = 7
+
+    /** A planned lesson's date chip: "Today", "Tomorrow", "Thu 29 Oct", or "Today · from Mon" once its day has gone by. */
+    fun plannedLabel(day: Long, today: Long): String = when {
+        day == today -> TODAY
+        day == today + 1 -> TOMORROW
+        day < today -> "$TODAY · from ${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1]}"
+        else -> CivilDate.shortLabel(day)
+    }
+
+    /**
+     * The lesson sheet's PLAN FOR chips: Today, Tomorrow and the next five days ("Thu 29 Oct"), the one it's planned
+     * for picked (a day gone by counts as today, where it rolled to), and "Not planned" (key [NOT_PLANNED_KEY]) once it is.
+     */
+    fun planChips(today: Long, plannedDay: Long?): List<StudyChip> {
+        val on = plannedDay?.let { maxOf(it, today) }
+        val days = (0 until PLAN_DAYS).map { today + it }
+        val extra = on?.takeIf { it !in days }
+        return buildList {
+            days.forEach { d -> add(StudyChip(d.toString(), plannedLabel(d, today), d == on, "Plan for ${CivilDate.longLabel(d)}")) }
+            extra?.let { add(StudyChip(it.toString(), plannedLabel(it, today), true, "Planned for ${CivilDate.longLabel(it)}")) }
+            if (plannedDay != null) add(StudyChip(NOT_PLANNED_KEY, NOT_PLANNED, false, "Not planned for a day"))
+        }
+    }
+
+    const val NOT_PLANNED_KEY = "none"
+
+    /** What planning says on the bar: "Planned “Pivot tables” for Tomorrow", "“Pivot tables” is no longer planned". */
+    fun plannedSaid(title: String, day: Long?, today: Long): String =
+        if (day == null) "\u201C$title\u201D is no longer planned"
+        else "Planned \u201C$title\u201D for " + plannedLabel(day, today).let { if (it == TODAY || it == TOMORROW) it.lowercase() else it }
+
+    /**
+     * The lessons on [day]: planned for it, plus (for today, [rollOver]) un-done lessons planned for a day gone by. Done
+     * ones count only when ticked that day ([doneDay] of their [StudyLesson.doneAtMs]). Course order.
+     */
+    fun onDay(lessons: List<StudyLesson>, courses: List<StudyCourse>, day: Long, rollOver: Boolean, doneDay: (Long) -> Long): List<StudyLesson> {
+        val live = courses.map { it.id }.toSet()
+        val order = courses.mapIndexed { i, c -> c.id to i }.toMap()
+        return lessons.filter { l ->
+            val p = l.plannedDay ?: return@filter false
+            l.courseId in live && when {
+                l.done -> p <= day && l.doneAtMs?.let(doneDay) == day && (p == day || rollOver)
+                else -> p == day || (rollOver && p < day)
+            }
+        }.sortedWith(compareBy<StudyLesson> { order[it.courseId] ?: 0 }.thenBy { it.pos })
+    }
+
+    /**
+     * Today's line: "Study today · 3 lessons · about 1 h 30 · next: Pivot tables" (lit when one rolled over: "· 1 from
+     * Mon"); "Study today · 1 of 3 done · next: Pivot tables"; "Study today · all 3 done"; null with none planned.
+     */
+    fun todayLine(on: List<StudyLesson>, today: Long): StudyDayLine? {
+        if (on.isEmpty()) return null
+        val left = on.filter { !it.done }
+        val done = on.size - left.size
+        val late = left.filter { (it.plannedDay ?: today) < today }
+        val mins = left.mapNotNull { it.mins }.sum()
+        val bits = buildList {
+            if (left.isEmpty()) add(if (on.size == 1) "done" else "all ${on.size} done")
+            else {
+                add(if (done > 0) "$done of ${on.size} done" else plural(left.size, "lesson"))
+                if (mins > 0) add(aboutLabel(mins))
+                add("next: ${left.first().title}")
+                if (late.isNotEmpty()) {
+                    val from = late.minOf { it.plannedDay ?: today }
+                    add("${late.size} from ${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(from) - 1]}")
+                }
+            }
+        }
+        val text = "Study today · " + bits.joinToString(" · ")
+        return StudyDayLine(text, text.replace(" · ", ", "), left.size, done, lit = late.isNotEmpty())
+    }
+
+    /** The Tomorrow sheet's line: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards"; null with none planned. */
+    fun tomorrowLine(on: List<StudyLesson>): StudyDayLine? {
+        val left = on.filter { !it.done }
+        if (left.isEmpty()) return null
+        val mins = left.mapNotNull { it.mins }.sum()
+        val names = left.take(2).map { it.title } + listOfNotNull((left.size - 2).takeIf { it > 0 }?.let { "+ $it more" })
+        val text = listOfNotNull("Study", plural(left.size, "lesson"), aboutLabel(mins).takeIf { mins > 0 }, names.joinToString(", ")).joinToString(" · ")
+        return StudyDayLine(text, text.replace(" · ", ", "), left.size, 0, lit = false)
+    }
 
     // ---- The plan (slice 2a) ----
 
@@ -696,6 +811,17 @@ class Study(
         if (StudyRules.SLOTS.none { it.key == key } || (key in c.slots) == on) return false
         val next = if (on) c.slots + key else c.slots - key
         replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.SLOTS to StudyRules.slotsText(next).fv()))
+        return true
+    }
+
+    /**
+     * Plans a lesson for [day] (an epoch day), or takes it off the plan with null; false when it isn't there or is
+     * already so. A lesson ticked done keeps its day (it counts as done that day).
+     */
+    fun planLesson(id: String, day: Long?): Boolean {
+        val l = lessons().firstOrNull { it.id == id } ?: return false
+        if (l.plannedDay == day) return false
+        replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.PLANNED_DAY to (day?.fv() ?: FieldValue.Null)))
         return true
     }
 

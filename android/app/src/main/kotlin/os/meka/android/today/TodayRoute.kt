@@ -1008,6 +1008,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Plan a lesson for a day: "Study today · 3 lessons · about 1 h 30 · next: Pivot tables" (lit in the
+                    // accent when one rolled over from an earlier day); cross-fades as lessons are ticked.
+                    today.study?.let { study ->
+                        Crossfade(study, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "study-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken }.testTag("today-study"))
+                        }
+                    }
                     // Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from the shipping emails (lit in
                     // the accent while one is out for delivery); a delivered parcel drops off; cross-fades as it changes.
                     today.parcels?.let { parcels ->

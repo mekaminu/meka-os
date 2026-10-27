@@ -294,6 +294,9 @@ internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
                 b.cancel?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent) }
             }
         }
+        // Plan a lesson for a day: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards".
+        p.study?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = Meka.colors.textSecondary,
+            modifier = Modifier.semantics { contentDescription = it.spoken }) }
         // The summary rolls over to its new value as items are carried in.
         AnimatedContent(
             targetState = p.summary,
