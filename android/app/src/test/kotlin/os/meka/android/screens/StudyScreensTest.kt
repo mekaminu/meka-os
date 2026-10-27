@@ -204,9 +204,12 @@ class StudyScreensTest {
         ScreenShots.assertSensible(compose, "cover-dark-lesson-sheet")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-lesson-sheet")
         // Delete asks first; only "Delete" in the confirm deletes, and Recently deleted brings it back.
+        // The sheet is taller with PLAN FOR on top: bring Delete, then its confirm, into view on the cover screen.
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-delete"))
         compose.onNodeWithTag("study-lesson-delete").performClick()
         compose.waitForIdle()
         assertEquals(8, core.studyView.value.course(id)!!.total)
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-confirm-yes"))
         compose.onNodeWithTag("study-lesson-confirm-yes").performClick()
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.total == 7 }
         val deleted = core.studyView.value.course(id)!!.deleted.single()
