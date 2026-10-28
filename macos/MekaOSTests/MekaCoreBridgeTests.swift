@@ -4153,6 +4153,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(MoneyTradingLayout.shared.FOOT_SHORT.hasSuffix("not trading advice"))
         XCTAssertEqual(MoneyTradingLayout.shared.SHOWN, 5)
         XCTAssertNil(MoneyTabs.shared.info(tab: MoneyTab.trading, v: MoneyView.companion.LOCKED))
+        // Layout rule (e): the address field sits behind one Add an address row.
+        XCTAssertEqual(MoneyTradingLayout.shared.ADD_TITLE, "Add an address")
+        XCTAssertTrue(MoneyTradingLayout.shared.ADD_SHEET_LINE.contains("never a key"))
     }
     /// Money → Trading's Obi risk line and Kestrel card reach the Mac: nothing to say without an account read.
     func testTradingRiskAndKestrelOnTheMac() {

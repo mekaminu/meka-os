@@ -7,13 +7,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
@@ -21,6 +26,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlin.random.Random
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import org.junit.Rule
@@ -178,6 +184,30 @@ class MoneyTradingLayoutScreensTest {
         if (showsText(MoneyRules.FOOT)) fail("Money's long read-only line sits on Trading")
         tap("money-foot-info")
         assertTrue(showsText(TradingTracker.FOOT.substringBefore(" · ")), "the foot's ⓘ says where the figures come from")
+    }
+
+    /** Layout rule (e) on Trading: no field on the page; "Add an address ›" opens a sheet with it, and adding works there. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theAddressFieldSitsInASheet() {
+        val core = open()
+        pick(MoneyTab.TRADING)
+        scrollTo("money-addresses-card")
+        val field = hasContentDescription(MoneyTradingLayout.ADD_HINT) and hasSetTextAction()
+        if (compose.onAllNodes(field, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("the address field still sits open on the page")
+        assertTrue(showsText(MoneyTradingLayout.ADD_TITLE), "YOUR ADDRESSES should end on one Add an address row")
+        tap("money-address-add")
+        assertTrue(shows("money-address-sheet"), "Add an address should open its sheet")
+        assertTrue(showsText(MoneyTradingLayout.ADD_SHEET_LINE.substringBefore(".")), "the sheet should say it's the public address only")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-add-address"))
+        compose.onAllNodes(field, useUnmergedTree = true)[0].performTextInput("Spare 0x" + "cd34".repeat(10))
+        settle()
+        compose.onAllNodes(field, useUnmergedTree = true)[0].performImeAction()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000) { core.moneyView.value.trading?.wallets?.size == 2 }
+        compose.mainClock.autoAdvance = false
+        settle()
+        assertEquals(2, core.moneyView.value.trading?.wallets?.size, "the second address should be followed")
+        assertTrue(showsText("Added Spare"), "the sheet should say the address was added")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

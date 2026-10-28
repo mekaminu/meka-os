@@ -65,4 +65,20 @@ class MoneyTradingLayoutTest {
         assertFalse(MoneyTradingLayout.hasPositions(empty))
         assertNull(MoneyTradingLayout.waiting(empty))
     }
+
+    @Test
+    fun theAddressFieldSitsBehindOneRow() {
+        // Layout rule (e): no field on the page; one row opens the sheet with it.
+        val none = MoneyTradingLayout.addRow(view(0))
+        assertTrue(none.first)
+        assertEquals(MoneyTradingLayout.ADD_FIRST, none.title)
+        assertTrue(none.spoken.endsWith("Opens a sheet"))
+        val one = view(1).copy(wallets = listOf(TradingWalletRow("w", "Main", "0x12…34 · read just now", false)))
+        val row = MoneyTradingLayout.addRow(one)
+        assertFalse(row.first)
+        assertEquals(MoneyTradingLayout.ADD_TITLE, row.title)
+        assertTrue(row.line.contains("never a key"))
+        assertEquals(TradingTracker.HINT, MoneyTradingLayout.ADD_HINT)
+        assertTrue(MoneyTradingLayout.ADD_SHEET_LINE.contains("never a key"))
+    }
 }

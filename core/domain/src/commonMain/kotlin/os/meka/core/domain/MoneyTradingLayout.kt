@@ -8,6 +8,11 @@ package os.meka.core.domain
  * "See all N ›"), the P&L line, YOUR TRADES, the month in review, YOUR ADDRESSES, ALERTS and EXPORT FOR TAX. Each
  * block's source line leaves the page: the tab ends on one "Read-only · not trading advice" line whose ⓘ says them all,
  * once ([info]). Both apps draw from here, so the Fold and the Mac can't drift.
+ *
+ * Layout rule (e) on Trading (2026-10-28): the address field leaves the page. YOUR ADDRESSES keeps each address he
+ * follows (with Remove) and one [addRow] ("Add an address ›", or "Add your Hyperliquid address" before the first),
+ * which opens a sheet with the field ([ADD_HINT]) and one line saying it is the public address only ([ADD_SHEET_LINE]).
+ * Words only; nothing new is stored.
  */
 object MoneyTradingLayout {
     /** The mark on the equity card (mockup): nothing on this tab can trade. */
@@ -17,6 +22,15 @@ object MoneyTradingLayout {
     const val ADDRESSES_HEAD = "YOUR ADDRESSES"
     /** Layout rule (c) on Trading: said once, at the foot. Trading isn't financial advice either; it says so in its own words. */
     const val FOOT_SHORT = "Read-only · not trading advice"
+    /** Layout rule (e): YOUR ADDRESSES' one row that opens the add sheet, and the sheet's words. */
+    const val ADD_TITLE = "Add an address"
+    const val ADD_FIRST = "Add your Hyperliquid address"
+    const val ADD_LINE = "Public address only · never a key"
+    const val ADD_FIRST_LINE = "To see equity, P&L and open positions · public address only"
+    const val ADD_SHEET = "Add an address"
+    const val ADD_HINT = TradingTracker.HINT
+    const val ADD_SHEET_LINE = "Paste the public 0x… address and a name for it. Navilife reads it from Hyperliquid's public data; never a key, and nothing here can trade."
+    const val ADD_DONE = "Done"
     /** Layout rule (d): open positions show this many, then "See all N ›". */
     const val SHOWN = 5
 
@@ -46,4 +60,12 @@ object MoneyTradingLayout {
         t.trades?.foot,
         t.review?.foot,
     ).distinct()
+
+    /** YOUR ADDRESSES' add row: "Add an address" under the ones he follows, "Add your Hyperliquid address" before the first. */
+    fun addRow(t: TradingView): TradingAddRow =
+        if (t.wallets.isEmpty()) TradingAddRow(ADD_FIRST, ADD_FIRST_LINE, first = true, spoken = "$ADD_FIRST. $ADD_FIRST_LINE. Opens a sheet")
+        else TradingAddRow(ADD_TITLE, ADD_LINE, first = false, spoken = "$ADD_TITLE. $ADD_LINE. Opens a sheet")
 }
+
+/** YOUR ADDRESSES' one row that opens the add sheet: [title] over [line]; [first] before any address is followed. */
+data class TradingAddRow(val title: String, val line: String, val first: Boolean, val spoken: String)

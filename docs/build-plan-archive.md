@@ -4480,3 +4480,17 @@ The approved mockup's last two Trading parts, both apps, read-only:
 - *Check on the Fold:* Money → Trading with a position open: under equity, Obi's line says how far it can move before
   liquidation. When Kestrel asks for a trade: KESTREL says "1 trade waiting for your OK"; Review in Needs you opens it
   there, and Approve asks for your fingerprint.
+
+### Money redesign, Trading slice 7: the address field behind a sheet (2026-10-28)
+
+Layout rule (e) ("inputs never sit open on the page") on Trading, both apps:
+- **YOUR ADDRESSES** keeps each followed address (name, what was read, Remove) and ends on one **Add an address ›** row
+  ("Add your Hyperliquid address" over "To see equity, P&L and open positions · public address only" before the first;
+  "Public address only · never a key" after). A tap opens a Money detail sheet (Mac: a popover) with the field (the same
+  "Public address 0x… and a name" hint) and one line that it's the public address only, never a key, and nothing can
+  trade; adding says "Added … · reading it from Hyperliquid" in the sheet; Done closes it.
+- Core `MoneyTradingLayout.addRow`, `TradingAddRow`, the sheet's words. Fold MoneyPane (TradingAddRowView,
+  TradingAddressFields); Mac MoneySheet (tradingAddRow, tradingAddPopover). Help money.md (HelpIndex regenerated), motion
+  catalogue. Tests: MoneyTradingLayoutTest.theAddressFieldSitsBehindOneRow, MoneyTradingLayoutScreensTest
+  .theAddressFieldSitsInASheet (Roborazzi money cover-dark-trading-add-address), MekaCoreBridgeTests. No server change, no
+  migration. Mac checked nightly.

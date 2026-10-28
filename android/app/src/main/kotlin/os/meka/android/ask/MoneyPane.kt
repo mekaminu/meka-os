@@ -136,6 +136,7 @@ import os.meka.core.domain.MoneyGoals
 import os.meka.core.domain.MoneyWorthOther
 import os.meka.core.domain.MoneyWorthOtherRow
 import os.meka.core.domain.MoneyTradingLayout
+import os.meka.core.domain.TradingAddRow
 import os.meka.core.domain.TradingKestrel
 import os.meka.core.domain.TradingKestrelView
 import os.meka.core.domain.TradingRiskView
@@ -316,6 +317,8 @@ fun MoneyPane(
     var goalSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val goalOpen = goalSheetId?.let { id -> v.goals?.rows?.firstOrNull { it.id == id } }
     var otherSheet by rememberSaveable { mutableStateOf(false) }
+    // Trading's layout rule (e): the add-an-address sheet with the field.
+    var addressSheet by rememberSaveable { mutableStateOf(false) }
     // Ask Obi (slice 1): the money chat's sheet, its turns while Money is open (never stored), its Try questions and
     // whether an answer is on its way.
     var chatOpen by rememberSaveable { mutableStateOf(false) }
@@ -469,7 +472,7 @@ fun MoneyPane(
         item(key = "trading-addresses") {
             MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-addresses-card") {
                 TradingAddressesBlock(t,
-                    onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
+                    onAdd = { haptics.tick(); said = null; addressSheet = true },
                     onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } })
             }
         }
@@ -1228,6 +1231,12 @@ fun MoneyPane(
     MoneyDetailSheet(info, title = { it.title }, tag = "money-info-sheet", done = MoneyTabs.INFO_DONE, onClose = { info = null }) { i ->
         MoneyInfoLines(i)
     }
+    // Trading's add-an-address sheet (layout rule (e)): the field and the line that it's the public address only.
+    MoneyDetailSheet(v.trading?.takeIf { addressSheet }, title = { MoneyTradingLayout.ADD_SHEET }, tag = "money-address-sheet",
+        done = MoneyTradingLayout.ADD_DONE, onClose = { addressSheet = false }) { _ ->
+        TradingAddressFields(onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } })
+        SheetSaid(said)
+    }
     // Net worth's typed things: each with Remove (Undo in the said line), and the field to add or update one.
     MoneyDetailSheet(otherOpen, title = { MoneyWorthOther.TITLE }, tag = "money-other-sheet", done = MoneyWorthOther.DONE, onClose = { otherSheet = false }) { w ->
         WorthOtherDetails(w,
@@ -1490,10 +1499,9 @@ private fun TradingKestrelBlock(k: TradingKestrelView, onReview: () -> Unit) {
     }
 }
 
-/** YOUR ADDRESSES as one card: each public address with what was read and Remove, and the field to add one. */
+/** YOUR ADDRESSES as one card: each public address with what was read and Remove, and one row opening the add sheet. */
 @Composable
-private fun TradingAddressesBlock(t: TradingView, onAdd: (String) -> Unit, onRemove: (String) -> Unit) {
-    var adding by rememberSaveable { mutableStateOf("") }
+private fun TradingAddressesBlock(t: TradingView, onAdd: () -> Unit, onRemove: (String) -> Unit) {
     t.wallets.forEach { w -> key(w.id) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
@@ -1505,7 +1513,36 @@ private fun TradingAddressesBlock(t: TradingView, onAdd: (String) -> Unit, onRem
                     .semantics { contentDescription = "Stop following ${w.name}" }.minTouch().padding(MekaSpace.xs))
         }
     } }
-    Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+    TradingAddRowView(MoneyTradingLayout.addRow(t), onAdd)
+}
+
+/** Layout rule (e): "Add an address" (or the first one) over its line, in the accent, ›; opens the sheet with the field. */
+@Composable
+private fun TradingAddRowView(r: TradingAddRow, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = r.spoken }
+            .padding(vertical = MekaSpace.xs).testTag("money-address-add"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(r.title, style = MekaType.body, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
+    }
+}
+
+/** The add-an-address sheet: the field (an address and a name) and the line that it's the public address only. */
+@Composable
+private fun TradingAddressFields(onAdd: (String) -> Unit) {
+    var adding by rememberSaveable { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Field(MoneyTradingLayout.ADD_HINT, modifier = Modifier.testTag("money-address-field"), value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        Text(MoneyTradingLayout.ADD_SHEET_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
 }
 
 /**

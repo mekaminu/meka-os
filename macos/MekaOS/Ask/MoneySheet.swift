@@ -69,6 +69,8 @@ struct MoneySheet: View {
     @State private var goalOpenId: String? = nil
     /// Net worth's typed things (Money review, layout rule (e)): whether their popover is open.
     @State private var worthOtherOpen = false
+    /// Trading's layout rule (e): the add-an-address popover with the field.
+    @State private var tradingAddOpen = false
     /// Slice 18: the year in review opened or folded by him, per year (else January's finished year opens by itself).
     @State private var yearOpen: [Int32: Bool] = [:]
     /// Money redesign (B), slice 1: the tab shown (Spending · Bills · Plan · Trading · Accounts); opens on Spending.
@@ -2386,7 +2388,7 @@ struct MoneySheet: View {
         }
     }
 
-    /// YOUR ADDRESSES: each public address with what was read and Remove, and the field to add one.
+    /// YOUR ADDRESSES: each public address with what was read and Remove, and one row opening the add popover.
     private func tradingAddresses(_ t: TradingView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             ForEach(t.wallets, id: \.id) { w in
@@ -2405,14 +2407,55 @@ struct MoneySheet: View {
                 }
                 .transition(.opacity)
             }
-            TextField(t.hint, text: $tradingText)
+            tradingAddRow(MoneyTradingLayout.shared.addRow(t: t))
+        }
+    }
+
+    /// Layout rule (e): "Add an address" (or the first one) over its line, in the accent, ›; opens the popover with the field.
+    private func tradingAddRow(_ r: TradingAddRow) -> some View {
+        Button {
+            MekaHaptics.tick()
+            said = nil
+            tradingAddOpen = true
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(r.title).font(MekaType.body).foregroundStyle(palette.accent).lineLimit(1)
+                    Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                }
+                Spacer()
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(r.spoken)
+        .popover(isPresented: $tradingAddOpen, arrowEdge: .trailing) { tradingAddPopover() }
+    }
+
+    /// The add-an-address popover: the field (an address and a name), the line that it's the public address only, and
+    /// what adding said.
+    private func tradingAddPopover() -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(MoneyTradingLayout.shared.ADD_SHEET).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            TextField(MoneyTradingLayout.shared.ADD_HINT, text: $tradingText)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
                     let text = tradingText
                     tradingText = ""
                     Task { said = await model.tradingWalletAdd(text: text) }
                 }
+            Text(MoneyTradingLayout.shared.ADD_SHEET_LINE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let s = said {
+                Text(s.line).font(MekaType.caption).foregroundStyle(s.refused ? palette.accent : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(MoneyTradingLayout.shared.ADD_DONE) { tradingAddOpen = false }.keyboardShortcut(.defaultAction)
         }
+        .padding(MekaSpace.m)
+        .frame(width: 380)
     }
 
     /// Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
