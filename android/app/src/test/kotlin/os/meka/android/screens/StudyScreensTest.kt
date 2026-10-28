@@ -398,4 +398,31 @@ class StudyScreensTest {
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.done == 1 }
         compose.onNodeWithText("Ticked \u201CWelcome and setup\u201D").assertExists()
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun theNudgeToggleUnderThisWeekAnswersInTheNextFrame() {
+        // Study plan, slice 2b rest: "Nudge me 10 minutes before · A card from Obi, not out loud" (mockup's toggle).
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        val id = runBlocking {
+            core.tick()
+            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            check(!core.addStudyLessons(id, outline).refused)
+            core.setStudySession(id, 60)
+            core.setStudySlot(id, "eve", true)
+            core.tick()
+            id
+        }
+        show(core, id)
+        scrollTo(hasTestTag("study-nudge"))
+        ScreenShots.assertShows(compose, "cover-dark-nudge", "Nudge me 10 minutes before")
+        compose.onNodeWithTag("study-nudge").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithText("Off", useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)?.nudge == false }
+    }
 }

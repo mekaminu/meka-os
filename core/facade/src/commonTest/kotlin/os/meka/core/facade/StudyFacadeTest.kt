@@ -234,4 +234,61 @@ class StudyFacadeTest {
         assertEquals("Dashboards · 30 min", mac.studyView.value.course(id)!!.week[1].lessons)
         assertEquals(os.meka.core.domain.StudyWeekRules.NOTHING_TO_TICK, fold.finishStudySession(on.key).line)
     }
+
+    @Test
+    fun theNudgeShowsTenMinutesBeforeASessionThenStartAndDoneAndNotNow() = runTest {
+        // Study plan, slice 2b rest: "Nudge me 10 minutes before · A card from Obi, not out loud".
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nPivot tables 45 min\nDashboards 30 min").courseId!!
+        assertTrue(fold.setStudySession(id, 60))
+        assertTrue(fold.setStudySlot(id, "eve", true)) // Mon and Wed evenings, 20:30
+        assertEquals(null, fold.today.value.studyNudge) // 10:00: too early
+        now += (10 * 60 + 19) * 60_000L // 20:19
+        fold.tick()
+        assertEquals(null, fold.today.value.studyNudge)
+        now += 60_000L // 20:20
+        fold.tick()
+        val n = assertNotNull(fold.today.value.studyNudge)
+        assertEquals("Study in 10 min · Data analytics", n.headline)
+        assertEquals("20:30 · Welcome + 1 more · 1 h · Evening", n.line)
+        assertEquals(os.meka.core.domain.StudyWeekRules.START, n.button)
+        // Start from the card: it says so, with Done.
+        assertTrue(fold.startStudySession(n.key))
+        val on = assertNotNull(fold.today.value.studyNudge)
+        assertEquals("Studying · Data analytics", on.headline)
+        assertEquals("Started 20:20 · Welcome + 1 more · 1 h · Evening", on.line)
+        assertEquals(os.meka.core.domain.StudyWeekRules.DONE, on.button)
+        // Still there at the session's end, gone once done.
+        now += 70 * 60_000L // 21:30
+        fold.tick()
+        assertNotNull(fold.today.value.studyNudge)
+        assertEquals("Ticked 2 lessons", fold.finishStudySession(on.key).line)
+        assertEquals(null, fold.today.value.studyNudge)
+
+        // On the Mac (not started there): past the 15 minutes after the start it's gone; Not now puts it away.
+        fold.syncNow(); mac.syncNow()
+        now -= 70 * 60_000L // 20:20 again
+        mac.tick()
+        assertEquals(null, mac.today.value.studyNudge) // its lessons are ticked
+        assertTrue(mac.setStudyNudge(id, false))
+        assertEquals(false, mac.setStudyNudge(id, false))
+        mac.syncNow(); fold.syncNow(); fold.tick()
+        assertEquals(false, fold.studyView.value.course(id)!!.nudge)
+        assertTrue(fold.setStudyNudge(id, true))
+        // Wednesday 20:25: Dashboards' session.
+        now += 2 * os.meka.core.domain.CivilDate.DAY_MS + 5 * 60_000L
+        fold.tick()
+        val wed = assertNotNull(fold.today.value.studyNudge)
+        assertEquals("Study in 5 min · Data analytics", wed.headline)
+        now += 20 * 60_000L // 20:45: 15 min after the start, not started
+        fold.tick()
+        assertEquals(null, fold.today.value.studyNudge)
+        now -= 10 * 60_000L // 20:35
+        fold.tick()
+        assertEquals("Study now · Data analytics", fold.today.value.studyNudge?.headline)
+        assertTrue(fold.putAwayStudyNudge(wed.key))
+        assertEquals(false, fold.putAwayStudyNudge(wed.key))
+        assertEquals(null, fold.today.value.studyNudge)
+    }
 }

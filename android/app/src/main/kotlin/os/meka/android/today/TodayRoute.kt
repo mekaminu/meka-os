@@ -88,6 +88,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
+import os.meka.android.goals.unfold as studyUnfold
+import os.meka.android.goals.fold as studyFold
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.mutableLongStateOf
@@ -817,6 +820,15 @@ private fun TodayPane(
     val signIn by signInFlow.collectAsState()
     // Roll-over's prompt: Break it down opens the task with its steps ready; Someday and Drop leave with Undo on the bar.
     val carryScope = rememberCoroutineScope()
+    // Study plan, slice 2b rest: the nudge card's taps, shown at once (Start → Done; Done and Not now fold it away).
+    val nudgeStarted = remember { mutableStateListOf<String>() }
+    val nudgeGone = remember { mutableStateListOf<String>() }
+    var nudgeLast by remember { mutableStateOf<os.meka.core.domain.StudyNudge?>(null) }
+    LaunchedEffect(today.studyNudge) {
+        today.studyNudge?.let { nudgeLast = it }
+        // Once the core says it's on, the tap's no longer needed.
+        today.studyNudge?.takeIf { it.on }?.let { nudgeStarted.remove(it.key) }
+    }
     val carryChoice: (String, os.meka.core.domain.CarryChoice) -> Unit = { id, choice ->
         if (choice == os.meka.core.domain.CarryChoice.BREAK_DOWN) { StepFocus.request(id); actions.select(id) }
         if (core != null) carryScope.launch {
@@ -1071,6 +1083,32 @@ private fun TodayPane(
                                 }
                             }
                         }
+                    }
+                    // Study plan, slice 2b rest: from 10 min before a study session, Obi's quiet card ("Study in 8 min ·
+                    // Data analytics", the time, lessons and where) with Start, then Done (its lessons ticked, Undo on the
+                    // bar) and Not now. A tap shows in the same frame; the card unfolds, cross-fades and folds away.
+                    val nudge = today.studyNudge?.takeIf { it.key !in nudgeGone }
+                    AnimatedVisibility(nudge != null, enter = studyUnfold(), exit = studyFold()) {
+                        val n = nudge ?: nudgeLast
+                        if (n != null) StudyNudgeCard(
+                            n, started = n.key in nudgeStarted, modifier = Modifier.padding(top = MekaSpace.xs),
+                            onStart = {
+                                nudgeStarted.add(n.key)
+                                if (core != null) carryScope.launch { if (runCatching { core.startStudySession(n.key) }.getOrNull() == null) nudgeStarted.remove(n.key) }
+                            },
+                            onDone = {
+                                nudgeGone.add(n.key)
+                                if (core != null) carryScope.launch {
+                                    val r = runCatching { core.finishStudySession(n.key) }.getOrNull()
+                                    if (r == null) nudgeGone.remove(n.key)
+                                    else if (r.token.isNotEmpty()) undo?.show(r.line) { core.undoStudySessionDone(r.token); nudgeGone.remove(n.key) }
+                                }
+                            },
+                            onNotNow = {
+                                nudgeGone.add(n.key)
+                                if (core != null) carryScope.launch { runCatching { core.putAwayStudyNudge(n.key) } }
+                            },
+                        )
                     }
                     // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
                     // (lit in the accent on Monday); cross-fades as it comes and changes.
@@ -1778,3 +1816,50 @@ private fun meta(t: Task): String? {
  */
 private fun greeting(core: MekaCore?, name: String?): String =
     core?.todayGreeting(name) ?: os.meka.core.domain.CallNameRules.todayGreeting(java.time.LocalTime.now().hour, name)
+
+/**
+ * Study plan, slice 2b rest: Obi's nudge card from 10 minutes before a study session ("A card from Obi, not out loud"):
+ * the headline in the accent, the time, lessons and where in grey, then Start (Done once started) and Not now.
+ */
+@Composable
+private fun StudyNudgeCard(
+    n: os.meka.core.domain.StudyNudge, started: Boolean, modifier: Modifier,
+    onStart: () -> Unit, onDone: () -> Unit, onNotNow: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    val on = n.on || started
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("today-study-nudge"),
+    ) {
+        Crossfade(if (on && !n.on) n.headline.replaceBefore(" · ", "Studying") else n.headline, animationSpec = MekaMotion.appear(reduced), label = "study-nudge-head") { h ->
+            Text(h, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { contentDescription = n.spoken })
+        }
+        Text(n.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = MekaSpace.xxs))
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+            val label = if (on) os.meka.core.domain.StudyWeekRules.DONE else os.meka.core.domain.StudyWeekRules.START
+            Box(
+                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = if (on) onDone else onStart)
+                    .testTag("today-study-nudge-button"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "study-nudge-button") { l ->
+                    Text(l, style = MekaType.captionStrong, color = if (on) Meka.colors.onAccent else Meka.colors.accent, maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                            .background(if (on) Meka.colors.accent else Meka.colors.surfaceRaised)
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                }
+            }
+            Box(
+                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotNow)
+                    .testTag("today-study-nudge-later"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(os.meka.core.domain.StudyNudgeRules.NOT_NOW, style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs))
+            }
+        }
+    }
+}

@@ -115,6 +115,7 @@ import os.meka.core.domain.StudyRules
 import os.meka.core.domain.StudyView
 import os.meka.core.domain.StudyWeekRow
 import os.meka.core.domain.StudyWeekRules
+import os.meka.core.domain.StudyNudgeRules
 import os.meka.core.domain.StudyWeekState
 import os.meka.core.domain.TripRules
 import os.meka.core.facade.MekaCore
@@ -271,6 +272,8 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     // the view says the same or the row's lessons change; Done's bar line with Undo.
     val weekTap = remember(courseId) { mutableStateMapOf<String, Pair<StudyWeekState, List<String>>>() }
     var sessionDone by remember(courseId) { mutableStateOf<StudyRemoved?>(null) }
+    // Slice 2b rest: "Nudge me 10 minutes before" tapped here, shown at once until the view says the same.
+    var nudgeTap by remember(courseId) { mutableStateOf<Boolean?>(null) }
     BackHandler(onBack = {
         when {
             selecting != null -> selecting = null
@@ -284,6 +287,7 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         val days = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.plannedDay }
         plannedTap.keys.toList().forEach { id -> if (id !in days || days[id] == plannedTap[id]) plannedTap.remove(id) }
         c?.planInput?.let { planTap = planTap.settled(it) }
+        if (nudgeTap == c?.nudge) nudgeTap = null
         val rows = c?.week.orEmpty().associateBy { it.key }
         weekTap.keys.toList().forEach { k ->
             val r = rows[k]; val t = weekTap[k]
@@ -440,6 +444,12 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         if (c.week.isNotEmpty()) item(key = "week") {
             WeekCard(
                 c.week, weekTap, sessionDone, Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)), onWeek,
+                nudge = nudgeTap ?: c.nudge,
+                onNudge = {
+                    val on = !(nudgeTap ?: c.nudge)
+                    haptics.tick(); nudgeTap = on
+                    scope.launch { if (runCatching { core.setStudyNudge(courseId, on) }.getOrNull() == null) nudgeTap = null }
+                },
                 onUndo = { r ->
                     haptics.light(); sessionDone = null
                     scope.launch { runCatching { core.undoStudySessionDone(r.token) } }
@@ -689,6 +699,7 @@ private fun SelectBar(n: Int, chips: List<StudyChip>, onChip: (StudyChip) -> Uni
 private fun WeekCard(
     rows: List<StudyWeekRow>, taps: Map<String, Pair<StudyWeekState, List<String>>>, done: StudyRemoved?, modifier: Modifier,
     onTap: (StudyWeekRow, StudyWeekState) -> Unit, onUndo: (StudyRemoved) -> Unit,
+    nudge: Boolean = true, onNudge: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -723,6 +734,34 @@ private fun WeekCard(
         }
         AnimatedVisibility(done != null, enter = unfold(), exit = fold()) {
             done?.let { r -> UndoLine(r) { onUndo(r) } }
+        }
+        NudgeRow(nudge, onNudge)
+    }
+}
+
+/**
+ * Slice 2b rest (mockup's toggle): "Nudge me 10 minutes before · A card from Obi, not out loud" with an On/Off pill whose
+ * fill glides; synced, so the Mac's follows.
+ */
+@Composable
+private fun NudgeRow(on: Boolean, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val label = StudyNudgeRules.TOGGLE
+    val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "study-nudge-pill")
+    Row(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = "$label. ${StudyNudgeRules.TOGGLE_SUB}"; stateDescription = if (on) "On" else "Off" }
+            .minTouch().padding(vertical = MekaSpace.xxs).testTag("study-nudge"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(StudyNudgeRules.TOGGLE_SUB, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        Crossfade(if (on) "On" else "Off", animationSpec = MekaMotion.appear(reduced), label = "study-nudge-on") { l ->
+            Text(l, style = MekaType.captionStrong, color = if (on) Meka.colors.onAccent else Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
         }
     }
 }

@@ -323,6 +323,11 @@ struct TodayView: View {
                         .accessibilityLabel(prep.spoken)
                         .staggeredAppear(0, play: play)
                     }
+                    // Study plan, slice 2b rest: from 10 min before a study session, Obi's quiet card with Start, then
+                    // Done and Not now; folds away.
+                    StudyNudgeCard(nudge: model.today?.studyNudge, palette: palette)
+                        .padding(.top, model.today?.studyNudge == nil ? 0 : MekaSpace.xs)
+                        .staggeredAppear(0, play: play)
                     // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
                     // (lit on Monday); cross-fades.
                     if let thing = model.today?.reflection {

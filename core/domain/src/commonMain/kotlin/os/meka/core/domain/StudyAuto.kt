@@ -195,6 +195,9 @@ data class StudyWeekRow(
     val note: String?,
     val catchUp: Boolean,
     val spoken: String,
+    /** Slice 2b rest: when it starts (minute of the day; null for an all-day event) and how long it lasts, for the nudge. */
+    val startMin: Int? = null,
+    val mins: Int = 0,
 )
 
 /**
@@ -244,7 +247,8 @@ object StudyWeekRules {
                 else -> StudyWeekState.START
             }
             val dayLabel = if (day == today) StudyRules.TODAY else LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1]
-            val time = s.mapNotNull { it.startMin }.minOrNull()?.let { LocalClock.formatMinute(it) }
+            val startMin = s.mapNotNull { it.startMin }.minOrNull()
+            val time = startMin?.let { LocalClock.formatMinute(it) }
             val sessionMins = s.sumOf { it.mins }
             val mins = if (on.isEmpty()) sessionMins else on.sumOf { it.mins ?: avg ?: sessionMins }
             val what = when (on.size) {
@@ -266,7 +270,7 @@ object StudyWeekRules {
             ).joinToString(", ")
             StudyWeekRow(
                 k, day, dayLabel, time, lessonsLine, place, on.filter { !it.done }.map { it.id }, state, button, note,
-                catchUp = on.isEmpty(), spoken = spoken,
+                catchUp = on.isEmpty(), spoken = spoken, startMin = startMin, mins = mins,
             )
         }
     }

@@ -21,8 +21,8 @@ import os.meka.core.sync.fv
  * a chosen module, and a new module is added with its first lessons; every lesson deleted in the last
  * [StudyRules.RECENT_DAYS] days (and any deleted before deletion times were kept) shows under Recently deleted with Restore. Slice 2b part 1 ([StudyAutoRules]): lessons he hasn't planned are suggested for his next study sessions.
  * Slice 2b part 2 ([StudyWeekRules]): THIS WEEK with Start and Done on a session.
- * Still to come (the board): the 10-minute nudge and the Sunday check-in; slice 3, the outline
- * from a screenshot.
+ * Slice 2b rest ([StudyNudgeRules]): the 10-minute nudge card on Today, with Start and Done.
+ * Still to come (the board): the Sunday check-in; slice 3, the outline from a screenshot.
  */
 object StudyCourseFields {
     /** "Data analytics certificate" (at most [StudyRules.MAX_COURSE]). */
@@ -40,6 +40,8 @@ object StudyCourseFields {
     /** The day the finish date was set, and how many lessons were left then: what "on track" is measured against. */
     const val PLAN_FROM = "planFromDay"
     const val PLAN_LEFT = "planLeft"
+    /** Slice 2b rest (LWW Bool, absent = on): "Nudge me 10 minutes before" ([StudyNudgeRules]). */
+    const val NUDGE = "nudge"
 }
 
 object StudyLessonFields {
@@ -71,6 +73,8 @@ data class StudyCourse(
     val id: String, val title: String, val addedAtMs: Long,
     val finishByDay: Long? = null, val sessionMins: Int? = null, val slots: Set<String> = emptySet(),
     val planFromDay: Long? = null, val planLeft: Int? = null,
+    /** Slice 2b rest: the 10-minute nudge card on Today ([StudyNudgeRules]); on until he turns it off. */
+    val nudge: Boolean = true,
 )
 
 /** A plan choice (a finish date, a session length, a time he can study): its label, whether it's picked, its key. */
@@ -198,6 +202,8 @@ data class StudyCourseView(
     val suggested: String? = null,
     /** Slice 2b part 2: THIS WEEK, the course's sessions from today for a week with Start and Done ([StudyWeekRules.rows]). */
     val week: List<StudyWeekRow> = emptyList(),
+    /** Slice 2b rest: "Nudge me 10 minutes before" is on ([StudyNudgeRules]). */
+    val nudge: Boolean = true,
 )
 
 data class StudyView(val courses: List<StudyCourseView>) {
@@ -400,6 +406,7 @@ object StudyRules {
             slots = readSlots(s.f(StudyCourseFields.SLOTS).textOrNull),
             planFromDay = s.f(StudyCourseFields.PLAN_FROM).longOrNull,
             planLeft = s.f(StudyCourseFields.PLAN_LEFT).longOrNull?.toInt()?.takeIf { it >= 0 },
+            nudge = s.f(StudyCourseFields.NUDGE).boolOrNull ?: true,
         )
     }.sortedWith(compareBy<StudyCourse> { it.addedAtMs }.thenBy { it.id })
 
@@ -549,6 +556,7 @@ object StudyRules {
             deleted = deletedRows(course.id, deleted, nowMs),
             suggested = StudyAutoRules.line(course.id, lessons, fromCalendar),
             week = week,
+            nudge = course.nudge,
         )
     }
 
@@ -959,6 +967,14 @@ class Study(
         val c = courses().firstOrNull { it.id == courseId } ?: return false
         if (mins !in StudyRules.MIN_SESSION..StudyRules.MAX_SESSION || c.sessionMins == mins) return false
         replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.SESSION_MINS to mins.toLong().fv()))
+        return true
+    }
+
+    /** Slice 2b rest: turns "Nudge me 10 minutes before" on or off; false when it already was. */
+    fun setNudge(courseId: String, on: Boolean): Boolean {
+        val c = courses().firstOrNull { it.id == courseId } ?: return false
+        if (c.nudge == on) return false
+        replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.NUDGE to on.fv()))
         return true
     }
 

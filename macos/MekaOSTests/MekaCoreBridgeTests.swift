@@ -3124,6 +3124,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(done.token.isEmpty)
         let undone = try await core.undoStudySessionDone(token: done.token)
         XCTAssertTrue(undone.boolValue)
+
+        // Slice 2b rest: Today's nudge (optional; it shows only near a session) and its toggle cross; Not now and the
+        // toggle take only Strings and a Bool.
+        _ = core.today.value.studyNudge?.headline
+        XCTAssertEqual(StudyNudgeRules.shared.TOGGLE, "Nudge me 10 minutes before")
+        XCTAssertEqual(core.studyView.value.course(id: id)?.nudge, true)
+        let off = try await core.setStudyNudge(courseId: id, on: false)
+        XCTAssertTrue(off.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.nudge, false)
+        let away = try await core.putAwayStudyNudge(key: row.key)
+        XCTAssertTrue(away.boolValue)
     }
 
     func testTripListsReachSwift() async throws {

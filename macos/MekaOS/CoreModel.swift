@@ -6303,6 +6303,27 @@ final class CoreModel {
 
     func undoStudySessionDone(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoStudySessionDone(token: token) } }
 
+    // MARK: Study plan, slice 2b rest: Today's 10-minute nudge. Only Strings and Bools cross.
+
+    /// Not now on Today's study nudge: put away on this Mac (the session stays on THIS WEEK).
+    func putAwayStudyNudge(_ key: String) async -> Bool {
+        guard let core else { return false }
+        MekaHaptics.light()
+        do { _ = try await core.putAwayStudyNudge(key: key); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// "Nudge me 10 minutes before" on a course (synced).
+    func setStudyNudge(_ courseId: String, on: Bool) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.setStudyNudge(courseId: courseId, on: on); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: Study fixes (Meka 2026-10-26 23:21): a right-click or long press opens a sheet, never deletes. Only Strings cross.
 
     /// "+ Add lesson" in a module: one lesson, or several lines, into that module.

@@ -176,6 +176,8 @@ struct StudySheet: View {
     /// the view says the same or the row's lessons change; Done's line with Undo.
     @State private var weekTap: [String: (state: String, ids: [String])] = [:]
     @State private var sessionDone: CoreModel.TripUndo?
+    /// Slice 2b rest: "Nudge me 10 minutes before" clicked here, shown at once until the view says the same.
+    @State private var tapNudge: Bool?
     private static let lessonDrag = "study-lesson:"
     private static let moduleDrag = "study-module:"
 
@@ -221,6 +223,7 @@ struct StudySheet: View {
                 guard let r = rows[key] else { return false }
                 return r.state.name != t.state && r.lessonIds == t.ids
             }
+            if tapNudge == c.nudge { tapNudge = nil }
         }
     }
 
@@ -264,7 +267,7 @@ struct StudySheet: View {
             planCard(c, p).padding(.top, MekaSpace.m).staggeredAppear(1)
         }
         if !c.week.isEmpty {
-            weekCard(c.week).padding(.top, MekaSpace.m).staggeredAppear(1)
+            weekCard(c.week, nudge: tapNudge ?? c.nudge).padding(.top, MekaSpace.m).staggeredAppear(1)
         }
         SectionLabel("Lessons", palette).padding(.top, MekaSpace.l).staggeredAppear(1)
         TextField(StudyRules.shared.ADD_LESSONS_HINT, text: $outline, axis: .vertical)
@@ -584,7 +587,7 @@ struct StudySheet: View {
     /// THIS WEEK (slice 2b part 2), like the Fold's: one row a day with its time, lessons, where, and Start → Done →
     /// a quiet green Done. A click shows at once; the fill glides and the lines cross-fade.
     @ViewBuilder
-    private func weekCard(_ rows: [StudyWeekRow]) -> some View {
+    private func weekCard(_ rows: [StudyWeekRow], nudge: Bool) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             SectionLabel(StudyWeekRules.shared.LABEL, palette)
             ForEach(rows, id: \.key) { row in
@@ -630,10 +633,45 @@ struct StudySheet: View {
                     if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { sessionDone = nil } }
                 }
             }
+            nudgeRow(nudge)
         }
         .padding(MekaSpace.m)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.l))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: weekTap.mapValues { $0.state })
+    }
+
+    /// Slice 2b rest (mockup's toggle): "Nudge me 10 minutes before · A card from Obi, not out loud" with an On/Off
+    /// pill; synced, so the Fold's follows. A click shows at once.
+    private func nudgeRow(_ on: Bool) -> some View {
+        let id = courseId
+        return Button {
+            let next = !on
+            MekaHaptics.tick()
+            tapNudge = next
+            Task { if !(await model.setStudyNudge(id, on: next)) { tapNudge = nil } }
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(StudyNudgeRules.shared.TOGGLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(StudyNudgeRules.shared.TOGGLE_SUB).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Text(on ? "On" : "Off")
+                    .font(MekaType.captionStrong)
+                    .foregroundStyle(on ? palette.onAccent : palette.textSecondary)
+                    .padding(.horizontal, MekaSpace.m)
+                    .padding(.vertical, MekaSpace.xxs)
+                    .background(on ? palette.accent : palette.surfaceRaised, in: Capsule())
+                    .contentTransition(.opacity)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .padding(.top, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
+        .accessibilityLabel("\(StudyNudgeRules.shared.TOGGLE). \(StudyNudgeRules.shared.TOGGLE_SUB)")
+        .accessibilityValue(on ? "On" : "Off")
     }
 
     /// Start (accent on raised), Done while on (filled accent), Done once ticked (green, does nothing).
