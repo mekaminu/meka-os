@@ -1513,7 +1513,7 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
             }
         }
         if (r.points.size >= 2) {
-            Crossfade(r.key, animationSpec = MekaMotion.appear(reduced), label = "trading-line") { _ -> WorthLine(r.points, dots = false) }
+            Crossfade(r.points, animationSpec = MekaMotion.appear(reduced), label = "trading-line") { pts -> WorthLine(pts, dots = false) }
         }
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             TradingEquity.chips(c, chosen).forEach { ch -> key(ch.key) {
