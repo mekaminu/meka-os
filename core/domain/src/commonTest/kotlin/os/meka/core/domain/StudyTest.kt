@@ -166,6 +166,51 @@ class StudyTest {
     }
 
     @Test
+    fun lessonsAndModulesAreDraggedIntoANewOrderOnBothDevices() {
+        val id = sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome\nSetup\nShortcuts\nModule 2: Core skills\nPivot tables\nCharts\nModule 3: Dashboards\nLayout").courseId!!
+        fun titles(s: Study) = s.view(0L).course(id)!!.modules.map { m -> m.lessons.map { it.title } }
+        val m0 = sFold.view(0L).course(id)!!.modules[0].lessons
+        // Shortcuts to the top of its module: one write, the rest keep their places.
+        assertTrue(sFold.placeLesson(m0[2].id, 0))
+        assertFalse(sFold.placeLesson(m0[2].id, 0))
+        assertEquals(listOf("Shortcuts", "Welcome", "Setup"), titles(sFold)[0])
+        // Welcome to the end (an index past the end is the end).
+        assertTrue(sFold.placeLesson(m0[0].id, 9))
+        assertEquals(listOf(listOf("Shortcuts", "Setup", "Welcome"), listOf("Pivot tables", "Charts"), listOf("Layout")), titles(sFold))
+        // Dashboards first, then Foundations last; each module keeps its lessons' order.
+        assertTrue(sFold.placeModule(id, "3 · dashboards", 0))
+        assertTrue(sFold.placeModule(id, "1 · Foundations", 2))
+        assertFalse(sFold.placeModule(id, "1 · Foundations", 2))
+        assertFalse(sFold.placeModule(id, "Nope", 0))
+        sync()
+        assertEquals(listOf(listOf("Layout"), listOf("Pivot tables", "Charts"), listOf("Shortcuts", "Setup", "Welcome")), titles(sMac))
+        // Lessons added later still go at their module's end.
+        sMac.addLessons(id, "Filters", into = "2 · Core skills")
+        assertEquals(listOf("Pivot tables", "Charts", "Filters"), titles(sMac)[1])
+    }
+
+    @Test
+    fun manyMovesIntoTheSameGapNumberTheCourseAgain() {
+        val id = sFold.addCourse("Data analytics\nWelcome\nSetup\nShortcuts").courseId!!
+        fun rows() = sFold.view(0L).course(id)!!.modules.single().lessons
+        // Moving the last lesson between the first two again and again halves the gap until it runs out.
+        repeat(15) { assertTrue(sFold.placeLesson(rows().last().id, 1)) }
+        assertEquals(listOf("Welcome", "Shortcuts", "Setup"), rows().map { it.title })
+        val pos = sFold.lessons().map { it.pos }
+        assertEquals(pos.sorted().distinct(), pos)
+    }
+
+    @Test
+    fun placesAreSpreadBetweenNeighboursOrNumberedAgain() {
+        assertEquals(listOf(1024L, 1536L, 2048L), StudyRules.placeBetween(listOf(1024L, null, 2048L)))
+        assertEquals(listOf(-1024L, 0L, 1024L), StudyRules.placeBetween(listOf(null, null, 1024L)))
+        assertEquals(listOf(1024L, 2048L, 3072L), StudyRules.placeBetween(listOf(1024L, null, null)))
+        assertEquals(listOf(10L, 13L, 16L, 20L), StudyRules.placeBetween(listOf(10L, null, null, 20L)))
+        assertNull(StudyRules.placeBetween(listOf(10L, null, 11L)))
+        assertNull(StudyRules.placeBetween(listOf(20L, null, 10L)))
+    }
+
+    @Test
     fun lessonsGoIntoTheModuleChosenAndANewModuleNeedsAFirstLesson() {
         val id = sFold.addCourse("Data analytics\nModule 1: Foundations\nWelcome\nModule 2: Core skills\nPivot tables").courseId!!
         assertEquals("Added 2 lessons to 1 · Foundations", sFold.addLessons(id, "Shortcuts\nCharts 20 min", into = "1 · Foundations").line)

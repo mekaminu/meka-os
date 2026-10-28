@@ -3087,6 +3087,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         let restored = try await core.restoreStudyLesson(id: gone.id)
         XCTAssertTrue(restored.boolValue)
         XCTAssertEqual(core.studyView.value.course(id: id)?.deleted.count, 0)
+        // Drag to reorder: a lesson to the top of its module, then the module to the top of the course; an Int32 crosses.
+        let back = try XCTUnwrap(core.studyView.value.course(id: id)?.modules.last?.lessons.last).id
+        let placed = try await core.placeStudyLesson(id: back, index: 0)
+        XCTAssertTrue(placed.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.modules.last?.lessons.map(\.title), ["Keyboard shortcuts", "Layout"])
+        let first = try await core.placeStudyModule(courseId: id, module: "Dashboards", index: 0)
+        XCTAssertTrue(first.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.modules.first?.name, "Dashboards")
+        XCTAssertEqual(StudyRules.shared.MOVE_UP, "Move up")
         XCTAssertEqual(StudyRules.shared.confirmDelete(title: "Layout"), "Delete \u{201C}Layout\u{201D}?")
 
         // Study fixes (3) slice 3: several lessons planned at once for a day picked past the week; [String] and an

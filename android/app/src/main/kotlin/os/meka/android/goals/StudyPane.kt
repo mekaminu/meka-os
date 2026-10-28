@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -17,6 +18,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,19 +41,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -59,15 +67,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.ask.TripPill
@@ -84,6 +101,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.DayPickerDialog
 import os.meka.android.lists.Field
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.ChecklistRules
 import os.meka.core.domain.StudyAdded
 import os.meka.core.domain.StudyChip
 import os.meka.core.domain.StudyPlanInput
@@ -234,6 +252,18 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     // "Pick a day…" date picker is open for.
     var selecting by remember(courseId) { mutableStateOf<Set<String>?>(null) }
     var pickFor by remember(courseId) { mutableStateOf<List<String>?>(null) }
+    // Study fixes (2) rest, drag to reorder (2026-10-28): the lesson or module held by its grip (≡), how far it has
+    // moved, a lesson row's height, where each module head on screen starts (root y) and where the held one began;
+    // the new order is shown at once (per module, and the modules') until the view says the same.
+    var dragLesson by remember(courseId) { mutableStateOf<String?>(null) }
+    var dragModule by remember(courseId) { mutableStateOf<String?>(null) }
+    var dragDy by remember(courseId) { mutableFloatStateOf(0f) }
+    var rowPx by remember { mutableFloatStateOf(0f) }
+    val headTops = remember(courseId) { mutableStateMapOf<String, Float>() }
+    var dragTop by remember(courseId) { mutableFloatStateOf(0f) }
+    val lessonOrder = remember(courseId) { mutableStateMapOf<String, List<String>>() }
+    var moduleOrder by remember(courseId) { mutableStateOf<List<String>?>(null) }
+    val gapPx = with(LocalDensity.current) { MekaSpace.xs.toPx() }
     BackHandler(onBack = {
         when {
             selecting != null -> selecting = null
@@ -247,6 +277,37 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         val days = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.plannedDay }
         plannedTap.keys.toList().forEach { id -> if (id !in days || days[id] == plannedTap[id]) plannedTap.remove(id) }
         c?.planInput?.let { planTap = planTap.settled(it) }
+        val viewModules = c?.modules.orEmpty()
+        if (moduleOrder == viewModules.map { it.key } || moduleOrder?.toSet() != viewModules.map { it.key }.toSet()) moduleOrder = null
+        lessonOrder.keys.toList().forEach { k ->
+            val ids = viewModules.firstOrNull { it.key == k }?.lessons?.map { it.id }
+            if (ids == null || ids == lessonOrder[k] || ids.toSet() != lessonOrder[k]?.toSet()) lessonOrder.remove(k)
+        }
+    }
+    // The modules as shown: the order dragged here first, until the view catches up.
+    val shownModules = c?.modules.orEmpty().let { ms -> StudyOrder.apply(ms, moduleOrder, lessonOrder) }
+    val dragFrom = dragLesson?.let { id -> shownModules.firstOrNull { m -> m.lessons.any { it.id == id } } }
+    val lessonFrom = dragFrom?.lessons?.indexOfFirst { it.id == dragLesson } ?: -1
+    val lessonTo = if (dragFrom == null) -1 else ChecklistRules.dropIndex(lessonFrom, dragDy, rowPx, dragFrom.lessons.size)
+    val moduleFrom = dragModule?.let { k -> shownModules.indexOfFirst { it.key == k } } ?: -1
+    val moduleTo = if (moduleFrom < 0) -1 else StudyOrder.moduleSlot(shownModules.map { it.key }, dragModule!!, headTops, dragTop + dragDy)
+    var lastSlot by remember { mutableIntStateOf(-1) }
+    val slot = if (lessonTo >= 0) lessonTo else moduleTo
+    LaunchedEffect(slot) { if (slot >= 0 && lastSlot >= 0 && slot != lastSlot) haptics.tick(); lastSlot = slot }
+    val placeLesson: (StudyModule, String, Int) -> Unit = { m, id, to ->
+        val from = m.lessons.indexOfFirst { it.id == id }
+        if (from >= 0 && to in m.lessons.indices && to != from) {
+            lessonOrder[m.key] = m.lessons.map { it.id }.toMutableList().apply { add(to, removeAt(from)) }
+            scope.launch { if (runCatching { core.placeStudyLesson(id, to) }.getOrNull() != true) lessonOrder.remove(m.key) }
+        }
+    }
+    val placeModule: (StudyModule, Int) -> Unit = { m, to ->
+        val keys = shownModules.map { it.key }
+        val from = keys.indexOf(m.key)
+        if (from >= 0 && to in keys.indices && to != from) {
+            moduleOrder = keys.toMutableList().apply { add(to, removeAt(from)) }
+            scope.launch { if (runCatching { core.placeStudyModule(courseId, m.name, to) }.getOrNull() != true) moduleOrder = null }
+        }
     }
     LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
     val tick: (StudyLessonRow, Boolean) -> Unit = { row, done ->
@@ -372,15 +433,34 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
                 Text(StudyRules.EMPTY_COURSE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem().padding(top = MekaSpace.xs))
             }
         }
-        val firstOpen = c.modules.firstOrNull { m -> m.lessons.any { !(pending[it.id] ?: it.done) } }?.key
-        val moduleNames = c.modules.map { it.name }
-        for (m in c.modules) {
-            val open = opened[m.key] ?: (m.key == firstOpen)
+        val firstOpen = shownModules.firstOrNull { m -> m.lessons.any { !(pending[it.id] ?: it.done) } }?.key
+        val moduleNames = shownModules.map { it.name }
+        val canDrag = selecting == null
+        shownModules.forEachIndexed { mi, m ->
+            // A held module folds while it's dragged (its lessons travel with it once let go).
+            val open = (opened[m.key] ?: (m.key == firstOpen)) && dragModule != m.key
             item(key = "module-${m.key}") {
+                val held = dragModule == m.key
+                DisposableEffect(m.key) { onDispose { headTops.remove(m.key) } }
                 ModuleHead(
-                    m, open, pending, Modifier.animateItem(),
+                    m, open, pending,
+                    Modifier.then(if (held) Modifier else Modifier.animateItem())
+                        .onGloballyPositioned { if (dragModule != m.key) headTops[m.key] = it.positionInRoot().y },
                     onToggle = { haptics.tick(); opened[m.key] = !open },
                     onHold = { haptics.tick(); sheet = null; moduleMenu = if (moduleMenu == m.key) null else m.key },
+                    grip = if (canDrag && shownModules.size > 1) Grip(
+                        label = StudyRules.gripLabel(m.name),
+                        dy = if (held) dragDy else 0f, lifted = held,
+                        onStart = { haptics.light(); sheet = null; moduleMenu = null; dragTop = headTops[m.key] ?: 0f; dragDy = 0f; dragModule = m.key; lastSlot = mi },
+                        onDrag = { dragDy += it },
+                        onEnd = {
+                            if (moduleTo >= 0 && moduleTo != mi) placeModule(m, moduleTo)
+                            dragModule = null; dragDy = 0f
+                        },
+                        onUp = if (mi > 0) ({ haptics.tick(); placeModule(m, mi - 1) }) else null,
+                        onDown = if (mi < shownModules.size - 1) ({ haptics.tick(); placeModule(m, mi + 1) }) else null,
+                    ) else null,
+                    dropAbove = dragModule != null && !held && StudyOrder.dropsAbove(shownModules.map { it.key }, dragModule!!, moduleTo, m.key),
                 )
             }
             if (moduleMenu == m.key) item(key = "module-menu-${m.key}") {
@@ -395,12 +475,38 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
                 )
             }
             if (open) {
-                for (row in m.lessons) {
+                m.lessons.forEachIndexed { li, row ->
                     item(key = "lesson-${row.id}") {
+                        val held = dragLesson == row.id
+                        // The rows a held lesson passes make room on the replan spring; let go, they sit at once.
+                        val shift = when {
+                            dragFrom?.key != m.key || held || lessonFrom < 0 -> 0f
+                            lessonFrom < lessonTo && li in (lessonFrom + 1)..lessonTo -> -rowPx
+                            lessonTo < lessonFrom && li in lessonTo until lessonFrom -> rowPx
+                            else -> 0f
+                        }
+                        val slide = remember { Animatable(0f) }
+                        LaunchedEffect(shift, dragLesson == null) { if (dragLesson == null) slide.snapTo(0f) else slide.animateTo(shift, MekaMotion.replan(reduced)) }
                         LessonRow(
                             row, pending[row.id] ?: row.done,
                             if (plannedTap.containsKey(row.id)) plannedTap[row.id]?.let { StudyRules.plannedLabel(it, today) } else row.planned,
-                            row.late && !plannedTap.containsKey(row.id), Modifier.animateItem(),
+                            row.late && !plannedTap.containsKey(row.id),
+                            Modifier.then(if (dragLesson != null) Modifier else Modifier.animateItem())
+                                .graphicsLayer { translationY = if (held) 0f else slide.value },
+                            grip = if (canDrag && m.lessons.size > 1) Grip(
+                                label = StudyRules.gripLabel(row.title),
+                                dy = if (held) dragDy else 0f, lifted = held,
+                                onStart = { haptics.light(); sheet = null; moduleMenu = null; dragDy = 0f; dragLesson = row.id; lastSlot = li },
+                                onDrag = { dragDy += it },
+                                onEnd = {
+                                    val to = ChecklistRules.dropIndex(li, dragDy, rowPx, m.lessons.size)
+                                    placeLesson(m, row.id, to)
+                                    dragLesson = null; dragDy = 0f
+                                },
+                                onUp = if (li > 0) ({ haptics.tick(); placeLesson(m, row.id, li - 1) }) else null,
+                                onDown = if (li < m.lessons.size - 1) ({ haptics.tick(); placeLesson(m, row.id, li + 1) }) else null,
+                            ) else null,
+                            onMeasured = { if (it > 0f) rowPx = it + gapPx },
                             onTick = { tick(row, it) },
                             onHold = { haptics.tick(); moduleMenu = null; sheet = if (sheet == row.id) null else row.id },
                             selected = selecting?.let { row.id in it },
@@ -434,7 +540,13 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             }
         }
         item(key = "add-module") {
-            AddModule(Modifier.animateItem().padding(top = MekaSpace.xs)) { name, text ->
+            // A held module let go here lands last: the gold line shows above "+ Add module".
+            val last = moduleFrom >= 0 && moduleTo == shownModules.size - 1 && moduleTo != moduleFrom
+            val line by animateFloatAsState(if (last) 1f else 0f, MekaMotion.appear(reduced), label = "study-module-drop-last")
+            val accent = Meka.colors.accent
+            AddModule(Modifier.animateItem().padding(top = MekaSpace.xs).drawBehind {
+                if (line > 0f) drawLine(accent.copy(alpha = line), Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            }) { name, text ->
                 scope.launch {
                     val r = runCatching { core.addStudyModule(courseId, name, text) }.getOrNull()
                     added(r)
@@ -662,23 +774,36 @@ private fun OutlineField(
 /** A module's head: its name, its count ("2 of 6", "Done" in green) and a chevron; a tap folds it. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onToggle: () -> Unit, onHold: () -> Unit) {
+private fun ModuleHead(
+    m: StudyModule, open: Boolean, pending: Map<String, Boolean>, modifier: Modifier, onToggle: () -> Unit, onHold: () -> Unit,
+    grip: Grip? = null, dropAbove: Boolean = false,
+) {
     val reduced = Meka.reducedMotion
     val done = m.lessons.count { pending[it.id] ?: it.done }
     val count = StudyRules.moduleCount(done, m.lessons.size)
     val allDone = done == m.lessons.size
     val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "study-module-chev")
+    val lift by animateFloatAsState(if (grip?.lifted == true && !reduced) 1f else 0f, MekaMotion.approve(reduced), label = "study-module-lift")
+    // Where a held module will land: a 2 dp gold line above this head (fades in and out).
+    val line by animateFloatAsState(if (dropAbove) 1f else 0f, MekaMotion.appear(reduced), label = "study-module-drop")
+    val accent = Meka.colors.accent
     Row(
-        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().zIndex(if (grip?.lifted == true) 1f else 0f).padding(top = MekaSpace.xs)
+            .drawBehind {
+                if (line > 0f) drawLine(accent.copy(alpha = line), Offset(0f, -MekaSpace.xs.toPx() / 2), Offset(size.width, -MekaSpace.xs.toPx() / 2), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            }
+            .graphicsLayer { translationY = grip?.dy ?: 0f; scaleX = 1f + 0.02f * lift; scaleY = 1f + 0.02f * lift }
+            .clip(RoundedCornerShape(MekaRadius.m)).background(if (grip?.lifted == true) Meka.colors.surfaceRaised else Meka.colors.surface)
             .combinedClickable(role = Role.Button, onClick = onToggle, onLongClick = onHold, onLongClickLabel = "Rename or delete the module")
             .semantics(mergeDescendants = true) { contentDescription = "${m.name}, $count, " + if (open) "tap to fold" else "tap to open" }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("study-module-${m.key}"),
+            .minTouch().padding(start = MekaSpace.m, end = if (grip != null) 0.dp else MekaSpace.m, top = MekaSpace.xs, bottom = MekaSpace.xs).testTag("study-module-${m.key}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text(m.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textTertiary)
         Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+        grip?.let { GripHandle(it, "study-module-grip-${m.key}") }
     }
 }
 
@@ -686,15 +811,21 @@ private fun ModuleHead(m: StudyModule, open: Boolean, pending: Map<String, Boole
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LessonRow(
-    row: StudyLessonRow, done: Boolean, planned: String?, late: Boolean, modifier: Modifier, onTick: (Boolean) -> Unit, onHold: () -> Unit,
+    row: StudyLessonRow, done: Boolean, planned: String?, late: Boolean, modifier: Modifier,
+    grip: Grip? = null, onMeasured: (Float) -> Unit = {},
+    onTick: (Boolean) -> Unit, onHold: () -> Unit,
     selected: Boolean? = null, onSelect: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     val fade by animateFloatAsState(if (done) 0.5f else 1f, MekaMotion.appear(reduced), label = "study-lesson-fade")
     // Study fixes (3) slice 3: while selecting, a tap (or a hold) picks the lesson instead of ticking it; the row lights.
-    val bg by animateColorAsState(if (selected == true) Meka.colors.surfaceRaised else Meka.colors.background, MekaMotion.appear(reduced), label = "study-lesson-selected")
+    val bg by animateColorAsState(if (selected == true || grip?.lifted == true) Meka.colors.surfaceRaised else Meka.colors.background, MekaMotion.appear(reduced), label = "study-lesson-selected")
+    // Drag to reorder: the held row lifts onto the raised surface (scale 1.02 on the approve spring) and follows the finger.
+    val lift by animateFloatAsState(if (grip?.lifted == true && !reduced) 1f else 0f, MekaMotion.approve(reduced), label = "study-lesson-lift")
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)
+        modifier.fillMaxWidth().zIndex(if (grip?.lifted == true) 1f else 0f).onSizeChanged { onMeasured(it.height.toFloat()) }
+            .graphicsLayer { translationY = grip?.dy ?: 0f; scaleX = 1f + 0.02f * lift; scaleY = 1f + 0.02f * lift }
+            .clip(RoundedCornerShape(MekaRadius.m)).background(bg)
             .combinedClickable(
                 role = Role.Checkbox,
                 onClick = { if (selected != null) onSelect() else onTick(!done) },
@@ -720,7 +851,84 @@ private fun LessonRow(
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(if (soft) Color.Transparent else Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs).testTag("study-lesson-planned"))
         }
-        if (row.mins.isNotEmpty()) Text(row.mins, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade).padding(end = MekaSpace.xs))
+        if (row.mins.isNotEmpty()) Text(row.mins, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade).padding(end = if (grip != null) 0.dp else MekaSpace.xs))
+        grip?.let { GripHandle(it, "study-lesson-grip-${row.id}") }
+    }
+}
+
+/**
+ * Drag to reorder (Study fixes (2) rest, 2026-10-28): a lesson's or module's grip. [dy] is how far the held one has
+ * moved; [onUp] / [onDown] are the same moves without a drag (the grip's accessibility actions), null at an end.
+ */
+internal class Grip(
+    val label: String, val dy: Float, val lifted: Boolean,
+    val onStart: () -> Unit, val onDrag: (Float) -> Unit, val onEnd: () -> Unit,
+    val onUp: (() -> Unit)?, val onDown: (() -> Unit)?,
+)
+
+/** The ≡ handle (48 dp): drag it up or down; a screen reader offers Move up and Move down. */
+@Composable
+private fun GripHandle(grip: Grip, tag: String) {
+    // The gesture outlives recompositions: always call the newest callbacks.
+    val start by rememberUpdatedState(grip.onStart)
+    val drag by rememberUpdatedState(grip.onDrag)
+    val end by rememberUpdatedState(grip.onEnd)
+    val muted = if (grip.lifted) Meka.colors.accent else Meka.colors.textTertiary
+    Canvas(
+        Modifier.size(48.dp)
+            // Its own node (not merged into the row's), so a screen reader reaches the grip and its moves.
+            .semantics(mergeDescendants = true) {
+                contentDescription = grip.label
+                customActions = listOfNotNull(
+                    grip.onUp?.let { up -> CustomAccessibilityAction(StudyRules.MOVE_UP) { up(); true } },
+                    grip.onDown?.let { down -> CustomAccessibilityAction(StudyRules.MOVE_DOWN) { down(); true } },
+                )
+            }
+            // A tap or a hold on the grip does nothing (never ticks the lesson or opens its sheet).
+            .pointerInput(tag) { detectTapGestures(onLongPress = {}) {} }
+            .pointerInput(tag) {
+                detectVerticalDragGestures(
+                    onDragStart = { start() },
+                    onDragEnd = { end() },
+                    onDragCancel = { end() },
+                    onVerticalDrag = { change, d -> change.consume(); drag(d) },
+                )
+            }
+            .testTag(tag),
+    ) {
+        val w = 16.dp.toPx(); val x0 = (size.width - w) / 2; val gap = 5.dp.toPx()
+        for (k in -1..1) {
+            val y = size.height / 2 + k * gap
+            drawLine(muted, Offset(x0, y), Offset(x0 + w, y), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
+        }
+    }
+}
+
+/** Drag to reorder: the order dragged on this screen laid over the view's, and where a held module would land. */
+internal object StudyOrder {
+    /** [ms] with the modules in [moduleOrder] (when given) and each module's lessons in [lessonOrder]'s order. */
+    fun apply(ms: List<StudyModule>, moduleOrder: List<String>?, lessonOrder: Map<String, List<String>>): List<StudyModule> {
+        val sorted = moduleOrder?.let { o -> ms.sortedBy { m -> o.indexOf(m.key).let { if (it < 0) Int.MAX_VALUE else it } } } ?: ms
+        return sorted.map { m ->
+            lessonOrder[m.key]?.let { o -> m.copy(lessons = m.lessons.sortedBy { r -> o.indexOf(r.id).let { if (it < 0) Int.MAX_VALUE else it } }) } ?: m
+        }
+    }
+
+    /**
+     * The place among the other modules for the held module [held] whose head's top is now at [top]: the number of
+     * other heads that start above it ([tops], root y; a head off screen counts as above when it was above before).
+     */
+    fun moduleSlot(keys: List<String>, held: String, tops: Map<String, Float>, top: Float): Int {
+        val from = keys.indexOf(held)
+        return keys.withIndex().count { (i, k) -> k != held && (tops[k]?.let { it < top } ?: (i < from)) }
+    }
+
+    /** Whether the gold line shows above [key]'s head: it's the head the held module would land before. */
+    fun dropsAbove(keys: List<String>, held: String, slot: Int, key: String): Boolean {
+        val from = keys.indexOf(held)
+        if (slot < 0 || slot == from) return false
+        val others = keys.filter { it != held }
+        return others.getOrNull(slot) == key
     }
 }
 

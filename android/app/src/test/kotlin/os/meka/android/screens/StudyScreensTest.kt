@@ -286,6 +286,43 @@ class StudyScreensTest {
     }
 
     @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun aLessonDraggedByItsGripMovesAndAModuleMovesUp() {
+        // Study fixes (2): "drag to reorder lessons and modules". Lookups dragged two rows up by its ≡ lands first.
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        val modules = core.studyView.value.course(id)!!.modules
+        val lookups = modules[1].lessons[2]
+        scrollTo(hasTestTag("study-lesson-grip-${lookups.id}"))
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("study-lesson-grip-${lookups.id}").assertExists()
+        val rowH = compose.onNodeWithTag("study-lesson-${lookups.id}").fetchSemanticsNode().size.height.toFloat()
+        compose.onNodeWithTag("study-lesson-grip-${lookups.id}").performTouchInput {
+            down(center)
+            repeat(12) { moveBy(androidx.compose.ui.geometry.Offset(0f, -rowH * 2.2f / 12)) }
+            up()
+        }
+        compose.waitUntil(5_000L) {
+            core.studyView.value.course(id)!!.modules[1].lessons.map { it.title } == listOf("Lookups", "Pivot tables", "Charts that say something")
+        }
+        assertEquals(8, core.studyView.value.course(id)!!.total)
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-${lookups.id}"))
+        compose.waitForIdle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-lesson-dragged"))
+        ScreenShots.assertSensible(compose, "cover-dark-lesson-dragged")
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-lesson-dragged")
+        // A module's grip offers Move up to a screen reader: Putting it together goes before Core skills.
+        val last = modules[2]
+        compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-module-grip-${last.key}"))
+        val actions = compose.onNodeWithTag("study-module-grip-${last.key}").fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
+        compose.runOnIdle { actions.first { it.label == "Move up" }.action() }
+        compose.waitUntil(5_000L) {
+            core.studyView.value.course(id)!!.modules.map { it.name } == listOf("1 · Foundations", "3 · Putting it together", "2 · Core skills")
+        }
+    }
+
+    @Test
     @Config(qualifiers = ScreenShots.INNER)
     fun plannedLessonsShowUnderTheirDayOnTheWeekBoardAndOpenTheCourse() {
         // Meka 2026-10-26 23:21: planned lessons show "on the Week board under that day".

@@ -5363,6 +5363,13 @@ class MekaCore(
     /** The lesson sheet: moves it to the end of another module of its course. */
     suspend fun moveStudyLesson(id: String, module: String): Boolean = onCore { study.moveLesson(id, module) }
 
+    /** Drag to reorder: puts a lesson at [index] among its module's other lessons (0 = first); false when nothing changed. */
+    suspend fun placeStudyLesson(id: String, index: Int): Boolean = onCore { study.placeLesson(id, index) }
+
+    /** Drag to reorder: puts a module at [index] among the course's other modules (0 = first); false when nothing changed. */
+    suspend fun placeStudyModule(courseId: String, module: String, index: Int): Boolean =
+        onCore { study.placeModule(courseId, module, index) }
+
     /** The module sheet: renames a module (every lesson in it). */
     suspend fun renameStudyModule(courseId: String, module: String, text: String): Boolean =
         onCore { study.renameModule(courseId, module, text) }

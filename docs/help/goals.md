@@ -1,7 +1,7 @@
 ---
 id: goals
 title: Goals and habits
-keywords: goals, goals and habits, study, study plan, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
+keywords: goals, goals and habits, study, study plan, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
 data: yes
 fold: GOALS
 fold_where: Ask → Life → Goals and habits
@@ -21,6 +21,7 @@ tip: In a course, YOUR PLAN asks when you want to finish, how long a session is 
 tip: Tick a lesson when you've done it: the ring and "5 of 24 lessons · about 18 h left" move at once, on the Fold and the Mac, and a module reads Done once all its lessons are ticked.
 tip: Press and hold a lesson (right-click on the Mac) to rename it, move it to another module, mark it done or delete it; Delete always asks first, and Undo or Recently deleted under the course brings it back for 30 days.
 tip: Press and hold a module's heading to rename or delete it. "+ Add lesson" at the foot of an open module adds into that module (one, or paste several lines); "+ Add module" adds a module with its first lessons.
+tip: To change the order, drag a lesson or a module by its ≡ grip on the right; the others make room and it stays where you let go, on the Fold and the Mac. On the Mac, drag one onto another, or right-click and pick Move up or Move down.
 tip: To plan a lesson for a day, press and hold it (right-click on the Mac) and pick Today, Tomorrow or a day this week under Plan for. It shows on Today ("Study today · 2 lessons · about 1 h · next: Pivot tables"), in Tomorrow, and on the course with a date chip; a lesson not done on its day moves on to today, marked "from Mon". Not planned takes it off.
 tip: For a day past this week, pick "Pick a day…" under Plan for and choose it on the calendar (up to a year ahead).
 tip: To plan several lessons at once, press and hold one (right-click on the Mac) and pick Select several, tap the others, then pick a day under Plan for… at the foot (Pick a day… for one further ahead).

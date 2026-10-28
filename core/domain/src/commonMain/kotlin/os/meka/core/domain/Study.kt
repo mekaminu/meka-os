@@ -252,7 +252,12 @@ object StudyRules {
     const val MODULE_NOT_READ = "Type the module's name."
     const val MODULE_NEEDS_LESSON = "Type the module's first lesson too."
     const val NAME_NOT_READ = "Type a name."
-    const val HOLD_NOTE = "Press and hold a lesson or a module to rename, move or delete it."
+    const val HOLD_NOTE = "Press and hold a lesson or a module to rename, move or delete it; drag ≡ to change the order."
+    /** Drag to reorder (2026-10-28): the grip's spoken actions (the same moves without a drag). */
+    const val MOVE_UP = "Move up"
+    const val MOVE_DOWN = "Move down"
+    /** What the grip says to a screen reader: "Drag to reorder Pivot tables". */
+    fun gripLabel(name: String): String = "Drag to reorder $name"
 
     fun confirmDelete(title: String): String = "Delete \u201C$title\u201D?"
     fun confirmDeleteModule(name: String, n: Int): String = "Delete \u201C$name\u201D and its ${if (n == 1) "lesson" else "$n lessons"}?"
@@ -429,6 +434,47 @@ object StudyRules {
     /** The module key the apps fold by. */
     fun moduleKey(courseId: String, module: String): String = "$courseId:${module.lowercase()}"
 
+    /**
+     * A course's lessons as they show: in modules (a module's place is its first lesson's), each module's lessons in
+     * order. [lessons] are one course's, in [lessons]' order (by place).
+     */
+    fun courseOrder(lessons: List<StudyLesson>): List<List<StudyLesson>> =
+        lessons.sortedWith(compareBy<StudyLesson> { it.pos }.thenBy { it.id })
+            .groupBy { it.module.lowercase() }.values.sortedBy { ls -> ls.minOf { it.pos } }
+
+    /**
+     * Drag to reorder: places for a list where the nulls are the lessons that moved and the rest keep theirs; each run
+     * of nulls is spread evenly between its neighbours (or [Study.GAP] apart past either end). Null when the kept
+     * places aren't in order or there's no room, so the caller numbers everything again.
+     */
+    fun placeBetween(slots: List<Long?>): List<Long>? {
+        val kept = slots.filterNotNull()
+        if (kept.zipWithNext().any { (a, b) -> a >= b }) return null
+        val out = ArrayList<Long>(slots.size)
+        var i = 0
+        while (i < slots.size) {
+            val v = slots[i]
+            if (v != null) { out += v; i++; continue }
+            var j = i
+            while (j < slots.size && slots[j] == null) j++
+            val k = j - i
+            val prev = out.lastOrNull()
+            val next = slots.getOrNull(j)
+            for (n in 1..k) out += when {
+                prev == null && next == null -> n * Study.GAP
+                next == null -> prev!! + n * Study.GAP
+                prev == null -> next - (k - n + 1) * Study.GAP
+                else -> {
+                    val step = (next - prev) / (k + 1)
+                    if (step < 1) return null
+                    prev + n * step
+                }
+            }
+            i = j
+        }
+        return out
+    }
+
     private fun row(l: StudyLesson, today: Long): StudyLessonRow {
         val mins = minsLabel(l.mins)
         if (l.suggested && !l.done && l.plannedDay != null) {
@@ -458,8 +504,7 @@ object StudyRules {
         val done = lessons.count { it.done }
         val total = lessons.size
         val pct = if (total == 0) 0 else (done * 100 + total / 2) / total
-        val modules = lessons.groupBy { it.module.lowercase() }.values
-            .sortedBy { ls -> ls.minOf { it.pos } }
+        val modules = courseOrder(lessons)
             .map { ls ->
                 val d = ls.count { it.done }
                 StudyModule(moduleKey(course.id, ls.first().module), ls.first().module, moduleCount(d, ls.size), d == ls.size, ls.map { row(it, today) })
@@ -971,6 +1016,50 @@ class Study(
             StudyLessonFields.POS to endOf(mine, name, except = id).fv(),
         ))
         return true
+    }
+
+    /**
+     * Study fixes (2) rest, drag to reorder (2026-10-28): puts a lesson at [index] among the other lessons of its module
+     * (0 = first), the module keeping its place; false when it isn't there or is already there.
+     */
+    fun placeLesson(id: String, index: Int): Boolean {
+        val l = lessons().firstOrNull { it.id == id } ?: return false
+        val groups = StudyRules.courseOrder(lessons().filter { it.courseId == l.courseId })
+        val g = groups.indexOfFirst { gr -> gr.any { it.id == id } }
+        val from = groups[g].indexOfFirst { it.id == id }
+        val others = groups[g].filter { it.id != id }
+        val to = index.coerceIn(0, others.size)
+        if (to == from) return false
+        val next = groups.toMutableList().also { it[g] = others.toMutableList().apply { add(to, l) } }
+        writeOrder(next.flatten(), setOf(id))
+        return true
+    }
+
+    /**
+     * Drag to reorder: puts the module [module] of the course at [index] among its other modules (0 = first), its
+     * lessons keeping their order; false when it isn't there or is already there.
+     */
+    fun placeModule(courseId: String, module: String, index: Int): Boolean {
+        val groups = StudyRules.courseOrder(lessons().filter { it.courseId == courseId })
+        val from = groups.indexOfFirst { gr -> gr.first().module.equals(module, ignoreCase = true) }
+        if (from < 0) return false
+        val others = groups.filterIndexed { i, _ -> i != from }
+        val to = index.coerceIn(0, others.size)
+        if (to == from) return false
+        val next = others.toMutableList().apply { add(to, groups[from]) }
+        writeOrder(next.flatten(), groups[from].map { it.id }.toSet())
+        return true
+    }
+
+    /**
+     * Writes [order] (a course's lessons as they should show) as positions: the [moved] lessons alone when they fit
+     * between their new neighbours, else the whole course again [GAP] apart (only lessons whose place changed).
+     */
+    private fun writeOrder(order: List<StudyLesson>, moved: Set<String>) {
+        val pos = StudyRules.placeBetween(order.map { if (it.id in moved) null else it.pos }) ?: order.indices.map { (it + 1) * GAP }
+        order.forEachIndexed { i, l ->
+            if (pos[i] != l.pos) replica.commitLocal(EntityTypes.STUDY_LESSON, l.id, mapOf(StudyLessonFields.POS to pos[i].fv()))
+        }
     }
 
     /** Study fixes: a new module named [name] with its first lessons from [text], at the course's end. */

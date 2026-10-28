@@ -6330,6 +6330,16 @@ final class CoreModel {
 
     func moveStudyLesson(_ id: String, module: String) { MekaHaptics.light(); run { _ = try await $0.moveStudyLesson(id: id, module: module) } }
 
+    /// Drag to reorder (2026-10-28): puts a lesson at `index` among its module's other lessons (0 = first).
+    func placeStudyLesson(_ id: String, index: Int) {
+        MekaHaptics.tick(); run { _ = try await $0.placeStudyLesson(id: id, index: Int32(index)) }
+    }
+
+    /// Drag to reorder: puts a module at `index` among the course's other modules (0 = first).
+    func placeStudyModule(_ courseId: String, module: String, index: Int) {
+        MekaHaptics.tick(); run { _ = try await $0.placeStudyModule(courseId: courseId, module: module, index: Int32(index)) }
+    }
+
     func renameStudyModule(_ courseId: String, module: String, _ text: String) {
         MekaHaptics.light(); run { _ = try await $0.renameStudyModule(courseId: courseId, module: module, text: text) }
     }

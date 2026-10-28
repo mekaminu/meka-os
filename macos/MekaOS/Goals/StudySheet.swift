@@ -170,6 +170,10 @@ struct StudySheet: View {
     @State private var selecting: Set<String>?
     @State private var picking: [String]?
     @State private var pickDate = Date()
+    /// Drag to reorder (2026-10-28): the lesson id or module key a drag is over (it tints raised).
+    @State private var dropOn: String?
+    private static let lessonDrag = "study-lesson:"
+    private static let moduleDrag = "study-module:"
 
     /// What a Delete confirm is about: a lesson (its id), a module (its name) or the course; [question] is the core's line.
     struct StudyAsk: Identifiable, Equatable {
@@ -303,12 +307,13 @@ struct StudySheet: View {
                         .padding(.top, MekaSpace.xs)
                 }
                 let names = c.modules.map { $0.name }
-                ForEach(c.modules, id: \.key) { m in
-                    module(m, open: opened[m.key] ?? (m.key == firstOpen), names: names)
+                let keys = c.modules.map { $0.key }
+                ForEach(Array(c.modules.enumerated()), id: \.element.key) { i, m in
+                    module(m, open: opened[m.key] ?? (m.key == firstOpen), names: names, index: i, keys: keys)
                 }
                 addModuleRow
                 if !c.deleted.isEmpty { deletedSection(c.deleted) }
-                Text(StudyRules.shared.NOTE + " Right-click a lesson or a module to rename, move or delete it.")
+                Text(StudyRules.shared.NOTE + " Right-click a lesson or a module to rename, move or delete it; drag one onto another to change the order.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, MekaSpace.m)
@@ -598,7 +603,7 @@ struct StudySheet: View {
     }
 
     @ViewBuilder
-    private func module(_ m: StudyModule, open: Bool, names: [String]) -> some View {
+    private func module(_ m: StudyModule, open: Bool, names: [String], index: Int, keys: [String]) -> some View {
         let done = m.lessons.filter { isDone($0) }.count
         let count = StudyRules.shared.moduleCount(done: Int32(done), total: Int32(m.lessons.count))
         let allDone = done == m.lessons.count
@@ -615,15 +620,30 @@ struct StudySheet: View {
             }
             .padding(.horizontal, MekaSpace.m)
             .padding(.vertical, MekaSpace.xs)
-            .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .background(dropOn == m.key ? palette.surfaceRaised : palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: dropOn == m.key)
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
         .padding(.top, MekaSpace.xs)
         .accessibilityLabel("\(m.name), \(count)")
+        // Drag to reorder (2026-10-28): drop a module's head onto another's; it takes that module's place.
+        .draggable(Self.moduleDrag + m.key)
+        .dropDestination(for: String.self) { items, _ in
+            guard let item = items.first, item.hasPrefix(Self.moduleDrag) else { return false }
+            let dragged = String(item.dropFirst(Self.moduleDrag.count))
+            guard dragged != m.key, let j = keys.firstIndex(of: dragged) else { return false }
+            model.placeStudyModule(courseId, module: names[j], index: index)
+            return true
+        } isTargeted: { on in dropOn = on ? m.key : (dropOn == m.key ? nil : dropOn) }
         .contextMenu {
             let name = m.name
             let n = m.lessons.count
+            if keys.count > 1 {
+                Button(StudyRules.shared.MOVE_UP) { model.placeStudyModule(courseId, module: name, index: index - 1) }.disabled(index == 0)
+                Button(StudyRules.shared.MOVE_DOWN) { model.placeStudyModule(courseId, module: name, index: index + 1) }.disabled(index >= keys.count - 1)
+                Divider()
+            }
             Button("\(StudyRules.shared.RENAME)…") { renameText = name; renameId = nil; renameModule = name }
             Divider()
             Button("\(StudyRules.shared.DELETE_MODULE)…") {
@@ -637,8 +657,9 @@ struct StudySheet: View {
             }
         }
         if open {
-            ForEach(m.lessons, id: \.id) { l in
-                lesson(l, module: m.name, names: names)
+            let ids = m.lessons.map { $0.id }
+            ForEach(Array(m.lessons.enumerated()), id: \.element.id) { i, l in
+                lesson(l, module: m.name, names: names, index: i, ids: ids)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 if renameId == l.id {
                     renameField("Rename \(l.title)") { text in
@@ -690,7 +711,7 @@ struct StudySheet: View {
             .transition(.opacity)
     }
 
-    private func lesson(_ l: StudyLessonRow, module: String, names: [String]) -> some View {
+    private func lesson(_ l: StudyLessonRow, module: String, names: [String], index: Int, ids: [String]) -> some View {
         let done = isDone(l)
         let id = l.id
         let picked = selecting?.contains(id)
@@ -737,9 +758,20 @@ struct StudySheet: View {
             .animation(MekaMotion.appear(reduced: reduceMotion), value: done)
             .padding(.vertical, MekaSpace.xxs)
             .padding(.leading, MekaSpace.m)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(dropOn == id ? palette.surfaceRaised : .clear))
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: dropOn == id)
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
+        // Drag to reorder (2026-10-28): drop a lesson onto another in the same module; it takes that lesson's place.
+        .draggable(Self.lessonDrag + id)
+        .dropDestination(for: String.self) { items, _ in
+            guard let item = items.first, item.hasPrefix(Self.lessonDrag) else { return false }
+            let dragged = String(item.dropFirst(Self.lessonDrag.count))
+            guard dragged != id, ids.contains(dragged) else { return false }
+            model.placeStudyLesson(dragged, index: index)
+            return true
+        } isTargeted: { on in dropOn = on ? id : (dropOn == id ? nil : dropOn) }
         .accessibilityLabel(l.suggested ? l.spoken : (l.planned.map { "\(l.title), planned for \($0)" } ?? l.title))
         .accessibilityValue(picked.map { $0 ? "Selected" : "Not selected" } ?? (done ? "Done" : "Not done"))
         .contextMenu {
@@ -761,6 +793,10 @@ struct StudySheet: View {
                 }
             }
             Button(StudyRules.shared.SELECT) { picking = nil; selecting = [id] }
+            if ids.count > 1 {
+                Button(StudyRules.shared.MOVE_UP) { model.placeStudyLesson(id, index: index - 1) }.disabled(index == 0)
+                Button(StudyRules.shared.MOVE_DOWN) { model.placeStudyLesson(id, index: index + 1) }.disabled(index >= ids.count - 1)
+            }
             Button("\(StudyRules.shared.RENAME)…") { renameText = title; renameModule = nil; renameId = id }
             if names.count > 1 {
                 Menu(StudyRules.shared.MOVE_LABEL) {
