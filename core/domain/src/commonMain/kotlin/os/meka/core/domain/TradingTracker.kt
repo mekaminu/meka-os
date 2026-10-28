@@ -210,6 +210,8 @@ data class TradingView(
     val currency: TradingCurrencyView? = null,
     /** Obi's risk line under the equity card (mockup): what share of what he holds, the nearest liquidation, funding. */
     val risk: TradingRiskView? = null,
+    /** The equity card as the mockup (TradingEquity): label inside, value, the other currency, ranges; null until read. */
+    val equity: TradingEquityCard? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -635,8 +637,10 @@ object TradingTracker {
             unrealisedLine,
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
+        val curve = curveView(wallets, nowMs, ccy)
         return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, if (ccy.pounds) FOOT_GBP else FOOT, spoken,
-            tradesView(wallets, nowMs, cal, ccy), TradingAlerts.view(alerts), curveView(wallets, nowMs, ccy), TradingExportRules.view(wallets, nowMs, cal),
-            TradingReviewRules.view(wallets, nowMs, cal, ccy), TradingCurrencyRules.view(wallets, alerts.pounds, ccy))
+            tradesView(wallets, nowMs, cal, ccy), TradingAlerts.view(alerts), curve, TradingExportRules.view(wallets, nowMs, cal),
+            TradingReviewRules.view(wallets, nowMs, cal, ccy), TradingCurrencyRules.view(wallets, alerts.pounds, ccy),
+            equity = TradingEquity.card(wallets, read, equity, ccy, curve, last?.let { HealthRules.at(it, nowMs, cal) }))
     }
 }

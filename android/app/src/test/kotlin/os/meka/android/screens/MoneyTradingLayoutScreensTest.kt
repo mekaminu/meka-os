@@ -45,6 +45,8 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.TradingCoinStats
+import os.meka.core.domain.TradingCurvePoint
+import os.meka.core.domain.TradingEquity
 import os.meka.core.domain.TradingPosition
 import os.meka.core.domain.TradingWalletFields
 import os.meka.core.domain.MoneyTradingLayout
@@ -85,7 +87,7 @@ class MoneyTradingLayoutScreensTest {
      * What the server would have written: the address read (equity, a BTC long 5× about 17% from liquidation, funding
      * paid over the month) and one request from Kestrel waiting in the approvals inbox. All invented.
      */
-    private fun seedKestrelAndRisk(store: InMemoryReplicaStore) {
+    private fun seedKestrelAndRisk(store: InMemoryReplicaStore, equityCard: Boolean = false) {
         var k = 0
         val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
         val id = TradingTracker.walletId(ADDRESS)
@@ -96,16 +98,25 @@ class MoneyTradingLayoutScreensTest {
             TradingWalletFields.POSITIONS to TradingTracker.encode(listOf(TradingPosition("BTC", "0.1", "60000", "60000", "49800", -1_000, 5))).fv(),
             TradingWalletFields.TRADES to TradingTracker.encodeTrades(listOf(TradingCoinStats("BTC", 3, 2, 1, 4_200, 300, -3_820, 6_000, -1_800, 4_000, -1_800))).fv(),
             TradingWalletFields.TRADES_AT to now.fv(),
+        ) + if (!equityCard) emptyMap() else mapOf(
+            // The equity card as the mockup: the month's P&L, a fortnight's day ends and the ECB's rate (all invented).
+            TradingWalletFields.PNL_DAY to 1_200L.fv(), TradingWalletFields.PNL_WEEK to (-2_400L).fv(),
+            TradingWalletFields.PNL_MONTH to 47_000L.fv(), TradingWalletFields.PNL_ALL to 120_000L.fv(),
+            TradingWalletFields.CURVE to TradingTracker.encodeCurve((14 downTo 1).map { d ->
+                TradingCurvePoint(now.floorDiv(86_400_000L) - d, 600_000L + (14 - d) * 3_000L + (d % 3) * 2_000L, (14 - d) * 3_000L + (d % 3) * 2_000L)
+            }).fv(),
+            TradingWalletFields.CURVE_NOW to 47_000L.fv(), TradingWalletFields.GBP_PER_USD to 775_000L.fv(),
+            TradingWalletFields.FX_DAY to now.floorDiv(86_400_000L).fv(),
         ))
         ApprovalRules.requestFields(ApprovalKind.TRADE, "Kestrel", "Go long ETH 0.8 at 3,420", listOf("About £2,140", "Stop 3,330"),
             now - 5 * 60_000L, now + 40 * 60_000L)!!.let { server.commitLocal(EntityTypes.APPROVAL, ApprovalRules.entityId("Kestrel", "r1"), it) }
     }
 
-    private fun open(seed: Boolean = false): MekaCore {
+    private fun open(seed: Boolean = false, equityCard: Boolean = false): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, ThemeChoice.DARK)
         val store = InMemoryReplicaStore()
-        if (seed) seedKestrelAndRisk(store)
+        if (seed) seedKestrelAndRisk(store, equityCard)
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = store, transport = null,
             secureRandom = Random(43), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
@@ -240,5 +251,39 @@ class MoneyTradingLayoutScreensTest {
         pick(MoneyTab.TRADING)
         assertTrue(shows("money-trading-risk-card"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-risk"))
+    }
+
+    /**
+     * README item 5: once read, Trading leads with the equity card as the mockup — its label inside (no TRADING ·
+     * HYPERLIQUID above), the value with "≈ £" beside it, the month's change, its line, 1D · 1W · 1M — and the separate
+     * P&L card and the Dollars · Pounds row are gone. A range chip changes the line; a tap on "≈ £" shows pounds.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theEquityCardLeadsAsTheMockup() {
+        val core = open(seed = true, equityCard = true)
+        pick(MoneyTab.TRADING)
+        val c = core.moneyView.value.trading?.equity ?: fail("no equity card once the address is read")
+        assertTrue(showsText(c.label), "the card carries its own label")
+        if (showsText(TradingTracker.HEAD)) fail("TRADING · HYPERLIQUID still sits above the card")
+        assertTrue(shows("money-trading-other"), "the other currency sits beside the value")
+        val month = TradingEquity.range(c, TradingEquity.MONTH).change!!
+        assertTrue(showsText(month), "the month's change shows first: $month")
+        if (shows("money-curve-card")) fail("the P&L line still has a card of its own")
+        if (showsText("Dollars")) fail("the Dollars · Pounds row still sits on the card")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-equity"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-equity")
+        tap("money-trading-range-1W")
+        assertTrue(showsText(TradingEquity.range(c, TradingEquity.WEEK).change!!), "1W shows the week's change")
+        tap("money-trading-other")
+        repeat(40) { if (core.moneyView.value.trading?.equity?.total?.startsWith("£") != true) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+        assertTrue(core.moneyView.value.trading?.equity?.total?.startsWith("£") == true, "a tap on ≈ £ shows Trading in pounds")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theEquityCardOnTheOpenFold() {
+        open(seed = true, equityCard = true)
+        pick(MoneyTab.TRADING)
+        assertTrue(shows("money-trading-other"))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-equity"))
     }
 }

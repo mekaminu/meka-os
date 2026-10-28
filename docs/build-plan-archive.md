@@ -4542,3 +4542,20 @@ the mockup); `MoneyTiles` labels auto-size down to 10 sp. Mac: the same title ro
 brass-tinted in `upNextCardTitle`, the month centred, the chips over the rows. Help money.md (HelpIndex regenerated),
 motion catalogue row. Tests: MoneyHeaderTest, MoneyScreensTest, MekaCoreBridgeTests (testMoneyHeaderOnTheMac). No server
 change, no migration. Mac checked nightly.
+
+### Money redesign: Trading's equity card as the mockup (2026-10-28)
+
+README item 5, slice 1. Core `TradingEquity` (new file): `TradingEquityCard` (label "Hyperliquid · <label> 0x…" or
+"Hyperliquid · N accounts", total, `other` "≈ £…"/"≈ $…" in whole units with `swapKey` to the other currency, the
+ranges 1D · 1W · 1M each with its change "+$610.00 (7.8%) over the month" (share of the account at the range's start),
+up, and the curve's last 2 / 8 / all points, and the foot "All time … · updated …"), `range`, `chips`, `pct1`, `about`,
+`change`; built in `TradingTracker.view` as the new defaulted `TradingView.equity` (null until an address is read).
+`MoneyTradingLayout.showHead` / `showCurveCard`: TRADING · HYPERLIQUID and the separate P&L · LAST 30 DAYS card only
+before the first read; `info` now carries the currency line (the Dollars · Pounds row left the card) and drops the curve
+foot once the card carries the line. Fold: `TradingEquityCardBlock` (label + Read-only, value in `greeting` with the
+tappable "≈ £…" (tick, `setTradingAlert(currency, …)`), the change cross-fading, `WorthLine` for the range, range chips
+brass-tinted as Money's tabs, the grey foot); the range is `rememberSaveable` on the device. Mac: `tradingEquityCard`
+the same, `@State tradingRange`. The pnl rows, curve and currency views stay in `TradingView` (Ask, Today and tests use
+them). Help money.md (HelpIndex regenerated), motion catalogue row. Tests: TradingEquityTest, MoneyTradingLayoutScreensTest
+(theEquityCardLeadsAsTheMockup, theEquityCardOnTheOpenFold), MekaCoreBridgeTests (testTradingEquityCardOnTheMac). No
+server change, no migration. Mac checked nightly.

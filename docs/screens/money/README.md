@@ -34,8 +34,14 @@ Accounts are his features the mockup predates.
    the category rows, with "All N ›" (no WHERE IT WENT label when the chips are there); the tiles' labels are whole
    ("Bills to come", stepping down on the closed Fold, never "Bills to").
 
+**Item 5, slice 1 (2026-10-28, both apps):** the equity card leads as the mockup — "Hyperliquid · Main 0x…" and
+Read-only inside it, the value large with "≈ £…" beside it (a tap switches the currency), the change over 1D · 1W · 1M
+(the month first) and its P&L line inside the card, "All time … · updated …" under the chips. The separate P&L card and
+the Dollars · Pounds row left the page (what the currency means is behind the foot's ⓘ). No 3M chip: the server keeps a
+month of day ends. App shots: `cover-dark-trading-equity`, `inner-dark-trading-equity`.
+
 **Still to do (next Money slices):**
-5. Trading: the mockup leads with the equity card (value, change, chart, 1D/1W/1M/3M), 2×2 tiles, Obi's line, positions
+5. Trading (rest): the mockup leads with the equity card (value, change, chart, 1D/1W/1M/3M), 2×2 tiles, Obi's line, positions
    and Kestrel; the app's shot with no address leads with the set-up card (Dollars/Pounds, addresses, a long alerts
    line). Check the shot with an address in, and fold the alerts line into a row with a sheet.
 6. Plan: OBI'S MONEY CHECK as the mockup's brass-bordered card with its label inside, the yearly total large, and the

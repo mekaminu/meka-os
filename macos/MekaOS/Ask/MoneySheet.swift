@@ -62,6 +62,8 @@ struct MoneySheet: View {
     @State private var tradingText = ""
     /// Layout rules on Trading (d): every open position, not only the first five.
     @State private var tradingAll = false
+    /// The equity card's range (1D · 1W · 1M): this Mac's choice, the month first as the mockup.
+    @State private var tradingRange: String = TradingEquity.shared.DEFAULT
     @State private var exporting = false
     /// Layout rule (c): the ⓘ whose popover is open ("review" or "foot").
     @State private var infoOpen: String? = nil
@@ -2280,7 +2282,10 @@ struct MoneySheet: View {
     /// Kestrel, trades, addresses, alerts and the export on the right; the foot under both (MoneyColumns, as the Fold).
     private func trading(_ t: TradingView, _ col: MoneyColumn) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            if on("trading-head", col) { Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            // The equity card as the mockup carries its own label: TRADING · HYPERLIQUID only before the first read.
+            if MoneyTradingLayout.shared.showHead(t: t), on("trading-head", col) {
+                Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
             if on("trading", col) { tradingEquity(t).moneyCard(palette) }
             if let r = t.risk, on("trading-risk", col) { tradingRisk(r).moneyCard(palette) }
             if MoneyTradingLayout.shared.hasPositions(t: t), on("trading-positions", col) {
@@ -2291,7 +2296,7 @@ struct MoneySheet: View {
                 tradingHead(k.head)
                 tradingKestrel(k).moneyCard(palette)
             }
-            if let c = t.curve, on("trading-curve", col) {
+            if let c = t.curve, MoneyTradingLayout.shared.showCurveCard(t: t), on("trading-curve", col) {
                 tradingHead(c.head)
                 tradingCurve(c).moneyCard(palette)
             }
@@ -2377,7 +2382,74 @@ struct MoneySheet: View {
 
     /// The equity card: the total and the mockup's Read-only mark, its other currency and when it was read,
     /// Dollars · Pounds, then today, the week, the month and all time (up in brass).
+    @ViewBuilder
     private func tradingEquity(_ t: TradingView) -> some View {
+        if let c = t.equity {
+            tradingEquityCard(c)
+        } else {
+            tradingEquityOld(t)
+        }
+    }
+
+    /// The equity card as the mockup (README item 5): "Hyperliquid · Main 0x…" with the Read-only mark, the value large
+    /// with "≈ £…" beside it (a click shows Trading in that currency, both devices), the range's change (up in brass),
+    /// its P&L line, the 1D · 1W · 1M chips (the chosen one brass-tinted) and one grey line: all time and when it was read.
+    private func tradingEquityCard(_ c: TradingEquityCard) -> some View {
+        let r = TradingEquity.shared.range(c: c, key: tradingRange)
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(alignment: .center) {
+                Text(c.label).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1).truncationMode(.middle)
+                Spacer()
+                readOnlyMark
+            }
+            HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
+                Text(c.total).font(MekaType.greeting).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    .accessibilityLabel(c.spoken)
+                if let other = c.other, let swap = c.swapKey {
+                    Button {
+                        MekaHaptics.tick()
+                        let kind = TradingCurrencyRules.shared.KIND
+                        let key = swap
+                        Task { said = await model.setTradingAlert(kind: kind, key: key) }
+                    } label: {
+                        Text(other).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel(c.otherSpoken ?? other)
+                }
+            }
+            if let ch = r.change {
+                Text(ch).font(MekaType.body)
+                    .foregroundStyle(r.up?.boolValue == true ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity)
+            }
+            if r.points.count >= 2 {
+                MoneyWorthLine(points: r.points, palette: palette, reduced: reduceMotion, dots: false).id(r.key)
+                    .transition(.opacity)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(TradingEquity.shared.chips(c: c, key: tradingRange), id: \.key) { ch in
+                    Button {
+                        guard !ch.on else { return }
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { tradingRange = ch.key }
+                    } label: {
+                        Text(ch.label).font(MekaType.caption.weight(.semibold))
+                            .foregroundStyle(ch.on ? palette.accent : palette.textSecondary)
+                            .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                            .background(Capsule().fill(ch.on ? palette.accent.opacity(0.16) : palette.surfaceRaised))
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel(ch.spoken)
+                    .accessibilityAddTraits(ch.on ? .isSelected : [])
+                }
+            }
+            if let f = c.foot { Text(f).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: r.change)
+    }
+
+    private func tradingEquityOld(_ t: TradingView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let total = t.total {
                 HStack(alignment: .top) {

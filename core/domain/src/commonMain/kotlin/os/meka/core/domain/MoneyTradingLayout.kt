@@ -47,6 +47,16 @@ object MoneyTradingLayout {
     /** What the equity card says while no address has been read yet (so the card is never empty); null otherwise. */
     fun waiting(t: TradingView): String? = TradingTracker.WAITING.takeIf { t.total == null && t.empty == null }
 
+    /**
+     * The equity card as the mockup (README item 5): once an address is read the card carries its own label
+     * ("Hyperliquid · Main 0x…"), so the TRADING · HYPERLIQUID label above it goes, and the P&L line sits inside it
+     * rather than in a card of its own. Before the first read the label and the set-up card stay as they were.
+     */
+    fun showHead(t: TradingView): Boolean = t.equity == null
+
+    /** Whether the separate P&L · LAST 30 DAYS card shows: only while the equity card can't carry the line. */
+    fun showCurveCard(t: TradingView): Boolean = t.curve != null && t.equity == null
+
     /** Whether the positions card shows at all (with no address yet, or none read, it doesn't). */
     fun hasPositions(t: TradingView): Boolean = t.positions.isNotEmpty() || t.unrealisedLine != null
 
@@ -56,7 +66,9 @@ object MoneyTradingLayout {
      */
     fun info(t: TradingView): List<String> = listOfNotNull(
         t.foot,
-        t.curve?.foot,
+        // The equity card (mockup): the Dollars · Pounds row left the page, so what the currency means is said here.
+        t.currency?.line?.takeIf { t.equity != null },
+        t.curve?.foot?.takeIf { t.equity == null },
         t.trades?.foot,
         t.review?.foot,
     ).distinct()

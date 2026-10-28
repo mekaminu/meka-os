@@ -157,6 +157,9 @@ import os.meka.core.domain.TradingReviewView
 import os.meka.core.domain.TradingTradesView
 import os.meka.core.domain.TradingCurrencyView
 import os.meka.core.domain.TradingView
+import os.meka.core.domain.TradingCurrencyRules
+import os.meka.core.domain.TradingEquityCard
+import os.meka.core.domain.TradingEquity
 import os.meka.core.facade.MekaCore
 
 /**
@@ -403,19 +406,24 @@ fun MoneyPane(
     // Layout rules on Trading (2026-10-28): the tracker as cards under their labels, five positions then See all, and
     // one foot line whose ⓘ says where the figures come from (MoneyTradingLayout).
     var tradingAll by rememberSaveable { mutableStateOf(false) }
+    // The equity card's range (1D · 1W · 1M): this device's choice, the month first as the mockup.
+    var tradingRange by rememberSaveable { mutableStateOf(TradingEquity.DEFAULT) }
     // Trading's Kestrel card (mockup): what Kestrel asked through the approvals inbox; null until it has asked.
     val kestrel by core.tradingKestrel.collectAsState()
     val tradingItems: MoneyItems.(TradingView) -> Unit = { t ->
         val onAlert: (String, String) -> Unit = { kind, key ->
             scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
         }
-        item(key = "trading-head") {
-            Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+        // The equity card as the mockup carries its own label, so TRADING · HYPERLIQUID shows only before the first read.
+        if (MoneyTradingLayout.showHead(t)) {
+            item(key = "trading-head") {
+                Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
         }
         item(key = "trading") {
             MoneyCard(Modifier.animateItem().appear(rememberAppearance(2)), tag = "money-trading-card") {
-                TradingEquityBlock(t, onAlert)
+                TradingEquityBlock(t, tradingRange, { k -> haptics.tick(); tradingRange = k }) { kind, k -> haptics.tick(); onAlert(kind, k) }
             }
         }
         // Obi's risk line (mockup): the share of what he holds, the nearest liquidation and funding, under equity.
@@ -447,7 +455,7 @@ fun MoneyPane(
                 }
             }
         }
-        t.curve?.let { c ->
+        t.curve?.takeIf { MoneyTradingLayout.showCurveCard(t) }?.let { c ->
             item(key = "trading-curve-head") {
                 Text(c.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -1425,8 +1433,14 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
  * when it was read, Dollars · Pounds, then today, the week, the month and all time (up in brass).
  */
 @Composable
-private fun TradingEquityBlock(t: TradingView, onAlert: (String, String) -> Unit) {
+private fun TradingEquityBlock(t: TradingView, range: String, onRange: (String) -> Unit, onAlert: (String, String) -> Unit) {
     val reduced = Meka.reducedMotion
+    // Once read, the card as the mockup (TradingEquity): label inside, the value, the other currency, the range's line.
+    val card = t.equity
+    if (card != null) {
+        TradingEquityCardBlock(card, range, onRange) { key -> onAlert(TradingCurrencyRules.KIND, key) }
+        return
+    }
     t.total?.let { total ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = t.spoken },
@@ -1459,6 +1473,64 @@ private fun TradingEquityBlock(t: TradingView, onAlert: (String, String) -> Unit
                 Text(a, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textPrimary)
             }
         }
+    }
+}
+
+/**
+ * The equity card as the mockup (README item 5): "Hyperliquid · Main 0x…" with the Read-only mark, the value large with
+ * "≈ £…" beside it (a tap shows Trading in that currency, both devices), the range's change (up in brass), its P&L line,
+ * the 1D · 1W · 1M chips (the chosen one brass-tinted, as Money's tabs) and one grey line: all time and when it was read.
+ */
+@Composable
+private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange: (String) -> Unit, onSwap: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val r = TradingEquity.range(c, chosen)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(c.label, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).testTag("money-trading-label"))
+            ReadOnlyMark()
+        }
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Crossfade(c.total, animationSpec = MekaMotion.appear(reduced), label = "trading-total") { l ->
+                Text(l, style = MekaType.greeting, color = Meka.colors.textPrimary, maxLines = 1,
+                    modifier = Modifier.semantics { contentDescription = c.spoken })
+            }
+            val other = c.other
+            val swap = c.swapKey
+            if (other != null && swap != null) {
+                Text(other, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 1,
+                    modifier = Modifier.padding(bottom = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { onSwap(swap) }
+                        .semantics { contentDescription = c.otherSpoken ?: other }
+                        .testTag("money-trading-other").padding(horizontal = MekaSpace.xxs))
+            }
+        }
+        r.change?.let { ch ->
+            Crossfade(ch, animationSpec = MekaMotion.appear(reduced), label = "trading-change") { l ->
+                Text(l, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textSecondary,
+                    modifier = Modifier.testTag("money-trading-change"))
+            }
+        }
+        if (r.points.size >= 2) {
+            Crossfade(r.key, animationSpec = MekaMotion.appear(reduced), label = "trading-line") { _ -> WorthLine(r.points, dots = false) }
+        }
+        Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            TradingEquity.chips(c, chosen).forEach { ch -> key(ch.key) {
+                val fill by animateColorAsState(if (ch.on) Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surfaceRaised) else Meka.colors.surfaceRaised,
+                    MekaMotion.appear(reduced), label = "trading-range-${ch.key}")
+                val ink by animateColorAsState(if (ch.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-range-ink-${ch.key}")
+                Box(Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.RadioButton) { if (!ch.on) onRange(ch.key) }
+                    .clearAndSetSemantics { contentDescription = ch.spoken; selected = ch.on; role = Role.RadioButton }
+                    .testTag("money-trading-range-${ch.key}"), contentAlignment = Alignment.Center) {
+                    Text(ch.label, style = MekaType.captionStrong, color = ink,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+                }
+            } }
+        }
+        c.foot?.let { f -> Text(f, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 

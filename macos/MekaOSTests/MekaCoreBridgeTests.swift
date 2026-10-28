@@ -4157,6 +4157,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTradingLayout.shared.ADD_TITLE, "Add an address")
         XCTAssertTrue(MoneyTradingLayout.shared.ADD_SHEET_LINE.contains("never a key"))
     }
+    /// Trading's equity card as the mockup reaches the Mac: the ranges 1D · 1W · 1M, the month first, its shares.
+    func testTradingEquityCardOnTheMac() {
+        XCTAssertEqual(TradingEquity.shared.KEYS, ["1D", "1W", "1M"])
+        XCTAssertEqual(TradingEquity.shared.DEFAULT, "1M")
+        XCTAssertEqual(TradingEquity.shared.pct1(share: 0.0779), "7.8%")
+        XCTAssertEqual(TradingEquity.shared.about(minor: 651_234, pounds: true), "≈ £6,512")
+        XCTAssertEqual(TradingEquity.shared.LABEL, "Hyperliquid")
+    }
     /// Money → Trading's Obi risk line and Kestrel card reach the Mac: nothing to say without an account read.
     func testTradingRiskAndKestrelOnTheMac() {
         XCTAssertNil(TradingRisk.shared.view(wallets: [], worth: nil, ccy: TradingCcy.companion.USD, near: 0.1))
