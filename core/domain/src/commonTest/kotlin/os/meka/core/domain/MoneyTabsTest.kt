@@ -56,7 +56,7 @@ class MoneyTabsTest {
         assertEquals("From your banks through Lunch Flow. Worked out on this device.", info.first())
         assertTrue(info.last() == MoneyRules.FOOT)
         assertEquals("Read-only · not financial advice", MoneyTabs.FOOT_SHORT)
-        // No month, no foot; Trading has no foot of its own.
+        // No month, no foot; Trading's foot needs the tracker (no address view here).
         assertTrue(MoneySection.SPEND_FOOT !in MoneyTabs.sections(MoneyTab.SPENDING, open(m = null)))
         assertNull(MoneyTabs.info(MoneyTab.TRADING, v))
     }

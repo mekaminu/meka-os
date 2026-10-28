@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -134,6 +135,7 @@ import os.meka.core.domain.MoneyWorthView
 import os.meka.core.domain.MoneyGoals
 import os.meka.core.domain.MoneyWorthOther
 import os.meka.core.domain.MoneyWorthOtherRow
+import os.meka.core.domain.MoneyTradingLayout
 import os.meka.core.domain.TradingAlertsView
 import os.meka.core.domain.TradingCurveView
 import os.meka.core.domain.TradingExportRules
@@ -379,18 +381,96 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
     }
 
+    // Layout rules on Trading (2026-10-28): the tracker as cards under their labels, five positions then See all, and
+    // one foot line whose ⓘ says where the figures come from (MoneyTradingLayout).
+    var tradingAll by rememberSaveable { mutableStateOf(false) }
     val tradingItems: LazyListScope.(TradingView) -> Unit = { t ->
+        val onAlert: (String, String) -> Unit = { kind, key ->
+            scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
+        }
         item(key = "trading-head") {
             Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.m))
         }
         item(key = "trading") {
-            TradingBlock(t, Modifier.animateItem().appear(rememberAppearance(2)),
-                onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
-                onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } },
-                onAlert = { kind, key ->
-                    scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
-                }, exporting = exporting, onExport = export)
+            MoneyCard(Modifier.animateItem().appear(rememberAppearance(2)), tag = "money-trading-card") {
+                TradingEquityBlock(t, onAlert)
+            }
+        }
+        if (MoneyTradingLayout.hasPositions(t)) {
+            item(key = "trading-positions-head") {
+                Text(MoneyTradingLayout.POSITIONS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-positions") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(3)), tag = "money-positions-card") {
+                    TradingPositionsBlock(t, tradingAll) { haptics.tick(); tradingAll = !tradingAll }
+                }
+            }
+        }
+        t.curve?.let { c ->
+            item(key = "trading-curve-head") {
+                Text(c.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-curve") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(3)), tag = "money-curve-card") { CurveBlock(c) }
+            }
+        }
+        t.trades?.let { tr ->
+            item(key = "trading-trades-head") {
+                Text(tr.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-trades") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-trades-card") { TradesBlock(tr) }
+            }
+        }
+        t.review?.let { r ->
+            item(key = "trading-review-head") {
+                Text(r.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-review") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-trading-review-card") { ReviewBlock(r) }
+            }
+        }
+        item(key = "trading-addresses-head") {
+            Text(MoneyTradingLayout.ADDRESSES_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+        }
+        item(key = "trading-addresses") {
+            MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-addresses-card") {
+                TradingAddressesBlock(t,
+                    onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } })
+            }
+        }
+        t.alerts?.let { a ->
+            item(key = "trading-alerts-head") {
+                Text(a.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-alerts") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-trading-alerts-card") { AlertsBlock(a, onAlert) }
+            }
+        }
+        t.export?.let { e ->
+            item(key = "trading-export-head") {
+                Text(e.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-export") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-trading-export-card") {
+                    ExportBlock(e, exporting, export, inCard = true)
+                }
+            }
+        }
+        // Layout rule (c): Trading says "read-only · not trading advice" once, at its foot; the tracker's lines behind ⓘ.
+        item(key = "trading-foot") {
+            MoneyTabFoot(Modifier.animateItem(), text = MoneyTradingLayout.FOOT_SHORT) {
+                haptics.tick(); MoneyTabs.info(MoneyTab.TRADING, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
+            }
         }
     }
 
@@ -1267,37 +1347,66 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
 }
 
 /**
- * Trading tracker: equity and when it was read, P&L for today, the week, the month and all time (up in brass), the open
- * positions nearest liquidation first (lit within 10%), each address with Remove, and a field for a public address.
+ * Layout rules on Trading: the equity card — the total and a Read-only mark (mockup), what it is in the other currency and
+ * when it was read, Dollars · Pounds, then today, the week, the month and all time (up in brass).
  */
 @Composable
-private fun TradingBlock(
-    t: TradingView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit, onAlert: (String, String) -> Unit,
-    exporting: Boolean = false, onExport: (String) -> Unit = {},
-) {
+private fun TradingEquityBlock(t: TradingView, onAlert: (String, String) -> Unit) {
     val reduced = Meka.reducedMotion
-    var adding by rememberSaveable { mutableStateOf("") }
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        t.total?.let { total ->
-            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = t.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+    t.total?.let { total ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = t.spoken },
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Crossfade(total, animationSpec = MekaMotion.appear(reduced), label = "trading-total") { l ->
                     Text(l, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
                 }
                 t.totalLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
+            ReadOnlyMark()
         }
-        t.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        t.currency?.let { c -> CurrencyRow(c, onAlert) }
-        t.pnl.forEach { r ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(r.label, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-                Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "trading-pnl-${r.label}") { a ->
-                    Text(a, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textPrimary)
-                }
+    }
+    t.empty?.let { e ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            ReadOnlyMark()
+        }
+    }
+    MoneyTradingLayout.waiting(t)?.let { l ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            ReadOnlyMark()
+        }
+    }
+    t.currency?.let { c -> CurrencyRow(c, onAlert) }
+    t.pnl.forEach { r ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(r.label, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "trading-pnl-${r.label}") { a ->
+                Text(a, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textPrimary)
             }
         }
-        t.unrealisedLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        t.positions.forEach { p -> key(p.id) {
+    }
+}
+
+/** The mockup's small "Read-only" mark on the equity card: nothing on this tab can trade. */
+@Composable
+private fun ReadOnlyMark() {
+    Text(MoneyTradingLayout.READ_ONLY, style = MekaType.caption, color = Meka.colors.textSecondary,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .semantics { contentDescription = MoneyTradingLayout.READ_ONLY_SPOKEN }
+            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs).testTag("money-trading-readonly"))
+}
+
+/**
+ * OPEN POSITIONS as one card: how many and what's not yet taken, then the positions nearest liquidation first (lit within
+ * his alert's distance), five, then "See all N ›" (layout rule (d)); the list opens and closes on the expand spring.
+ */
+@Composable
+private fun TradingPositionsBlock(t: TradingView, all: Boolean, onMore: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    t.unrealisedLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+    Column(Modifier.fillMaxWidth().animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        MoneyTradingLayout.positions(t, all).forEach { p -> key(p.id) {
             val c by animateColorAsState(if (p.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-liq-${p.id}")
             Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = p.spoken },
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -1309,25 +1418,30 @@ private fun TradingBlock(
                 p.liquidationLine?.let { l -> Text(l, style = MekaType.caption, color = c) }
             }
         } }
-        t.curve?.let { c -> CurveBlock(c) }
-        t.trades?.let { tr -> TradesBlock(tr) }
-        t.review?.let { r -> ReviewBlock(r) }
-        t.wallets.forEach { w ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
-                    Text(w.name, style = MekaType.body, color = Meka.colors.textPrimary)
-                    Text(w.line, style = MekaType.caption, color = if (w.lit) Meka.colors.accent else Meka.colors.textSecondary)
-                }
-                Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(w.id) }
-                        .semantics { contentDescription = "Stop following ${w.name}" }.minTouch().padding(MekaSpace.xs))
-            }
-        }
-        Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
-        t.alerts?.let { a -> AlertsBlock(a, onAlert) }
-        t.export?.let { e -> ExportBlock(e, exporting, onExport) }
-        Text(t.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
+    MoneyTradingLayout.more(t, all)?.let { m ->
+        Text(m, style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMore)
+                .minTouch().padding(vertical = MekaSpace.xs).testTag("money-positions-more"))
+    }
+}
+
+/** YOUR ADDRESSES as one card: each public address with what was read and Remove, and the field to add one. */
+@Composable
+private fun TradingAddressesBlock(t: TradingView, onAdd: (String) -> Unit, onRemove: (String) -> Unit) {
+    var adding by rememberSaveable { mutableStateOf("") }
+    t.wallets.forEach { w -> key(w.id) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
+                Text(w.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                Text(w.line, style = MekaType.caption, color = if (w.lit) Meka.colors.accent else Meka.colors.textSecondary)
+            }
+            Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(w.id) }
+                    .semantics { contentDescription = "Stop following ${w.name}" }.minTouch().padding(MekaSpace.xs))
+        }
+    } }
+    Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
 }
 
 /**
@@ -1362,8 +1476,8 @@ private fun CurrencyRow(c: TradingCurrencyView, onPick: (String, String) -> Unit
 @Composable
 private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(a.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+    // Layout rules on Trading: the card's label (a.head) sits above the card.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Crossfade(a.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-line") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
@@ -1389,10 +1503,11 @@ private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit)
  * the line says so, then the system's save sheet asks where the CSV goes.
  */
 @Composable
-private fun ExportBlock(e: TradingExportView, exporting: Boolean, onExport: (String) -> Unit) {
+private fun ExportBlock(e: TradingExportView, exporting: Boolean, onExport: (String) -> Unit, inCard: Boolean = false) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(e.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+    // Layout rules on Trading: in its card the label (e.head) sits above the card; the side hustle's keeps its own.
+    Column(Modifier.fillMaxWidth().padding(top = if (inCard) 0.dp else MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        if (!inCard) Text(e.head, style = MekaType.caption, color = Meka.colors.textTertiary)
         Crossfade(if (exporting) TradingExportRules.WORKING else e.line, animationSpec = MekaMotion.appear(reduced), label = "trading-export-line") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
@@ -1416,15 +1531,14 @@ private fun ExportBlock(e: TradingExportView, exporting: Boolean, onExport: (Str
 @Composable
 private fun CurveBlock(c: TradingCurveView) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(c.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+    // Layout rules on Trading: the label sits above the card; how to read the line is behind the tab's foot ⓘ.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Crossfade(c.summary, animationSpec = MekaMotion.appear(reduced), label = "trading-curve-summary") { l ->
             Text(l, style = MekaType.body, color = if (c.up == true) Meka.colors.accent else Meka.colors.textPrimary,
                 modifier = Modifier.semantics { contentDescription = c.spoken })
         }
         c.rangeLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
         WorthLine(c.points, dots = false)
-        Text(c.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -1435,8 +1549,8 @@ private fun CurveBlock(c: TradingCurveView) {
 @Composable
 private fun TradesBlock(tr: TradingTradesView) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(tr.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+    // Layout rules on Trading: the label sits above the card; how trades are counted is behind the tab's foot ⓘ.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         tr.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
         tr.summary?.let { s ->
             Crossfade(s, animationSpec = MekaMotion.appear(reduced), label = "trades-summary") { l ->
@@ -1467,7 +1581,6 @@ private fun TradesBlock(tr: TradingTradesView) {
             }
         } }
         tr.moreLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Text(tr.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -1475,9 +1588,9 @@ private fun TradesBlock(tr: TradingTradesView) {
 @Composable
 private fun ReviewBlock(r: TradingReviewView) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m).semantics(mergeDescendants = true) { contentDescription = r.spoken },
+    // Layout rules on Trading: the label sits above the card; what the month covers is behind the tab's foot ⓘ.
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken },
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(r.head, style = MekaType.caption, color = Meka.colors.textTertiary)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(r.summary.substringBefore(" · "), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
             r.amount?.let { a ->
@@ -1492,7 +1605,6 @@ private fun ReviewBlock(r: TradingReviewView) {
                 lines.forEach { line -> Text(line, style = MekaType.body, color = Meka.colors.textSecondary) }
             }
         }
-        Text(r.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

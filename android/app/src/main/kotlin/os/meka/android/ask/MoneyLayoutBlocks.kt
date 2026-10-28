@@ -85,10 +85,10 @@ internal fun MoneyReviewCard(rv: MoneyMonthReviewView, modifier: Modifier = Modi
 
 /** The tab's one foot line, "Read-only · not financial advice", with its ⓘ. */
 @Composable
-internal fun MoneyTabFoot(modifier: Modifier = Modifier, onInfo: () -> Unit) {
+internal fun MoneyTabFoot(modifier: Modifier = Modifier, text: String = MoneyTabs.FOOT_SHORT, onInfo: () -> Unit) {
     Row(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(MoneyTabs.FOOT_SHORT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        Text(text, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
         MoneyInfoButton(MoneyTabs.INFO_SPOKEN, "money-foot-info", onInfo)
     }
 }

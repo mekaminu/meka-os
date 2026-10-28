@@ -60,6 +60,8 @@ struct MoneySheet: View {
     @State private var funText = ""
     @State private var capText = ""
     @State private var tradingText = ""
+    /// Layout rules on Trading (d): every open position, not only the first five.
+    @State private var tradingAll = false
     @State private var exporting = false
     /// Layout rule (c): the ⓘ whose popover is open ("review" or "foot").
     @State private var infoOpen: String? = nil
@@ -2203,21 +2205,86 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.refreshing)
     }
 
-    /// Trading tracker: TRADING · HYPERLIQUID — equity and when it was read, P&L (up in brass), open positions nearest
-    /// liquidation first (lit within 10%), each public address with Remove, and a field to add one. Read-only.
+    /// Trading tracker: TRADING · HYPERLIQUID, read-only from his public addresses. Layout rules on Trading (2026-10-28,
+    /// MoneyTradingLayout): cards under their labels — equity (the total, a Read-only mark, Dollars · Pounds, the P&L),
+    /// OPEN POSITIONS (five, then See all), the P&L line, YOUR TRADES, the month in review, YOUR ADDRESSES, ALERTS and
+    /// EXPORT FOR TAX — and one "Read-only · not trading advice" foot whose ⓘ says where the figures come from.
     private func trading(_ t: TradingView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            if let total = t.total {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(total).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
-                    if let l = t.totalLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            tradingEquity(t).moneyCard(palette)
+            if MoneyTradingLayout.shared.hasPositions(t: t) {
+                tradingHead(MoneyTradingLayout.shared.POSITIONS_HEAD)
+                tradingPositions(t).moneyCard(palette)
+            }
+            if let c = t.curve {
+                tradingHead(c.head)
+                tradingCurve(c).moneyCard(palette)
+            }
+            if let tr = t.trades {
+                tradingHead(tr.head)
+                trades(tr).moneyCard(palette)
+            }
+            if let r = t.review {
+                tradingHead(r.head)
+                tradingReview(r).moneyCard(palette)
+            }
+            Group {
+                tradingHead(MoneyTradingLayout.shared.ADDRESSES_HEAD)
+                tradingAddresses(t).moneyCard(palette)
+                if let a = t.alerts {
+                    tradingHead(a.head)
+                    tradingAlerts(a).moneyCard(palette)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(t.spoken)
+                if let e = t.export {
+                    tradingHead(e.head)
+                    tradingExport(e, inCard: true).moneyCard(palette)
+                }
+            }
+            HStack(spacing: MekaSpace.xs) {
+                Text(MoneyTradingLayout.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Spacer()
+                infoButton("foot-trading", title: MoneyTabs.shared.INFO_TITLE, lines: MoneyTradingLayout.shared.info(t: t))
+            }
+            .padding(.top, MekaSpace.m)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
+    }
+
+    private func tradingHead(_ head: String) -> some View {
+        Text(head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+    }
+
+    /// The equity card: the total and the mockup's Read-only mark, its other currency and when it was read,
+    /// Dollars · Pounds, then today, the week, the month and all time (up in brass).
+    private func tradingEquity(_ t: TradingView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let total = t.total {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(total).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                        if let l = t.totalLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(t.spoken)
+                    Spacer()
+                    readOnlyMark
+                }
             }
             if let e = t.empty {
-                Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top) {
+                    Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    readOnlyMark
+                }
+            }
+            if let w = MoneyTradingLayout.shared.waiting(t: t) {
+                HStack(alignment: .top) {
+                    Text(w).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    readOnlyMark
+                }
             }
             if let c = t.currency { tradingCurrency(c) }
             ForEach(t.pnl, id: \.label) { r in
@@ -2229,8 +2296,22 @@ struct MoneySheet: View {
                         .contentTransition(.opacity)
                 }
             }
+        }
+    }
+
+    private var readOnlyMark: some View {
+        Text(MoneyTradingLayout.shared.READ_ONLY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .accessibilityLabel(MoneyTradingLayout.shared.READ_ONLY_SPOKEN)
+    }
+
+    /// OPEN POSITIONS: how many and what's not yet taken, then nearest liquidation first (lit within his alert's
+    /// distance), five, then "See all N ›" (layout rule (d)), opening on the expand spring.
+    private func tradingPositions(_ t: TradingView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let u = t.unrealisedLine { Text(u).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
-            ForEach(t.positions, id: \.id) { p in
+            ForEach(MoneyTradingLayout.shared.positions(t: t, all: tradingAll), id: \.id) { p in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Text(p.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
@@ -2247,9 +2328,21 @@ struct MoneySheet: View {
                 .accessibilityLabel(p.spoken)
                 .transition(.opacity)
             }
-            if let c = t.curve { tradingCurve(c) }
-            if let tr = t.trades { trades(tr) }
-            if let r = t.review { tradingReview(r) }
+            if let m = MoneyTradingLayout.shared.more(t: t, all: tradingAll) {
+                Button {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { tradingAll.toggle() }
+                } label: {
+                    Text(m).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                .buttonStyle(MekaPressStyle())
+            }
+        }
+    }
+
+    /// YOUR ADDRESSES: each public address with what was read and Remove, and the field to add one.
+    private func tradingAddresses(_ t: TradingView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             ForEach(t.wallets, id: \.id) { w in
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
@@ -2273,19 +2366,14 @@ struct MoneySheet: View {
                     tradingText = ""
                     Task { said = await model.tradingWalletAdd(text: text) }
                 }
-            if let a = t.alerts { tradingAlerts(a) }
-            if let e = t.export { tradingExport(e) }
-            Text(t.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
     }
 
     /// Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
     /// month's high; slice 7: a big order and a day's high funding), with a row of choices for each; the chosen one in brass.
     private func tradingAlerts(_ a: TradingAlertsView) -> some View {
+        // Layout rules on Trading: the label (a.head) sits above the card.
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(a.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             Text(a.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
             alertChips(a.liqLabel, a.liqChips)
@@ -2293,16 +2381,16 @@ struct MoneySheet: View {
             if !a.fillChips.isEmpty { alertChips(a.fillLabel, a.fillChips) }
             if !a.fundingChips.isEmpty { alertChips(a.fundingLabel, a.fundingChips) }
         }
-        .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: a.line)
     }
 
     /// Trading tracker, slice 8: EXPORT FOR TAX — a button per UK tax year; while the server reads the year they dim and
     /// the line says so, then a save panel asks where the CSV goes.
     /// Money slice 13b: the same block serves the side hustle's YEAR-END EXPORT (`business`), made on the Mac at once.
-    private func tradingExport(_ e: TradingExportView, business: Bool = false) -> some View {
+    private func tradingExport(_ e: TradingExportView, business: Bool = false, inCard: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(e.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            // Layout rules on Trading: in its card the label sits above it; the side hustle's keeps its own.
+            if !inCard { Text(e.head).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             Text(exporting && !business ? TradingExportRules.shared.WORKING : e.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
             HStack(spacing: MekaSpace.xs) {
@@ -2321,7 +2409,7 @@ struct MoneySheet: View {
                 }
             }
         }
-        .padding(.top, business ? MekaSpace.xs : MekaSpace.m)
+        .padding(.top, inCard ? 0 : (business ? MekaSpace.xs : MekaSpace.m))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: exporting)
     }
 
@@ -2408,25 +2496,23 @@ struct MoneySheet: View {
     /// Trading tracker, slice 4: P&L · LAST 30 DAYS — the month's P&L (up in brass), its high and low, and the line day
     /// by day ending at Now (only the picked day's dot); click a day for its figure.
     private func tradingCurve(_ c: TradingCurveView) -> some View {
+        // Layout rules on Trading: the label sits above the card; how to read the line is behind the foot's ⓘ.
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(c.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             Text(c.summary).font(MekaType.body)
                 .foregroundStyle(c.up?.boolValue == true ? palette.accent : palette.textPrimary)
                 .contentTransition(.opacity)
                 .accessibilityLabel(c.spoken)
             if let r = c.rangeLine { Text(r).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
             MoneyWorthLine(points: c.points, palette: palette, reduced: reduceMotion, dots: false)
-            Text(c.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: c.summary)
     }
 
     /// Trading tracker, slice 2: YOUR TRADES · LAST 30 DAYS — trades closed and won, closed P&L, fees, funding and
     /// what's left after them (up in brass), the average win and loss, the best and worst trade, and each coin.
     private func trades(_ tr: TradingTradesView) -> some View {
+        // Layout rules on Trading: the label sits above the card; how trades are counted is behind the foot's ⓘ.
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(tr.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             if let e = tr.empty { Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
             if let s = tr.summary {
                 Text(s).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
@@ -2459,9 +2545,7 @@ struct MoneySheet: View {
                 .transition(.opacity)
             }
             if let m = tr.moreLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
-            Text(tr.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.summary)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.coins.count)
     }
@@ -2469,8 +2553,8 @@ struct MoneySheet: View {
     /// Trading tracker, slice 9: last month in review — the month's result after fees and funding (up in brass) and
     /// plain sentences, facts only; a new month cross-fades in.
     private func tradingReview(_ r: TradingReviewView) -> some View {
+        // Layout rules on Trading: the label sits above the card; what the month covers is behind the foot's ⓘ.
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             HStack {
                 Text(r.summary.components(separatedBy: " · ").first ?? r.summary).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 Spacer()
@@ -2485,9 +2569,7 @@ struct MoneySheet: View {
                 Text(line).font(MekaType.body).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
-            Text(r.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, MekaSpace.m)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(r.spoken)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: r.summary)

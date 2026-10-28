@@ -4433,3 +4433,26 @@ Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
   bar's mic does so on appear; Return asks the tidied question. Help money.md (HelpIndex regenerated), motion catalogue.
   Tests: MoneyChatSpokenTest, MoneyChatScreensTest.theBarsMicOpensTheChatListening (Roborazzi cover-dark-ask-obi-mic),
   MekaCoreBridgeTests.testMoneyChatReachesSwift. No server change, no migration. Mac checked nightly.
+### Money redesign, layout rules slice 5: Trading in cards, one foot line (2026-10-28)
+
+Money's layout rules (Meka 2026-10-26 22:18) and the approved mockup's Trading tab, both apps:
+- The old one-block TRADING · HYPERLIQUID becomes cards under small caps labels: the **equity card** (total, its other
+  currency and when read, Dollars · Pounds, Today / This week / This month / All time, and the mockup's **Read-only**
+  mark; before the first read it says "Reading it from Hyperliquid…" so it's never empty), **OPEN POSITIONS** (what's not
+  yet taken, nearest liquidation first, five then "See all N ›" / "Show fewer" on the expand spring), **P&L · LAST 30
+  DAYS**, **YOUR TRADES**, the month in review, **YOUR ADDRESSES** (each address with Remove, and the field), **ALERTS**
+  and **EXPORT FOR TAX**.
+- The tracker's, the line's, the trades' and the review's source lines left their cards; Trading ends on one
+  **"Read-only · not trading advice"** line whose ⓘ says them once.
+- Core `MoneyTradingLayout` (READ_ONLY, POSITIONS_HEAD, ADDRESSES_HEAD, FOOT_SHORT, SHOWN, positions, more, waiting,
+  hasPositions, info); `MoneyTabs.info(TRADING)` now returns the tracker's lines. Fold MoneyPane (tradingItems as cards,
+  TradingEquityBlock, ReadOnlyMark, TradingPositionsBlock, TradingAddressesBlock; ExportBlock `inCard`; MoneyTabFoot
+  `text`); Mac MoneySheet (tradingEquity, readOnlyMark, tradingPositions, tradingAddresses with `.moneyCard`, the foot's
+  ⓘ popover; tradingExport `inCard`, the side hustle's export unchanged). Help money.md (HelpIndex regenerated), motion
+  catalogue. Tests: MoneyTradingLayoutTest, MoneyTabsTest, MoneyTradingLayoutScreensTest (Roborazzi money
+  cover-dark-trading-layout, inner-dark-trading-layout), MekaCoreBridgeTests.testMoneyTradingLayoutOnTheMac. No server
+  change, no migration. Mac checked nightly. Next on Trading: the mockup's Kestrel card (shows its waiting trade, opens
+  Kestrel; Navilife never approves) and Obi's risk line, then the address field behind an Add sheet (rule (e)).
+- *Check on the Fold:* Money → Trading: the equity card with "Read-only" on the right, then each part in its own card;
+  with more than five open positions, "See all" shows the rest; at the foot, "Read-only · not trading advice" and ⓘ
+  says where the figures come from.

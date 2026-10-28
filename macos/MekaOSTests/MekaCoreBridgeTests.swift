@@ -4146,4 +4146,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MoneyChatSpoken.shared.question(words: "  "))
         XCTAssertFalse(MoneyChatSpoken.shared.MIC_SPOKEN.isEmpty)
     }
+    /// Money's layout rules on Trading: the cards' labels, five positions then See all, and one foot line on the Mac.
+    func testMoneyTradingLayoutOnTheMac() {
+        XCTAssertEqual(MoneyTradingLayout.shared.POSITIONS_HEAD, "OPEN POSITIONS")
+        XCTAssertEqual(MoneyTradingLayout.shared.READ_ONLY, "Read-only")
+        XCTAssertTrue(MoneyTradingLayout.shared.FOOT_SHORT.hasSuffix("not trading advice"))
+        XCTAssertEqual(MoneyTradingLayout.shared.SHOWN, 5)
+        XCTAssertNil(MoneyTabs.shared.info(tab: MoneyTab.trading, v: MoneyView.companion.LOCKED))
+    }
 }

@@ -184,7 +184,8 @@ object MoneyTabs {
             v.year?.foot,
             MoneyRules.FOOT,
         )
-        MoneyTab.TRADING -> null
+        // Layout rules on Trading (2026-10-28): the tracker's lines, said once at the foot ([MoneyTradingLayout.info]).
+        MoneyTab.TRADING -> v.trading?.let { MoneyTradingLayout.info(it) }
     }
 
     const val BILLS_FROM = "Bills are found from payments that repeat each month, Lists → Renewals and your cards' due dates. Until payday counts a card due before payday by its statement."
