@@ -1903,7 +1903,7 @@ private fun StudyCheckinCard(
 ) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("today-study-checkin"),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("today-study-checkin"),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }) {
             Text(c.headline, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1, modifier = Modifier.weight(1f))

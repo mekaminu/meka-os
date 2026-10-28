@@ -49,6 +49,8 @@ class StudyCheckinTest {
         // Looks good on it: gone; off: gone.
         assertNull(checkin(lessons, course.copy(checkinSeen = sun)))
         assertNull(checkin(lessons, course.copy(checkin = false)))
+        // A course added on Monday morning has no week behind it yet.
+        assertNull(checkin(lessons, course.copy(addedAtMs = (sun + 1) * day + 3_600_000L), today = sun + 1, nowMin = 9 * 60))
     }
 
     @Test

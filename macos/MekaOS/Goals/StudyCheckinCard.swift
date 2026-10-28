@@ -35,7 +35,7 @@ struct StudyCheckinCard: View {
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             HStack(alignment: .firstTextBaseline) {
                 Text(c.headline).font(MekaType.captionStrong).foregroundStyle(palette.accent).lineLimit(1)
-                Spacer(minLength: MekaSpace.s)
+                Spacer(minLength: MekaSpace.xs)
                 Text(c.sub).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
             }
             .accessibilityElement(children: .ignore)
@@ -81,7 +81,7 @@ struct StudyCheckinCard: View {
             .padding(.top, MekaSpace.xxs)
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.l))
         .accessibilityElement(children: .contain)

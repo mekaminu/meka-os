@@ -58,7 +58,7 @@ object StudyCheckinRules {
     }
 
     /**
-     * The check-in, or null: for each course with it on that hasn't been seen for this Sunday, with lessons in it and
+     * The check-in, or null: for each course with it on that hasn't been seen for this Sunday, added by then, with lessons in it and
      * either lessons left or one ticked this week. [lessons] carry the suggestions ([StudyAutoRules.suggest]),
      * [sessions] are from today ([StudyAutoRules.sessions]), [plans] each course's plan card ([StudyRules.plan]).
      */
@@ -69,7 +69,8 @@ object StudyCheckinRules {
         val sunday = sundayFor(today, nowMin) ?: return null
         val weekDays = (sunday - 6)..sunday
         val nextDays = (sunday + 1)..(sunday + 7)
-        val rows = courses.filter { it.checkin && it.checkinSeen != sunday }.mapNotNull { c ->
+        // A course added after that Sunday (on Monday morning) has no week to look back on yet.
+        val rows = courses.filter { it.checkin && it.checkinSeen != sunday && doneDay(it.addedAtMs) <= sunday }.mapNotNull { c ->
             val mine = lessons.filter { it.courseId == c.id }
             if (mine.isEmpty()) return@mapNotNull null
             val ticked = mine.filter { it.done && it.doneAtMs?.let(doneDay) in weekDays }
