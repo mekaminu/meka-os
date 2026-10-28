@@ -4609,3 +4609,19 @@ and the Outside row the same colours, wrapping. Help money.md (HelpIndex regener
 README. Tests: MoneyTotalTest (the mockup's figures: £5,750 across 6 accounts and trading), MoneyAccountsScreensTest
 (accountsOpensOnTheMockupsTotalCard, shot `cover-dark-accounts-total`), MekaCoreBridgeTests (testMoneyTotalCardOnTheMac).
 No server change, no migration. Mac checked nightly.
+
+### Money redesign: the labels and Spending's notes as the mockup (2026-10-28)
+
+README item 8, both apps. New type token `cardLabel` (12 sp / Mac 11 pt, weight 400, tracking 0.14 em, line 1.3;
+design/tokens/tokens.json, generated for the Fold, the Mac and the watch). Fold: `MoneyLabel(text, modifier, color)` in
+MoneyLayoutBlocks (cardLabel in `textSecondary`, a heading for screen readers) replaces every Money card label that was a
+13 sp `caption` in `textTertiary` (MoneyPane's 31 heads across Spending, Bills, Plan, Trading and Accounts,
+`MoneyHeadWithInfo`, `MoneyHeadWithLink`); OBI'S MONEY CHECK uses it in the accent. Mac: `MoneyLabel` view
+(MoneySpendingViews.swift) the same, 24 heads in MoneySheet.swift, `MoneyHeadWithLink`, the side tabs' label. Core
+`MoneySpendNote.of` (category, own, pence, payments, usual average, its name, partial, day, days in month) → the Spending
+row's note and tone, wired in `Money.view` for `MoneySpendCat` (the older category rows' lines are unchanged): no month
+before → "N payments"; Other → "N without a category"; usual 0 → "new this month" / "none in September"; this month
+before the 7th → the count; this month against the usual pace by today, bills/subscriptions/fees against the whole usual
+month (over only past it, else "as usual"); over needs £20 and 20% (as everywhere), under £20. Help money.md (two tips,
+HelpIndex regenerated), screens README. Tests: MoneySpendNoteTest (5). core-verify 3722 passed. No server change, no
+migration. Mac checked nightly.

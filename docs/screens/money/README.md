@@ -61,7 +61,12 @@ anything counts: "Add each account's balance to see one total"). The change sinc
 accent, was blue), Add balance is quiet (secondary text, was the accent), and names and lines wrap instead of being cut.
 App shot: `cover-dark-accounts-total`.
 
+**Item 8 (2026-10-28, both apps):** every Money card label in the mockup's style: small, letter-spaced caps (12 sp,
+0.14 em; Mac 11 pt) at regular weight in the secondary text colour (was a dim grey 13 sp caption), the money check's in
+brass; a new `cardLabel` type token. Spending's category notes say how each compares with the usual month ("£20 under
+usual" green, "£110 over usual" amber, "as usual"): this month against the usual pace by today from the 7th, bills,
+subscriptions and fees against the whole usual month (over only once past it); one month before names it ("£20 under
+September"); none counts the payments; Other says "14 without a category". Core MoneySpendNote.
+
 **Still to do (next Money slices):**
-8. Section labels in the mockup's style (small, letter-spaced caps); Spending's category notes against usual ("£20 under
-   usual") where the months allow it rather than "3 payments".
 9. Bills: the grey line under the still-to-go-out card; refunds' middle column aligned.

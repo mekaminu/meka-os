@@ -712,6 +712,7 @@ object MoneyRules {
         val partial = shown == thisMonth
         val label = if (partial) "${CivilDate.MONTH_LONG[shown % 12]} so far" else monthLabel(shown)
         val spendCats = ArrayList<MoneySpendCat>()
+        val spendDate = CivilDate.fromEpochDay(today)
         val shownSpend = if (ownRules.isEmpty()) spend.mapKeys { it.key.key } else shownSpendOf(cur)
         val catRows = shownSpend.filter { it.value > 0 }.entries.sortedByDescending { it.value }.mapNotNull { (k, p) ->
             val ownC = MoneyOwnCategories.idOf(k)?.let { ownById[it] }
@@ -728,7 +729,13 @@ object MoneyRules {
                 else -> if (prior.size == 1) "about the same as $avgName" else "about $avgName"
             }
             val line = listOfNotNull("$n payment${if (n == 1) "" else "s"}", vs).joinToString(" · ")
-            spendCats += MoneySpendCat(c, p, line, over, under = !partial && a != null && a > 0 && a - p >= OVER_MIN_PENCE, own = ownC)
+            // Item 8: Spending's note against usual where the months allow it ("£20 under usual"), this month too.
+            val note = MoneySpendNote.of(
+                c, own = ownC != null, pence = p, payments = n, avg = if (prior.isEmpty()) null else a ?: 0L,
+                usual = if (prior.size == 1) avgName else "usual", partial = partial,
+                dayOfMonth = spendDate.day, daysInMonth = CivilDate.lengthOfMonth(spendDate.year, spendDate.month),
+            )
+            spendCats += MoneySpendCat(c, p, note.text, over = note.tone == MoneyTone.OVER, under = note.tone == MoneyTone.GOOD, own = ownC)
             MoneyCategoryRow(k, label, fmt(p), if (spent > 0) (p.toFloat() / spent).coerceIn(0f, 1f) else 0f, line, over,
                 "$label, ${fmt(p)}, $line")
         }

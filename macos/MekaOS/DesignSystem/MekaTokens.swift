@@ -114,6 +114,8 @@ enum MekaType {
     static var greetingTracking: CGFloat { -0.52 * MekaTextScale.shared.factor }
     static var sectionLabel: Font { Font.system(size: MekaTextScale.size(11), weight: .semibold) }
     static var sectionLabelTracking: CGFloat { 0.88 * MekaTextScale.shared.factor }
+    static var cardLabel: Font { Font.system(size: MekaTextScale.size(11), weight: .regular) }
+    static var cardLabelTracking: CGFloat { 1.54 * MekaTextScale.shared.factor }
     static var itemTitle: Font { Font.system(size: MekaTextScale.size(15), weight: .medium) }
     static var itemTitleTracking: CGFloat { -0.07 * MekaTextScale.shared.factor }
     static var itemMeta: Font { Font.system(size: MekaTextScale.size(12), weight: .regular) }

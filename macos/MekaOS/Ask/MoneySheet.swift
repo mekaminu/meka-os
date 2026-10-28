@@ -223,7 +223,7 @@ struct MoneySheet: View {
     /// (MoneyTabs.stepOnPick).
     private func sideTabs(_ v: MoneyView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(MoneyColumns.shared.SIDE_HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            MoneyLabel(MoneyColumns.shared.SIDE_HEAD, palette: palette)
                 .padding(.horizontal, MekaSpace.xs).padding(.bottom, MekaSpace.xxs)
                 .accessibilityAddTraits(.isHeader)
             ForEach(MoneyTabs.shared.ALL, id: \.name) { t in
@@ -367,7 +367,7 @@ struct MoneySheet: View {
             if let p = v.payday, has(.payday, v), on("payday", col) { paydayRow(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
             if let c = v.cards, has(.cards, v), on("cards", col) { cards(c).transition(.opacity) }
             if let r = v.refunds, has(.refunds, v), on("refunds", col) {
-                Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                MoneyLabel(r.head, palette: palette)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
                 // Layout rules (b) and (d): compact rows (what · its state · ›), three then "2 more ›"; a click opens the
                 // refund's popover with Close it or the chase to copy.
@@ -388,7 +388,7 @@ struct MoneySheet: View {
             // rows, "1 more ›", and "2 put away" with Show them again.
             if let c = v.check, has(.tips, v), on("check", col) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(MoneyCheck.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.accent)
+                    MoneyLabel(MoneyCheck.shared.HEAD, palette: palette, color: palette.accent)
                         .accessibilityAddTraits(.isHeader)
                     HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
                         if let t = c.total {
@@ -446,7 +446,7 @@ struct MoneySheet: View {
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this Mac as he slides, Make it a goal.
             if let b = v.save, has(.save, v), on("save", col) {
-                Text(MoneySave.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                MoneyLabel(MoneySave.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs)
                 MoneySaveCardView(base: b, palette: palette, reduced: reduceMotion) { amount, months, rate in
                     Task { said = await model.moneySaveGoal(amountPence: amount, months: months, rateBp: rate) }
                 }
@@ -454,7 +454,7 @@ struct MoneySheet: View {
             }
             // Money redesign, Plan (mockup): Clear my cards — one amount a month across his cards, worked out here as he slides.
             if let b = v.clear, has(.clear, v), on("clear", col) {
-                Text(MoneyClear.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                MoneyLabel(MoneyClear.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs)
                 MoneyClearCardView(base: b, palette: palette, reduced: reduceMotion) { pay, order in
                     Task { said = await model.moneyClearGoal(payPence: pay, order: order) }
                 }
@@ -560,7 +560,7 @@ struct MoneySheet: View {
     private func paydayRow(_ p: MoneyPaydayView, withRows: Bool) -> some View {
         let b = MoneyPayday.shared.brief(p: p)
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(p.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(p.head, palette: palette).padding(.top, MekaSpace.xs)
             Button {
                 MekaHaptics.tick()
                 said = nil
@@ -647,7 +647,7 @@ struct MoneySheet: View {
     /// popover with its details, Paid and the fields.
     private func cards(_ cv: MoneyCardsView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(cv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(cv.head, palette: palette).padding(.top, MekaSpace.xs)
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 ForEach(MoneyCards.shared.briefs(cv: cv), id: \.id) { b in
                     let id = b.id
@@ -759,7 +759,7 @@ struct MoneySheet: View {
     /// and the run (Remove); fields to set them.
     private func challenges(_ ch: MoneyChallengesView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(ch.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(ch.head, palette: palette).padding(.top, MekaSpace.xs)
             if let i = ch.intro {
                 Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -836,7 +836,7 @@ struct MoneySheet: View {
     /// the lines cross-fade (snap with Reduce Motion).
     private func moneyGoals(_ gv: MoneyGoalsView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(gv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(gv.head, palette: palette).padding(.top, MekaSpace.xs)
             VStack(alignment: .leading, spacing: MekaSpace.m) {
                 if gv.rows.isEmpty {
                     Text(gv.empty ?? MoneyGoals.shared.EMPTY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -939,7 +939,7 @@ struct MoneySheet: View {
     /// a brass dot by one that charged none. Lines cross-fade as they change.
     private func travel(_ tv: MoneyTravelView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(tv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(tv.head, palette: palette).padding(.top, MekaSpace.xs)
             if let t = tv.tip {
                 Text(t).font(MekaType.body).foregroundStyle(tv.tipLit ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity).fixedSize(horizontal: false, vertical: true)
@@ -968,7 +968,7 @@ struct MoneySheet: View {
     private func review(_ rv: MoneyMonthReviewView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
-                Text(rv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                MoneyLabel(rv.head, palette: palette)
                 Spacer()
                 infoButton("review", title: rv.infoTitle, lines: rv.info)
             }
@@ -1010,7 +1010,7 @@ struct MoneySheet: View {
     /// quietest months and the biggest payment. Unfolds on the expand spring.
     private func year(_ yv: MoneyYearView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(yv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(yv.head, palette: palette).padding(.top, MekaSpace.xs)
             // Layout rules on Accounts (a), (c): the year in one card; what it covers behind the tab's foot ⓘ.
             yearCard(yv)
         }
@@ -1093,7 +1093,7 @@ struct MoneySheet: View {
     /// when someone does), this month's shared total, what the partner paid (Remove), a field to type it and Settled up.
     private func shared(_ sh: MoneySharedView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(sh.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(sh.head, palette: palette).padding(.top, MekaSpace.xs)
             if let i = sh.intro {
                 Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -1166,7 +1166,7 @@ struct MoneySheet: View {
     /// the side hustle's. Lines cross-fade as a match lands.
     private func businessMail(_ m: MoneyBusinessMailView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(m.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(m.head, palette: palette).padding(.top, MekaSpace.xs)
             Text(m.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
             ForEach(m.rows, id: \.id) { r in
                 HStack {
@@ -1204,7 +1204,7 @@ struct MoneySheet: View {
     /// account's Side hustle account switch.
     private func business(_ b: MoneyBusinessView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(b.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(b.head, palette: palette).padding(.top, MekaSpace.xs)
             if let i = b.intro {
                 Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -1387,7 +1387,7 @@ struct MoneySheet: View {
     /// Slice 4: the forecast at his pace, with what-ifs on this Mac only (they go when Money locks).
     private func forecast(_ f: MoneyForecastView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(f.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(f.head, palette: palette).padding(.top, MekaSpace.xs)
             if let n = f.notReady {
                 Text(n).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             } else {
@@ -2090,7 +2090,7 @@ struct MoneySheet: View {
     /// from the ring"; a click opens its popover.
     private func ownCategories(_ v: MoneyView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(MoneyOwnCategories.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            MoneyLabel(MoneyOwnCategories.shared.HEAD, palette: palette)
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 ForEach(v.ownRows, id: \.id) { r in
                     let id = r.id
@@ -2298,7 +2298,7 @@ struct MoneySheet: View {
     /// reconnect, Refresh (Refreshing… until the server has been), Open Lunch Flow, Sync them again for removed accounts.
     private func bank(_ b: MoneyBankView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(b.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            MoneyLabel(b.head, palette: palette)
             // Layout rules on Accounts (a): his banks in one card under their label.
             bankCard(b)
         }
@@ -2351,7 +2351,7 @@ struct MoneySheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             // The equity card as the mockup carries its own label: TRADING · HYPERLIQUID only before the first read.
             if MoneyTradingLayout.shared.showHead(t: t), on("trading-head", col) {
-                Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                MoneyLabel(t.head, palette: palette)
             }
             if on("trading", col) { tradingEquity(t).moneyCard(palette) }
             // The month's four tiles under equity (mockup's 2×2): closed profit, funding, fees, winning trades.
@@ -2411,7 +2411,7 @@ struct MoneySheet: View {
     /// Obi's risk line (mockup): his small caps label over the line, lit in brass when a position is near liquidation.
     private func tradingRisk(_ r: TradingRiskView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            MoneyLabel(r.head, palette: palette)
             Text(r.line).font(MekaType.body).foregroundStyle(r.lit ? palette.accent : palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
         }
@@ -2449,7 +2449,7 @@ struct MoneySheet: View {
     }
 
     private func tradingHead(_ head: String) -> some View {
-        Text(head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+        MoneyLabel(head, palette: palette).padding(.top, MekaSpace.xs)
     }
 
     /// The equity card: the total and the mockup's Read-only mark, its other currency and when it was read,
@@ -2752,7 +2752,7 @@ struct MoneySheet: View {
     private func tradingExport(_ e: TradingExportView, business: Bool = false, inCard: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             // Layout rules on Trading: in its card the label sits above it; the side hustle's keeps its own.
-            if !inCard { Text(e.head).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            if !inCard { MoneyLabel(e.head, palette: palette) }
             Text(exporting && !business ? TradingExportRules.shared.WORKING : e.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
             HStack(spacing: MekaSpace.xs) {
@@ -2946,7 +2946,7 @@ struct MoneySheet: View {
             if let e = v.empty {
                 Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
-            Text(MoneyMore.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(MoneyMore.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs)
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 ForEach(rows, id: \.title) { r in moreRow(r, v) }
             }
@@ -3110,7 +3110,7 @@ struct MoneySheet: View {
     private func accounts(_ v: MoneyView) -> some View {
         let items = MoneyAccountList.shared.items(v: v)
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(MoneyAccountList.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            MoneyLabel(MoneyAccountList.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs)
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 ForEach(items, id: \.id) { r in accountRow(r) }
             }

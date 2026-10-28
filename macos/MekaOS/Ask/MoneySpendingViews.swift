@@ -188,6 +188,27 @@ struct MoneySpendRowView: View {
 }
 
 /// A section's head in caps with an accent link on the right ("All 10 ›", "See all 42 ›").
+/// A card's label as the approved mockup draws it (Money's mockup check, item 8): small, letter-spaced caps in the
+/// secondary text colour at regular weight (`MekaType.cardLabel`), quiet over its card's numbers. Every Money tab's card
+/// labels use it; `color` for the money check's brass one.
+struct MoneyLabel: View {
+    let text: String
+    let palette: MekaPalette
+    var color: Color? = nil
+
+    init(_ text: String, palette: MekaPalette, color: Color? = nil) {
+        self.text = text
+        self.palette = palette
+        self.color = color
+    }
+
+    var body: some View {
+        Text(text).font(MekaType.cardLabel).tracking(MekaType.cardLabelTracking)
+            .foregroundStyle(color ?? palette.textSecondary)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 struct MoneyHeadWithLink: View {
     let head: String
     let link: String?
@@ -196,7 +217,7 @@ struct MoneyHeadWithLink: View {
 
     var body: some View {
         HStack {
-            Text(head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            MoneyLabel(head, palette: palette)
             Spacer()
             if let l = link {
                 Button(l, action: onLink).buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)

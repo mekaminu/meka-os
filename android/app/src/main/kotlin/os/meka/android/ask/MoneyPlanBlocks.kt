@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -73,7 +72,7 @@ internal fun MoneyCheckCard(
     val more = MoneyCheck.more(c.ideas.size, open)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         MoneyBrassCard(tag = "money-check-card") {
-            Text(MoneyCheck.HEAD, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.semantics { heading() })
+            MoneyLabel(MoneyCheck.HEAD, color = Meka.colors.accent)
             Row(Modifier.semantics(mergeDescendants = true) { contentDescription = listOfNotNull(c.total, c.from).joinToString(", ") },
                 verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 c.total?.let { t ->

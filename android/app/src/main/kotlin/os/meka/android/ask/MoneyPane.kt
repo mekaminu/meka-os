@@ -434,7 +434,7 @@ fun MoneyPane(
         // The equity card as the mockup carries its own label, so TRADING · HYPERLIQUID shows only before the first read.
         if (MoneyTradingLayout.showHead(t)) {
             item(key = "trading-head") {
-                Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(t.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
         }
@@ -446,7 +446,7 @@ fun MoneyPane(
         // The month's four tiles under equity (mockup's 2×2): closed profit, funding, fees, winning trades.
         t.tiles?.let { tl ->
             item(key = "trading-tiles-head") {
-                Text(tl.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(tl.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-tiles") {
@@ -461,7 +461,7 @@ fun MoneyPane(
         }
         if (MoneyTradingLayout.hasPositions(t)) {
             item(key = "trading-positions-head") {
-                Text(MoneyTradingLayout.POSITIONS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(MoneyTradingLayout.POSITIONS_HEAD,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-positions") {
@@ -473,7 +473,7 @@ fun MoneyPane(
         // The Kestrel card (mockup): what's waiting for his OK; Review opens it in Needs you (nothing here trades).
         kestrel?.let { k ->
             item(key = "trading-kestrel-head") {
-                Text(k.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(k.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-kestrel") {
@@ -484,7 +484,7 @@ fun MoneyPane(
         }
         t.curve?.takeIf { MoneyTradingLayout.showCurveCard(t) }?.let { c ->
             item(key = "trading-curve-head") {
-                Text(c.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(c.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-curve") {
@@ -493,7 +493,7 @@ fun MoneyPane(
         }
         TradingTiles.trades(t)?.let { tr ->
             item(key = "trading-trades-head") {
-                Text(tr.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(tr.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-trades") {
@@ -502,7 +502,7 @@ fun MoneyPane(
         }
         t.review?.let { r ->
             item(key = "trading-review-head") {
-                Text(r.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(r.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-review") {
@@ -510,7 +510,7 @@ fun MoneyPane(
             }
         }
         item(key = "trading-addresses-head") {
-            Text(MoneyTradingLayout.ADDRESSES_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+            MoneyLabel(MoneyTradingLayout.ADDRESSES_HEAD,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.m))
         }
         item(key = "trading-addresses") {
@@ -522,7 +522,7 @@ fun MoneyPane(
         }
         t.alerts?.let { a ->
             item(key = "trading-alerts-head") {
-                Text(a.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(a.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-alerts") {
@@ -533,7 +533,7 @@ fun MoneyPane(
         }
         t.export?.let { e ->
             item(key = "trading-export-head") {
-                Text(e.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(e.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-export") {
@@ -613,7 +613,7 @@ fun MoneyPane(
         // Bank sync: FROM YOUR BANKS (Accounts).
         v.bank?.takeIf { has(MoneySection.BANK) }?.let { b ->
             item(key = "bank-head") {
-                Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(b.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             // Layout rules on Accounts (a): his banks in one card under their label.
@@ -696,7 +696,7 @@ fun MoneyPane(
                 item(key = "alerts-head") {
                     Crossfade(MoneyWatch.head(v.alerts.size), animationSpec = MekaMotion.appear(reduced), label = "money-alerts-head",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m)) { h ->
-                        Text(h, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        MoneyLabel(h)
                     }
                 }
                 // Money review (Meka 2026-10-26 22:12): compact one-line rows (what · amount · ›), three then "2 more ›"; a tap
@@ -742,7 +742,7 @@ fun MoneyPane(
             // Bills, opening its sheet (since payday, the balance and its field), so no field sits open on the page.
             v.payday?.takeIf { has(MoneySection.PAYDAY) }?.let { p ->
                 item(key = "payday-head") {
-                    Text(p.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(p.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "payday") {
@@ -755,7 +755,7 @@ fun MoneyPane(
             // opening the card's sheet with its details, Paid and the fields; the accounts that could be a card are on Accounts.
             v.cards?.takeIf { has(MoneySection.CARDS) }?.let { cv ->
                 item(key = "cards-head") {
-                    Text(cv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(cv.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "cards") {
@@ -769,7 +769,7 @@ fun MoneyPane(
                 item(key = "refunds-head") {
                     Crossfade(rf.head, animationSpec = MekaMotion.appear(reduced), label = "money-refunds-head",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m)) { h ->
-                        Text(h, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        MoneyLabel(h)
                     }
                 }
                 // Layout rules (b) and (d): compact rows (what · its state · ›), three then "2 more ›"; a tap opens the
@@ -808,7 +808,7 @@ fun MoneyPane(
             // Money redesign, Plan (mockup): What if I save… — worked out on this phone as he slides, Make it a goal.
             v.save?.takeIf { has(MoneySection.SAVE) }?.let { b ->
                 item(key = "save-head") {
-                    Text(MoneySave.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(MoneySave.HEAD,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "save") {
@@ -821,7 +821,7 @@ fun MoneyPane(
             // Money redesign, Plan (mockup): Clear my cards — one amount a month across his cards, worked out here as he slides.
             v.clear?.takeIf { has(MoneySection.CLEAR) }?.let { b ->
                 item(key = "clear-head") {
-                    Text(MoneyClear.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(MoneyClear.HEAD,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "clear") {
@@ -833,7 +833,7 @@ fun MoneyPane(
             // Money redesign, Plan's goals card (mockup): GOALS — each £ goal's progress and pace; a tap opens its sheet.
             v.goals?.takeIf { has(MoneySection.GOALS) }?.let { gv ->
                 item(key = "goals-head") {
-                    Text(gv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(gv.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "goals") {
@@ -843,7 +843,7 @@ fun MoneyPane(
             v.regular?.takeIf { has(MoneySection.REGULAR) }?.let { r ->
                 item(key = "regular-head") {
                     Column(Modifier.animateItem().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        Text("REGULAR PAYMENTS", style = MekaType.caption, color = Meka.colors.textTertiary)
+                        MoneyLabel("REGULAR PAYMENTS")
                         Crossfade(r.head, animationSpec = MekaMotion.appear(reduced), label = "money-regular-head") { l ->
                             Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
                         }
@@ -862,7 +862,7 @@ fun MoneyPane(
             // Slice 4: the forecast at his pace, with what-ifs on this phone only (this month only).
             v.forecast?.takeIf { has(MoneySection.FORECAST) }?.let { f ->
                 item(key = "forecast-head") {
-                    Text(f.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(f.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 f.notReady?.let { n ->
@@ -881,7 +881,7 @@ fun MoneyPane(
             // Slice 15: challenges he set himself — no-spend days, fun money for the week, category caps (this month only).
             v.challenges?.takeIf { has(MoneySection.CHALLENGES) }?.let { ch ->
                 item(key = "challenges-head") {
-                    Text(ch.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(ch.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 // Layout rules on Plan (a), (e): the challenges in one card; fun money and caps are set in a sheet.
@@ -899,7 +899,7 @@ fun MoneyPane(
             // Slice 17: PAYING ABROAD — which accounts charged foreign fees, and the one to use (Plan).
             v.travel?.takeIf { has(MoneySection.TRAVEL) }?.let { tv ->
                 item(key = "travel-head") {
-                    Text(tv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel(tv.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "travel") {
@@ -954,7 +954,7 @@ fun MoneyPane(
             }
             if (has(MoneySection.CATEGORIES) && sp == null) {
                 item(key = "cats-head") {
-                    Text("BY CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel("BY CATEGORY",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 m.categories.forEachIndexed { i, c ->
@@ -987,7 +987,7 @@ fun MoneyPane(
                     MoneyHeadWithLink("ALL PAYMENTS THIS MONTH", MoneySpending.SEE_ALL_CLOSE, Modifier.animateItem()) { allPays = false }
                 }
                 item(key = "txns-head") {
-                    Text("PAYMENTS · TAP ONE TO CHANGE ITS CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    MoneyLabel("PAYMENTS · TAP ONE TO CHANGE ITS CATEGORY",
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 m.receiptsLine?.let { l ->
@@ -1027,7 +1027,7 @@ fun MoneyPane(
         // Money review (Meka 2026-10-26 22:12), Accounts: one clean list under net worth, each row opening its sheet.
         if (has(MoneySection.ACCOUNTS)) {
             item(key = "accounts-head") {
-                Text(MoneyAccountList.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(MoneyAccountList.HEAD,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "accounts") {
@@ -1042,7 +1042,7 @@ fun MoneyPane(
         // (Meka 2026-10-26 22:12): it lives on Accounts, under net worth, not on Spending.
         v.year?.takeIf { has(MoneySection.YEAR) }?.let { yv ->
             item(key = "year-head") {
-                Text(yv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(yv.head,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             // Layout rules on Accounts (a), (c): the year in one card; what it covers behind the tab's foot ⓘ.
@@ -1055,7 +1055,7 @@ fun MoneyPane(
         // Slice 3: YOUR CATEGORIES, the ones he made, each opening its sheet (Accounts).
         if (has(MoneySection.OWN_CATEGORIES)) {
             item(key = "own-head") {
-                Text(MoneyOwnCategories.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(MoneyOwnCategories.HEAD,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "own") {
@@ -1067,7 +1067,7 @@ fun MoneyPane(
         v.empty?.takeIf { has(MoneySection.MORE) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(top = MekaSpace.m)) } }
         if (has(MoneySection.MORE)) {
             item(key = "more-head") {
-                Text(MoneyMore.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+                MoneyLabel(MoneyMore.HEAD,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "more") {
@@ -1612,7 +1612,7 @@ private fun TradingRiskBlock(r: TradingRiskView) {
     val c by animateColorAsState(if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-risk")
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken },
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Text(r.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        MoneyLabel(r.head)
         Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "trading-risk-line") { l ->
             Text(l, style = MekaType.body, color = c, modifier = Modifier.testTag("money-trading-risk"))
         }
@@ -1802,7 +1802,7 @@ private fun ExportBlock(e: TradingExportView, exporting: Boolean, onExport: (Str
     val reduced = Meka.reducedMotion
     // Layout rules on Trading: in its card the label (e.head) sits above the card; the side hustle's keeps its own.
     Column(Modifier.fillMaxWidth().padding(top = if (inCard) 0.dp else MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        if (!inCard) Text(e.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (!inCard) MoneyLabel(e.head)
         Crossfade(if (exporting) TradingExportRules.WORKING else e.line, animationSpec = MekaMotion.appear(reduced), label = "trading-export-line") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
@@ -2033,7 +2033,7 @@ private fun BusinessBlock(
 private fun BusinessMailBlock(m: MoneyBusinessMailView, onBusinessTxn: (String) -> Unit) {
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(m.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        MoneyLabel(m.head)
         Crossfade(m.line, animationSpec = MekaMotion.appear(reduced), label = "money-biz-mail-line") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
         }

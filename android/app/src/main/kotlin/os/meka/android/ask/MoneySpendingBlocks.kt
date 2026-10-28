@@ -238,7 +238,7 @@ internal fun MoneySpendRowView(r: MoneySpendRow, picked: Boolean, modifier: Modi
 @Composable
 internal fun MoneyHeadWithLink(head: String, link: String?, modifier: Modifier = Modifier, onLink: () -> Unit) {
     Row(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
-        Text(head, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        MoneyLabel(head, modifier = Modifier.weight(1f))
         link?.let { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onLink).minTouch()

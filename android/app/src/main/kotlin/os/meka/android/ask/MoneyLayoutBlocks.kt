@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -49,6 +50,16 @@ internal fun MoneyCard(modifier: Modifier = Modifier, tag: String? = null, conte
     )
 }
 
+/**
+ * A card's label as the approved mockup draws it (Money's mockup check, item 8): small, letter-spaced caps in the
+ * secondary text colour at regular weight ([MekaType.cardLabel]), so the label reads quietly over its card's numbers
+ * rather than as a dim grey caption. Every Money tab's card labels use it; [color] for the money check's brass one.
+ */
+@Composable
+internal fun MoneyLabel(text: String, modifier: Modifier = Modifier, color: androidx.compose.ui.graphics.Color = Meka.colors.textSecondary) {
+    Text(text, style = MekaType.cardLabel, color = color, modifier = modifier.semantics { heading() })
+}
+
 /** The small ⓘ that opens a card's help or where its numbers came from. */
 @Composable
 internal fun MoneyInfoButton(spoken: String, tag: String, onClick: () -> Unit) {
@@ -63,7 +74,7 @@ internal fun MoneyInfoButton(spoken: String, tag: String, onClick: () -> Unit) {
 @Composable
 internal fun MoneyHeadWithInfo(head: String, spoken: String, tag: String, modifier: Modifier = Modifier, onInfo: () -> Unit) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(head, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        MoneyLabel(head, modifier = Modifier.weight(1f))
         MoneyInfoButton(spoken, tag, onInfo)
     }
 }
