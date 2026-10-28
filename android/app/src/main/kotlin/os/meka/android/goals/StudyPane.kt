@@ -55,6 +55,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -330,7 +331,7 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         }
         if (total > 0 && !c.allDone) item(key = "plan") {
             PlanCard(
-                plan, Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)),
+                plan, c.suggested, Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)),
                 onFinish = { chip ->
                     val day = chip.key.toLong()
                     if (!chip.on) choose(planTap.copy(finish = day)) { core.setStudyFinish(courseId, day) }
@@ -556,7 +557,7 @@ internal data class PlanTap(val finish: Long? = null, val session: Int? = null, 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PlanCard(
-    plan: StudyPlanView, modifier: Modifier,
+    plan: StudyPlanView, suggested: String?, modifier: Modifier,
     onFinish: (StudyChip) -> Unit, onSession: (StudyChip) -> Unit, onSlot: (StudyChip) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -577,6 +578,12 @@ private fun PlanCard(
             }
             Crossfade(plan.fit, animationSpec = MekaMotion.appear(reduced), label = "study-fit") { fit ->
                 fit?.let { Text(it, style = MekaType.caption, color = if (plan.fits) Meka.colors.success else if (plan.perWeek == null) Meka.colors.textTertiary else Meka.colors.accent, modifier = Modifier.testTag("study-fit")) }
+            }
+            // Slice 2b: lessons he hasn't planned, suggested for his next sessions ("5 lessons suggested for your next 3 sessions · …").
+            AnimatedVisibility(suggested != null, enter = unfold(), exit = fold()) {
+                Crossfade(suggested.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "study-suggested") { line ->
+                    Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("study-suggested"))
+                }
             }
         }
         AnimatedVisibility(plan.obi != null, enter = unfold(), exit = fold()) {
@@ -707,8 +714,10 @@ private fun LessonRow(
             modifier = Modifier.weight(1f).alpha(fade))
         // Plan a lesson for a day: its date chip ("Today", "Tomorrow", "Thu 29 Oct"; in the accent once it rolled over).
         AnimatedVisibility(planned != null && !done, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
-            Text(planned.orEmpty(), style = MekaType.caption, color = if (late) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            // Slice 2b: a suggestion ("Tomorrow · suggested") is quieter: no fill, the tertiary text.
+            val soft = row.suggested && planned == row.planned
+            Text(planned.orEmpty(), style = MekaType.caption, color = if (late) Meka.colors.accent else if (soft) Meka.colors.textTertiary else Meka.colors.textSecondary, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(if (soft) Color.Transparent else Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs).testTag("study-lesson-planned"))
         }
         if (row.mins.isNotEmpty()) Text(row.mins, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade).padding(end = MekaSpace.xs))

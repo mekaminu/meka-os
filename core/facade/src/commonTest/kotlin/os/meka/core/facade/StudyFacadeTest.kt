@@ -169,4 +169,26 @@ class StudyFacadeTest {
         assertEquals("Study · 1 lesson · about 15 min · Welcome", mac.shutdownView.value.tomorrow.study?.text)
         assertEquals("3 lessons are no longer planned", mac.planStudyLessons(ids, null))
     }
+
+    @Test
+    fun lessonsNotPlannedAreSuggestedForTheTimesPickedAndHandPlannedOnesStay() = runTest {
+        // Study plan, slice 2b part 1: the auto-schedule fills the days he hasn't planned, never moving ones he set.
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nPivot tables 1 h\nDashboards 30 min").courseId!!
+        val today = fold.todayEpochDay() // Mon 26 Oct
+        assertTrue(fold.setStudySession(id, 60))
+        assertTrue(fold.setStudySlot(id, "sat", true))
+        val (welcome, pivot, dash) = fold.studyView.value.course(id)!!.modules.single().lessons
+        assertEquals(listOf("Sat 31 Oct · suggested", "Sat 7 Nov · suggested", null), listOf(welcome, pivot, dash).map { it.planned })
+        // Pivot tables planned by hand for tomorrow: it stays there; Welcome and Dashboards (45 min) share Saturday.
+        fold.planStudyLesson(pivot.id, today + 1)
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        val onMac = mac.studyView.value.course(id)!!
+        assertEquals(listOf("Sat 31 Oct · suggested", "Tomorrow", "Sat 31 Oct · suggested"), onMac.modules.single().lessons.map { it.planned })
+        assertEquals("2 lessons suggested for your next session · Sat · from the times you picked", onMac.suggested)
+        assertEquals("Study · 2 lessons · about 45 min", mac.weekBoard.value.day(today + 5)?.study?.text)
+        assertEquals("Study · 1 lesson · about 1 h · Pivot tables", mac.shutdownView.value.tomorrow.study?.text)
+    }
 }

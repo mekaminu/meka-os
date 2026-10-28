@@ -588,6 +588,8 @@ class MekaCore(
     val tripListsView: StateFlow<List<os.meka.core.domain.TripListsView>> = _tripLists.asStateFlow()
 
     private val _study = MutableStateFlow(os.meka.core.domain.StudyView.EMPTY)
+    /** Slice 2b: the lessons with their suggested days from the last refresh, and whether the sessions came from his calendar. */
+    private var studySuggested: Pair<List<os.meka.core.domain.StudyLesson>, Boolean>? = null
 
     /**
      * Study plan, slice 1 (Meka 2026-10-26): the courses under Goals, each with its ring, its modules and lessons in
@@ -12796,8 +12798,18 @@ class MekaCore(
         }
         // Plan a lesson for a day (Meka 2026-10-26 23:21): the lessons planned for today (with any that rolled over) and tomorrow.
         val studyCoursesNow = study.courses()
-        val studyLessonsNow = study.lessons()
         val studyDoneDay: (Long) -> Long = { ms -> cal.epochDayOf(ms) }
+        // Study plan, slice 2b: lessons he hasn't planned are suggested for his next study sessions (his calendar's
+        // "Study…" events, else the times he picked), worked out here and never written, so both devices agree.
+        val studyStored = study.lessons()
+        val studySessions = viewMemo.keep("Study sessions", listOf(studyCoursesNow, studyStored, dayEvents, workState.schedule, leave.days(), todayDay, timeZone())) {
+            os.meka.core.domain.StudyAutoRules.sessions(
+                studyCoursesNow, studyStored, dayEvents, todayDay, { ms -> cal.epochDayOf(ms) },
+                { d -> hoursOf(workState, d).atOffice(d) },
+            )
+        }
+        val studyLessonsNow = os.meka.core.domain.StudyAutoRules.suggest(studyCoursesNow, studyStored, studySessions.first, todayDay, studyDoneDay)
+        studySuggested = studyLessonsNow to studySessions.second
         val studyToday = os.meka.core.domain.StudyRules.todayLine(
             os.meka.core.domain.StudyRules.onDay(studyLessonsNow, studyCoursesNow, todayDay, rollOver = true, doneDay = studyDoneDay), todayDay,
         )
@@ -13207,10 +13219,11 @@ class MekaCore(
             os.meka.core.domain.TripListRules.views(tripItems, tripListItems, todayDay, tripAbout, tripTemplates, tripSky)
         } }
         val studyCourses = study.courses()
-        val studyLessons = study.lessons()
+        // Slice 2b: the lessons with today's suggestions (worked out with Today's lines above).
+        val (studyLessons, studyFromCalendar) = studySuggested ?: (study.lessons() to false)
         val studyDeleted = study.deleted()
-        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, studyDeleted, todayDay)) {
-            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs())
+        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, studyDeleted, todayDay, studyFromCalendar)) {
+            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs(), studyFromCalendar)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

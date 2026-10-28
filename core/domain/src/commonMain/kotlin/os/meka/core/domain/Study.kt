@@ -19,8 +19,9 @@ import os.meka.core.sync.fv
  * an item in a module"): a long press opens a lesson's sheet (rename, move to another module, mark done, delete after a
  * confirm) instead of deleting; a module can be renamed or deleted (after a confirm, with Undo), lessons are added into
  * a chosen module, and a new module is added with its first lessons; every lesson deleted in the last
- * [StudyRules.RECENT_DAYS] days (and any deleted before deletion times were kept) shows under Recently deleted with Restore. Still to come (the board): slice 2b, sessions on the Week board, Start/Done, the 10-minute nudge and
- * the Sunday check-in; slice 3, the outline from a screenshot.
+ * [StudyRules.RECENT_DAYS] days (and any deleted before deletion times were kept) shows under Recently deleted with Restore. Slice 2b part 1 ([StudyAutoRules]): lessons he hasn't planned are suggested for his next study sessions.
+ * Still to come (the board): Start/Done on a session, the 10-minute nudge and the Sunday check-in; slice 3, the outline
+ * from a screenshot.
  */
 object StudyCourseFields {
     /** "Data analytics certificate" (at most [StudyRules.MAX_COURSE]). */
@@ -124,6 +125,11 @@ data class StudyLesson(
     val done: Boolean, val doneAtMs: Long?,
     /** The day he planned it for ([StudyLessonFields.PLANNED_DAY]), or null. */
     val plannedDay: Long? = null,
+    /**
+     * Slice 2b: [plannedDay] is a suggestion ([StudyAutoRules.suggest]) for his next study session, not a day he set;
+     * never stored.
+     */
+    val suggested: Boolean = false,
 )
 
 /** One line of an outline ([StudyRules.readOutline]). */
@@ -142,6 +148,8 @@ data class StudyDeletedRow(val id: String, val title: String, val line: String, 
 data class StudyLessonRow(
     val id: String, val title: String, val mins: String, val done: Boolean, val spoken: String,
     val planned: String? = null, val plannedDay: Long? = null, val late: Boolean = false,
+    /** Slice 2b: [planned] is a suggestion ("Tomorrow · suggested"); [plannedDay] is then null (he hasn't set one). */
+    val suggested: Boolean = false,
 )
 
 /**
@@ -182,6 +190,11 @@ data class StudyCourseView(
     val planInput: StudyPlanInput,
     /** Study fixes: Recently deleted, newest first. */
     val deleted: List<StudyDeletedRow> = emptyList(),
+    /**
+     * Slice 2b: "5 lessons suggested for your next 3 sessions · Thu, Sat, Mon · from your calendar" under the plan card
+     * ([StudyAutoRules.line]); null when nothing is suggested.
+     */
+    val suggested: String? = null,
 )
 
 data class StudyView(val courses: List<StudyCourseView>) {
@@ -418,6 +431,14 @@ object StudyRules {
 
     private fun row(l: StudyLesson, today: Long): StudyLessonRow {
         val mins = minsLabel(l.mins)
+        if (l.suggested && !l.done && l.plannedDay != null) {
+            val chip = StudyAutoRules.chip(l.plannedDay, today)
+            val spoken = listOfNotNull(
+                l.title, mins.takeIf { it.isNotEmpty() }?.replace(" min", " minutes")?.replace(" h", " hours"),
+                "suggested for ${plannedLabel(l.plannedDay, today)}",
+            ).joinToString(", ")
+            return StudyLessonRow(l.id, l.title, mins, false, spoken, chip, plannedDay = null, late = false, suggested = true)
+        }
         val planned = if (l.done) null else l.plannedDay?.let { plannedLabel(it, today) }
         val spoken = listOfNotNull(
             l.title, mins.takeIf { it.isNotEmpty() }?.replace(" min", " minutes")?.replace(" h", " hours"),
@@ -431,7 +452,7 @@ object StudyRules {
 
     fun view(
         course: StudyCourse, all: List<StudyLesson>, today: Long,
-        deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L,
+        deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L, fromCalendar: Boolean = false,
     ): StudyCourseView {
         val lessons = all.filter { it.courseId == course.id }
         val done = lessons.count { it.done }
@@ -477,13 +498,14 @@ object StudyRules {
             spoken = "${course.title}, $pct percent, $line" + (next?.let { ", $it" } ?: ""),
             plan = plan(input), planInput = input,
             deleted = deletedRows(course.id, deleted, nowMs),
+            suggested = StudyAutoRules.line(course.id, lessons, fromCalendar),
         )
     }
 
     fun view(
         courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long,
-        deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L,
-    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs) })
+        deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L, fromCalendar: Boolean = false,
+    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs, fromCalendar) })
 
     // ---- Plan a lesson for a day (Meka 2026-10-26 23:21) ----
 

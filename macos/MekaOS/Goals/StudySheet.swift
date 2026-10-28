@@ -540,6 +540,12 @@ struct StudySheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
+            // Slice 2b: lessons he hasn't planned, suggested for his next sessions.
+            if let suggested = c.suggested {
+                Text(suggested).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
             if let obi = p.obi {
                 HStack(alignment: .top, spacing: MekaSpace.xs) {
                     Circle().fill(RadialGradient(colors: [palette.accent.opacity(0.9), palette.accent.opacity(0.45)], center: .center, startRadius: 0, endRadius: 8))
@@ -714,10 +720,12 @@ struct StudySheet: View {
                 Spacer()
                 // Plan a lesson for a day: its date chip ("Today", "Tomorrow", "Thu 29 Oct"; in the accent once it rolled over).
                 if let planned = plannedTap[id].map({ $0.isEmpty ? nil : $0 }) ?? l.planned, !done {
+                    // Slice 2b: a suggestion ("Tomorrow · suggested") is quieter: no fill, the tertiary text.
+                    let soft = l.suggested && plannedTap[id] == nil
                     Text(planned).font(MekaType.caption)
-                        .foregroundStyle(l.late && plannedTap[id] == nil ? palette.accent : palette.textSecondary)
+                        .foregroundStyle(l.late && plannedTap[id] == nil ? palette.accent : (soft ? palette.textTertiary : palette.textSecondary))
                         .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
-                        .background(Capsule().fill(palette.surfaceRaised))
+                        .background(Capsule().fill(soft ? Color.clear : palette.surfaceRaised))
                         .transition(.opacity)
                 }
                 if !l.mins.isEmpty {
@@ -732,7 +740,7 @@ struct StudySheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(l.planned.map { "\(l.title), planned for \($0)" } ?? l.title)
+        .accessibilityLabel(l.suggested ? l.spoken : (l.planned.map { "\(l.title), planned for \($0)" } ?? l.title))
         .accessibilityValue(picked.map { $0 ? "Selected" : "Not selected" } ?? (done ? "Done" : "Not done"))
         .contextMenu {
             let title = l.title
