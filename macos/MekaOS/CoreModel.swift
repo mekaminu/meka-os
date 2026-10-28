@@ -6276,6 +6276,33 @@ final class CoreModel {
 
     func undoStudyRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoStudyRemoval(token: token) } }
 
+    // MARK: Study plan, slice 2b part 2: Start and Done on a session (THIS WEEK). Only Strings cross.
+
+    /// Start on a THIS WEEK row: it says "Started 14:05" and its button becomes Done (this Mac only).
+    func startStudySession(_ key: String) async -> Bool {
+        guard let core else { return false }
+        MekaHaptics.tick()
+        do { _ = try await core.startStudySession(key: key); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Done on a THIS WEEK row: ticks its lessons; "Ticked 2 lessons" with Undo's token (nil token when nothing was ticked).
+    func finishStudySession(_ key: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do {
+            let r = try await core.finishStudySession(key: key)
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func undoStudySessionDone(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoStudySessionDone(token: token) } }
+
     // MARK: Study fixes (Meka 2026-10-26 23:21): a right-click or long press opens a sheet, never deletes. Only Strings cross.
 
     /// "+ Add lesson" in a module: one lesson, or several lines, into that module.

@@ -1,7 +1,7 @@
 ---
 id: goals
 title: Goals and habits
-keywords: goals, goals and habits, study, study plan, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
+keywords: goals, goals and habits, study, study plan, study this week, study session, start a session, session done, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
 data: yes
 fold: GOALS
 fold_where: Ask → Life → Goals and habits
@@ -27,4 +27,5 @@ tip: For a day past this week, pick "Pick a day…" under Plan for and choose it
 tip: To plan several lessons at once, press and hold one (right-click on the Mac) and pick Select several, tap the others, then pick a day under Plan for… at the foot (Pick a day… for one further ahead).
 tip: Planned lessons also show under their day on the Week board ("Study · 2 lessons · about 1 h"); tap the line to open the course.
 tip: Lessons you haven't planned are suggested for your next study sessions, as many as each holds: your calendar's "Study…" events, or, with none, the times you picked in YOUR PLAN. They show as "Tomorrow · suggested" on the lesson, on Today, in Tomorrow and on the Week board, and one not done moves on by itself.
+tip: In a course, THIS WEEK lists your study sessions from today for a week: the day and time, the lessons in each and where (a train morning, your calendar's event). Tap Start when you begin and Done when you finish: its lessons are ticked at once, with Undo. Done on a later day's session counts the lessons as done today, and that session takes the next ones.
 tip: Plan a suggested lesson by hand (Plan for…) and it keeps that day; suggestions never move a lesson you planned.

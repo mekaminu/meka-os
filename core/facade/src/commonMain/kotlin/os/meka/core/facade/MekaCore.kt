@@ -590,6 +590,9 @@ class MekaCore(
     private val _study = MutableStateFlow(os.meka.core.domain.StudyView.EMPTY)
     /** Slice 2b: the lessons with their suggested days from the last refresh, and whether the sessions came from his calendar. */
     private var studySuggested: Pair<List<os.meka.core.domain.StudyLesson>, Boolean>? = null
+    /** Slice 2b part 2: the study sessions worked out with Today's lines, and the THIS WEEK rows started on this device. */
+    private var studySessionsNow: List<os.meka.core.domain.StudySession> = emptyList()
+    private var studyStarted: Map<String, Long> = emptyMap()
 
     /**
      * Study plan, slice 1 (Meka 2026-10-26): the courses under Goals, each with its ring, its modules and lessons in
@@ -5418,6 +5421,40 @@ class MekaCore(
         val n = study.planLessons(ids, epochDay)
         if (n == 0) null else os.meka.core.domain.StudyRules.plannedManySaid(n, epochDay, today)
     }
+
+    // ---- Study plan, slice 2b part 2: Start and Done on a session (THIS WEEK) ----
+
+    /**
+     * Start on a THIS WEEK row ([os.meka.core.domain.StudyWeekRow.key]): the row says "Started 14:05" and its button
+     * becomes Done. Kept on this device only (a session lasts under an hour); false when it was already started.
+     */
+    suspend fun startStudySession(key: String): Boolean = onCore {
+        if (key in studyStarted || os.meka.core.domain.StudyWeekRules.dayOf(key) == null) return@onCore false
+        studyStarted = studyStarted + (key to nowMs())
+        refresh()
+        true
+    }
+
+    /**
+     * Done on a THIS WEEK row: ticks its lessons not yet done (a session done ahead of its day plans them for today,
+     * where they were done). The bar's line ("Ticked 2 lessons") with Undo's token ([undoStudySessionDone]); refused
+     * (no token) when there was nothing to tick.
+     */
+    suspend fun finishStudySession(key: String): os.meka.core.domain.StudyRemoved = onCore {
+        val today = todayEpochDay()
+        val day = os.meka.core.domain.StudyWeekRules.dayOf(key)
+        val courseId = os.meka.core.domain.StudyWeekRules.courseOf(key)
+        val row = _study.value.course(courseId ?: "")?.week?.firstOrNull { it.key == key }
+        // Off "on" first, so the views the ticks rebuild already show it finished (or the next lessons, done ahead).
+        studyStarted = studyStarted - key
+        val token = if (row == null || day == null) null else study.finishSession(row.lessonIds, today.takeIf { day > today })
+        if (token == null) { refresh(); return@onCore os.meka.core.domain.StudyRemoved(os.meka.core.domain.StudyWeekRules.NOTHING_TO_TICK, "") }
+        val titles = study.lessons().filter { it.id in row!!.lessonIds }.map { it.title }
+        os.meka.core.domain.StudyRemoved(os.meka.core.domain.StudyWeekRules.doneSaid(titles, day!!, today), token)
+    }
+
+    /** Undo on Done's bar: unticks the session's lessons and puts back the days they were planned for. */
+    suspend fun undoStudySessionDone(token: String): Boolean = onCore { token.isNotEmpty() && study.undoFinish(token) }
 
     /** Picks or drops a time he can study (a WHEN YOU CAN STUDY chip's key). */
     suspend fun setStudySlot(courseId: String, key: String, on: Boolean): Boolean = onCore { study.setSlot(courseId, key, on) }
@@ -12812,9 +12849,10 @@ class MekaCore(
         val studySessions = viewMemo.keep("Study sessions", listOf(studyCoursesNow, studyStored, dayEvents, workState.schedule, leave.days(), todayDay, timeZone())) {
             os.meka.core.domain.StudyAutoRules.sessions(
                 studyCoursesNow, studyStored, dayEvents, todayDay, { ms -> cal.epochDayOf(ms) },
-                { d -> hoursOf(workState, d).atOffice(d) },
+                { d -> hoursOf(workState, d).atOffice(d) }, { ms -> cal.minuteOfDay(ms) },
             )
         }
+        studySessionsNow = studySessions.first
         val studyLessonsNow = os.meka.core.domain.StudyAutoRules.suggest(studyCoursesNow, studyStored, studySessions.first, todayDay, studyDoneDay)
         studySuggested = studyLessonsNow to studySessions.second
         val studyToday = os.meka.core.domain.StudyRules.todayLine(
@@ -13229,8 +13267,17 @@ class MekaCore(
         // Slice 2b: the lessons with today's suggestions (worked out with Today's lines above).
         val (studyLessons, studyFromCalendar) = studySuggested ?: (study.lessons() to false)
         val studyDeleted = study.deleted()
-        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, studyDeleted, todayDay, studyFromCalendar)) {
-            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs(), studyFromCalendar)
+        val studySessionsList = studySessionsNow
+        val studyStartedNow = studyStarted
+        _study.value = timed("Study") { viewMemo.keep("Study", listOf(studyCourses, studyLessons, studyDeleted, todayDay, studyFromCalendar, studySessionsList, studyStartedNow, timeZone())) {
+            // Slice 2b part 2: THIS WEEK, each course's sessions from today for a week with Start and Done.
+            val week = studyCourses.associate { c ->
+                c.id to os.meka.core.domain.StudyWeekRules.rows(
+                    c.id, studyLessons, studySessionsList, todayDay, studyStartedNow,
+                    { ms -> cal.epochDayOf(ms) }, { ms -> os.meka.core.domain.LocalClock.formatMinute(cal.minuteOfDay(ms)) },
+                )
+            }
+            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs(), studyFromCalendar, week)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

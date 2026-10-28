@@ -191,4 +191,47 @@ class StudyFacadeTest {
         assertEquals("Study · 2 lessons · about 45 min", mac.weekBoard.value.day(today + 5)?.study?.text)
         assertEquals("Study · 1 lesson · about 1 h · Pivot tables", mac.shutdownView.value.tomorrow.study?.text)
     }
+
+    @Test
+    fun startAndDoneOnASessionTickItsLessonsOnBothDevicesWithUndo() = runTest {
+        // Study plan, slice 2b part 2: THIS WEEK with Start and Done.
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nPivot tables 45 min\nDashboards 30 min").courseId!!
+        val today = fold.todayEpochDay() // Mon 26 Oct
+        assertTrue(fold.setStudySession(id, 60))
+        assertTrue(fold.setStudySlot(id, "eve", true)) // Mon and Wed evenings
+        val week = fold.studyView.value.course(id)!!.week
+        assertEquals(listOf("Today", "Wed"), week.map { it.dayLabel })
+        assertEquals("20:30", week.first().time)
+        assertEquals("Welcome + 1 more · 1 h", week.first().lessons)
+        assertEquals("Evening", week.first().place)
+        assertEquals(os.meka.core.domain.StudyWeekState.START, week.first().state)
+
+        // Start: on, on this device only.
+        assertTrue(fold.startStudySession(week.first().key))
+        assertEquals(false, fold.startStudySession(week.first().key))
+        val on = fold.studyView.value.course(id)!!.week.first()
+        assertEquals(os.meka.core.domain.StudyWeekState.ON, on.state)
+        assertEquals("Started 10:00", on.note)
+
+        // Done: both lessons ticked, the row quiet, and the Mac sees them ticked and the session done.
+        val done = fold.finishStudySession(on.key)
+        assertEquals("Ticked 2 lessons", done.line)
+        assertEquals(os.meka.core.domain.StudyWeekState.DONE, fold.studyView.value.course(id)!!.week.first().state)
+        fold.syncNow(); mac.syncNow()
+        val onMac = mac.studyView.value.course(id)!!
+        assertEquals(2, onMac.done)
+        assertEquals(os.meka.core.domain.StudyWeekState.DONE, onMac.week.first().state)
+        assertEquals("Dashboards · 30 min", onMac.week[1].lessons)
+
+        // Done ahead on Wednesday's from the Mac: Dashboards is ticked and counts on today; Undo puts it back.
+        val ahead = mac.finishStudySession(onMac.week[1].key)
+        assertEquals("Ticked \u201CDashboards\u201D · done ahead of Wed", ahead.line)
+        assertEquals(3, mac.studyView.value.course(id)!!.done)
+        assertTrue(mac.undoStudySessionDone(ahead.token))
+        assertEquals(2, mac.studyView.value.course(id)!!.done)
+        assertEquals("Dashboards · 30 min", mac.studyView.value.course(id)!!.week[1].lessons)
+        assertEquals(os.meka.core.domain.StudyWeekRules.NOTHING_TO_TICK, fold.finishStudySession(on.key).line)
+    }
 }

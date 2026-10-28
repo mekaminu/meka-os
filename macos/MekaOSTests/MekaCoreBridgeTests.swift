@@ -3107,6 +3107,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(line, "Planned \(ids.count) lessons for " + StudyRules.shared.plannedLabel(day: today + 20, today: today))
         let past = try await core.planStudyLessons(ids: ids, epochDay: KotlinLong(longLong: today - 1))
         XCTAssertNil(past)
+
+        // Slice 2b part 2: THIS WEEK's rows cross with their state's name, and Start, Done and Undo take only Strings.
+        _ = try await core.planStudyLessons(ids: ids, epochDay: nil)
+        for key in ["eve", "night", "thu", "sat"] { _ = try await core.setStudySlot(courseId: id, key: key, on: true) }
+        let week = try XCTUnwrap(core.studyView.value.course(id: id)?.week)
+        let row = try XCTUnwrap(week.first { $0.button != nil })
+        XCTAssertEqual(row.state.name, "START")
+        XCTAssertEqual(row.button, StudyWeekRules.shared.START)
+        let started = try await core.startStudySession(key: row.key)
+        XCTAssertTrue(started.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.week.first { $0.key == row.key }?.state.name, "ON")
+        let done = try await core.finishStudySession(key: row.key)
+        XCTAssertTrue(done.line.hasPrefix("Ticked"))
+        XCTAssertFalse(done.token.isEmpty)
+        let undone = try await core.undoStudySessionDone(token: done.token)
+        XCTAssertTrue(undone.boolValue)
     }
 
     func testTripListsReachSwift() async throws {

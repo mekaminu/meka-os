@@ -113,6 +113,9 @@ import os.meka.core.domain.StudyModule
 import os.meka.core.domain.StudyRemoved
 import os.meka.core.domain.StudyRules
 import os.meka.core.domain.StudyView
+import os.meka.core.domain.StudyWeekRow
+import os.meka.core.domain.StudyWeekRules
+import os.meka.core.domain.StudyWeekState
 import os.meka.core.domain.TripRules
 import os.meka.core.facade.MekaCore
 
@@ -264,6 +267,10 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     val lessonOrder = remember(courseId) { mutableStateMapOf<String, List<String>>() }
     var moduleOrder by remember(courseId) { mutableStateOf<List<String>?>(null) }
     val gapPx = with(LocalDensity.current) { MekaSpace.xs.toPx() }
+    // Slice 2b part 2, THIS WEEK: a row's Start or Done tapped here, shown at once (with the lessons it had then) until
+    // the view says the same or the row's lessons change; Done's bar line with Undo.
+    val weekTap = remember(courseId) { mutableStateMapOf<String, Pair<StudyWeekState, List<String>>>() }
+    var sessionDone by remember(courseId) { mutableStateOf<StudyRemoved?>(null) }
     BackHandler(onBack = {
         when {
             selecting != null -> selecting = null
@@ -277,6 +284,11 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         val days = c?.modules.orEmpty().flatMap { it.lessons }.associate { it.id to it.plannedDay }
         plannedTap.keys.toList().forEach { id -> if (id !in days || days[id] == plannedTap[id]) plannedTap.remove(id) }
         c?.planInput?.let { planTap = planTap.settled(it) }
+        val rows = c?.week.orEmpty().associateBy { it.key }
+        weekTap.keys.toList().forEach { k ->
+            val r = rows[k]; val t = weekTap[k]
+            if (r == null || t == null || r.state == t.first || r.lessonIds != t.second) weekTap.remove(k)
+        }
         val viewModules = c?.modules.orEmpty()
         if (moduleOrder == viewModules.map { it.key } || moduleOrder?.toSet() != viewModules.map { it.key }.toSet()) moduleOrder = null
         lessonOrder.keys.toList().forEach { k ->
@@ -310,6 +322,24 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         }
     }
     LaunchedEffect(removed) { if (removed != null) { delay(TripRules.UNDO_MS); removed = null } }
+    LaunchedEffect(sessionDone) { if (sessionDone != null) { delay(TripRules.UNDO_MS); sessionDone = null } }
+    // Start marks the session on; Done ticks its lessons in the same frame, the core's line and Undo after.
+    val onWeek: (StudyWeekRow, StudyWeekState) -> Unit = { row, state ->
+        if (state == StudyWeekState.START) {
+            haptics.tick()
+            weekTap[row.key] = StudyWeekState.ON to row.lessonIds
+            scope.launch { if (runCatching { core.startStudySession(row.key) }.isFailure) weekTap.remove(row.key) }
+        } else if (state == StudyWeekState.ON) {
+            haptics.light()
+            weekTap[row.key] = StudyWeekState.DONE to row.lessonIds
+            row.lessonIds.forEach { pending[it] = true }
+            scope.launch {
+                val r = runCatching { core.finishStudySession(row.key) }
+                r.getOrNull()?.let { sessionDone = it.takeIf { d -> d.token.isNotEmpty() } }
+                if (r.isFailure) { weekTap.remove(row.key); row.lessonIds.forEach { pending.remove(it) } }
+            }
+        }
+    }
     val tick: (StudyLessonRow, Boolean) -> Unit = { row, done ->
         haptics.light()
         pending[row.id] = done
@@ -404,6 +434,15 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
                 onSlot = { chip ->
                     val slots = (planTap.slots ?: c.planInput.slots).let { if (chip.on) it - chip.key else it + chip.key }
                     choose(planTap.copy(slots = slots)) { core.setStudySlot(courseId, chip.key, !chip.on) }
+                },
+            )
+        }
+        if (c.week.isNotEmpty()) item(key = "week") {
+            WeekCard(
+                c.week, weekTap, sessionDone, Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)), onWeek,
+                onUndo = { r ->
+                    haptics.light(); sessionDone = null
+                    scope.launch { runCatching { core.undoStudySessionDone(r.token) } }
                 },
             )
         }
@@ -637,6 +676,84 @@ private fun SelectBar(n: Int, chips: List<StudyChip>, onChip: (StudyChip) -> Uni
         Text(if (n == 0) StudyRules.SELECT_HINT else StudyRules.PLAN_SELECTED, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             for (chip in chips) TripPill(chip.label, on = false, tag = "study-select-plan-${chip.label}", description = "${chip.spoken}, $n lessons") { onChip(chip) }
+        }
+    }
+}
+
+/**
+ * THIS WEEK (slice 2b part 2, mockup): the course's study sessions from today for a week, one row a day: the day and
+ * time, the lessons ("Pivot tables + 1 more · 1 h 15"), where ("Train morning"), and Start → Done → a quiet green Done.
+ * A tap shows in the same frame ([taps]); the row's fill and the button's colour glide, the lines cross-fade.
+ */
+@Composable
+private fun WeekCard(
+    rows: List<StudyWeekRow>, taps: Map<String, Pair<StudyWeekState, List<String>>>, done: StudyRemoved?, modifier: Modifier,
+    onTap: (StudyWeekRow, StudyWeekState) -> Unit, onUndo: (StudyRemoved) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m).testTag("study-week"),
+    ) {
+        SectionLabel(StudyWeekRules.LABEL)
+        rows.forEach { row ->
+            val state = taps[row.key]?.first ?: row.state
+            val note = if (state == StudyWeekState.ON) row.note ?: "On now" else null
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("study-week-${row.day}")
+                    .semantics(mergeDescendants = true) { contentDescription = row.spoken + if (state == StudyWeekState.DONE && row.state != StudyWeekState.DONE) ", done" else "" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+            ) {
+                Column(Modifier.widthIn(min = 52.dp)) {
+                    Text(row.dayLabel, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    row.time?.let { Text(it, style = MekaType.captionStrong, color = Meka.colors.textPrimary) }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        row.lessons, style = MekaType.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = if (row.catchUp) Meka.colors.textTertiary else Meka.colors.textPrimary,
+                    )
+                    Crossfade(note ?: row.place, animationSpec = MekaMotion.appear(reduced), label = "study-week-where") { line ->
+                        Text(line, style = MekaType.caption, color = if (note != null) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (row.button != null) WeekButton(state, row) { onTap(row, state) }
+            }
+        }
+        AnimatedVisibility(done != null, enter = unfold(), exit = fold()) {
+            done?.let { r -> UndoLine(r) { onUndo(r) } }
+        }
+    }
+}
+
+/** Start (accent text on a raised pill), Done while on (filled accent), and Done once ticked (green, does nothing). */
+@Composable
+private fun WeekButton(state: StudyWeekState, row: StudyWeekRow, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val bg by animateColorAsState(
+        when (state) {
+            StudyWeekState.START -> Meka.colors.surfaceRaised
+            StudyWeekState.ON -> Meka.colors.accent
+            StudyWeekState.DONE -> Meka.colors.success.copy(alpha = 0.16f)
+        }, MekaMotion.appear(reduced), label = "study-week-button",
+    )
+    val fg = when (state) {
+        StudyWeekState.START -> Meka.colors.accent
+        StudyWeekState.ON -> Meka.colors.onAccent
+        StudyWeekState.DONE -> Meka.colors.success
+    }
+    val label = if (state == StudyWeekState.START) StudyWeekRules.START else StudyWeekRules.DONE
+    Box(
+        Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+            .then(if (state == StudyWeekState.DONE) Modifier else Modifier.clickable(role = Role.Button, onClick = onClick))
+            .semantics { contentDescription = if (state == StudyWeekState.START) "Start ${row.dayLabel}'s session" else if (state == StudyWeekState.ON) "Done, tick ${row.lessonIds.size} lessons" else "Session done" }
+            .testTag("study-week-button-${row.day}"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "study-week-label") { l ->
+            Text(l, style = MekaType.captionStrong, color = fg, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
         }
     }
 }

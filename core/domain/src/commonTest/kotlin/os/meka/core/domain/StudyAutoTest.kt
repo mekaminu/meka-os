@@ -41,7 +41,7 @@ class StudyAutoTest {
             mon, dayOf, { false },
         )
         assertTrue(cal)
-        assertEquals(listOf(StudySession(mon + 1, 30, "c2"), StudySession(mon + 2, 45, "c1"), StudySession(mon + 3, 60, "c1")), s)
+        assertEquals(listOf(StudySession(mon + 1, 30, "c2"), StudySession(mon + 2, 45, "c1"), StudySession(mon + 3, 60, "c1")), s.map { it.copy(startMin = null, label = null) })
     }
 
     @Test

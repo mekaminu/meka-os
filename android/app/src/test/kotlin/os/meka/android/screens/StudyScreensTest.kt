@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -356,5 +357,37 @@ class StudyScreensTest {
         compose.waitForIdle()
         assertEquals(id, app.openStudy.value)
         assertEquals(ShellDestination.GOALS, app.openDestination.value)
+    }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun thisWeeksSessionStartsAndIsDoneInTheNextFrame() {
+        // Study plan, slice 2b part 2: THIS WEEK with Start and Done (mockup).
+        val (core, id) = filled(ThemeChoice.DARK)
+        runBlocking {
+            core.setStudySession(id, 60)
+            core.setStudySlot(id, "eve", true) // Mon and Wed evenings
+            core.tick()
+        }
+        val today = core.todayEpochDay()
+        show(core, id)
+        scrollTo(hasTestTag("study-week"))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-this-week"))
+        ScreenShots.assertSensible(compose, "cover-dark-this-week")
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-this-week")
+        ScreenShots.assertShows(compose, "cover-dark-this-week", "THIS WEEK")
+        ScreenShots.assertShows(compose, "cover-dark-this-week", "Pivot tables · 1 h")
+        compose.onNodeWithTag("study-week-button-$today").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNode(hasContentDescription("Done, tick 1 lessons"), useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.week.first().note != null }
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("study-week-button-$today").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNode(hasContentDescription("Session done"), useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.done == 4 }
+        compose.onNodeWithText("Ticked \u201CPivot tables\u201D").assertExists()
     }
 }

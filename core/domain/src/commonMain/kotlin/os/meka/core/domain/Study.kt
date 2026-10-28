@@ -20,7 +20,8 @@ import os.meka.core.sync.fv
  * confirm) instead of deleting; a module can be renamed or deleted (after a confirm, with Undo), lessons are added into
  * a chosen module, and a new module is added with its first lessons; every lesson deleted in the last
  * [StudyRules.RECENT_DAYS] days (and any deleted before deletion times were kept) shows under Recently deleted with Restore. Slice 2b part 1 ([StudyAutoRules]): lessons he hasn't planned are suggested for his next study sessions.
- * Still to come (the board): Start/Done on a session, the 10-minute nudge and the Sunday check-in; slice 3, the outline
+ * Slice 2b part 2 ([StudyWeekRules]): THIS WEEK with Start and Done on a session.
+ * Still to come (the board): the 10-minute nudge and the Sunday check-in; slice 3, the outline
  * from a screenshot.
  */
 object StudyCourseFields {
@@ -195,6 +196,8 @@ data class StudyCourseView(
      * ([StudyAutoRules.line]); null when nothing is suggested.
      */
     val suggested: String? = null,
+    /** Slice 2b part 2: THIS WEEK, the course's sessions from today for a week with Start and Done ([StudyWeekRules.rows]). */
+    val week: List<StudyWeekRow> = emptyList(),
 )
 
 data class StudyView(val courses: List<StudyCourseView>) {
@@ -499,6 +502,7 @@ object StudyRules {
     fun view(
         course: StudyCourse, all: List<StudyLesson>, today: Long,
         deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L, fromCalendar: Boolean = false,
+        week: List<StudyWeekRow> = emptyList(),
     ): StudyCourseView {
         val lessons = all.filter { it.courseId == course.id }
         val done = lessons.count { it.done }
@@ -544,13 +548,15 @@ object StudyRules {
             plan = plan(input), planInput = input,
             deleted = deletedRows(course.id, deleted, nowMs),
             suggested = StudyAutoRules.line(course.id, lessons, fromCalendar),
+            week = week,
         )
     }
 
     fun view(
         courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long,
         deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L, fromCalendar: Boolean = false,
-    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs, fromCalendar) })
+        week: Map<String, List<StudyWeekRow>> = emptyMap(),
+    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs, fromCalendar, week[it.id].orEmpty()) })
 
     // ---- Plan a lesson for a day (Meka 2026-10-26 23:21) ----
 
@@ -974,6 +980,36 @@ class Study(
         if (l.plannedDay == day) return false
         replica.commitLocal(EntityTypes.STUDY_LESSON, id, mapOf(StudyLessonFields.PLANNED_DAY to (day?.fv() ?: FieldValue.Null)))
         return true
+    }
+
+    /**
+     * Slice 2b part 2, Done on a session: ticks [ids] not yet done; each is planned for [planFor] (today) when that's
+     * given (a session done ahead of its day). The token Undo takes ([undoFinish]) holds each lesson's stored day before;
+     * null when nothing was ticked.
+     */
+    fun finishSession(ids: List<String>, planFor: Long?): String? {
+        val byId = lessons().associateBy { it.id }
+        val parts = mutableListOf<String>()
+        for (id in ids.distinct()) {
+            val l = byId[id] ?: continue
+            if (l.done || !tick(id, true)) continue
+            if (planFor != null && l.plannedDay != planFor) planLesson(id, planFor)
+            parts += "$id=${l.plannedDay ?: ""}"
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(";")
+    }
+
+    /** Undoes [finishSession]: unticks its lessons and puts back the day each was planned for; false when nothing changed. */
+    fun undoFinish(token: String): Boolean {
+        var changed = false
+        for (part in token.split(';')) {
+            val id = part.substringBefore('=')
+            if (id.isEmpty()) continue
+            val day = part.substringAfter('=', "").toLongOrNull()
+            if (tick(id, false)) changed = true
+            if (planLesson(id, day)) changed = true
+        }
+        return changed
     }
 
     /** Plans each of [ids] for [day] (null: off the plan); how many changed. Lessons not there are skipped. */

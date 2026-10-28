@@ -172,6 +172,10 @@ struct StudySheet: View {
     @State private var pickDate = Date()
     /// Drag to reorder (2026-10-28): the lesson id or module key a drag is over (it tints raised).
     @State private var dropOn: String?
+    /// Slice 2b part 2, THIS WEEK: a row's Start or Done clicked here (with the lessons it had then), shown at once until
+    /// the view says the same or the row's lessons change; Done's line with Undo.
+    @State private var weekTap: [String: (state: String, ids: [String])] = [:]
+    @State private var sessionDone: CoreModel.TripUndo?
     private static let lessonDrag = "study-lesson:"
     private static let moduleDrag = "study-module:"
 
@@ -211,6 +215,12 @@ struct StudySheet: View {
             if let f = tapFinish, i.finishByDay?.int64Value == f { tapFinish = nil }
             if let m = tapSession, i.sessionMins == m { tapSession = nil }
             tapSlots = tapSlots.filter { key, on in i.slots.contains(key) != on }
+            var rows: [String: StudyWeekRow] = [:]
+            for r in c.week { rows[r.key] = r }
+            weekTap = weekTap.filter { key, t in
+                guard let r = rows[key] else { return false }
+                return r.state.name != t.state && r.lessonIds == t.ids
+            }
         }
     }
 
@@ -252,6 +262,9 @@ struct StudySheet: View {
         .staggeredAppear(0)
         if total > 0 && !c.allDone {
             planCard(c, p).padding(.top, MekaSpace.m).staggeredAppear(1)
+        }
+        if !c.week.isEmpty {
+            weekCard(c.week).padding(.top, MekaSpace.m).staggeredAppear(1)
         }
         SectionLabel("Lessons", palette).padding(.top, MekaSpace.l).staggeredAppear(1)
         TextField(StudyRules.shared.ADD_LESSONS_HINT, text: $outline, axis: .vertical)
@@ -566,6 +579,97 @@ struct StudySheet: View {
         .padding(MekaSpace.m)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.l))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: p.spoken)
+    }
+
+    /// THIS WEEK (slice 2b part 2), like the Fold's: one row a day with its time, lessons, where, and Start → Done →
+    /// a quiet green Done. A click shows at once; the fill glides and the lines cross-fade.
+    @ViewBuilder
+    private func weekCard(_ rows: [StudyWeekRow]) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            SectionLabel(StudyWeekRules.shared.LABEL, palette)
+            ForEach(rows, id: \.key) { row in
+                let state = weekTap[row.key]?.state ?? row.state.name
+                let note: String? = state == "ON" ? (row.note ?? "On now") : nil
+                HStack(spacing: MekaSpace.m) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(row.dayLabel).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        if let time = row.time { Text(time).font(MekaType.captionStrong).foregroundStyle(palette.textPrimary) }
+                    }
+                    .frame(width: 52, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(row.lessons).font(MekaType.body).lineLimit(1)
+                            .foregroundStyle(row.catchUp ? palette.textTertiary : palette.textPrimary)
+                        Text(note ?? row.place).font(MekaType.caption).lineLimit(1)
+                            .foregroundStyle(note != nil ? palette.accent : palette.textSecondary)
+                            .contentTransition(.opacity)
+                    }
+                    Spacer(minLength: 0)
+                    if row.button != nil { weekButton(row, state) }
+                }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(row.spoken)
+            }
+            if let done = sessionDone {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(done.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Spacer()
+                    Button("Undo") {
+                        let token = done.token
+                        sessionDone = nil
+                        model.undoStudySessionDone(token)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Undo: \(done.line)")
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                .task(id: done) {
+                    try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
+                    if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { sessionDone = nil } }
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.l))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: weekTap.mapValues { $0.state })
+    }
+
+    /// Start (accent on raised), Done while on (filled accent), Done once ticked (green, does nothing).
+    private func weekButton(_ row: StudyWeekRow, _ state: String) -> some View {
+        let key = row.key
+        let ids = row.lessonIds
+        let bg: Color = state == "START" ? palette.surfaceRaised : (state == "ON" ? palette.accent : palette.success.opacity(0.16))
+        let fg: Color = state == "START" ? palette.accent : (state == "ON" ? palette.onAccent : palette.success)
+        return Button {
+            if state == "START" {
+                weekTap[key] = (state: "ON", ids: ids)
+                Task { if !(await model.startStudySession(key)) { weekTap[key] = nil } }
+            } else if state == "ON" {
+                weekTap[key] = (state: "DONE", ids: ids)
+                for id in ids { pending[id] = true }
+                Task {
+                    if let r = await model.finishStudySession(key) {
+                        if !r.token.isEmpty { sessionDone = r }
+                    } else {
+                        weekTap[key] = nil
+                        for id in ids { pending[id] = nil }
+                    }
+                }
+            }
+        } label: {
+            Text(state == "START" ? StudyWeekRules.shared.START : StudyWeekRules.shared.DONE)
+                .font(MekaType.captionStrong)
+                .foregroundStyle(fg)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xxs)
+                .background(bg, in: Capsule())
+                .contentTransition(.opacity)
+        }
+        .buttonStyle(MekaPressStyle())
+        .disabled(state == "DONE")
+        .accessibilityLabel(state == "START" ? "Start \(row.dayLabel)'s session" : (state == "ON" ? "Done, tick \(ids.count) lessons" : "Session done"))
     }
 
     private func chipRow(_ label: String, _ chips: [StudyChip], _ tap: @escaping (StudyChip) -> Void) -> some View {
