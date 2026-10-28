@@ -33,8 +33,10 @@ class LiveSessionsTest {
         val resumed = mutableListOf<String?>()
         val mailMoneys = mutableListOf<Boolean>()
         val speakers = mutableListOf<Boolean>()
-        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean, speaker: Boolean): String? {
+        val seeses = mutableListOf<Boolean>()
+        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean, speaker: Boolean, sees: Boolean): String? {
             speakers += speaker
+            seeses += sees
             mailMoneys += mailMoney
             resumed += resume
             tooled += tools
@@ -323,6 +325,28 @@ class LiveSessionsTest {
         // A full day with the mail and money lines still fits whole.
         val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
         assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
+    }
+
+    @Test
+    fun obiSeesEverythingTheNavilifeLookUpJoinsOnlyForADeviceThatAnswersIt() {
+        // Meka 2026-10-28: "I need the orb to be the same": Study, goals, trips… looked up on the device in Live.
+        val tokens = Tokens(key)
+        val day = LiveCodec.Day("2026-10-28", "Wednesday 28 October 2026 · 19:40", emptyList(), tools = true, mailMoney = true, sees = true)
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day))
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day.copy(sees = false)))
+        assertEquals(listOf(true, false), tokens.seeses)
+        assertTrue("look_up_navilife" in tokens.instructions[0] && os.meka.core.domain.ObiSees.NEVER_NO_VIEW in tokens.instructions[0])
+        assertTrue("look_up_navilife" !in tokens.instructions[1])
+        val decl = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = true, mailMoney = true, sees = true)).jsonObject["bidiGenerateContentSetup"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray
+        assertEquals(listOf("look_up_my_days", "propose_action", "look_up_my_mail", "look_up_my_money", "look_up_navilife", "search_the_web"), decl.map { it.jsonObject["name"]!!.jsonPrimitive.content })
+        val areas = decl.single { it.jsonObject["name"]!!.jsonPrimitive.content == "look_up_navilife" }.jsonObject["parameters"]!!.jsonObject["properties"]!!.jsonObject["area"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(os.meka.core.domain.ObiArea.KEYS, areas)
+        assertTrue("study" in areas)
+        // A full day with every look-up still fits whole.
+        val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
+        assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
+        // Typed Ask's prompt has the study lines and the same rule.
+        assertTrue("Its study lines" in AskService.SYSTEM && "Never say you have no view of" in AskService.SYSTEM)
     }
 
     @Test

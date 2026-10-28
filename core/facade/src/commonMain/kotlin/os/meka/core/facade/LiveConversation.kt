@@ -66,6 +66,8 @@ class LiveConversation internal constructor(
         suspend fun propose(args: Map<String, String>): LiveOffer
         suspend fun mail(about: String): String
         suspend fun money(question: String): LiveMoney
+        /** Obi sees everything, slice 1: one area of his Navilife ([os.meka.core.domain.LiveToolRules.NAVILIFE_TOOL]). */
+        suspend fun navilife(area: String, question: String): String
         /** 2026-10-24: how this talk went (Live, or why normal Obi answered), for Health; reasons only, never words. */
         suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats? = null, events: List<String> = emptyList()) {}
     }
@@ -376,6 +378,9 @@ class LiveConversation internal constructor(
                 LiveProtocol.toolAnswer(call.id, call.name, money.reply)
             }
             LiveToolRules.LOOK_UP_TOOL -> LiveProtocol.toolAnswer(call.id, call.name, core.lookUp(call.args[LiveToolRules.WHEN_ARG].orEmpty()))
+            LiveToolRules.NAVILIFE_TOOL -> LiveProtocol.toolAnswer(
+                call.id, call.name, core.navilife(call.args[LiveToolRules.AREA_ARG].orEmpty(), call.args[LiveToolRules.QUESTION_ARG].orEmpty()),
+            )
             LiveToolRules.PROPOSE_TOOL ->
                 if (cardsNow.size >= LiveToolRules.MAX_CARDS) LiveProtocol.toolAnswer(call.id, call.name, null, error = LiveToolRules.PROPOSE_FULL)
                 else {
@@ -571,5 +576,6 @@ internal class MekaLiveCore(private val core: MekaCore) : LiveConversation.Core 
     override suspend fun propose(args: Map<String, String>) = core.livePropose(args)
     override suspend fun mail(about: String) = core.liveMail(about)
     override suspend fun money(question: String) = core.liveMoney(question)
+    override suspend fun navilife(area: String, question: String) = core.liveNavilife(area, question)
     override suspend fun outcome(live: Boolean, fallback: LiveDiagnosisRules.LiveFallback?, detail: String?, audio: LiveAudioStats?, events: List<String>) { core.noteLiveOutcome(live, fallback, detail, audio, events) }
 }

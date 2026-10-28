@@ -91,6 +91,12 @@ object LiveCodec {
          * hearing speech less eagerly; with headphones (false, or an older device) he can still be talked over.
          */
         val speaker: Boolean = false,
+        /**
+         * Obi sees everything, slice 1 (additive, only with [tools]): the device also answers the Navilife look-up
+         * ([os.meka.core.domain.LiveToolRules.NAVILIFE_TOOL]: Study, goals, trips, the shopping and every other area
+         * Ask sees), so the server adds it; an older device leaves it out.
+         */
+        val sees: Boolean = false,
     )
 
     /**
@@ -222,6 +228,7 @@ object LiveCodec {
                 d.greeted?.takeIf { it.isNotBlank() }?.let { put("greeted", it) }
                 if (d.tools && d.mailMoney) put("mailMoney", true)
                 if (d.speaker) put("speaker", true)
+                if (d.tools && d.sees) put("sees", true)
             }
         }
         r.resume?.let { put("resume", it) }
@@ -264,7 +271,8 @@ object LiveCodec {
         // Handles mean something only to a device that answers the tools.
         val mailMoney = tools && (o["mailMoney"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val speaker = (o["speaker"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
-        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted, mailMoney, speaker)
+        val sees = tools && (o["sees"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted, mailMoney, speaker, sees)
     }
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

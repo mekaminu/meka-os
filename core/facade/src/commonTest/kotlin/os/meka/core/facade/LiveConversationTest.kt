@@ -72,6 +72,7 @@ class LiveConversationTest {
         override suspend fun propose(args: Map<String, String>) = LiveOffer(null, LiveToolRules.PROPOSE_REFUSED)
         override suspend fun mail(about: String) = "no emails"
         override suspend fun money(question: String) = LiveMoney(LiveToolRules.MONEY_LOCKED, unlockMoney = true)
+        override suspend fun navilife(area: String, question: String) = "study: Study · 1 course · 3 of 10 lessons done"
     }
 
     private fun TestScope.conversation(core: FakeCore, socket: FakeSocket, wall: Long = 0): Pair<LiveConversation, MutableList<LiveEvent>> {

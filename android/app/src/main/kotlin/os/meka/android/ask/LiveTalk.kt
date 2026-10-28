@@ -470,6 +470,12 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             val money = withContext(Dispatchers.IO) { core.liveMoney(call.args[LiveToolRules.QUESTION_ARG].orEmpty()) }
             if (money.unlockMoney && gen == generation) unlockNow = true
             LiveProtocol.toolAnswer(call.id, call.name, money.reply)
+        } else if (call.name == LiveToolRules.NAVILIFE_TOOL) {
+            // Obi sees everything, slice 1: any other area of his Navilife (Study, goals, trips…), read here as Ask reads it.
+            val lines = withContext(Dispatchers.IO) {
+                core.liveNavilife(call.args[LiveToolRules.AREA_ARG].orEmpty(), call.args[LiveToolRules.QUESTION_ARG].orEmpty())
+            }
+            LiveProtocol.toolAnswer(call.id, call.name, lines)
         } else if (call.name == LiveToolRules.LOOK_UP_TOOL) {
             // Slice 5: another day, read here from his own calendar and tasks (nothing of it goes to Navilife's server).
             val lines = withContext(Dispatchers.IO) { core.liveLookUp(call.args[LiveToolRules.WHEN_ARG].orEmpty()) }

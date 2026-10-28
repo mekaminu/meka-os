@@ -140,8 +140,17 @@ object LiveToolRules {
     /** The money look-up's argument: his money question in his words ("how much did I spend on takeaways last month?"). */
     const val QUESTION_ARG = "question"
 
-    /** Read-only look-ups a 5b device answers, in the token's order (the search follows them). */
-    val LOOK_UPS = listOf(LOOK_UP_TOOL, MAIL_TOOL, MONEY_TOOL)
+    /**
+     * Obi sees everything, slice 1 (Meka 2026-10-28: "I need the orb to be the same"): every other area of Navilife
+     * ([ObiArea]: Study, goals, trips and trip lists, the shopping, …), answered on the device from the very lines Ask
+     * sends ([ObiSees.answer]), so the orb in Live sees what typed Ask sees.
+     */
+    const val NAVILIFE_TOOL = "look_up_navilife"
+    /** The Navilife look-up's area: one of [ObiArea.KEYS]. */
+    const val AREA_ARG = "area"
+
+    /** Read-only look-ups a device answers, in the token's order (the search follows them). */
+    val LOOK_UPS = listOf(LOOK_UP_TOOL, MAIL_TOOL, MONEY_TOOL, NAVILIFE_TOOL)
 
     /** What the model is told when the device couldn't read his mail just now. */
     const val MAIL_FAILED = "Navilife couldn't read his mail just now. Say you can't see his email at the moment."

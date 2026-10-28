@@ -54,6 +54,14 @@ object LivePrompt {
         His money: for "how much did I spend on takeaways last month?", "what's coming out this week?", "when's payday?", "can I afford £300 on Saturday?" call look_up_my_money with his question in his words and say what it returns without changing any figure. If it says Money is locked, tell him he can tap Unlock on his screen; never guess an amount. It's from his own statements, not financial advice.
     """.trimIndent()
 
+    /**
+     * Obi sees everything, slice 1 (Meka 2026-10-28: "I need the orb to be the same"): every other area of his
+     * Navilife, looked up on his phone from the lines typed Ask sends.
+     */
+    val SEES = """
+        Everything else in his Navilife: for his study ("how's my study going?", "what lessons tonight?"), goals, trips and trip lists, the shopping, meals, errands, appointments, renewals, bins, the car, birthdays and gifts, people and promises, school dates, annual leave, work wins, the train queue, the facts he keeps ("what's the car's reg?"), protected time, his admin hour, date night or the commute, call look_up_navilife with the area and his question, and answer only from what it returns. ${os.meka.core.domain.ObiSees.NEVER_NO_VIEW}
+    """.trimIndent()
+
     /** Ask's action lines ("- {"kind":"add_task",…} (…)"), from Ask's own prompt. */
     val actions: List<String> by lazy {
         AskService.SYSTEM.lines().map { it.trim() }.filter { it.startsWith("- {\"kind\":") }
@@ -66,6 +74,7 @@ object LivePrompt {
             appendLine(TOOLS)
             actions.forEach { appendLine(it) }
             if (day?.mailMoney == true) appendLine(MAIL_MONEY)
+            if (day?.sees == true) appendLine(SEES)
         } else appendLine(NO_TOOLS)
         appendLine(AskService.nameLine(day?.name))
         if (day?.callMe == os.meka.core.wire.AskCodec.CALL_SIR) appendLine(AskService.CALL_SIR)

@@ -141,6 +141,12 @@ class LiveCodecTest {
         assertEquals(false, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r.copy(day = day.copy(mailMoney = false)))).day!!.mailMoney)
         assertEquals(false, LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[],"mailMoney":true}}""").day!!.mailMoney)
         assertEquals(false, LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[],"tools":true,"mailMoney":"true"}}""").day!!.mailMoney)
+        // Obi sees everything, slice 1: the Navilife look-up's flag, only with the tools.
+        val sees = day.copy(sees = true, items = listOf(AskCodec.Item("", "study", "Study · 1 course · 3 of 10 lessons done")))
+        val back = LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r.copy(day = sees))).day!!
+        assertEquals(true, back.sees)
+        assertEquals("study", back.items.single().kind)
+        assertEquals(false, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r.copy(day = sees.copy(tools = false)))).day!!.sees)
     }
 
     @Test

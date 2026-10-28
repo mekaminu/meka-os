@@ -30,7 +30,7 @@ object AskCodec {
     /** At most this many proposals are read from a model's answer (the device shows at most three). */
     const val MAX_ACTIONS = 5
     const val MAX_FIELD = 200
-    val KINDS = setOf("needs_you", "task", "done", "event", "weather", "shopping", "school", "meals", "date_night", "renewals", "wins", "queue", "leave", "facts", "protected", "errands", "appointments", "checklists", "goals", "bins", "car", "life_admin", "gifts", "people", "trips", "notifications", "commute", "mail", "help", "kids", "barca", "days")
+    val KINDS = setOf("needs_you", "task", "done", "event", "weather", "shopping", "school", "meals", "date_night", "renewals", "wins", "queue", "leave", "facts", "protected", "errands", "appointments", "checklists", "goals", "bins", "car", "life_admin", "gifts", "people", "trips", "notifications", "commute", "mail", "help", "kids", "barca", "days", "study")
 
     /** A task's handle ("t1"…"t999") or, since Edit your calendars completeness slice 4, an event's ("e1"…"e99"). */
     private val REF = Regex("t[1-9][0-9]{0,2}|e[1-9][0-9]?")

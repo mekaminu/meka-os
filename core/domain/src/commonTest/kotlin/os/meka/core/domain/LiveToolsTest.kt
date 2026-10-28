@@ -85,7 +85,7 @@ class LiveToolsTest {
         // Money: the device's own sentence, said as it is; a blank question asks what's safe to spend.
         assertTrue(LiveToolRules.moneyAnswer("You spent £60 on groceries last month.").contains("\"You spent £60 on groceries last month.\""))
         assertEquals("what's safe to spend", LiveToolRules.moneyQuestion(" "))
-        assertEquals(LiveToolRules.LOOK_UPS, listOf("look_up_my_days", "look_up_my_mail", "look_up_my_money"))
+        assertEquals(LiveToolRules.LOOK_UPS, listOf("look_up_my_days", "look_up_my_mail", "look_up_my_money", "look_up_navilife"))
         // Locked during the turn: Ask's Unlock under his words, or the locked line when he said nothing.
         val said = LiveToolRules.turnAnswer("That's behind your fingerprint.", emptyList(), emptyList(), unlockMoney = true) as AskOutcome.Answered
         assertEquals(MoneyAskRules.UNLOCK, said.answer.unlockMoney)

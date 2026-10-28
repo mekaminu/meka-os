@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -297,7 +297,7 @@ object AskRules {
                 notifications: List<String> = emptyList(), commute: List<String> = emptyList(),
                 mail: List<String> = emptyList(), help: List<String> = emptyList(),
                 kids: List<String> = emptyList(), kidsFromOthers: Boolean = false,
-                barca: List<String> = emptyList(),
+                barca: List<String> = emptyList(), study: List<String> = emptyList(),
                 days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
                 movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
@@ -354,7 +354,7 @@ object AskRules {
         // The forecast (weather item): numbers MEKA wrote into words itself, so never untrusted; kept whatever the day holds.
         val forecast = weather.take(WeatherRules.MAX_ASK_LINES).map { AskItem("", AskItemKind.WEATHER, it.take(MAX_LINE)) }
         // The children's school year (school items, [SchoolRules.askLines]): Meka's own typed lines, never untrusted.
-        val schoolYear = school.take(SchoolRules.ASK_OFF + SchoolRules.ASK_DATES + SchoolRules.ASK_WEEKLY).map { AskItem("", AskItemKind.SCHOOL, line(it)) }
+        val schoolYear = school.take(ObiArea.SCHOOL.max).map { AskItem("", AskItemKind.SCHOOL, line(it)) }
         // The week's dinners and the favourites (Meal plan slice 2, [MealRules.askLine]): Meka's and his wife's own
         // dinner names; his wife's favourites make the context untrusted like her shopping (below).
         val dinners = meals?.let { AskItem("", AskItemKind.MEALS, line(it)) }
@@ -365,46 +365,46 @@ object AskRules {
         val adminHour = lifeAdmin?.let { AskItem("", AskItemKind.LIFE_ADMIN, line(it)) }
         // The renewals radar (Home upkeep slice 2, [RenewalAskRules.askLines]): Meka's own entries, titles and dates
         // only, never untrusted.
-        val radar = renewals.take(RenewalAskRules.ASK_ITEMS).map { AskItem("", AskItemKind.RENEWALS, line(it)) }
+        val radar = renewals.take(ObiArea.RENEWALS.max).map { AskItem("", AskItemKind.RENEWALS, line(it)) }
         // The work wins log (Work wins slice 2, [WinAskRules.askLines]): Meka's own lines, never untrusted.
-        val winLog = wins.take(WinAskRules.ASK_ITEMS + 1).map { AskItem("", AskItemKind.WINS, line(it)) }
+        val winLog = wins.take(ObiArea.WINS.max).map { AskItem("", AskItemKind.WINS, line(it)) }
         // The train queue (Train-time queue slice 3, [QueueAskRules.askLines]): the saved links' titles came from the
         // pages and apps they were shared from, so they make the context untrusted (below).
-        val saved = queue.take(QueueAskRules.ASK_ITEMS + QueueAskRules.ASK_DONE + 1).map { AskItem("", AskItemKind.QUEUE, line(it)) }
+        val saved = queue.take(ObiArea.QUEUE.max).map { AskItem("", AskItemKind.QUEUE, line(it)) }
         // Annual leave (slice 2b, [LeaveAskRules.askLines]): Meka's own allowance, stretches and typed holidays, never untrusted.
-        val leaveLines = leave.take(LeaveAskRules.MAX_LINES).map { AskItem("", AskItemKind.LEAVE, line(it)) }
+        val leaveLines = leave.take(ObiArea.LEAVE.max).map { AskItem("", AskItemKind.LEAVE, line(it)) }
         // What MEKA knows (facts page, [FactAskRules.askLines]): only the facts that bear on the question, Meka's own
         // typed lines, never one kept from the AI; never untrusted.
-        val factLines = facts.take(FactAskRules.ASK_ALL + 1).map { AskItem("", AskItemKind.FACTS, line(it)) }
+        val factLines = facts.take(ObiArea.FACTS.max).map { AskItem("", AskItemKind.FACTS, line(it)) }
         // Protected time (slice 4, [ProtectedRules.askLines]): Meka's own setting and work schedule in MEKA's words,
         // never untrusted.
-        val shield = protected.take(ProtectedRules.ASK_LINES).map { AskItem("", AskItemKind.PROTECTED, line(it)) }
+        val shield = protected.take(ObiArea.PROTECTED.max).map { AskItem("", AskItemKind.PROTECTED, line(it)) }
         // Errands by location (slice 2b, [ErrandAskRules.askLines]): Meka's own typed places and things, never untrusted.
-        val errandLines = errands.take(ErrandAskRules.ASK_PLACES + 1).map { AskItem("", AskItemKind.ERRANDS, line(it)) }
+        val errandLines = errands.take(ObiArea.ERRANDS.max).map { AskItem("", AskItemKind.ERRANDS, line(it)) }
         // Appointment nudges (slice 2a, [AppointmentAskRules.askLines]): Meka's own typed appointments, never untrusted.
-        val visits = appointments.take(AppointmentAskRules.ASK_ITEMS + 1).map { AskItem("", AskItemKind.APPOINTMENTS, line(it)) }
+        val visits = appointments.take(ObiArea.APPOINTMENTS.max).map { AskItem("", AskItemKind.APPOINTMENTS, line(it)) }
         // Checklists in tasks (slice 3b, [ChecklistAskRules.askLines]): Meka's own tasks and items, never untrusted.
-        val listLines = checklists.take(ChecklistAskRules.ASK_LISTS + 1).map { AskItem("", AskItemKind.CHECKLISTS, line(it)) }
+        val listLines = checklists.take(ObiArea.CHECKLISTS.max).map { AskItem("", AskItemKind.CHECKLISTS, line(it)) }
         // Goals, properly (slice 8, [GoalAskRules.askLines]): Meka's own goals, never untrusted.
-        val goalLines = goals.take(GoalAskRules.ASK_GOALS + 1).map { AskItem("", AskItemKind.GOALS, line(it)) }
+        val goalLines = goals.take(ObiArea.GOALS.max).map { AskItem("", AskItemKind.GOALS, line(it)) }
         // Bin days (slice 2, [BinRules.askLines]): Meka's own typed bins in MEKA's words, never untrusted.
-        val binLines = bins.take(1 + BinRules.ASK_BINS + BinRules.ASK_DAYS).map { AskItem("", AskItemKind.BINS, line(it)) }
+        val binLines = bins.take(ObiArea.BINS.max).map { AskItem("", AskItemKind.BINS, line(it)) }
         // Car on autopilot (slice 3, [CarAskRules.askLines]): the registration, the DVLA's answer and the four dates, never untrusted.
-        val carLines = car.take(CarAskRules.ASK_LINES_ALL).map { AskItem("", AskItemKind.CAR, line(it)) }
+        val carLines = car.take(ObiArea.CAR.max).map { AskItem("", AskItemKind.CAR, line(it)) }
         // Gift planner (slice 2, [GiftAskRules.askLines]): Meka's own birthdays, anniversaries and ideas, never untrusted.
-        val giftLines = gifts.take(1 + GiftAskRules.ASK_ITEMS).map { AskItem("", AskItemKind.GIFTS, line(it)) }
+        val giftLines = gifts.take(ObiArea.GIFTS.max).map { AskItem("", AskItemKind.GIFTS, line(it)) }
         // People (slice 3, [PeopleAskRules.askLines]): Meka's own promises, waiting-fors and birthdays; a contact only
         // joins a row he made, and carries no message words, so never untrusted.
-        val peopleLines = people.take(PeopleAskRules.ASK_LINES).map { AskItem("", AskItemKind.PEOPLE, line(it)) }
+        val peopleLines = people.take(ObiArea.PEOPLE.max).map { AskItem("", AskItemKind.PEOPLE, line(it)) }
         // Travel mode (slice 2a, [TripAskRules.askLines]): Meka's own typed trips and bookings, never untrusted.
-        val tripLines = trips.take(TripAskRules.ASK_LINES + TripListAskRules.ASK_LINES).map { AskItem("", AskItemKind.TRIPS, line(it)) }
+        val tripLines = trips.take(ObiArea.TRIPS.max).map { AskItem("", AskItemKind.TRIPS, line(it)) }
         // Notifications never seen (slice 4, [NotifyAskRules.askLines]): only with a question about notifications; the
         // phone's own trace and MEKA's settings in MEKA's words (no notice's text), never untrusted. First in the tail, so
         // the lines that answer the question are the last to be cut.
         val notifyLines = notifications.take(NotifyAskRules.ASK_LINES).map { AskItem("", AskItemKind.NOTIFICATIONS, line(it)) }
         // The commute counts everywhere (slice 5, [CommuteAskRules.askLines]): Meka's own setting, work schedule and wake
         // alarm in MEKA's words, never untrusted; early in the tail, so "when do I need to leave?" keeps its answer.
-        val commuteLines = commute.take(CommuteAskRules.ASK_LINES).map { AskItem("", AskItemKind.COMMUTE, line(it)) }
+        val commuteLines = commute.take(ObiArea.COMMUTE.max).map { AskItem("", AskItemKind.COMMUTE, line(it)) }
         // Inbox autopilot, slice 9a ([MailAskRules.askLines]): only with a question about his email; senders, subjects and
         // previews are other people's words, so they make the context untrusted (below). First in the tail with the
         // notifications, so the lines that answer the question are the last to be cut.
@@ -418,6 +418,8 @@ object AskRules {
         // Barça match day, slice 3 ([BarcaAskRules.askLines]): only with a question about Barça or the match; the kick-off,
         // the UK channels and the score were read from public web pages, so they make the context untrusted.
         val barcaLines = barca.take(BarcaAskRules.ASK_LINES).map { AskItem("", AskItemKind.BARCA, line(it)) }
+        // Obi sees everything, slice 1 ([StudyAskRules]): his courses, lessons and plan, all of it when he asks about study.
+        val studyLines = study.take(ObiArea.STUDY.max).map { AskItem("", AskItemKind.STUDY, line(it)) }
         // The companion, slice 4 ([DayAskRules]): the days the question names, looked up on the device in his calendar
         // and tasks; their events and tasks keep their handles, so a move or a done still comes back as a card. Event
         // titles can be other people's words, so they make the context untrusted. First in the tail: they answer it.
@@ -429,7 +431,7 @@ object AskRules {
                     if (t.lifecycle == Lifecycle.DONE) AskItem("", AskItemKind.DONE, line(t.title, DayAskRules.taskWhen(t, day, cal)))
                     else AskItem(ref(t), AskItemKind.TASK, line(t.title, DayAskRules.taskWhen(t, day, cal)))
                 }
-        val tail = dayItems + helpLines + notifyLines + mailLines + barcaLines + kidLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        val tail = dayItems + helpLines + notifyLines + mailLines + (if (studyLines.size > 1) studyLines else emptyList()) + barcaLines + kidLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + (if (studyLines.size == 1) studyLines else emptyList()) + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))

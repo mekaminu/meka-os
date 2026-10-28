@@ -10211,56 +10211,57 @@ class MekaCore(
             val askDays = os.meka.core.domain.DayAskRules.range(q, cal.epochDayOf(nowMs()))
             val askDayEvents = askDays?.let { os.meka.core.domain.DayAskRules.events(it, currentEvents(), cal.epochDayOf(nowMs()), cal) }.orEmpty()
             val askDayTasks = askDays?.let { os.meka.core.domain.DayAskRules.tasks(it, tasks.all(), cal.epochDayOf(nowMs()), cal) }.orEmpty()
+            // Obi sees everything, slice 1: each area's lines come from the one provider Live's look-up reads too.
+            fun seen(area: os.meka.core.domain.ObiArea) = obiSeesLines(area, q, cal)
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
                     .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size - tripLines.size) +
                     hereLines + workLines + routeLines + tripLines,
                 shopping.view(),
                 // School rhythm, slice 2b: the school year, so "when's half term?" has an answer.
-                os.meka.core.domain.SchoolRules.askLines(school.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()),
+                seen(os.meka.core.domain.ObiArea.SCHOOL),
                 // Meal plan, slice 2: the week's dinners and the favourites, so "what's for dinner tonight?" has an answer.
-                os.meka.core.domain.MealRules.askLine(mealPlan.view(emptySet())),
+                seen(os.meka.core.domain.ObiArea.MEALS).firstOrNull(),
                 mealPlan.meals().any { os.meka.core.domain.ShoppingRules.byName(it.by) != null },
                 // Date night, slice 3: the coming nights, so "when's date night?" has an answer.
-                os.meka.core.domain.DateNightRules.askLine(dateNight.setting(), cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs())),
+                seen(os.meka.core.domain.ObiArea.DATE_NIGHT).firstOrNull(),
                 // Home upkeep, slice 2: the renewals radar, so "when's the boiler service?" has an answer.
-                os.meka.core.domain.RenewalAskRules.askLines(renewals.view(), cal.epochDayOf(nowMs())),
+                seen(os.meka.core.domain.ObiArea.RENEWALS),
                 // Work wins, slice 2: the log, so "show my wins this quarter" has an answer.
-                os.meka.core.domain.WinAskRules.askLines(wins.all(), cal.epochDayOf(nowMs())),
+                seen(os.meka.core.domain.ObiArea.WINS),
                 // Train-time queue, slice 3: the saved links, so "what's in my train queue?" has an answer.
-                os.meka.core.domain.QueueAskRules.askLines(trainQueue.items(), nowMs(), cal),
+                seen(os.meka.core.domain.ObiArea.QUEUE),
                 // Annual leave, slice 2b: the planner as the pane shows it, so "how many days have I got left?" has an answer.
-                os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q),
+                seen(os.meka.core.domain.ObiArea.LEAVE),
                 // What MEKA knows, slice 1: only the facts that bear on the question, so "what's the car's reg?" has an answer.
-                os.meka.core.domain.FactAskRules.askLines(lifeFacts.all(), q),
+                seen(os.meka.core.domain.ObiArea.FACTS),
                 // Protected time, slice 4: the rules, today and the next two weeks, so "is Saturday protected?" has an answer.
-                os.meka.core.domain.ProtectedRules.askLines(protectedTime.setting(), cal.epochDayOf(nowMs()), work.schedule(), bankHolidays.calendar()),
+                seen(os.meka.core.domain.ObiArea.PROTECTED),
                 // Errands by location, slice 2b: what waits at each place, so "what do I need at Tesco?" has an answer.
-                os.meka.core.domain.ErrandAskRules.askLines(errands.view()),
+                seen(os.meka.core.domain.ObiArea.ERRANDS),
                 // Appointment nudges, slice 2a: each appointment with its last visit, booking and when it's due.
-                os.meka.core.domain.AppointmentAskRules.askLines(appointments.view()),
+                seen(os.meka.core.domain.ObiArea.APPOINTMENTS),
                 // Checklists in tasks, slice 3b: each open task's checklist, so "what's left on the party checklist?" has an answer.
-                os.meka.core.domain.ChecklistAskRules.askLines(tasks.all(), cal.epochDayOf(nowMs())),
+                seen(os.meka.core.domain.ObiArea.CHECKLISTS),
                 // Goals, properly, slice 8: each open goal with its progress and next step, so "how are my goals?" has an answer.
-                os.meka.core.domain.GoalAskRules.askLines(goals.view(tasks.all())),
+                seen(os.meka.core.domain.ObiArea.GOALS),
                 // Bin days, slice 2: each bin and the coming collections, so "which bin is it this week?" has an answer.
-                os.meka.core.domain.BinRules.askLines(bins.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()),
+                seen(os.meka.core.domain.ObiArea.BINS),
                 // Car on autopilot, slice 3: the DVLA's answer and the car's dates, so "is the car taxed?" has an answer.
-                os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.views(car.cars(), renewals.items(), carCheck(), cal.epochDayOf(nowMs()), cal), cal.epochDayOf(nowMs())),
+                seen(os.meka.core.domain.ObiArea.CAR),
                 // Life admin hour, slice 3: the hour and its jobs, so "when's my admin hour?" has an answer.
-                lifeAdmin = os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, nowMs()),
+                lifeAdmin = seen(os.meka.core.domain.ObiArea.LIFE_ADMIN).firstOrNull(),
                 // Gift planner, slice 2: each birthday and anniversary with its ideas, so "when's Mum's birthday?" has an answer.
-                gifts = os.meka.core.domain.GiftAskRules.askLines(gifts.view()),
+                gifts = seen(os.meka.core.domain.ObiArea.GIFTS),
                 // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jordan?" has an answer.
-                people = os.meka.core.domain.PeopleAskRules.askLines(_people.value),
+                people = seen(os.meka.core.domain.ObiArea.PEOPLE),
                 // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
-                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs()), tripClocks) +
-                    // Trip lists, slice 2c: what's still to buy, pack or do, so "what's left to pack?" has an answer.
-                    os.meka.core.domain.TripListAskRules.askLines(trips.items(), tripLists.items(), cal.epochDayOf(nowMs())),
+                // Trip lists, slice 2c: what's still to buy, pack or do, so "what's left to pack?" has an answer.
+                trips = seen(os.meka.core.domain.ObiArea.TRIPS),
                 // Notifications never seen, slice 4: only for a question about notifications, so "why didn't I get a notification?" has an answer.
                 notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList(),
                 // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
-                commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake()),
+                commute = seen(os.meka.core.domain.ObiArea.COMMUTE),
                 // Inbox autopilot, slice 9a: only for a question about his email, so "what did the school say?" has an answer.
                 mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) +
                     os.meka.core.domain.MailAskRules.tidiedLines(mailTidied, nowMs(), cal) else emptyList(),
@@ -10271,6 +10272,8 @@ class MekaCore(
                 kidsFromOthers = kidsAsked && os.meka.core.domain.KidAskRules.fromOthers(kidsNow),
                 // Barça match day, slice 3: only for a question about Barça, so "what's the score?" has an answer.
                 barca = if (barcaAsked) os.meka.core.domain.BarcaAskRules.askLines(barcaEvents, barcaMarks, nowMs(), cal) else emptyList(),
+                // Obi sees everything, slice 1: his Study plan, all of it when he asks about study, a line otherwise.
+                study = obiSeesLines(os.meka.core.domain.ObiArea.STUDY, q, cal, full = studyAsked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -11738,6 +11741,7 @@ class MekaCore(
             introduce = adaIntroduces(emptyList(), cal),
             tools = true,
             mailMoney = true, // slice 5b: this device answers the mail and money look-ups too
+            sees = true, // Obi sees everything, slice 1: and the Navilife look-up
         )
     }
 
@@ -11830,6 +11834,70 @@ class MekaCore(
             }
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveMoney(os.meka.core.domain.LiveToolRules.MONEY_FAILED) }
+
+    /**
+     * Obi sees everything, slice 1: [area]'s lines exactly as Ask's <today> block carries them (at most
+     * [os.meka.core.domain.ObiArea.max]). Ask's builder and Live's [liveNavilife] both read them here, so the orb and
+     * typed Ask never see different things. [q] is his question (the facts and leave bearing on it); [full] is Study's
+     * whole picture rather than its one line. Caller is on the core.
+     */
+    private fun obiSeesLines(area: os.meka.core.domain.ObiArea, q: String, cal: ZoneCalendar, full: Boolean = true): List<String> {
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val lines: List<String> = when (area) {
+            os.meka.core.domain.ObiArea.STUDY -> {
+                val courses = study.courses()
+                // Today's lessons with the suggestions Today worked out (the same ones Study shows).
+                val lessons = studySuggested?.first ?: study.lessons()
+                os.meka.core.domain.StudyAskRules.askLines(
+                    courses, lessons, studySessionsNow, today, full, { ms -> cal.epochDayOf(ms) },
+                    { m -> os.meka.core.domain.LocalClock.formatMinute(m) },
+                )
+            }
+            os.meka.core.domain.ObiArea.GOALS -> os.meka.core.domain.GoalAskRules.askLines(goals.view(tasks.all()))
+            os.meka.core.domain.ObiArea.TRIPS -> os.meka.core.domain.TripAskRules.askLines(trips.items(), today, tripClocks) +
+                os.meka.core.domain.TripListAskRules.askLines(trips.items(), tripLists.items(), today)
+            os.meka.core.domain.ObiArea.CHECKLISTS -> os.meka.core.domain.ChecklistAskRules.askLines(tasks.all(), today)
+            os.meka.core.domain.ObiArea.SHOPPING -> listOfNotNull(shopping.view().takeIf { it.toBuy.isNotEmpty() || it.got.isNotEmpty() }
+                ?.let { os.meka.core.domain.AskRules.shoppingLine(it).line })
+            os.meka.core.domain.ObiArea.MEALS -> listOfNotNull(os.meka.core.domain.MealRules.askLine(mealPlan.view(emptySet())))
+            os.meka.core.domain.ObiArea.ERRANDS -> os.meka.core.domain.ErrandAskRules.askLines(errands.view())
+            os.meka.core.domain.ObiArea.APPOINTMENTS -> os.meka.core.domain.AppointmentAskRules.askLines(appointments.view())
+            os.meka.core.domain.ObiArea.RENEWALS -> os.meka.core.domain.RenewalAskRules.askLines(renewals.view(), today)
+            os.meka.core.domain.ObiArea.BINS -> os.meka.core.domain.BinRules.askLines(bins.items(), today, bankHolidays.calendar())
+            os.meka.core.domain.ObiArea.CAR -> os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.views(car.cars(), renewals.items(), carCheck(), today, cal), today)
+            os.meka.core.domain.ObiArea.GIFTS -> os.meka.core.domain.GiftAskRules.askLines(gifts.view())
+            os.meka.core.domain.ObiArea.PEOPLE -> os.meka.core.domain.PeopleAskRules.askLines(_people.value)
+            os.meka.core.domain.ObiArea.SCHOOL -> os.meka.core.domain.SchoolRules.askLines(school.items(), today, bankHolidays.calendar())
+            os.meka.core.domain.ObiArea.LEAVE -> os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q)
+            os.meka.core.domain.ObiArea.WINS -> os.meka.core.domain.WinAskRules.askLines(wins.all(), today)
+            os.meka.core.domain.ObiArea.QUEUE -> os.meka.core.domain.QueueAskRules.askLines(trainQueue.items(), now, cal)
+            os.meka.core.domain.ObiArea.FACTS -> os.meka.core.domain.FactAskRules.askLines(lifeFacts.all(), q)
+            os.meka.core.domain.ObiArea.PROTECTED -> os.meka.core.domain.ProtectedRules.askLines(protectedTime.setting(), today, work.schedule(), bankHolidays.calendar())
+            os.meka.core.domain.ObiArea.LIFE_ADMIN -> listOfNotNull(os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, now))
+            os.meka.core.domain.ObiArea.DATE_NIGHT -> listOfNotNull(os.meka.core.domain.DateNightRules.askLine(dateNight.setting(), today, cal.minuteOfDay(now)))
+            os.meka.core.domain.ObiArea.COMMUTE -> os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, today), cal, now, currentWake())
+        }
+        return lines.take(area.max)
+    }
+
+    /** Obi sees everything, slice 1: whether [q] is about his study (a study word or one of his courses' names). Caller is on the core. */
+    private fun studyAsked(q: String): Boolean = os.meka.core.domain.StudyAskRules.isAbout(q, study.courses().map { it.title })
+
+    /**
+     * Obi sees everything, slice 1 (Meka 2026-10-28: "I need the orb to be the same"): Obi's Navilife look-up in Live
+     * ([os.meka.core.domain.LiveToolRules.NAVILIFE_TOOL]) — [areaKey]'s lines from [obiSeesLines], the very lines typed
+     * Ask sends, read here on the device. An area whose lines can carry other people's words turns the session's
+     * picture untrusted, as Ask's does. Never throws: a failure reads as [os.meka.core.domain.ObiSees.FAILED].
+     */
+    suspend fun liveNavilife(areaKey: String, question: String): String = try {
+        onCore {
+            val area = os.meka.core.domain.ObiArea.of(areaKey) ?: return@onCore os.meka.core.domain.ObiSees.NO_AREA
+            val lines = obiSeesLines(area, os.meka.core.domain.LiveToolRules.arg(question), ZoneCalendar(timeZone), full = true)
+            if (area.untrusted && lines.isNotEmpty()) liveAsk = liveAsk.copy(untrusted = true)
+            os.meka.core.domain.ObiSees.answer(area, lines)
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.ObiSees.FAILED }
 
     /**
      * Obi's Live mode, slice 4: a web search Obi asked for in Live session [sessionId]. Checked here first
