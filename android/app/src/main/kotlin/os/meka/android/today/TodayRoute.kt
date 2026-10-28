@@ -1830,7 +1830,7 @@ private fun StudyNudgeCard(
     val on = n.on || started
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("today-study-nudge"),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("today-study-nudge"),
     ) {
         Crossfade(if (on && !n.on) n.headline.replaceBefore(" · ", "Studying") else n.headline, animationSpec = MekaMotion.appear(reduced), label = "study-nudge-head") { h ->
             Text(h, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,

@@ -92,7 +92,7 @@ struct StudyNudgeCard: View {
             .padding(.top, MekaSpace.xxs)
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.l))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
