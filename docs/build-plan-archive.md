@@ -4346,3 +4346,23 @@ Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
   money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyTabsTest, MoneyAccountsLayoutScreensTest (Roborazzi
   money cover-dark-accounts-layout, inner-dark-accounts-layout), MekaCoreBridgeTests.testMoneyAccountsLayoutOnTheMac. No
   server change, no migration. Mac checked nightly. With this every Money tab but Trading follows the layout rules.
+
+2026-10-27, **Obi's money check, slice 1 (rules)**, both apps. Core `MoneyCheck` (MoneyCheck.kt): `MoneyIdeaKind`
+  (interest, rise, habit, subs, over), `MoneyIdea(id, kind, title, figure, savePence, why, behind, act, actKey, lit,
+  spoken)`, `MoneyIdeaPay`, `MoneyIdeaState(notFor, until)`, `MoneyCheckView(total, from, ideas, empty, away)`;
+  `interest` (FEES lines in the last 90 days, ≥ £10, a year at that pace, rounded to £10), `rises` (a regular payment
+  that went up, the rise × 12), `habits` (MoneyTips' habit rule, halving × 12), `subs` (2+ subscriptions, their monthly
+  cost, savePence 0: no data says he doesn't use one), `over` (this month's MoneyTips.over, savePence 0; not when the
+  same category is a habit idea); `view` sorts by the yearly saving, sums it, and leaves out ideas Not for me, reminded
+  until a later day, or of a tip kind hidden before (counted in "N put away"); `shown`/`more` (three, then "2 more ›"),
+  `ideaOf`, `validId`. `Money.ideaState/ideaNotFor/ideaRemind(today + 14)/showIdeas` on `money_tips` entities
+  `idea-<id>` (`hidden`, new `until`; ADR-008 addendum), `undoCategory` handles `idea|`; hiddenTips() leaves idea
+  entities out; Delete all money data clears them. `MoneyRules.view(ideaState)` → `MoneyView.check` (this month only);
+  `MoneyTabs` shows the TIPS section when `check` is there and Plan's ⓘ gains `MoneyCheck.FROM_LINE`. Facade
+  `moneyIdeaNotFor/moneyIdeaRemind/moneyIdeasShow`. Fold: `MoneyCheckCard` and `MoneyIdeaDetails` (MoneyPlanBlocks.kt)
+  replace the tips card and the tip sheet; See Clear my cards scrolls Plan to it a page at a time (`scrollToKey`), Set
+  a cap opens Set a challenge. Mac: the card in MoneySheet with `ideaRow`/`ideaDetails` popovers; CoreModel
+  `moneyIdeaNotFor/moneyIdeaRemind/moneyIdeasShow`. Help money.md (HelpIndex regenerated), motion catalogue. Tests:
+  MoneyCheckTest (5), MoneyTabsTest, MoneyFacadeTest.anIdeaPutAwayOnTheFoldIsPutAwayOnTheMac, MoneyPlanLayoutScreensTest
+  (Roborazzi cover-dark-plan-layout, cover-dark-plan-idea), MekaCoreBridgeTests.testMoneyCheckReachesSwift. No server
+  change, no migration. Mac checked nightly. Next: Obi's wording of the ideas (AI) and Ask Obi.

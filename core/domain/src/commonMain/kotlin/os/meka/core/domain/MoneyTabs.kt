@@ -70,7 +70,8 @@ object MoneyTabs {
         MoneySection.REVIEW -> v.month != null && v.review != null
         MoneySection.ALERTS -> v.month != null && v.alerts.isNotEmpty()
         MoneySection.YEAR -> v.month != null && v.year != null
-        MoneySection.TIPS -> v.month != null && (v.tips.isNotEmpty() || v.hiddenTips != null)
+        // Obi's money check leads Plan (it holds the tips as ideas, and says so when there are none).
+        MoneySection.TIPS -> v.month != null && v.check != null
         MoneySection.SAVE -> v.month != null && v.save != null
         MoneySection.CLEAR -> v.month != null && v.clear != null
         MoneySection.CATEGORIES -> v.month?.categories?.isNotEmpty() == true
@@ -168,6 +169,7 @@ object MoneyTabs {
         )
         MoneyTab.PLAN -> listOfNotNull(
             PLAN_FROM,
+            MoneyCheck.FROM_LINE.takeIf { v.check != null },
             MoneySave.BASIS.takeIf { v.save != null },
             MoneyClear.BASIS.takeIf { v.clear != null },
             v.forecast?.basis,

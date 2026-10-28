@@ -4718,6 +4718,39 @@ final class CoreModel {
         showMoneyView()
     }
 
+    /// Obi's money check: Not for me on one idea, on both devices; Undo with `undoMoneyCategory`.
+    func moneyIdeaNotFor(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyIdeaNotFor(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Obi's money check: Remind me on one idea (back in two weeks), on both devices; Undo with `undoMoneyCategory`.
+    func moneyIdeaRemind(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyIdeaRemind(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Obi's money check: every idea put away, and every hidden kind of tip, shown again.
+    func moneyIdeasShow() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyIdeasShow())
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 2: hides every tip of that kind ("habit", "over", "rise") on both devices; Undo with `undoMoneyCategory`.
     func hideMoneyTips(kind: String) async -> MoneySaid? {
         guard let core else { return nil }

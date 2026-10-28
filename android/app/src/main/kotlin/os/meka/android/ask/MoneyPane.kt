@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,7 +53,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.graphics.drawscope.clipRect
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -113,8 +117,7 @@ import os.meka.core.domain.MoneyTabs
 import os.meka.core.domain.MoneySpending
 import os.meka.core.domain.InstantPaymentRules
 import os.meka.core.domain.PaymentTap
-import os.meka.core.domain.MoneyTip
-import os.meka.core.domain.MoneyTips
+import os.meka.core.domain.MoneyCheck
 import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.domain.MoneyWatch
 import os.meka.core.domain.MoneyBusiness
@@ -282,9 +285,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     val refundOpen = refundSheetId?.let { id -> v.refunds?.rows?.firstOrNull { it.id == id } }
     // Layout rules on Plan: "2 more" on the tips, the tip whose sheet is open (Hide takes it away, which closes the
     // sheet), and the What if… and Set a challenge sheets.
-    var allTips by rememberSaveable { mutableStateOf(false) }
-    var tipSheetId by rememberSaveable { mutableStateOf<String?>(null) }
-    val tipOpen = MoneyPlanLayout.tipOf(v.tips, tipSheetId)
+    // Obi's money check: "2 more" on the ideas and the idea whose sheet is open (Remind me and Not for me take it away,
+    // which closes the sheet).
+    var allIdeas by rememberSaveable { mutableStateOf(false) }
+    var ideaSheetId by rememberSaveable { mutableStateOf<String?>(null) }
+    val ideaOpen = MoneyCheck.ideaOf(v.check, ideaSheetId)
+    val listState = rememberLazyListState()
     var whatIfOpen by rememberSaveable { mutableStateOf(false) }
     var setChallengeOpen by rememberSaveable { mutableStateOf(false) }
     // Money review, Accounts: the account whose sheet is open.
@@ -379,6 +385,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -599,17 +606,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             // Slice 2: tips from his own numbers, then his regular payments (this month only).
             // Layout rules on Plan (a), (b), (d): the tips are one card of one-line rows, three then "2 more ›"; a tap opens
             // the tip's sheet (what it means, Hide tips like this); "Tips hidden" and Show them again sit in the same card.
-            if (has(MoneySection.TIPS)) {
-                item(key = "tips-head") {
-                    Text(MoneyPlanLayout.TIPS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
+            // Obi's money check (Plan, mockup): the tips become ideas, each opening a sheet with the payments behind it.
+            v.check?.takeIf { has(MoneySection.TIPS) }?.let { c ->
+                item(key = "check-head") {
+                    Text(MoneyCheck.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
-                item(key = "tips") {
-                    MoneyTipsCard(MoneyPlanLayout.tipsShown(v.tips, allTips), MoneyPlanLayout.tipsMore(v.tips.size, allTips), v.hiddenTips,
+                item(key = "check") {
+                    MoneyCheckCard(c, MoneyCheck.shown(c.ideas, allIdeas), MoneyCheck.more(c.ideas.size, allIdeas),
                         Modifier.animateItem().appear(rememberAppearance(4)),
-                        onOpen = { id -> haptics.tick(); said = null; tipSheetId = id },
-                        onMore = { haptics.tick(); allTips = !allTips },
-                        onShowAgain = { scope.launch { runCatching { core.showMoneyTips() }.getOrNull()?.let(say) } })
+                        onOpen = { id -> haptics.tick(); said = null; ideaSheetId = id },
+                        onMore = { haptics.tick(); allIdeas = !allIdeas },
+                        onShowAgain = { scope.launch { runCatching { core.moneyIdeasShow() }.getOrNull()?.let(say) } })
                 }
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this phone as he slides, Make it a goal.
@@ -1050,9 +1058,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         v.refunds?.foot?.let { f -> Text(f, style = MekaType.caption, color = Meka.colors.textTertiary) }
         SheetSaid(said)
     }
-    // Layout rules on Plan: a tip's sheet (what it means, Hide tips like this).
-    MoneyDetailSheet(tipOpen, title = { MoneyPlanLayout.TIP_SHEET }, tag = "money-tip-sheet", done = MoneyCards.DONE, onClose = { tipSheetId = null }) { t ->
-        TipCard(t, Modifier) { scope.launch { runCatching { core.hideMoneyTips(t.kind) }.getOrNull()?.let(say) } }
+    // Obi's money check: an idea's sheet — why, the payments behind it, its step, Remind me and Not for me.
+    MoneyDetailSheet(ideaOpen, title = { MoneyCheck.SHEET }, tag = "money-idea-sheet", done = MoneyCards.DONE, onClose = { ideaSheetId = null }) { i ->
+        MoneyIdeaDetails(i,
+            onAct = {
+                haptics.tick()
+                ideaSheetId = null
+                when (i.actKey) {
+                    MoneyCheck.ACT_CAP -> setChallengeOpen = true
+                    MoneyCheck.ACT_CLEAR -> scope.launch { scrollToKey(listState, "clear-head", reduced) }
+                }
+            },
+            onRemind = { scope.launch { runCatching { core.moneyIdeaRemind(i.id) }.getOrNull()?.let(say) } },
+            onNotFor = { scope.launch { runCatching { core.moneyIdeaNotFor(i.id) }.getOrNull()?.let(say) } })
         SheetSaid(said)
     }
     // Layout rules on Plan (e): the forecast's what-ifs (cuts, trading at its pace, extra a month) in a sheet.
@@ -1802,23 +1820,6 @@ private fun SharedBlock(
 }
 
 @Composable
-private fun TipCard(t: MoneyTip, modifier: Modifier, onHide: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val c by animateColorAsState(if (t.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-tip-${t.id}")
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-    ) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = t.spoken }) {
-            Text(t.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(t.line, style = MekaType.caption, color = c)
-        }
-        Text(MoneyTips.HIDE, style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onHide).minTouch())
-    }
-}
-
-@Composable
 private fun RegularRow(r: MoneyRegularRow, modifier: Modifier) {
     Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken }.padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically) {
@@ -2192,5 +2193,18 @@ private fun WorthLine(points: List<MoneyWorthPoint>, dots: Boolean = true) {
         Crossfade(points[picked.coerceIn(0, points.size - 1)].said, animationSpec = MekaMotion.appear(reduced), label = "money-worth-picked") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textPrimary)
         }
+    }
+}
+
+/** Obi's money check: "See Clear my cards" scrolls Plan until the [key] item shows (a page at a time; at once with reduced motion). */
+private suspend fun scrollToKey(state: LazyListState, key: String, reduced: Boolean) {
+    repeat(8) {
+        if (state.layoutInfo.visibleItemsInfo.any { it.key == key }) {
+            val item = state.layoutInfo.visibleItemsInfo.first { it.key == key }
+            if (reduced) state.scrollToItem(item.index) else state.animateScrollToItem(item.index)
+            return
+        }
+        val page = (state.layoutInfo.viewportEndOffset - state.layoutInfo.viewportStartOffset) * 0.8f
+        if (reduced) state.scrollBy(page) else state.animateScrollBy(page)
     }
 }

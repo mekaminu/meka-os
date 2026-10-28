@@ -46,7 +46,7 @@ import os.meka.core.sync.InMemoryReplicaStore
 
 /**
  * Money's layout rules on Plan (Meka 2026-10-26 22:18: "it's sentences and text, not segmented, boxed, grouped"): the
- * tips are one card of one-line rows each opening a sheet, the forecast is a card whose what-ifs sit behind one
+ * money check is one card of one-line ideas each opening a sheet (why, the payments behind it, Remind me, Not for me), the forecast is a card whose what-ifs sit behind one
  * "What if…" row, the challenges' fields live in a "Set a challenge" sheet, and the tab ends on one "Read-only · not
  * financial advice" line whose ⓘ says how each part is worked out. Shot on the cover screen and the open Fold in Dark.
  * Invented data (rule 13).
@@ -133,21 +133,34 @@ class MoneyPlanLayoutScreensTest {
         val core = open()
         pick(MoneyTab.PLAN)
         val v = core.moneyView.value
-        val tip = v.tips.firstOrNull() ?: fail("twelve coffees should make a tip")
+        val idea = v.check?.ideas?.firstOrNull { it.kind == "habit" } ?: fail("twelve coffees should make an idea in Obi's money check")
         val f = v.forecast ?: fail("the forecast isn't on Plan")
         if (f.notReady != null) fail("three whole months should make a forecast: ${f.notReady}")
         if (v.challenges == null) fail("the challenges aren't on Plan")
 
-        // Tips: one card of one-line rows; what a tip means lives in its sheet.
-        scrollTo("money-tips-card")
+        // Obi's money check: one card, the yearly total and one-line ideas; why and the payments live in its sheet.
+        scrollTo("money-check-card")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-layout"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-plan-layout")
-        if (showsText(tip.line)) fail("a tip's meaning sits on the page")
-        tap("money-tip-${tip.id}")
-        assertTrue(shows("money-tip-sheet"), "a tip's row should open its sheet")
-        assertTrue(showsText(tip.line), "the tip's sheet says what it means")
-        tap("money-tip-sheet-done")
-        if (shows("money-tip-sheet")) fail("Done didn't close the tip's sheet")
+        assertTrue(shows("money-check-total"), "the money check leads with what the ideas save a year")
+        if (showsText(idea.why)) fail("an idea's why sits on the page")
+        tap("money-idea-${idea.id}")
+        assertTrue(shows("money-idea-sheet"), "an idea's row should open its sheet")
+        assertTrue(showsText(idea.why) && shows("money-idea-behind"), "the idea's sheet says why, with the payments behind it")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-idea"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-plan-idea")
+        // Its step: Set a cap opens Set a challenge.
+        tap("money-idea-act")
+        if (shows("money-idea-sheet")) fail("the idea's step should close its sheet")
+        assertTrue(showsText(MoneyChallenges.CAP_HINT), "Set a cap should open the challenge fields")
+        tap("money-set-challenge-sheet-done")
+        // Remind me puts it away (on both devices) and Show them again brings it back.
+        tap("money-idea-${idea.id}")
+        tap("money-idea-remind")
+        if (shows("money-idea-${idea.id}")) fail("Remind me should put the idea away")
+        assertTrue(showsText("1 put away"), "the card should say one is put away")
+        tap("money-ideas-show-again")
+        assertTrue(shows("money-idea-${idea.id}"), "Show them again should bring the idea back")
 
         // The forecast: no field on the page; What if… opens the cuts and the extra-a-month field.
         scrollTo("money-forecast-card")
@@ -178,7 +191,7 @@ class MoneyPlanLayoutScreensTest {
     fun planInCardsOnTheOpenFold() {
         open()
         pick(MoneyTab.PLAN)
-        assertTrue(shows("money-tips-card") || shows("money-save-card"))
+        assertTrue(shows("money-check-card") || shows("money-save-card"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-plan-layout"))
     }
 }

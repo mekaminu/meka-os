@@ -89,8 +89,9 @@ struct MoneySheet: View {
     @State private var allRefunds = false
     /// Layout rules on Plan: "2 more" on the tips, the tip whose popover is open, and the What if… and Set a challenge
     /// popovers.
-    @State private var allTips = false
-    @State private var tipOpenId: String? = nil
+    /// Obi's money check: "2 more" on the ideas and the idea whose popover is open.
+    @State private var allIdeas = false
+    @State private var ideaOpenId: String? = nil
     @State private var whatIfOpen = false
     @State private var setChallengeOpen = false
     @State private var refundOpenId: String? = nil
@@ -312,21 +313,32 @@ struct MoneySheet: View {
                 }
                 .moneyCard(palette)
             }
-            // Layout rules on Plan (a), (b), (d): the tips are one card of one-line rows, three then "2 more ›"; a click
-            // opens the tip's popover (what it means, Hide tips like this); "Tips hidden" and Show them again sit in it too.
-            if has(.tips, v) {
-                Text(MoneyPlanLayout.shared.TIPS_HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            // Obi's money check (Plan, mockup): the yearly total, then the ideas as one-line rows, three then "2 more ›"; a
+            // click opens the idea's popover (why, the payments behind it, its step, Remind me, Not for me); "2 put away"
+            // and Show them again sit in the same card.
+            if let c = v.check, has(.tips, v) {
+                Text(MoneyCheck.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    ForEach(MoneyPlanLayout.shared.tipsShown(tips: v.tips, open: allTips), id: \.id) { t in tipRow(t).transition(.opacity) }
-                    if let more = MoneyPlanLayout.shared.tipsMore(tips: Int32(v.tips.count), open: allTips) {
-                        Button(more) { MekaHaptics.tick(); allTips.toggle() }
+                    HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                        if let t = c.total {
+                            Text(t).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                        }
+                        Text(c.from).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    if let e = c.empty {
+                        Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    ForEach(MoneyCheck.shared.shown(ideas: c.ideas, open: allIdeas), id: \.id) { i in ideaRow(i).transition(.opacity) }
+                    if let more = MoneyCheck.shared.more(n: Int32(c.ideas.count), open: allIdeas) {
+                        Button(more) { MekaHaptics.tick(); allIdeas.toggle() }
                             .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                     }
-                    if let h = v.hiddenTips {
+                    if let h = c.away {
                         HStack {
                             Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
                             Spacer()
-                            Button(MoneyTips.shared.SHOW_AGAIN) { Task { said = await model.showMoneyTips() } }
+                            Button(MoneyCheck.shared.SHOW_AGAIN) { Task { said = await model.moneyIdeasShow() } }
                                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                         }
                     }
@@ -1342,29 +1354,81 @@ struct MoneySheet: View {
         .padding(.top, MekaSpace.xs)
     }
 
-    /// Layout rules on Plan: one tip as a compact row (the fact · ›, a lit one in brass); a click opens its popover with
-    /// what it means and Hide tips like this.
-    private func tipRow(_ t: MoneyTip) -> some View {
-        let id = t.id
-        return Button { MekaHaptics.tick(); said = nil; tipOpenId = id } label: {
+    /// Obi's money check: one idea as a compact row (its title · its figure, lit in brass · ›); a click opens its
+    /// popover with why, the payments behind it, its step, Remind me and Not for me.
+    private func ideaRow(_ i: MoneyIdea) -> some View {
+        let id = i.id
+        return Button { MekaHaptics.tick(); said = nil; ideaOpenId = id } label: {
             HStack(spacing: MekaSpace.m) {
-                Text(t.title).font(MekaType.body).foregroundStyle(t.lit ? palette.accent : palette.textPrimary).lineLimit(1)
+                Text(i.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                 Spacer(minLength: MekaSpace.xs)
+                Text(i.figure).font(MekaType.body).foregroundStyle(i.lit ? palette.accent : palette.textSecondary).lineLimit(1)
                 Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(t.spoken)
-        .popover(isPresented: Binding(get: { tipOpenId == id }, set: { if !$0 && tipOpenId == id { tipOpenId = nil } }), arrowEdge: .trailing) {
-            VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                Text(MoneyPlanLayout.shared.TIP_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                tip(t)
-                Button(MoneyCards.shared.DONE) { tipOpenId = nil }.keyboardShortcut(.defaultAction)
-            }
-            .padding(MekaSpace.m)
-            .frame(width: 360)
+        .accessibilityLabel(i.spoken)
+        .popover(isPresented: Binding(get: { ideaOpenId == id }, set: { if !$0 && ideaOpenId == id { ideaOpenId = nil } }), arrowEdge: .trailing) {
+            ideaDetails(i)
         }
+    }
+
+    /// An idea's popover: title and figure, why, THE PAYMENTS BEHIND IT, then its step, Remind me and Not for me.
+    private func ideaDetails(_ i: MoneyIdea) -> some View {
+        let id = i.id
+        let act = i.actKey
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(i.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Spacer(minLength: MekaSpace.xs)
+                Text(i.figure).font(MekaType.itemTitle).foregroundStyle(i.lit ? palette.accent : palette.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
+            Text(i.why).font(MekaType.body).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            if !i.behind.isEmpty {
+                Text(MoneyCheck.shared.BEHIND).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xxs)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    ForEach(Array(i.behind.enumerated()), id: \.offset) { _, p in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(p.label).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                                Text(p.date).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            }
+                            Spacer()
+                            Text(p.amount).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .moneyCard(palette)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                if let a = i.act {
+                    Button(a) {
+                        MekaHaptics.tick()
+                        ideaOpenId = nil
+                        if act == MoneyCheck.shared.ACT_CAP {
+                            // One popover at a time: Set a challenge opens once this one has gone.
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 300_000_000)
+                                setChallengeOpen = true
+                            }
+                        }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                Button(MoneyCheck.shared.REMIND) { Task { said = await model.moneyIdeaRemind(id: id) } }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                Button(MoneyCheck.shared.NOT_FOR_ME) { Task { said = await model.moneyIdeaNotFor(id: id) } }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Spacer()
+                Button(MoneyCards.shared.DONE) { ideaOpenId = nil }.keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, MekaSpace.xxs)
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 380)
     }
 
     /// A what-if chip (a halved category, or slice 11's trading); a click turns it on or off on this Mac only.
@@ -1613,26 +1677,6 @@ struct MoneySheet: View {
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 Text(MoneyRefunds.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
-        }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-    }
-
-    /// Slice 2: one tip from his own numbers, with Hide tips like this (Undo in the line below).
-    private func tip(_ t: MoneyTip) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(t.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(t.line).font(MekaType.caption).foregroundStyle(t.lit ? palette.accent : palette.textSecondary)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(t.spoken)
-            Button(MoneyTips.shared.HIDE) {
-                let kind = t.kind
-                Task { said = await model.hideMoneyTips(kind: kind) }
-            }
-            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

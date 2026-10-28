@@ -95,8 +95,8 @@ class MoneyTabsTest {
     @Test
     fun theYearMovesToAccountsAndTheTipsToPlan() {
         // Money review (Meka 2026-10-26 22:12): "2026 so far" and "Tips from your numbers" leave Spending.
-        val tip = MoneyTip("t1", "habit", "Coffee adds up", "£64 this month", false, "Coffee adds up")
-        val v = open().copy(tips = listOf(tip))
+        // Obi's money check holds them now, as ideas.
+        val v = open().copy(check = MoneyCheckView(null, "no ideas just now", emptyList(), MoneyCheck.EMPTY, null))
         assertEquals(MoneyTab.ACCOUNTS, MoneyTabs.tabOf(MoneySection.YEAR))
         assertEquals(MoneyTab.PLAN, MoneyTabs.tabOf(MoneySection.TIPS))
         assertTrue(MoneySection.TIPS !in MoneyTabs.sections(MoneyTab.SPENDING, v))

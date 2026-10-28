@@ -148,6 +148,32 @@ class MoneyFacadeTest {
         assertTrue(mac.lifeLines.value.needsSetUp(LifeTile.MONEY))
     }
     @Test
+    fun anIdeaPutAwayOnTheFoldIsPutAwayOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        // Obi's money check: ten coffees in October make an idea; Remind me on the Fold puts it away on the Mac too.
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.moneyIdeaRemind("habit-coffee").refused, "locked: nothing is put away")
+        val coffees = "Date,Description,Amount\n10/09/2026,TESCO STORES 2041,-60.00\n" +
+            (1..10).joinToString("") { d -> "${d.toString().padStart(2, '0')}/10/2026,COSTA COFFEE,-4.00\n" }
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", coffees)
+        val idea = fold.moneyView.value.check!!.ideas.single { it.kind == "habit" }
+        assertEquals("habit-coffee", idea.id)
+        val r = fold.moneyIdeaRemind(idea.id)
+        assertEquals("Obi brings it back on Fri 30 Oct", r.line)
+        assertTrue(fold.moneyView.value.check!!.ideas.none { it.id == idea.id })
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals("1 put away", mac.moneyView.value.check!!.away)
+        // Show them again on the Mac brings it back on both.
+        mac.moneyIdeasShow()
+        assertTrue(mac.moneyView.value.check!!.ideas.any { it.id == idea.id })
+        mac.syncNow(); fold.syncNow()
+        fold.moneyStep(0)
+        assertTrue(fold.moneyView.value.check!!.ideas.any { it.id == idea.id })
+    }
+
+    @Test
     fun aCategoryOfHisOwnMadeOnTheFoldShowsOnTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

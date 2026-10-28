@@ -3979,7 +3979,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: nil)],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
-            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files)
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files, check: nil)
         let items = MoneyAccountList.shared.items(v: v)
         XCTAssertEqual(items.map { $0.name }, ["Oakbank saver"])
         XCTAssertEqual(items.first?.amount, MoneyAccountList.shared.ADD_BALANCE)
@@ -3996,7 +3996,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: "Rainy day")],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
-            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files)
+            review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files, check: nil)
         XCTAssertEqual(MoneyAccountList.shared.items(v: v).map { $0.name }, ["Rainy day"])
         let sheet = MoneyAccountList.shared.sheet(v: v, id: "a1")
         XCTAssertEqual(sheet?.title, "Rainy day")
@@ -4069,6 +4069,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyPlanLayout.shared.WHAT_IF_ROW, "What if…")
         XCTAssertEqual(MoneyPlanLayout.shared.SET_CHALLENGE, "Set a challenge")
     }
+    /// Obi's money check: ideas from his own payments cross to Swift with their payments, the fold after three and the
+    /// put-away state; nothing is put away by default.
+    func testMoneyCheckReachesSwift() {
+        let day = Int64(20_745) // 19 Oct 2026
+        let coffees = (0..<12).map { MoneyLine(day: day - Int64($0), pence: -400, merchant: "COSTA COFFEE", category: .coffee) }
+        let fees = [MoneyLine(day: day - 5, pence: -12_000, merchant: "CARD INTEREST", category: .fees)]
+        let lines = coffees + fees
+        let regular = MoneyTips.shared.regular(lines: lines, today: day)
+        guard let v = MoneyCheck.shared.view(lines: lines, today: day, regular: regular, state: MoneyIdeaState(notFor: Set<String>(), until: [:]),
+                                             hiddenKinds: Set<String>()) else { return XCTFail("twelve coffees and a fee should make a money check") }
+        XCTAssertEqual(v.ideas.map(\.id), ["interest", "habit-coffee"])
+        XCTAssertEqual(v.from, "from 2 ideas")
+        XCTAssertNotNil(v.total)
+        XCTAssertNil(v.away)
+        XCTAssertEqual(v.ideas.first?.actKey, MoneyCheck.shared.ACT_CLEAR)
+        XCTAssertFalse(v.ideas.first?.behind.isEmpty ?? true)
+        XCTAssertEqual(MoneyCheck.shared.more(n: 5, open: false), "2 more ›")
+        XCTAssertNil(MoneyCheck.shared.more(n: 3, open: false))
+        let away = MoneyCheck.shared.view(lines: lines, today: day, regular: regular,
+                                          state: MoneyIdeaState(notFor: ["interest"], until: [:]), hiddenKinds: Set<String>())
+        XCTAssertEqual(away?.away, "1 put away")
+        XCTAssertNil(MoneyView.companion.LOCKED.check)
+    }
+
     /// Money's layout rules on Accounts: one foot line at Accounts' end, its ⓘ led by where the accounts come from.
     func testMoneyAccountsLayoutOnTheMac() {
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .foot), MoneyTab.accounts)

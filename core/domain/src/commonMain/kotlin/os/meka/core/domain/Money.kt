@@ -57,6 +57,8 @@ object MoneyTxnFields {
 object MoneyTipsFields {
     /** True while he has that kind hidden. */
     const val HIDDEN = "hidden"
+    /** Obi's money check: on an idea's entity ("idea-<id>"), the epoch day Remind me brings it back (null when not asked). */
+    const val UNTIL = "until"
 }
 
 /** Slice 3: one watchdog alert he put away, id the alert's id ([MoneyWatch]). */
@@ -494,6 +496,8 @@ data class MoneyView(
     val clear: MoneyClearBase? = null,
     /** Where the shown lines came from (statement files, his banks through Lunch Flow, or both), for the tabs' ⓘ. */
     val source: MoneySource = MoneySource.FILES,
+    /** Plan's OBI'S MONEY CHECK: ideas to save from his own payments ([MoneyCheck]); this month only. */
+    val check: MoneyCheckView? = null,
 ) {
     /**
      * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
@@ -627,6 +631,8 @@ object MoneyRules {
         own: List<MoneyOwnCategory> = emptyList(), ownRules: Map<String, String> = emptyMap(),
         /** Needs and wants: the payers he marked a need (true) or a want (false), by merchant key ([MoneyNeeds]). */
         needMerchants: Map<String, Boolean> = emptyMap(),
+        /** Obi's money check: the ideas he put away (Not for me) or asked to be reminded of. */
+        ideaState: MoneyIdeaState = MoneyIdeaState(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -841,6 +847,7 @@ object MoneyRules {
             ownCategories = own,
             ownRows = MoneyOwnCategories.rows(own, ownRules, MoneyChallenges.ownCapBars(challengeLines, challenges, own, today)),
             source = source,
+            check = if (partial) MoneyCheck.view(lines, today, regular, ideaState, hiddenTips) else null,
         )
     }
 
@@ -889,7 +896,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|"; const val NEED_UNDO = "need|"; const val NICK_UNDO = "nick|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val IDEA_UNDO = "idea|"; const val IDEA_PREFIX = "idea-"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|"; const val OWN_UNDO = "own|"; const val OWN_EDIT_UNDO = "ownedit|"; const val OWN_HIDE_UNDO = "ownhide|"; const val OWN_MOVE_UNDO = "ownmove|"; const val NEED_UNDO = "need|"; const val NICK_UNDO = "nick|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -1408,7 +1415,45 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Slice 2: the kinds of tip he hid ([MoneyTipKind.key]). */
     fun hiddenTips(): Set<String> = replica.entities(EntityTypes.MONEY_TIPS)
-        .filter { it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId }.toSet()
+        .filter { !it.ref.entityId.startsWith(IDEA_PREFIX) && it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId }.toSet()
+
+    /** Obi's money check: the ideas he said Not for me to, and the ones Remind me put away until a day. */
+    fun ideaState(): MoneyIdeaState {
+        val ideas = replica.entities(EntityTypes.MONEY_TIPS).filter { it.ref.entityId.startsWith(IDEA_PREFIX) }
+        return MoneyIdeaState(
+            notFor = ideas.filter { it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId.removePrefix(IDEA_PREFIX) }.toSet(),
+            until = ideas.mapNotNull { e -> e[MoneyTipsFields.UNTIL].longOrNull?.let { e.ref.entityId.removePrefix(IDEA_PREFIX) to it } }.toMap(),
+        )
+    }
+
+    /** Not for me on one idea: put away for good on both devices; Undo (by [undoCategory] with the token) brings it back. */
+    fun ideaNotFor(id: String): MoneySaved {
+        if (!MoneyCheck.validId(id)) return MoneySaved(MoneyRules.GONE, refused = true)
+        replica.commitLocal(EntityTypes.MONEY_TIPS, IDEA_PREFIX + id, mapOf(MoneyTipsFields.HIDDEN to true.fv()))
+        return MoneySaved(MoneyCheck.NOT_FOR_SAID, undo = IDEA_UNDO + id)
+    }
+
+    /** Remind me on one idea: put away until [MoneyCheck.REMIND_DAYS] days after [today], on both devices; Undo brings it back now. */
+    fun ideaRemind(id: String, today: Long): MoneySaved {
+        if (!MoneyCheck.validId(id)) return MoneySaved(MoneyRules.GONE, refused = true)
+        val day = today + MoneyCheck.REMIND_DAYS
+        replica.commitLocal(EntityTypes.MONEY_TIPS, IDEA_PREFIX + id, mapOf(MoneyTipsFields.UNTIL to day.fv()))
+        return MoneySaved(MoneyCheck.remindSaid(day), undo = IDEA_UNDO + id)
+    }
+
+    /** Show them again on the money check: every idea put away, and every kind of tip hidden, back. */
+    fun showIdeas(): MoneySaved {
+        val ideas = replica.entities(EntityTypes.MONEY_TIPS).filter {
+            it.ref.entityId.startsWith(IDEA_PREFIX) && (it[MoneyTipsFields.HIDDEN].boolOrNull == true || it[MoneyTipsFields.UNTIL].longOrNull != null)
+        }.map { it.ref.entityId }
+        val kinds = hiddenTips()
+        if (ideas.isEmpty() && kinds.isEmpty()) return MoneySaved(MoneyCheck.SHOWN_AGAIN)
+        replica.batched {
+            ideas.forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to false.fv(), MoneyTipsFields.UNTIL to FieldValue.Null)) }
+            kinds.forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to false.fv())) }
+        }
+        return MoneySaved(MoneyCheck.SHOWN_AGAIN)
+    }
 
     /** Hides every tip of [kindKey] on both devices; Undo (by [undoCategory] with the token) shows them again. */
     fun hideTips(kindKey: String): MoneySaved {
@@ -1664,6 +1709,12 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             replica.commitLocal(EntityTypes.MONEY_ALERT, id, mapOf(MoneyAlertFields.FINE to false.fv()))
             return true
         }
+        if (token.startsWith(IDEA_UNDO)) {
+            val id = token.removePrefix(IDEA_UNDO)
+            if (replica.entity(EntityTypes.MONEY_TIPS, IDEA_PREFIX + id) == null) return false
+            replica.commitLocal(EntityTypes.MONEY_TIPS, IDEA_PREFIX + id, mapOf(MoneyTipsFields.HIDDEN to false.fv(), MoneyTipsFields.UNTIL to FieldValue.Null))
+            return true
+        }
         if (token.startsWith(TIPS_UNDO)) {
             val kind = MoneyTipKind.of(token.removePrefix(TIPS_UNDO)) ?: return false
             replica.commitLocal(EntityTypes.MONEY_TIPS, kind.key, mapOf(MoneyTipsFields.HIDDEN to false.fv()))
@@ -1718,6 +1769,9 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, mapOf(MoneyBusinessFields.SET_ASIDE to FieldValue.Null))
             }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
+            replica.entities(EntityTypes.MONEY_TIPS).map { it.ref.entityId }.filter { it.startsWith(IDEA_PREFIX) }.forEach {
+                replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null, MoneyTipsFields.UNTIL to FieldValue.Null))
+            }
             replica.entities(EntityTypes.MONEY_ALERT).forEach { replica.commitLocal(EntityTypes.MONEY_ALERT, it.ref.entityId, mapOf(MoneyAlertFields.FINE to FieldValue.Null)) }
             replica.entities(EntityTypes.MONEY_CATEGORY, includeDeleted = true).forEach {
                 replica.commitLocal(EntityTypes.MONEY_CATEGORY, it.ref.entityId, mapOf(
