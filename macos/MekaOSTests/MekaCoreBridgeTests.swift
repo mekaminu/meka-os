@@ -4143,8 +4143,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         let fees = [MoneyLine(day: day - 5, pence: -12_000, merchant: "CARD INTEREST", category: .fees)]
         let lines = coffees + fees
         let regular = MoneyTips.shared.regular(lines: lines, today: day)
+        // Kotlin's default arguments don't reach Swift: his own categories (none here) are passed.
+        let noPlan = MoneyOwnPlan(own: [], ownRules: [:], needMerchants: [:])
         guard let v = MoneyCheck.shared.view(lines: lines, today: day, regular: regular, state: MoneyIdeaState(notFor: Set<String>(), until: [:]),
-                                             hiddenKinds: Set<String>(), words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil)) else { return XCTFail("twelve coffees and a fee should make a money check") }
+                                             hiddenKinds: Set<String>(), words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil), plan: noPlan) else { return XCTFail("twelve coffees and a fee should make a money check") }
         XCTAssertEqual(v.ideas.map(\.id), ["interest", "habit-coffee"])
         XCTAssertEqual(v.from, "from 2 ideas")
         XCTAssertNotNil(v.total)
@@ -4156,16 +4158,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         // README item 6: the biggest idea leads in its own card, the rest are rows.
         XCTAssertEqual(MoneyCheck.shared.lead(ideas: v.ideas)?.id, "interest")
         XCTAssertEqual(MoneyCheck.shared.rest(ideas: v.ideas, open: false).map(\.id), ["habit-coffee"])
-        let away =MoneyCheck.shared.view(lines: lines, today: day, regular: regular,
+        let away = MoneyCheck.shared.view(lines: lines, today: day, regular: regular,
                                           state: MoneyIdeaState(notFor: ["interest"], until: [:]), hiddenKinds: Set<String>(),
-                                          words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil))
+                                          words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil), plan: noPlan)
         XCTAssertEqual(away?.away, "1 put away")
         XCTAssertNil(MoneyView.companion.LOCKED.check)
         // Obi's wording: his words show when they use only the idea's own numbers, with the day he wrote them.
         let words = MoneyCheckWordsState(words: ["habit-coffee": MoneyIdeaWords(title: "Coffee most days", why: "12 coffees in 30 days.", rank: 0)],
                                          atMs: KotlinLong(value: 1), day: KotlinLong(value: day))
         let worded = MoneyCheck.shared.view(lines: lines, today: day, regular: regular, state: MoneyIdeaState(notFor: Set<String>(), until: [:]),
-                                            hiddenKinds: Set<String>(), words: words)
+                                            hiddenKinds: Set<String>(), words: words, plan: noPlan)
         XCTAssertEqual(worded?.ideas.first(where: { $0.id == "habit-coffee" })?.title, "Coffee most days")
         XCTAssertEqual(worded?.by, "Written by Obi · Mon 19 Oct")
         XCTAssertNil(v.by)
