@@ -22,7 +22,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -60,7 +59,7 @@ internal fun MoneyCheckCard(
                     Text(l, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.testTag("money-check-total"))
                 }
             }
-            Text(c.from, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = 2.dp))
+            Text(c.from, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         c.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
         ideas.forEach { i ->
@@ -130,7 +129,7 @@ internal fun MoneyIdeaDetails(i: MoneyIdea, onAct: () -> Unit, onRemind: () -> U
             IdeaPill(MoneyCheck.REMIND, Meka.colors.textPrimary, "money-idea-remind", onRemind)
             Text(MoneyCheck.NOT_FOR_ME, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotFor)
-                    .minTouch().padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs).testTag("money-idea-not-for-me"))
+                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-idea-not-for-me"))
         }
     }
 }

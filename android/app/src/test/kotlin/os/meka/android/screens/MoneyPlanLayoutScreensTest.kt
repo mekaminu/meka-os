@@ -157,9 +157,12 @@ class MoneyPlanLayoutScreensTest {
         // Remind me puts it away (on both devices) and Show them again brings it back.
         tap("money-idea-${idea.id}")
         tap("money-idea-remind")
+        // The write and the fresh view run off the main thread: tick until it lands.
+        repeat(40) { if (shows("money-idea-${idea.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         if (shows("money-idea-${idea.id}")) fail("Remind me should put the idea away")
         assertTrue(showsText("1 put away"), "the card should say one is put away")
         tap("money-ideas-show-again")
+        repeat(40) { if (!shows("money-idea-${idea.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(shows("money-idea-${idea.id}"), "Show them again should bring the idea back")
 
         // The forecast: no field on the page; What if… opens the cuts and the extra-a-month field.
