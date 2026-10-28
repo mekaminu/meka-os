@@ -58,4 +58,12 @@ class MoneyColumnsTest {
         assertEquals(MoneyColumns.COLUMNS_KEY, MoneyColumns.scrollKey("clear-head", wide = true))
         assertEquals("tabs", MoneyColumns.scrollKey("tabs", wide = true))
     }
+
+    @Test
+    fun theMacsSideListHasItsLabelAndDrawsByTheSameKeys() {
+        assertEquals("MONEY", MoneyColumns.SIDE_HEAD)
+        // The Mac gates whole parts by these keys (a part's first key), so they must land as the Fold's do.
+        assertEquals(List(4) { MoneyColumn.START }, at("travel-banner", "review", "alerts-head", "trading-review"))
+        assertEquals(List(5) { MoneyColumn.END }, at("latest-head", "txns-head", "regular", "own", "trading-kestrel"))
+    }
 }

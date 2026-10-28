@@ -4512,3 +4512,15 @@ below. Fold `MoneyPane`: the list is written once as `MoneyItems` (a LazyColumn 
 `BoxWithConstraints` picks. Tests: MoneyColumnsTest, MoneyScreensTest (innerTwoColumns, innerBills/Plan/Accounts,
 coverOneColumn). Help money.md (HelpIndex regenerated). No server change, no migration. Mac: not yet (its sheet is one
 column; the wider window with a sidebar is the next slice).
+
+### Money redesign: the Mac's wider window, tabs down the side (2026-10-28)
+
+Mockup Mac-*.dc.html (1280 px: the tabs under a small MONEY label in the sidebar, two columns 32 px apart). Mac
+`MoneySheet`: locked it stays the 520 pt sheet; once unlocked it widens to 1040 pt (`MoneyMacLayout`) with `sideTabs` (a
+180 pt darker strip, a hairline at its edge, MONEY then Spending · Bills · Plan · Trading · Accounts, lit tab on
+surface-raised in the accent; the pills' tick and stepOnPick kept) and the body drawn three times by `parts(v, col)`:
+START and END side by side, then FULL (the empty line, the said line, each tab's foot) under them. Each part is gated by
+`on(key, col)` with the Fold list's keys through core `MoneyColumns.of`, so both apps split alike (month, trading and the
+top-level sections). The Ask Obi bar caps at 640 pt. Core `MoneyColumns.SIDE_HEAD`. Help money.md (HelpIndex
+regenerated), motion catalogue row. Tests: MoneyColumnsTest (the Mac's keys), MekaCoreBridgeTests
+(testMoneyColumnsOnTheMac). No server change, no migration. Mac checked nightly.

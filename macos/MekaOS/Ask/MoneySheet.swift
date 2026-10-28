@@ -125,78 +125,68 @@ struct MoneySheet: View {
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(MoneyRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.locked && v.summary == MoneyRules.shared.LOCKED ? MoneyRules.shared.LOCKED_MAC : v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
-                .staggeredAppear(1)
-            // Speed (4c): while the fresh view is built, the last one shows with "bringing it up to date…" under the title.
-            if let line = v.opening, !v.skeleton {
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
-            }
-            if v.skeleton {
-                Spacer(minLength: 0)
-            } else if v.locked {
-                Button(MoneyRules.shared.UNLOCK) { unlock() }
-                    .keyboardShortcut(.defaultAction)
-                    .staggeredAppear(2)
-            } else {
-                tabPills(v).staggeredAppear(2)
-                // Ask Obi: the bar on every tab opens Obi · money.
-                MoneyAskBarView(palette: palette, onMic: { openChat(listen: true) }) { openChat(listen: false) }
-                .staggeredAppear(2)
-                .popover(isPresented: $chatOpen, arrowEdge: .bottom) { chatPanel(v) }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: MekaSpace.m) {
-                        if let e = MoneyTabs.shared.empty(tab: tab, v: v) {
-                            Text(e).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true).transition(.opacity)
-                        }
-                        if let b = v.bank, has(.bank, v) { bank(b).staggeredAppear(2) }
-                        if let t = v.trading, has(.trading, v) { trading(t).staggeredAppear(2) }
-                        if let m = v.month, tabOfMonth { month(m, v).staggeredAppear(2) }
-                        if let g = v.goals, has(.goals, v) { moneyGoals(g).staggeredAppear(3) }
-                        if let ch = v.challenges, has(.challenges, v) { challenges(ch).staggeredAppear(3) }
-                        if let tv = v.travel, has(.travel, v) { travel(tv).transition(.opacity) }
-                        // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part
-                        // is worked out behind ⓘ.
-                        if has(.planFoot, v), let lines = MoneyTabs.shared.info(tab: MoneyTab.plan, v: v) {
-                            HStack(spacing: MekaSpace.xs) {
-                                Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                                Spacer()
-                                infoButton("foot-plan", title: MoneyTabs.shared.INFO_TITLE, lines: lines)
-                            }
-                            .padding(.top, MekaSpace.m)
-                        }
-                        if let w = v.worth, has(.worth, v) { worth(w).staggeredAppear(3) }
-                        // Money review: the accounts as one clean list under net worth, each opening its popover.
-                        if has(.accounts, v) { accounts(v).staggeredAppear(3) }
-                        // Money review: the year in review lives on Accounts, under net worth.
-                        if let yv = v.year, has(.year, v) { year(yv).transition(.opacity) }
-                        if has(.ownCategories, v) { ownCategories(v).staggeredAppear(3) }
-                        // Accounts' rest (mockup): Side hustle and tax, Shared costs, and Import, export and delete as
-                        // one card of rows, each opening its popover.
-                        if has(.more, v) { more(v).staggeredAppear(3) }
-                        if let s = said { saidLine(s) }
-                        if has(.foot, v) { foot(v) }
-                    }
-                    .id(tab.name)
-                    .transition(.opacity)
+        // Money on the Mac as the mockup (Mac-*.dc.html): once open, a wider window with the tabs down the side and each
+        // tab's body in two columns (core MoneyColumns, the same split as the open Fold); locked, the narrow sheet.
+        let wide = !v.locked && !v.skeleton
+        HStack(alignment: .top, spacing: 0) {
+            if wide { sideTabs(v).transition(.opacity) }
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(MoneyRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
+                Text(v.locked && v.summary == MoneyRules.shared.LOCKED ? MoneyRules.shared.LOCKED_MAC : v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    .staggeredAppear(1)
+                // Speed (4c): while the fresh view is built, the last one shows with "bringing it up to date…" under the title.
+                if let line = v.opening, !v.skeleton {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
                 }
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: tab.name)
-                .scrollIndicators(.never)
-                .frame(maxHeight: 560)
+                if v.skeleton {
+                    Spacer(minLength: 0)
+                } else if v.locked {
+                    Button(MoneyRules.shared.UNLOCK) { unlock() }
+                        .keyboardShortcut(.defaultAction)
+                        .staggeredAppear(2)
+                } else {
+                    // Ask Obi: the bar on every tab opens Obi · money.
+                    MoneyAskBarView(palette: palette, onMic: { openChat(listen: true) }) { openChat(listen: false) }
+                    .frame(maxWidth: MoneyMacLayout.askWidth, alignment: .leading)
+                    .staggeredAppear(2)
+                    .popover(isPresented: $chatOpen, arrowEdge: .bottom) { chatPanel(v) }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: MekaSpace.m) {
+                            HStack(alignment: .top, spacing: MoneyMacLayout.gap) {
+                                parts(v, .start).frame(maxWidth: .infinity, alignment: .topLeading)
+                                parts(v, .end).frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+                            // Full width under the columns: the empty line, the said line and the tab's foot.
+                            parts(v, .full)
+                        }
+                        .id(tab.name)
+                        .transition(.opacity)
+                    }
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: tab.name)
+                    .scrollIndicators(.never)
+                    .frame(maxHeight: MoneyMacLayout.scrollHeight)
+                }
+                HStack {
+                    Spacer()
+                    Button("Done") { dismiss() }.keyboardShortcut(v.locked ? .cancelAction : .defaultAction)
+                }
+                .padding(.top, MekaSpace.m)
             }
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(v.locked ? .cancelAction : .defaultAction)
-            }
-            .padding(.top, MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(MekaSpace.l)
         }
-        .padding(MekaSpace.l)
-        .frame(width: 520)
+        // The side list's darker strip runs the sheet's full height (a background, so it never stretches the sheet).
+        .background(alignment: .leading) {
+            if wide {
+                palette.background.frame(width: MoneyMacLayout.sideWidth)
+                    .overlay(alignment: .trailing) { Rectangle().fill(palette.hairline).frame(width: 1) }
+            }
+        }
+        .frame(width: wide ? MoneyMacLayout.wideWidth : MoneyMacLayout.narrowWidth)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: wide)
         .background(palette.surface)
         .onAppear { if model.money?.locked ?? true { unlock() } }
         .onDisappear { model.closeMoney() }
@@ -210,10 +200,14 @@ struct MoneySheet: View {
     /// Spending and Bills draw from the month's block (this month's payday, cards and refunds live there).
     private var tabOfMonth: Bool { tab == MoneyTab.spending || tab == MoneyTab.bills || tab == MoneyTab.plan }
 
-    /// Money redesign (B), slice 1: Spending · Bills · Plan · Trading · Accounts as pills; the chosen one is lit and
-    /// blends there; a click gives a tick. Bills and Plan step back to this month (MoneyTabs.stepOnPick).
-    private func tabPills(_ v: MoneyView) -> some View {
-        HStack(spacing: MekaSpace.xs) {
+    /// Money on the Mac as the mockup (Mac-*.dc.html): the tabs down the side under a small MONEY label instead of pills;
+    /// the chosen one is lit and blends there; a click gives a tick. Bills and Plan step back to this month
+    /// (MoneyTabs.stepOnPick).
+    private func sideTabs(_ v: MoneyView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(MoneyColumns.shared.SIDE_HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .padding(.horizontal, MekaSpace.xs).padding(.bottom, MekaSpace.xxs)
+                .accessibilityAddTraits(.isHeader)
             ForEach(MoneyTabs.shared.ALL, id: \.name) { t in
                 let lit = t == tab
                 Button {
@@ -222,11 +216,12 @@ struct MoneySheet: View {
                     tab = t
                     if let step = MoneyTabs.shared.stepOnPick(tab: t, v: v) { model.moneyStep(step.int32Value) }
                 } label: {
-                    Text(t.label).font(MekaType.itemMeta).lineLimit(1)
+                    Text(t.label).font(MekaType.body).lineLimit(1)
                         .foregroundStyle(lit ? palette.accent : palette.textSecondary)
-                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                        .background(Capsule().fill(lit ? palette.surfaceRaised : palette.background))
-                        .contentShape(Capsule())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xs)
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(lit ? palette.surfaceRaised : Color.clear))
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(MekaPressStyle())
                 .accessibilityLabel(MoneyTabs.shared.spoken(tab: t, chosen: lit))
@@ -234,7 +229,49 @@ struct MoneySheet: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.vertical, MekaSpace.l).padding(.horizontal, MekaSpace.xs)
+        .frame(width: MoneyMacLayout.sideWidth)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tab.name)
+    }
+
+    /// Whether the part keyed [key] (the Fold list's key, so both apps split alike) belongs in column [col].
+    private func on(_ key: String, _ col: MoneyColumn) -> Bool { MoneyColumns.shared.of(key: key) == col }
+
+    /// The chosen tab's parts that sit in column [col]: the left or right column, or (FULL) what spans both under them.
+    private func parts(_ v: MoneyView, _ col: MoneyColumn) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            if let e = MoneyTabs.shared.empty(tab: tab, v: v), on("tab-empty-\(tab.name)", col) {
+                Text(e).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true).transition(.opacity)
+            }
+            if let b = v.bank, has(.bank, v), on("bank", col) { bank(b).staggeredAppear(2) }
+            if let t = v.trading, has(.trading, v) { trading(t, col).staggeredAppear(2) }
+            if let m = v.month, tabOfMonth { month(m, v, col).staggeredAppear(2) }
+            if let g = v.goals, has(.goals, v), on("goals", col) { moneyGoals(g).staggeredAppear(3) }
+            if let ch = v.challenges, has(.challenges, v), on("challenges", col) { challenges(ch).staggeredAppear(3) }
+            if let tv = v.travel, has(.travel, v), on("travel", col) { travel(tv).transition(.opacity) }
+            // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part is worked
+            // out behind ⓘ.
+            if has(.planFoot, v), on("plan-foot", col), let lines = MoneyTabs.shared.info(tab: MoneyTab.plan, v: v) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    infoButton("foot-plan", title: MoneyTabs.shared.INFO_TITLE, lines: lines)
+                }
+                .padding(.top, MekaSpace.m)
+            }
+            if let w = v.worth, has(.worth, v), on("worth", col) { worth(w).staggeredAppear(3) }
+            // Money review: the accounts as one clean list under net worth, each opening its popover.
+            if has(.accounts, v), on("accounts", col) { accounts(v).staggeredAppear(3) }
+            // Money review: the year in review lives on Accounts, under net worth.
+            if let yv = v.year, has(.year, v), on("year", col) { year(yv).transition(.opacity) }
+            if has(.ownCategories, v), on("own", col) { ownCategories(v).staggeredAppear(3) }
+            // Accounts' rest (mockup): Side hustle and tax, Shared costs, and Import, export and delete as one card of
+            // rows, each opening its popover.
+            if has(.more, v), on("more", col) { more(v).staggeredAppear(3) }
+            if let s = said, on("said", col) { saidLine(s) }
+            if has(.foot, v), on("foot", col) { foot(v) }
+        }
     }
 
     private func unlock() {
@@ -244,9 +281,10 @@ struct MoneySheet: View {
         }
     }
 
-    private func month(_ m: MoneyMonth, _ v: MoneyView) -> some View {
+    /// The month's parts that sit in column [col] (the Fold list's keys decide, as MoneyColumns says).
+    private func month(_ m: MoneyMonth, _ v: MoneyView, _ col: MoneyColumn) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            if has(.month, v) {
+            if has(.month, v), on("month", col) {
             HStack {
                 Button("‹") { model.moneyStep(-1) }.disabled(!v.earlier).accessibilityLabel("Month before")
                 Text(m.label).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -279,13 +317,13 @@ struct MoneySheet: View {
             }
             }
             }
-            if let b = v.travel?.banner, has(.travelBanner, v) {
+            if let b = v.travel?.banner, has(.travelBanner, v), on("travel-banner", col) {
                 // Slice 17: abroad, or a trip near — the card to use leads this month.
                 Text(b).font(MekaType.body).foregroundStyle(palette.accent).contentTransition(.opacity)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, MekaSpace.xxs)
             }
-            if let rv = v.review, has(.review, v) { review(rv).transition(.opacity) }
-            if has(.alerts, v) {
+            if let rv = v.review, has(.review, v), on("review", col) { review(rv).transition(.opacity) }
+            if has(.alerts, v), on("alerts-head", col) {
                 Text(MoneyWatch.shared.head(n: Int32(v.alerts.count))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
                 // Money review: compact one-line rows, three then "2 more ›"; a click opens one with That's fine.
@@ -298,10 +336,12 @@ struct MoneySheet: View {
             }
             // Money redesign (B3): the Bills tab's card, then the month's bills by date (to come first, paid greyed).
             if let b = v.bills, has(.bills, v) {
-                MoneyBillsCardView(bills: b, palette: palette, reduced: reduceMotion).padding(.top, MekaSpace.xs).transition(.opacity)
+                if on("bills-card", col) {
+                    MoneyBillsCardView(bills: b, palette: palette, reduced: reduceMotion).padding(.top, MekaSpace.xs).transition(.opacity)
+                }
                 // Layout rules (a) and (d): the month's bills in one card, five then "See all N ›"; where they're found
                 // from is behind the tab's ⓘ at the foot.
-                if !b.rows.isEmpty {
+                if !b.rows.isEmpty, on("bills-list", col) {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         ForEach(MoneyBills.shared.shownRows(v: b, open: allBills), id: \.key) { r in
                             MoneyBillRowView(row: r, palette: palette).transition(.opacity)
@@ -314,9 +354,9 @@ struct MoneySheet: View {
                     .moneyCard(palette)
                 }
             }
-            if let p = v.payday, has(.payday, v) { paydayRow(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
-            if let c = v.cards, has(.cards, v) { cards(c).transition(.opacity) }
-            if let r = v.refunds, has(.refunds, v) {
+            if let p = v.payday, has(.payday, v), on("payday", col) { paydayRow(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
+            if let c = v.cards, has(.cards, v), on("cards", col) { cards(c).transition(.opacity) }
+            if let r = v.refunds, has(.refunds, v), on("refunds", col) {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
                 // Layout rules (b) and (d): compact rows (what · its state · ›), three then "2 more ›"; a click opens the
@@ -335,7 +375,7 @@ struct MoneySheet: View {
             // Obi's money check (Plan, mockup): the yearly total, then the ideas as one-line rows, three then "2 more ›"; a
             // click opens the idea's popover (why, the payments behind it, its step, Remind me, Not for me); "2 put away"
             // and Show them again sit in the same card.
-            if let c = v.check, has(.tips, v) {
+            if let c = v.check, has(.tips, v), on("check", col) {
                 Text(MoneyCheck.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
@@ -382,7 +422,7 @@ struct MoneySheet: View {
                 .moneyCard(palette)
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this Mac as he slides, Make it a goal.
-            if let b = v.save, has(.save, v) {
+            if let b = v.save, has(.save, v), on("save", col) {
                 Text(MoneySave.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 MoneySaveCardView(base: b, palette: palette, reduced: reduceMotion) { amount, months, rate in
                     Task { said = await model.moneySaveGoal(amountPence: amount, months: months, rateBp: rate) }
@@ -390,20 +430,20 @@ struct MoneySheet: View {
                 .transition(.opacity)
             }
             // Money redesign, Plan (mockup): Clear my cards — one amount a month across his cards, worked out here as he slides.
-            if let b = v.clear, has(.clear, v) {
+            if let b = v.clear, has(.clear, v), on("clear", col) {
                 Text(MoneyClear.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 MoneyClearCardView(base: b, palette: palette, reduced: reduceMotion) { pay, order in
                     Task { said = await model.moneyClearGoal(payPence: pay, order: order) }
                 }
                 .transition(.opacity)
             }
-            if let r = v.regular, has(.regular, v) {
+            if let r = v.regular, has(.regular, v), on("regular", col) {
                 Text("REGULAR PAYMENTS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
                 ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
             }
             // Layout rule (c): Bills says "read-only · not financial advice" once, at its foot; where it's from behind ⓘ.
-            if has(.billsFoot, v), let lines = MoneyTabs.shared.info(tab: MoneyTab.bills, v: v) {
+            if has(.billsFoot, v), on("bills-foot", col), let lines = MoneyTabs.shared.info(tab: MoneyTab.bills, v: v) {
                 HStack(spacing: MekaSpace.xs) {
                     Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     Spacer()
@@ -411,8 +451,8 @@ struct MoneySheet: View {
                 }
                 .padding(.top, MekaSpace.m)
             }
-            if let f = v.forecast, has(.forecast, v) { forecast(f).transition(.opacity) }
-            if has(.categories, v), let full = m.spending {
+            if let f = v.forecast, has(.forecast, v), on("forecast", col) { forecast(f).transition(.opacity) }
+            if has(.categories, v), on("cats-head", col), let full = m.spending {
                 let sp = MoneyNeeds.shared.shown(v: full, needs: needsView)
                 MoneyHeadWithLink(head: "WHERE IT WENT", link: MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats), palette: palette) {
                     allCats.toggle()
@@ -430,12 +470,12 @@ struct MoneySheet: View {
                 }
                 .moneyCard(palette)
             }
-            if let u = m.unsorted, has(.unsorted, v) { unsortedRow(u) }
-            if has(.categories, v), m.spending == nil {
+            if let u = m.unsorted, has(.unsorted, v), on("unsorted", col) { unsortedRow(u) }
+            if has(.categories, v), on("cats-head", col), m.spending == nil {
                 Text("BY CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(m.categories, id: \.key) { c in category(c).transition(.opacity) }
             }
-            if has(.payments, v), let sp = m.spending, !allPays {
+            if has(.payments, v), on("latest-head", col), let sp = m.spending, !allPays {
                 MoneyHeadWithLink(head: MoneySpending.shared.LATEST_HEAD, link: sp.seeAll, palette: palette) { allPays = true }
                 // Layout rule (a): the latest payments, by day, in one card.
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -445,7 +485,7 @@ struct MoneySheet: View {
                     }
                 }
                 .moneyCard(palette)
-            } else if has(.payments, v) {
+            } else if has(.payments, v), on("txns-head", col) {
                 if m.spending != nil {
                     MoneyHeadWithLink(head: "ALL PAYMENTS THIS MONTH", link: MoneySpending.shared.SEE_ALL_CLOSE, palette: palette) { allPays = false }
                 }
@@ -459,7 +499,7 @@ struct MoneySheet: View {
                 }
             }
             // Layout rule (c): "read-only · not financial advice" once, at the foot of Spending; where it's from behind ⓘ.
-            if has(.spendFoot, v), let lines = MoneyTabs.shared.info(tab: MoneyTab.spending, v: v) {
+            if has(.spendFoot, v), on("spend-foot", col), let lines = MoneyTabs.shared.info(tab: MoneyTab.spending, v: v) {
                 HStack(spacing: MekaSpace.xs) {
                     Text(MoneyTabs.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     Spacer()
@@ -2211,50 +2251,56 @@ struct MoneySheet: View {
     /// MoneyTradingLayout): cards under their labels — equity (the total, a Read-only mark, Dollars · Pounds, the P&L),
     /// OPEN POSITIONS (five, then See all), the P&L line, YOUR TRADES, the month in review, YOUR ADDRESSES, ALERTS and
     /// EXPORT FOR TAX — and one "Read-only · not trading advice" foot whose ⓘ says where the figures come from.
-    private func trading(_ t: TradingView) -> some View {
+    /// Trading's parts that sit in column [col]: equity, Obi's risk line, the curve and the month on the left; positions,
+    /// Kestrel, trades, addresses, alerts and the export on the right; the foot under both (MoneyColumns, as the Fold).
+    private func trading(_ t: TradingView, _ col: MoneyColumn) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            tradingEquity(t).moneyCard(palette)
-            if let r = t.risk { tradingRisk(r).moneyCard(palette) }
-            if MoneyTradingLayout.shared.hasPositions(t: t) {
+            if on("trading-head", col) { Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            if on("trading", col) { tradingEquity(t).moneyCard(palette) }
+            if let r = t.risk, on("trading-risk", col) { tradingRisk(r).moneyCard(palette) }
+            if MoneyTradingLayout.shared.hasPositions(t: t), on("trading-positions", col) {
                 tradingHead(MoneyTradingLayout.shared.POSITIONS_HEAD)
                 tradingPositions(t).moneyCard(palette)
             }
-            if let k = model.tradingKestrel {
+            if let k = model.tradingKestrel, on("trading-kestrel", col) {
                 tradingHead(k.head)
                 tradingKestrel(k).moneyCard(palette)
             }
-            if let c = t.curve {
+            if let c = t.curve, on("trading-curve", col) {
                 tradingHead(c.head)
                 tradingCurve(c).moneyCard(palette)
             }
-            if let tr = t.trades {
+            if let tr = t.trades, on("trading-trades", col) {
                 tradingHead(tr.head)
                 trades(tr).moneyCard(palette)
             }
-            if let r = t.review {
+            if let r = t.review, on("trading-review", col) {
                 tradingHead(r.head)
                 tradingReview(r).moneyCard(palette)
             }
             Group {
-                tradingHead(MoneyTradingLayout.shared.ADDRESSES_HEAD)
-                tradingAddresses(t).moneyCard(palette)
-                if let a = t.alerts {
+                if on("trading-addresses", col) {
+                    tradingHead(MoneyTradingLayout.shared.ADDRESSES_HEAD)
+                    tradingAddresses(t).moneyCard(palette)
+                }
+                if let a = t.alerts, on("trading-alerts", col) {
                     tradingHead(a.head)
                     tradingAlerts(a).moneyCard(palette)
                 }
-                if let e = t.export {
+                if let e = t.export, on("trading-export", col) {
                     tradingHead(e.head)
                     tradingExport(e, inCard: true).moneyCard(palette)
                 }
             }
-            HStack(spacing: MekaSpace.xs) {
-                Text(MoneyTradingLayout.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                Spacer()
-                infoButton("foot-trading", title: MoneyTabs.shared.INFO_TITLE,
-                           lines: MoneyTradingLayout.shared.info(t: t) + (model.tradingKestrel == nil ? [] : [TradingKestrel.shared.INFO]))
+            if on("trading-foot", col) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(MoneyTradingLayout.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    infoButton("foot-trading", title: MoneyTabs.shared.INFO_TITLE,
+                               lines: MoneyTradingLayout.shared.info(t: t) + (model.tradingKestrel == nil ? [] : [TradingKestrel.shared.INFO]))
+                }
+                .padding(.top, MekaSpace.m)
             }
-            .padding(.top, MekaSpace.m)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
@@ -3074,4 +3120,15 @@ private struct MoneyWorthLine: View {
             if reduced { drawn = 1 } else { withAnimation(MekaMotion.appear(reduced: false)) { drawn = 1 } }
         }
     }
+}
+
+/// Money on the Mac as the mockup draws it at 1280 px (Mac-*.dc.html): once open, the sheet widens to hold the tabs down
+/// the side and two columns 32 pt apart; locked, it stays the narrow sheet with Unlock.
+enum MoneyMacLayout {
+    static let narrowWidth: CGFloat = 520
+    static let wideWidth: CGFloat = 1040
+    static let sideWidth: CGFloat = 180
+    static let gap: CGFloat = 32
+    static let askWidth: CGFloat = 640
+    static let scrollHeight: CGFloat = 620
 }

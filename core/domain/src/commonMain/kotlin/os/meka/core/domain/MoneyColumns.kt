@@ -27,6 +27,12 @@ object MoneyColumns {
     /** The narrowest pane that gets two columns (the open Fold is ~840 dp; the closed one ~344–412 dp). */
     const val WIDE_DP = 600
 
+    /**
+     * The small caps label over the tabs where they run down the side instead of pills (the Mac's wider Money window,
+     * Mac-*.dc.html; the Mac draws by the same keys, so both apps split each tab alike).
+     */
+    const val SIDE_HEAD = "MONEY"
+
     /** The key of the one list item that holds both columns (what a jump to a part inside them scrolls to). */
     const val COLUMNS_KEY = "money-columns"
 

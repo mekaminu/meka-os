@@ -4164,5 +4164,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TradingKestrel.shared.REVIEW, "Review in Needs you")
         XCTAssertTrue(TradingKestrel.shared.INFO.contains("Nothing on this tab can trade"))
     }
-}
 
+    /// Money on the Mac as the mockup: the tabs down the side under MONEY, each tab's parts split by the Fold's keys.
+    func testMoneyColumnsOnTheMac() {
+        XCTAssertEqual(MoneyColumns.shared.SIDE_HEAD, "MONEY")
+        XCTAssertEqual(MoneyColumns.shared.of(key: "month"), MoneyColumn.start)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "latest-head"), MoneyColumn.end)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "bills-card"), MoneyColumn.start)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "bills-list"), MoneyColumn.end)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "trading-positions"), MoneyColumn.end)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "spend-foot"), MoneyColumn.full)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "said"), MoneyColumn.full)
+        XCTAssertEqual(MoneyColumns.shared.of(key: "tab-empty-SPENDING"), MoneyColumn.full)
+    }
+}
