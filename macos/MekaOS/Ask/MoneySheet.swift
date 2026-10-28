@@ -1316,7 +1316,7 @@ struct MoneySheet: View {
             HStack(spacing: MekaSpace.m) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
-                    Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1).contentTransition(.opacity)
+                    Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(3).fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
                 }
                 Spacer()
                 Text(r.amount ?? MoneyWorthOther.shared.ADD)

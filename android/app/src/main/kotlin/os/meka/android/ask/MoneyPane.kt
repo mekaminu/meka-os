@@ -2564,7 +2564,7 @@ private fun WorthOtherRow(r: MoneyWorthOtherRow, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 3)
             }
         }
         Crossfade(r.amount ?: MoneyWorthOther.ADD, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-amount") { a ->
