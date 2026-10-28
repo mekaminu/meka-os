@@ -40,6 +40,7 @@ import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
 import os.meka.core.domain.AskContext
 import os.meka.core.domain.MoneyChatObi
+import os.meka.core.domain.MoneyChatSpoken
 import os.meka.core.domain.TalkTurn
 import os.meka.core.facade.AiApi
 import os.meka.core.facade.AskReply
@@ -198,5 +199,22 @@ class MoneyChatScreensTest {
         assertTrue(showsText("Costa came to £57.60"), "Obi's answer isn't in the chat")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-ai"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-ai")
+    }
+
+    /** Slice 3: the bar's mic opens Obi · money listening; a phone with no recogniser says so and keeps the field. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theBarsMicOpensTheChatListening() {
+        Shadows.shadowOf(ApplicationProvider.getApplicationContext<ShotApplication>()).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
+        val core = open()
+        assertTrue(shows("money-ask-mic"), "no mic on the Ask Obi bar")
+        tap("money-ask-mic")
+        until(core) { shows("money-chat-heard") }
+        assertTrue(shows("money-chat-sheet"), "the mic didn't open the chat")
+        assertTrue(shows("money-chat-mic"), "no mic beside the chat's field")
+        assertTrue(shows("money-chat-heard"), "nothing said why the mic couldn't listen")
+        assertTrue(compose.onAllNodes(hasContentDescription(MoneyChatSpoken.MIC_SPOKEN), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "the mic has no spoken name")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-mic"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-mic")
     }
 }

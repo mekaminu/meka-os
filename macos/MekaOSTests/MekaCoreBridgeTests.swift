@@ -4141,5 +4141,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(t.byObi)
         XCTAssertNil(MoneyChatObi.shared.check(answer: "You spent £999 on coffee.", sent: ["Coffee £48"]))
         XCTAssertEqual(MoneyChatObi.shared.check(answer: "Coffee was £48 this month.", sent: ["Coffee £48"]), "Coffee was £48 this month.")
+        // Slice 3: what's said to the mic (or dictated on the Mac) is tidied into the question the rules read.
+        XCTAssertEqual(MoneyChatSpoken.shared.question(words: "can I afford two grand by March"), "Can I afford £2,000 by March?")
+        XCTAssertNil(MoneyChatSpoken.shared.question(words: "  "))
+        XCTAssertFalse(MoneyChatSpoken.shared.MIC_SPOKEN.isEmpty)
     }
 }

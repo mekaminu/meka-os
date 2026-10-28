@@ -4418,3 +4418,18 @@ Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
   MoneyChatObiFacadeTest, MoneyChatScreensTest.askObiAQuestionTheRulesCantAnswer (Roborazzi
   cover-dark-ask-obi-ai), MekaCoreBridgeTests.testMoneyChatReachesSwift. No migration. Mac checked nightly. Next: the
   mic on the bar (slice 3), then Trading.
+
+
+2026-10-28, **Ask Obi, slice 3 (the mic on the bar)**, both apps. Core `MoneyChatSpoken`: `question` tidies what was
+  said (spoken number runs of 100 or more, or before pounds/quid/grand, become digits: "twelve hundred pound" → "£1200",
+  "two grand" → "£2,000", "a hundred pounds" → "£100"; a lone "one"/"a" and "six months" stay words; "N pounds/quid" →
+  "£N"; a capital first letter and "?" after a question word), `MIC_SPOKEN`, `MIC_DONE`, `NOTHING`(`_MAC`). Fold: the
+  bar's mockup mic (drawn line mic, accent; `money-ask-mic`) opens Obi · money already listening; a mic beside the
+  field (`money-chat-mic`, brass while listening, "Done speaking" takes what's said so far) listens in the sheet through
+  Capture's `CaptureListener` (his words in the field as he speaks, the 0.6 s end, Google's speech or the phone's own),
+  then asks the tidied question; the microphone permission is asked on first use; nothing heard or no recogniser says
+  so under the field (`money-chat-heard`); Capture's `ListeningLine` is now internal and shared. Mac: a mic at the end of
+  the bar and beside the field; it focuses the field and starts macOS Dictation (`startDictation:`), the popover from the
+  bar's mic does so on appear; Return asks the tidied question. Help money.md (HelpIndex regenerated), motion catalogue.
+  Tests: MoneyChatSpokenTest, MoneyChatScreensTest.theBarsMicOpensTheChatListening (Roborazzi cover-dark-ask-obi-mic),
+  MekaCoreBridgeTests.testMoneyChatReachesSwift. No server change, no migration. Mac checked nightly.

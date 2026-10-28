@@ -812,7 +812,7 @@ private fun CaptureSheet(
  * listens, after a brass dot that grows with his voice (still with reduced motion).
  */
 @Composable
-private fun ListeningLine(engine: os.meka.core.domain.ListenEngine?, resting: Boolean, level: Float, reduced: Boolean) {
+internal fun ListeningLine(engine: os.meka.core.domain.ListenEngine?, resting: Boolean, level: Float, reduced: Boolean) {
     val line = os.meka.core.domain.ListenRules.listeningLine(engine ?: os.meka.core.domain.ListenEngine.ONLINE, os.meka.core.domain.ListenRules.GOOGLE, resting = resting)
     Row(
         Modifier.padding(vertical = MekaSpace.xs).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = line },

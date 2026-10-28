@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import AppKit
 import SwiftUI
 
 /// Money redesign, **Ask Obi** on the Mac (slice 1), like the Fold's MoneyChatUi: the bar under the tabs on every Money
@@ -11,25 +12,36 @@ import SwiftUI
 /// Motion); buttons press like every control.
 struct MoneyAskBarView: View {
     let palette: MekaPalette
+    var onMic: () -> Void = {}
     let onOpen: () -> Void
 
     var body: some View {
-        Button { MekaHaptics.tick(); onOpen() } label: {
-            HStack(spacing: MekaSpace.xs) {
-                Circle()
-                    .fill(RadialGradient(colors: [palette.accent, palette.accent.opacity(0.45)], center: .topLeading, startRadius: 0, endRadius: 22))
-                    .frame(width: 20, height: 20)
-                Text(MoneyChat.shared.BAR).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
-                Spacer(minLength: MekaSpace.xs)
-                Text("›").font(MekaType.body).foregroundStyle(palette.accent)
+        HStack(spacing: 0) {
+            Button { MekaHaptics.tick(); onOpen() } label: {
+                HStack(spacing: MekaSpace.xs) {
+                    Circle()
+                        .fill(RadialGradient(colors: [palette.accent, palette.accent.opacity(0.45)], center: .topLeading, startRadius: 0, endRadius: 22))
+                        .frame(width: 20, height: 20)
+                    Text(MoneyChat.shared.BAR).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    Spacer(minLength: MekaSpace.xs)
+                }
+                .padding(.leading, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-            .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.background))
-            .overlay(RoundedRectangle(cornerRadius: MekaRadius.l).stroke(palette.hairline, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: MekaRadius.l))
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(MoneyChat.shared.BAR_SPOKEN)
+            // Slice 3: the mockup's mic opens Obi · money with Dictation already listening.
+            Button { MekaHaptics.tick(); onMic() } label: {
+                Image(systemName: "mic").font(MekaType.body).foregroundStyle(palette.accent)
+                    .frame(width: 32, height: 32).contentShape(Circle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .padding(.trailing, MekaSpace.xs)
+            .help(MoneyChatSpoken.shared.MIC_SPOKEN)
+            .accessibilityLabel(MoneyChatSpoken.shared.MIC_SPOKEN)
         }
-        .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(MoneyChat.shared.BAR_SPOKEN)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.background))
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.l).stroke(palette.hairline, lineWidth: 1))
     }
 }
 
@@ -43,8 +55,11 @@ struct MoneyChatPanel: View {
     let onAction: (CoreModel.MoneyChatAct) -> Void
     let onUndo: (String) -> Void
     let onDone: () -> Void
+    /// Slice 3: opened from the bar's mic, so Dictation starts in the field once the popover is up.
+    var listenOnOpen = false
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var typed = ""
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -102,7 +117,12 @@ struct MoneyChatPanel: View {
             HStack(spacing: MekaSpace.xs) {
                 TextField(MoneyChat.shared.FIELD, text: $typed)
                     .textFieldStyle(.roundedBorder)
+                    .focused($fieldFocused)
                     .onSubmit { send() }
+                Button { dictate() } label: { Image(systemName: "mic") }
+                    .help(MoneyChatSpoken.shared.MIC_SPOKEN)
+                    .accessibilityLabel(MoneyChatSpoken.shared.MIC_SPOKEN)
+                    .disabled(working)
                 Button(MoneyChat.shared.SEND) { send() }.disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty || working)
             }
             if let s = said {
@@ -125,11 +145,24 @@ struct MoneyChatPanel: View {
         }
         .padding(MekaSpace.m)
         .frame(width: 420)
+        .onAppear { if listenOnOpen { dictate() } }
+    }
+
+    /// The mic: the field takes focus and macOS Dictation listens into it (Return asks, as typed; the core tidies the
+    /// spoken amounts). Dictation is the Mac's own; nothing is recorded or kept here.
+    private func dictate() {
+        MekaHaptics.tick()
+        fieldFocused = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            NSApp.sendAction(Selector(("startDictation:")), to: nil, from: nil)
+        }
     }
 
     private func send() {
-        let q = typed.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty, !working else { return }
+        let raw = typed.trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty, !working else { return }
+        let q = MoneyChatSpoken.shared.question(words: raw) ?? raw
         typed = ""
         onAsk(q)
     }

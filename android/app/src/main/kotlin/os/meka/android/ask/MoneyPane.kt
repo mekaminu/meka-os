@@ -313,6 +313,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var chatTurns by remember { mutableStateOf(emptyList<MoneyChatTurn>()) }
     var chatTry by remember { mutableStateOf(emptyList<String>()) }
     var chatWorking by remember { mutableStateOf(false) }
+    // Slice 3: the bar's mic opened the sheet, so it starts listening once it's up.
+    var chatListen by remember { mutableStateOf(false) }
     // Layout rule (c): the ⓘ sheet open, if any (not saved: it's rebuilt from the view on a tap).
     var info by remember { mutableStateOf<MoneyInfo?>(null) }
     val otherOpen = v.worth?.takeIf { otherSheet }
@@ -435,10 +437,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
         // Ask Obi: the bar on every tab opens the money chat.
         item(key = "ask-obi") {
-            MoneyAskBar(Modifier.animateItem().appear(rememberAppearance(2))) {
-                haptics.tick(); said = null; chatOpen = true
+            val openChat: (Boolean) -> Unit = { listen ->
+                haptics.tick(); said = null; chatListen = listen; chatOpen = true
                 scope.launch { chatTry = runCatching { core.moneyChatSuggestions() }.getOrDefault(emptyList()) }
             }
+            MoneyAskBar(Modifier.animateItem().appear(rememberAppearance(2)), onMic = { openChat(true) }) { openChat(false) }
         }
         MoneyTabs.empty(tab, v)?.let { e ->
             item(key = "tab-empty-${tab.name}") {
@@ -1125,8 +1128,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         SheetSaid(said)
     }
     // Ask Obi: Obi · money, answered on the device; an answer's buttons make the goal, use the cards plan or show Plan.
-    MoneyDetailSheet(MoneyChat.HEAD.takeIf { chatOpen }, title = { it }, tag = "money-chat-sheet", done = MoneyChat.DONE, onClose = { chatOpen = false }) { _ ->
-        MoneyChatContent(chatTurns, chatTry, chatWorking,
+    MoneyDetailSheet(MoneyChat.HEAD.takeIf { chatOpen }, title = { it }, tag = "money-chat-sheet", done = MoneyChat.DONE, onClose = { chatOpen = false; chatListen = false }) { _ ->
+        MoneyChatContent(chatTurns, chatTry, chatWorking, listenNow = chatListen, onListenTaken = { chatListen = false },
             onAsk = { q ->
                 if (!chatWorking) {
                     haptics.tick(); said = null; chatWorking = true

@@ -41,6 +41,8 @@ struct MoneySheet: View {
     /// Ask Obi (slice 1): the money chat's popover, its turns while Money is open (never stored), its Try questions,
     /// whether an answer is on its way, and the next turn's id.
     @State private var chatOpen = false
+    /// Ask Obi, slice 3: the popover was opened from the bar's mic (Dictation starts in its field).
+    @State private var chatListen = false
     @State private var chatTurns: [CoreModel.MoneyChatLine] = []
     @State private var chatTry: [String] = []
     @State private var chatWorking = false
@@ -139,11 +141,7 @@ struct MoneySheet: View {
             } else {
                 tabPills(v).staggeredAppear(2)
                 // Ask Obi: the bar on every tab opens Obi · money.
-                MoneyAskBarView(palette: palette) {
-                    said = nil
-                    chatOpen = true
-                    Task { chatTry = await model.moneyChatSuggestions() }
-                }
+                MoneyAskBarView(palette: palette, onMic: { openChat(listen: true) }) { openChat(listen: false) }
                 .staggeredAppear(2)
                 .popover(isPresented: $chatOpen, arrowEdge: .bottom) { chatPanel(v) }
                 ScrollView {
@@ -2103,6 +2101,13 @@ struct MoneySheet: View {
             .accessibilityAddTraits(on ? .isSelected : [])
     }
 
+    private func openChat(listen: Bool) {
+        said = nil
+        chatListen = listen
+        chatOpen = true
+        Task { chatTry = await model.moneyChatSuggestions() }
+    }
+
     /// Ask Obi's popover: an answer's buttons make the goal, use the cards plan, or show Plan.
     private func chatPanel(_ v: MoneyView) -> some View {
         MoneyChatPanel(
@@ -2132,7 +2137,8 @@ struct MoneySheet: View {
                 }
             },
             onUndo: { u in Task { _ = await model.undoMoneyCategory(token: u); said = nil } },
-            onDone: { chatOpen = false }
+            onDone: { chatOpen = false },
+            listenOnOpen: chatListen
         )
     }
 
