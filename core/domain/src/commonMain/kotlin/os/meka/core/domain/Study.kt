@@ -23,7 +23,7 @@ import os.meka.core.sync.fv
  * Slice 2b part 2 ([StudyWeekRules]): THIS WEEK with Start and Done on a session.
  * Slice 2b rest ([StudyNudgeRules]): the 10-minute nudge card on Today, with Start and Done.
  * Slice 2b rest ([StudyCheckinRules]): the Sunday check-in card on Today.
- * Still to come (the board): slice 3, the outline from a screenshot.
+ * Slice 3 part 1, the outline from a screenshot read on the device, is [StudyScanRules].
  */
 object StudyCourseFields {
     /** "Data analytics certificate" (at most [StudyRules.MAX_COURSE]). */

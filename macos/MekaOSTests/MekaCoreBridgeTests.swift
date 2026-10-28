@@ -3146,6 +3146,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.studyView.value.course(id: id)?.checkin, false)
         let notShowing = try await core.seeStudyCheckin(key: StudyCheckinRules.shared.key(sunday: 1))
         XCTAssertFalse(notShowing.boolValue)
+
+        // Slice 3 part 1: a screenshot's words (as Vision hands them) become outline lines for the field, as Strings.
+        let scan = StudyScanRules.shared.scan(text: "Course content\nSection 1: Basics 0 / 1 | 5min\n1. Hello\n5min")
+        XCTAssertTrue(scan.found)
+        XCTAssertEqual(scan.outline, "Section 1: Basics\n1. Hello 5 min")
+        XCTAssertEqual(StudyScanRules.shared.merge(field: "", scan: scan), scan.outline)
     }
 
     func testTripListsReachSwift() async throws {

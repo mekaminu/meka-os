@@ -1,6 +1,9 @@
 package os.meka.android.goals
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -72,6 +75,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -112,6 +116,10 @@ import os.meka.core.domain.StudyLessonRow
 import os.meka.core.domain.StudyModule
 import os.meka.core.domain.StudyRemoved
 import os.meka.core.domain.StudyRules
+import os.meka.core.domain.StudyScanRules
+import os.meka.core.domain.PictureTextRules
+import os.meka.android.capture.PictureRead
+import os.meka.android.capture.PictureReader
 import os.meka.core.domain.StudyView
 import os.meka.core.domain.StudyWeekRow
 import os.meka.core.domain.StudyWeekRules
@@ -229,7 +237,11 @@ private fun UndoLine(r: StudyRemoved, onUndo: () -> Unit) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, onRemoved: (StudyRemoved) -> Unit) {
+internal fun StudyPane(
+    core: MekaCore, courseId: String, onClose: () -> Unit, onRemoved: (StudyRemoved) -> Unit,
+    /** Slice 3: how "From a screenshot" gets its words; null opens the photo picker and reads on the phone (tests hand words in). */
+    readScreenshot: (((PictureRead) -> Unit) -> Unit)? = null,
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -238,6 +250,8 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
     var said by remember { mutableStateOf<StudyAdded?>(null) }
     var removed by remember { mutableStateOf<StudyRemoved?>(null) }
     var outline by rememberSaveable(courseId) { mutableStateOf("") }
+    // Slice 3: the line a screenshot's read left under the field ("Reading the picture…", "Read 14 lessons…"), until Add.
+    var scanned by remember(courseId) { mutableStateOf<String?>(null) }
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     // Plan a lesson for a day: the day picked here (null = not planned), shown at once until the view says the same.
@@ -359,7 +373,31 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
             val r = runCatching { core.addStudyLessons(courseId, text) }.getOrNull()
             if (r?.refused == false) { haptics.light(); outline = "" } else haptics.reject()
             said = r
+            scanned = null
         }
+    }
+    val context = LocalContext.current
+    val onRead: (PictureRead) -> Unit = { r ->
+        said = null
+        when (r) {
+            is PictureRead.Words -> {
+                val scan = StudyScanRules.scan(r.text)
+                if (scan.found) { haptics.light(); outline = StudyScanRules.merge(outline, scan) } else haptics.reject()
+                scanned = scan.line
+            }
+            is PictureRead.NoWords -> { haptics.reject(); scanned = r.line }
+        }
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) scanned = null
+        else scope.launch { onRead(runCatching { PictureReader.read(context, uri) }.getOrElse { PictureRead.NoWords(PictureTextRules.COULD_NOT_OPEN_LINE) }) }
+    }
+    val fromScreenshot: () -> Unit = {
+        haptics.light(); said = null; scanned = PictureTextRules.READING_LINE
+        val pick = readScreenshot
+        if (pick != null) pick(onRead)
+        else runCatching { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+            .onFailure { scanned = PictureTextRules.COULD_NOT_OPEN_LINE }
     }
     val added: (StudyAdded?) -> Unit = { r ->
         if (r?.refused == false) haptics.light() else haptics.reject()
@@ -470,8 +508,9 @@ internal fun StudyPane(core: MekaCore, courseId: String, onClose: () -> Unit, on
         item(key = "field") {
             Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 OutlineField(outline, { outline = it }, add)
-                Crossfade(said?.line ?: StudyRules.ADD_LESSONS_NOTE, animationSpec = MekaMotion.appear(reduced), label = "study-added") { line ->
-                    Text(line, style = MekaType.caption, color = if (said != null) saidColor else Meka.colors.textTertiary)
+                ScreenshotAction(fromScreenshot)
+                Crossfade(scanned ?: said?.line ?: StudyRules.ADD_LESSONS_NOTE, animationSpec = MekaMotion.appear(reduced), label = "study-added") { line ->
+                    Text(line, style = MekaType.caption, color = if (said != null || scanned != null) saidColor else Meka.colors.textTertiary)
                 }
                 AnimatedVisibility(
                     visible = removed != null,
@@ -910,6 +949,20 @@ private fun PlanChip(chip: StudyChip, modifier: Modifier, onClick: () -> Unit) {
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         )
     }
+}
+
+/**
+ * Slice 3: "From a screenshot" under the outline field: a quiet accent line that opens the photo picker; the picture is
+ * read on the phone and its lessons land in the field to check before Add lessons.
+ */
+@Composable
+private fun ScreenshotAction(onClick: () -> Unit) {
+    Text(
+        "+ " + StudyScanRules.ACTION, style = MekaType.caption, color = Meka.colors.accent,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }
+            .semantics { contentDescription = StudyScanRules.ACTION_DESCRIPTION }.minTouch()
+            .padding(vertical = MekaSpace.xxs).testTag("study-from-screenshot"),
+    )
 }
 
 /** A multi-line field for an outline (a paste keeps its lines); Add appears once something is typed. */

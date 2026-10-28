@@ -1,5 +1,7 @@
+import AppKit
 @preconcurrency import MekaKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Goals' STUDY section on the Mac (study plan, slice 1), like the Fold's StudySection: one row per course (its ring
 /// with the percentage, the name, "5 of 24 lessons · about 18 h left" and the next lesson), a click opening the
@@ -142,6 +144,8 @@ struct StudySheet: View {
     let onRemoved: (CoreModel.TripUndo) -> Void
     @State private var outline = ""
     @State private var said: CoreModel.StudySaid?
+    /// Slice 3: the line a screenshot's read left under the field ("Reading the picture on this Mac…", "Read 14 lessons…").
+    @State private var scanned: String?
     @State private var removed: CoreModel.TripUndo?
     /// What this sheet ticked, until the view says the same.
     @State private var pending: [String: Bool] = [:]
@@ -279,12 +283,26 @@ struct StudySheet: View {
             .accessibilityLabel(StudyRules.shared.ADD_LESSONS_DESCRIPTION)
             .onSubmit(add)
             .staggeredAppear(1)
+        HStack(spacing: MekaSpace.m) {
+            Button("+ " + StudyScanRules.shared.ACTION_MAC, action: chooseScreenshot)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.accent)
+                .accessibilityLabel(StudyScanRules.shared.ACTION_DESCRIPTION)
+            Button(StudyScanRules.shared.PASTE_MAC, action: pasteScreenshot)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.textSecondary)
+            Spacer()
+        }
+        .staggeredAppear(1)
         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-            Text(said?.line ?? StudyRules.shared.ADD_LESSONS_NOTE).font(MekaType.caption)
-                .foregroundStyle(said?.refused == true ? palette.accent : (said == nil ? palette.textTertiary : palette.textSecondary))
+            Text(scanned ?? said?.line ?? StudyRules.shared.ADD_LESSONS_NOTE).font(MekaType.caption)
+                .foregroundStyle(said?.refused == true ? palette.accent : (said == nil && scanned == nil ? palette.textTertiary : palette.textSecondary))
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: scanned)
             Spacer()
             if !outline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button("Add lessons", action: add)
@@ -776,7 +794,44 @@ struct StudySheet: View {
         Task {
             let r = await model.addStudyLessons(courseId, typed)
             said = r
+            scanned = nil
             if let r, !r.refused { outline = "" }
+        }
+    }
+
+    /// Slice 3: From a screenshot…: one image from an open panel, read on this Mac (Vision), its lessons into the field
+    /// to check before Add lessons. Only Strings come back from the reader; the picture isn't kept.
+    private func chooseScreenshot() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.message = "Pick a screenshot of the course's contents · Navilife reads it on this Mac and doesn't keep it"
+        panel.prompt = "Read it"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        readScreenshot(.file(url))
+    }
+
+    /// Paste a copied screenshot: one taken with ⌃⇧⌘4, or an image copied in a browser.
+    private func pasteScreenshot() {
+        guard let picture = MacPictureReader.picture(on: .general) else {
+            scanned = PictureTextRules.shared.NO_COPIED_LINE
+            return
+        }
+        readScreenshot(picture)
+    }
+
+    private func readScreenshot(_ picture: MacPictureReader.Picture) {
+        said = nil
+        scanned = PictureTextRules.shared.READING_LINE_MAC
+        Task {
+            switch await MacPictureReader.read(picture) {
+            case .words(let text):
+                let scan = StudyScanRules.shared.scan(text: text)
+                if scan.found { outline = StudyScanRules.shared.merge(field: outline, scan: scan) }
+                scanned = scan.line
+            case .nothing(let line):
+                scanned = line
+            }
         }
     }
 

@@ -452,4 +452,44 @@ class StudyScreensTest {
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)?.checkin == false }
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun fromAScreenshotFillsTheFieldToCheckThenAddLessonsAddsThem() {
+        // Study plan, slice 3 part 1: a contents page's words (invented) land in the field as outline lines; nothing is
+        // added until Add lessons.
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        val id = runBlocking {
+            core.tick()
+            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            core.tick()
+            id
+        }
+        val page = "Course content\nSection 1: Getting started 0 / 2 | 14min\n1. Welcome\nPlay\n2min\n2. Installing the tools\n12min\n25% complete"
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    StudyPane(core, id, onClose = {}, onRemoved = {}, readScreenshot = { done -> done(os.meka.android.capture.PictureRead.Words(page)) })
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(3_000L)
+        compose.waitForIdle()
+        scrollTo(hasTestTag("study-from-screenshot"))
+        compose.onNodeWithTag("study-from-screenshot").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithTag("study-outline").assertTextEquals("Section 1: Getting started\n1. Welcome 2 min\n2. Installing the tools 12 min")
+        compose.mainClock.advanceTimeBy(1_000L)
+        ScreenShots.assertShows(compose, "cover-dark-from-screenshot", "Read 2 lessons in 1 module, all with a time · check them, then Add lessons · the picture isn't kept")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-from-screenshot"))
+        assertEquals(0, core.studyView.value.course(id)!!.total)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithText("Add lessons", useUnmergedTree = true).performClick()
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)?.total == 2 }
+        assertEquals("1 · Getting started", core.studyView.value.course(id)!!.modules.single().name)
+    }
 }
