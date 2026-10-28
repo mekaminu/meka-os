@@ -201,17 +201,21 @@ class MoneyChatScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-ai")
     }
 
-    /** Slice 3: the bar's mic opens Obi · money listening; a phone with no recogniser says so and keeps the field. */
+    /**
+     * Slice 3: the bar's mic opens Obi · money and starts the mic at once: it is listening ("Listening · …" under the
+     * field) or, with no recogniser, says why under the field, which stays for typing.
+     */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun theBarsMicOpensTheChatListening() {
         Shadows.shadowOf(ApplicationProvider.getApplicationContext<ShotApplication>()).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         val core = open()
         assertTrue(shows("money-ask-mic"), "no mic on the Ask Obi bar")
         tap("money-ask-mic")
-        until(core) { shows("money-chat-heard") }
+        val started = { shows("money-chat-listening") || shows("money-chat-heard") }
+        until(core) { started() }
         assertTrue(shows("money-chat-sheet"), "the mic didn't open the chat")
         assertTrue(shows("money-chat-mic"), "no mic beside the chat's field")
-        assertTrue(shows("money-chat-heard"), "nothing said why the mic couldn't listen")
+        assertTrue(started(), "the mic neither listened nor said why it couldn't")
         assertTrue(compose.onAllNodes(hasContentDescription(MoneyChatSpoken.MIC_SPOKEN), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
             "the mic has no spoken name")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-mic"))

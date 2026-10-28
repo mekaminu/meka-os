@@ -214,7 +214,9 @@ internal fun MoneyChatContent(
                 contentAlignment = Alignment.Center,
             ) { MicGlyph(if (on) Meka.colors.onAccent else Meka.colors.accent) }
         }
-        if (listener.listening) ListeningLine(listener.engine, listener.resting, listener.level, Meka.reducedMotion)
+        if (listener.listening) {
+            Box(Modifier.testTag("money-chat-listening")) { ListeningLine(listener.engine, listener.resting, listener.level, Meka.reducedMotion) }
+        }
         problem?.takeIf { !listener.listening }?.let { p ->
             Text(p, style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.testTag("money-chat-heard").semantics { liveRegion = LiveRegionMode.Polite })
