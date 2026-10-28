@@ -1069,9 +1069,9 @@ class MekaCore(
         if (ideas.isEmpty()) return if (force) os.meka.core.domain.MoneySaved(w.NO_IDEAS) else null
         val api = aiApi ?: return os.meka.core.domain.MoneySaved(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE, refused = true)
         val c = os.meka.core.wire.MoneyCheckCodec
-        val request = c.Request(os.meka.core.domain.AskRules.isoDate(today), ideas.map { i ->
-            c.Idea(i.id, i.kind, i.ruleTitle.take(c.MAX_SHORT), i.figure.take(c.MAX_SHORT), i.ruleWhy.take(c.MAX_TEXT),
-                i.behind.take(c.MAX_BEHIND).map { p -> c.Pay(p.label.take(c.MAX_SHORT), p.amount.take(c.MAX_SHORT)) })
+        val request = os.meka.core.wire.MoneyCheckCodec.Request(os.meka.core.domain.AskRules.isoDate(today), ideas.map { i ->
+            os.meka.core.wire.MoneyCheckCodec.Idea(i.id, i.kind, i.ruleTitle.take(c.MAX_SHORT), i.figure.take(c.MAX_SHORT), i.ruleWhy.take(c.MAX_TEXT),
+                i.behind.take(c.MAX_BEHIND).map { p -> os.meka.core.wire.MoneyCheckCodec.Pay(p.label.take(c.MAX_SHORT), p.amount.take(c.MAX_SHORT)) })
         })
         val reply = try { api.moneyCheck(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             onCore { moneyWordsFailedAtMs = nowMs() }
