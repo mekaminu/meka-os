@@ -583,6 +583,7 @@ Acceptance: re-shoot the open Fold at its real size with Meka-like data (a mostl
 
 - [ ] **Two screen tests flaked once on CI (Claude 2026-10-26 03:55, run 1279, green on re-run):** `ShutdownScreensTest.shutDownByHand` ("Day shut down" not on screen) and `WatchHealthScreensTest.watchByHand` ("Linked today" not on screen): the core state had changed but the screen hadn't caught up. Make both wait (idle the looper, advance the clock) until the text shows, up to a bound, before asserting; never skip them. *Also (run 1301, 2026-10-26 17:49):* `WorkScreensTest.byHand` ("Start work now" not on screen after Stop work now; its wait loops use `return@repeat`, which never stops early): the same fix.
 
+  - *Also (Claude 2026-10-28 00:26, run 1357, green on re-run):* `LifeAdminScreensTest.byHand` ("no Keep it once skipped"): the core said skipped but the Keep it chip wasn't composed yet; the same fix applies (wait for the node, not only the core).
 ## Milestones
 
 ### M0 · Foundation — done
