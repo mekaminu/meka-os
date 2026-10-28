@@ -25,3 +25,5 @@ tip: To plan a lesson for a day, press and hold it (right-click on the Mac) and 
 tip: For a day past this week, pick "Pick a day…" under Plan for and choose it on the calendar (up to a year ahead).
 tip: To plan several lessons at once, press and hold one (right-click on the Mac) and pick Select several, tap the others, then pick a day under Plan for… at the foot (Pick a day… for one further ahead).
 tip: Planned lessons also show under their day on the Week board ("Study · 2 lessons · about 1 h"); tap the line to open the course.
+tip: Lessons you haven't planned are suggested for your next study sessions, as many as each holds: your calendar's "Study…" events, or, with none, the times you picked in YOUR PLAN. They show as "Tomorrow · suggested" on the lesson, on Today, in Tomorrow and on the Week board, and one not done moves on by itself.
+tip: Plan a suggested lesson by hand (Plan for…) and it keeps that day; suggestions never move a lesson you planned.
