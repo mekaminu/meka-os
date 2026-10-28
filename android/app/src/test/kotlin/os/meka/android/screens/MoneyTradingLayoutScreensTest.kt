@@ -15,7 +15,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
@@ -202,10 +201,7 @@ class MoneyTradingLayoutScreensTest {
         compose.onAllNodes(field, useUnmergedTree = true)[0].performTextInput("Spare 0x" + "cd34".repeat(10))
         settle()
         compose.onAllNodes(field, useUnmergedTree = true)[0].performImeAction()
-        compose.mainClock.autoAdvance = true
-        compose.waitUntil(5_000) { core.moneyView.value.trading?.wallets?.size == 2 }
-        compose.mainClock.autoAdvance = false
-        settle()
+        repeat(40) { if (core.moneyView.value.trading?.wallets?.size != 2) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertEquals(2, core.moneyView.value.trading?.wallets?.size, "the second address should be followed")
         assertTrue(showsText("Added Spare"), "the sheet should say the address was added")
     }
