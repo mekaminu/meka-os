@@ -94,7 +94,8 @@ internal fun MoneyBillsCard(b: MoneyBillsView, modifier: Modifier = Modifier) {
             Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)) {
                 Box(Modifier.fillMaxWidth(bar.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
             }
-            Text(b.paidLine!!, style = MekaType.caption, color = Meka.colors.textTertiary)
+            // Money review item 9: the paid line in the head's secondary grey (as the mockup), was the dim tertiary.
+            Text(b.paidLine!!, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
     }
 }
@@ -272,14 +273,18 @@ internal fun MoneyRefundsCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
-                Text(r.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f))
-                Crossfade(r.brief, animationSpec = MekaMotion.appear(reduced), label = "money-refund-brief-${r.id}") { b ->
-                    Text(b, style = MekaType.caption, maxLines = 1,
-                        color = when {
-                            r.lit -> Meka.colors.accent
-                            r.state == MoneyRefunds.BACK -> Meka.colors.success
-                            else -> Meka.colors.textSecondary
-                        })
+                // Money review item 9: the state sits under the name (as the cards' and bills' rows), so every state starts
+                // at the same left edge instead of floating in a middle column whose start moved with each name.
+                Column(Modifier.weight(1f)) {
+                    Text(r.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2)
+                    Crossfade(r.brief, animationSpec = MekaMotion.appear(reduced), label = "money-refund-brief-${r.id}") { b ->
+                        Text(b, style = MekaType.caption, maxLines = 1, modifier = Modifier.testTag("money-refund-brief-${r.id}"),
+                            color = when {
+                                r.lit -> Meka.colors.accent
+                                r.state == MoneyRefunds.BACK -> Meka.colors.success
+                                else -> Meka.colors.textSecondary
+                            })
+                    }
                 }
                 Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
             }

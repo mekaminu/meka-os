@@ -150,6 +150,13 @@ class MoneyBillsLayoutScreensTest {
         // Three compact rows, then "1 more ›"; the chase and the note live in the sheet.
         assertTrue(showsText("Waiting · since today"), "a refund row should say its state in a few words")
         if (showsText(MoneyRefunds.NOTE)) fail("the chase note sits on the page")
+        // Money review item 9: each state starts at the same left edge (under its name), not in a ragged middle column.
+        val lefts = rf.rows.take(3).map { r ->
+            compose.onNodeWithTag("money-refund-brief-${r.id}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        }
+        if (lefts.distinct().size != 1) fail("the refunds' states don't line up: $lefts")
+        val nameLeft = compose.onNodeWithTag("money-refund-${rf.rows.first().id}", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        if (lefts.first() - nameLeft > 48f) fail("a refund's state should sit under its name, not out in a middle column")
         if (shows("money-refund-${rf.rows[3].id}")) fail("a fourth refund shows before 1 more")
         tap("money-refunds-more")
         assertTrue(shows("money-refund-${rf.rows[3].id}"), "1 more should show the fourth refund")

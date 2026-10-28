@@ -4625,3 +4625,13 @@ before the 7th → the count; this month against the usual pace by today, bills/
 month (over only past it, else "as usual"); over needs £20 and 20% (as everywhere), under £20. Help money.md (two tips,
 HelpIndex regenerated), screens README. Tests: MoneySpendNoteTest (5). core-verify 3722 passed. No server change, no
 migration. Mac checked nightly.
+
+### Money redesign: Bills' last bits (2026-10-28)
+
+README item 9, both apps. Fold `MoneyBillsCard` / Mac `MoneyBillsCard`: the paid line under the still-to-go-out bar in
+`textSecondary` (was `textTertiary`), as the mockup's. Fold `MoneyRefundsCard` / Mac `refundRow`: the short state
+(`brief`) sits under the name in one weighted column (name up to two lines), the chevron on the right, so every state
+starts on the same left edge (was a middle column whose start moved with each name's width). Test:
+MoneyBillsLayoutScreensTest asserts the three shown states share one left edge, under the name. No core change, no server
+change, no migration. Mac checked nightly.
+

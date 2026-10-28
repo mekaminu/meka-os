@@ -1793,11 +1793,14 @@ struct MoneySheet: View {
     private func refundRow(_ r: MoneyRefundRow, foot: String?) -> some View {
         let id = r.id
         return Button { MekaHaptics.tick(); said = nil; refundOpenId = id } label: {
+            // Money review item 9: the state under the name (as the cards' rows), every state on the same left edge.
             HStack(spacing: MekaSpace.m) {
-                Text(r.name).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(r.name).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
+                    Text(r.brief).font(MekaType.caption).lineLimit(1).contentTransition(.opacity)
+                        .foregroundStyle(r.lit ? palette.accent : (r.state == MoneyRefunds.shared.BACK ? palette.success : palette.textSecondary))
+                }
                 Spacer(minLength: MekaSpace.xs)
-                Text(r.brief).font(MekaType.caption).lineLimit(1).contentTransition(.opacity)
-                    .foregroundStyle(r.lit ? palette.accent : (r.state == MoneyRefunds.shared.BACK ? palette.success : palette.textSecondary))
                 Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
             }
             .contentShape(Rectangle())

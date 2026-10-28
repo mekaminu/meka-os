@@ -28,7 +28,7 @@ struct MoneyBillsCardView: View {
                     }
                 }
                 .frame(height: 6)
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)  // item 9: the head's grey, as the mockup
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

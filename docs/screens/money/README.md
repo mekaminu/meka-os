@@ -68,5 +68,9 @@ usual" green, "£110 over usual" amber, "as usual"): this month against the usua
 subscriptions and fees against the whole usual month (over only once past it); one month before names it ("£20 under
 September"); none counts the payments; Other says "14 without a category". Core MoneySpendNote.
 
-**Still to do (next Money slices):**
-9. Bills: the grey line under the still-to-go-out card; refunds' middle column aligned.
+**Item 9 (2026-10-28, both apps):** Bills' "£… of £… this month already paid" under the still-to-go-out bar is in the
+head's secondary grey as the mockup (was the dim tertiary); each refund on the way puts its state under its name (as the
+cards' rows), so every state starts on the same left edge instead of a middle column that moved with each name, and a
+long name wraps to two lines. App shot: `cover-dark-bills-layout`.
+
+Every item of this check has landed; each tab now waits for Meka's yes beside the mockup.
