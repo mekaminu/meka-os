@@ -67,6 +67,8 @@ data class MoneyBankReconnect(val id: String, val line: String)
 data class MoneyBankView(
     val head: String, val line: String, val lit: Boolean, val refreshing: Boolean, val reconnect: List<MoneyBankReconnect>,
     val restoreLine: String?, val spoken: String,
+    /** When the banks last synced ("06:10", "Tue 06:10"), for the title row's Updated pill ([MoneyHeader]); null before. */
+    val updated: String? = null,
 )
 
 /** Which statement lines also came from a bank ([hidden], counted once) and which statement account is which bank's ([sameAs]). */
@@ -226,6 +228,7 @@ object MoneyBank {
             HEAD, line + skipped, lit = s.state == KEY || s.state == ERROR || reconnect.isNotEmpty(),
             refreshing = refreshing(s, askedAtMs, nowMs), reconnect = reconnect, restoreLine = restore,
             spoken = (listOf(line) + reconnect.map { it.line }).joinToString(". "),
+            updated = s.lastOkMs?.let { at(it, nowMs, cal) },
         )
     }
 

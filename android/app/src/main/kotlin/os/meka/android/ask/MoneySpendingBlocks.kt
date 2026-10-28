@@ -1,5 +1,8 @@
 package os.meka.android.ask
 
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.unit.sp
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -189,7 +192,11 @@ internal fun MoneyTiles(tiles: List<MoneyTile>, modifier: Modifier = Modifier) {
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
             ) {
-                Text(t.label, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1)
+                // As the mockup: the label whole ("Bills to come", never "Bills to"), stepping down on the closed Fold.
+                BasicText(
+                    t.label, style = MekaType.caption.copy(color = Meka.colors.textSecondary), maxLines = 1, softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
+                )
                 Text(t.value, style = MekaType.metaStrong, color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
             }
         }

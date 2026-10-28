@@ -6,6 +6,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -137,6 +141,7 @@ import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
 import os.meka.core.domain.MoneyGoals
+import os.meka.core.domain.MoneyHeader
 import os.meka.core.domain.MoneyWorthOther
 import os.meka.core.domain.MoneyWorthOtherRow
 import os.meka.core.domain.MoneyTradingLayout
@@ -512,15 +517,23 @@ fun MoneyPane(
     // Money on the open Fold (MoneyColumns, the mockup at Fold size): the list is written once; on a wide pane its body
     // sits in two columns under the full-width title, pills and Ask Obi bar, with the said line and the foot below.
     val body: MoneyItems.() -> Unit = body@{
-        item(key = "close") {
-            Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        }
+        // Money's top as the mockup (MoneyHeader): "Money" with the Updated pill on its right (a tap asks the banks for a
+        // sync) and Close; the line under the title only when locked or nothing is in yet.
         item(key = "title") {
-            Text(MoneyRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.MONEY)).appear(rememberAppearance(0)))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(MoneyRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
+                    modifier = Modifier.weight(1f).sharedTitleInPane(SharedMotion.paneKey(MoreItem.MONEY)).appear(rememberAppearance(0)))
+                MoneyHeader.pill(v.bank)?.let { p ->
+                    MoneyUpdatedPill(p, Modifier.appear(rememberAppearance(1))) {
+                        haptics.tick(); scope.launch { runCatching { core.moneyBankRefresh() }.getOrNull()?.let(say) }
+                    }
+                }
+                Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onClose() }.minTouch()
+                        .padding(start = MekaSpace.xs))
+            }
         }
-        item(key = "summary") {
+        if (MoneyHeader.showsSummary(v)) item(key = "summary") {
             Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "money-summary") { s ->
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
@@ -587,10 +600,12 @@ fun MoneyPane(
         v.trading?.takeIf { has(MoneySection.TRADING) }?.let { tradingItems(it) }
         v.month?.let { m ->
             if (has(MoneySection.MONTH)) item(key = "month") {
-                Row(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
+                // As the mockup: ‹ October 2026 › centred over the ring.
+                Row(Modifier.fillMaxWidth().animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2)),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Arrow("‹", "Month before", enabled = v.earlier) { scope.launch { runCatching { core.moneyStep(-1) } } }
-                    Crossfade(m.label, animationSpec = MekaMotion.appear(reduced), label = "money-month", modifier = Modifier.weight(1f)) { l ->
-                        Text(l, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                    Crossfade(m.label, animationSpec = MekaMotion.appear(reduced), label = "money-month") { l ->
+                        Text(l, style = MekaType.metaStrong, color = Meka.colors.textPrimary, textAlign = TextAlign.Center, modifier = Modifier.widthIn(min = 120.dp))
                     }
                     Arrow("›", "Month after", enabled = v.later) { scope.launch { runCatching { core.moneyStep(1) } } }
                 }
@@ -599,11 +614,6 @@ fun MoneyPane(
             // The ring and rows as the view chip has them; payment chips keep their categories' colours ([sp]).
             val ringSp = sp?.let { MoneyNeeds.shown(it, needsView) }
             if (has(MoneySection.MONTH) && sp != null && ringSp != null) {
-                if (sp.needs != null) item(key = "needs-views") {
-                    MoneyViewChips(needsView, Modifier.animateItem().appear(rememberAppearance(3))) { on ->
-                        if (on != needsView) { haptics.tick(); needsView = on; focus = null }
-                    }
-                }
                 item(key = "ring") {
                     Box(Modifier.fillMaxWidth().animateItem().appear(rememberAppearance(3)), contentAlignment = Alignment.Center) {
                         MoneyRing(ringSp, focus) { focus = null }
@@ -868,7 +878,21 @@ fun MoneyPane(
             }
             if (has(MoneySection.CATEGORIES) && ringSp != null) {
                 item(key = "cats-head") {
-                    MoneyHeadWithLink("WHERE IT WENT", MoneySpending.allLabel(ringSp.rows.size, allCats), Modifier.animateItem()) { allCats = !allCats }
+                    // As the mockup: Categories · Needs vs wants on the row over the rows, with "All N ›" (MoneyHeader).
+                    if (MoneyHeader.chipsInHead(sp)) {
+                        Row(Modifier.fillMaxWidth().animateItem().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                            MoneyViewChips(needsView, Modifier.weight(1f).appear(rememberAppearance(3))) { on ->
+                                if (on != needsView) { haptics.tick(); needsView = on; focus = null }
+                            }
+                            MoneySpending.allLabel(ringSp.rows.size, allCats)?.let { l ->
+                                Text(l, style = MekaType.caption, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { allCats = !allCats }.minTouch()
+                                        .padding(horizontal = MekaSpace.xs))
+                            }
+                        }
+                    } else {
+                        MoneyHeadWithLink("WHERE IT WENT", MoneySpending.allLabel(ringSp.rows.size, allCats), Modifier.animateItem()) { allCats = !allCats }
+                    }
                 }
                 // Layout rule (a): the category rows sit in one card under their label.
                 item(key = "spend-card") {
@@ -1309,14 +1333,19 @@ private fun SheetSaid(said: MoneySaved?) {
 internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPick: (MoneyTab) -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
+    // As the mockup: the row runs to the screen's edges (past the page's gutter, which it keeps as its own padding), so a
+    // pill that doesn't fit slides off the edge instead of being cut inside the margin.
     Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
+        modifier.fillMaxWidth().bleed(MekaSpace.gutter).horizontalScroll(rememberScrollState()).selectableGroup()
+            .padding(horizontal = MekaSpace.gutter),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MoneyTabs.ALL.forEach { t ->
             val lit = t == chosen
-            val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "money-tab-${t.name}")
+            // The chosen pill has the brass tint (the accent over the surface), every label semibold.
+            val fill by animateColorAsState(if (lit) Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surface) else Meka.colors.surface,
+                MekaMotion.appear(reduced), label = "money-tab-${t.name}")
             val ink by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-tab-ink-${t.name}")
             Box(
                 Modifier.heightIn(min = MekaSpace.touch)
@@ -1326,7 +1355,7 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    t.label, style = MekaType.itemMeta, color = ink, maxLines = 1,
+                    t.label, style = MekaType.metaStrong, color = ink, maxLines = 1,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
@@ -2541,4 +2570,13 @@ private fun MoneyColumnOf(parts: List<MoneyPart>, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         parts.forEach { p -> key(p.key) { p.content(StillItems) } }
     }
+}
+
+/** Widens a full-width item by [by] on each side (past the list's gutter), for a row that should run to the screen's edges. */
+private fun Modifier.bleed(by: androidx.compose.ui.unit.Dp): Modifier = layout { measurable, constraints ->
+    val px = by.roundToPx()
+    val wide = if (constraints.hasBoundedWidth) constraints.maxWidth + 2 * px else constraints.maxWidth
+    val p = measurable.measure(constraints.copy(minWidth = wide, maxWidth = wide))
+    val w = if (constraints.hasBoundedWidth) constraints.maxWidth else p.width
+    layout(w, p.height) { p.place(-px, 0) }
 }

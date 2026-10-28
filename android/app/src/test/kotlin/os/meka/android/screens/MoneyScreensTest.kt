@@ -17,6 +17,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlin.test.fail
 import org.junit.Rule
+import android.os.Looper
+import org.robolectric.Shadows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -97,6 +99,15 @@ class MoneyScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
+    private fun settle() {
+        repeat((SETTLE_MS / 100).toInt()) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(100)
+    }
+
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, tab: MoneyTab = MoneyTabs.FIRST) {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
@@ -125,16 +136,16 @@ class MoneyScreensTest {
                 }
             }
         }
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
-        compose.waitForIdle()
+        settle()
         // Money redesign (B), slice 1: the tab's pill, as he'd tap it.
         if (tab != MoneyTabs.FIRST) {
             // The row scrolls sideways on the cover screen, so Accounts may start partly off the edge: its click action, not
             // a touch at its centre (and not performScrollTo, whose animated scroll never ends with the clock held).
             compose.onNodeWithContentDescription(MoneyTabs.spoken(tab, chosen = false), useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.OnClick)
-            compose.mainClock.advanceTimeBy(SETTLE_MS)
-            compose.waitForIdle()
+            // The main looper runs too (the view's flow and the tab's state land there), else the shot catches the tab
+            // before it switched: the mockup check of 2026-10-28 found Bills, Plan and Trading shot empty under "Spending".
+            settle()
         }
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", name))
@@ -144,6 +155,12 @@ class MoneyScreensTest {
         ScreenShots.assertShows(compose, name, MoneyRules.TITLE)
         val v = core.moneyView.value
         if (v.locked) fail("$name: Money is still locked after opening")
+        // Money's top as the mockup: the line under the title only when nothing is in yet ("2 accounts · …" is gone), and
+        // the chosen tab's pill really is the chosen one in the shot.
+        val summaryShown = compose.onAllNodesWithText(v.summary).fetchSemanticsNodes().isNotEmpty()
+        if (summaryShown != os.meka.core.domain.MoneyHeader.showsSummary(v)) fail("$name: the line under the title shows=$summaryShown")
+        if (compose.onAllNodesWithContentDescription(MoneyTabs.spoken(tab, chosen = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: the ${tab.label} pill isn't the chosen one")
         // Slice 1 of the redesign: five tabs, the chosen one selected, and only its own sections on screen.
         MoneyTabs.ALL.forEach { t ->
             val spoken = MoneyTabs.spoken(t, chosen = t == tab)
@@ -176,6 +193,13 @@ class MoneyScreensTest {
                 ScreenShots.assertShows(compose, name, sp.centre.top)
                 ScreenShots.assertShows(compose, name, sp.centre.big)
                 if (compose.onAllNodesWithText(m.spentLine).fetchSemanticsNodes().isNotEmpty()) fail("$name: the old spent line still shows")
+                // As the mockup: Categories · Needs vs wants sit under the ring and its tiles (over the rows), not above it.
+                if (sp.needs != null) {
+                    val chips = compose.onAllNodesWithTag("money-view-categories", useUnmergedTree = true).fetchSemanticsNodes()
+                    val big = compose.onAllNodesWithText(sp.centre.big, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
+                    if (chips.isNotEmpty() && big != null && chips.first().boundsInRoot.top < big.boundsInRoot.bottom)
+                        fail("$name: the view chips sit above the ring")
+                }
                 // Slice 12: an average is named by the months it covers (two months of statements here, never "6-month").
                 m.vsLine?.let { if ("6-month" in it) fail("$name: \"$it\" from ${v.accounts.size} account(s) of at most two months") }
                 // Slice 13: a current account is never offered as a card (it waits behind "Show 1 more account"),

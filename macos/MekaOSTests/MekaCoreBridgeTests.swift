@@ -4177,4 +4177,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyColumns.shared.of(key: "said"), MoneyColumn.full)
         XCTAssertEqual(MoneyColumns.shared.of(key: "tab-empty-SPENDING"), MoneyColumn.full)
     }
+
+    /// Money's top as the mockup: the Updated pill's words, and the line under the title only when locked.
+    func testMoneyHeaderOnTheMac() {
+        XCTAssertNil(MoneyHeader.shared.pill(bank: nil))
+        XCTAssertEqual(MoneyHeader.shared.spoken(pill: "Updated 06:10"), "Updated 06:10, refresh")
+        XCTAssertTrue(MoneyHeader.shared.showsSummary(v: MoneyView.companion.LOCKED))
+        XCTAssertFalse(MoneyHeader.shared.chipsInHead(sp: nil))
+    }
 }

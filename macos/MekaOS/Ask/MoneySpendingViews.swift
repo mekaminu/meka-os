@@ -229,3 +229,28 @@ extension View {
             .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
     }
 }
+
+/// Money's top as the mockup (core MoneyHeader): the Updated pill on the title row, a refresh glyph and "Updated 06:10"
+/// on the raised surface; a click asks the banks for a sync (the words cross-fade to "Updating…" and back; reduced motion
+/// swaps them). VoiceOver hears "Updated 06:10, refresh".
+struct MoneyUpdatedPill: View {
+    let text: String
+    let palette: MekaPalette
+    let reduced: Bool
+    let onRefresh: () -> Void
+
+    var body: some View {
+        Button(action: onRefresh) {
+            HStack(spacing: MekaSpace.xxs) {
+                Image(systemName: "arrow.clockwise").font(MekaType.caption)
+                Text(text).font(MekaType.caption).lineLimit(1).contentTransition(.opacity)
+            }
+            .foregroundStyle(palette.textSecondary)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(palette.surfaceRaised, in: Capsule())
+        }
+        .buttonStyle(MekaPressStyle())
+        .animation(MekaMotion.appear(reduced: reduced), value: text)
+        .accessibilityLabel(MoneyHeader.shared.spoken(pill: text))
+    }
+}

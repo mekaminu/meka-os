@@ -103,3 +103,31 @@ internal fun MoneyInfoLines(info: MoneyInfo) {
             color = if (i == 0) Meka.colors.textPrimary else Meka.colors.textSecondary)
     }
 }
+
+/**
+ * Money's top as the mockup ([os.meka.core.domain.MoneyHeader]): the Updated pill on the title row, a small refresh
+ * glyph and "Updated 06:10" on the raised surface; a tap asks the banks for a sync (the words cross-fade to "Updating…"
+ * and back on the appear spring; reduced motion swaps them). A 48 dp target; a screen reader hears "Updated 06:10, refresh".
+ */
+@Composable
+internal fun MoneyUpdatedPill(text: String, modifier: Modifier = Modifier, onRefresh: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(
+        modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onRefresh).minTouch()
+            .semantics(mergeDescendants = true) { contentDescription = os.meka.core.domain.MoneyHeader.spoken(text) }
+            .testTag("money-updated"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Text("↻", style = MekaType.caption, color = Meka.colors.textSecondary)
+            Crossfade(text, animationSpec = MekaMotion.appear(reduced), label = "money-updated") { t ->
+                Text(t, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1)
+            }
+        }
+    }
+}

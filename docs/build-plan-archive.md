@@ -4524,3 +4524,21 @@ START and END side by side, then FULL (the empty line, the said line, each tab's
 top-level sections). The Ask Obi bar caps at 640 pt. Core `MoneyColumns.SIDE_HEAD`. Help money.md (HelpIndex
 regenerated), motion catalogue row. Tests: MoneyColumnsTest (the Mac's keys), MekaCoreBridgeTests
 (testMoneyColumnsOnTheMac). No server change, no migration. Mac checked nightly.
+
+### Money redesign: the mockup check and Money's top (2026-10-28)
+The mockups had no way to be drawn here (they load the design tool's `support.js`, not in the repo), so
+`tools/design-render/` adds a small stand-in runtime (`<x-dc>`, `{{…}}` bindings, `sc-if`, `sc-for`, `dc-import`, the
+`DCLogic` component) and `render.mjs` (Playwright, a local server, web fonts off, `--click` to change state). The 15 Money
+renders (phone, Fold, Mac × five tabs) sit in `docs/screens/money/` with a README: a fresh reviewer's item-by-item check
+against the app's shots, what stays by Meka's later rules, what was fixed and what's next. Fixed on both apps: the
+MoneyScreensTest tab shots now idle the main looper while settling (Bills, Plan, Trading, Accounts were shot before the
+tab switched) and fail if the chosen pill isn't chosen or the line under the title shows when it shouldn't; core
+`MoneyHeader` (the Updated pill's words from `MoneyBankView.updated`, additive default field; `showsSummary`;
+`chipsInHead`); Fold: the title row is "Money", `MoneyUpdatedPill` (a tap → `moneyBankRefresh`) and Close; the summary
+line only when locked or empty; `MoneyTabPills` brass tint over the surface and `metaStrong` labels, the row bleeding past
+the gutter (`Modifier.bleed`) with the gutter as its own padding; the month row centred (`metaStrong`, min 120 dp);
+the view chips moved from over the ring into `cats-head` with All N › (so on the open Fold they top the right column, as
+the mockup); `MoneyTiles` labels auto-size down to 10 sp. Mac: the same title row and `MoneyUpdatedPill`, side tabs
+brass-tinted in `upNextCardTitle`, the month centred, the chips over the rows. Help money.md (HelpIndex regenerated),
+motion catalogue row. Tests: MoneyHeaderTest, MoneyScreensTest, MekaCoreBridgeTests (testMoneyHeaderOnTheMac). No server
+change, no migration. Mac checked nightly.

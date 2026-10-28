@@ -131,12 +131,26 @@ struct MoneySheet: View {
         HStack(alignment: .top, spacing: 0) {
             if wide { sideTabs(v).transition(.opacity) }
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                Text(MoneyRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-                Text(v.locked && v.summary == MoneyRules.shared.LOCKED ? MoneyRules.shared.LOCKED_MAC : v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
-                    .staggeredAppear(1)
+                // Money's top as the mockup (MoneyHeader): "Money" with the Updated pill on its right (a click asks the banks
+                // for a sync); the line under the title only when locked or nothing is in yet.
+                HStack(alignment: .center, spacing: MekaSpace.xs) {
+                    Text(MoneyRules.shared.TITLE).font(MekaType.upNextTitle)
+                    Spacer(minLength: MekaSpace.xs)
+                    if let pill = MoneyHeader.shared.pill(bank: v.bank), !v.locked {
+                        MoneyUpdatedPill(text: pill, palette: palette, reduced: reduceMotion) {
+                            MekaHaptics.tick()
+                            Task { said = await model.moneyBankRefresh() }
+                        }
+                    }
+                }
+                .staggeredAppear(0)
+                if MoneyHeader.shared.showsSummary(v: v) {
+                    Text(v.locked && v.summary == MoneyRules.shared.LOCKED ? MoneyRules.shared.LOCKED_MAC : v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                        .staggeredAppear(1)
+                }
                 // Speed (4c): while the fresh view is built, the last one shows with "bringing it up to date…" under the title.
                 if let line = v.opening, !v.skeleton {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
@@ -216,11 +230,12 @@ struct MoneySheet: View {
                     tab = t
                     if let step = MoneyTabs.shared.stepOnPick(tab: t, v: v) { model.moneyStep(step.int32Value) }
                 } label: {
-                    Text(t.label).font(MekaType.body).lineLimit(1)
+                    // As the mockup: the chosen tab has the brass tint and every label is semibold.
+                    Text(t.label).font(MekaType.upNextCardTitle).lineLimit(1)
                         .foregroundStyle(lit ? palette.accent : palette.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xs)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(lit ? palette.surfaceRaised : Color.clear))
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(lit ? palette.accent.opacity(0.16) : Color.clear))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(MekaPressStyle())
@@ -285,28 +300,19 @@ struct MoneySheet: View {
     private func month(_ m: MoneyMonth, _ v: MoneyView, _ col: MoneyColumn) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if has(.month, v), on("month", col) {
-            HStack {
+            // As the mockup: ‹ October 2026 › centred over the ring.
+            HStack(spacing: MekaSpace.xs) {
+                Spacer(minLength: 0)
                 Button("‹") { model.moneyStep(-1) }.disabled(!v.earlier).accessibilityLabel("Month before")
-                Text(m.label).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(m.label).font(MekaType.upNextCardTitle).foregroundStyle(palette.textPrimary)
+                    .frame(minWidth: 120)
                     .contentTransition(.opacity)
-                Spacer()
                 Button("›") { model.moneyStep(1) }.disabled(!v.later).accessibilityLabel("Month after")
+                Spacer(minLength: 0)
             }
             if let full = m.spending {
-                // Needs and wants: the view chips, then the ring as they have it.
+                // Needs and wants: the ring as the view chips (over the category rows, MoneyHeader) have it.
                 let sp = MoneyNeeds.shared.shown(v: full, needs: needsView)
-                if full.needs != nil {
-                    HStack(spacing: MekaSpace.xs) {
-                        ForEach(MoneyNeeds.shared.views(needs: needsView), id: \.label) { c in
-                            let wantsNeeds = c.needs
-                            sheetPill(c.label, on: c.on, spoken: c.spoken) {
-                                guard wantsNeeds != needsView else { return }
-                                MekaHaptics.tick()
-                                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { needsView = wantsNeeds; focus = nil }
-                            }
-                        }
-                    }
-                }
                 // Money redesign (B2): the ring with the month's total in the middle, then the tiles.
                 MoneyRingView(spending: sp, focus: focus, palette: palette, reduced: reduceMotion) { focus = nil }
                 if !sp.tiles.isEmpty { MoneyTilesView(tiles: sp.tiles, palette: palette) }
@@ -454,8 +460,27 @@ struct MoneySheet: View {
             if let f = v.forecast, has(.forecast, v), on("forecast", col) { forecast(f).transition(.opacity) }
             if has(.categories, v), on("cats-head", col), let full = m.spending {
                 let sp = MoneyNeeds.shared.shown(v: full, needs: needsView)
-                MoneyHeadWithLink(head: "WHERE IT WENT", link: MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats), palette: palette) {
-                    allCats.toggle()
+                if MoneyHeader.shared.chipsInHead(sp: full) {
+                    // As the mockup: Categories · Needs vs wants on the row over the rows, with "All N ›".
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(MoneyNeeds.shared.views(needs: needsView), id: \.label) { c in
+                            let wantsNeeds = c.needs
+                            sheetPill(c.label, on: c.on, spoken: c.spoken) {
+                                guard wantsNeeds != needsView else { return }
+                                MekaHaptics.tick()
+                                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { needsView = wantsNeeds; focus = nil }
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        if let l = MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats) {
+                            Button(l) { allCats.toggle() }.buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                    }
+                    .padding(.top, MekaSpace.xs)
+                } else {
+                    MoneyHeadWithLink(head: "WHERE IT WENT", link: MoneySpending.shared.allLabel(rows: Int32(sp.rows.count), open: allCats), palette: palette) {
+                        allCats.toggle()
+                    }
                 }
                 // Layout rule (a): the category rows in one card under their label.
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
