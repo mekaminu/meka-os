@@ -272,7 +272,9 @@ class MoneyTradingLayoutScreensTest {
         if (showsText("Dollars")) fail("the Dollars · Pounds row still sits on the card")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-equity"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-equity")
-        tap("money-trading-range-1W")
+        compose.onNodeWithContentDescription(TradingEquity.chips(c, TradingEquity.MONTH)[1].spoken, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        settle()
         assertTrue(showsText(TradingEquity.range(c, TradingEquity.WEEK).change!!), "1W shows the week's change")
         tap("money-trading-other")
         repeat(40) { if (core.moneyView.value.trading?.equity?.total?.startsWith("£") != true) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }

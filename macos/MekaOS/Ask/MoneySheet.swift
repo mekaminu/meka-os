@@ -2434,9 +2434,9 @@ struct MoneySheet: View {
                         MekaHaptics.tick()
                         withAnimation(MekaMotion.appear(reduced: reduceMotion)) { tradingRange = ch.key }
                     } label: {
-                        Text(ch.label).font(MekaType.caption.weight(.semibold))
+                        Text(ch.label).font(MekaType.captionStrong)
                             .foregroundStyle(ch.on ? palette.accent : palette.textSecondary)
-                            .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                             .background(Capsule().fill(ch.on ? palette.accent.opacity(0.16) : palette.surfaceRaised))
                     }
                     .buttonStyle(MekaPressStyle())

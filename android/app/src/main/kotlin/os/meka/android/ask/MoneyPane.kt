@@ -1500,10 +1500,10 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
             val swap = c.swapKey
             if (other != null && swap != null) {
                 Text(other, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 1,
-                    modifier = Modifier.padding(bottom = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
+                    modifier = Modifier.testTag("money-trading-other").padding(bottom = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Button) { onSwap(swap) }
                         .semantics { contentDescription = c.otherSpoken ?: other }
-                        .testTag("money-trading-other").padding(horizontal = MekaSpace.xxs))
+                        .padding(horizontal = MekaSpace.xxs))
             }
         }
         r.change?.let { ch ->
@@ -1520,13 +1520,13 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
                 val fill by animateColorAsState(if (ch.on) Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surfaceRaised) else Meka.colors.surfaceRaised,
                     MekaMotion.appear(reduced), label = "trading-range-${ch.key}")
                 val ink by animateColorAsState(if (ch.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-range-ink-${ch.key}")
-                Box(Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+                Box(Modifier.testTag("money-trading-range-${ch.key}").minTouch().clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.RadioButton) { if (!ch.on) onRange(ch.key) }
-                    .clearAndSetSemantics { contentDescription = ch.spoken; selected = ch.on; role = Role.RadioButton }
-                    .testTag("money-trading-range-${ch.key}"), contentAlignment = Alignment.Center) {
+                    .clearAndSetSemantics { contentDescription = ch.spoken; selected = ch.on; role = Role.RadioButton },
+                    contentAlignment = Alignment.Center) {
                     Text(ch.label, style = MekaType.captionStrong, color = ink,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+                            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
                 }
             } }
         }
