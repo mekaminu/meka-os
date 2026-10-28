@@ -17,6 +17,8 @@ import kotlin.math.roundToLong
  * - **subs**: two or more subscriptions — what they cost a month; never a claim he doesn't use one (no data says so),
  *   so it adds nothing to the yearly total.
  * - **over**: a category well over its 6-month average this month — how far over; nothing to the yearly total.
+ * - His own categories ([MoneyOwnPlan], 2026-10-28) are ideas too: a want of his ("Vape") bought often is a **habit**,
+ *   and one well over its usual this month is **over**, each with Set a cap.
  *
  * Never moves money, cancels or pays anything; "not financial advice" sits in the tab's foot ⓘ ([MoneyTabs.info]).
  */
@@ -155,14 +157,60 @@ object MoneyCheck {
             behind(ls), ACT_CAP_LABEL, ACT_CAP, lit = true, spoken = "${c.label} $by over usual this month. ${t.line}")
     }
 
+    /** His own categories bought often (wants only, as [habits]): "Vape 12× in 30 days", what halving saves a year. */
+    fun ownHabits(lines: List<MoneyLine>, today: Long, plan: MoneyOwnPlan): List<MoneyIdea> {
+        val from = today - 29
+        return plan.spendBy(lines.filter { it.day in from..today }).mapNotNull { (c, all) ->
+            val ls = all.filter { !plan.need(it) }
+            val total = -ls.sumOf { it.pence }
+            if (ls.size < MoneyTips.HABIT_MIN_COUNT || total < MoneyTips.HABIT_MIN_PENCE) return@mapNotNull null
+            val save = roundTen(total * 12 / 2)
+            val title = "${c.name} ${ls.size}× in 30 days"
+            val why = "${fmt(total)} in the last 30 days. Halving it saves about ${fmt(save)} a year."
+            MoneyIdea("habit-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.HABIT.key, title, yearly(save), save, why, behind(ls),
+                ACT_CAP_LABEL, ACT_CAP, lit = false, spoken = "$title, about ${fmt(save)} a year. $why")
+        }.sortedByDescending { it.savePence }.take(MoneyTips.MAX_PER_KIND)
+    }
+
+    /**
+     * His own categories well over their average this month (the same test as Spending's: at least
+     * [MoneyRules.OVER_MIN_PENCE] and [MoneyRules.OVER_SHARE] over, against the up to 6 whole months before with statements).
+     */
+    fun ownOver(lines: List<MoneyLine>, today: Long, plan: MoneyOwnPlan): List<MoneyIdea> {
+        if (!plan.any || lines.isEmpty()) return emptyList()
+        val firstMonth = MoneyRules.monthOf(lines.minOf { it.day })
+        val month = MoneyRules.monthOf(today)
+        val prior = (1..6).map { month - it }.filter { it >= firstMonth }
+        if (prior.size < 2) return emptyList()
+        val d = CivilDate.fromEpochDay(today)
+        val left = CivilDate.lengthOfMonth(d.year, d.month) - d.day
+        val monthName = CivilDate.MONTH_LONG[month % 12]
+        val avgName = MoneyRules.averageName(prior)
+        return plan.spendBy(lines).mapNotNull { (c, ls) ->
+            val byMonth = ls.groupBy { MoneyRules.monthOf(it.day) }.mapValues { (_, m) -> -m.sumOf { it.pence } }
+            val p = byMonth[month] ?: 0L
+            val avg = prior.sumOf { byMonth[it] ?: 0L } / prior.size
+            if (p <= 0 || p - avg < MoneyRules.OVER_MIN_PENCE || p <= avg * (1 + MoneyRules.OVER_SHARE)) return@mapNotNull null
+            val by = fmt(p - avg)
+            val line = "${fmt(p)} so far in $monthName · " + when (left) { 0 -> "last day of the month"; 1 -> "1 day to go"; else -> "$left days to go" }
+            val cur = ls.filter { MoneyRules.monthOf(it.day) == month }
+            Triple(p - avg, c, MoneyIdea("over-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.OVER.key, "${c.name} over usual this month", "$by over", 0,
+                "${c.name} $by over $avgName. $line.", behind(cur), ACT_CAP_LABEL, ACT_CAP, lit = true,
+                spoken = "${c.name} $by over usual this month. $line"))
+        }.sortedByDescending { it.first }.take(MoneyTips.MAX_PER_KIND).map { it.third }
+    }
+
     /** Every idea for [today], biggest yearly saving first (the ones without a sum after), none of a [hiddenKinds] tip kind. */
-    fun ideas(lines: List<MoneyLine>, today: Long, regular: List<MoneyTips.Regular>, hiddenKinds: Set<String> = emptySet()): List<MoneyIdea> {
+    fun ideas(
+        lines: List<MoneyLine>, today: Long, regular: List<MoneyTips.Regular>, hiddenKinds: Set<String> = emptySet(),
+        plan: MoneyOwnPlan = MoneyOwnPlan(),
+    ): List<MoneyIdea> {
         if (lines.isEmpty()) return emptyList()
         val all = listOfNotNull(interest(lines, today)) +
             (if (MoneyTipKind.RISE.key in hiddenKinds) emptyList() else rises(lines, regular)) +
-            (if (MoneyTipKind.HABIT.key in hiddenKinds) emptyList() else habits(lines, today)) +
+            (if (MoneyTipKind.HABIT.key in hiddenKinds) emptyList() else habits(lines, today) + ownHabits(lines, today, plan)) +
             listOfNotNull(subs(regular)) +
-            (if (MoneyTipKind.OVER.key in hiddenKinds) emptyList() else over(lines, today))
+            (if (MoneyTipKind.OVER.key in hiddenKinds) emptyList() else over(lines, today) + ownOver(lines, today, plan))
         // A category that is already a habit idea isn't said twice as "over usual".
         val habitCats = all.filter { it.kind == MoneyIdeaKind.HABIT.key }.map { it.id.removePrefix("habit-") }.toSet()
         return all.filter { !(it.kind == MoneyIdeaKind.OVER.key && it.id.removePrefix("over-") in habitCats) }.sortedWith(compareByDescending<MoneyIdea> { it.savePence }.thenBy { it.kind })
@@ -174,11 +222,11 @@ object MoneyCheck {
     /** The money check for [today]; null without this month's lines. */
     fun view(
         lines: List<MoneyLine>, today: Long, regular: List<MoneyTips.Regular>, state: MoneyIdeaState, hiddenKinds: Set<String> = emptySet(),
-        words: MoneyCheckWordsState = MoneyCheckWordsState(),
+        words: MoneyCheckWordsState = MoneyCheckWordsState(), plan: MoneyOwnPlan = MoneyOwnPlan(),
     ): MoneyCheckView? {
         if (lines.isEmpty()) return null
         // A kind of tip hidden before the money check (habits, over, rises) counts as put away, so Show them again brings it back.
-        val found = ideas(lines, today, regular)
+        val found = ideas(lines, today, regular, plan = plan)
         val shown = found.filter { !away(it.id, state, today) && it.kind !in hiddenKinds }
         val awayN = found.size - shown.size
         val save = shown.sumOf { it.savePence }

@@ -140,7 +140,10 @@ object MoneyForecast {
         "Trading: your Hyperliquid result a month from ${pace.from}, after fees and funding, at today's dollar rate · on top of your statements · not a promise"
 
     /** The forecast for [today] from every line, with [whatIf] applied; null with no lines at all. */
-    fun view(lines: List<MoneyLine>, today: Long, whatIf: MoneyWhatIf = MoneyWhatIf(), trading: MoneyTradingPace? = null): MoneyForecastView? {
+    fun view(
+        lines: List<MoneyLine>, today: Long, whatIf: MoneyWhatIf = MoneyWhatIf(), trading: MoneyTradingPace? = null,
+        plan: MoneyOwnPlan = MoneyOwnPlan(),
+    ): MoneyForecastView? {
         if (lines.isEmpty()) return null
         val months = wholeMonths(lines, today)
         if (months.size < 2) return MoneyForecastView(HEAD, NOT_READY, null, null, false, emptyList(), emptyList(), null, null)
@@ -159,14 +162,16 @@ object MoneyForecast {
             net > 0 -> "About ${fmt(leftRounded)} a month left over"
             else -> "About ${fmt(-leftRounded)} a month more going out than coming in"
         }
-        // What-ifs: his three biggest everyday categories, each halved on a tap.
-        val cuttable = spendBy.filter { (c, p) -> c !in NOT_CUTTABLE && p >= CUT_MIN_PENCE }.entries
-            .sortedByDescending { it.value }.take(MAX_CUTS)
-        val cuts = cuttable.map { (c, p) ->
+        // What-ifs: his three biggest everyday categories, each halved on a tap. His own ([MoneyOwnPlan], 2026-10-28)
+        // count too ("Halve Vape"): underneath they are Other, which is never cut, so nothing is counted twice.
+        val builtIn = spendBy.filter { (c, p) -> c !in NOT_CUTTABLE && p >= CUT_MIN_PENCE }.map { (c, p) -> Triple(c.key, c.label, p) }
+        val ownCut = plan.spendBy(inMonths).map { (c, ls) -> Triple(c.key, c.name, -ls.sumOf { it.pence } / n) }.filter { it.third >= CUT_MIN_PENCE }
+        val cuttable = (builtIn + ownCut).sortedByDescending { it.third }.take(MAX_CUTS)
+        val cuts = cuttable.map { (key, label, p) ->
             val save = roundTen(p / 2)
-            val on = c.key in whatIf.cuts
-            MoneyCutChip(c.key, "Halve ${c.label}", "+${fmt(save)} a month", on,
-                "Halve ${c.label}, ${fmt(save)} a month more" + if (on) ", on" else "")
+            val on = key in whatIf.cuts
+            MoneyCutChip(key, "Halve $label", "+${fmt(save)} a month", on,
+                "Halve $label, ${fmt(save)} a month more" + if (on) ", on" else "")
         }
         // Slice 11: trading at the pace it has gone, his tap (a loss counts too).
         val tradingOn = trading != null && TRADING_KEY in whatIf.cuts
@@ -174,7 +179,7 @@ object MoneyForecast {
             val shown = signed(roundTen(t.pencePerMonth)) + " a month"
             MoneyCutChip(TRADING_KEY, TRADING_LABEL, shown, tradingOn, "$TRADING_LABEL, $shown" + if (tradingOn) ", on" else "")
         }
-        val saved = cuttable.filter { it.key.key in whatIf.cuts }.sumOf { it.value / 2 } + whatIf.extraPence +
+        val saved = cuttable.filter { it.first in whatIf.cuts }.sumOf { it.third / 2 } + whatIf.extraPence +
             (if (tradingOn) trading!!.pencePerMonth else 0L)
         val thisMonth = MoneyRules.monthOf(today)
         val rows = listOf(6, 12).map { h ->

@@ -3,6 +3,7 @@ package os.meka.core.facade
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.LifeTile
+import os.meka.core.domain.MoneyCheck
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneyTab
@@ -201,6 +202,27 @@ class MoneyFacadeTest {
         mac.moneyStep(0)
         assertEquals(listOf("Groceries", "Coffee"), mac.moneyView.value.month!!.categories.map { it.label })
         assertTrue(mac.moneyView.value.ownCategories.isEmpty())
+    }
+
+    @Test
+    fun hisOwnCategoryIsAnIdeaInPlanOnBothDevices() = runTest(timeout = SLOW_RUNNER) {
+        // His categories in Plan: ten buys he put in Vape make Obi's habit idea, on the Mac too.
+        val fold = core("android")
+        val mac = core("mac")
+        val buys = "Date,Description,Amount\n10/09/2026,TESCO STORES 2041,-60.00\n" +
+            (1..10).joinToString("") { d -> "${d.toString().padStart(2, '0')}/10/2026,NEWS ON THE CORNER,-6.00\n" }
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", buys)
+        assertTrue(fold.moneyView.value.check!!.ideas.none { it.title.startsWith("Vape") })
+        val news = fold.moneyView.value.month!!.txns.first { it.merchant.startsWith("News") }
+        fold.addMoneyCategory("Vape", 2, "BAG", news.id)
+        val idea = fold.moneyView.value.check!!.ideas.single { it.title.startsWith("Vape") }
+        assertEquals("Vape 10× in 30 days", idea.title)
+        assertEquals("habit", idea.kind)
+        assertEquals(MoneyCheck.ACT_CAP, idea.actKey)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals(idea.id, mac.moneyView.value.check!!.ideas.single { it.title.startsWith("Vape") }.id)
     }
 
     @Test

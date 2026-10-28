@@ -823,7 +823,9 @@ object MoneyRules {
             ),
         )
         val cardLines = if (partial) mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) } else emptyList()
-        val forecastView = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null
+        // His own categories in Plan: Obi's money check and the forecast's what-ifs see them (2026-10-28).
+        val ownPlan = MoneyOwnPlan(own, ownRules, needMerchants)
+        val forecastView = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }, ownPlan) else null
         return MoneyView(
             false, summary, null, month.copy(spending = spending), accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
             tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),
@@ -856,7 +858,7 @@ object MoneyRules {
             ownCategories = own,
             ownRows = MoneyOwnCategories.rows(own, ownRules, MoneyChallenges.ownCapBars(challengeLines, challenges, own, today)),
             source = source,
-            check = if (partial) MoneyCheck.view(lines, today, regular, ideaState, hiddenTips, checkWords) else null,
+            check = if (partial) MoneyCheck.view(lines, today, regular, ideaState, hiddenTips, checkWords, ownPlan) else null,
         )
     }
 
