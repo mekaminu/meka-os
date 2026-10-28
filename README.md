@@ -431,6 +431,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/study/cover-dark-lesson-sheet.png](docs/screens/fold/study/cover-dark-lesson-sheet.png)
 - [fold/study/cover-dark-lessons-selected.png](docs/screens/fold/study/cover-dark-lessons-selected.png)
 - [fold/study/cover-dark-plan.png](docs/screens/fold/study/cover-dark-plan.png)
+- [fold/study/cover-dark-this-week.png](docs/screens/fold/study/cover-dark-this-week.png)
 - [fold/study/cover-light-course.png](docs/screens/fold/study/cover-light-course.png)
 - [fold/study/cover-light-plan.png](docs/screens/fold/study/cover-light-plan.png)
 - [fold/study/inner-dark-board-study.png](docs/screens/fold/study/inner-dark-board-study.png)
