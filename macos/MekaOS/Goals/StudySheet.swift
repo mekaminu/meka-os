@@ -596,7 +596,7 @@ struct StudySheet: View {
                         if let time = row.time { Text(time).font(MekaType.captionStrong).foregroundStyle(palette.textPrimary) }
                     }
                     .frame(width: 52, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 0) {
                         Text(row.lessons).font(MekaType.body).lineLimit(1)
                             .foregroundStyle(row.catchUp ? palette.textTertiary : palette.textPrimary)
                         Text(note ?? row.place).font(MekaType.caption).lineLimit(1)

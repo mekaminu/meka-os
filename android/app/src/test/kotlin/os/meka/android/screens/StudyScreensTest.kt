@@ -371,7 +371,7 @@ class StudyScreensTest {
         }
         val today = core.todayEpochDay()
         show(core, id)
-        scrollTo(hasTestTag("study-week"))
+        scrollTo(hasTestTag("study-week-button-$today"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-this-week"))
         ScreenShots.assertSensible(compose, "cover-dark-this-week")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-this-week")
@@ -382,7 +382,7 @@ class StudyScreensTest {
         compose.onNode(hasContentDescription("Done, tick 1 lessons"), useUnmergedTree = true).assertExists()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.week.first().note != null }
-        compose.mainClock.autoAdvance = false
+        scrollTo(hasTestTag("study-week-button-$today"))
         compose.onNodeWithTag("study-week-button-$today").performClick()
         compose.mainClock.advanceTimeBy(16L)
         compose.onNode(hasContentDescription("Session done"), useUnmergedTree = true).assertExists()
