@@ -10339,7 +10339,7 @@ class MekaCore(
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
                     os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items(),
-                    _people.value, lists.promisedItems(), trips.items(), tripLists.items())
+                    _people.value, lists.promisedItems(), trips.items(), tripLists.items(), study.courses(), study.lessons())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -10562,6 +10562,22 @@ class MekaCore(
                 refreshAboutYouStep()
                 os.meka.core.domain.AskUndo.PutBackName(before, p.name)
             }
+            // Study's own tick, checked again now: refused when the lesson went or was ticked meanwhile (here or on the Mac).
+            is os.meka.core.domain.AskProposal.StudyTick -> {
+                val l = study.lessons().firstOrNull { it.id == p.lessonId } ?: throw os.meka.core.domain.ValidationException(os.meka.core.domain.StudyAskCards.GONE)
+                if (l.done || !study.tick(l.id, true)) throw os.meka.core.domain.ValidationException(os.meka.core.domain.StudyAskCards.ALREADY_DONE)
+                os.meka.core.domain.AskUndo.UntickLesson(l.id)
+            }
+            // Study's own Plan for, checked again now: lessons gone or ticked meanwhile are left; the day must still be plannable.
+            is os.meka.core.domain.AskProposal.StudyPlan -> {
+                if (!os.meka.core.domain.StudyRules.plannable(p.day, today)) throw os.meka.core.domain.ValidationException(os.meka.core.domain.StudyRules.PICK_REFUSED)
+                val now = study.lessons().associateBy { it.id }
+                val open = p.lessonIds.mapNotNull { now[it] }.filter { !it.done }
+                if (open.isEmpty()) throw os.meka.core.domain.ValidationException(os.meka.core.domain.StudyAskCards.GONE)
+                val before = open.filter { it.plannedDay != p.day }.associate { it.id to it.plannedDay }
+                if (before.isEmpty() || study.planLessons(before.keys.toList(), p.day) == 0) throw os.meka.core.domain.ValidationException(os.meka.core.domain.StudyAskCards.ALREADY_PLANNED)
+                os.meka.core.domain.AskUndo.PutBackLessonPlan(before, p.day)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -10642,6 +10658,13 @@ class MekaCore(
                 if (aboutYou.profile().shownName == undo.after) {
                     !aboutYou.set(os.meka.core.domain.AboutField.SHOWN_NAME, undo.before ?: "").refused
                 } else false
+            // Unticked only while it is still ticked (unticked or removed since, it stays as it is).
+            is os.meka.core.domain.AskUndo.UntickLesson -> study.tick(undo.lessonId, false)
+            // Each lesson back to the day it had, only while it is still on the card's day.
+            is os.meka.core.domain.AskUndo.PutBackLessonPlan -> {
+                val now = study.lessons().associateBy { it.id }
+                undo.before.entries.count { (id, day) -> now[id]?.plannedDay == undo.day && study.planLesson(id, day) } > 0
+            }
         }
     }
 
@@ -11791,7 +11814,7 @@ class MekaCore(
             val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
             val card = os.meka.core.domain.AskRules.card(raw, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
                 os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items(),
-                _people.value, lists.promisedItems(), trips.items(), tripLists.items()) ?: return@onCore unusable
+                _people.value, lists.promisedItems(), trips.items(), tripLists.items(), study.courses(), study.lessons()) ?: return@onCore unusable
             if (!askAllowed(card.proposal, context.untrusted)) os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_REFUSED)
             else os.meka.core.domain.LiveOffer(card, os.meka.core.domain.LiveToolRules.offered(card.line))
         }

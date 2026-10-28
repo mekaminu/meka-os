@@ -2449,6 +2449,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "marked Why trains run late done in the train queue")
     }
 
+    func testStudyCardsFromAskReachSwift() {
+        // "I've finished Pivot tables" / "plan it for tomorrow" in Ask and on the orb (Obi sees everything, slice 2).
+        let tick = AskRules.shared.cardOf(p: AskProposalStudyTick(lessonId: "l1", title: "Pivot tables", course: "Data analytics"), today: 0)
+        XCTAssertEqual(tick.line, "Tick off “Pivot tables” · Data analytics")
+        XCTAssertEqual(tick.button, "Done")
+        XCTAssertEqual(TalkRules.shared.phrase(p: tick.proposal, today: 0, past: true), "ticked off Pivot tables in your study plan")
+        let plan = AskRules.shared.cardOf(p: AskProposalStudyPlan(lessonIds: ["l1"], what: "“Pivot tables”", course: "Data analytics", day: 1), today: 0)
+        XCTAssertEqual(plan.line, "Plan “Pivot tables” for tomorrow · Data analytics")
+        XCTAssertEqual(plan.button, "Plan")
+        XCTAssertNil(TrustRules.shared.kindOf(p: plan.proposal))
+    }
+
     func testAddFactFromAskReachesSwift() {
         // "Remember that my shoe size is 10" in Ask and Talk (What MEKA knows, slice 2): the card's words reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddFact(label: "Shoe size", value: "10", factId: nil), today: 0)

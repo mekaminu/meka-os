@@ -115,5 +115,7 @@ object AskPolicy {
         is AskProposal.ReadingUpdate -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         // His own name in his own About you, like typing it there (nothing is sent to anyone).
         is AskProposal.SetName -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+        // Ticks or plans lessons in Meka's own Study plan, like its buttons (nothing is sent to anyone).
+        is AskProposal.StudyTick, is AskProposal.StudyPlan -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
     }
 }

@@ -132,6 +132,13 @@ sealed interface AskProposal {
     data class ReadingUpdate(val change: ReadingChange, val itemId: String?, val title: String, val text: String, val line: String) : AskProposal
     /** One name everywhere: saves [name] as About you → Your name ("Call you “Alex”", [CallNameRules]). */
     data class SetName(val name: String) : AskProposal
+    /** Obi sees everything, slice 2: ticks one lesson of his Study plan done ("I've done Pivot tables", [StudyAskCards]). */
+    data class StudyTick(val lessonId: String, val title: String, val course: String) : AskProposal
+    /**
+     * Obi sees everything, slice 2: plans [lessonIds] for [day] ("plan module 4 for tomorrow"); [what] is "“Pivot
+     * tables”" for one lesson or "Module 4 · 5 lessons" for a module's lessons not done, [course] their course.
+     */
+    data class StudyPlan(val lessonIds: List<String>, val what: String, val course: String, val day: Long) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -198,6 +205,10 @@ sealed interface AskUndo {
     data class RemoveGiftIdea(val ideaId: String) : AskUndo
     /** The promise card: the promise it added leaves Lists (only while it is still open). */
     data class RemovePromise(val promiseId: String) : AskUndo
+    /** The Study tick card: the lesson is unticked again (only while it is still ticked). */
+    data class UntickLesson(val lessonId: String) : AskUndo
+    /** The Study plan card: each lesson gets the day it had ([before], null for none) while it is still on [day]. */
+    data class PutBackLessonPlan(val before: Map<String, Long?>, val day: Long) : AskUndo
     /** The booking card: the booking it added leaves the trip (only while it is still there). */
     data class RemoveBooking(val bookingId: String) : AskUndo
     /** The trip list card's things: [added] ones leave the trip's lists, [revived] ones (unticked by it) are ticked again. */
@@ -275,7 +286,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event", "add_trip_item")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event", "add_trip_item", "study_done", "plan_lesson")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -466,10 +477,11 @@ object AskRules {
                tasks: List<Task> = emptyList(), goals: List<GoalItem> = emptyList(), lifeAdmin: LifeAdminView? = null,
                occasions: List<Occasion> = emptyList(), people: PeopleView = PeopleView.EMPTY,
                promised: List<PromiseItem> = emptyList(), trips: List<TripItem> = emptyList(),
-               tripItems: List<TripListItem> = emptyList()): AskAnswer =
+               tripItems: List<TripListItem> = emptyList(), studyCourses: List<StudyCourse> = emptyList(),
+               studyLessons: List<StudyLesson> = emptyList()): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts, errands, tasks, goals, lifeAdmin, occasions, people, promised, trips, tripItems) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts, errands, tasks, goals, lifeAdmin, occasions, people, promised, trips, tripItems, studyCourses, studyLessons) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -483,7 +495,8 @@ object AskRules {
              facts: List<LifeFact> = emptyList(), errands: List<ErrandItem> = emptyList(), tasks: List<Task> = emptyList(),
              goals: List<GoalItem> = emptyList(), lifeAdmin: LifeAdminView? = null, occasions: List<Occasion> = emptyList(),
              people: PeopleView = PeopleView.EMPTY, promised: List<PromiseItem> = emptyList(), trips: List<TripItem> = emptyList(),
-             tripItems: List<TripListItem> = emptyList()): AskCard? {
+             tripItems: List<TripListItem> = emptyList(), studyCourses: List<StudyCourse> = emptyList(),
+             studyLessons: List<StudyLesson> = emptyList()): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -492,7 +505,7 @@ object AskRules {
         fun day(): Long? = a.date?.let { parseDay(it) }?.takeIf { it in today..today + MAX_DAYS_AHEAD }
         val minute = a.time?.let { parseTime(it) }
         // Where a kind uses a day or time, one that is there must read right (a bad one isn't guessed at).
-        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night" || a.kind == "add_goal" || a.kind == "add_promise" || a.kind == "add_booking") {
+        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night" || a.kind == "add_goal" || a.kind == "add_promise" || a.kind == "add_booking" || a.kind == "plan_lesson") {
             if (a.time != null && minute == null) return null
             if (a.date != null && day() == null) return null
         }
@@ -542,6 +555,8 @@ object AskRules {
             "add_gift_idea" -> GiftAskRules.proposal(occasions, a.title) ?: return null
             "add_promise" -> PeopleAskRules.proposal(people.rows, promised, a.title, day()) ?: return null
             "add_trip_item" -> TripListAskRules.proposal(trips, tripItems, a.title, today) ?: return null
+            "study_done" -> StudyAskCards.tick(studyCourses, studyLessons, a.title) ?: return null
+            "plan_lesson" -> StudyAskCards.plan(studyCourses, studyLessons, a.title, day(), today) ?: return null
             "add_booking" -> TripAskRules.proposal(trips, a.title, day(), minute, today, cal.minuteOfDay(nowMs)) ?: return null
             // Edit your calendars, completeness slice 4: only an event MEKA sent a handle for; a bad day or time isn't guessed at.
             "move_event" -> {
@@ -667,6 +682,8 @@ object AskRules {
         is AskProposal.AddGoal -> GoalAskRules.doneLine(p)
         is AskProposal.ReadingUpdate -> p.line
         is AskProposal.SetName -> CallNameRules.doneLine(p.name)
+        is AskProposal.StudyTick -> StudyAskCards.tickDone(p)
+        is AskProposal.StudyPlan -> StudyAskCards.planDone(p, today)
     }
 
     /** The card's words for [p]. */
@@ -698,6 +715,8 @@ object AskRules {
         is AskProposal.AddGoal -> AskCard(p, GoalAskRules.cardLine(p, today), "Add")
         is AskProposal.ReadingUpdate -> AskCard(p, ReadingAskRules.cardLine(p), ReadingAskRules.button(p))
         is AskProposal.SetName -> CallNameRules.card(p.name)
+        is AskProposal.StudyTick -> StudyAskCards.tickCard(p)
+        is AskProposal.StudyPlan -> StudyAskCards.planCard(p, today)
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

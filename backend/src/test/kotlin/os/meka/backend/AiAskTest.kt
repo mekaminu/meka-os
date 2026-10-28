@@ -96,6 +96,8 @@ class AiAskTest {
         assertTrue("add_win" in AskService.KINDS && "add_win" in AskService.SYSTEM)
         assertTrue("queue lines" in AskService.SYSTEM)
         assertTrue("queue_done" in AskService.KINDS && "queue_done" in AskService.SYSTEM)
+        assertTrue("study_done" in AskService.KINDS && "study_done" in AskService.SYSTEM)
+        assertTrue("plan_lesson" in AskService.KINDS && "plan_lesson" in AskService.SYSTEM && "study lines" in AskService.SYSTEM)
         assertTrue("leave lines" in AskService.SYSTEM)
         assertTrue("facts lines" in AskService.SYSTEM)
         assertTrue("protected lines" in AskService.SYSTEM && "never refuse a task" in AskService.SYSTEM)

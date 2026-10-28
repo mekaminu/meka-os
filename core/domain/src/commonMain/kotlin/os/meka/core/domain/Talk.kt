@@ -317,6 +317,10 @@ object TalkRules {
         is AskProposal.ReadingUpdate -> clean(ReadingAskRules.phrase(p, past))
         // "call you Alex from now on" / "saved your name as Alex".
         is AskProposal.SetName -> CallNameRules.phrase(clean(p.name), past)
+        // "tick off Pivot tables in your study plan" / "ticked off …".
+        is AskProposal.StudyTick -> (if (past) "ticked off " else "tick off ") + clean(p.title) + " in your study plan"
+        // "plan Module 4, 5 lessons for tomorrow" / "planned Pivot tables for Thursday 29 October".
+        is AskProposal.StudyPlan -> (if (past) "planned " else "plan ") + clean(p.what.replace(" · ", ", ")) + " for " + spokenWhen(p.day, null, today)
         is AskProposal.AddGoal -> (if (past) "added " else "add ") + "the goal " + clean(p.title) +
             (p.dueDay?.let { ", done by " + spokenWhen(it, null, today) } ?: " for " + GoalRules.horizonLabel(p.horizon).lowercase())
     }
