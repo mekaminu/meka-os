@@ -149,7 +149,10 @@ import os.meka.core.domain.TradingAddRow
 import os.meka.core.domain.TradingKestrel
 import os.meka.core.domain.TradingKestrelView
 import os.meka.core.domain.TradingRiskView
+import os.meka.core.domain.TradingAlertsRow
 import os.meka.core.domain.TradingAlertsView
+import os.meka.core.domain.TradingTiles
+import os.meka.core.domain.TradingTilesView
 import os.meka.core.domain.TradingCurveView
 import os.meka.core.domain.TradingExportRules
 import os.meka.core.domain.TradingExportView
@@ -331,6 +334,8 @@ fun MoneyPane(
     var otherSheet by rememberSaveable { mutableStateOf(false) }
     // Trading's layout rule (e): the add-an-address sheet with the field.
     var addressSheet by rememberSaveable { mutableStateOf(false) }
+    // Trading's ALERTS as one row (README item 5): the choices open in a sheet.
+    var alertsSheet by rememberSaveable { mutableStateOf(false) }
     // Ask Obi (slice 1): the money chat's sheet, its turns while Money is open (never stored), its Try questions and
     // whether an answer is on its way.
     var chatOpen by rememberSaveable { mutableStateOf(false) }
@@ -426,6 +431,16 @@ fun MoneyPane(
                 TradingEquityBlock(t, tradingRange, { k -> haptics.tick(); tradingRange = k }) { kind, k -> haptics.tick(); onAlert(kind, k) }
             }
         }
+        // The month's four tiles under equity (mockup's 2×2): closed profit, funding, fees, winning trades.
+        t.tiles?.let { tl ->
+            item(key = "trading-tiles-head") {
+                Text(tl.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-tiles") {
+                TradingTilesBlock(tl, Modifier.animateItem().appear(rememberAppearance(2)))
+            }
+        }
         // Obi's risk line (mockup): the share of what he holds, the nearest liquidation and funding, under equity.
         t.risk?.let { r ->
             item(key = "trading-risk") {
@@ -464,7 +479,7 @@ fun MoneyPane(
                 MoneyCard(Modifier.animateItem().appear(rememberAppearance(3)), tag = "money-curve-card") { CurveBlock(c) }
             }
         }
-        t.trades?.let { tr ->
+        TradingTiles.trades(t)?.let { tr ->
             item(key = "trading-trades-head") {
                 Text(tr.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -499,7 +514,9 @@ fun MoneyPane(
                     modifier = Modifier.animateItem().padding(top = MekaSpace.m))
             }
             item(key = "trading-alerts") {
-                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-trading-alerts-card") { AlertsBlock(a, onAlert) }
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-trading-alerts-card") {
+                    TradingAlertsRowView(TradingTiles.alertsRow(a)) { haptics.tick(); said = null; alertsSheet = true }
+                }
             }
         }
         t.export?.let { e ->
@@ -1277,6 +1294,15 @@ fun MoneyPane(
         TradingAddressFields(onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } })
         SheetSaid(said)
     }
+    // Trading's ALERTS sheet (README item 5): the sentence and each alert's choices, as the card had them.
+    MoneyDetailSheet(v.trading?.alerts?.takeIf { alertsSheet }, title = { TradingTiles.ALERTS_SHEET }, tag = "money-alerts-sheet",
+        done = TradingTiles.ALERTS_DONE, onClose = { alertsSheet = false }) { a ->
+        AlertsBlock(a) { kind, key ->
+            haptics.tick()
+            scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
+        }
+        SheetSaid(said)
+    }
     // Net worth's typed things: each with Remove (Undo in the said line), and the field to add or update one.
     MoneyDetailSheet(otherOpen, title = { MoneyWorthOther.TITLE }, tag = "money-other-sheet", done = MoneyWorthOther.DONE, onClose = { otherSheet = false }) { w ->
         WorthOtherDetails(w,
@@ -1605,6 +1631,58 @@ private fun TradingKestrelBlock(k: TradingKestrelView, onReview: () -> Unit) {
         Text(r + " ›", style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onReview)
                 .minTouch().padding(vertical = MekaSpace.xs).testTag("money-kestrel-review"))
+    }
+}
+
+/**
+ * The month's four tiles (mockup's 2×2): label over value in raised tiles, two a row; a gain in the accent. Values
+ * cross-fade when the trades are read again (MekaMotion.appear honours reduced motion).
+ */
+@Composable
+private fun TradingTilesBlock(v: TradingTilesView, modifier: Modifier = Modifier) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth().testTag("money-trading-tiles"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        v.tiles.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                row.forEach { t -> key(t.label) {
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                            .semantics(mergeDescendants = true) { contentDescription = "${t.label}, ${t.value}" }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                    ) {
+                        Text(t.label, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Crossfade(t.value, animationSpec = MekaMotion.appear(reduced), label = "trading-tile-${t.label}") { l ->
+                            Text(l, style = MekaType.metaStrong, color = if (t.up == true) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
+                        }
+                    }
+                } }
+            }
+        }
+    }
+}
+
+/** ALERTS as one row (README item 5): how many are on over each one's choice, ›; opens the sheet with the choices. */
+@Composable
+private fun TradingAlertsRowView(r: TradingAlertsRow, onOpen: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = r.spoken }
+            .padding(vertical = MekaSpace.xs).testTag("money-alerts-row"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Crossfade(r.title, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-title") { l ->
+                Text(l, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-row-line") { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
     }
 }
 

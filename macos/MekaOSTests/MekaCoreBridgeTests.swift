@@ -4165,6 +4165,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TradingEquity.shared.about(minor: 651_234, pounds: true), "≈ £6,512")
         XCTAssertEqual(TradingEquity.shared.LABEL, "Hyperliquid")
     }
+    /// Trading's month tiles and the ALERTS row reach the Mac: no tiles before trades are read; the row counts what's on.
+    func testTradingTilesAndAlertsRowOnTheMac() {
+        XCTAssertNil(TradingTiles.shared.view(wallets: [], ccy: TradingCcy.companion.USD))
+        XCTAssertEqual(TradingTiles.shared.HEAD, "LAST 30 DAYS")
+        let on = TradingAlerts.shared.view(s: TradingAlertSetting.companion.DEFAULT)
+        XCTAssertEqual(TradingTiles.shared.alertsRow(a: on).title, "All 4 alerts on")
+        XCTAssertEqual(TradingTiles.shared.ALERTS_SHEET, "Alerts")
+    }
     /// Money → Trading's Obi risk line and Kestrel card reach the Mac: nothing to say without an account read.
     func testTradingRiskAndKestrelOnTheMac() {
         XCTAssertNil(TradingRisk.shared.view(wallets: [], worth: nil, ccy: TradingCcy.companion.USD, near: 0.1))

@@ -4559,3 +4559,19 @@ the same, `@State tradingRange`. The pnl rows, curve and currency views stay in 
 them). Help money.md (HelpIndex regenerated), motion catalogue row. Tests: TradingEquityTest, MoneyTradingLayoutScreensTest
 (theEquityCardLeadsAsTheMockup, theEquityCardOnTheOpenFold), MekaCoreBridgeTests (testTradingEquityCardOnTheMac). No
 server change, no migration. Mac checked nightly.
+
+### Money redesign: Trading's month tiles and the alerts row (2026-10-28)
+
+README item 5, rest, both apps. Core `TradingTiles`: `view(wallets, ccy)` adds up the read accounts' 30-day trades
+(YOUR TRADES' window) into four tiles, Closed profit, Funding paid / Funding received, Fees and Winning trades ("14 of 23",
+"None closed"), under LAST 30 DAYS (the mockup's "October so far" isn't what the server adds up), null until trades are
+read or with nothing in the window; built in `TradingTracker.view` as the new defaulted `TradingView.tiles`.
+`TradingTiles.trades(t)`: YOUR TRADES beside the tiles drops the summary and the closed, fees and funding rows and keeps
+"After fees and funding", the averages, best and worst and each coin. `TradingTiles.alertsRow(a)`: ALERTS as one row
+("All 4 alerts on" / "N of 4 alerts on" / "All alerts off" over "Near liquidation 10% · a drop 20% · a big order 5× ·
+funding 1%"). Fold: `TradingTilesBlock` (2×2 raised tiles on the surface colour, a gain in the accent, values
+cross-fading) after the equity card, `TradingAlertsRowView` in the ALERTS card opening the `money-alerts-sheet`
+MoneyDetailSheet with the old AlertsBlock and the said line. Mac: `tradingTiles` (two-column grid), `tradingAlertsRow`
+with a popover holding `tradingAlerts`. Help money.md (HelpIndex regenerated), motion catalogue row, screens README.
+Tests: TradingTilesTest, MoneyTradingLayoutScreensTest (theMonthsTilesAndTheAlertsRow, theMonthsTilesOnTheOpenFold),
+MekaCoreBridgeTests (testTradingTilesAndAlertsRowOnTheMac). No server change, no migration. Mac checked nightly.

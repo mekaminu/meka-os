@@ -212,6 +212,8 @@ data class TradingView(
     val risk: TradingRiskView? = null,
     /** The equity card as the mockup (TradingEquity): label inside, value, the other currency, ranges; null until read. */
     val equity: TradingEquityCard? = null,
+    /** The month's four tiles under the equity card (TradingTiles); null until trades are read. */
+    val tiles: TradingTilesView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -641,6 +643,7 @@ object TradingTracker {
         return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, if (ccy.pounds) FOOT_GBP else FOOT, spoken,
             tradesView(wallets, nowMs, cal, ccy), TradingAlerts.view(alerts), curve, TradingExportRules.view(wallets, nowMs, cal),
             TradingReviewRules.view(wallets, nowMs, cal, ccy), TradingCurrencyRules.view(wallets, alerts.pounds, ccy),
-            equity = TradingEquity.card(wallets, read, equity, ccy, curve, last?.let { HealthRules.at(it, nowMs, cal) }))
+            equity = TradingEquity.card(wallets, read, equity, ccy, curve, last?.let { HealthRules.at(it, nowMs, cal) }),
+            tiles = TradingTiles.view(wallets, ccy))
     }
 }

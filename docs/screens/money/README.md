@@ -40,10 +40,13 @@ Read-only inside it, the value large with "≈ £…" beside it (a tap switches 
 the Dollars · Pounds row left the page (what the currency means is behind the foot's ⓘ). No 3M chip: the server keeps a
 month of day ends. App shots: `cover-dark-trading-equity`, `inner-dark-trading-equity`.
 
+**Item 5, rest (2026-10-28, both apps):** the month's 2×2 tiles under the equity card (Closed profit, Funding paid or
+received, Fees, Winning trades "14 of 23"), labelled LAST 30 DAYS rather than the mockup's "October so far" because the
+server adds trades up over 30 days; YOUR TRADES no longer repeats them (it keeps After fees and funding, the averages and
+each coin). ALERTS is one row ("All 4 alerts on" over each one's choice) opening a sheet (Mac: a popover) with the
+choices. App shots: `cover-dark-trading-tiles`, `cover-dark-trading-alerts-sheet`, `inner-dark-trading-tiles`.
+
 **Still to do (next Money slices):**
-5. Trading (rest): the mockup leads with the equity card (value, change, chart, 1D/1W/1M/3M), 2×2 tiles, Obi's line, positions
-   and Kestrel; the app's shot with no address leads with the set-up card (Dollars/Pounds, addresses, a long alerts
-   line). Check the shot with an address in, and fold the alerts line into a row with a sheet.
 6. Plan: OBI'S MONEY CHECK as the mockup's brass-bordered card with its label inside, the yearly total large, and the
    first idea as its own card with its step, Remind me and Not for me; the What if I save slider as a thin track with a
    round knob, smaller chips.

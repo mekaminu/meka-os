@@ -50,6 +50,7 @@ import os.meka.core.domain.TradingEquity
 import os.meka.core.domain.TradingPosition
 import os.meka.core.domain.TradingWalletFields
 import os.meka.core.domain.MoneyTradingLayout
+import os.meka.core.domain.TradingTiles
 import os.meka.core.domain.TradingTracker
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
@@ -287,5 +288,46 @@ class MoneyTradingLayoutScreensTest {
         pick(MoneyTab.TRADING)
         assertTrue(shows("money-trading-other"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-equity"))
+    }
+
+    /**
+     * README item 5 (rest): the month as four tiles under the equity card (closed profit, funding paid, fees, winning
+     * trades), YOUR TRADES no longer repeating them, and ALERTS as one row whose sheet holds the choices.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theMonthsTilesAndTheAlertsRow() {
+        val core = open(seed = true, equityCard = true)
+        pick(MoneyTab.TRADING)
+        val t = core.moneyView.value.trading ?: fail("no trading view")
+        val tiles = t.tiles ?: fail("no tiles once trades are read")
+        assertEquals(listOf("+$42.00", "−$38.20", "−$3.00", "2 of 3"), tiles.tiles.map { it.value })
+        scrollTo("money-trading-tiles")
+        assertTrue(showsText(TradingTiles.HEAD), "the tiles sit under their label")
+        tiles.tiles.forEach { assertTrue(showsText(it.label), "the ${it.label} tile shows") }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-tiles"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-tiles")
+        scrollTo("money-trades-card")
+        if (showsText(t.trades?.summary ?: fail("no trades summary"))) fail("YOUR TRADES still repeats the trades closed and won")
+        scrollTo("money-trading-alerts-card")
+        val row = TradingTiles.alertsRow(t.alerts ?: fail("no alerts"))
+        assertTrue(showsText(row.title), "ALERTS is one row: ${row.title}")
+        if (showsText(t.alerts!!.dropLabel)) fail("the alert choices still sit open on the page")
+        tap("money-alerts-row")
+        assertTrue(shows("money-alerts-sheet"), "the alerts row opens its sheet")
+        assertTrue(showsText(t.alerts!!.dropLabel), "the sheet holds the choices")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-alerts-sheet"))
+        compose.onNodeWithContentDescription(t.alerts!!.liqChips.first { !it.on }.spoken, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        repeat(40) { if (core.moneyView.value.trading?.alerts == t.alerts) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+        assertTrue(core.moneyView.value.trading?.alerts != t.alerts, "a choice in the sheet changes the alert")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theMonthsTilesOnTheOpenFold() {
+        open(seed = true, equityCard = true)
+        pick(MoneyTab.TRADING)
+        assertTrue(shows("money-trading-tiles"))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-tiles"))
     }
 }

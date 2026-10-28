@@ -73,6 +73,8 @@ struct MoneySheet: View {
     @State private var worthOtherOpen = false
     /// Trading's layout rule (e): the add-an-address popover with the field.
     @State private var tradingAddOpen = false
+    /// Trading's ALERTS as one row (README item 5): whether its popover with the choices is open.
+    @State private var tradingAlertsOpen = false
     /// Slice 18: the year in review opened or folded by him, per year (else January's finished year opens by itself).
     @State private var yearOpen: [Int32: Bool] = [:]
     /// Money redesign (B), slice 1: the tab shown (Spending · Bills · Plan · Trading · Accounts); opens on Spending.
@@ -2287,6 +2289,11 @@ struct MoneySheet: View {
                 Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             if on("trading", col) { tradingEquity(t).moneyCard(palette) }
+            // The month's four tiles under equity (mockup's 2×2): closed profit, funding, fees, winning trades.
+            if let tl = t.tiles, on("trading-tiles", col) {
+                tradingHead(tl.head)
+                tradingTiles(tl)
+            }
             if let r = t.risk, on("trading-risk", col) { tradingRisk(r).moneyCard(palette) }
             if MoneyTradingLayout.shared.hasPositions(t: t), on("trading-positions", col) {
                 tradingHead(MoneyTradingLayout.shared.POSITIONS_HEAD)
@@ -2300,7 +2307,7 @@ struct MoneySheet: View {
                 tradingHead(c.head)
                 tradingCurve(c).moneyCard(palette)
             }
-            if let tr = t.trades, on("trading-trades", col) {
+            if let tr = TradingTiles.shared.trades(t: t), on("trading-trades", col) {
                 tradingHead(tr.head)
                 trades(tr).moneyCard(palette)
             }
@@ -2315,7 +2322,7 @@ struct MoneySheet: View {
                 }
                 if let a = t.alerts, on("trading-alerts", col) {
                     tradingHead(a.head)
-                    tradingAlerts(a).moneyCard(palette)
+                    tradingAlertsRow(TradingTiles.shared.alertsRow(a: a), a).moneyCard(palette)
                 }
                 if let e = t.export, on("trading-export", col) {
                     tradingHead(e.head)
@@ -2599,6 +2606,64 @@ struct MoneySheet: View {
         }
         .padding(MekaSpace.m)
         .frame(width: 380)
+    }
+
+    /// The month's four tiles (mockup's 2×2): label over value in raised tiles, two a row; a gain in the accent. A value
+    /// cross-fades when the trades are read again (reduced motion: no movement, the same fade).
+    private func tradingTiles(_ v: TradingTilesView) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)],
+                  alignment: .leading, spacing: MekaSpace.xs) {
+            ForEach(v.tiles, id: \.label) { t in
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(t.label).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    Text(t.value).font(MekaType.metaStrong)
+                        .foregroundStyle(t.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                        .lineLimit(1).contentTransition(.opacity)
+                }
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(t.label), \(t.value)")
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.spoken)
+    }
+
+    /// ALERTS as one row (README item 5): how many are on over each one's choice, ›; opens the popover with the choices.
+    private func tradingAlertsRow(_ r: TradingAlertsRow, _ a: TradingAlertsView) -> some View {
+        Button {
+            MekaHaptics.tick()
+            said = nil
+            tradingAlertsOpen = true
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1).contentTransition(.opacity)
+                    Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2).contentTransition(.opacity)
+                }
+                Spacer()
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(r.spoken)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: r.line)
+        .popover(isPresented: $tradingAlertsOpen, arrowEdge: .trailing) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text(TradingTiles.shared.ALERTS_SHEET).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                tradingAlerts(model.money?.trading?.alerts ?? a)
+                if let s = said {
+                    Text(s.line).font(MekaType.caption).foregroundStyle(s.refused ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button(TradingTiles.shared.ALERTS_DONE) { tradingAlertsOpen = false }.keyboardShortcut(.defaultAction)
+            }
+            .padding(MekaSpace.m)
+            .frame(width: 380)
+        }
     }
 
     /// Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
