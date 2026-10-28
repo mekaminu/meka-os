@@ -38,6 +38,13 @@ struct MoneySheet: View {
     let palette: MekaPalette
     @State private var account = ""
     @State private var said: CoreModel.MoneySaid?
+    /// Ask Obi (slice 1): the money chat's popover, its turns while Money is open (never stored), its Try questions,
+    /// whether an answer is on its way, and the next turn's id.
+    @State private var chatOpen = false
+    @State private var chatTurns: [CoreModel.MoneyChatLine] = []
+    @State private var chatTry: [String] = []
+    @State private var chatWorking = false
+    @State private var chatNext = 0
     @State private var deleting = false
     @State private var busy = false
     @State private var extra = ""
@@ -131,6 +138,14 @@ struct MoneySheet: View {
                     .staggeredAppear(2)
             } else {
                 tabPills(v).staggeredAppear(2)
+                // Ask Obi: the bar on every tab opens Obi · money.
+                MoneyAskBarView(palette: palette) {
+                    said = nil
+                    chatOpen = true
+                    Task { chatTry = await model.moneyChatSuggestions() }
+                }
+                .staggeredAppear(2)
+                .popover(isPresented: $chatOpen, arrowEdge: .bottom) { chatPanel(v) }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         if let e = MoneyTabs.shared.empty(tab: tab, v: v) {
@@ -2086,6 +2101,39 @@ struct MoneySheet: View {
             .background(on ? palette.accent : palette.surfaceRaised, in: Capsule())
             .accessibilityLabel(spoken)
             .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// Ask Obi's popover: an answer's buttons make the goal, use the cards plan, or show Plan.
+    private func chatPanel(_ v: MoneyView) -> some View {
+        MoneyChatPanel(
+            palette: palette, turns: chatTurns, suggestions: chatTry, working: chatWorking, said: said,
+            onAsk: { q in
+                guard !chatWorking else { return }
+                MekaHaptics.tick()
+                said = nil
+                chatWorking = true
+                let id = chatNext
+                chatNext += 1
+                Task {
+                    let line = await model.moneyChat(q, id: id)
+                    chatWorking = false
+                    if let line { chatTurns = Array((chatTurns + [line]).suffix(Int(MoneyChat.shared.KEEP))) }
+                }
+            },
+            onAction: { a in
+                if a.kind == MoneyChat.shared.ACT_GOAL {
+                    Task { said = await model.moneyChatGoal(amountPence: a.amountPence, months: a.months) }
+                } else if a.kind == MoneyChat.shared.ACT_CLEAR {
+                    Task { said = await model.moneyClearGoal(payPence: a.amountPence, order: a.order) }
+                } else {
+                    chatOpen = false
+                    tab = MoneyTab.plan
+                    if let step = MoneyTabs.shared.stepOnPick(tab: MoneyTab.plan, v: v) { model.moneyStep(step.int32Value) }
+                }
+            },
+            onUndo: { u in Task { _ = await model.undoMoneyCategory(token: u); said = nil } },
+            onDone: { chatOpen = false }
+        )
     }
 
     private func saidLine(_ s: CoreModel.MoneySaid) -> some View {

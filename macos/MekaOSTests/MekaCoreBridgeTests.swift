@@ -4121,4 +4121,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MoneyTabs.shared.info(tab: MoneyTab.trading, v: MoneyView.companion.LOCKED))
         XCTAssertEqual(MoneyTabs.shared.info(tab: MoneyTab.accounts, v: MoneyView.companion.LOCKED)?.first, MoneyTabs.shared.ACCOUNTS_FROM)
     }
+    /// Ask Obi (slice 1): the money chat reaches Swift; locked, it refuses with the locked line and offers no Try questions.
+    func testMoneyChatReachesSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "chat-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let t = try await core.moneyChat(question: "What if I save £300 a month for 6 months?")
+        XCTAssertTrue(t.refused)
+        XCTAssertEqual(t.text, MoneyRules.shared.LOCKED)
+        let tries = try await core.moneyChatSuggestions()
+        XCTAssertTrue(tries.isEmpty)
+        let goal = try await core.moneyChatGoal(amountPence: 30_000, months: 6)
+        XCTAssertTrue(goal.refused)
+        XCTAssertEqual(MoneyChat.shared.monthsIn(q: "for two years")?.intValue, 24)
+        XCTAssertEqual(MoneyChat.shared.goal(amountPence: 13_500, months: 9, thisMonth: 2026 * 12 + 9).title, "Save £1,215 by Jul 2027")
+    }
 }

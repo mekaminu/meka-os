@@ -114,6 +114,8 @@ import os.meka.core.domain.MoneySheetMark
 import os.meka.core.domain.MoneyNeeds
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
+import os.meka.core.domain.MoneyChat
+import os.meka.core.domain.MoneyChatTurn
 import os.meka.core.domain.MoneySpending
 import os.meka.core.domain.InstantPaymentRules
 import os.meka.core.domain.PaymentTap
@@ -305,6 +307,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     var goalSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val goalOpen = goalSheetId?.let { id -> v.goals?.rows?.firstOrNull { it.id == id } }
     var otherSheet by rememberSaveable { mutableStateOf(false) }
+    // Ask Obi (slice 1): the money chat's sheet, its turns while Money is open (never stored), its Try questions and
+    // whether an answer is on its way.
+    var chatOpen by rememberSaveable { mutableStateOf(false) }
+    var chatTurns by remember { mutableStateOf(emptyList<MoneyChatTurn>()) }
+    var chatTry by remember { mutableStateOf(emptyList<String>()) }
+    var chatWorking by remember { mutableStateOf(false) }
     // Layout rule (c): the ⓘ sheet open, if any (not saved: it's rebuilt from the view on a tap).
     var info by remember { mutableStateOf<MoneyInfo?>(null) }
     val otherOpen = v.worth?.takeIf { otherSheet }
@@ -423,6 +431,13 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             MoneyTabPills(tab, Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2))) { t ->
                 tab = t
                 MoneyTabs.stepOnPick(t, v)?.let { step -> scope.launch { runCatching { core.moneyStep(step) } } }
+            }
+        }
+        // Ask Obi: the bar on every tab opens the money chat.
+        item(key = "ask-obi") {
+            MoneyAskBar(Modifier.animateItem().appear(rememberAppearance(2))) {
+                haptics.tick(); said = null; chatOpen = true
+                scope.launch { chatTry = runCatching { core.moneyChatSuggestions() }.getOrDefault(emptyList()) }
             }
         }
         MoneyTabs.empty(tab, v)?.let { e ->
@@ -1107,6 +1122,33 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         WorthOtherDetails(w,
             onAdd = { text -> scope.launch { runCatching { core.moneyWorthAdd(text) }.getOrNull()?.let(say) } },
             onRemove = { id -> haptics.tick(); scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } })
+        SheetSaid(said)
+    }
+    // Ask Obi: Obi · money, answered on the device; an answer's buttons make the goal, use the cards plan or show Plan.
+    MoneyDetailSheet(MoneyChat.HEAD.takeIf { chatOpen }, title = { it }, tag = "money-chat-sheet", done = MoneyChat.DONE, onClose = { chatOpen = false }) { _ ->
+        MoneyChatContent(chatTurns, chatTry, chatWorking,
+            onAsk = { q ->
+                if (!chatWorking) {
+                    haptics.tick(); said = null; chatWorking = true
+                    scope.launch {
+                        val t = runCatching { core.moneyChat(q) }.getOrNull()
+                        chatWorking = false
+                        if (t != null) { if (t.refused) haptics.tick() else haptics.light(); chatTurns = MoneyChat.add(chatTurns, t) }
+                    }
+                }
+            },
+            onAction = { a ->
+                haptics.tick()
+                when (a.kind) {
+                    MoneyChat.ACT_GOAL -> scope.launch { runCatching { core.moneyChatGoal(a.amountPence, a.months) }.getOrNull()?.let(say) }
+                    MoneyChat.ACT_CLEAR -> scope.launch { runCatching { core.moneyClearGoal(a.amountPence, a.order) }.getOrNull()?.let(say) }
+                    else -> {
+                        chatOpen = false
+                        tab = MoneyTab.PLAN
+                        MoneyTabs.stepOnPick(MoneyTab.PLAN, v)?.let { step -> scope.launch { runCatching { core.moneyStep(step) } } }
+                    }
+                }
+            })
         SheetSaid(said)
     }
     MoneyDetailSheet(paydayOpen, title = { it.head.lowercase().replaceFirstChar { ch -> ch.uppercase() } }, tag = "money-payday-sheet",

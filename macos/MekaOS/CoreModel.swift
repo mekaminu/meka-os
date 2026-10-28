@@ -5001,6 +5001,64 @@ final class CoreModel {
         }
     }
 
+    /// Ask Obi (slice 1): one button under an answer, copied out of the core's MoneyChatAction.
+    struct MoneyChatAct: Equatable, Identifiable {
+        let id: Int
+        let kind: String
+        let label: String
+        let amountPence: Int64
+        let months: Int32
+        let order: String
+    }
+
+    /// Ask Obi: one turn of Obi · money, copied out of the core's MoneyChatTurn on the main actor.
+    struct MoneyChatLine: Equatable, Identifiable {
+        let id: Int
+        let question: String
+        let text: String
+        let refused: Bool
+        let actions: [MoneyChatAct]
+    }
+
+    /// Ask Obi: the answer to [question] from his own Money, worked out by the core on this Mac (nothing is sent). Only
+    /// the question's string crosses into the core; the answer is copied into Swift values here.
+    func moneyChat(_ question: String, id: Int) async -> MoneyChatLine? {
+        guard let core else { return nil }
+        do {
+            let t = try await core.moneyChat(question: question)
+            if t.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            let acts = t.actions.enumerated().map { i, a in
+                MoneyChatAct(id: i, kind: a.kind, label: a.label, amountPence: a.amountPence, months: a.months, order: a.order)
+            }
+            return MoneyChatLine(id: id, question: t.question, text: t.text, refused: t.refused, actions: acts)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Ask Obi: the chat's Try questions from his own numbers (none while Money is locked).
+    func moneyChatSuggestions() async -> [String] {
+        guard let core else { return [] }
+        do {
+            return try await core.moneyChatSuggestions()
+        } catch {
+            lastError = error.localizedDescription
+            return []
+        }
+    }
+
+    /// Ask Obi → Make it a goal: "Save £1,215 by Jul 2027" in Goals, Undo deletes it (MoneyChat.goal in the core).
+    func moneyChatGoal(amountPence: Int64, months: Int32) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyChatGoal(amountPence: amountPence, months: months))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Plan's Clear my cards → Use this plan: "Clear my cards by …" in Goals, Undo deletes it (MoneyClear in the core).
     func moneyClearGoal(payPence: Int64, order: String) async -> MoneySaid? {
         guard let core else { return nil }

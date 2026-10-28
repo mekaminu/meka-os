@@ -872,6 +872,47 @@ class MekaCore(
         return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.answer(q, moneyAskData()), emptyList()))
     }
 
+    // ---- Money redesign, Ask Obi (slice 1): the money chat on every Money tab, answered on the device ----
+
+    /** What the money chat reads (caller is on the core): Ask's money data and the Plan tab's bases from the money view. */
+    private fun moneyChatData(): os.meka.core.domain.MoneyChatData =
+        os.meka.core.domain.MoneyChatData(moneyAskData(), _money.value.save, _money.value.clear)
+
+    /**
+     * Obi · money: the answer to [question] from his own Money on this device ([os.meka.core.domain.MoneyChat]), with its
+     * buttons; nothing is sent. Only while Money is open (else refused with the locked line). The apps keep the turns.
+     */
+    suspend fun moneyChat(question: String): os.meka.core.domain.MoneyChatTurn = onCore {
+        val q = question.trim()
+        if (!moneyOpen) return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyRules.LOCKED, refused = true)
+        if (money.accounts().isEmpty() && moneyBills().isEmpty()) {
+            return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyAskRules.EMPTY, refused = true)
+        }
+        os.meka.core.domain.MoneyChat.answer(q, moneyChatData())
+    }
+
+    /** The chat's "Try" questions from his own numbers ([os.meka.core.domain.MoneyChat.suggestions]); none while locked. */
+    suspend fun moneyChatSuggestions(): List<String> = onCore {
+        if (!moneyOpen || (money.accounts().isEmpty() && moneyBills().isEmpty())) emptyList()
+        else os.meka.core.domain.MoneyChat.suggestions(moneyChatData())
+    }
+
+    /**
+     * An answer's Make it a goal: "Save £1,215 by Jul 2027" in Goals, its number the total of [amountPence] a month for
+     * [months], due the end of that month ([os.meka.core.domain.MoneyChat.goal]). Undo (by [undoMoneyCategory]) deletes
+     * it. Only while Money is open.
+     */
+    suspend fun moneyChatGoal(amountPence: Long, months: Int): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        if (amountPence <= 0 || months <= 0) return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        val g = os.meka.core.domain.MoneyChat.goal(amountPence, months, os.meka.core.domain.MoneyRules.monthOf(todayEpochDay()))
+        val id = goals.addGoal(g.title, null, g.horizon, dueDay = g.dueDay)
+        goals.setMetric(id, g.target)
+        refreshMoney()
+        refresh()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneySave.goalSaid(g.title), undo = moneySaveGoalUndoPrefix + id)
+    }
+
     /** ‹ / ›: [step] −1 a month earlier, +1 a month later (never past this month). */
     suspend fun moneyStep(step: Int) = onCore {
         if (!moneyOpen) return@onCore

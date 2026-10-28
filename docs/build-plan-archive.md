@@ -4383,3 +4383,21 @@ Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
   help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyCheckCodecTest, MoneyCheckWordsTest,
   MoneyCheckWordsFacadeTest, AiMoneyCheckTest, MoneyPlanLayoutScreensTest (look again), MekaCoreBridgeTests
   (testMoneyCheckReachesSwift words, testMoneyCheckWordsWhileLocked). No migration. Mac checked nightly. Next: Ask Obi.
+
+2026-10-28, **Ask Obi, slice 1 (the bar and the money chat on the device)**, both apps. Core `MoneyChat`: `isAbout`,
+  `answer` (What if I save £N a month for N months → total and month, `MoneySave.obi`'s fit line, and with "… my cards"
+  the cards' clear date on what's left over via `MoneyClear.run`; "save £N by <month>" and "can I afford £N in/by
+  <month>" → a pace rounded up to £5 a month from next month; "which card first / clear my cards (at £N a month)" →
+  the highest-rate card first, why, clear date and interest; everything else through `MoneyAskRules`), `suggestions`
+  (a what-if at the slider's start, can I afford £300 on Saturday, which card first when a card owes, his biggest
+  category this year), `monthsIn`, `monthAhead`, `goal` (Save £X by Mon YYYY, due the month's end), `add` (keeps 6);
+  actions Make it a goal (`ACT_GOAL`), Use this plan (`ACT_CLEAR`), Show the numbers (`ACT_PLAN`). Facade `moneyChat`,
+  `moneyChatSuggestions`, `moneyChatGoal` (Undo via `undoMoneyCategory`, the `msave|` token), only while Money is open;
+  nothing sent. Fold: `MoneyAskBar` under the tabs on every tab, Obi · money in a `MoneyDetailSheet` (MoneyChatUi.kt:
+  bubbles, action pills, Try chips, field, foot line), Show the numbers switches to Plan. Mac: `MoneyAskBarView` +
+  `MoneyChatPanel` popover (MoneyChatViews.swift), CoreModel `moneyChat/moneyChatSuggestions/moneyChatGoal` copying the
+  turn into Swift values. Help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyChatTest (9),
+  MoneyChatFacadeTest, MoneyChatScreensTest (Roborazzi cover-dark-ask-obi, cover-dark-ask-obi-answer,
+  inner-dark-ask-obi), MekaCoreBridgeTests.testMoneyChatReachesSwift. No server change, no migration. Mac checked
+  nightly. Next: Ask Obi slice 2, the AI's own money chat for questions the rules can't answer (data sharing approved
+  2026-10-24 21:13), and the mic on the bar.
