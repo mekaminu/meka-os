@@ -12,7 +12,9 @@ package os.meka.core.domain
  *   (two flat whites or two bus fares the same day are normal).
  * - **large**: a payment of £100+ at least twice the shop's usual and £50 over its biggest before ("Bigger than usual ·
  *   Currys £480" · "Usually about £45 · Tue 13 Oct · Current account"), or £250+ to a shop never paid before once there
- *   are 60 days of statements to know that ("First payment to Acme Ltd · £320").
+ *   are 60 days of statements to know that ("First payment to Acme Ltd · £320"). Any single payment of £2,000+ is
+ *   "Check this · Rail Co · £2,400" instead (Money review 2026-10-26: one booking was over half a month), lit, with its
+ *   share of the month and whether the same amount came back (a refund, or a move between his accounts).
  * - **fees**: foreign transaction fees added up per account ("Foreign transaction fees · £4.12" · "3 fees on Credit
  *   card in the last 30 days"), and each late-payment or over-limit fee or interest charged ("Late payment fee · £12").
  *
@@ -44,6 +46,12 @@ object MoneyWatch {
     const val LARGE_MIN_PENCE = 10_000L
     const val NEW_MIN_PENCE = 25_000L
     const val NEW_HISTORY_DAYS = 60
+
+    /** Money review (Meka 2026-10-26 22:12): one payment of £2,000+ is "Check this", whatever the shop's usual. */
+    const val CHECK_MIN_PENCE = 200_000L
+    const val CHECK = "Check this"
+    const val CHECK_ASK = "Real, or a refund or a move?"
+    const val BACK_DAYS = 30L
     const val FINE = "That's fine"
     const val HEAD = "WORTH A LOOK"
     const val FOOT = "Not you? Your bank's app can stop or dispute it · Navilife never acts on your accounts"
@@ -103,6 +111,7 @@ object MoneyWatch {
     fun large(lines: List<MoneyWatchLine>, today: Long, names: Map<String, String>): List<MoneyAlert> {
         val first = lines.minOf { it.day }
         val byMerchant = lines.filter { it.pence < 0 }.groupBy { it.merchant }
+        val monthSpend = lines.filter { it.pence < 0 && it.category.spend }.groupBy { MoneyRules.monthOf(it.day) }.mapValues { (_, ls) -> -ls.sumOf { it.pence } }
         val out = mutableListOf<Pair<Long, MoneyAlert>>()
         lines.filter { inWindow(it, today) && it.pence <= -LARGE_MIN_PENCE && it.category.spend && it.category != MoneyCategory.FEES }.forEach { l ->
             val amount = -l.pence
@@ -112,6 +121,12 @@ object MoneyWatch {
             val title: String
             val line: String
             when {
+                amount >= CHECK_MIN_PENCE -> {
+                    title = "$CHECK · $label · ${fmt(amount)}"
+                    line = checkLine(l, amount, lines, monthSpend[MoneyRules.monthOf(l.day)] ?: 0L, account)
+                    out += l.day to MoneyAlert(id(MoneyAlertKind.LARGE, l.id), MoneyAlertKind.LARGE.key, title, line, lit = true, spoken = "$title. $line")
+                    return@forEach
+                }
                 before.isEmpty() -> {
                     if (amount < NEW_MIN_PENCE || l.day - first < NEW_HISTORY_DAYS) return@forEach
                     title = "First payment to $label · ${fmt(amount)}"
@@ -128,6 +143,21 @@ object MoneyWatch {
             out += l.day to MoneyAlert(id(MoneyAlertKind.LARGE, l.id), MoneyAlertKind.LARGE.key, title, line, lit = false, spoken = "$title. $line")
         }
         return out.sortedByDescending { it.first }.take(MAX_PER_KIND).map { it.second }
+    }
+
+    /**
+     * A "Check this" payment's line: its share of that month's spending, the day and account, then whether the same
+     * amount came back within [BACK_DAYS] either side (a refund, or a move between his accounts that landed as spending:
+     * "£2,400 came back on Tue 15 Sep · a refund?"), else "Real, or a refund or a move?".
+     */
+    internal fun checkLine(l: MoneyWatchLine, amount: Long, lines: List<MoneyWatchLine>, monthSpend: Long, account: String): String {
+        val share = if (monthSpend > 0) (amount * 100 / monthSpend).toInt() else 0
+        val month = CivilDate.MONTH_LONG[MoneyRules.monthOf(l.day) % 12]
+        val shareText = if (share in 25..100) "$share% of $month's spending" else null
+        val back = lines.filter { it.pence == amount && kotlin.math.abs(it.day - l.day) <= BACK_DAYS }
+            .minByOrNull { kotlin.math.abs(it.day - l.day) }
+        val ask = if (back != null) "${fmt(amount)} came back on ${CivilDate.shortLabel(back.day)} · a refund?" else CHECK_ASK
+        return listOfNotNull(shareText, CivilDate.shortLabel(l.day), account.ifEmpty { null }, ask).joinToString(" · ")
     }
 
     fun fees(lines: List<MoneyWatchLine>, today: Long, names: Map<String, String>): List<MoneyAlert> {

@@ -2029,6 +2029,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Money manager, slice 3: the watchdog's words and head cross to Swift; a locked screen has no alerts.
         XCTAssertEqual(MoneyWatch.shared.FINE, "That's fine")
         XCTAssertEqual(MoneyWatch.shared.head(n: 2), "WORTH A LOOK · 2")
+        XCTAssertEqual(MoneyWatch.shared.CHECK, "Check this")
         XCTAssertEqual(MoneyAlertKind.duplicate.key, "double")
         XCTAssertTrue(MoneyView.companion.LOCKED.alerts.isEmpty)
     }

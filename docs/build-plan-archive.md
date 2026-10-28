@@ -4639,3 +4639,8 @@ starts on the same left edge (was a middle column whose start moved with each na
 MoneyBillsLayoutScreensTest asserts the three shown states share one left edge, under the name. No core change, no server
 change, no migration. Mac checked nightly.
 
+
+
+### Money review: "Check this" for single payments of £2,000+ (2026-10-28)
+
+From the Money review item's *Check later* (Meka 2026-10-26 22:12: one payment was over half a month's spending). Core `MoneyWatch.large` now flags any spending line of £2,000+ (`CHECK_MIN_PENCE`) in the last 30 days as "Check this · <shop> · £…" before the bigger-than-usual and first-payment rules (one alert per payment, same id as the large alert so one already put away stays away), lit; its line (`checkLine`) gives its share of that month's spending (25–100%), the day, the account, and "£… came back on <day> · a refund?" when a credit of the same amount landed within 30 days either side (a refund or a move between his accounts), else "Real, or a refund or a move?". Worth a look's rows (MoneyLook) and the 09:00 heads-up (MoneyNudges, amounts stripped) carry it unchanged on the Fold and the Mac. Help: money.md tip, HelpIndex regenerated. Tests: MoneyWatchTest.aSinglePaymentOverTwoThousandIsCheckThis, MekaCoreBridgeTests (CHECK reaches Swift). No server change, no migration; Mac checked nightly.

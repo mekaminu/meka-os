@@ -54,6 +54,30 @@ class MoneyWatchTest {
     }
 
     @Test
+    fun aSinglePaymentOverTwoThousandIsCheckThis() {
+        val month = (1..10).map { line(d(9, it), -15_000, "SUPERMART") } // £1,500 of other spending in September
+        val big = line(d(9, 20), -240_000, "RAILWAYS ONLINE")
+        val a = MoneyWatch.large(month + big, d(10, 16), names)
+        assertEquals(listOf("Check this · Railways Online · £2,400"), a.map { it.title })
+        assertEquals("61% of September's spending · Sun 20 Sep · Current account · ${MoneyWatch.CHECK_ASK}", a.single().line)
+        assertTrue(a.single().lit)
+        // The row on Spending: name and amount apart.
+        val row = MoneyLook.row(a.single())
+        assertEquals("Check this · Railways Online", row.name)
+        assertEquals("£2,400", row.amount)
+        // The same amount back within a month reads as a likely refund or move.
+        val back = MoneyWatch.large(month + big + line(d(9, 25), 240_000, "RAILWAYS REFUND"), d(10, 16), names)
+        assertTrue(back.single().line.endsWith("£2,400 came back on Fri 25 Sep · a refund?"), back.single().line)
+        // Even where the shop's usual is just as big, £2,000+ is still Check this; under £2,000 it isn't.
+        val rent = (5..9).map { m -> line(d(m, 1), -210_000, "LANDLORD CO") }
+        assertEquals(1, MoneyWatch.large(rent + line(d(10, 1), -210_000, "LANDLORD CO"), d(10, 16), names).size)
+        assertTrue(MoneyWatch.large(month + line(d(10, 2), -199_999, "RAILWAYS ONLINE"), d(10, 16), names).isEmpty())
+        // Its id is the large alert's, so one put away as "That's fine" before stays away.
+        assertEquals(1, MoneyWatch.alerts(month + big, d(10, 16), names).size)
+        assertTrue(MoneyWatch.alerts(month + big, d(10, 16), names, fine = setOf(a.single().id)).isEmpty())
+    }
+
+    @Test
     fun feesAreAddedUpOrCalledOut() {
         val ls = listOf(
             line(d(10, 2), -103, "NON-STERLING TRANSACTION FEE", "a2"),
