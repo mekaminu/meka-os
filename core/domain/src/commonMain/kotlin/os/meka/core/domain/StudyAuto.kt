@@ -237,7 +237,7 @@ object StudyWeekRules {
         val known = course.mapNotNull { it.mins }
         val avg = if (known.isEmpty()) null else (known.sum() + known.size / 2) / known.size
         val ordered = StudyRules.courseOrder(course).flatten()
-        return mine.groupBy { it.day }.toSortedMap().map { (day, s) ->
+        return mine.groupBy { it.day }.entries.sortedBy { it.key }.map { (day, s) ->
             val on = ordered.filter { l -> l.plannedDay == day && (!l.done || l.doneAtMs?.let(doneDay) == day) }
             val k = key(courseId, day)
             val allDone = on.isNotEmpty() && on.all { it.done }
