@@ -1065,8 +1065,8 @@ class HttpSyncTransport(
         when {
             resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/money-chat")
             // A server without the route (older, or no AI key): the rules' hello stays.
-            resp.status.value == 404 -> return codec.Response(AskCodec.Response.OFF)
-            resp.status.value == 403 -> return codec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            resp.status.value == 404 -> return os.meka.core.wire.MoneyChatCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.MoneyChatCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/money-chat")
         }
         return codec.decodeResponse(resp.bodyAsText())

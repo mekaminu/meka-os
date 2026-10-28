@@ -893,15 +893,15 @@ class MekaCore(
         val o = os.meka.core.domain.MoneyChatObi
         val c = os.meka.core.wire.MoneyChatCodec
         val q = question.trim().take(c.MAX_QUESTION)
-        val (local, ask) = onCore {
+        val (local, ask) = onCore<Pair<os.meka.core.domain.MoneyChatTurn?, os.meka.core.wire.MoneyChatCodec.Request?>> {
             if (!moneyOpen) return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyRules.LOCKED, refused = true) to null
             if (money.accounts().isEmpty() && moneyBills().isEmpty()) {
                 return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyAskRules.EMPTY, refused = true) to null
             }
             val d = moneyChatData()
             if (aiApi != null && o.needsObi(q, d)) {
-                val history = moneyChatTurns.filter { !it.refused }.takeLast(o.HISTORY).map { c.Turn(it.question.take(c.MAX_QUESTION), it.text.take(c.MAX_TURN)) }
-                null to c.Request(os.meka.core.domain.AskRules.isoDate(todayEpochDay()), q, o.facts(d).map { it.take(c.MAX_FACT) }.take(c.MAX_FACTS), history)
+                val history = moneyChatTurns.filter { !it.refused }.takeLast(o.HISTORY).map { os.meka.core.wire.MoneyChatCodec.Turn(it.question.take(c.MAX_QUESTION), it.text.take(c.MAX_TURN)) }
+                null to os.meka.core.wire.MoneyChatCodec.Request(os.meka.core.domain.AskRules.isoDate(todayEpochDay()), q, o.facts(d).map { it.take(c.MAX_FACT) }.take(c.MAX_FACTS), history)
             } else os.meka.core.domain.MoneyChat.answer(q, d) to null
         }
         val turn = local ?: run {
