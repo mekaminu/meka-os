@@ -46,10 +46,14 @@ server adds trades up over 30 days; YOUR TRADES no longer repeats them (it keeps
 each coin). ALERTS is one row ("All 4 alerts on" over each one's choice) opening a sheet (Mac: a popover) with the
 choices. App shots: `cover-dark-trading-tiles`, `cover-dark-trading-alerts-sheet`, `inner-dark-trading-tiles`.
 
+**Item 6 (2026-10-28, both apps):** OBI'S MONEY CHECK as the mockup's brass-bordered card (a warm accent tint, a thin
+accent line) with its label inside, the yearly total in the greeting size over "from N ideas" and "Written by Obi · …"
+with Ask Obi to look again; the biggest idea as its own card (title · figure, why, its step, Remind me, Not for me; a tap
+on its title opens the payments behind it); the rest as one-line rows in a card with "N more ›" and "N put away". What
+if I save's (and Clear my cards') slider is a thin 4 dp track with a round 20 dp knob (Mac: the small control size), and
+the chips are drawn small inside a 48 dp target. App shot: `cover-dark-plan-layout`.
+
 **Still to do (next Money slices):**
-6. Plan: OBI'S MONEY CHECK as the mockup's brass-bordered card with its label inside, the yearly total large, and the
-   first idea as its own card with its step, Remind me and Not for me; the What if I save slider as a thin track with a
-   round knob, smaller chips.
 7. Accounts: a total card on top ("Across N accounts and trading", the total, a breakdown line) instead of the net worth
    card's set-up words; an account with no balance shows "Add balance" quietly, owed amounts in amber, no cut words.
 8. Section labels in the mockup's style (small, letter-spaced caps); Spending's category notes against usual ("£20 under

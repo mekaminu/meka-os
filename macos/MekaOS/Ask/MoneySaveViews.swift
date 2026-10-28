@@ -41,6 +41,7 @@ struct MoneySaveCardView: View {
                 in: Double(MoneySave.shared.MIN_PENCE) / 100 ... Double(MoneySave.shared.MAX_PENCE) / 100
             )
             .tint(palette.accent)
+            .controlSize(.small) // README item 6: the mockup's thin track and round knob
             .accessibilityLabel("Amount to save each month, \(v.amount)")
             HStack(spacing: MekaSpace.xs) {
                 ForEach(v.months, id: \.value) { c in
@@ -115,7 +116,7 @@ struct MoneySaveCardView: View {
         .font(MekaType.caption)
         .lineLimit(1)
         .foregroundStyle(c.on ? palette.onAccent : palette.textPrimary)
-        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs) // the mockup's smaller chips
         .background(c.on ? palette.accent : palette.surfaceRaised, in: Capsule())
         .animation(MekaMotion.appear(reduced: reduced), value: c.on)
         .accessibilityLabel(c.spoken)

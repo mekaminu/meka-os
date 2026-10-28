@@ -4087,7 +4087,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(v.ideas.first?.behind.isEmpty ?? true)
         XCTAssertEqual(MoneyCheck.shared.more(n: 5, open: false), "2 more ›")
         XCTAssertNil(MoneyCheck.shared.more(n: 3, open: false))
-        let away = MoneyCheck.shared.view(lines: lines, today: day, regular: regular,
+        // README item 6: the biggest idea leads in its own card, the rest are rows.
+        XCTAssertEqual(MoneyCheck.shared.lead(ideas: v.ideas)?.id, "interest")
+        XCTAssertEqual(MoneyCheck.shared.rest(ideas: v.ideas, open: false).map(\.id), ["habit-coffee"])
+        let away =MoneyCheck.shared.view(lines: lines, today: day, regular: regular,
                                           state: MoneyIdeaState(notFor: ["interest"], until: [:]), hiddenKinds: Set<String>(),
                                           words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil))
         XCTAssertEqual(away?.away, "1 put away")

@@ -4575,3 +4575,20 @@ MoneyDetailSheet with the old AlertsBlock and the said line. Mac: `tradingTiles`
 with a popover holding `tradingAlerts`. Help money.md (HelpIndex regenerated), motion catalogue row, screens README.
 Tests: TradingTilesTest, MoneyTradingLayoutScreensTest (theMonthsTilesAndTheAlertsRow, theMonthsTilesOnTheOpenFold),
 MekaCoreBridgeTests (testTradingTilesAndAlertsRowOnTheMac). No server change, no migration. Mac checked nightly.
+
+### Money redesign: Plan's money check as the mockup (2026-10-28)
+
+README item 6, both apps. Core `MoneyCheck.lead(ideas)` (the first, biggest idea) and `rest(ideas, open)` (the next
+`SHOWN` − 1 as rows until "more" opens them, so `more` counts as before). Fold: `MoneyCheckCard` is now three cards in
+the "check" item (the separate "check-head" label item is gone): `MoneyBrassCard` (accent tint over the surface, a 1 dp
+accent line) with OBI'S MONEY CHECK inside in the accent, the yearly total in `greeting` over "from N ideas", and the
+"Written by Obi · …" / Ask Obi to look again row; `MoneyLeadIdeaCard` (`money-check-lead`: title · figure in
+`itemTitle`, a tap opening the idea's sheet; why in caption; `money-lead-act`, `money-lead-remind`,
+`money-lead-not-for-me`); the rows' card (`money-check-rest`) with "N more ›" and "N put away · Show them again". The
+lead's step and the sheet's share `ideaStep` (Set a cap → Set a challenge; See Clear my cards scrolls to it, the pane's
+two-column state kept by a SideEffect). `MoneySlider` (a 4 dp track, brass to the value, a round 20 dp knob) and
+`MoneyChip` (drawn small inside a 48 dp target) for What if I save and Clear my cards; `IdeaPill` drawn small too. Mac:
+`moneyBrassCard`, `leadIdeaCard` with its popover and `leadPill`s, rows card; the save slider `.controlSize(.small)` and
+its pills slimmer. Help money.md (HelpIndex regenerated), motion catalogue row, screens README. Tests: MoneyCheckTest
+(threeShowThenMore), MoneyPlanLayoutScreensTest (the lead card, its Remind me and Show them again), MekaCoreBridgeTests
+(testMoneyCheckReachesSwift). No server change, no migration. Mac checked nightly.

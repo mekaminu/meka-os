@@ -241,6 +241,15 @@ object MoneyCheck {
     /** The first [SHOWN] ideas until "more" opens them. */
     fun shown(ideas: List<MoneyIdea>, open: Boolean): List<MoneyIdea> = if (open) ideas else ideas.take(SHOWN)
 
+    /**
+     * The mockup's lead (README item 6, 2026-10-28): the first idea, the biggest, as its own card under the brass head
+     * card, with its why on the page and its step, Remind me and Not for me as buttons; null when there are no ideas.
+     */
+    fun lead(ideas: List<MoneyIdea>): MoneyIdea? = ideas.firstOrNull()
+
+    /** The ideas after the [lead] as one-line rows: the next [SHOWN] − 1 until "more" opens them (so [more] counts the same). */
+    fun rest(ideas: List<MoneyIdea>, open: Boolean): List<MoneyIdea> = shown(ideas, open).drop(1)
+
     /** "2 more ›" folded, Fewer open; null when every idea already shows. */
     fun more(n: Int, open: Boolean): String? = when {
         n <= SHOWN -> null

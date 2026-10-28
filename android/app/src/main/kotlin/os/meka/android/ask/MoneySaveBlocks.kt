@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -76,26 +76,23 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
                 Text(a, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
             }
         }
-        Slider(
+        MoneySlider(
             value = (v.amountPence / 100).toFloat(),
             onValueChange = { f ->
                 val p = MoneySave.snap((f * 100).toLong())
                 if (p != amount) { onTick(); amount = p }
             },
-            valueRange = (MoneySave.MIN_PENCE / 100f)..(MoneySave.MAX_PENCE / 100f),
-            colors = SliderDefaults.colors(
-                thumbColor = Meka.colors.accent, activeTrackColor = Meka.colors.accent,
-                inactiveTrackColor = Meka.colors.surfaceRaised,
-            ),
-            modifier = Modifier.testTag("money-save-slider").semantics { contentDescription = "Amount to save each month, ${v.amount}" },
+            range = (MoneySave.MIN_PENCE / 100f)..(MoneySave.MAX_PENCE / 100f),
+            tag = "money-save-slider", spoken = "Amount to save each month, ${v.amount}",
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            for (c in v.months) TripPill(c.label, on = c.on, tag = "money-save-months-${c.value}", description = c.spoken) {
+        // README item 6: the mockup's smaller chips (drawn small, still a 48 dp target).
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (c in v.months) MoneyChip(c.label, on = c.on, tag = "money-save-months-${c.value}", description = c.spoken) {
                 if (!c.on) { onTick(); months = c.value }
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            for (c in v.rates) TripPill(c.label, on = c.on, tag = "money-save-rate-${c.value}", description = c.spoken) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            for (c in v.rates) MoneyChip(c.label, on = c.on, tag = "money-save-rate-${c.value}", description = c.spoken) {
                 if (!c.on) { onTick(); rate = c.value }
             }
         }
@@ -149,3 +146,25 @@ private fun SaveBar(b: MoneySaveBar, i: Int, reduced: Boolean, modifier: Modifie
     )
 }
 
+/**
+ * The mockup's slider (README item 6): a thin 4 dp track, brass up to the value, and a round 20 dp knob, inside the
+ * slider's own 48 dp drag area. The knob follows the finger with no animation of its own (direct manipulation).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MoneySlider(value: Float, onValueChange: (Float) -> Unit, range: ClosedFloatingPointRange<Float>, tag: String, spoken: String) {
+    val accent = Meka.colors.accent
+    val rail = Meka.colors.surfaceRaised
+    Slider(
+        value = value, onValueChange = onValueChange, valueRange = range,
+        modifier = Modifier.fillMaxWidth().testTag(tag).semantics { contentDescription = spoken },
+        thumb = { Box(Modifier.size(20.dp).clip(CircleShape).background(accent)) },
+        track = { st ->
+            val span = (st.valueRange.endInclusive - st.valueRange.start).takeIf { it > 0f } ?: 1f
+            val frac = ((st.value - st.valueRange.start) / span).coerceIn(0f, 1f)
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(rail)) {
+                Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(accent))
+            }
+        },
+    )
+}

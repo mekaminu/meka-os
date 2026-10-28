@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,22 +70,18 @@ internal fun MoneyClearCard(base: MoneyClearBase, modifier: Modifier = Modifier,
                 Text(a, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
             }
         }
-        Slider(
+        MoneySlider(
             value = (v.payPence / 100).toFloat(),
             onValueChange = { f ->
                 val p = MoneyClear.snap((f * 100).toLong(), base)
                 if (p != pay) { onTick(); pay = p }
             },
-            valueRange = (base.minPence / 100f)..(base.maxPence / 100f),
-            colors = SliderDefaults.colors(
-                thumbColor = Meka.colors.accent, activeTrackColor = Meka.colors.accent,
-                inactiveTrackColor = Meka.colors.surfaceRaised,
-            ),
-            modifier = Modifier.testTag("money-clear-slider").semantics { contentDescription = "Total to pay off the cards each month, ${v.pay}" },
+            range = (base.minPence / 100f)..(base.maxPence / 100f),
+            tag = "money-clear-slider", spoken = "Total to pay off the cards each month, ${v.pay}",
         )
         if (v.orders.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                for (c in v.orders) TripPill(c.label, on = c.on, tag = "money-clear-order-${c.key}", description = c.spoken) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                for (c in v.orders) MoneyChip(c.label, on = c.on, tag = "money-clear-order-${c.key}", description = c.spoken) {
                     if (!c.on) { onTick(); order = c.key }
                 }
             }

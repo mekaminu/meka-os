@@ -382,34 +382,23 @@ struct MoneySheet: View {
                 }
                 .moneyCard(palette)
             }
-            // Obi's money check (Plan, mockup): the yearly total, then the ideas as one-line rows, three then "2 more ›"; a
-            // click opens the idea's popover (why, the payments behind it, its step, Remind me, Not for me); "2 put away"
-            // and Show them again sit in the same card.
+            // Obi's money check as the mockup (README item 6): a brass-bordered head card with its label inside, the yearly
+            // total large and "Written by Obi · …" with Ask Obi to look again; the lead idea as its own card (why, its step,
+            // Remind me, Not for me; a click on its title opens the payments behind it); then the next ideas as one-line
+            // rows, "1 more ›", and "2 put away" with Show them again.
             if let c = v.check, has(.tips, v), on("check", col) {
-                Text(MoneyCheck.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(MoneyCheck.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .accessibilityAddTraits(.isHeader)
+                    HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
                         if let t = c.total {
-                            Text(t).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                            Text(t).font(MekaType.greeting).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
                         }
                         Text(c.from).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     }
                     .accessibilityElement(children: .combine)
                     if let e = c.empty {
                         Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    }
-                    ForEach(MoneyCheck.shared.shown(ideas: c.ideas, open: allIdeas), id: \.id) { i in ideaRow(i).transition(.opacity) }
-                    if let more = MoneyCheck.shared.more(n: Int32(c.ideas.count), open: allIdeas) {
-                        Button(more) { MekaHaptics.tick(); allIdeas.toggle() }
-                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
-                    }
-                    if let h = c.away {
-                        HStack {
-                            Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
-                            Spacer()
-                            Button(MoneyCheck.shared.SHOW_AGAIN) { Task { said = await model.moneyIdeasShow() } }
-                                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
-                        }
                     }
                     // Obi's wording: "Written by Obi · Sun 25 Oct" (or that he's reading them) and Ask Obi to look again.
                     HStack {
@@ -429,7 +418,31 @@ struct MoneySheet: View {
                         }
                     }
                 }
-                .moneyCard(palette)
+                .moneyBrassCard(palette)
+                .padding(.top, MekaSpace.xs)
+                if let lead = MoneyCheck.shared.lead(ideas: c.ideas) {
+                    leadIdeaCard(lead).id(lead.id).transition(.opacity)
+                }
+                let rest = MoneyCheck.shared.rest(ideas: c.ideas, open: allIdeas)
+                let more = MoneyCheck.shared.more(n: Int32(c.ideas.count), open: allIdeas)
+                if !rest.isEmpty || more != nil || c.away != nil {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        ForEach(rest, id: \.id) { i in ideaRow(i).transition(.opacity) }
+                        if let more {
+                            Button(more) { MekaHaptics.tick(); allIdeas.toggle() }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                        if let h = c.away {
+                            HStack {
+                                Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
+                                Spacer()
+                                Button(MoneyCheck.shared.SHOW_AGAIN) { Task { said = await model.moneyIdeasShow() } }
+                                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                            }
+                        }
+                    }
+                    .moneyCard(palette)
+                }
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this Mac as he slides, Make it a goal.
             if let b = v.save, has(.save, v), on("save", col) {
@@ -1457,6 +1470,53 @@ struct MoneySheet: View {
         .buttonStyle(MekaPressStyle())
         .accessibilityLabel("\(title), \(line)")
         .padding(.top, MekaSpace.xs)
+    }
+
+    /// The lead idea as its own card (README item 6): title (a click opens the payments behind it) and figure, why, then
+    /// its step, Remind me and Not for me as the mockup's small buttons.
+    private func leadIdeaCard(_ i: MoneyIdea) -> some View {
+        let id = i.id
+        let act = i.actKey
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button { MekaHaptics.tick(); said = nil; ideaOpenId = id } label: {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.m) {
+                    Text(i.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: MekaSpace.xs)
+                    Text(i.figure).font(MekaType.itemTitle).foregroundStyle(i.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(i.spoken)
+            .popover(isPresented: Binding(get: { ideaOpenId == id }, set: { if !$0 && ideaOpenId == id { ideaOpenId = nil } }), arrowEdge: .trailing) {
+                ideaDetails(i)
+            }
+            Text(i.why).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: MekaSpace.xs) {
+                if let a = i.act {
+                    leadPill(a, ink: palette.accent) {
+                        if act == MoneyCheck.shared.ACT_CAP { setChallengeOpen = true }
+                    }
+                }
+                leadPill(MoneyCheck.shared.REMIND, ink: palette.textPrimary) {
+                    Task { said = await model.moneyIdeaRemind(id: id) }
+                }
+                Button(MoneyCheck.shared.NOT_FOR_ME) { MekaHaptics.tick(); Task { said = await model.moneyIdeaNotFor(id: id) } }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+        }
+        .moneyCard(palette)
+    }
+
+    /// A small pill button on the lead idea's card (the plain surface on the card's raised one, caption type).
+    private func leadPill(_ label: String, ink: Color, action: @escaping () -> Void) -> some View {
+        Button { MekaHaptics.tick(); action() } label: {
+            Text(label).font(MekaType.caption).foregroundStyle(ink).lineLimit(1)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
+                .background(palette.surface, in: Capsule())
+        }
+        .buttonStyle(MekaPressStyle())
     }
 
     /// Obi's money check: one idea as a compact row (its title · its figure, lit in brass · ›); a click opens its

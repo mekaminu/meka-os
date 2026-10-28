@@ -228,6 +228,21 @@ extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
     }
+
+    /// The mockup's brass-bordered card (Obi's money check, README item 6): a warm tint of the accent over the raised
+    /// surface and a thin accent line.
+    func moneyBrassCard(_ palette: MekaPalette) -> some View {
+        let shape = RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous)
+        return self.padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                ZStack {
+                    shape.fill(palette.surfaceRaised)
+                    shape.fill(palette.accent.opacity(0.06))
+                }
+            }
+            .overlay(shape.strokeBorder(palette.accent.opacity(0.32), lineWidth: 1))
+    }
 }
 
 /// Money's top as the mockup (core MoneyHeader): the Updated pill on the title row, a refresh glyph and "Updated 06:10"

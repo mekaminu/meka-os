@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -129,6 +130,7 @@ import os.meka.core.domain.MoneySpending
 import os.meka.core.domain.InstantPaymentRules
 import os.meka.core.domain.PaymentTap
 import os.meka.core.domain.MoneyCheck
+import os.meka.core.domain.MoneyIdea
 import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.domain.MoneyWatch
 import os.meka.core.domain.MoneyBusiness
@@ -320,8 +322,17 @@ fun MoneyPane(
     var ideaSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val ideaOpen = MoneyCheck.ideaOf(v.check, ideaSheetId)
     val listState = rememberLazyListState()
+    // Whether the pane is in two columns (the open Fold), kept for the idea's step that scrolls to Clear my cards.
+    var wideNow by remember { mutableStateOf(false) }
     var whatIfOpen by rememberSaveable { mutableStateOf(false) }
     var setChallengeOpen by rememberSaveable { mutableStateOf(false) }
+    // An idea's step (from the lead card or its sheet): Set a cap opens Set a challenge; See Clear my cards scrolls to it.
+    fun ideaStep(i: MoneyIdea) {
+        when (i.actKey) {
+            MoneyCheck.ACT_CAP -> setChallengeOpen = true
+            MoneyCheck.ACT_CLEAR -> scope.launch { scrollToKey(listState, MoneyColumns.scrollKey("clear-head", wideNow), reduced) }
+        }
+    }
     // Money review, Accounts: the account whose sheet is open.
     var accountSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val accountSheet = accountSheetId?.let { id -> MoneyAccountList.sheet(v, id) }
@@ -774,16 +785,16 @@ fun MoneyPane(
             // the tip's sheet (what it means, Hide tips like this); "Tips hidden" and Show them again sit in the same card.
             // Obi's money check (Plan, mockup): the tips become ideas, each opening a sheet with the payments behind it.
             v.check?.takeIf { has(MoneySection.TIPS) }?.let { c ->
-                item(key = "check-head") {
-                    Text(MoneyCheck.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-                }
+                // README item 6: the label sits inside the brass head card, so no label above it.
                 item(key = "check") {
-                    MoneyCheckCard(c, MoneyCheck.shown(c.ideas, allIdeas), MoneyCheck.more(c.ideas.size, allIdeas),
-                        Modifier.animateItem().appear(rememberAppearance(4)),
+                    MoneyCheckCard(c, allIdeas,
+                        Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(4)),
                         onOpen = { id -> haptics.tick(); said = null; ideaSheetId = id },
                         onMore = { haptics.tick(); allIdeas = !allIdeas },
                         onShowAgain = { scope.launch { runCatching { core.moneyIdeasShow() }.getOrNull()?.let(say) } },
+                        onAct = { i -> haptics.tick(); ideaStep(i) },
+                        onRemind = { id -> haptics.tick(); scope.launch { runCatching { core.moneyIdeaRemind(id) }.getOrNull()?.let(say) } },
+                        onNotFor = { id -> haptics.tick(); scope.launch { runCatching { core.moneyIdeaNotFor(id) }.getOrNull()?.let(say) } },
                         looking = obiLooking,
                         onLookAgain = {
                             haptics.tick(); obiLooking = true
@@ -1097,6 +1108,7 @@ fun MoneyPane(
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = MoneyColumns.wide(maxWidth.value.toInt())
+    SideEffect { wideNow = wide }
     LazyColumn(
         Modifier.fillMaxSize(),
         state = listState,
@@ -1259,10 +1271,7 @@ fun MoneyPane(
             onAct = {
                 haptics.tick()
                 ideaSheetId = null
-                when (i.actKey) {
-                    MoneyCheck.ACT_CAP -> setChallengeOpen = true
-                    MoneyCheck.ACT_CLEAR -> scope.launch { scrollToKey(listState, MoneyColumns.scrollKey("clear-head", wide), reduced) }
-                }
+                ideaStep(i)
             },
             onRemind = { scope.launch { runCatching { core.moneyIdeaRemind(i.id) }.getOrNull()?.let(say) } },
             onNotFor = { scope.launch { runCatching { core.moneyIdeaNotFor(i.id) }.getOrNull()?.let(say) } })

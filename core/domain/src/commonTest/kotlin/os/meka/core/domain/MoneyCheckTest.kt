@@ -97,6 +97,15 @@ class MoneyCheckTest {
         assertEquals("2 more ›", MoneyCheck.more(5, open = false))
         assertEquals(MoneyRefunds.FEWER, MoneyCheck.more(5, open = true))
         assertNull(MoneyCheck.more(3, open = false))
+        // The mockup's lead: the first (biggest) idea as its own card, the next two as rows, the rest behind "2 more ›".
+        val lines = interest + netflix + music + coffees
+        val ideas = MoneyCheck.view(lines, oct16, MoneyTips.regular(lines, oct16), MoneyIdeaState())!!.ideas
+        assertEquals("interest", MoneyCheck.lead(ideas)?.id)
+        assertEquals(listOf("habit-coffee", "rise-NETFLIX.COM"), MoneyCheck.rest(ideas, open = false).map { it.id })
+        assertEquals(listOf("habit-coffee", "rise-NETFLIX.COM", "subs"), MoneyCheck.rest(ideas, open = true).map { it.id })
+        assertEquals("1 more ›", MoneyCheck.more(ideas.size, open = false))
+        assertNull(MoneyCheck.lead(emptyList()))
+        assertTrue(MoneyCheck.rest(ideas.take(1), open = false).isEmpty())
         assertTrue(MoneyCheck.validId("rise-NETFLIX.COM"))
         assertFalse(MoneyCheck.validId(""))
         assertFalse(MoneyCheck.validId("x|y"))

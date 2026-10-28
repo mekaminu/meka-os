@@ -138,12 +138,17 @@ class MoneyPlanLayoutScreensTest {
         if (f.notReady != null) fail("three whole months should make a forecast: ${f.notReady}")
         if (v.challenges == null) fail("the challenges aren't on Plan")
 
-        // Obi's money check: one card, the yearly total and one-line ideas; why and the payments live in its sheet.
+        // Obi's money check as the mockup: the brass head card with the yearly total, the lead idea as its own card (its
+        // why and buttons on the page), the rest one-line rows; the payments behind each live in its sheet.
         scrollTo("money-check-card")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-layout"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-plan-layout")
         assertTrue(shows("money-check-total"), "the money check leads with what the ideas save a year")
-        if (showsText(idea.why)) fail("an idea's why sits on the page")
+        val lead = v.check?.ideas?.firstOrNull() ?: fail("no lead idea")
+        assertTrue(shows("money-check-lead") && showsText(lead.why), "the lead idea is its own card with its why")
+        assertTrue(shows("money-lead-remind") && shows("money-lead-not-for-me"), "the lead card has Remind me and Not for me")
+        if (idea.id != lead.id && showsText(idea.why)) fail("a row idea's why sits on the page")
+        if (shows("money-idea-behind")) fail("the payments behind an idea sit on the page")
         tap("money-idea-${idea.id}")
         assertTrue(shows("money-idea-sheet"), "an idea's row should open its sheet")
         assertTrue(showsText(idea.why) && shows("money-idea-behind"), "the idea's sheet says why, with the payments behind it")
@@ -169,6 +174,14 @@ class MoneyPlanLayoutScreensTest {
         tap("money-check-look-again")
         repeat(40) { if (!shows("money-check-look-again")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(shows("money-check-look-again"), "Ask Obi to look again should come back once answered")
+        // The lead card's own Remind me puts the lead away, and the next idea leads; Show them again brings it back.
+        scrollTo("money-check-lead")
+        tap("money-lead-remind")
+        repeat(40) { if (shows("money-idea-${lead.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+        if (shows("money-idea-${lead.id}")) fail("the lead card's Remind me should put the idea away")
+        tap("money-ideas-show-again")
+        repeat(40) { if (!shows("money-idea-${lead.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+        assertTrue(shows("money-idea-${lead.id}"), "Show them again should bring the lead back")
 
         // The forecast: no field on the page; What if… opens the cuts and the extra-a-month field.
         scrollTo("money-forecast-card")
