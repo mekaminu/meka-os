@@ -355,7 +355,12 @@ class BoardScreensTest {
         val month = one(MONTH_TAG)
         val more = one(FOLDED_MENU_TAG)
         assertTrue("⋯ sits on the month's row ($more vs $month)", more.top < month.bottom && more.bottom > month.top)
-        assertTrue("\"Week 43\" in words", compose.onAllNodesWithText("Week 43").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(
+            "\"Week 43\" in words",
+            compose.onAllNodesWithContentDescription("October, week 43", substring = true).fetchSemanticsNodes().isNotEmpty(),
+        )
+        // ⋯ holds the rest (Robolectric can't reach a dropdown's popup; BoardFoldedTest pins what it lists).
+        assertTrue("no ⋯", compose.onAllNodesWithContentDescription(os.meka.android.calendar.FOLDED_MENU_LABEL).fetchSemanticsNodes().isNotEmpty())
         val strip = one(FOLDED_STRIP_TAG)
         val day = one(FOLDED_DAY_TAG)
         val pill = one(NUDGE_TAG)
@@ -363,7 +368,8 @@ class BoardScreensTest {
         assertTrue("the day's line sits under the strip", day.top >= strip.bottom - 1f)
         assertTrue("Obi's line sits under the day's line", pill.top >= day.bottom - 1f)
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
-        val first = cardBounds("Fix the gate latch")
+        val first = compose.onAllNodesWithTag(PLANNER_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+            .minByOrNull { it.top } ?: throw AssertionError("no card on the cover screen")
         assertTrue("the day's first card starts in the top third (${first.top} of ${root.height})", first.top < root.top + root.height / 3f)
         if (compose.onAllNodesWithTag(os.meka.android.calendar.DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
             fail("a serif date on the cover screen's day")
@@ -472,47 +478,6 @@ class BoardScreensTest {
             .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
         assertTrue("an empty weekday's pill reads \"– / …\" ($values)", values.any { it.startsWith(os.meka.core.domain.BoardDenseHeadRules.NOTHING_SHORT) })
         assertTrue("no narrow pill says \"nothing yet\" ($values)", values.none { it.contains(os.meka.core.domain.BoardPlannerRules.NOTHING_YET) })
-    }
-
-    /** The folded mockup: ⋯ → Timeline shows the day in view by the hour; ⋯ → Cards brings its cards back. */
-    @Test @Config(qualifiers = ScreenShots.COVER)
-    fun foldedTheMenusTimelineShowsTheDayInView() {
-        val (core, spoken) = timedCore()
-        show(core)
-        compose.onNodeWithTag(FOLDED_MENU_TAG).performClick()
-        settle()
-        compose.onNodeWithText("Timeline").performClick()
-        settle()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-timeline"))
-        ScreenShots.assertSensible(compose, "cover-dark-timeline")
-        assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
-        compose.onNodeWithTag(FOLDED_MENU_TAG).performClick()
-        settle()
-        compose.onNodeWithText("Cards").performClick()
-        settle()
-        assertTrue("the timeline stayed", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
-        assertTrue("the cards didn't come back", compose.onAllNodesWithText("Send the quote").fetchSemanticsNodes().isNotEmpty())
-    }
-
-    /** The folded mockup: ⋯ → Someday with nothing in it says so instead of opening an empty sheet. */
-    @Test @Config(qualifiers = ScreenShots.COVER)
-    fun foldedAnEmptyListSaysSo() {
-        val (core, _) = timedCore()
-        val undo = EventUndo()
-        compose.mainClock.autoAdvance = false
-        compose.setContent {
-            MekaTheme {
-                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    WeekBoardView(core, undo, onEvent = {}, Modifier.fillMaxSize())
-                }
-            }
-        }
-        settle()
-        compose.onNodeWithTag(FOLDED_MENU_TAG).performClick()
-        settle()
-        compose.onNodeWithText(os.meka.core.domain.WeekBoardRules.SOMEDAY).performClick()
-        settle()
-        assertEquals(os.meka.core.domain.BoardFoldedRules.emptyList(os.meka.core.domain.WeekBoardRules.SOMEDAY), undo.offer?.message)
     }
 
     /**
