@@ -2301,7 +2301,7 @@ struct MoneySheet: View {
 
     private var readOnlyMark: some View {
         Text(MoneyTradingLayout.shared.READ_ONLY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-            .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .accessibilityLabel(MoneyTradingLayout.shared.READ_ONLY_SPOKEN)
     }

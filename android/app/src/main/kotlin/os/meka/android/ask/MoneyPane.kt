@@ -1366,13 +1366,13 @@ private fun TradingEquityBlock(t: TradingView, onAlert: (String, String) -> Unit
         }
     }
     t.empty?.let { e ->
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
             ReadOnlyMark()
         }
     }
     MoneyTradingLayout.waiting(t)?.let { l ->
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
             ReadOnlyMark()
         }
@@ -1394,7 +1394,7 @@ private fun ReadOnlyMark() {
     Text(MoneyTradingLayout.READ_ONLY, style = MekaType.caption, color = Meka.colors.textSecondary,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .semantics { contentDescription = MoneyTradingLayout.READ_ONLY_SPOKEN }
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs).testTag("money-trading-readonly"))
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs).testTag("money-trading-readonly"))
 }
 
 /**
