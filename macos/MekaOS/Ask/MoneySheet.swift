@@ -91,6 +91,8 @@ struct MoneySheet: View {
     /// popovers.
     /// Obi's money check: "2 more" on the ideas and the idea whose popover is open.
     @State private var allIdeas = false
+    /// Obi's wording: true while Ask Obi to look again is on its way.
+    @State private var obiLooking = false
     @State private var ideaOpenId: String? = nil
     @State private var whatIfOpen = false
     @State private var setChallengeOpen = false
@@ -340,6 +342,23 @@ struct MoneySheet: View {
                             Spacer()
                             Button(MoneyCheck.shared.SHOW_AGAIN) { Task { said = await model.moneyIdeasShow() } }
                                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                    }
+                    // Obi's wording: "Written by Obi · Sun 25 Oct" (or that he's reading them) and Ask Obi to look again.
+                    HStack {
+                        Text(obiLooking ? MoneyCheckWords.shared.LOOKING : (c.by ?? ""))
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
+                        Spacer()
+                        if !obiLooking {
+                            Button(MoneyCheckWords.shared.LOOK_AGAIN) {
+                                MekaHaptics.tick()
+                                obiLooking = true
+                                Task {
+                                    said = await model.moneyCheckWords()
+                                    obiLooking = false
+                                }
+                            }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                         }
                     }
                 }

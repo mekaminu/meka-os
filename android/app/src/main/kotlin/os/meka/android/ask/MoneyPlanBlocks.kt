@@ -29,6 +29,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.MoneyCheck
+import os.meka.core.domain.MoneyCheckWords
 import os.meka.core.domain.MoneyCheckView
 import os.meka.core.domain.MoneyIdea
 
@@ -49,6 +50,7 @@ import os.meka.core.domain.MoneyIdea
 internal fun MoneyCheckCard(
     c: MoneyCheckView, ideas: List<MoneyIdea>, more: String?, modifier: Modifier = Modifier,
     onOpen: (String) -> Unit, onMore: () -> Unit, onShowAgain: () -> Unit,
+    looking: Boolean = false, onLookAgain: (() -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
     MoneyCard(modifier, tag = "money-check-card") {
@@ -89,6 +91,20 @@ internal fun MoneyCheckCard(
                 Text(MoneyCheck.SHOW_AGAIN, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onShowAgain)
                         .minTouch().padding(MekaSpace.xs).testTag("money-ideas-show-again"))
+            }
+        }
+        // Obi's wording: "Written by Obi · Sun 25 Oct" (or that he's reading them) and Ask Obi to look again.
+        onLookAgain?.let { look ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                val line = if (looking) MoneyCheckWords.LOOKING else c.by.orEmpty()
+                Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "money-check-by", modifier = Modifier.weight(1f)) { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-check-by"))
+                }
+                if (!looking) {
+                    Text(MoneyCheckWords.LOOK_AGAIN, style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = look)
+                            .minTouch().padding(MekaSpace.xs).testTag("money-check-look-again"))
+                }
             }
         }
     }

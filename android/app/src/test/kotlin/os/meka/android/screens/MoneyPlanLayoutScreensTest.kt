@@ -164,6 +164,11 @@ class MoneyPlanLayoutScreensTest {
         tap("money-ideas-show-again")
         repeat(40) { if (!shows("money-idea-${idea.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(shows("money-idea-${idea.id}"), "Show them again should bring the idea back")
+        // Obi's wording: Ask Obi to look again sits in the card's foot; with no server here it says so and comes back.
+        assertTrue(shows("money-check-look-again"), "the money check should offer Ask Obi to look again")
+        tap("money-check-look-again")
+        repeat(40) { if (!shows("money-check-look-again")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+        assertTrue(shows("money-check-look-again"), "Ask Obi to look again should come back once answered")
 
         // The forecast: no field on the page; What if… opens the cuts and the extra-a-month field.
         scrollTo("money-forecast-card")

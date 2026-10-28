@@ -4366,3 +4366,20 @@ Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
   MoneyCheckTest (5), MoneyTabsTest, MoneyFacadeTest.anIdeaPutAwayOnTheFoldIsPutAwayOnTheMac, MoneyPlanLayoutScreensTest
   (Roborazzi cover-dark-plan-layout, cover-dark-plan-idea), MekaCoreBridgeTests.testMoneyCheckReachesSwift. No server
   change, no migration. Mac checked nightly. Next: Obi's wording of the ideas (AI) and Ask Obi.
+
+2026-10-28, **Obi's money check, slice 2 (Obi's wording)**, both apps and the server. The AI ranks and words the ideas
+  the rules found (data sharing approved 2026-10-24 21:13). Wire `MoneyCheckCodec` (request: date + ≤12 ideas, each id,
+  kind, rules' title, figure, why and ≤6 payee name + amount; response: ids in Obi's order with title and why;
+  `parseModelAnswer` keeps only known ids, once). Server `MoneyCheckService` (AiMoneyCheck.kt, feature `money.check`,
+  small model, 1,200 tokens, ideas as data in `<ideas>`) and `POST /v1/ai/money-check` (keyed devices only). Core
+  `MoneyCheckWords`: `check` (one line each, title 3–60, why 10–220, no links or markup, every number one of the idea's
+  own rule numbers, so made-up or stale figures fall back), `apply` (his order, ideas new since his run first, his
+  words where they pass, `MoneyIdea.byObi`, `MoneyCheckView.by` "Written by Obi · Sun 25 Oct"), `due` (weekly),
+  `toSend`; `MoneyIdea.ruleTitle/ruleWhy` keep the rules' words. `Money.checkWords/saveCheckWords` on `money_tips`
+  (`idea-<id>`: `wTitle`, `wWhy`, `rank`; `obi-words`: `at`, `day`; ADR-008 addendum), cleared by Delete all money data.
+  Facade `moneyCheckWords(force)` (Ask Obi to look again) and the weekly run after a money view publishes (one at a
+  time, an hour's wait after a failure); `AiApi.moneyCheck`. Fold: MoneyCheckCard's foot line (by / "Obi is reading
+  the ideas…") with Ask Obi to look again; Mac: the same in MoneySheet, CoreModel `moneyCheckWords`. ADR-006 addendum,
+  help money.md (HelpIndex regenerated), motion catalogue. Tests: MoneyCheckCodecTest, MoneyCheckWordsTest,
+  MoneyCheckWordsFacadeTest, AiMoneyCheckTest, MoneyPlanLayoutScreensTest (look again), MekaCoreBridgeTests
+  (testMoneyCheckReachesSwift words, testMoneyCheckWordsWhileLocked). No migration. Mac checked nightly. Next: Ask Obi.

@@ -1047,6 +1047,64 @@ class MekaCore(
         if (!moneyOpen) moneyLocked() else money.showIdeas().also { refreshMoney() }
     }
 
+    /** Obi's wording of the money check: a run on its way (one at a time), and when an automatic one last failed. */
+    private var moneyWordsJob: Job? = null
+    private var moneyWordsFailedAtMs: Long? = null
+
+    /**
+     * Obi's money check, **Ask Obi to look again** (and the weekly run, [force] false): the ideas the rules found go to
+     * `POST /v1/ai/money-check` (their words and figures and the payee names and amounts behind them, nothing else of
+     * Money; approved 2026-10-24) and Obi's order and words come back; they're checked against the ideas as they are now
+     * ([os.meka.core.domain.MoneyCheckWords.check]) whenever the view is built, and kept on both devices. Returns the
+     * line to show, or null when nothing was asked (not due, Money locked, no ideas).
+     */
+    suspend fun moneyCheckWords(force: Boolean = true): os.meka.core.domain.MoneySaved? {
+        val w = os.meka.core.domain.MoneyCheckWords
+        val (ideas, today) = onCore {
+            if (!moneyOpen) return@onCore null
+            val v = _money.value.takeIf { !it.locked && moneyOffset == 0 }?.check ?: return@onCore null
+            if (!force && !w.due(money.checkWords(), nowMs())) return@onCore null
+            w.toSend(v) to todayEpochDay()
+        } ?: return if (force) os.meka.core.domain.MoneySaved(w.NO_IDEAS) else null
+        if (ideas.isEmpty()) return if (force) os.meka.core.domain.MoneySaved(w.NO_IDEAS) else null
+        val api = aiApi ?: return os.meka.core.domain.MoneySaved(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE, refused = true)
+        val c = os.meka.core.wire.MoneyCheckCodec
+        val request = c.Request(os.meka.core.domain.AskRules.isoDate(today), ideas.map { i ->
+            c.Idea(i.id, i.kind, i.ruleTitle.take(c.MAX_SHORT), i.figure.take(c.MAX_SHORT), i.ruleWhy.take(c.MAX_TEXT),
+                i.behind.take(c.MAX_BEHIND).map { p -> c.Pay(p.label.take(c.MAX_SHORT), p.amount.take(c.MAX_SHORT)) })
+        })
+        val reply = try { api.moneyCheck(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            onCore { moneyWordsFailedAtMs = nowMs() }
+            return os.meka.core.domain.MoneySaved(os.meka.core.domain.AskRules.OFFLINE_LINE, refused = true)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            onCore { moneyWordsFailedAtMs = nowMs() }
+            return os.meka.core.domain.MoneySaved(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason), refused = true)
+        }
+        val sent = ideas.associateBy { it.id }
+        // Only what passes the check is kept; the rest keeps the rules' words.
+        val kept = reply.ideas.mapNotNull { r -> sent[r.id]?.let { i -> w.check(i, r.title, r.why)?.let { r.id to it } } }
+        return onCore {
+            moneyWordsFailedAtMs = null
+            money.saveCheckWords(kept, nowMs(), todayEpochDay())
+            refreshMoney()
+            os.meka.core.domain.MoneySaved(if (kept.isEmpty()) w.NOTHING else w.WROTE)
+        }
+    }
+
+    /** Tests: waits for the weekly run of Obi's wording started in the background, if any. */
+    internal suspend fun awaitMoneyWordsForTest() { onCore { moneyWordsJob }?.join() }
+
+    /** After a money view is published (core only): the weekly run of Obi's wording, in the background, when it's due. */
+    private fun maybeWordMoneyCheck(v: os.meka.core.domain.MoneyView) {
+        if (aiApi == null || moneyOffset != 0 || v.check?.ideas.isNullOrEmpty()) return
+        if (moneyWordsJob?.isActive == true) return
+        val now = nowMs()
+        if (moneyWordsFailedAtMs?.let { now - it < os.meka.core.domain.MoneyCheckWords.RETRY_MS } == true) return
+        if (!os.meka.core.domain.MoneyCheckWords.due(money.checkWords(), now)) return
+        moneyWordsJob = scope.launch { runCatching { moneyCheckWords(force = false) } }
+    }
+
     /** Slice 2: every hidden kind of tip shown again. */
     suspend fun showMoneyTips(): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else money.showTips().also { refreshMoney() }
@@ -1133,7 +1191,7 @@ class MekaCore(
         val sharedSetting = money.sharedSetting(); val partner = aboutYou.profile().partnerName
         val challenges = money.challenges(); val abroad = moneyAbroadNow()
         val own = money.ownCategories(); val ownRules = money.ownRules(); val needMerchants = money.needMerchants()
-        val ideaState = money.ideaState()
+        val ideaState = money.ideaState(); val checkWords = money.checkWords()
         val inputs = listOf(
             accounts, txns, rules, today, tz, offset, hiddenTips, fineAlerts,
             whatIf, waiting, bills, holidays, cards, worth,
@@ -1142,7 +1200,7 @@ class MekaCore(
             now / os.meka.core.domain.MoneyViewMemo.MINUTE_MS, wallets,
             bizAccounts, bizMerchants, setAside,
             sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner,
-            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules, needMerchants, ideaState,
+            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules, needMerchants, ideaState, checkWords,
         )
         // The same build is already on its way.
         if (moneyJob?.isActive == true && moneyPendingFrom == inputs) return
@@ -1168,7 +1226,7 @@ class MekaCore(
                 abroad, os.meka.core.domain.MoneyTravel.tripNear(tripItems, today),
                 // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
                 receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, cal),
-                own = own, ownRules = ownRules, needMerchants = needMerchants, ideaState = ideaState,
+                own = own, ownRules = ownRules, needMerchants = needMerchants, ideaState = ideaState, checkWords = checkWords,
             )
             v.copy(
                 trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts),
@@ -1194,6 +1252,7 @@ class MekaCore(
                 built.fold(
                     onSuccess = { v ->
                         _money.value = v
+                        maybeWordMoneyCheck(v)
                         moneyBuiltFrom = inputs
                         moneyBuilt = v
                         if (os.meka.core.domain.MoneyOpenRules.keep(v, offset, whatIf)) moneyLast.value = v

@@ -7,7 +7,7 @@ import kotlin.math.roundToLong
  * ideas to save, each built only from his own payments and showing the payments behind it, with **Remind me** (put
  * away for [REMIND_DAYS] days, then it comes back) and **Not for me** (put away for good), both on both devices with
  * Undo. Rules find every idea and every number (this slice); Obi's wording of them (the AI, approved 2026-10-24 21:13)
- * is the next slice and may only reword and rank what is here, never add a payment.
+ * ([MoneyCheckWords], 2026-10-28) may only reword and rank what is here, never add a payment.
  *
  * Ideas ([MoneyIdeaKind]), biggest yearly saving first:
  * - **interest**: interest and fees charged in the last [INTEREST_DAYS] days, at least [INTEREST_MIN_PENCE] — what
@@ -36,6 +36,8 @@ data class MoneyIdeaPay(val label: String, val date: String, val amount: String)
 data class MoneyIdea(
     val id: String, val kind: String, val title: String, val figure: String, val savePence: Long, val why: String,
     val behind: List<MoneyIdeaPay>, val act: String?, val actKey: String?, val lit: Boolean, val spoken: String,
+    /** The rules' own title and why (what goes to Obi, and what [MoneyCheckWords.check] reads); [byObi] when he worded it. */
+    val ruleTitle: String = title, val ruleWhy: String = why, val byObi: Boolean = false,
 )
 
 /** What he put away: ideas he said Not for me to, and ideas he asked to be reminded of, with the day they come back. */
@@ -45,7 +47,11 @@ data class MoneyIdeaState(val notFor: Set<String> = emptySet(), val until: Map<S
  * OBI'S MONEY CHECK: [total] "£1,960 a year" (null when no idea saves a sum) over [from] "from 4 ideas", the [ideas]
  * (empty with [empty] said instead), and [away] "2 put away" with Show them again when any are put away.
  */
-data class MoneyCheckView(val total: String?, val from: String, val ideas: List<MoneyIdea>, val empty: String?, val away: String?)
+data class MoneyCheckView(
+    val total: String?, val from: String, val ideas: List<MoneyIdea>, val empty: String?, val away: String?,
+    /** "Written by Obi · Sun 25 Oct" when any idea shows in his words ([MoneyCheckWords]); null otherwise. */
+    val by: String? = null,
+)
 
 object MoneyCheck {
     const val HEAD = "OBI'S MONEY CHECK"
@@ -166,7 +172,10 @@ object MoneyCheck {
     fun away(id: String, state: MoneyIdeaState, today: Long): Boolean = id in state.notFor || (state.until[id]?.let { it > today } == true)
 
     /** The money check for [today]; null without this month's lines. */
-    fun view(lines: List<MoneyLine>, today: Long, regular: List<MoneyTips.Regular>, state: MoneyIdeaState, hiddenKinds: Set<String> = emptySet()): MoneyCheckView? {
+    fun view(
+        lines: List<MoneyLine>, today: Long, regular: List<MoneyTips.Regular>, state: MoneyIdeaState, hiddenKinds: Set<String> = emptySet(),
+        words: MoneyCheckWordsState = MoneyCheckWordsState(),
+    ): MoneyCheckView? {
         if (lines.isEmpty()) return null
         // A kind of tip hidden before the money check (habits, over, rises) counts as put away, so Show them again brings it back.
         val found = ideas(lines, today, regular)
@@ -174,11 +183,11 @@ object MoneyCheck {
         val awayN = found.size - shown.size
         val save = shown.sumOf { it.savePence }
         val n = shown.size
-        return MoneyCheckView(
+        return MoneyCheckWords.apply(MoneyCheckView(
             total = if (save > 0) "${fmt(save)} a year" else null,
             from = if (n == 0) "no ideas just now" else "from $n idea${if (n == 1) "" else "s"}",
             ideas = shown, empty = if (n == 0) EMPTY else null, away = awayLine(awayN),
-        )
+        ), words)
     }
 
     /** The first [SHOWN] ideas until "more" opens them. */

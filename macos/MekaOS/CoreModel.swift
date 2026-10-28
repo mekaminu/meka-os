@@ -4740,6 +4740,18 @@ final class CoreModel {
         }
     }
 
+    /// Obi's money check: Ask Obi to look again (the ideas the rules found go to the server; his checked words come back).
+    func moneyCheckWords() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            guard let r = try await core.moneyCheckWords(force: true) else { return nil }
+            return moneySaid(r)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Obi's money check: every idea put away, and every hidden kind of tip, shown again.
     func moneyIdeasShow() async -> MoneySaid? {
         guard let core else { return nil }

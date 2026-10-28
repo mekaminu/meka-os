@@ -4078,7 +4078,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let lines = coffees + fees
         let regular = MoneyTips.shared.regular(lines: lines, today: day)
         guard let v = MoneyCheck.shared.view(lines: lines, today: day, regular: regular, state: MoneyIdeaState(notFor: Set<String>(), until: [:]),
-                                             hiddenKinds: Set<String>()) else { return XCTFail("twelve coffees and a fee should make a money check") }
+                                             hiddenKinds: Set<String>(), words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil)) else { return XCTFail("twelve coffees and a fee should make a money check") }
         XCTAssertEqual(v.ideas.map(\.id), ["interest", "habit-coffee"])
         XCTAssertEqual(v.from, "from 2 ideas")
         XCTAssertNotNil(v.total)
@@ -4088,9 +4088,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyCheck.shared.more(n: 5, open: false), "2 more ›")
         XCTAssertNil(MoneyCheck.shared.more(n: 3, open: false))
         let away = MoneyCheck.shared.view(lines: lines, today: day, regular: regular,
-                                          state: MoneyIdeaState(notFor: ["interest"], until: [:]), hiddenKinds: Set<String>())
+                                          state: MoneyIdeaState(notFor: ["interest"], until: [:]), hiddenKinds: Set<String>(),
+                                          words: MoneyCheckWordsState(words: [:], atMs: nil, day: nil))
         XCTAssertEqual(away?.away, "1 put away")
         XCTAssertNil(MoneyView.companion.LOCKED.check)
+        // Obi's wording: his words show when they use only the idea's own numbers, with the day he wrote them.
+        let words = MoneyCheckWordsState(words: ["habit-coffee": MoneyIdeaWords(title: "Coffee most days", why: "12 coffees in 30 days.", rank: 0)],
+                                         atMs: KotlinLong(value: 1), day: KotlinLong(value: day))
+        let worded = MoneyCheck.shared.view(lines: lines, today: day, regular: regular, state: MoneyIdeaState(notFor: Set<String>(), until: [:]),
+                                            hiddenKinds: Set<String>(), words: words)
+        XCTAssertEqual(worded?.ideas.first(where: { $0.id == "habit-coffee" })?.title, "Coffee most days")
+        XCTAssertEqual(worded?.by, "Written by Obi · Mon 19 Oct")
+        XCTAssertNil(v.by)
+        XCTAssertEqual(MoneyCheckWords.shared.LOOK_AGAIN, "Ask Obi to look again")
+    }
+
+    /// Obi's wording through the core: with Money locked nothing is asked, and the line says so.
+    func testMoneyCheckWordsWhileLocked() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "words-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let r = try await core.moneyCheckWords(force: true)
+        XCTAssertEqual(r?.line, MoneyCheckWords.shared.NO_IDEAS)
     }
 
     /// Money's layout rules on Accounts: one foot line at Accounts' end, its ⓘ led by where the accounts come from.

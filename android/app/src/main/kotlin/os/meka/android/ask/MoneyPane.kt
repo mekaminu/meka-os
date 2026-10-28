@@ -288,6 +288,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     // Obi's money check: "2 more" on the ideas and the idea whose sheet is open (Remind me and Not for me take it away,
     // which closes the sheet).
     var allIdeas by rememberSaveable { mutableStateOf(false) }
+    // Obi's wording: true while Ask Obi to look again is on its way.
+    var obiLooking by remember { mutableStateOf(false) }
     var ideaSheetId by rememberSaveable { mutableStateOf<String?>(null) }
     val ideaOpen = MoneyCheck.ideaOf(v.check, ideaSheetId)
     val listState = rememberLazyListState()
@@ -617,7 +619,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         Modifier.animateItem().appear(rememberAppearance(4)),
                         onOpen = { id -> haptics.tick(); said = null; ideaSheetId = id },
                         onMore = { haptics.tick(); allIdeas = !allIdeas },
-                        onShowAgain = { scope.launch { runCatching { core.moneyIdeasShow() }.getOrNull()?.let(say) } })
+                        onShowAgain = { scope.launch { runCatching { core.moneyIdeasShow() }.getOrNull()?.let(say) } },
+                        looking = obiLooking,
+                        onLookAgain = {
+                            haptics.tick(); obiLooking = true
+                            scope.launch {
+                                try { runCatching { core.moneyCheckWords() }.getOrNull()?.let(say) } finally { obiLooking = false }
+                            }
+                        })
                 }
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this phone as he slides, Make it a goal.

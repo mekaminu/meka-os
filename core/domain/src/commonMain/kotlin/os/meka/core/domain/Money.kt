@@ -59,6 +59,13 @@ object MoneyTipsFields {
     const val HIDDEN = "hidden"
     /** Obi's money check: on an idea's entity ("idea-<id>"), the epoch day Remind me brings it back (null when not asked). */
     const val UNTIL = "until"
+    /** Obi's wording ([MoneyCheckWords]), on an idea's entity: his title, his why and its place in his order (Null when his last run didn't word it). */
+    const val WORD_TITLE = "wTitle"
+    const val WORD_WHY = "wWhy"
+    const val RANK = "rank"
+    /** On [MoneyCheckWords.ENTITY]: when Obi last wrote the ideas (epoch ms) and that day (epoch day). */
+    const val AT = "at"
+    const val DAY = "day"
 }
 
 /** Slice 3: one watchdog alert he put away, id the alert's id ([MoneyWatch]). */
@@ -633,6 +640,8 @@ object MoneyRules {
         needMerchants: Map<String, Boolean> = emptyMap(),
         /** Obi's money check: the ideas he put away (Not for me) or asked to be reminded of. */
         ideaState: MoneyIdeaState = MoneyIdeaState(),
+        /** Obi's wording of the money check ([MoneyCheckWords]). */
+        checkWords: MoneyCheckWordsState = MoneyCheckWordsState(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -847,7 +856,7 @@ object MoneyRules {
             ownCategories = own,
             ownRows = MoneyOwnCategories.rows(own, ownRules, MoneyChallenges.ownCapBars(challengeLines, challenges, own, today)),
             source = source,
-            check = if (partial) MoneyCheck.view(lines, today, regular, ideaState, hiddenTips) else null,
+            check = if (partial) MoneyCheck.view(lines, today, regular, ideaState, hiddenTips, checkWords) else null,
         )
     }
 
@@ -1455,6 +1464,41 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         return MoneySaved(MoneyCheck.SHOWN_AGAIN)
     }
 
+    /** Obi's wording of the money check as last synced ([MoneyCheckWords]). */
+    fun checkWords(): MoneyCheckWordsState {
+        val es = replica.entities(EntityTypes.MONEY_TIPS)
+        val words = es.filter { it.ref.entityId.startsWith(IDEA_PREFIX) }.mapNotNull { e ->
+            val t = e[MoneyTipsFields.WORD_TITLE].textOrNull ?: return@mapNotNull null
+            val w = e[MoneyTipsFields.WORD_WHY].textOrNull ?: return@mapNotNull null
+            val r = e[MoneyTipsFields.RANK].longOrNull ?: return@mapNotNull null
+            e.ref.entityId.removePrefix(IDEA_PREFIX) to MoneyIdeaWords(t, w, r.toInt())
+        }.toMap()
+        val at = es.firstOrNull { it.ref.entityId == MoneyCheckWords.ENTITY }
+        return MoneyCheckWordsState(words, at?.get(MoneyTipsFields.AT)?.longOrNull, at?.get(MoneyTipsFields.DAY)?.longOrNull)
+    }
+
+    /**
+     * Keeps Obi's [words] (id → title and why, in his order) on both devices, taking his older words off every idea he
+     * didn't word this time, and notes the run at [atMs] on [day] (a run that worded nothing still counts as the week's).
+     */
+    fun saveCheckWords(words: List<Pair<String, Pair<String, String>>>, atMs: Long, day: Long) {
+        val keep = words.filter { MoneyCheck.validId(it.first) }.distinctBy { it.first }
+        val ids = keep.map { it.first }.toSet()
+        replica.batched {
+            replica.entities(EntityTypes.MONEY_TIPS).filter {
+                it.ref.entityId.startsWith(IDEA_PREFIX) && it.ref.entityId.removePrefix(IDEA_PREFIX) !in ids && it[MoneyTipsFields.WORD_TITLE].textOrNull != null
+            }.forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it.ref.entityId, wordFields(null, null, null)) }
+            keep.forEachIndexed { n, (id, w) -> replica.commitLocal(EntityTypes.MONEY_TIPS, IDEA_PREFIX + id, wordFields(w.first, w.second, n)) }
+            replica.commitLocal(EntityTypes.MONEY_TIPS, MoneyCheckWords.ENTITY, mapOf(MoneyTipsFields.AT to atMs.fv(), MoneyTipsFields.DAY to day.fv()))
+        }
+    }
+
+    private fun wordFields(title: String?, why: String?, rank: Int?): Map<String, FieldValue> = mapOf(
+        MoneyTipsFields.WORD_TITLE to (title?.fv() ?: FieldValue.Null),
+        MoneyTipsFields.WORD_WHY to (why?.fv() ?: FieldValue.Null),
+        MoneyTipsFields.RANK to (rank?.toLong()?.fv() ?: FieldValue.Null),
+    )
+
     /** Hides every tip of [kindKey] on both devices; Undo (by [undoCategory] with the token) shows them again. */
     fun hideTips(kindKey: String): MoneySaved {
         val kind = MoneyTipKind.of(kindKey) ?: return MoneySaved(MoneyRules.GONE, refused = true)
@@ -1770,7 +1814,10 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
             replica.entities(EntityTypes.MONEY_TIPS).map { it.ref.entityId }.filter { it.startsWith(IDEA_PREFIX) }.forEach {
-                replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null, MoneyTipsFields.UNTIL to FieldValue.Null))
+                replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null, MoneyTipsFields.UNTIL to FieldValue.Null) + wordFields(null, null, null))
+            }
+            if (replica.entity(EntityTypes.MONEY_TIPS, MoneyCheckWords.ENTITY) != null) {
+                replica.commitLocal(EntityTypes.MONEY_TIPS, MoneyCheckWords.ENTITY, mapOf(MoneyTipsFields.AT to FieldValue.Null, MoneyTipsFields.DAY to FieldValue.Null))
             }
             replica.entities(EntityTypes.MONEY_ALERT).forEach { replica.commitLocal(EntityTypes.MONEY_ALERT, it.ref.entityId, mapOf(MoneyAlertFields.FINE to FieldValue.Null)) }
             replica.entities(EntityTypes.MONEY_CATEGORY, includeDeleted = true).forEach {

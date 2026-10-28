@@ -231,6 +231,13 @@ interface AiApi {
         os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * Obi's wording of the money check (`POST /v1/ai/money-check`): the ideas the rules found; Obi's order and words come
+     * back unchecked ([os.meka.core.domain.MoneyCheckWords.check] reads them). A server without the route answers "off".
+     */
+    suspend fun moneyCheck(request: os.meka.core.wire.MoneyCheckCodec.Request): os.meka.core.wire.MoneyCheckCodec.Response =
+        os.meka.core.wire.MoneyCheckCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * The morning brief written by MEKA's AI (`POST /v1/ai/brief-script`, slice 2): the brief's facts; the spoken text
      * comes back unchecked ([os.meka.core.domain.BriefAiRules.check] reads it). A server without the route answers "off".
      */
@@ -1026,6 +1033,21 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/voice-note")
         }
         return os.meka.core.wire.VoiceNoteCodec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun moneyCheck(request: os.meka.core.wire.MoneyCheckCodec.Request): os.meka.core.wire.MoneyCheckCodec.Response {
+        val codec = os.meka.core.wire.MoneyCheckCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/money-check", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/money-check")
+            // A server without the route (older, or no AI key): the rules' words stay.
+            resp.status.value == 404 -> return codec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return codec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/money-check")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun goalBreakdown(request: os.meka.core.wire.GoalBreakdownCodec.Request): os.meka.core.wire.GoalBreakdownCodec.Response {
