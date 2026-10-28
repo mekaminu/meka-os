@@ -238,6 +238,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/money/cover-dark-accounts-layout.png](docs/screens/fold/money/cover-dark-accounts-layout.png)
 - [fold/money/cover-dark-accounts-list.png](docs/screens/fold/money/cover-dark-accounts-list.png)
 - [fold/money/cover-dark-accounts-more.png](docs/screens/fold/money/cover-dark-accounts-more.png)
+- [fold/money/cover-dark-accounts-total.png](docs/screens/fold/money/cover-dark-accounts-total.png)
 - [fold/money/cover-dark-accounts.png](docs/screens/fold/money/cover-dark-accounts.png)
 - [fold/money/cover-dark-ask-obi-ai.png](docs/screens/fold/money/cover-dark-ask-obi-ai.png)
 - [fold/money/cover-dark-ask-obi-answer.png](docs/screens/fold/money/cover-dark-ask-obi-answer.png)
