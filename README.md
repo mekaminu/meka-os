@@ -262,6 +262,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/money/cover-dark-plan-whatif.png](docs/screens/fold/money/cover-dark-plan-whatif.png)
 - [fold/money/cover-dark-plan.png](docs/screens/fold/money/cover-dark-plan.png)
 - [fold/money/cover-dark-sorter.png](docs/screens/fold/money/cover-dark-sorter.png)
+- [fold/money/cover-dark-trading-add-address.png](docs/screens/fold/money/cover-dark-trading-add-address.png)
 - [fold/money/cover-dark-trading-kestrel.png](docs/screens/fold/money/cover-dark-trading-kestrel.png)
 - [fold/money/cover-dark-trading-layout.png](docs/screens/fold/money/cover-dark-trading-layout.png)
 - [fold/money/cover-dark-trading-risk.png](docs/screens/fold/money/cover-dark-trading-risk.png)
