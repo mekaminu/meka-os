@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -95,6 +97,8 @@ import os.meka.core.domain.MoneyCategoryRow
 import os.meka.core.domain.MoneyChallengeBar
 import os.meka.core.domain.MoneyChallenges
 import os.meka.core.domain.MoneyChallengesView
+import os.meka.core.domain.MoneyColumn
+import os.meka.core.domain.MoneyColumns
 import os.meka.core.domain.MoneyCutChip
 import os.meka.core.domain.MoneyForecast
 import os.meka.core.domain.MoneyForecastRow
@@ -396,7 +400,7 @@ fun MoneyPane(
     var tradingAll by rememberSaveable { mutableStateOf(false) }
     // Trading's Kestrel card (mockup): what Kestrel asked through the approvals inbox; null until it has asked.
     val kestrel by core.tradingKestrel.collectAsState()
-    val tradingItems: LazyListScope.(TradingView) -> Unit = { t ->
+    val tradingItems: MoneyItems.(TradingView) -> Unit = { t ->
         val onAlert: (String, String) -> Unit = { kind, key ->
             scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
         }
@@ -505,13 +509,9 @@ fun MoneyPane(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        state = listState,
-        contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
+    // Money on the open Fold (MoneyColumns, the mockup at Fold size): the list is written once; on a wide pane its body
+    // sits in two columns under the full-width title, pills and Ask Obi bar, with the said line and the foot below.
+    val body: MoneyItems.() -> Unit = body@{
         item(key = "close") {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
@@ -531,13 +531,13 @@ fun MoneyPane(
                 Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
             }
         }
-        if (v.skeleton) return@LazyColumn
+        if (v.skeleton) return@body
         if (v.locked) {
             item(key = "unlock") {
                 Text(MoneyRules.UNLOCK, style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) { unlock() }.minTouch().appear(rememberAppearance(2)))
             }
-            return@LazyColumn
+            return@body
         }
         // Money redesign (B), slice 1: Spending · Bills · Plan · Trading · Accounts; only the chosen tab's sections show.
         item(key = "tabs") {
@@ -1046,6 +1046,14 @@ fun MoneyPane(
             }
         }
     }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val wide = MoneyColumns.wide(maxWidth.value.toInt())
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(MekaSpace.gutter),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) { moneyList(body, wide) }
     PaymentSheet(
         row = sheetRow, order = v.categoryOrder, said = said,
         onCategory = { key -> sheetRow?.let { t -> payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) } } },
@@ -1204,7 +1212,7 @@ fun MoneyPane(
                 ideaSheetId = null
                 when (i.actKey) {
                     MoneyCheck.ACT_CAP -> setChallengeOpen = true
-                    MoneyCheck.ACT_CLEAR -> scope.launch { scrollToKey(listState, "clear-head", reduced) }
+                    MoneyCheck.ACT_CLEAR -> scope.launch { scrollToKey(listState, MoneyColumns.scrollKey("clear-head", wide), reduced) }
                 }
             },
             onRemind = { scope.launch { runCatching { core.moneyIdeaRemind(i.id) }.getOrNull()?.let(say) } },
@@ -2473,5 +2481,64 @@ private suspend fun scrollToKey(state: LazyListState, key: String, reduced: Bool
         }
         val page = (state.layoutInfo.viewportEndOffset - state.layoutInfo.viewportStartOffset) * 0.8f
         if (reduced) state.scrollBy(page) else state.animateScrollBy(page)
+    }
+}
+
+/** Money's list, written once ([MoneyPane]'s body): straight into the LazyColumn, or gathered for the open Fold's two columns. */
+private interface MoneyItems {
+    fun item(key: String, content: @Composable MoneyItemScope.() -> Unit)
+}
+
+/** What a Money part may ask of where it sits: the list's own placement motion, or none inside a column. */
+private interface MoneyItemScope {
+    fun Modifier.animateItem(): Modifier
+}
+
+private fun LazyItemScope.lazyPlacement(m: Modifier): Modifier = m.animateItem()
+
+private class LazyMoneyItems(private val lazy: LazyListScope) : MoneyItems {
+    override fun item(key: String, content: @Composable MoneyItemScope.() -> Unit) {
+        lazy.item(key = key) {
+            val item = this
+            content(object : MoneyItemScope { override fun Modifier.animateItem(): Modifier = item.lazyPlacement(this) })
+        }
+    }
+}
+
+private class MoneyPart(val key: String, val content: @Composable MoneyItemScope.() -> Unit)
+
+private class GatherMoneyItems : MoneyItems {
+    val parts = mutableListOf<MoneyPart>()
+    override fun item(key: String, content: @Composable MoneyItemScope.() -> Unit) { parts += MoneyPart(key, content) }
+}
+
+/** Inside a column the column item moves as one, so a part has no placement motion of its own (it still appears). */
+private object StillItems : MoneyItemScope {
+    override fun Modifier.animateItem(): Modifier = this
+}
+
+/** One column (narrow) or, on a wide pane, the full-width parts, then both columns side by side, then the said line and foot. */
+private fun LazyListScope.moneyList(body: MoneyItems.() -> Unit, wide: Boolean) {
+    val lazy = LazyMoneyItems(this)
+    if (!wide) { lazy.body(); return }
+    val parts = GatherMoneyItems().apply { body() }.parts
+    val full = parts.filter { MoneyColumns.of(it.key) == MoneyColumn.FULL }
+    full.filterNot { MoneyColumns.below(it.key) }.forEach { lazy.item(it.key, it.content) }
+    val start = parts.filter { MoneyColumns.of(it.key) == MoneyColumn.START }
+    val end = parts.filter { MoneyColumns.of(it.key) == MoneyColumn.END }
+    if (start.isNotEmpty() || end.isNotEmpty()) item(key = MoneyColumns.COLUMNS_KEY) {
+        Row(Modifier.fillMaxWidth().animateItem().testTag("money-columns"),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), verticalAlignment = Alignment.Top) {
+            MoneyColumnOf(start, Modifier.weight(1f).testTag("money-column-start"))
+            MoneyColumnOf(end, Modifier.weight(1f).testTag("money-column-end"))
+        }
+    }
+    full.filter { MoneyColumns.below(it.key) }.forEach { lazy.item(it.key, it.content) }
+}
+
+@Composable
+private fun MoneyColumnOf(parts: List<MoneyPart>, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        parts.forEach { p -> key(p.key) { p.content(StillItems) } }
     }
 }

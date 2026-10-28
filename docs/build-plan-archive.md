@@ -4498,3 +4498,17 @@ Layout rule (e) ("inputs never sit open on the page") on Trading, both apps:
   catalogue. Tests: MoneyTradingLayoutTest.theAddressFieldSitsBehindOneRow, MoneyTradingLayoutScreensTest
   .theAddressFieldSitsInASheet (Roborazzi money cover-dark-trading-add-address), MekaCoreBridgeTests. No server change, no
   migration. Mac checked nightly.
+
+### Money redesign: the open Fold's two columns (2026-10-28)
+
+The mockup draws Money at Fold size (884 px) in two columns under the pills. Core `MoneyColumns` (FULL / START / END by
+the Fold list's part key; `wide(widthDp)` at 600 dp; `scrollKey` so See Clear my cards still jumps; unknown parts go left).
+Spending: month switcher, Needs vs wants chips, ring, tiles, review and Worth a look left; WHERE IT WENT, Sort them and the
+latest payments right. Bills: still-to-go-out card, Until payday, cards left; bills by date, refunds, regular right. Plan:
+money check, forecast, challenges, paying abroad left; What if I save, Clear my cards, goals right. Trading: equity, risk,
+curve, review left; positions, Kestrel, trades, addresses, alerts, export right. Accounts: banks, net worth, accounts left;
+year, your categories, MORE right. The title, summary, pills, Ask Obi bar, empty line stay above; the said line and foot
+below. Fold `MoneyPane`: the list is written once as `MoneyItems` (a LazyColumn adapter, or a gatherer for the columns);
+`BoxWithConstraints` picks. Tests: MoneyColumnsTest, MoneyScreensTest (innerTwoColumns, innerBills/Plan/Accounts,
+coverOneColumn). Help money.md (HelpIndex regenerated). No server change, no migration. Mac: not yet (its sheet is one
+column; the wider window with a sidebar is the next slice).

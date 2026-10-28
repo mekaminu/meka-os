@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -236,4 +238,27 @@ class MoneyScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT)
+
+    // Money on the open Fold (MoneyColumns): each tab's body in two columns, as the mockup at Fold size; one on the cover.
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerTwoColumns() {
+        shoot("inner-dark-columns-spending", Fill.MANY)
+        compose.onNodeWithTag("money-column-start", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("money-column-end", useUnmergedTree = true).assertExists()
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerBills() = shoot("inner-dark-columns-bills", Fill.MANY, tab = MoneyTab.BILLS)
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerPlan() = shoot("inner-dark-columns-plan", Fill.MANY, tab = MoneyTab.PLAN)
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerAccounts() = shoot("inner-dark-columns-accounts", Fill.MANY, tab = MoneyTab.ACCOUNTS)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverOneColumn() {
+        shoot("cover-dark-one-column", Fill.MANY)
+        compose.onAllNodesWithTag("money-columns", useUnmergedTree = true).assertCountEquals(0)
+    }
 }
