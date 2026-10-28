@@ -4204,4 +4204,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(MoneyHeader.shared.showsSummary(v: MoneyView.companion.LOCKED))
         XCTAssertFalse(MoneyHeader.shared.chipsInHead(sp: nil))
     }
+
+    /// Money's mockup check item 7: Accounts' total card says across how many and what to do before anything counts.
+    func testMoneyTotalCardOnTheMac() {
+        XCTAssertEqual(MoneyTotal.shared.head(accounts: 6, trading: 1), "Across 6 accounts and trading")
+        XCTAssertEqual(MoneyTotal.shared.head(accounts: 1, trading: 0), "Across 1 account")
+        XCTAssertNil(MoneyTotal.shared.card(w: nil))
+    }
 }

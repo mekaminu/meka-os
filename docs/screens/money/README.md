@@ -53,9 +53,15 @@ on its title opens the payments behind it); the rest as one-line rows in a card 
 if I save's (and Clear my cards') slider is a thin 4 dp track with a round 20 dp knob (Mac: the small control size), and
 the chips are drawn small inside a 48 dp target. App shot: `cover-dark-plan-layout`.
 
+**Item 7 (2026-10-28, both apps):** Accounts opens on the mockup's total card — "Across 6 accounts and trading" inside it,
+the total in the greeting size and one breakdown line ("Cash £5,924 · trading £6,512 · owed on cards £6,686", plus
+"outside £…" for what he typed); the NET WORTH label, "You have … · you owe …" and the set-up sentence left (before
+anything counts: "Add each account's balance to see one total"). The change since last month, the month-by-month line,
+"Partial · …" and Outside these accounts stay in the card under it. In the list an owed amount is amber (the brass
+accent, was blue), Add balance is quiet (secondary text, was the accent), and names and lines wrap instead of being cut.
+App shot: `cover-dark-accounts-total`.
+
 **Still to do (next Money slices):**
-7. Accounts: a total card on top ("Across N accounts and trading", the total, a breakdown line) instead of the net worth
-   card's set-up words; an account with no balance shows "Add balance" quietly, owed amounts in amber, no cut words.
 8. Section labels in the mockup's style (small, letter-spaced caps); Spending's category notes against usual ("£20 under
    usual") where the months allow it rather than "3 payments".
 9. Bills: the grey line under the still-to-go-out card; refunds' middle column aligned.

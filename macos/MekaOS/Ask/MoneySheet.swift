@@ -1267,38 +1267,43 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.profitLine)
     }
 
-    /// Slice 8: net worth — the total, have/owe, the change since last month and the month-by-month line; what he typed
-    /// outside his accounts is one row ("Outside these accounts") opening a popover with each thing and the field.
+    /// Slice 8: net worth — since the mockup check's item 7 the mockup's total card: "Across N accounts and trading" over
+    /// the total (large) and one breakdown line (core MoneyTotal), then the change since last month and the month-by-month
+    /// line; what he typed outside his accounts is one row ("Outside these accounts") opening a popover.
     private func worth(_ w: MoneyWorthView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(w.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
-            // Layout rules on Accounts (a), (c): net worth in one card; how it's worked out behind the tab's foot ⓘ.
-            worthCard(w)
-        }
+        // Layout rules on Accounts (a), (c): net worth in one card; how it's worked out behind the tab's foot ⓘ.
+        worthCard(w).padding(.top, MekaSpace.xs)
     }
 
+    @ViewBuilder
     private func worthCard(_ w: MoneyWorthView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            if let t = w.total {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(t).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
-                    if let s = w.splitLine { Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
-                    if let c = w.changeLine { Text(c).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+        if let c = MoneyTotal.shared.card(w: w) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(c.head).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                    if let t = c.total {
+                        Text(t).font(MekaType.greeting).foregroundStyle(palette.textPrimary).lineLimit(1).contentTransition(.opacity)
+                    }
+                    if let b = c.breakdown {
+                        Text(b).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
+                    }
+                    if let e = c.empty {
+                        Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(w.spoken)
+                .accessibilityLabel(c.spoken)
+                if let ch = w.changeLine { Text(ch).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity) }
+                if w.points.count >= 2 { MoneyWorthLine(points: w.points, palette: palette, reduced: reduceMotion) }
+                if let l = w.chartLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+                if let m = w.missingLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+                // Money review (layout rule (e)): what he typed outside his accounts is one row opening its popover.
+                if let r = MoneyWorthOther.shared.row(w: w) { worthOtherRow(r) }
             }
-            if let e = w.empty {
-                Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
-            }
-            if w.points.count >= 2 { MoneyWorthLine(points: w.points, palette: palette, reduced: reduceMotion) }
-            if let l = w.chartLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
-            if let m = w.missingLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
-            // Money review (layout rule (e)): what he typed outside his accounts is one row opening its popover.
-            if let r = MoneyWorthOther.shared.row(w: w) { worthOtherRow(r) }
+            .moneyCard(palette)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: c.total)
         }
-        .moneyCard(palette)
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: w.total)
     }
 
     /// Net worth's one row for what he typed: the title over the names (or what to add), the total or "Add…", ›.
@@ -1316,7 +1321,7 @@ struct MoneySheet: View {
                 Spacer()
                 Text(r.amount ?? MoneyWorthOther.shared.ADD)
                     .font(r.add ? MekaType.caption : MekaType.body)
-                    .foregroundStyle(r.add ? palette.accent : (r.owes ? palette.approval : palette.textPrimary))
+                    .foregroundStyle(r.add ? palette.textSecondary : (r.owes ? palette.accent : palette.textPrimary))
                     .contentTransition(.opacity)
                 Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
             }
@@ -3100,7 +3105,7 @@ struct MoneySheet: View {
     }
 
     /// Money review (Meka 2026-10-26 22:12), Accounts: one clean list — two letters, the short name over what it is,
-    /// the balance (a card's owed in the approval tone) or Add balance — each row opening the account's popover; a
+    /// the balance (a card's owed in amber, the brass accent) or a quiet Add balance — each row opening the account's popover; a
     /// trading row goes to the Trading tab.
     private func accounts(_ v: MoneyView) -> some View {
         let items = MoneyAccountList.shared.items(v: v)
@@ -3134,13 +3139,15 @@ struct MoneySheet: View {
                     .frame(width: 40, height: 40)
                     .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m, style: .continuous))
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    // Mockup check item 7: no cut words; a long name or line wraps instead.
+                    Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(r.sub).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textSecondary)
-                        .lineLimit(1).contentTransition(.opacity)
+                        .lineLimit(3).fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
                 }
                 Spacer()
                 Text(r.amount).font(r.addBalance ? MekaType.caption : MekaType.metaStrong)
-                    .foregroundStyle(r.addBalance ? palette.accent : (r.owes ? palette.approval : palette.textPrimary))
+                    .foregroundStyle(r.addBalance ? palette.textSecondary : (r.owes ? palette.accent : palette.textPrimary))
                     .contentTransition(.opacity)
             }
             .contentShape(Rectangle())

@@ -4592,3 +4592,20 @@ two-column state kept by a SideEffect). `MoneySlider` (a 4 dp track, brass to th
 its pills slimmer. Help money.md (HelpIndex regenerated), motion catalogue row, screens README. Tests: MoneyCheckTest
 (threeShowThenMore), MoneyPlanLayoutScreensTest (the lead card, its Remind me and Show them again), MekaCoreBridgeTests
 (testMoneyCheckReachesSwift). No server change, no migration. Mac checked nightly.
+
+### Money redesign: Accounts' total card as the mockup (2026-10-28)
+
+README item 7, both apps. Core `MoneyTotal.card(worth)` → `MoneyTotalCard` (head "Across N accounts[ and trading]" /
+"Across trading" / "Your money", total, breakdown "Cash … · trading … · owed on cards … · outside …" with a part only when
+something is in it, `EMPTY` "Add each account's balance to see one total" before anything counts, spoken);
+`MoneyWorthView` gains defaulted `cashPence` (the accounts' balances, signed), `cardsOwePence`, `typedPence`,
+`accountCount`, `tradingCount`. Fold: the "worth-head" NET WORTH label item is gone; `WorthBlock` leads with the card's
+head inside (caption, secondary), the total in `greeting` (`money-total-amount`), the breakdown (`money-total-breakdown`),
+then the change line, the month-by-month line, Partial and Outside these accounts as before; "You have … · you owe …"
+and `MoneyWorth.EMPTY` left the card. `MoneyAccountsCard`: owed amounts in the accent (was approval blue), Add balance in
+secondary text (was the accent), name up to 2 lines and the sub line up to 3 with no ellipsis; Outside these accounts'
+Add… quiet and its owed total amber too. Mac: `worth`/`worthCard` the same (`MoneyTotal.shared.card`), the account rows
+and the Outside row the same colours, wrapping. Help money.md (HelpIndex regenerated), motion catalogue row, screens
+README. Tests: MoneyTotalTest (the mockup's figures: £5,750 across 6 accounts and trading), MoneyAccountsScreensTest
+(accountsOpensOnTheMockupsTotalCard, shot `cover-dark-accounts-total`), MekaCoreBridgeTests (testMoneyTotalCardOnTheMac).
+No server change, no migration. Mac checked nightly.

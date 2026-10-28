@@ -145,6 +145,7 @@ import os.meka.core.domain.MoneyWorthView
 import os.meka.core.domain.MoneyGoals
 import os.meka.core.domain.MoneyHeader
 import os.meka.core.domain.MoneyWorthOther
+import os.meka.core.domain.MoneyTotal
 import os.meka.core.domain.MoneyWorthOtherRow
 import os.meka.core.domain.MoneyTradingLayout
 import os.meka.core.domain.TradingAddRow
@@ -1015,13 +1016,10 @@ fun MoneyPane(
         }
         // Slice 8: net worth (Accounts).
         v.worth?.takeIf { has(MoneySection.WORTH) }?.let { w ->
-            item(key = "worth-head") {
-                Text(w.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            // Layout rules on Accounts (a), (c): net worth in one card; where it's from behind the tab's foot ⓘ.
+            // Layout rules on Accounts (a), (c): net worth in one card; where it's from behind the tab's foot ⓘ. Mockup
+            // check item 7: the card is the mockup's total card, its label ("Across 6 accounts and trading") inside.
             item(key = "worth") {
-                MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-worth-card") {
+                MoneyCard(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(4)), tag = "money-worth-card") {
                     WorthBlock(w, Modifier, onOther = { haptics.tick(); said = null; otherSheet = true })
                 }
             }
@@ -2510,32 +2508,39 @@ private fun ForecastRow(r: MoneyForecastRow) {
 }
 
 /**
- * Slice 8: NET WORTH — the total (big), have/owe, the change since last month and the month-by-month line. Money review
+ * Slice 8: NET WORTH — since the mockup check's item 7 the mockup's total card: "Across N accounts and trading" over the
+ * total (large) and one breakdown line (cash · trading · owed on cards · outside), then the change since last month and
+ * the month-by-month line (core MoneyTotal). Money review
  * (layout rule (e)): what he typed outside his accounts is one row ("Outside these accounts", the names, the total, or
  * "Add…"), opening its sheet; the accounts, cards and trading are the list under this card.
  */
 @Composable
 private fun WorthBlock(w: MoneyWorthView, modifier: Modifier, onOther: () -> Unit) {
     val reduced = Meka.reducedMotion
+    val c = MoneyTotal.card(w) ?: return
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        w.total?.let { t ->
-            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = w.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }.testTag("money-total"),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Crossfade(c.head, animationSpec = MekaMotion.appear(reduced), label = "money-total-head") { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+            c.total?.let { t ->
                 Crossfade(t, animationSpec = MekaMotion.appear(reduced), label = "money-worth-total") { l ->
-                    Text(l, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
-                }
-                w.splitLine?.let { l ->
-                    Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-worth-split") { x ->
-                        Text(x, style = MekaType.caption, color = Meka.colors.textSecondary)
-                    }
-                }
-                w.changeLine?.let { l ->
-                    Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-worth-change") { x ->
-                        Text(x, style = MekaType.caption, color = Meka.colors.textSecondary)
-                    }
+                    Text(l, style = MekaType.greeting, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.testTag("money-total-amount"))
                 }
             }
+            c.breakdown?.let { l ->
+                Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-total-breakdown") { x ->
+                    Text(x, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("money-total-breakdown"))
+                }
+            }
+            c.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
-        w.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        w.changeLine?.let { l ->
+            Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-worth-change") { x ->
+                Text(x, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
         if (w.points.size >= 2) WorthLine(w.points)
         w.chartLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         w.missingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
@@ -2564,7 +2569,7 @@ private fun WorthOtherRow(r: MoneyWorthOtherRow, onOpen: () -> Unit) {
         }
         Crossfade(r.amount ?: MoneyWorthOther.ADD, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-amount") { a ->
             Text(a, style = if (r.add) MekaType.caption else MekaType.metaStrong,
-                color = when { r.add -> Meka.colors.accent; r.owes -> Meka.colors.approval; else -> Meka.colors.textPrimary }, maxLines = 1)
+                color = when { r.add -> Meka.colors.textSecondary; r.owes -> Meka.colors.accent; else -> Meka.colors.textPrimary }, maxLines = 1)
         }
         Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
     }

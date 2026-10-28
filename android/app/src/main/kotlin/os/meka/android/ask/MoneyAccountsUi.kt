@@ -53,8 +53,8 @@ import os.meka.core.domain.MoneyWorth
 
 /**
  * Money review (Meka 2026-10-26 22:12), Accounts: one card listing his accounts as the mockup draws them (a 40 dp tile
- * with two letters, the short name over what it is, the balance on the right; a card's owed amount in the accent; "Add
- * balance" when there's none), each row opening its sheet. A trading row goes to the Trading tab. Everything it says is
+ * with two letters, the short name over what it is, the balance on the right; a card's owed amount in the accent; a quiet
+ * "Add balance" when there's none; nothing cut, a long line wraps), each row opening its sheet. A trading row goes to the Trading tab. Everything it says is
  * the core's `MoneyAccountList`; this only draws it.
  *
  * Motion: the card appears with the screen's stagger; a changed balance or line cross-fades; rows press like every row.
@@ -82,17 +82,18 @@ internal fun MoneyAccountsCard(items: List<MoneyAccountItem>, modifier: Modifier
                     Text(r.initials, style = MekaType.caption, color = Meka.colors.accent)
                 }
                 Column(Modifier.weight(1f)) {
-                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // Mockup check item 7: no cut words; a long name or line wraps instead.
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2)
                     Crossfade(r.sub, animationSpec = MekaMotion.appear(reduced), label = "money-account-sub-${r.id}") { l ->
-                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 3)
                     }
                 }
                 Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "money-account-amount-${r.id}") { a ->
                     Text(a, style = if (r.addBalance) MekaType.caption else MekaType.metaStrong,
+                        // Mockup check item 7: Add balance quietly, what's owed in amber (the brass accent, as the mockup).
                         color = when {
-                            r.addBalance -> Meka.colors.accent
-                            r.owes -> Meka.colors.approval
+                            r.addBalance -> Meka.colors.textSecondary
+                            r.owes -> Meka.colors.accent
                             else -> Meka.colors.textPrimary
                         }, maxLines = 1)
                 }
