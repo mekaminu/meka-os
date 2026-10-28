@@ -193,8 +193,10 @@ class MoneyScreensTest {
                 ScreenShots.assertShows(compose, name, sp.centre.top)
                 ScreenShots.assertShows(compose, name, sp.centre.big)
                 if (compose.onAllNodesWithText(m.spentLine).fetchSemanticsNodes().isNotEmpty()) fail("$name: the old spent line still shows")
-                // As the mockup: Categories · Needs vs wants sit under the ring and its tiles (over the rows), not above it.
-                if (sp.needs != null) {
+                // As the mockup: Categories · Needs vs wants sit under the ring and its tiles (over the rows), not above it
+                // (on the open Fold they top the right column, beside the ring, as the mockup at Fold size).
+                val columns = compose.onAllNodesWithTag("money-columns", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+                if (sp.needs != null && !columns) {
                     val chips = compose.onAllNodesWithTag("money-view-categories", useUnmergedTree = true).fetchSemanticsNodes()
                     val big = compose.onAllNodesWithText(sp.centre.big, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
                     if (chips.isNotEmpty() && big != null && chips.first().boundsInRoot.top < big.boundsInRoot.bottom)
