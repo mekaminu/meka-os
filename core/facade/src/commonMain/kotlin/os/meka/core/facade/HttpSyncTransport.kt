@@ -238,6 +238,13 @@ interface AiApi {
         os.meka.core.wire.MoneyCheckCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * Ask Obi's money chat (`POST /v1/ai/money-chat`): a question the rules couldn't answer, with the device's facts; the
+     * answer comes back unchecked ([os.meka.core.domain.MoneyChatObi.check] reads it). A server without the route answers "off".
+     */
+    suspend fun moneyChat(request: os.meka.core.wire.MoneyChatCodec.Request): os.meka.core.wire.MoneyChatCodec.Response =
+        os.meka.core.wire.MoneyChatCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * The morning brief written by MEKA's AI (`POST /v1/ai/brief-script`, slice 2): the brief's facts; the spoken text
      * comes back unchecked ([os.meka.core.domain.BriefAiRules.check] reads it). A server without the route answers "off".
      */
@@ -1046,6 +1053,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.MoneyCheckCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.MoneyCheckCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/money-check")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun moneyChat(request: os.meka.core.wire.MoneyChatCodec.Request): os.meka.core.wire.MoneyChatCodec.Response {
+        val codec = os.meka.core.wire.MoneyChatCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/money-chat", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/money-chat")
+            // A server without the route (older, or no AI key): the rules' hello stays.
+            resp.status.value == 404 -> return codec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return codec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/money-chat")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }

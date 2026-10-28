@@ -816,7 +816,7 @@ class MekaCore(
     internal fun launchOnCoreForTest(block: suspend () -> Unit) { scope.launch { block() } }
 
     /** Locks Money again (the pane closed or the app went away). */
-    suspend fun closeMoney() = onCore { dropMoneyBuild(); moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
+    suspend fun closeMoney() = onCore { dropMoneyBuild(); moneyOpen = false; moneyChatTurns = emptyList(); moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
 
     // ---- Money manager (16), slice 1: money questions in Ask and Talk, answered on the device ----
 
@@ -878,17 +878,50 @@ class MekaCore(
     private fun moneyChatData(): os.meka.core.domain.MoneyChatData =
         os.meka.core.domain.MoneyChatData(moneyAskData(), _money.value.save, _money.value.clear)
 
+    /** Ask Obi (slice 2): the chat's last turns, for a follow-up to Obi (this device only, gone when Money closes). */
+    private var moneyChatTurns: List<os.meka.core.domain.MoneyChatTurn> = emptyList()
+
     /**
      * Obi · money: the answer to [question] from his own Money on this device ([os.meka.core.domain.MoneyChat]), with its
-     * buttons; nothing is sent. Only while Money is open (else refused with the locked line). The apps keep the turns.
+     * buttons. A question those rules can't answer goes to Obi's AI (slice 2, `POST /v1/ai/money-chat`) with only the
+     * facts [os.meka.core.domain.MoneyChatObi.facts] makes (monthly totals and categories, payees and amounts, what's
+     * still to go out, payday's date; approved 2026-10-24), and his answer shows only when every number in it was sent
+     * ([os.meka.core.domain.MoneyChatObi.check]). Only while Money is open (else refused with the locked line). The apps
+     * keep the turns on screen.
      */
-    suspend fun moneyChat(question: String): os.meka.core.domain.MoneyChatTurn = onCore {
-        val q = question.trim()
-        if (!moneyOpen) return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyRules.LOCKED, refused = true)
-        if (money.accounts().isEmpty() && moneyBills().isEmpty()) {
-            return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyAskRules.EMPTY, refused = true)
+    suspend fun moneyChat(question: String): os.meka.core.domain.MoneyChatTurn {
+        val o = os.meka.core.domain.MoneyChatObi
+        val c = os.meka.core.wire.MoneyChatCodec
+        val q = question.trim().take(c.MAX_QUESTION)
+        val (local, ask) = onCore {
+            if (!moneyOpen) return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyRules.LOCKED, refused = true) to null
+            if (money.accounts().isEmpty() && moneyBills().isEmpty()) {
+                return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyAskRules.EMPTY, refused = true) to null
+            }
+            val d = moneyChatData()
+            if (aiApi != null && o.needsObi(q, d)) {
+                val history = moneyChatTurns.filter { !it.refused }.takeLast(o.HISTORY).map { c.Turn(it.question.take(c.MAX_QUESTION), it.text.take(c.MAX_TURN)) }
+                null to c.Request(os.meka.core.domain.AskRules.isoDate(todayEpochDay()), q, o.facts(d).map { it.take(c.MAX_FACT) }.take(c.MAX_FACTS), history)
+            } else os.meka.core.domain.MoneyChat.answer(q, d) to null
         }
-        os.meka.core.domain.MoneyChat.answer(q, moneyChatData())
+        val turn = local ?: run {
+            val request = ask!!
+            val api = aiApi ?: return os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.AskRules.NOT_CONNECTED_LINE, refused = true)
+            val reply = try { api.moneyChat(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                return os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.AskRules.OFFLINE_LINE, refused = true)
+            }
+            if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+                return os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason), refused = true)
+            }
+            val sent = request.facts + request.question + request.history.flatMap { listOf(it.question, it.answer) }
+            o.turn(q, reply.answer, sent)
+        }
+        return onCore {
+            // Money locked while Obi was thinking: nothing is kept and the answer isn't shown.
+            if (!moneyOpen) return@onCore os.meka.core.domain.MoneyChatTurn(q, os.meka.core.domain.MoneyRules.LOCKED, refused = true)
+            moneyChatTurns = os.meka.core.domain.MoneyChat.add(moneyChatTurns, turn)
+            turn
+        }
     }
 
     /** The chat's "Try" questions from his own numbers ([os.meka.core.domain.MoneyChat.suggestions]); none while locked. */

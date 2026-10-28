@@ -5018,10 +5018,13 @@ final class CoreModel {
         let text: String
         let refused: Bool
         let actions: [MoneyChatAct]
+        /// Slice 2: Obi's AI wrote the answer (checked by the core); the panel shows MoneyChatObi.BY under it.
+        var byObi: Bool = false
     }
 
-    /// Ask Obi: the answer to [question] from his own Money, worked out by the core on this Mac (nothing is sent). Only
-    /// the question's string crosses into the core; the answer is copied into Swift values here.
+    /// Ask Obi: the answer to [question] from his own Money, worked out by the core on this Mac, or by Obi's AI through the
+    /// core when its rules can't (slice 2). Only the question's string crosses into the core; the answer is copied into
+    /// Swift values here.
     func moneyChat(_ question: String, id: Int) async -> MoneyChatLine? {
         guard let core else { return nil }
         do {
@@ -5030,7 +5033,7 @@ final class CoreModel {
             let acts = t.actions.enumerated().map { i, a in
                 MoneyChatAct(id: i, kind: a.kind, label: a.label, amountPence: a.amountPence, months: a.months, order: a.order)
             }
-            return MoneyChatLine(id: id, question: t.question, text: t.text, refused: t.refused, actions: acts)
+            return MoneyChatLine(id: id, question: t.question, text: t.text, refused: t.refused, actions: acts, byObi: t.byObi)
         } catch {
             lastError = error.localizedDescription
             return nil

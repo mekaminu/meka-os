@@ -66,6 +66,7 @@ import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.GoalBreakdownCodec
 import os.meka.core.wire.MoneyCheckCodec
+import os.meka.core.wire.MoneyChatCodec
 import os.meka.core.wire.HandleThisCodec
 import os.meka.core.wire.VoiceNoteCodec
 import os.meka.core.wire.MessageRequestCodec
@@ -794,6 +795,16 @@ fun Application.mekaSync(
                 val request = MoneyCheckCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { moneyCheckService.word(request) }
                 call.respondText(MoneyCheckCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // Ask Obi's money chat: a question the device's rules couldn't answer, with the facts the device made (monthly
+            // totals, payees and amounts, what's still to go out; never accounts or balances). Nothing is kept or logged.
+            val moneyChatService = MoneyChatService(ai.provider)
+            post("/v1/ai/money-chat") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = MoneyChatCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { moneyChatService.answer(request) }
+                call.respondText(MoneyChatCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // The morning brief written by the AI: the brief's facts out, the spoken text back. Nothing is kept or logged.
             val briefScriptService = BriefScriptService(ai.provider)

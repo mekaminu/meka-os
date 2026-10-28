@@ -7,7 +7,7 @@ import kotlin.math.roundToLong
  * Money redesign, **Ask Obi** (mockup `docs/design/money/`, v4, approved Meka 2026-10-25 09:30), slice 1: a bar on every
  * Money tab ("Ask Obi: “Can I afford…”, “What if I save…”") opens **Obi · money**, a short money chat answered on the
  * device from his own numbers, each answer with the buttons the mockup shows (Make it a goal, Use this plan, Show the
- * numbers). Rules only, nothing sent: the AI's own money chat is the next slice.
+ * numbers). Rules first, on the device; what they can't answer goes to Obi's AI ([MoneyChatObi], slice 2).
  *
  * What it answers, beyond [MoneyAskRules] (spending, what's coming out, payday, safe to spend, can I afford £N on a day,
  * paying abroad):
@@ -39,6 +39,8 @@ data class MoneyChatTurn(
     val text: String,
     val actions: List<MoneyChatAction> = emptyList(),
     val refused: Boolean = false,
+    /** Slice 2: Obi's AI wrote [text] ([MoneyChatObi]), checked on the device; the apps show [MoneyChatObi.BY] under it. */
+    val byObi: Boolean = false,
 )
 
 /** What the chat reads: Ask's money data, and the Plan tab's bases (null when not worked out yet). */
@@ -57,7 +59,7 @@ object MoneyChat {
     const val SEND = "Ask"
     const val DONE = "Done"
     const val WORKING = "Obi is working it out…"
-    const val FOOT = "Worked out on this device from your own numbers; nothing is sent. Sums, not financial advice."
+    const val FOOT = "Sums are worked out on this device. Anything else goes to Obi with your monthly totals and payees, never your accounts or balances. Not financial advice."
     const val HELLO = "Ask me about your money: what you've spent, what's coming out, whether you can afford something, what saving a little each month adds up to, or which card to clear first."
 
     const val ACT_GOAL = "goal"

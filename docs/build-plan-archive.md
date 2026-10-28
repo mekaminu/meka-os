@@ -4401,3 +4401,20 @@ Money's layout rules (Meka 2026-10-26 22:18) on Accounts, both apps:
   inner-dark-ask-obi), MekaCoreBridgeTests.testMoneyChatReachesSwift. No server change, no migration. Mac checked
   nightly. Next: Ask Obi slice 2, the AI's own money chat for questions the rules can't answer (data sharing approved
   2026-10-24 21:13), and the mic on the bar.
+
+2026-10-28, **Ask Obi, slice 2 (Obi's own money chat)**, both apps. Core `MoneyChatObi`: `needsObi` (not a question
+  `MoneyChat`/`MoneyAskRules` answer, Money has something to go on), `facts` (today; for the last three months with
+  payments, spent / came in and the ten biggest categories; the 15 biggest payees of 90 days with counts; up to five
+  payers in; what's still to go out in 31 days; next payday; transfers left out, a payee holding an account number
+  never sent: `payee`), `check` (every number in the answer must be one sent, its whole part allowed; days ≤ 31, small
+  counts and years may stand alone; no link or markup; ≤ 600 characters), `turn` (`byObi`, or UNCHECKED / NOTHING).
+  `MoneyChatTurn.byObi`; `MoneyChat.FOOT` now says what goes. Wire `MoneyChatCodec` (question ≤ 300, ≤ 40 facts of
+  ≤ 700, ≤ 4 history turns). Server `MoneyChatService` (feature `money.chat`, small model, 400 tokens, history as turns,
+  facts in a `<money>` block) and `POST /v1/ai/money-chat` (keyed devices). Facade `moneyChat` sends what the rules
+  can't answer through `AiApi.moneyChat` with the last 4 shown turns (kept in memory, forgotten on closeMoney),
+  checks the answer, and drops it if Money locked meanwhile; offline / AI off say so. Fold: "Obi's answer · …" under
+  his words (MoneyChatUi). Mac: `MoneyChatLine.byObi`, the same caption (MoneyChatViews). ADR-006 addendum; help
+  money.md (HelpIndex regenerated); motion catalogue. Tests: MoneyChatObiTest, MoneyChatCodecTest, AiMoneyChatTest,
+  MoneyChatObiFacadeTest, MoneyChatScreensTest.askObiAQuestionTheRulesCantAnswer (Roborazzi
+  cover-dark-ask-obi-ai), MekaCoreBridgeTests.testMoneyChatReachesSwift. No migration. Mac checked nightly. Next: the
+  mic on the bar (slice 3), then Trading.

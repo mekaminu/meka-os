@@ -4,7 +4,8 @@ import SwiftUI
 /// Money redesign, **Ask Obi** on the Mac (slice 1), like the Fold's MoneyChatUi: the bar under the tabs on every Money
 /// tab, and its popover **Obi · money**: the turns (his question on the right, Obi's answer on the left with its
 /// buttons), the Try questions from his own numbers, a field (Return asks) and the one foot line. Every word is the
-/// core's `MoneyChat`, answered on this Mac; only the question's string crosses into the core.
+/// core's `MoneyChat`, answered on this Mac; what its rules can't answer goes to Obi's AI through the core (slice 2), and
+/// "Obi's answer · …" sits under his words. Only the question's string crosses into the core.
 ///
 /// Motion: the popover scale-fades (system); each new turn fades and rises on the appear spring (fades only with Reduce
 /// Motion); buttons press like every control.
@@ -57,6 +58,10 @@ struct MoneyChatPanel: View {
                             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                                 HStack { Spacer(minLength: MekaSpace.xl); bubble(t.question, mine: true) }
                                 bubble(t.text, mine: false)
+                                if t.byObi {
+                                    Text(MoneyChatObi.shared.BY).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                        .padding(.leading, MekaSpace.xs)
+                                }
                                 if !t.actions.isEmpty {
                                     HStack(spacing: MekaSpace.xs) {
                                         ForEach(t.actions) { a in

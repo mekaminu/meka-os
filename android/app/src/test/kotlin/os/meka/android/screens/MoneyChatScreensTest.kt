@@ -11,7 +11,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -34,7 +38,18 @@ import os.meka.core.domain.MoneyChat
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.AskContext
+import os.meka.core.domain.MoneyChatObi
+import os.meka.core.domain.TalkTurn
+import os.meka.core.facade.AiApi
+import os.meka.core.facade.AskReply
 import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.InMemoryServerOpStore
+import os.meka.core.sync.PullRequest
+import os.meka.core.sync.PushRequest
+import os.meka.core.sync.SyncService
+import os.meka.core.sync.SyncTransport
+import os.meka.core.wire.MoneyChatCodec
 
 /**
  * Money redesign, Ask Obi (slice 1): the bar under the tabs on every Money tab opens Obi · money; a Try question is
@@ -63,11 +78,25 @@ class MoneyChatScreensTest {
             (1..12).joinToString("") { d -> "${d.toString().padStart(2, '0')}/10/2026,COSTA COFFEE,-4.80\n" }
     }
 
-    private fun open(): MekaCore {
+    /** Slice 2: a server whose AI answers the money chat (sync goes to an in-memory server). */
+    private class ObiServer : SyncTransport, AiApi {
+        private val sync = SyncService(InMemoryServerOpStore())
+        val asked = mutableListOf<MoneyChatCodec.Request>()
+        override suspend fun push(request: PushRequest) = sync.push(request)
+        override suspend fun pull(request: PullRequest) = sync.pull(request)
+        override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply =
+            AskReply.Unavailable("off", null)
+        override suspend fun moneyChat(request: MoneyChatCodec.Request): MoneyChatCodec.Response {
+            asked += request
+            return MoneyChatCodec.Response("answered", "Yes, a little: Costa came to £57.60 this month, your biggest everyday spend after Tesco at £64.90.")
+        }
+    }
+
+    private fun open(transport: SyncTransport? = null): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, ThemeChoice.DARK)
         val core = MekaCore(
-            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
             secureRandom = Random(43), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
         )
         context.useCoreForScreens(core)
@@ -151,5 +180,23 @@ class MoneyChatScreensTest {
         assertTrue(shows("money-chat-answer-0"), "Can I afford wasn't answered")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-ask-obi"))
         ScreenShots.assertNoBrokenWords(compose, "inner-dark-ask-obi")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun askObiAQuestionTheRulesCantAnswer() {
+        val server = ObiServer()
+        val core = open(server)
+        tap("money-ask-bar")
+        until(core) { shows("money-chat-try-0") }
+        val field = hasContentDescription(MoneyChat.FIELD) and hasSetTextAction()
+        compose.onAllNodes(field, useUnmergedTree = true)[0].performTextInput("Is coffee becoming a habit?")
+        settle()
+        compose.onAllNodes(field, useUnmergedTree = true)[0].performImeAction()
+        until(core) { shows("money-chat-by-0") }
+        assertTrue(server.asked.isNotEmpty(), "the question didn't go to Obi")
+        assertTrue(shows("money-chat-by-0"), "no \"${MoneyChatObi.BY}\" under Obi's answer")
+        assertTrue(showsText("Costa came to £57.60"), "Obi's answer isn't in the chat")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-ai"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-ai")
     }
 }

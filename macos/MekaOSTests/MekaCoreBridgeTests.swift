@@ -4137,5 +4137,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(goal.refused)
         XCTAssertEqual(MoneyChat.shared.monthsIn(q: "for two years")?.intValue, 24)
         XCTAssertEqual(MoneyChat.shared.goal(amountPence: 13_500, months: 9, thisMonth: 2026 * 12 + 9).title, "Save £1,215 by Jul 2027")
+        // Slice 2: Obi's answers are checked in the core; a turn says when he wrote it.
+        XCTAssertFalse(t.byObi)
+        XCTAssertNil(MoneyChatObi.shared.check(answer: "You spent £999 on coffee.", sent: ["Coffee £48"]))
+        XCTAssertEqual(MoneyChatObi.shared.check(answer: "Coffee was £48 this month.", sent: ["Coffee £48"]), "Coffee was £48 this month.")
     }
 }

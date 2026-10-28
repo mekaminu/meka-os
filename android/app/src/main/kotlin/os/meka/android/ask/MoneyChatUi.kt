@@ -45,12 +45,13 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.lists.Field
 import os.meka.core.domain.MoneyChat
 import os.meka.core.domain.MoneyChatAction
+import os.meka.core.domain.MoneyChatObi
 import os.meka.core.domain.MoneyChatTurn
 
 /**
  * Money redesign, **Ask Obi** (mockup `docs/design/money/`, v4, approved 2026-10-25), slice 1: the bar under the tabs on
  * every Money tab, and what its sheet holds: the turns (his question on the right, Obi's answer on the left with its
- * buttons), the "Try" questions from his own numbers, the field and the one foot line. Every word is the core's
+ * buttons, and "Obi's answer · …" under one his AI wrote, slice 2), the "Try" questions from his own numbers, the field and the one foot line. Every word is the core's
  * ([MoneyChat]); answers are worked out on the device.
  *
  * Motion: the sheet rises on the expand spring ([MoneyDetailSheet]); each new turn appears on the appear spring (a fade
@@ -96,6 +97,10 @@ internal fun MoneyChatContent(
                 Column(Modifier.fillMaxWidth().appear(rememberAppearance(0)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     Bubble(t.question, mine = true, Modifier.align(Alignment.End))
                     Bubble(t.text, mine = false, Modifier.testTag("money-chat-answer-$i"))
+                    if (t.byObi) {
+                        Text(MoneyChatObi.BY, style = MekaType.caption, color = Meka.colors.textTertiary,
+                            modifier = Modifier.padding(start = MekaSpace.xs).testTag("money-chat-by-$i"))
+                    }
                     if (t.actions.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                             t.actions.forEach { a -> ActionPill(a.label, "money-chat-act-${a.kind}-$i") { onAction(a) } }
