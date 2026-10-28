@@ -4456,3 +4456,27 @@ Money's layout rules (Meka 2026-10-26 22:18) and the approved mockup's Trading t
 - *Check on the Fold:* Money → Trading: the equity card with "Read-only" on the right, then each part in its own card;
   with more than five open positions, "See all" shows the rest; at the foot, "Read-only · not trading advice" and ⓘ
   says where the figures come from.
+
+### Money redesign, Trading slice 6: Obi's risk line and the Kestrel card (2026-10-28)
+
+The approved mockup's last two Trading parts, both apps, read-only:
+- **Obi's risk line** (card under equity, label OBI ON YOUR RISK): up to three short sentences, each only when its figures
+  are there: the share of what he holds that is trading (net worth's "You have", trading counted in pounds at the ECB
+  rate), the nearest position's leverage and how far the price can move before liquidation ("Your BTC long is 5×: a 17%
+  drop reaches its liquidation price"; a short says rise; lit at his near-liquidation alert's level), and what funding
+  cost or paid over the trades' 30 days (under $1 isn't said). No account read, or nothing to say: no card.
+- **The Kestrel card** (KESTREL, below the open positions): "1 trade waiting for your OK" (lit), the newest waiting
+  request's title, its first two lines and expiry, today's tally ("Today: 3 asked · 1 approved · 1 declined", else "Last
+  asked …"), and **Review in Needs you ›**: Money closes and Needs you opens on the request, where a yes still needs his
+  fingerprint (Touch ID on the Mac). Nothing on Trading approves. Hidden until a trade was asked in the last 30 days (so
+  it stays away until Kestrel's side is connected, Needs Meka #27). The foot's ⓘ says this once.
+- Core `TradingRisk`, `TradingKestrel` (TradingObi.kt); `TradingView.risk`; `MoneyWorthView.havePence/tradingPence`;
+  facade `tradingKestrel` (follows sync and the minute tick). Fold MoneyPane (TradingRiskBlock, TradingKestrelBlock,
+  `onNeedsYou` from AskRoute); Mac MoneySheet (tradingRisk, tradingKestrel), CoreModel.tradingKestrel and
+  reviewKestrelInNeedsYou. Help money.md (HelpIndex regenerated), motion catalogue. Tests: TradingObiTest,
+  ApprovalsFacadeTest.tradingsKestrelCardFollowsTheInbox, MoneyTradingLayoutScreensTest (Roborazzi money
+  cover-dark-trading-risk, cover-dark-trading-kestrel, inner-dark-trading-risk), MekaCoreBridgeTests. No server change,
+  no migration. Mac checked nightly. Next on Trading: the address field behind an Add sheet (rule (e)).
+- *Check on the Fold:* Money → Trading with a position open: under equity, Obi's line says how far it can move before
+  liquidation. When Kestrel asks for a trade: KESTREL says "1 trade waiting for your OK"; Review in Needs you opens it
+  there, and Approve asks for your fingerprint.

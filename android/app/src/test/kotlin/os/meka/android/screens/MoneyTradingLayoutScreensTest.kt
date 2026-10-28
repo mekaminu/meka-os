@@ -34,13 +34,23 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.ApprovalKind
+import os.meka.core.domain.ApprovalRules
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.MoneyRules
+import os.meka.core.domain.TradingCoinStats
+import os.meka.core.domain.TradingPosition
+import os.meka.core.domain.TradingWalletFields
 import os.meka.core.domain.MoneyTradingLayout
 import os.meka.core.domain.TradingTracker
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
+import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
 
 /**
  * Money's layout rules on Trading (Meka 2026-10-26 22:18; the approved mockup's Trading tab): the tracker as cards under
@@ -66,11 +76,33 @@ class MoneyTradingLayoutScreensTest {
         val ADDRESS = "0x" + "ab12".repeat(10)
     }
 
-    private fun open(): MekaCore {
+    /**
+     * What the server would have written: the address read (equity, a BTC long 5× about 17% from liquidation, funding
+     * paid over the month) and one request from Kestrel waiting in the approvals inbox. All invented.
+     */
+    private fun seedKestrelAndRisk(store: InMemoryReplicaStore) {
+        var k = 0
+        val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
+        val id = TradingTracker.walletId(ADDRESS)
+        server.commitLocal(EntityTypes.TRADING_WALLET, id, mapOf(
+            TradingWalletFields.ADDRESS to ADDRESS.fv(), TradingWalletFields.LABEL to "Main".fv(),
+            TradingWalletFields.STATE to TradingTracker.OK.fv(), TradingWalletFields.READ_AT to now.fv(),
+            TradingWalletFields.EQUITY to 650_000L.fv(), TradingWalletFields.UNREALISED to (-1_000L).fv(),
+            TradingWalletFields.POSITIONS to TradingTracker.encode(listOf(TradingPosition("BTC", "0.1", "60000", "60000", "49800", -1_000, 5))).fv(),
+            TradingWalletFields.TRADES to TradingTracker.encodeTrades(listOf(TradingCoinStats("BTC", 3, 2, 1, 4_200, 300, -3_820, 6_000, -1_800, 4_000, -1_800))).fv(),
+            TradingWalletFields.TRADES_AT to now.fv(),
+        ))
+        ApprovalRules.requestFields(ApprovalKind.TRADE, "Kestrel", "Go long ETH 0.8 at 3,420", listOf("About £2,140", "Stop 3,330"),
+            now - 5 * 60_000L, now + 40 * 60_000L)!!.let { server.commitLocal(EntityTypes.APPROVAL, ApprovalRules.entityId("Kestrel", "r1"), it) }
+    }
+
+    private fun open(seed: Boolean = false): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, ThemeChoice.DARK)
+        val store = InMemoryReplicaStore()
+        if (seed) seedKestrelAndRisk(store)
         val core = MekaCore(
-            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+            householdId = "hh", deviceId = "android", store = store, transport = null,
             secureRandom = Random(43), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
         )
         context.useCoreForScreens(core)
@@ -78,18 +110,22 @@ class MoneyTradingLayoutScreensTest {
             core.tick()
             core.openMoney()
             check(!core.importMoneyStatement("Current account", CURRENT).refused)
-            check(!core.tradingWalletAdd("Main $ADDRESS").refused)
+            if (!seed) check(!core.tradingWalletAdd("Main $ADDRESS").refused)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {
             MekaTheme {
-                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { MoneyPane(core, onClose = {}) }
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    MoneyPane(core, onClose = {}, onNeedsYou = { reviewed++ })
+                }
             }
         }
         settle()
         return core
     }
+
+    private var reviewed = 0
 
     private fun settle() {
         repeat((SETTLE_MS / 100).toInt()) {
@@ -150,5 +186,33 @@ class MoneyTradingLayoutScreensTest {
         pick(MoneyTab.TRADING)
         assertTrue(shows("money-trading-card"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-layout"))
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun obisRiskLineAndKestrelsCard() {
+        val core = open(seed = true)
+        pick(MoneyTab.TRADING)
+        val risk = core.moneyView.value.trading?.risk ?: fail("Trading has no risk line with a position read")
+        assertTrue(risk.line.contains("Your BTC long is 5×: a 17% drop reaches its liquidation price."), risk.line)
+        assertTrue(risk.line.contains("Funding has cost $38.20"), risk.line)
+        assertTrue(shows("money-trading-risk-card"), "Obi's risk line sits in its own card")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-risk"))
+        scrollTo("money-kestrel-card")
+        assertTrue(showsText("1 trade waiting for your OK"), "Kestrel's card says what's waiting")
+        assertTrue(showsText("Go long ETH 0.8 at 3,420"), "the waiting request's title shows")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-kestrel"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-kestrel")
+        // Review takes him to Needs you; nothing on Trading approves.
+        if (showsText(ApprovalRules.APPROVE)) fail("Trading must not offer Approve")
+        tap("money-kestrel-review")
+        assertTrue(reviewed == 1, "Review should open Needs you")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun obisRiskLineAndKestrelsCardOnTheOpenFold() {
+        open(seed = true)
+        pick(MoneyTab.TRADING)
+        assertTrue(shows("money-trading-risk-card"))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-risk"))
     }
 }

@@ -29,6 +29,8 @@ final class CoreModel {
     /// The approvals inbox (V1, slice 1): requests to trade, pay or share a document, first in Needs you. Approve asks
     /// for Touch ID every time; synced with the Fold.
     private(set) var approvals: [ApprovalCard] = []
+    /// Money → Trading's Kestrel card (approved mockup): what Kestrel asked through the inbox; nil until it has asked.
+    private(set) var tradingKestrel: TradingKestrelView?
     /// School rhythm (V1, slice 1): Theo's and Finn's days off, dates and weekly things (Ask → More → School), and the
     /// week-ahead cover questions Needs you shows above the requests. Synced with the Fold.
     private(set) var school: SchoolView?
@@ -578,6 +580,9 @@ final class CoreModel {
             for await a in core.approvals { self?.approvals = a }
         })
         observers.append(Task { [weak self] in
+            for await k in core.tradingKestrel { self?.tradingKestrel = k }
+        })
+        observers.append(Task { [weak self] in
             for await s in core.schoolView { self?.school = s }
         })
         observers.append(Task { [weak self] in
@@ -1087,6 +1092,13 @@ final class CoreModel {
 
     /// "Clear my inbox" said to Talk (Inbox autopilot, slice 7b): Needs you comes forward and the ten-minute inbox starts,
     /// as its Start does (nothing is archived or sent but by his own clicks there).
+    /// Trading's Kestrel card → Review: Money closes and Needs you comes forward with the request; approving stays
+    /// there, behind Touch ID (nothing on the Trading tab can trade).
+    func reviewKestrelInNeedsYou() {
+        showMoney = false
+        go(to: .needsYou, reduced: MotionSetting.reduced)
+    }
+
     func openInboxFromTalk() {
         go(to: .needsYou, reduced: MotionSetting.reduced)
         startMailMoment()

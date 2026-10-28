@@ -64,6 +64,8 @@ data class MoneyWorthView(
     val head: String, val total: String?, val totalNegative: Boolean, val splitLine: String?, val changeLine: String?,
     val rows: List<MoneyWorthRow>, val missingLine: String?, val points: List<MoneyWorthPoint>, val chartLine: String?,
     val empty: String?, val hint: String, val foot: String, val spoken: String,
+    /** What he holds ("You have", pence; trading included) and the trading part of it, for Obi's risk line on Trading. */
+    val havePence: Long = 0, val tradingPence: Long = 0,
 )
 
 /** An account's figures for the history: its id, current balance (signed) and day, and its statement lines (day, pence). */
@@ -255,7 +257,7 @@ object MoneyWorth {
         return MoneyWorthView(
             HEAD, if (counted) signed(total) else null, total < 0, split, change, rows, missingLine,
             if (points.size >= 2) points else emptyList(), chartLine, if (counted) null else EMPTY, HINT,
-            if (tradingPence != 0L) FOOT_TRADING else FOOT, spoken,
+            if (tradingPence != 0L) FOOT_TRADING else FOOT, spoken, have, tradingPence.coerceAtLeast(0),
         )
     }
 }

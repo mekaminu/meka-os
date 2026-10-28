@@ -2213,9 +2213,14 @@ struct MoneySheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             tradingEquity(t).moneyCard(palette)
+            if let r = t.risk { tradingRisk(r).moneyCard(palette) }
             if MoneyTradingLayout.shared.hasPositions(t: t) {
                 tradingHead(MoneyTradingLayout.shared.POSITIONS_HEAD)
                 tradingPositions(t).moneyCard(palette)
+            }
+            if let k = model.tradingKestrel {
+                tradingHead(k.head)
+                tradingKestrel(k).moneyCard(palette)
             }
             if let c = t.curve {
                 tradingHead(c.head)
@@ -2244,12 +2249,53 @@ struct MoneySheet: View {
             HStack(spacing: MekaSpace.xs) {
                 Text(MoneyTradingLayout.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 Spacer()
-                infoButton("foot-trading", title: MoneyTabs.shared.INFO_TITLE, lines: MoneyTradingLayout.shared.info(t: t))
+                infoButton("foot-trading", title: MoneyTabs.shared.INFO_TITLE,
+                           lines: MoneyTradingLayout.shared.info(t: t) + (model.tradingKestrel == nil ? [] : [TradingKestrel.shared.INFO]))
             }
             .padding(.top, MekaSpace.m)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
+    }
+
+    /// Obi's risk line (mockup): his small caps label over the line, lit in brass when a position is near liquidation.
+    private func tradingRisk(_ r: TradingRiskView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(r.line).font(MekaType.body).foregroundStyle(r.lit ? palette.accent : palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(r.spoken)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: r.line)
+    }
+
+    /// The Kestrel card: what's waiting for his OK, the newest request and when it expires, today's tally, and
+    /// Review in Needs you. Only reads: approving stays in Needs you, behind Touch ID.
+    private func tradingKestrel(_ k: TradingKestrelView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Group {
+                Text(k.status).font(MekaType.body).foregroundStyle(k.lit ? palette.accent : palette.textSecondary)
+                if let t = k.waitingTitle { Text(t).font(MekaType.body).foregroundStyle(palette.textPrimary) }
+                if let l = k.waitingLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                if let t = k.tally { Text(t).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(k.spoken)
+            if let r = k.review {
+                Button {
+                    MekaHaptics.tick()
+                    model.reviewKestrelInNeedsYou()
+                } label: {
+                    Text(r + " ›").font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                .buttonStyle(MekaPressStyle())
+                .padding(.top, MekaSpace.xs)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: k.status)
     }
 
     private func tradingHead(_ head: String) -> some View {

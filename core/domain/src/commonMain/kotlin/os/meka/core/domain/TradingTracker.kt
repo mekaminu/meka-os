@@ -208,6 +208,8 @@ data class TradingView(
     val review: TradingReviewView? = null,
     /** Slice 12: SHOW IN · Dollars · Pounds. */
     val currency: TradingCurrencyView? = null,
+    /** Obi's risk line under the equity card (mockup): what share of what he holds, the nearest liquidation, funding. */
+    val risk: TradingRiskView? = null,
 )
 
 /** What an address typed into Money reads as. */

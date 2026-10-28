@@ -1303,7 +1303,13 @@ class MekaCore(
                 own = own, ownRules = ownRules, needMerchants = needMerchants, ideaState = ideaState, checkWords = checkWords,
             )
             v.copy(
-                trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts),
+                trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts).let { t ->
+                    // Money's Trading tab (mockup): Obi's risk line under the equity card, from the same figures.
+                    t.copy(risk = os.meka.core.domain.TradingRisk.view(
+                        wallets, v.worth, os.meka.core.domain.TradingCcy.of(wallets, alerts.pounds),
+                        alerts.liquidation.share.takeIf { it > 0 } ?: os.meka.core.domain.TradingTracker.LIQ_NEAR,
+                    ))
+                },
                 // Slice 13c: the side hustle's money in his Business mail, checked against the statements.
                 business = v.business?.let { b -> b.copy(mail = moneyBusinessMail(businessFinds, accounts, txns, rules, bizAccounts, bizMerchants, today)) },
                 goals = if (v.locked || goalList == null) null
@@ -2033,6 +2039,14 @@ class MekaCore(
      * on the Mac) every time; declining a tap. Synced, so an answer on either device clears both.
      */
     val approvals: StateFlow<List<os.meka.core.domain.ApprovalCard>> = _approvals.asStateFlow()
+
+    private val _tradingKestrel = MutableStateFlow<os.meka.core.domain.TradingKestrelView?>(null)
+    /**
+     * Money → Trading's Kestrel card (approved mockup): what Kestrel has asked through the approvals inbox, the newest
+     * waiting request and today's tally; null until a trade was asked in the last 30 days. Only reads: Review takes
+     * him to the request in Needs you, where a yes still needs his fingerprint. Follows sync and the minute tick.
+     */
+    val tradingKestrel: StateFlow<os.meka.core.domain.TradingKestrelView?> = _tradingKestrel.asStateFlow()
 
     private val _triage = MutableStateFlow<List<os.meka.core.domain.TriageCard>>(emptyList())
     /**
@@ -13161,6 +13175,7 @@ class MekaCore(
         _afterWork.value = held.summary().without(afterWorkHiding)
         _requests.value = requestCards.open()
         _approvals.value = approvalStore.cards()
+        _tradingKestrel.value = os.meka.core.domain.TradingKestrel.view(approvalStore.all(), nowMs(), cal)
         // Taps feel instant, slice 12: School is kept while his work hours, the minute and every record type it reads
         // (school dates, About you's school website) are unchanged.
         val schoolHours = hoursOf(workState, todayDay)

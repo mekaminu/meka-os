@@ -136,6 +136,9 @@ import os.meka.core.domain.MoneyGoals
 import os.meka.core.domain.MoneyWorthOther
 import os.meka.core.domain.MoneyWorthOtherRow
 import os.meka.core.domain.MoneyTradingLayout
+import os.meka.core.domain.TradingKestrel
+import os.meka.core.domain.TradingKestrelView
+import os.meka.core.domain.TradingRiskView
 import os.meka.core.domain.TradingAlertsView
 import os.meka.core.domain.TradingCurveView
 import os.meka.core.domain.TradingExportRules
@@ -197,7 +200,11 @@ import os.meka.core.facade.MekaCore
 private const val MONEY_FEEL_WAIT_MS = 10_000L
 
 @Composable
-fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
+fun MoneyPane(
+    core: MekaCore, onClose: () -> Unit,
+    /** Trading's Kestrel card: Review takes him to the request in Needs you, where a yes needs his fingerprint. */
+    onNeedsYou: () -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -384,6 +391,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
     // Layout rules on Trading (2026-10-28): the tracker as cards under their labels, five positions then See all, and
     // one foot line whose ⓘ says where the figures come from (MoneyTradingLayout).
     var tradingAll by rememberSaveable { mutableStateOf(false) }
+    // Trading's Kestrel card (mockup): what Kestrel asked through the approvals inbox; null until it has asked.
+    val kestrel by core.tradingKestrel.collectAsState()
     val tradingItems: LazyListScope.(TradingView) -> Unit = { t ->
         val onAlert: (String, String) -> Unit = { kind, key ->
             scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
@@ -397,6 +406,12 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 TradingEquityBlock(t, onAlert)
             }
         }
+        // Obi's risk line (mockup): the share of what he holds, the nearest liquidation and funding, under equity.
+        t.risk?.let { r ->
+            item(key = "trading-risk") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(2)), tag = "money-trading-risk-card") { TradingRiskBlock(r) }
+            }
+        }
         if (MoneyTradingLayout.hasPositions(t)) {
             item(key = "trading-positions-head") {
                 Text(MoneyTradingLayout.POSITIONS_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -405,6 +420,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             item(key = "trading-positions") {
                 MoneyCard(Modifier.animateItem().appear(rememberAppearance(3)), tag = "money-positions-card") {
                     TradingPositionsBlock(t, tradingAll) { haptics.tick(); tradingAll = !tradingAll }
+                }
+            }
+        }
+        // The Kestrel card (mockup): what's waiting for his OK; Review opens it in Needs you (nothing here trades).
+        kestrel?.let { k ->
+            item(key = "trading-kestrel-head") {
+                Text(k.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading-kestrel") {
+                MoneyCard(Modifier.animateItem().appear(rememberAppearance(3)), tag = "money-kestrel-card") {
+                    TradingKestrelBlock(k) { haptics.tick(); onNeedsYou() }
                 }
             }
         }
@@ -469,7 +496,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         // Layout rule (c): Trading says "read-only · not trading advice" once, at its foot; the tracker's lines behind ⓘ.
         item(key = "trading-foot") {
             MoneyTabFoot(Modifier.animateItem(), text = MoneyTradingLayout.FOOT_SHORT) {
-                haptics.tick(); MoneyTabs.info(MoneyTab.TRADING, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
+                haptics.tick()
+                MoneyTabs.info(MoneyTab.TRADING, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, if (kestrel != null) it + TradingKestrel.INFO else it) }
             }
         }
     }
@@ -1423,6 +1451,42 @@ private fun TradingPositionsBlock(t: TradingView, all: Boolean, onMore: () -> Un
         Text(m, style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMore)
                 .minTouch().padding(vertical = MekaSpace.xs).testTag("money-positions-more"))
+    }
+}
+
+/** Obi's risk line as one card: his small caps label over the line, lit in brass when a position is near liquidation. */
+@Composable
+private fun TradingRiskBlock(r: TradingRiskView) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-risk")
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text(r.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "trading-risk-line") { l ->
+            Text(l, style = MekaType.body, color = c, modifier = Modifier.testTag("money-trading-risk"))
+        }
+    }
+}
+
+/**
+ * The Kestrel card: what's waiting for his OK (lit), the newest request and when it expires, today's tally, and
+ * Review in Needs you. It only reads: approving stays in Needs you, behind his fingerprint.
+ */
+@Composable
+private fun TradingKestrelBlock(k: TradingKestrelView, onReview: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (k.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "kestrel-status")
+    Column(Modifier.fillMaxWidth().animateContentSize(MekaMotion.expand(reduced)).semantics(mergeDescendants = true) { contentDescription = k.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text(k.status, style = MekaType.body, color = c, modifier = Modifier.testTag("money-kestrel-status"))
+        k.waitingTitle?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
+        k.waitingLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        k.tally?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+    }
+    k.review?.let { r ->
+        Text(r + " ›", style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onReview)
+                .minTouch().padding(vertical = MekaSpace.xs).testTag("money-kestrel-review"))
     }
 }
 

@@ -4154,4 +4154,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTradingLayout.shared.SHOWN, 5)
         XCTAssertNil(MoneyTabs.shared.info(tab: MoneyTab.trading, v: MoneyView.companion.LOCKED))
     }
+    /// Money → Trading's Obi risk line and Kestrel card reach the Mac: nothing to say without an account read.
+    func testTradingRiskAndKestrelOnTheMac() {
+        XCTAssertNil(TradingRisk.shared.view(wallets: [], worth: nil, ccy: TradingCcy.companion.USD, near: 0.1))
+        XCTAssertEqual(TradingRisk.shared.HEAD, "OBI ON YOUR RISK")
+        XCTAssertEqual(TradingKestrel.shared.REVIEW, "Review in Needs you")
+        XCTAssertTrue(TradingKestrel.shared.INFO.contains("Nothing on this tab can trade"))
+    }
 }
+

@@ -31,6 +31,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The approvals inbox through the facade (slice 1): a request the server writes, the fingerprint rule, both devices. */
@@ -165,5 +167,24 @@ class ApprovalsFacadeTest {
             assertTrue(approval.biometric, kind.name)
             assertTrue(kind.biometric, kind.name)
         }
+    }
+
+    /** Money → Trading's Kestrel card follows the inbox on both devices: what waits, then today's tally once answered. */
+    @Test
+    fun tradingsKestrelCardFollowsTheInbox() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertNull(fold.tradingKestrel.value)
+        val id = serverAsks("k-1", "Go long ETH 0.8 at 3,420", now + 30 * 60_000L)
+        fold.syncNow(); mac.syncNow()
+        val k = assertNotNull(fold.tradingKestrel.value)
+        assertEquals("KESTREL", k.head)
+        assertEquals("1 trade waiting for your OK", k.status)
+        assertEquals(id, k.approvalId)
+        assertEquals("Go long ETH 0.8 at 3,420", mac.tradingKestrel.value?.waitingTitle)
+        fold.declineApproval(id)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(os.meka.core.domain.TradingKestrel.NOTHING, mac.tradingKestrel.value?.status)
+        assertEquals("Today: 1 asked · 1 declined", mac.tradingKestrel.value?.tally)
     }
 }
