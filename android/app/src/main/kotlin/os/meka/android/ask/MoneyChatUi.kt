@@ -59,13 +59,12 @@ import os.meka.core.domain.MoneyChatTurn
 @Composable
 internal fun MoneyAskBar(modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l))
+        modifier.testTag("money-ask-bar").fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l))
             .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.l))
             .background(Meka.colors.background)
             .clickable(role = Role.Button, onClick = onOpen)
             .clearAndSetSemantics { contentDescription = MoneyChat.BAR_SPOKEN; role = Role.Button }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .testTag("money-ask-bar"),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

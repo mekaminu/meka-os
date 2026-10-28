@@ -152,6 +152,8 @@ class MoneyLayoutScreensTest {
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun spendingInCardsOnTheOpenFold() {
         open()
+        // Ask Obi's bar sits under the tabs, so the review card can start below the first screen.
+        scrollTo("money-review-card")
         assertTrue(shows("money-review-card"))
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-layout-spending-unfolded.png")
     }
