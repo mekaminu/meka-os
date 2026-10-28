@@ -25,7 +25,9 @@ import org.junit.Assert.fail
 import os.meka.android.calendar.AREA_DOT_TAG
 import os.meka.android.calendar.BUDGET_TAG
 import os.meka.android.calendar.NUDGE_TAG
-import os.meka.android.calendar.TIMELINE_TAB_TAG
+import os.meka.android.calendar.FOLDED_DAY_TAG
+import os.meka.android.calendar.FOLDED_MENU_TAG
+import os.meka.android.calendar.FOLDED_STRIP_TAG
 import os.meka.android.calendar.TIMELINE_TAG
 import os.meka.android.calendar.TIMELINE_TOGGLE_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
@@ -330,11 +332,13 @@ class BoardScreensTest {
     }
 
     /**
-     * Option B match slice 3: on the cover screen Obi's pill is its own line between the month and the week's buttons
-     * (the mockup at 390 wide), never under the whole header.
+     * The folded Week board, as the approved mockup (Meka 2026-10-27 07:44, `docs/design/week-board/folded.dc.html`): one
+     * header row ("October  Week 43", ‹ › ⋯ on the same row), the week's strip under it, the chosen day's line, Obi's
+     * line in a card, and the day's first card in the top third of the screen. No serif date, no budget pill, no goals
+     * or list chips on the page (they're in ⋯); "+ Add to Wed" at the foot.
      */
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun foldedObisNudgeSitsUnderTheMonthAboveTheButtons() {
+    fun foldedIsTheApprovedMockup() {
         ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
         val core = core()
         runBlocking {
@@ -344,22 +348,31 @@ class BoardScreensTest {
                 .forEach { core.addOnBoardSized(it, today, 60) }
         }
         show(core)
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-nudge"))
-        ScreenShots.assertSensible(compose, "cover-dark-nudge")
-        val pill = compose.onAllNodesWithTag(NUDGE_TAG).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
-            ?: throw AssertionError("no nudge on the cover screen")
-        val month = compose.onAllNodesWithTag(os.meka.android.calendar.MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes()
-            .single().boundsInRoot
-        val next = compose.onAllNodesWithContentDescription("Next week").fetchSemanticsNodes().map { it.boundsInRoot }
-            .minByOrNull { it.top } ?: throw AssertionError("no Next week button")
-        assertTrue("the pill sits under the month ($pill vs $month)", pill.top >= month.bottom - 1f)
-        assertTrue("the pill sits above the buttons ($pill vs $next)", pill.bottom <= next.top + 1f)
-        // (9) The folded day is the same column as unfolded: the serif date, the budget pill, the "+ add" at its foot.
-        if (compose.onAllNodesWithTag(os.meka.android.calendar.DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
-            fail("no serif date on the cover screen's day")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-folded"))
+        ScreenShots.assertSensible(compose, "cover-dark-folded")
+        fun one(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+            ?: throw AssertionError("not one $tag on the cover screen")
+        val month = one(MONTH_TAG)
+        val more = one(FOLDED_MENU_TAG)
+        assertTrue("⋯ sits on the month's row ($more vs $month)", more.top < month.bottom && more.bottom > month.top)
+        assertTrue("\"Week 43\" in words", compose.onAllNodesWithText("Week 43").fetchSemanticsNodes().isNotEmpty())
+        val strip = one(FOLDED_STRIP_TAG)
+        val day = one(FOLDED_DAY_TAG)
+        val pill = one(NUDGE_TAG)
+        assertTrue("the strip sits under the header", strip.top >= month.bottom - 1f)
+        assertTrue("the day's line sits under the strip", day.top >= strip.bottom - 1f)
+        assertTrue("Obi's line sits under the day's line", pill.top >= day.bottom - 1f)
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val first = cardBounds("Fix the gate latch")
+        assertTrue("the day's first card starts in the top third (${first.top} of ${root.height})", first.top < root.top + root.height / 3f)
+        if (compose.onAllNodesWithTag(os.meka.android.calendar.DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("a serif date on the cover screen's day")
         }
-        if (compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes().isEmpty()) fail("no budget pill on the cover screen's day")
-        if (compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no + add on the cover screen's day")
+        if (compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes().isNotEmpty()) fail("a budget box on the cover screen's day")
+        if (compose.onAllNodesWithText(os.meka.core.domain.WeekBoardRules.NO_DAY, substring = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("the No day yet chip is still on the page")
+        }
+        assertTrue("no + Add to Wed", compose.onAllNodesWithText("+ Add to Wed").fetchSemanticsNodes().isNotEmpty())
     }
 
     /**
@@ -461,21 +474,45 @@ class BoardScreensTest {
         assertTrue("no narrow pill says \"nothing yet\" ($values)", values.none { it.contains(os.meka.core.domain.BoardPlannerRules.NOTHING_YET) })
     }
 
-    /** Option B slice 5: folded, the Cards · Timeline tab shows the day in view as a timeline, and back. */
+    /** The folded mockup: ⋯ → Timeline shows the day in view by the hour; ⋯ → Cards brings its cards back. */
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun foldedTheTimelineTabShowsTheDayInView() {
+    fun foldedTheMenusTimelineShowsTheDayInView() {
         val (core, spoken) = timedCore()
         show(core)
-        assertTrue("no tabs on the cover screen", compose.onAllNodesWithTag(TIMELINE_TAB_TAG).fetchSemanticsNodes().isNotEmpty())
-        compose.onNodeWithText(os.meka.core.domain.BoardTimelineRules.TAB_TIMELINE).performClick()
+        compose.onNodeWithTag(FOLDED_MENU_TAG).performClick()
+        settle()
+        compose.onNodeWithText("Timeline").performClick()
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-timeline"))
         ScreenShots.assertSensible(compose, "cover-dark-timeline")
         assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
-        compose.onNodeWithText(os.meka.core.domain.BoardTimelineRules.TAB_CARDS).performClick()
+        compose.onNodeWithTag(FOLDED_MENU_TAG).performClick()
+        settle()
+        compose.onNodeWithText("Cards").performClick()
         settle()
         assertTrue("the timeline stayed", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
         assertTrue("the cards didn't come back", compose.onAllNodesWithText("Send the quote").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /** The folded mockup: ⋯ → Someday with nothing in it says so instead of opening an empty sheet. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun foldedAnEmptyListSaysSo() {
+        val (core, _) = timedCore()
+        val undo = EventUndo()
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, undo, onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        settle()
+        compose.onNodeWithTag(FOLDED_MENU_TAG).performClick()
+        settle()
+        compose.onNodeWithText(os.meka.core.domain.WeekBoardRules.SOMEDAY).performClick()
+        settle()
+        assertEquals(os.meka.core.domain.BoardFoldedRules.emptyList(os.meka.core.domain.WeekBoardRules.SOMEDAY), undo.offer?.message)
     }
 
     /**

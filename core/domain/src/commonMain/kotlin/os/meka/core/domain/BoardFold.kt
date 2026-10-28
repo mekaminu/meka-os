@@ -15,6 +15,8 @@ data class DayStripPill(
     val stacking: Boolean,
     /** Screen readers: "Thursday 22 October, 3 tasks, stacking up". */
     val accessibilityLabel: String,
+    /** The folded mockup's short bars under the number: one an open task, up to three ([BoardFoldedRules.dots]). */
+    val dots: Int = 0,
 ) {
     /** A held card can be dropped on it (today and later). */
     val canDrop: Boolean get() = !isPast
@@ -61,6 +63,7 @@ object BoardFoldRules {
         return DayStripPill(
             epochDay = day.epochDay, weekday = day.weekday, number = day.number, isToday = day.isToday, isPast = day.isPast,
             hasTasks = open > 0, stacking = day.pressure != null, accessibilityLabel = label,
+            dots = BoardFoldedRules.dots(day),
         )
     }
 

@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
 import os.meka.core.domain.BoardHandRules
 import os.meka.core.domain.BoardFoldRules
+import os.meka.core.domain.BoardFoldedRules
+import os.meka.core.domain.FoldedMenuKind
 import os.meka.core.domain.DayStripPill
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
@@ -143,7 +145,6 @@ import os.meka.core.domain.BoardGoal
 import os.meka.core.domain.BoardGoalRules
 import os.meka.core.domain.BoardTidyRules
 import os.meka.core.domain.BoardTray
-import os.meka.core.domain.TrayChip
 import os.meka.core.domain.GoalPickChoice
 import os.meka.core.domain.BoardSource
 import os.meka.core.domain.BoardWeek
@@ -216,6 +217,8 @@ import androidx.compose.ui.text.font.FontFamily
 @Composable
 fun WeekBoardView(
     core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> Unit, modifier: Modifier = Modifier, onPlanWeek: (() -> Unit)? = null,
+    /** Folded, the ⋯ menu's Agenda view and New event (the Calendar's own header steps aside on the cover screen). */
+    onAgenda: (() -> Unit)? = null, onAddEvent: (() -> Unit)? = null,
 ) {
     val coreBoard by core.weekBoard.collectAsState()
     // Taps feel instant, slice 13: Done, Not done and a drop show in the next frame over the core's board
@@ -271,6 +274,8 @@ fun WeekBoardView(
     // keep their width); folded, the Cards · Timeline tab for the day in view.
     var timelineOpen by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var foldTimeline by rememberSaveable { mutableStateOf(false) }
+    // The folded mockup: Goals moved into ⋯ and open as a sheet over the day.
+    var goalsOpen by remember { mutableStateOf(false) }
     LaunchedEffect(landed) { if (landed != null) { delay(LAND_MS); landed = null } }
     // Slice 2: the free-time drop targets only show while a card is held, so their places are forgotten when it lands.
     LaunchedEffect(drag == null) { if (drag == null) freeSlots.clear() }
@@ -535,7 +540,35 @@ fun WeekBoardView(
                     onBounds = { key, r -> columns[key] = r }, modifier = mod, inHeader = true,
                 )
             }
-            WeekHeader(
+            if (!wide) board.weeks.getOrNull(weekIndex)?.let { week ->
+                // The folded mockup: one header row, "October  Week 43" and ‹ › ⋯; the rest is in ⋯.
+                val head = remember(week.startEpochDay) { BoardFoldedRules.head(week.startEpochDay) }
+                val menu = BoardFoldedRules.menu(board, week, weekIndex, foldTimeline, onAddEvent != null, onPlanWeek != null)
+                FoldedHeader(
+                    head.month, head.week, head.spoken + ", " + week.title, weekIndex > 0, weekIndex < board.weeks.size - 1,
+                    onBack = { goWeek(weekIndex - 1) }, onForward = { goWeek(weekIndex + 1) },
+                    menu = menu,
+                    onMenu = { item ->
+                        when (item.kind) {
+                            FoldedMenuKind.AGENDA -> onAgenda?.invoke()
+                            FoldedMenuKind.TIMELINE -> foldTimeline = !foldTimeline
+                            FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
+                            FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
+                            FoldedMenuKind.REVIEW -> onReview()
+                            FoldedMenuKind.GOALS -> { openTray = null; goalsOpen = true }
+                            FoldedMenuKind.NO_DAY, FoldedMenuKind.SOMEDAY -> {
+                                // A list with nothing in it says so rather than opening an empty sheet.
+                                val tray = if (item.kind == FoldedMenuKind.NO_DAY) BoardTray.NO_DAY else BoardTray.SOMEDAY
+                                goalsOpen = false
+                                if (BoardTidyRules.trayChips(week, board).any { it.tray == tray && it.canOpen }) openTray = tray
+                                else undo.show(BoardFoldedRules.emptyList(item.label), null)
+                            }
+                        }
+                    },
+                    modifier = Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.xs, top = MekaSpace.xs).appear(rememberAppearance(2)),
+                )
+            }
+            if (wide) WeekHeader(
                 board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview,
                 timeline = if (wide) showTimeline else null,
                 onTimeline = { timelineOpen = !showTimeline },
@@ -551,39 +584,26 @@ fun WeekBoardView(
                 // row, folded on two); an open tray's cards unfolded in a lane under them.
                 val chips = BoardTidyRules.trayChips(week, board, openTray)
                 LaunchedEffect(chips.map { it.count }) { openTray = BoardTidyRules.stillOpen(openTray, chips) }
-                val onTrayTap: (TrayChip) -> Unit = { chip -> haptics.tick(); openTray = BoardTidyRules.toggle(openTray, chip) }
-                val goalsLane: @Composable (Modifier) -> Unit = { mod ->
-                    GoalsLane(
-                        week = week, core = core, undo = undo, hovered = if (drag != null) hovered else null,
-                        onBounds = { key, r -> columns[key] = r }, modifier = mod,
-                    )
-                }
-                val trayChips: @Composable (Modifier) -> Unit = { mod ->
-                    TrayChips(
-                        chips, openTray, hovered = if (drag != null) hovered else null,
-                        onBounds = { key, r -> columns[key] = r }, onGone = { key -> columns.remove(key) }, onTap = onTrayTap, modifier = mod,
-                    )
-                }
-                if (wide) {
-                    // Density pass slice 2: unfolded, the goals are in the header's row (headerGoals), not a row of their own.
-                } else {
-                    Column(Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        if (week.goals.isNotEmpty() || week.canAddGoal) goalsLane(Modifier)
-                        trayChips(Modifier)
-                    }
-                }
-                // By hand, slice 3: folded, the week's seven days as pills; tap one to go to it, drop a card on one.
+                // Density pass slice 2: unfolded, the goals are in the header's row (headerGoals), not a row of their own.
+                // The folded mockup: the goals and the two lists are in ⋯ (sheets over the day), so the day starts high.
                 if (!wide) {
-                    DayStrip(
+                    // The week's seven days as the mockup's pills; tap one to go to it, drop a held card on one.
+                    FoldedDayStrip(
                         pills = BoardFoldRules.strip(week), inView = focusDay, hovered = hoveredPill,
                         onBounds = { day, r -> pills[day] = r }, onGone = { day -> pills.remove(day) },
                         onTap = { day -> haptics.tick(); turnTo(board.days.indexOfFirst { it.epochDay == day }) },
-                        modifier = Modifier.padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xs).appear(rememberAppearance(3)),
+                        modifier = Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.xs).appear(rememberAppearance(3)),
                     )
-                    // Option B slice 5: the cover screen's Cards · Timeline tab, for the day in view.
-                    BoardFoldTabs(
-                        foldTimeline, Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).appear(rememberAppearance(3)),
-                    ) { foldTimeline = it }
+                    // The chosen day's line and plan bar, then Obi's one line in a card.
+                    (board.day(focusDay ?: board.todayEpochDay) ?: week.days.firstOrNull())?.let { shown ->
+                        FoldedDayLineView(shown, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.m).appear(rememberAppearance(3)))
+                    }
+                    if (nudge != null) {
+                        FoldedObiLine(nudge, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.m).appear(rememberAppearance(3))) { fix ->
+                            scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) }
+                        }
+                    }
+                    Spacer(Modifier.height(MekaSpace.xs))
                 }
             }
             // One day's column, folded or unfolded; a column that leaves (another week shown) is forgotten as a target.
@@ -598,6 +618,8 @@ fun WeekBoardView(
                         width = width,
                         // Option B match: no folded days; a past one is a full column, dimmed.
                         collapsed = wide && BoardTidyRules.collapsed(day, openedPast),
+                        // The folded mockup: the day's line above the strip says the date and plan, so no column head.
+                        showHead = wide,
                         onFold = null,
                         gapAt = gap,
                         gapHeight = drag?.let { d -> cards[d.card.id]?.let { with(density) { it.height.toDp() } } } ?: MekaSpace.xxl,
@@ -736,6 +758,17 @@ fun WeekBoardView(
             }
         }
 
+        // The folded mockup: ⋯ → Goals opens the week's goals in a sheet over the day (pick, + Goal, Off this week).
+        if (!wide && goalsOpen) {
+            board.weeks.getOrNull(weekIndex)?.let { week ->
+                TraySheet(title = "Goals · ${week.title}", hidden = false, onClose = { haptics.tick(); goalsOpen = false }) {
+                    GoalsLane(
+                        week = week, core = core, undo = undo, hovered = null,
+                        onBounds = { _, _ -> }, modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
         // By hand, slice 4: folded, an open tray is a sheet over the day; it steps aside while one of its cards is held
         // and closes once that card is let go.
         val sheetTray = openTray
@@ -810,70 +843,6 @@ private class DaySnapFling(
         if (settled >= 0 && target != settled) onNewDay()
         settled = target
         return 0f
-    }
-}
-
-/**
- * By hand, slice 3: the folded Board's strip of the week's seven days ("Mon 19" … "Sun 25"): the day in view lit, today
- * in gold, a dot under a day with open tasks (amber when it is stacking up). Tap one to go to it; while a card is held
- * a pill under it swells (1.15, the approve spring) and glows gold, and letting go there moves the card to that day.
- * Reduced motion: no swell, the colours cross-fade.
- */
-@Composable
-private fun DayStrip(
-    pills: List<DayStripPill>, inView: Long?, hovered: Long?, onBounds: (Long, Rect) -> Unit, onGone: (Long) -> Unit,
-    onTap: (Long) -> Unit, modifier: Modifier,
-) {
-    val reduced = Meka.reducedMotion
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        pills.forEach { p ->
-            key(p.epochDay) {
-                androidx.compose.runtime.DisposableEffect(p.epochDay) { onDispose { onGone(p.epochDay) } }
-                val lit = p.epochDay == inView
-                val over = hovered == p.epochDay && p.canDrop
-                val swell by animateFloatAsState(if (over && !reduced) BoardFoldRules.PILL_SWELL else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "pill-swell")
-                val fill by animateColorAsState(
-                    when {
-                        over -> Meka.colors.accent.copy(alpha = 0.22f)
-                        lit -> Meka.colors.surfaceRaised
-                        else -> Meka.colors.surface
-                    },
-                    MekaMotion.appear(reduced), label = "pill-fill",
-                )
-                val edge by animateColorAsState(
-                    if (over || (lit && p.isToday)) Meka.colors.accent else if (lit) Meka.colors.hairline else Meka.colors.hairline.copy(alpha = 0f),
-                    MekaMotion.appear(reduced), label = "pill-edge",
-                )
-                val ink = when {
-                    p.isToday -> Meka.colors.accent
-                    p.isPast -> Meka.colors.textTertiary
-                    else -> Meka.colors.textPrimary
-                }
-                Column(
-                    Modifier.weight(1f).zIndex(if (over) 1f else 0f)
-                        .graphicsLayer { scaleX = swell; scaleY = swell }
-                        .onGloballyPositioned { if (p.canDrop) onBounds(p.epochDay, it.boundsInRoot()) }
-                        .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
-                        .border(1.dp, edge, RoundedCornerShape(MekaRadius.m))
-                        .clickable(role = Role.Tab) { onTap(p.epochDay) }
-                        .semantics { contentDescription = p.accessibilityLabel; selected = lit }
-                        .padding(vertical = MekaSpace.xs),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(p.weekday, style = MekaType.micro, color = if (p.isToday) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
-                    Text(p.number, style = MekaType.metaStrong, color = ink, maxLines = 1)
-                    Box(
-                        Modifier.padding(top = MekaSpace.xxs).size(4.dp).clip(CircleShape).background(
-                            when {
-                                p.stacking -> Meka.colors.calendar3
-                                p.hasTasks -> Meka.colors.textSecondary
-                                else -> Meka.colors.textSecondary.copy(alpha = 0f)
-                            },
-                        ),
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -1142,6 +1111,8 @@ private fun DayColumn(
     collapsed: Boolean,
     /** Opens a folded past day, or folds an opened one again (unfolded only); null elsewhere. */
     onFold: (() -> Unit)?,
+    /** The column's own date, done bar and budget pill (folded, the day's line above the strip says them). */
+    showHead: Boolean = true,
     /** By hand: where the gold gap opens for a held card (an index into the day's open cards), and its height. */
     gapAt: Int?,
     gapHeight: androidx.compose.ui.unit.Dp,
@@ -1218,7 +1189,7 @@ private fun DayColumn(
         // Option B match (Meka 2026-10-24 14:39): the mockup's header, "27 Oct" in serif with "Mon" on the right (today
         // in gold), the thin done bar under it without words, then the budget pill, always "planned · 4h 05 / 3h".
         val head = BoardMatchRules.dayHead(day)
-        Column(
+        if (showHead) Column(
             Modifier.fillMaxWidth().padding(bottom = MekaSpace.xxs)
                 .clearAndSetSemantics { contentDescription = day.accessibilityLabel },
         ) {
@@ -1234,8 +1205,9 @@ private fun DayColumn(
             }
             BoardLookRules.progress(day)?.let { DoneBar(it) }
         }
-        day.capacity?.let { BudgetPill(it, day.isToday) }
-        day.pressure?.let { PressureNote(it, onEase) }
+        if (showHead) day.capacity?.let { BudgetPill(it, day.isToday) }
+        // Folded, the day's line turns amber ("5h · 1h over") and Obi's line above carries the fix.
+        if (showHead) day.pressure?.let { PressureNote(it, onEase) }
         // The day's events are cards in the column too, a blue time chip and their length (the mockup's stand-up).
         val events = BoardMatchRules.eventCards(day)
         if (events.isNotEmpty()) {
@@ -1278,7 +1250,7 @@ private fun DayColumn(
             }
         }
         // Option B match: "+ add" at the foot of every day from today, a quiet dashed button; the field opens there.
-        if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd)
+        if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd, if (showHead) BoardMatchRules.ADD else BoardFoldedRules.addLabel(day))
         // Match slice 4: a past day with nothing on it says so quietly under its date, never a bare column.
         BoardMatchRules.pastEmpty(day)?.let {
             Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.testTag(PAST_EMPTY_TAG))
@@ -1766,6 +1738,8 @@ private fun AddAtTop(
     onClose: () -> Unit,
     onBounds: (Rect) -> Unit,
     onAdd: (String, Int?) -> Unit,
+    /** "+ add", or the folded mockup's "+ Add to Sun". */
+    label: String = BoardMatchRules.ADD,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -1801,7 +1775,12 @@ private fun AddAtTop(
                     .semantics { contentDescription = BoardHandRules.addLabel(day.title) }
                     .padding(horizontal = MekaSpace.m),
                 contentAlignment = Alignment.Center,
-            ) { Text(BoardMatchRules.ADD, style = if (dense) BoardType.addDense else MekaType.caption, color = Meka.colors.textTertiary) }
+            ) {
+                Text(
+                    label, style = if (dense) BoardType.addDense else MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = if (label == BoardMatchRules.ADD) Modifier else Modifier.fillMaxWidth(),
+                )
+            }
         } else {
             val focus = remember { FocusRequester() }
             val keyboard = LocalSoftwareKeyboardController.current
@@ -2059,57 +2038,6 @@ fun CalendarViewSwitch(board: Boolean, modifier: Modifier = Modifier, onChange: 
                     .clickable(role = Role.Tab) { if (!lit) { haptics.tick(); onChange(isBoard) } }
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
-        }
-    }
-}
-
-/**
- * By hand, slice 4: "No day yet · 3" and "Someday · 12" as two small chips on one row (each a drop target that glows
- * gold and swells while a card is over it). Tap one with cards to open it, one at a time ([BoardTidyRules.toggle]);
- * an empty one never opens into an empty box. Removed targets are forgotten so a closed tray is never dropped on.
- */
-@Composable
-private fun TrayChips(
-    chips: List<TrayChip>,
-    open: BoardTray?,
-    hovered: Long?,
-    onBounds: (Long, Rect) -> Unit,
-    onGone: (Long) -> Unit,
-    onTap: (TrayChip) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val reduced = Meka.reducedMotion
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-        chips.forEach { chip ->
-            val key = if (chip.tray == BoardTray.NO_DAY) LANE else TRAY
-            val lit = hovered == key
-            val isOpen = open == chip.tray
-            val glow by animateColorAsState(
-                when { lit || isOpen -> Meka.colors.accent; else -> Meka.colors.hairline }, MekaMotion.appear(reduced), label = "tray-glow-$key",
-            )
-            val swell by animateFloatAsState(if (lit && !reduced) BoardFoldRules.PILL_SWELL else 1f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "tray-swell-$key")
-            androidx.compose.runtime.DisposableEffect(key) { onDispose { onGone(key) } }
-            Row(
-                Modifier.heightIn(min = 32.dp)
-                    .onGloballyPositioned { onBounds(key, it.boundsInRoot()) }
-                    .graphicsLayer { scaleX = swell; scaleY = swell }
-                    .clip(RoundedCornerShape(MekaRadius.pill))
-                    .background(if (lit || isOpen) Meka.colors.surfaceRaised else Meka.colors.surface)
-                    .border(1.dp, glow, RoundedCornerShape(MekaRadius.pill))
-                    .clickable(enabled = chip.canOpen || isOpen, role = Role.Button) { onTap(chip) }
-                    .clearAndSetSemantics { contentDescription = chip.accessibilityLabel }
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    chip.label, style = MekaType.caption, maxLines = 1,
-                    color = when { isOpen -> Meka.colors.accent; chip.canOpen -> Meka.colors.textPrimary; else -> Meka.colors.textTertiary },
-                )
-                if (chip.canOpen) {
-                    Spacer(Modifier.width(MekaSpace.xxs))
-                    Text(if (isOpen) "▴" else "▾", style = MekaType.micro, color = Meka.colors.textTertiary)
-                }
-            }
         }
     }
 }
