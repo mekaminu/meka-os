@@ -3101,8 +3101,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(restored.boolValue)
         XCTAssertEqual(core.studyView.value.course(id: id)?.deleted.count, 0)
         // Drag to reorder: a lesson to the top of its module, then the module to the top of the course; an Int32 crosses.
-        let back = try XCTUnwrap(core.studyView.value.course(id: id)?.modules.last?.lessons.last).id
-        let placed = try await core.placeStudyLesson(id: back, index: 0)
+        let bottom = try XCTUnwrap(core.studyView.value.course(id: id)?.modules.last?.lessons.last).id
+        let placed = try await core.placeStudyLesson(id: bottom, index: 0)
         XCTAssertTrue(placed.boolValue)
         XCTAssertEqual(core.studyView.value.course(id: id)?.modules.last?.lessons.map(\.title), ["Keyboard shortcuts", "Layout"])
         let first = try await core.placeStudyModule(courseId: id, module: "Dashboards", index: 0)
