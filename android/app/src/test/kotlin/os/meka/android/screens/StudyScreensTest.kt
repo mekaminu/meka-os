@@ -363,11 +363,19 @@ class StudyScreensTest {
     @Config(qualifiers = ScreenShots.COVER)
     fun thisWeeksSessionStartsAndIsDoneInTheNextFrame() {
         // Study plan, slice 2b part 2: THIS WEEK with Start and Done (mockup).
-        val (core, id) = filled(ThemeChoice.DARK)
-        runBlocking {
+        // A course with nothing ticked yet (lessons ticked today already count as today's session).
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        val id = runBlocking {
+            core.tick()
+            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            check(!core.addStudyLessons(id, outline).refused)
             core.setStudySession(id, 60)
             core.setStudySlot(id, "eve", true) // Mon and Wed evenings
             core.tick()
+            id
         }
         val today = core.todayEpochDay()
         show(core, id)
@@ -376,7 +384,7 @@ class StudyScreensTest {
         ScreenShots.assertSensible(compose, "cover-dark-this-week")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-this-week")
         ScreenShots.assertShows(compose, "cover-dark-this-week", "THIS WEEK")
-        ScreenShots.assertShows(compose, "cover-dark-this-week", "Pivot tables · 1 h")
+        ScreenShots.assertShows(compose, "cover-dark-this-week", "Welcome and setup · 30 min")
         compose.onNodeWithTag("study-week-button-$today").performClick()
         compose.mainClock.advanceTimeBy(16L)
         compose.onNode(hasContentDescription("Done, tick 1 lessons"), useUnmergedTree = true).assertExists()
@@ -387,7 +395,7 @@ class StudyScreensTest {
         compose.mainClock.advanceTimeBy(16L)
         compose.onNode(hasContentDescription("Session done"), useUnmergedTree = true).assertExists()
         compose.mainClock.autoAdvance = true
-        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.done == 4 }
-        compose.onNodeWithText("Ticked \u201CPivot tables\u201D").assertExists()
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.done == 1 }
+        compose.onNodeWithText("Ticked \u201CWelcome and setup\u201D").assertExists()
     }
 }

@@ -747,7 +747,7 @@ private fun WeekButton(state: StudyWeekState, row: StudyWeekRow, onClick: () -> 
     Box(
         Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
             .then(if (state == StudyWeekState.DONE) Modifier else Modifier.clickable(role = Role.Button, onClick = onClick))
-            .semantics { contentDescription = if (state == StudyWeekState.START) "Start ${row.dayLabel}'s session" else if (state == StudyWeekState.ON) "Done, tick ${row.lessonIds.size} lessons" else "Session done" }
+            .semantics(mergeDescendants = true) { contentDescription = if (state == StudyWeekState.START) "Start ${row.dayLabel}'s session" else if (state == StudyWeekState.ON) "Done, tick ${row.lessonIds.size} lessons" else "Session done" }
             .testTag("study-week-button-${row.day}"),
         contentAlignment = Alignment.Center,
     ) {
