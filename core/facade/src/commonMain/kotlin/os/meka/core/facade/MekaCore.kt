@@ -5472,6 +5472,21 @@ class MekaCore(
     /** Slice 2b rest: "Nudge me 10 minutes before" on a course (synced); false when it already was. */
     suspend fun setStudyNudge(courseId: String, on: Boolean): Boolean = onCore { study.setNudge(courseId, on) }
 
+    /**
+     * Slice 2b rest: Looks good on Today's Sunday check-in ([os.meka.core.domain.StudyCheckin.key]): each course on it
+     * keeps that Sunday as seen, so it goes on every device; false when nothing was showing for that key.
+     */
+    suspend fun seeStudyCheckin(key: String): Boolean = onCore {
+        val sunday = os.meka.core.domain.StudyCheckinRules.dayOf(key) ?: return@onCore false
+        val shown = _today.value.studyCheckin?.takeIf { it.key == key } ?: return@onCore false
+        val changed = study.seeCheckin(sunday, shown.rows.map { it.courseId })
+        if (changed) refresh()
+        changed
+    }
+
+    /** Slice 2b rest: "Sunday check-in" on a course (synced); false when it already was. */
+    suspend fun setStudyCheckin(courseId: String, on: Boolean): Boolean = onCore { study.setCheckin(courseId, on) }
+
     /** Picks or drops a time he can study (a WHEN YOU CAN STUDY chip's key). */
     suspend fun setStudySlot(courseId: String, key: String, on: Boolean): Boolean = onCore { study.setSlot(courseId, key, on) }
 
@@ -12888,6 +12903,17 @@ class MekaCore(
             }
             os.meka.core.domain.StudyNudgeRules.nudge(studyCoursesNow, week, todayDay, cal.minuteOfDay(nowMs()), studyAwayNow)
         }
+        // Study plan, slice 2b rest: Sunday 17:00 to Monday 12:00, the check-in card (how the week went, next week's sessions).
+        val studyCheckinNow = viewMemo.keep(
+            "Study check-in", listOf(studyCoursesNow, studyLessonsNow, studySessions.first, todayDay, minuteNow(), timeZone()),
+        ) {
+            if (os.meka.core.domain.StudyCheckinRules.sundayFor(todayDay, cal.minuteOfDay(nowMs())) == null) null
+            else os.meka.core.domain.StudyCheckinRules.checkin(
+                studyCoursesNow, studyLessonsNow, studySessions.first,
+                studyCoursesNow.associate { c -> c.id to os.meka.core.domain.StudyRules.view(c, studyLessonsNow, todayDay).plan },
+                todayDay, cal.minuteOfDay(nowMs()), studyDoneDay,
+            )
+        }
         val studyTomorrow = os.meka.core.domain.StudyRules.tomorrowLine(
             os.meka.core.domain.StudyRules.onDay(studyLessonsNow, studyCoursesNow, todayDay + 1, rollOver = false, doneDay = studyDoneDay),
         )
@@ -12944,7 +12970,7 @@ class MekaCore(
             listOf(
                 all, dayEvents, marks.clubChildren, sessionsNow, fastingNow, goalsNow, listsNow, shutdownNow, forecast, workForecast,
                 office, rideNow, weekAheadNow, schoolToday, binItems, occasionItems, tripItems, lifeAdminNow, lifeAdminViewNow,
-                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, studyToday, studyNudgeNow, minuteNow(), timeZone(),
+                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, studyToday, studyNudgeNow, studyCheckinNow, minuteNow(), timeZone(),
             ),
         ) {
             val projected = project(all, dayEvents, marks.clubChildren)
@@ -12978,6 +13004,7 @@ class MekaCore(
                 trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
                 study = studyToday,
                 studyNudge = studyNudgeNow,
+                studyCheckin = studyCheckinNow,
                 // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
                 // Deliveries completeness: lit with "you're at the office" on an office day, and yesterday's that didn't show.
                 parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay, officeDay = office != null),

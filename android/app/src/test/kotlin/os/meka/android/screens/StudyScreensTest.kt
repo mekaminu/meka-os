@@ -425,4 +425,31 @@ class StudyScreensTest {
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)?.nudge == false }
     }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun theSundayCheckInToggleUnderThisWeekAnswersInTheNextFrame() {
+        // Study plan, slice 2b rest: "Sunday check-in · How the week went, and next week's sessions" (mockup's toggle).
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        val id = runBlocking {
+            core.tick()
+            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            check(!core.addStudyLessons(id, outline).refused)
+            core.setStudySession(id, 60)
+            core.setStudySlot(id, "eve", true)
+            core.tick()
+            id
+        }
+        show(core, id)
+        scrollTo(hasTestTag("study-checkin"))
+        ScreenShots.assertShows(compose, "cover-dark-checkin", "Sunday check-in")
+        compose.onNodeWithTag("study-checkin").performClick()
+        compose.mainClock.advanceTimeBy(16L)
+        compose.onNodeWithText("Off", useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)?.checkin == false }
+    }
 }

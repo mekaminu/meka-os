@@ -234,6 +234,10 @@ private fun TodayRouteContent(
     var showQueue by rememberSaveable { mutableStateOf(false) }
     /** The Fasting screen over Today, from the live Fasting card (Fasting rebuild slice 4). */
     var showFasting by rememberSaveable { mutableStateOf(false) }
+    /** Study plan, slice 2b rest: a course over Today, from the Sunday check-in's Change plan. */
+    var studyOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    var studyShown by remember { mutableStateOf<String?>(null) }
+    if (studyOpen != null) studyShown = studyOpen
     var showWeekAhead by rememberSaveable { mutableStateOf(false) }
     // The Tomorrow sheet: from the Tomorrow peek (17:00 on) or the date under the greeting (any time).
     var showTomorrow by rememberSaveable { mutableStateOf(false) }
@@ -412,6 +416,7 @@ private fun TodayRouteContent(
                         openDayRing = { showDayRing = true },
                         openQueue = { showQueue = true },
                         openFasting = { showFasting = true },
+                        openStudy = { id -> studyOpen = id },
                         openWeekAhead = { showWeekAhead = true },
                         openTomorrow = { showTomorrow = true },
                         openActivity = { showActivity = true },
@@ -489,6 +494,9 @@ private fun TodayRouteContent(
                 }
             }
             BackHandler(enabled = showFasting) { showFasting = false }
+            MekaPane(visible = studyOpen != null) {
+                studyShown?.let { id -> os.meka.android.goals.StudyPane(core, id, onClose = { studyOpen = null }, onRemoved = { studyOpen = null }) }
+            }
             MekaPane(visible = showFasting) { os.meka.android.goals.FastingPane(core, onClose = { showFasting = false }, backLabel = "‹ Today") }
             MekaPane(visible = showQueue) { TrainQueuePane(core, onClose = { showQueue = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showWeekAhead) { WeekAheadPane(core, onClose = { showWeekAhead = false }, closeLabel = "‹ Today") }
@@ -771,6 +779,8 @@ private fun TodayPane(
     openTomorrow: () -> Unit = {},
     /** Tapping the live Fasting card opens the Fasting screen. */
     openFasting: () -> Unit = {},
+    /** Study plan, slice 2b rest: Change plan on the Sunday check-in opens the course. */
+    openStudy: (String) -> Unit = {},
     /** Tapping "Your week ahead · …" (Sunday from 18:00) opens the week ahead. */
     openWeekAhead: () -> Unit = {},
     openActivity: () -> Unit = {},
@@ -824,6 +834,10 @@ private fun TodayPane(
     val nudgeStarted = remember { mutableStateListOf<String>() }
     val nudgeGone = remember { mutableStateListOf<String>() }
     var nudgeLast by remember { mutableStateOf<os.meka.core.domain.StudyNudge?>(null) }
+    // Slice 2b rest: the Sunday check-in, folded away in the same frame as Looks good.
+    val checkinGone = remember { mutableStateListOf<String>() }
+    var checkinLast by remember { mutableStateOf<os.meka.core.domain.StudyCheckin?>(null) }
+    LaunchedEffect(today.studyCheckin) { today.studyCheckin?.let { checkinLast = it } }
     LaunchedEffect(today.studyNudge) {
         today.studyNudge?.let { nudgeLast = it }
         // Once the core says it's on, the tap's no longer needed.
@@ -1108,6 +1122,20 @@ private fun TodayPane(
                                 nudgeGone.add(n.key)
                                 if (core != null) carryScope.launch { runCatching { core.putAwayStudyNudge(n.key) } }
                             },
+                        )
+                    }
+                    // Study plan, slice 2b rest: Sunday 17:00 to Monday 12:00, how the study week went and next week's
+                    // sessions; Looks good folds it away (both devices), Change plan opens the course.
+                    val checkin = today.studyCheckin?.takeIf { it.key !in checkinGone }
+                    AnimatedVisibility(checkin != null, enter = studyUnfold(), exit = studyFold()) {
+                        val c = checkin ?: checkinLast
+                        if (c != null) StudyCheckinCard(
+                            c, modifier = Modifier.padding(top = MekaSpace.xs),
+                            onLooksGood = {
+                                checkinGone.add(c.key)
+                                if (core != null) carryScope.launch { if (runCatching { core.seeStudyCheckin(c.key) }.getOrNull() == null) checkinGone.remove(c.key) }
+                            },
+                            onChange = { id -> openStudy(id) },
                         )
                     }
                     // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
@@ -1858,6 +1886,62 @@ private fun StudyNudgeCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(os.meka.core.domain.StudyNudgeRules.NOT_NOW, style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs))
+            }
+        }
+    }
+}
+
+/**
+ * Study plan, slice 2b rest: the Sunday check-in ("Sunday check-in · How the week went, and next week's sessions"): the
+ * headline in the accent over the week's dates, then per course its name, what was ticked, on track (green) or behind (accent, as the course's plan card) and
+ * next week's sessions; Obi's one line; Looks good and Change plan. Rows come in with the card's unfold.
+ */
+@Composable
+private fun StudyCheckinCard(
+    c: os.meka.core.domain.StudyCheckin, modifier: Modifier, onLooksGood: () -> Unit, onChange: (String) -> Unit,
+) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("today-study-checkin"),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }) {
+            Text(c.headline, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(c.sub, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1)
+        }
+        c.rows.forEach { r ->
+            Column(
+                Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button) { onChange(r.courseId) }
+                    .semantics(mergeDescendants = true) { contentDescription = r.spoken },
+            ) {
+                Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(r.week, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                r.status?.let { st ->
+                    Text(st, style = MekaType.caption, color = if (r.behind) Meka.colors.accent else Meka.colors.success,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text(r.next, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text(c.obi, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onLooksGood)
+                    .testTag("today-study-checkin-ok"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(os.meka.core.domain.StudyCheckinRules.LOOKS_GOOD, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+            }
+            Box(
+                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { c.rows.firstOrNull()?.let { onChange(it.courseId) } }
+                    .testTag("today-study-checkin-change"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(os.meka.core.domain.StudyCheckinRules.CHANGE, style = MekaType.caption, color = Meka.colors.textSecondary,
                     modifier = Modifier.padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs))
             }
         }

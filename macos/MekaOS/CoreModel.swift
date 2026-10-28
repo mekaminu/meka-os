@@ -6324,6 +6324,27 @@ final class CoreModel {
         }
     }
 
+    // MARK: Study plan, slice 2b rest: the Sunday check-in. Only Strings and Bools cross.
+
+    /// Looks good on Today's Sunday check-in: put away on every device (each course keeps that Sunday as seen).
+    func seeStudyCheckin(_ key: String) async -> Bool {
+        guard let core else { return false }
+        MekaHaptics.light()
+        do { return try await core.seeStudyCheckin(key: key).boolValue } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// "Sunday check-in" on a course (synced).
+    func setStudyCheckin(_ courseId: String, on: Bool) async -> Bool {
+        guard let core else { return false }
+        do { _ = try await core.setStudyCheckin(courseId: courseId, on: on); return true } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: Study fixes (Meka 2026-10-26 23:21): a right-click or long press opens a sheet, never deletes. Only Strings cross.
 
     /// "+ Add lesson" in a module: one lesson, or several lines, into that module.

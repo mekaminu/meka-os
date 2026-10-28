@@ -1,7 +1,7 @@
 ---
 id: goals
 title: Goals and habits
-keywords: goals, goals and habits, study, study plan, study this week, study session, study nudge, nudge before a session, study reminder, start a session, session done, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
+keywords: goals, goals and habits, study, study plan, study this week, study session, study nudge, nudge before a session, study reminder, sunday check-in, study check-in, study week, start a session, session done, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
 data: yes
 fold: GOALS
 fold_where: Ask → Life → Goals and habits
@@ -29,4 +29,5 @@ tip: Planned lessons also show under their day on the Week board ("Study · 2 le
 tip: Lessons you haven't planned are suggested for your next study sessions, as many as each holds: your calendar's "Study…" events, or, with none, the times you picked in YOUR PLAN. They show as "Tomorrow · suggested" on the lesson, on Today, in Tomorrow and on the Week board, and one not done moves on by itself.
 tip: In a course, THIS WEEK lists your study sessions from today for a week: the day and time, the lessons in each and where (a train morning, your calendar's event). Tap Start when you begin and Done when you finish: its lessons are ticked at once, with Undo. Done on a later day's session counts the lessons as done today, and that session takes the next ones.
 tip: Ten minutes before a study session with lessons in it, Today shows a quiet card from Obi ("Study in 10 min · your course", the time, lessons and where), never spoken: Start when you begin, Done when you finish (its lessons ticked, with Undo), or Not now to put it away. Turn it off under THIS WEEK with "Nudge me 10 minutes before".
+tip: On Sunday from 5pm (until Monday midday), Today shows your study week: for each course, what you ticked this week, whether you're on track, and next week's sessions with the lessons in them. Looks good puts it away on the Fold and the Mac; Change plan opens the course. Turn it off under THIS WEEK with "Sunday check-in".
 tip: Plan a suggested lesson by hand (Plan for…) and it keeps that day; suggestions never move a lesson you planned.

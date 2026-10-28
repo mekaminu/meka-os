@@ -3135,6 +3135,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.studyView.value.course(id: id)?.nudge, false)
         let away = try await core.putAwayStudyNudge(key: row.key)
         XCTAssertTrue(away.boolValue)
+
+        // Slice 2b rest: the Sunday check-in (optional; Sunday evening to Monday noon only) and its toggle cross; Looks
+        // good takes a String and says false for a key that isn't showing.
+        _ = core.today.value.studyCheckin?.rows.first?.next
+        XCTAssertEqual(StudyCheckinRules.shared.TOGGLE, "Sunday check-in")
+        XCTAssertEqual(core.studyView.value.course(id: id)?.checkin, true)
+        let checkinOff = try await core.setStudyCheckin(courseId: id, on: false)
+        XCTAssertTrue(checkinOff.boolValue)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.checkin, false)
+        let notShowing = try await core.seeStudyCheckin(key: StudyCheckinRules.shared.key(sunday: 1))
+        XCTAssertFalse(notShowing.boolValue)
     }
 
     func testTripListsReachSwift() async throws {

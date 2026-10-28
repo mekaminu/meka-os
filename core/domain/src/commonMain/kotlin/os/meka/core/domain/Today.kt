@@ -56,6 +56,8 @@ data class Today(
     val study: StudyDayLine? = null,
     /** Study plan, slice 2b rest: from 10 min before a study session, a card with Start, then Done ([StudyNudgeRules]); set by the facade. */
     val studyNudge: StudyNudge? = null,
+    /** Study plan, slice 2b rest: Sunday 17:00 to Monday 12:00, how the study week went and next week's sessions ([StudyCheckinRules]); set by the facade. */
+    val studyCheckin: StudyCheckin? = null,
     /** Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from shipping emails ([ParcelRules.todayLine]); set by the facade. */
     val parcels: ParcelLine? = null,
     /** Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can tidy" ([MailUnreadRules.todayLine]); set by the facade. */

@@ -328,6 +328,11 @@ struct TodayView: View {
                     StudyNudgeCard(nudge: model.today?.studyNudge, palette: palette)
                         .padding(.top, model.today?.studyNudge == nil ? 0 : MekaSpace.xs)
                         .staggeredAppear(0, play: play)
+                    // Study plan, slice 2b rest: Sunday 17:00 to Monday 12:00, how the study week went and next week's
+                    // sessions; Looks good folds it away on both devices, Change plan opens the course.
+                    StudyCheckinCard(checkin: model.today?.studyCheckin, palette: palette)
+                        .padding(.top, model.today?.studyCheckin == nil ? 0 : MekaSpace.xs)
+                        .staggeredAppear(0, play: play)
                     // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
                     // (lit on Monday); cross-fades.
                     if let thing = model.today?.reflection {

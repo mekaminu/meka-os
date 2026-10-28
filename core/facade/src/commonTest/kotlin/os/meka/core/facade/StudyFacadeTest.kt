@@ -291,4 +291,54 @@ class StudyFacadeTest {
         assertEquals(false, fold.putAwayStudyNudge(wed.key))
         assertEquals(null, fold.today.value.studyNudge)
     }
+
+    @Test
+    fun theSundayCheckInShowsFromFiveAndLooksGoodPutsItAwayOnBothDevices() = runTest {
+        // Study plan, slice 2b rest: "Sunday check-in · How the week went, and next week's sessions".
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addStudyCourse("Data analytics\nModule 1: Foundations\nWelcome 15 min\nPivot tables 45 min\nDashboards 30 min").courseId!!
+        assertTrue(fold.setStudySession(id, 60))
+        assertTrue(fold.setStudySlot(id, "eve", true)) // Mon and Wed evenings
+        val welcome = fold.studyView.value.course(id)!!.modules.first().lessons.first().id
+        assertTrue(fold.tickStudyLesson(welcome, true)) // Mon 26 Oct
+        assertEquals(null, fold.today.value.studyCheckin)
+        now += 6 * os.meka.core.domain.CivilDate.DAY_MS + (6 * 60 + 59) * 60_000L // Sun 1 Nov 16:59
+        fold.tick()
+        assertEquals(null, fold.today.value.studyCheckin)
+        now += 60_000L // 17:00
+        fold.tick()
+        val c = assertNotNull(fold.today.value.studyCheckin)
+        assertEquals(os.meka.core.domain.StudyCheckinRules.HEADLINE, c.headline)
+        assertEquals("Mon 26 Oct – Sun 1 Nov", c.sub)
+        val row = c.rows.single()
+        assertEquals("Data analytics", row.title)
+        assertEquals("This week · 1 lesson · about 15 min", row.week)
+        assertEquals("Next week · 2 sessions · Mon, Wed · 2 lessons", row.next)
+        assertEquals("Next week is planned. Change anything in the course.", c.obi)
+
+        // The Mac shows the same; Looks good there puts it away on the Fold too, and Monday morning it stays away.
+        fold.syncNow(); mac.syncNow(); mac.tick()
+        assertEquals(c.key, mac.today.value.studyCheckin?.key)
+        assertTrue(mac.seeStudyCheckin(c.key))
+        assertEquals(false, mac.seeStudyCheckin(c.key))
+        assertEquals(null, mac.today.value.studyCheckin)
+        mac.syncNow(); fold.syncNow(); fold.tick()
+        assertEquals(null, fold.today.value.studyCheckin)
+        now += (18 * 60 + 59) * 60_000L // Mon 2 Nov 11:59
+        fold.tick()
+        assertEquals(null, fold.today.value.studyCheckin)
+
+        // Turned off, next Sunday has none; back on, it shows.
+        assertTrue(fold.setStudyCheckin(id, false))
+        assertEquals(false, fold.setStudyCheckin(id, false))
+        assertEquals(false, fold.studyView.value.course(id)!!.checkin)
+        now += 6 * os.meka.core.domain.CivilDate.DAY_MS + 6 * 60 * 60_000L // Sun 8 Nov 17:59
+        fold.tick()
+        assertEquals(null, fold.today.value.studyCheckin)
+        assertTrue(fold.setStudyCheckin(id, true))
+        fold.tick()
+        assertEquals("Mon 2 Nov – Sun 8 Nov", fold.today.value.studyCheckin?.sub)
+        assertEquals("This week · nothing ticked", fold.today.value.studyCheckin?.rows?.single()?.week)
+    }
 }

@@ -178,6 +178,8 @@ struct StudySheet: View {
     @State private var sessionDone: CoreModel.TripUndo?
     /// Slice 2b rest: "Nudge me 10 minutes before" clicked here, shown at once until the view says the same.
     @State private var tapNudge: Bool?
+    /// Slice 2b rest: "Sunday check-in" clicked here, the same way.
+    @State private var tapCheckin: Bool?
     private static let lessonDrag = "study-lesson:"
     private static let moduleDrag = "study-module:"
 
@@ -224,6 +226,7 @@ struct StudySheet: View {
                 return r.state.name != t.state && r.lessonIds == t.ids
             }
             if tapNudge == c.nudge { tapNudge = nil }
+            if tapCheckin == c.checkin { tapCheckin = nil }
         }
     }
 
@@ -267,7 +270,7 @@ struct StudySheet: View {
             planCard(c, p).padding(.top, MekaSpace.m).staggeredAppear(1)
         }
         if !c.week.isEmpty {
-            weekCard(c.week, nudge: tapNudge ?? c.nudge).padding(.top, MekaSpace.m).staggeredAppear(1)
+            weekCard(c.week, nudge: tapNudge ?? c.nudge, checkin: tapCheckin ?? c.checkin).padding(.top, MekaSpace.m).staggeredAppear(1)
         }
         SectionLabel("Lessons", palette).padding(.top, MekaSpace.l).staggeredAppear(1)
         TextField(StudyRules.shared.ADD_LESSONS_HINT, text: $outline, axis: .vertical)
@@ -587,7 +590,7 @@ struct StudySheet: View {
     /// THIS WEEK (slice 2b part 2), like the Fold's: one row a day with its time, lessons, where, and Start → Done →
     /// a quiet green Done. A click shows at once; the fill glides and the lines cross-fade.
     @ViewBuilder
-    private func weekCard(_ rows: [StudyWeekRow], nudge: Bool) -> some View {
+    private func weekCard(_ rows: [StudyWeekRow], nudge: Bool, checkin: Bool) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             SectionLabel(StudyWeekRules.shared.LABEL, palette)
             ForEach(rows, id: \.key) { row in
@@ -634,6 +637,7 @@ struct StudySheet: View {
                 }
             }
             nudgeRow(nudge)
+            checkinRow(checkin)
         }
         .padding(MekaSpace.m)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.l))
@@ -671,6 +675,38 @@ struct StudySheet: View {
         .padding(.top, MekaSpace.xs)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
         .accessibilityLabel("\(StudyNudgeRules.shared.TOGGLE). \(StudyNudgeRules.shared.TOGGLE_SUB)")
+        .accessibilityValue(on ? "On" : "Off")
+    }
+
+    /// Slice 2b rest (mockup's toggle): "Sunday check-in · How the week went, and next week's sessions", like the nudge's.
+    private func checkinRow(_ on: Bool) -> some View {
+        let id = courseId
+        return Button {
+            let next = !on
+            MekaHaptics.tick()
+            tapCheckin = next
+            Task { if !(await model.setStudyCheckin(id, on: next)) { tapCheckin = nil } }
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(StudyCheckinRules.shared.TOGGLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(StudyCheckinRules.shared.TOGGLE_SUB).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Text(on ? "On" : "Off")
+                    .font(MekaType.captionStrong)
+                    .foregroundStyle(on ? palette.onAccent : palette.textSecondary)
+                    .padding(.horizontal, MekaSpace.m)
+                    .padding(.vertical, MekaSpace.xxs)
+                    .background(on ? palette.accent : palette.surfaceRaised, in: Capsule())
+                    .contentTransition(.opacity)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
+        .accessibilityLabel("\(StudyCheckinRules.shared.TOGGLE). \(StudyCheckinRules.shared.TOGGLE_SUB)")
         .accessibilityValue(on ? "On" : "Off")
     }
 

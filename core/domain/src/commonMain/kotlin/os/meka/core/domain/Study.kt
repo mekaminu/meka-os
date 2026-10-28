@@ -22,7 +22,8 @@ import os.meka.core.sync.fv
  * [StudyRules.RECENT_DAYS] days (and any deleted before deletion times were kept) shows under Recently deleted with Restore. Slice 2b part 1 ([StudyAutoRules]): lessons he hasn't planned are suggested for his next study sessions.
  * Slice 2b part 2 ([StudyWeekRules]): THIS WEEK with Start and Done on a session.
  * Slice 2b rest ([StudyNudgeRules]): the 10-minute nudge card on Today, with Start and Done.
- * Still to come (the board): the Sunday check-in; slice 3, the outline from a screenshot.
+ * Slice 2b rest ([StudyCheckinRules]): the Sunday check-in card on Today.
+ * Still to come (the board): slice 3, the outline from a screenshot.
  */
 object StudyCourseFields {
     /** "Data analytics certificate" (at most [StudyRules.MAX_COURSE]). */
@@ -42,6 +43,10 @@ object StudyCourseFields {
     const val PLAN_LEFT = "planLeft"
     /** Slice 2b rest (LWW Bool, absent = on): "Nudge me 10 minutes before" ([StudyNudgeRules]). */
     const val NUDGE = "nudge"
+    /** Slice 2b rest (LWW Bool, absent = on): "Sunday check-in" ([StudyCheckinRules]). */
+    const val CHECKIN = "checkin"
+    /** Slice 2b rest (LWW Int64): the Sunday (epoch day) whose check-in he put away with Looks good. */
+    const val CHECKIN_SEEN = "checkinSeen"
 }
 
 object StudyLessonFields {
@@ -75,6 +80,10 @@ data class StudyCourse(
     val planFromDay: Long? = null, val planLeft: Int? = null,
     /** Slice 2b rest: the 10-minute nudge card on Today ([StudyNudgeRules]); on until he turns it off. */
     val nudge: Boolean = true,
+    /** Slice 2b rest: the Sunday check-in card on Today ([StudyCheckinRules]); on until he turns it off. */
+    val checkin: Boolean = true,
+    /** The Sunday whose check-in he put away, or null. */
+    val checkinSeen: Long? = null,
 )
 
 /** A plan choice (a finish date, a session length, a time he can study): its label, whether it's picked, its key. */
@@ -204,6 +213,8 @@ data class StudyCourseView(
     val week: List<StudyWeekRow> = emptyList(),
     /** Slice 2b rest: "Nudge me 10 minutes before" is on ([StudyNudgeRules]). */
     val nudge: Boolean = true,
+    /** Slice 2b rest: "Sunday check-in" is on ([StudyCheckinRules]). */
+    val checkin: Boolean = true,
 )
 
 data class StudyView(val courses: List<StudyCourseView>) {
@@ -407,6 +418,8 @@ object StudyRules {
             planFromDay = s.f(StudyCourseFields.PLAN_FROM).longOrNull,
             planLeft = s.f(StudyCourseFields.PLAN_LEFT).longOrNull?.toInt()?.takeIf { it >= 0 },
             nudge = s.f(StudyCourseFields.NUDGE).boolOrNull ?: true,
+            checkin = s.f(StudyCourseFields.CHECKIN).boolOrNull ?: true,
+            checkinSeen = s.f(StudyCourseFields.CHECKIN_SEEN).longOrNull,
         )
     }.sortedWith(compareBy<StudyCourse> { it.addedAtMs }.thenBy { it.id })
 
@@ -557,6 +570,7 @@ object StudyRules {
             suggested = StudyAutoRules.line(course.id, lessons, fromCalendar),
             week = week,
             nudge = course.nudge,
+            checkin = course.checkin,
         )
     }
 
@@ -976,6 +990,21 @@ class Study(
         if (c.nudge == on) return false
         replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.NUDGE to on.fv()))
         return true
+    }
+
+    /** Slice 2b rest: turns "Sunday check-in" on or off; false when it already was. */
+    fun setCheckin(courseId: String, on: Boolean): Boolean {
+        val c = courses().firstOrNull { it.id == courseId } ?: return false
+        if (c.checkin == on) return false
+        replica.commitLocal(EntityTypes.STUDY_COURSE, courseId, mapOf(StudyCourseFields.CHECKIN to on.fv()))
+        return true
+    }
+
+    /** Slice 2b rest: Looks good on the check-in for [sunday]: each of [courseIds] keeps it as seen; false when none changed. */
+    fun seeCheckin(sunday: Long, courseIds: List<String>): Boolean {
+        val mine = courses().filter { it.id in courseIds && it.checkinSeen != sunday }
+        for (c in mine) replica.commitLocal(EntityTypes.STUDY_COURSE, c.id, mapOf(StudyCourseFields.CHECKIN_SEEN to sunday.fv()))
+        return mine.isNotEmpty()
     }
 
     /** Plan: picks or drops a time he can study ([StudyRules.SLOTS] key). */
