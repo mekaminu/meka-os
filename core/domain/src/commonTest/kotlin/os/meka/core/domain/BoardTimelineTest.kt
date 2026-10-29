@@ -56,7 +56,7 @@ class BoardTimelineTest {
         assertEquals("Today", tl.title)
         assertEquals("Fri 9 Oct", tl.dateLabel)
         assertEquals(660, tl.nowMinute)
-        assertEquals((11 - 7) * 44f, tl.nowTopDp)
+        assertEquals(8f + (11 - 7) * 44f, tl.nowTopDp)
         assertEquals("Today, Fri 9 Oct, timeline, 6 things at a time, All day: Event half", tl.spoken)
         assertEquals("Task Task renew, 08:10 to 08:20, done", tl.blocks[1].spoken)
         assertNull(tl.emptyLine)
@@ -93,11 +93,11 @@ class BoardTimelineTest {
         assertEquals(24, tl.endHour)
         assertEquals("06", tl.hours.first())
         assertEquals("23", tl.hours.last())
-        assertEquals(18 * 44f, tl.heightDp)
+        assertEquals(18 * 44f + 16f, tl.heightDp)
         val early = tl.blocks.first { it.key == "e:early" }
         assertTrue(early.oneLine)
         assertEquals(BoardTimelineRules.MIN_BLOCK_DP, early.heightDp)
-        assertEquals(0f, early.topDp(tl.firstHour))
+        assertEquals(BoardTimelineRules.TOP_INSET_DP, early.topDp(tl.firstHour))
         // The late one runs past midnight: clipped to the day.
         assertEquals("23:00–24:00", tl.blocks.first { it.key == "e:late" }.label)
         assertEquals("Tuesday", BoardTimelineRules.of(day(fri + 4, emptyList()), emptyList(), null, fri, 0, cal).title)
@@ -134,5 +134,33 @@ class BoardTimelineTest {
             BoardTimelineRules.EMPTY, "All day: Half term", "Today, Fri 9 Oct, timeline, 6 things at a time",
             BoardTimelineRules.COMMUTE_TO, BoardTimelineRules.COMMUTE_HOME, BoardTimelineRules.HIDE,
         ).forEach { assertTrue(ScreenSenseRules.problemsIn(it).isEmpty(), it) }
+    }
+
+    @Test
+    fun theTimelineLinesUpWithTheDaysAndOpensAtTheTopWhenNowFits() {
+        // The alignment pass (7): the first hour's line just under the panel's top, its label whole above and below it.
+        val tl = BoardTimelineRules.of(
+            day(fri, emptyList()), listOf(ev("standup", fri, 9 * 60 + 30, 10 * 60 + 30), ev("lunch", fri, 13 * 60, 14 * 60)),
+            null, today = fri, nowMs = ms(fri, 9 * 60 + 45), calendar = cal,
+        )
+        assertEquals(8f, tl.hourLineDp(0))
+        assertEquals(8f + 2 * 44f, tl.hourLineDp(2))
+        assertEquals(tl.hourLineDp(2) + 22f, tl.blocks.first().topDp(tl.firstHour))
+        // The heading sits as far down as the days' dates beside it.
+        assertEquals(8f, BoardTimelineRules.HEAD_TOP_DP)
+        // Now (09:45) runs under the stand-up: that block gets an opaque face so the line never crosses its title.
+        assertEquals(listOf("e:standup"), tl.nowUnder)
+        // 09:45 fits in ten rows with an hour after it: open at the top (07), not scrolled.
+        assertEquals(0f, tl.openingScrollHours(10f))
+        // Only three rows fit: an hour before now.
+        assertEquals(9.75f - 7f - 1f, tl.openingScrollHours(3f))
+        // Late in the evening on a short panel: never past the last row.
+        val late = BoardTimelineRules.of(day(fri, emptyList()), emptyList(), null, fri, ms(fri, 22 * 60 + 30), cal)
+        assertEquals((23 - 7) - 5f, late.openingScrollHours(5f))
+        assertTrue(late.nowUnder.isEmpty())
+        // Not today and nothing timed: the top.
+        val quiet = BoardTimelineRules.of(day(fri, emptyList()), emptyList(), null, fri - 1, 0, cal)
+        assertEquals(0f, quiet.openingScrollHours(3f))
+        assertTrue(quiet.nowUnder.isEmpty())
     }
 }

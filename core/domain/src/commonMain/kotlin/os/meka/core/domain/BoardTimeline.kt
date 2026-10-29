@@ -42,8 +42,11 @@ data class DayBlock(
         }
     }
 
-    /** Its top in the timeline, in dp, below the first hour [firstHour]. */
-    fun topDp(firstHour: Int): Float = (startMinute - firstHour * 60) * BoardTimelineRules.HOUR_DP / 60f
+    /**
+     * Its top in the timeline, in dp, below the first hour [firstHour] (the alignment pass (7): after
+     * [BoardTimelineRules.TOP_INSET_DP], so the first hour's line sits at the panel's top with its label whole).
+     */
+    fun topDp(firstHour: Int): Float = BoardTimelineRules.minuteDp(startMinute, firstHour)
 
     /** Its height in dp, never under [BoardTimelineRules.MIN_BLOCK_DP] so a ten-minute task can still be read. */
     val heightDp: Float get() = maxOf(minutes * BoardTimelineRules.HOUR_DP / 60f, BoardTimelineRules.MIN_BLOCK_DP)
@@ -72,12 +75,36 @@ data class BoardTimeline(
     /** The hour labels down the side: "07" … "22". */
     val hours: List<String> get() = (firstHour until endHour).map { it.toString().padStart(2, '0') }
 
-    /** The whole timeline's height in dp. */
-    val heightDp: Float get() = (endHour - firstHour) * BoardTimelineRules.HOUR_DP
+    /** The whole timeline's height in dp: the rows and the inset above and below them (the alignment pass (7)). */
+    val heightDp: Float get() = (endHour - firstHour) * BoardTimelineRules.HOUR_DP + 2 * BoardTimelineRules.TOP_INSET_DP
 
-    /** The gold now line's top in dp, or null when it isn't today or now is outside the rows. */
+    /** The hairline of the [index]th hour row (0 = [firstHour]), in dp: its label is centred on it. */
+    fun hourLineDp(index: Int): Float = BoardTimelineRules.TOP_INSET_DP + index * BoardTimelineRules.HOUR_DP
+
+    /**
+     * The gold now line's top in dp, or null when it isn't today or now is outside the rows. It is drawn behind the
+     * blocks (the alignment pass (7)): an event under it keeps its title readable.
+     */
     val nowTopDp: Float? get() = nowMinute?.takeIf { it >= firstHour * 60 && it < endHour * 60 }
-        ?.let { (it - firstHour * 60) * BoardTimelineRules.HOUR_DP / 60f }
+        ?.let { BoardTimelineRules.minuteDp(it, firstHour) }
+
+    /** The keys of the blocks the now line runs under (each drawn on an opaque face so the line can't cross its title). */
+    val nowUnder: List<String> get() {
+        val now = nowMinute?.takeIf { nowTopDp != null } ?: return emptyList()
+        return blocks.filter { b -> now >= b.startMinute && BoardTimelineRules.minuteDp(now, firstHour) < b.topDp(firstHour) + b.heightDp }.map { it.key }
+    }
+
+    /**
+     * Where the timeline opens, in hours scrolled down from [firstHour], when [visibleHours] rows fit (the alignment pass
+     * (7)): at the top (the first hour, 07 or the first event) whenever now, or else the first block, sits inside the view
+     * with an hour after it; otherwise an hour before it, so it is never hidden.
+     */
+    fun openingScrollHours(visibleHours: Float): Float {
+        val focus = nowMinute ?: blocks.firstOrNull()?.startMinute ?: return 0f
+        val focusHours = focus / 60f - firstHour
+        if (focusHours + 1f <= visibleHours) return 0f
+        return (focusHours - 1f).coerceIn(0f, ((endHour - firstHour) - visibleHours).coerceAtLeast(0f))
+    }
 
     /** "Nothing timed yet" when there are no blocks (the rows still show, so a day looks open, not broken). */
     val emptyLine: String? get() = if (blocks.isEmpty()) BoardTimelineRules.EMPTY else null
@@ -108,6 +135,19 @@ object BoardTimelineRules {
     /** Rows run up to 23:00, so the last row is "22". */
     const val END_HOUR = 23
     const val HOUR_DP = 44f
+    /**
+     * The alignment pass (Meka 2026-10-24 20:07, (7)): room above the first hour's line (and below the last) for half
+     * an hour label, so "07" is centred on its line at the panel's top, not cut and not floating under it.
+     */
+    const val TOP_INSET_DP = 8f
+    /**
+     * The panel's heading starts this far down, the day columns' own top padding, so "Today" sits on the same line as
+     * the days' dates beside it (the alignment pass (7)).
+     */
+    const val HEAD_TOP_DP = 8f
+
+    /** Minute [minute] of the day as a top in dp below [firstHour]'s line, after [TOP_INSET_DP]. */
+    fun minuteDp(minute: Int, firstHour: Int): Float = TOP_INSET_DP + (minute - firstHour * 60) * HOUR_DP / 60f
     const val MIN_BLOCK_DP = 18f
     const val ONE_LINE_MIN = 40
     const val DEFAULT_TASK_MIN = 30

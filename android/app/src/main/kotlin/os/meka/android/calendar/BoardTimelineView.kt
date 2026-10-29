@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -64,6 +66,10 @@ import kotlin.math.abs
 /** The day timeline (Option B slice 5, UI tests). */
 internal const val TIMELINE_TAG = "board-timeline"
 internal const val TIMELINE_TAB_TAG = "board-timeline-tab"
+/** The alignment pass (7), UI tests: the panel's heading, the now line, and a block the now line runs under. */
+internal const val TIMELINE_HEAD_TAG = "board-timeline-head"
+internal const val TIMELINE_NOW_TAG = "board-timeline-now"
+internal const val TIMELINE_UNDER_NOW_TAG = "board-timeline-under-now"
 
 /**
  * The Week board redesign, Option B slice 5: a day as an hour-by-hour timeline, the approved mockup's "Today" panel.
@@ -83,6 +89,11 @@ internal fun DayTimelineView(
     onSwipe: ((Int) -> Unit)? = null,
     /** Option B match, slice 2: a task block's area (its card's), so it wears the category's colour; null keeps gold. */
     areaOf: (DayBlock) -> os.meka.core.domain.BoardArea? = { null },
+    /**
+     * The alignment pass (7): beside the week, the heading starts as far down as the days' dates and in their type, so
+     * "Today" and "Sat 24 Oct" share the dates' line.
+     */
+    besideWeek: Boolean = false,
 ) {
     val reduced = Meka.reducedMotion
     val density = LocalDensity.current
@@ -110,15 +121,22 @@ internal fun DayTimelineView(
         ) { timeline ->
             Column(Modifier.fillMaxSize()) {
                 Row(
-                    Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).semantics(mergeDescendants = true) {
-                        heading(); contentDescription = timeline.spoken
-                    },
+                    Modifier.fillMaxWidth()
+                        .padding(top = if (besideWeek) BoardTimelineRules.HEAD_TOP_DP.dp else 0.dp, bottom = MekaSpace.xs)
+                        .testTag(TIMELINE_HEAD_TAG)
+                        .semantics(mergeDescendants = true) { heading(); contentDescription = timeline.spoken },
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    Text(timeline.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1)
+                    Text(
+                        timeline.title, style = if (besideWeek) BoardType.dateDense else MekaType.itemTitle,
+                        color = Meka.colors.textPrimary, maxLines = 1,
+                    )
                     Spacer(Modifier.weight(1f))
                     if (timeline.dateLabel != timeline.title) {
-                        Text(timeline.dateLabel, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+                        Text(
+                            timeline.dateLabel, style = if (besideWeek) BoardType.weekdayDense else MekaType.micro,
+                            color = Meka.colors.textTertiary, maxLines = 1,
+                        )
                     }
                 }
                 timeline.allDayLine?.let {
@@ -149,42 +167,54 @@ private fun Hours(
     val scroll = rememberScrollState()
     val density = LocalDensity.current
     val hourPx = with(density) { BoardTimelineRules.HOUR_DP.dp.toPx() }
-    // Open an hour before now on today, else at the first block (or the top).
-    LaunchedEffect(timeline.epochDay) {
-        val focus = timeline.nowMinute ?: timeline.blocks.firstOrNull()?.startMinute ?: (timeline.firstHour * 60)
-        val px = ((focus / 60f - 1f - timeline.firstHour) * hourPx).coerceAtLeast(0f)
-        scroll.scrollTo(px.toInt())
-    }
     val hairline = Meka.colors.hairline
-    Box(modifier.verticalScroll(scroll)) {
-        Box(Modifier.fillMaxWidth().height(timeline.heightDp.dp)) {
-            timeline.hours.forEachIndexed { i, label ->
-                Row(Modifier.fillMaxWidth().offset(y = (i * BoardTimelineRules.HOUR_DP).dp).height(BoardTimelineRules.HOUR_DP.dp)) {
-                    Text(
-                        label, style = MekaType.micro, color = Meka.colors.textTertiary,
-                        modifier = Modifier.width(LABEL_W).padding(top = MekaSpace.xxs).clearAndSetSemantics { },
-                    )
-                    Box(Modifier.weight(1f).height(1.dp).background(hairline))
-                }
-            }
-            BoxWithConstraints(Modifier.fillMaxSize().padding(start = LABEL_W)) {
-                val area = maxWidth
-                timeline.blocks.forEachIndexed { i, b ->
-                    val colW = area / b.columns
-                    Block(
-                        b, Modifier.offset(x = colW * b.column, y = b.topDp(timeline.firstHour).dp)
-                            .width(colW - 2.dp).height(b.heightDp.dp)
-                            .appear(rememberAppearance(minOf(i, 8))),
-                        onEvent,
-                        areaOf(b),
-                    )
-                }
-                timeline.nowTopDp?.let { top ->
-                    Box(Modifier.fillMaxWidth().offset(y = top.dp - 1.dp).height(2.dp).background(Meka.colors.accent).clearAndSetSemantics { })
+    BoxWithConstraints(modifier) {
+        // The alignment pass (7): open at the first hour (07 or the first event) whenever now, else the first block,
+        // fits with an hour after it; otherwise an hour before it.
+        val visibleHours = maxHeight.value / BoardTimelineRules.HOUR_DP
+        LaunchedEffect(timeline.epochDay, visibleHours > 0f) {
+            scroll.scrollTo((timeline.openingScrollHours(visibleHours) * hourPx).toInt())
+        }
+        val under = remember(timeline) { timeline.nowUnder.toSet() }
+        Box(Modifier.fillMaxSize().verticalScroll(scroll)) {
+            Box(Modifier.fillMaxWidth().height(timeline.heightDp.dp)) {
+                // Each hour's label is centred on its line (the first one whole at the panel's top, TOP_INSET_DP).
+                timeline.hours.forEachIndexed { i, label ->
+                    val line = timeline.hourLineDp(i).dp
+                    Box(Modifier.fillMaxWidth().padding(start = LABEL_W).offset(y = line).height(1.dp).background(hairline))
                     Box(
-                        Modifier.offset(x = (-4).dp, y = top.dp - 4.dp).size(8.dp).clip(CircleShape).background(Meka.colors.accent)
+                        Modifier.width(LABEL_W).offset(y = line - BoardTimelineRules.TOP_INSET_DP.dp).height((BoardTimelineRules.TOP_INSET_DP * 2).dp)
                             .clearAndSetSemantics { },
-                    )
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Text(label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.wrapContentHeight(unbounded = true))
+                    }
+                }
+                BoxWithConstraints(Modifier.fillMaxSize().padding(start = LABEL_W)) {
+                    val area = maxWidth
+                    // The alignment pass (7): the now line is drawn behind the blocks, and a block it runs under has an
+                    // opaque face, so the line never crosses an event's title.
+                    timeline.nowTopDp?.let { top ->
+                        Box(
+                            Modifier.fillMaxWidth().offset(y = top.dp - 1.dp).height(2.dp).background(Meka.colors.accent)
+                                .testTag(TIMELINE_NOW_TAG).clearAndSetSemantics { },
+                        )
+                        Box(
+                            Modifier.offset(x = (-4).dp, y = top.dp - 4.dp).size(8.dp).clip(CircleShape).background(Meka.colors.accent)
+                                .clearAndSetSemantics { },
+                        )
+                    }
+                    timeline.blocks.forEachIndexed { i, b ->
+                        val colW = area / b.columns
+                        Block(
+                            b, Modifier.offset(x = colW * b.column, y = b.topDp(timeline.firstHour).dp)
+                                .width(colW - 2.dp).height(b.heightDp.dp)
+                                .appear(rememberAppearance(minOf(i, 8))),
+                            onEvent,
+                            areaOf(b),
+                            opaque = b.key in under,
+                        )
+                    }
                 }
             }
         }
@@ -192,7 +222,13 @@ private fun Hours(
 }
 
 @Composable
-private fun Block(b: DayBlock, modifier: Modifier, onEvent: (CalendarEvent) -> Unit, area: os.meka.core.domain.BoardArea? = null) {
+private fun Block(
+    b: DayBlock,
+    modifier: Modifier,
+    onEvent: (CalendarEvent) -> Unit,
+    area: os.meka.core.domain.BoardArea? = null,
+    opaque: Boolean = false,
+) {
     val tone = when (b.kind) {
         DayBlockKind.EVENT -> Meka.colors.calendarTone(b.tone)
         DayBlockKind.TASK -> area?.let { Meka.colors.areaTone(it) } ?: Meka.colors.accent
@@ -202,6 +238,7 @@ private fun Block(b: DayBlock, modifier: Modifier, onEvent: (CalendarEvent) -> U
     Row(
         modifier.alpha(if (b.done) BoardPlannerRules.DONE_ALPHA else 1f)
             .clip(RoundedCornerShape(MekaRadius.s / 1.25f))
+            .then(if (opaque) Modifier.background(Meka.colors.background).testTag(TIMELINE_UNDER_NOW_TAG) else Modifier)
             .background(tone.copy(alpha = 0.16f))
             .then(if (event != null) Modifier.clickable(role = Role.Button) { onEvent(event) } else Modifier)
             .clearAndSetSemantics {

@@ -364,15 +364,16 @@ private struct BoardTimelineView: View {
     private let labelWidth: CGFloat = 36
 
     var body: some View {
-        let hour = CGFloat(BoardTimelineRules.shared.HOUR_DP)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            // The alignment pass (7): "Today" in the dates' type, as far down as the days' dates beside it.
             HStack(alignment: .firstTextBaseline) {
-                Text(timeline.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Text(timeline.title).font(BoardFont.date).foregroundStyle(palette.textPrimary).lineLimit(1)
                 Spacer(minLength: MekaSpace.xs)
                 if timeline.dateLabel != timeline.title {
-                    Text(timeline.dateLabel).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Text(timeline.dateLabel).font(BoardFont.weekday).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
             }
+            .padding(.top, CGFloat(BoardTimelineRules.shared.HEAD_TOP_DP))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(timeline.spoken)
             .accessibilityAddTraits(.isHeader)
@@ -383,30 +384,33 @@ private struct BoardTimelineView: View {
                 Text(empty).font(MekaType.micro).foregroundStyle(palette.textTertiary)
             }
             ZStack(alignment: .topLeading) {
-                VStack(spacing: 0) {
-                    ForEach(Array(timeline.hours.enumerated()), id: \.offset) { _, label in
-                        HStack(alignment: .top, spacing: 0) {
-                            Text(label).font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                                .frame(width: labelWidth, alignment: .leading).padding(.top, MekaSpace.xxs)
-                            Rectangle().fill(palette.hairline).frame(height: 1)
-                        }
-                        .frame(height: hour, alignment: .top)
-                    }
+                // The alignment pass (7): each hour's label centred on its line, the first one whole at the top.
+                let inset = CGFloat(BoardTimelineRules.shared.TOP_INSET_DP)
+                ForEach(Array(timeline.hours.enumerated()), id: \.offset) { i, label in
+                    let line = CGFloat(timeline.hourLineDp(index: Int32(i)))
+                    Text(label).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                        .frame(width: labelWidth, height: inset * 2, alignment: .leading)
+                        .offset(y: line - inset)
+                    Rectangle().fill(palette.hairline).frame(height: 1)
+                        .padding(.leading, labelWidth)
+                        .offset(y: line)
                 }
                 .accessibilityHidden(true)
                 GeometryReader { geo in
                     let area = max(geo.size.width - labelWidth, 0)
                     let first = timeline.firstHour
-                    ForEach(timeline.blocks, id: \.key) { b in
-                        let colW = area / CGFloat(max(b.columns, 1))
-                        block(b)
-                            .frame(width: max(colW - 2, 0), height: CGFloat(b.heightDp))
-                            .offset(x: labelWidth + colW * CGFloat(b.column), y: CGFloat(b.topDp(firstHour: first)))
-                    }
+                    let under = Set(timeline.nowUnder)
+                    // Drawn behind the blocks; a block it runs under has an opaque face, so it never crosses a title.
                     if let top = timeline.nowTopDp {
                         Rectangle().fill(palette.accent).frame(width: area, height: 2)
                             .offset(x: labelWidth, y: CGFloat(top.floatValue) - 1)
                             .accessibilityHidden(true)
+                    }
+                    ForEach(timeline.blocks, id: \.key) { b in
+                        let colW = area / CGFloat(max(b.columns, 1))
+                        block(b, opaque: under.contains(b.key))
+                            .frame(width: max(colW - 2, 0), height: CGFloat(b.heightDp))
+                            .offset(x: labelWidth + colW * CGFloat(b.column), y: CGFloat(b.topDp(firstHour: first)))
                     }
                 }
             }
@@ -416,7 +420,7 @@ private struct BoardTimelineView: View {
     }
 
     @ViewBuilder
-    private func block(_ b: DayBlock) -> some View {
+    private func block(_ b: DayBlock, opaque: Bool = false) -> some View {
         let area: BoardArea? = board.flatMap { BoardMatchRules.shared.blockArea(block: b, board: $0) }
         let tone: Color = b.kind == DayBlockKind.event ? palette.calendarTone(b.tone)
             : (b.kind == DayBlockKind.task ? (area.map { palette.areaTone($0) } ?? palette.accent) : palette.calendar3)
@@ -433,6 +437,7 @@ private struct BoardTimelineView: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(tone.opacity(0.16))
+        .background(opaque ? palette.background : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .opacity(b.done ? Double(BoardPlannerRules.shared.DONE_ALPHA) : 1)
         .transition(.opacity)

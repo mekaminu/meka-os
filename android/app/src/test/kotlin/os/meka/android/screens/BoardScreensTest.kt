@@ -488,6 +488,28 @@ class BoardScreensTest {
     }
 
     /**
+     * The open Fold's alignment pass (7): today's timeline beside the week starts its heading as far down as the days'
+     * dates and in their type, so "Today" sits on the same line as the dates beside it (within a pixel).
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theTimelinesHeadingSitsOnTheDatesLine() {
+        val (core, _) = timedCore()
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-timeline-aligned"))
+        ScreenShots.assertSensible(compose, "inner-dark-timeline-aligned")
+        fun whole(n: androidx.compose.ui.semantics.SemanticsNode) = androidx.compose.ui.geometry.Rect(n.positionInRoot, androidx.compose.ui.geometry.Size(n.size.width.toFloat(), n.size.height.toFloat()))
+        val panel = compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().firstOrNull()?.let(::whole)
+            ?: throw AssertionError("the timeline isn't beside the week")
+        val title = compose.onAllNodesWithText("Today", useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+            .firstOrNull { it.left >= panel.left && it.top >= panel.top && it.bottom <= panel.top + panel.height / 3 }
+            ?: throw AssertionError("no \"Today\" heading in the timeline")
+        val dates = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+            .filter { it.right <= panel.left }
+        val date = dates.minByOrNull { it.top } ?: throw AssertionError("no day's date beside the timeline")
+        assertTrue("the timeline's heading ($title) isn't on the dates' line ($date)", kotlin.math.abs(title.bottom - date.bottom) < 1.5f)
+    }
+
+    /**
      * The density pass (Claude's check 2026-10-24 18:10: "Option B is closer but still not the mockup on the open Fold"),
      * unfolded on a Wednesday: the five weekday columns and today's timeline fit together (each day's card 90–140 dp
      * wide, the timeline to their right); a card with no time wears no "Any time" chip, its length alone on the right; a

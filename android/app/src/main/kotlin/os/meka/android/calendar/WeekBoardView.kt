@@ -754,6 +754,7 @@ fun WeekBoardView(
                                 Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(panelDp + MekaSpace.gutter)
                                     .fillMaxHeight().padding(end = MekaSpace.gutter, bottom = MekaSpace.m).appear(rememberAppearance(4)),
                                 areaOf = { b -> BoardMatchRules.blockArea(b, board) },
+                                besideWeek = true,
                             )
                         }
                     }

@@ -1709,6 +1709,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(tl.panelDp(boardDp: 1280), 260, accuracy: 0.01)
         XCTAssertTrue(tl.opensByDefault(boardDp: 1280, spareDp: 48))
         XCTAssertEqual(tl.HIDE, "Hide timeline")
+        // The alignment pass (7): the heading on the dates' line, the first hour's label whole at the top.
+        XCTAssertEqual(tl.HEAD_TOP_DP, 8, accuracy: 0.01)
+        XCTAssertEqual(tl.minuteDp(minute: 7 * 60, firstHour: 7), tl.TOP_INSET_DP, accuracy: 0.01)
         // The density pass: the mockup's proportions, no "Any time" chip, the weekend on the weekdays' grid.
         let dense = BoardDenseRules.shared
         XCTAssertTrue(dense.timelineByDefault(boardDp: 829, spareDp: 48))
