@@ -442,7 +442,7 @@ private struct RenewalEmailBox: View {
                                 Text(t.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                 Text(t.value).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
                             }
-                            .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                             .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.background))
                         }
                     }
@@ -457,7 +457,7 @@ private struct RenewalEmailBox: View {
             }
             .padding(.top, MekaSpace.xxs)
         }
-        .padding(MekaSpace.s)
+        .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
         .sheet(isPresented: $reading) {

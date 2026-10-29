@@ -40,7 +40,7 @@ internal fun RenewalEmailBox(id: String, box: RenewalEmail, core: MekaCore, tap:
     var reading by rememberSaveable(id) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
-            .background(Meka.colors.surfaceRaised).padding(MekaSpace.s).testTag("renewal-email-$id"),
+            .background(Meka.colors.surfaceRaised).padding(MekaSpace.m).testTag("renewal-email-$id"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = box.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -51,7 +51,7 @@ internal fun RenewalEmailBox(id: String, box: RenewalEmail, core: MekaCore, tap:
             if (box.tiles.isNotEmpty()) {
                 FlowRow(Modifier.padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     box.tiles.forEach { t ->
-                        Column(Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs)) {
+                        Column(Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs)) {
                             Text(t.label, style = MekaType.caption, color = Meka.colors.textTertiary)
                             Text(t.value, style = MekaType.metaStrong, color = Meka.colors.textPrimary)
                         }
