@@ -418,6 +418,8 @@ class BoardScreensTest {
         val gateNode = compose.onNodeWithContentDescription(label(gate)).fetchSemanticsNode()
         val gateConfig = "${gateNode.config} children ${gateNode.children.size}"
         compose.onNodeWithContentDescription(label(gate)).performSemanticsAction(SemanticsActions.OnClick)
+        // A semantics action injects no input, so nothing moves the paused clock: let its write land, then run frames.
+        compose.waitForIdle()
         settle()
         fun sheetShown() = compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_SHEET_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         val bySemantics = sheetShown()
