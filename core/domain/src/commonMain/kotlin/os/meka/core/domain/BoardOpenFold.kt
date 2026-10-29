@@ -11,6 +11,9 @@ package os.meka.core.domain
  *   column scrolls by itself or cuts a card off, and a quiet week leaves no gap; the week scrolls as one.
  * - One pill everywhere on the columns ([pillStacked]): "planned" over the figures, the same height on every day.
  * - A past day wears the same pill ([pastPill]): "done" over "2 of 3" (or "none"), its bar filled by what was done.
+ * - One header (alignment list (1)(2), 2026-10-24): no "Calendar" title or Agenda · Board switch above the board; the
+ *   month's row holds Obi's pill, Today, ‹ › and a ⋯ in the same round style, and ⋯ ([menu]) holds what were four
+ *   different text styles: Agenda view, Timeline / Hide timeline, New event, Plan your week, Review the week.
  */
 object BoardOpenFoldRules {
     /** The least the weekday row is drawn (dp): its header, pill and "+ add" with room to drop a card. */
@@ -50,4 +53,32 @@ object BoardOpenFoldRules {
         }
         return PlannerBudget(DONE, value, over = false, fill = if (total == 0) 0f else done.toFloat() / total, spoken = spoken)
     }
+
+    /**
+     * The open Fold's (and the Mac's) ⋯ menu for the week at [weekIndex] (0 is this week): Agenda view, the timeline's
+     * toggle when the window has room for it ([timelineOpen] null when it hasn't), New event when a calendar can take
+     * one, Plan your week, Review the week (from Friday, this week). Goals, No day yet and Someday stay on the page.
+     */
+    fun menu(board: WeekBoard, weekIndex: Int, timelineOpen: Boolean?, canAddEvent: Boolean, canPlan: Boolean): List<FoldedMenuItem> =
+        buildList {
+            add(FoldedMenuItem(FoldedMenuKind.AGENDA, AGENDA, ""))
+            if (timelineOpen != null) {
+                add(
+                    if (timelineOpen) FoldedMenuItem(FoldedMenuKind.TIMELINE, BoardTimelineRules.HIDE, "")
+                    else FoldedMenuItem(FoldedMenuKind.TIMELINE, BoardTimelineRules.SHOW, "today by the hour"),
+                )
+            }
+            if (canAddEvent) add(FoldedMenuItem(FoldedMenuKind.NEW_EVENT, NEW_EVENT, ""))
+            if (canPlan) add(FoldedMenuItem(FoldedMenuKind.PLAN_WEEK, PlanWeekRules.OPEN, "Obi helps"))
+            if (board.offersReview && weekIndex == 0) add(FoldedMenuItem(FoldedMenuKind.REVIEW, BoardReviewRules.REVIEW, ""))
+        }
+
+    /** The menu's way back to the list of days. */
+    const val AGENDA = "Agenda view"
+
+    /** The menu's new event. */
+    const val NEW_EVENT = "New event"
+
+    /** The ⋯ button's spoken name. */
+    const val MENU_LABEL = "More: Agenda view, timeline, new event, plan your week"
 }

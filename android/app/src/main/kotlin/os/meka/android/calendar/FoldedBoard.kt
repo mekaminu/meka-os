@@ -103,22 +103,32 @@ internal fun FoldedHeader(
         RoundButton("›", "Next week", canForward) { haptics.tick(); onForward() }
         Box {
             RoundButton("⋯", FOLDED_MENU_LABEL, true, FOLDED_MENU_TAG) { haptics.tick(); open = true }
-            DropdownMenu(
-                expanded = open, onDismissRequest = { open = false },
-                containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
-            ) {
-                menu.forEach { item ->
-                    DropdownMenuItem(
-                        text = {
-                            Row(Modifier.width(FOLDED_MENU_WIDTH), verticalAlignment = Alignment.CenterVertically) {
-                                Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 1)
-                                if (item.detail.isNotEmpty()) Text(item.detail, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
-                            }
-                        },
-                        onClick = { open = false; haptics.tick(); onMenu(item) },
-                    )
-                }
-            }
+            BoardMenu(open, menu, onDismiss = { open = false }) { item -> open = false; haptics.tick(); onMenu(item) }
+        }
+    }
+}
+
+/**
+ * The Board's ⋯ menu, folded and on the open Fold: each item's name with its detail quiet on the right. The open Fold's
+ * timeline toggle carries [TIMELINE_TOGGLE_TAG] for the UI tests.
+ */
+@Composable
+internal fun BoardMenu(open: Boolean, menu: List<FoldedMenuItem>, onDismiss: () -> Unit, onPick: (FoldedMenuItem) -> Unit) {
+    DropdownMenu(
+        expanded = open, onDismissRequest = onDismiss,
+        containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+    ) {
+        menu.forEach { item ->
+            DropdownMenuItem(
+                text = {
+                    Row(Modifier.width(FOLDED_MENU_WIDTH), verticalAlignment = Alignment.CenterVertically) {
+                        Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 1)
+                        if (item.detail.isNotEmpty()) Text(item.detail, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
+                    }
+                },
+                onClick = { onPick(item) },
+                modifier = if (item.kind == os.meka.core.domain.FoldedMenuKind.TIMELINE) Modifier.testTag(TIMELINE_TOGGLE_TAG) else Modifier,
+            )
         }
     }
 }

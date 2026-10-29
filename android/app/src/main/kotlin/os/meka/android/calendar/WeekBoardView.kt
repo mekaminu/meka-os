@@ -598,7 +598,7 @@ fun WeekBoardView(
                 )
             }
             if (wide) WeekHeader(
-                board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview,
+                board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.m).appear(rememberAppearance(2)), onPlanWeek, onReview,
                 timeline = if (wide) showTimeline else null,
                 onTimeline = { timelineOpen = !showTimeline },
                 wide = wide,
@@ -607,6 +607,17 @@ fun WeekBoardView(
                 },
                 nudge = nudgePill,
                 goals = headerGoals,
+                menu = os.meka.core.domain.BoardOpenFoldRules.menu(board, weekIndex, showTimeline, onAddEvent != null, onPlanWeek != null),
+                onMenu = { item ->
+                    when (item.kind) {
+                        FoldedMenuKind.AGENDA -> onAgenda?.invoke()
+                        FoldedMenuKind.TIMELINE -> timelineOpen = !showTimeline
+                        FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
+                        FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
+                        FoldedMenuKind.REVIEW -> onReview()
+                        else -> Unit
+                    }
+                },
             )
             board.weeks.getOrNull(weekIndex)?.let { week ->
                 // By hand, slice 4: the week's goals as small gold pills and the two trays as chips (unfolded on one
@@ -935,8 +946,11 @@ private fun WeekHeader(
     timeline: Boolean? = null, onTimeline: () -> Unit = {}, wide: Boolean = true, onToday: () -> Unit = {},
     nudge: (@Composable (Modifier) -> Unit)? = null,
     goals: (@Composable (Modifier) -> Unit)? = null,
+    menu: List<os.meka.core.domain.FoldedMenuItem> = emptyList(),
+    onMenu: (os.meka.core.domain.FoldedMenuItem) -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
+    var menuOpen by remember { mutableStateOf(false) }
     val w = board.weeks[week]
     // Density pass slice 2: unfolded, the header at the mockup's size (BoardDenseHeadRules).
     val label = if (wide) BoardType.labelDense else MekaType.itemMeta
@@ -976,37 +990,45 @@ private fun WeekHeader(
                     .padding(horizontal = MekaSpace.m),
             )
         }
-        // Item (8): from Friday, on this week, Review the week (tick haptic; Review slides in as a tab change).
-        if (board.offersReview && week == 0) {
-            Text(
-                os.meka.core.domain.BoardReviewRules.REVIEW, style = label, color = Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.Button) { haptics.tick(); onReview() }
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
-            )
-        }
-        // Option B slice 5: unfolded, Timeline / Hide timeline opens or shuts today's timeline beside the week.
-        if (timeline != null) {
-            Text(
-                if (timeline) BoardTimelineRules.HIDE else BoardTimelineRules.SHOW, style = label, color = Meka.colors.textSecondary,
-                maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.Button) { haptics.tick(); onTimeline() }
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs)
-                    .testTag(TIMELINE_TOGGLE_TAG),
-            )
-        }
-        // Item (6): Plan your week opens the guided flow (tick haptic; the pane springs up).
-        if (onPlanWeek != null) {
-            Text(
-                os.meka.core.domain.PlanWeekRules.OPEN, style = label, color = Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.Button) { haptics.tick(); onPlanWeek() }
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
-            )
+        // Alignment list (1)(2): unfolded, Review, Timeline, Plan your week (and Agenda view and New event, the Calendar's
+        // own header having stepped aside) are in ⋯, so the row is Obi's pill, Today, ‹ › ⋯ in one round style.
+        if (!wide) {
+            // Item (8): from Friday, on this week, Review the week (tick haptic; Review slides in as a tab change).
+            if (board.offersReview && week == 0) {
+                Text(
+                    os.meka.core.domain.BoardReviewRules.REVIEW, style = label, color = Meka.colors.textSecondary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { haptics.tick(); onReview() }
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+                )
+            }
+            // Option B slice 5: unfolded, Timeline / Hide timeline opens or shuts today's timeline beside the week.
+            if (timeline != null) {
+                Text(
+                    if (timeline) BoardTimelineRules.HIDE else BoardTimelineRules.SHOW, style = label, color = Meka.colors.textSecondary,
+                    maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { haptics.tick(); onTimeline() }
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs)
+                        .testTag(TIMELINE_TOGGLE_TAG),
+                )
+            }
+            // Item (6): Plan your week opens the guided flow (tick haptic; the pane springs up).
+            if (onPlanWeek != null) {
+                Text(
+                    os.meka.core.domain.PlanWeekRules.OPEN, style = label, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { haptics.tick(); onPlanWeek() }
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+                )
+            }
         }
         StepButton("‹", "Previous week", week > 0, button) { go(week - 1) }
         StepButton("›", "Next week", week < board.weeks.size - 1, button) { go(week + 1) }
+        if (wide && menu.isNotEmpty()) Box {
+            StepButton("⋯", os.meka.core.domain.BoardOpenFoldRules.MENU_LABEL, true, button, OPEN_MENU_TAG) { haptics.tick(); menuOpen = true }
+            BoardMenu(menuOpen, menu, onDismiss = { menuOpen = false }) { item -> menuOpen = false; haptics.tick(); onMenu(item) }
+        }
     }
     if (wide) {
         // Match slice 3: "October 2026 W44" on the left; Obi's pill, Today and ‹ › on the right (the pill takes what's
@@ -1142,13 +1164,15 @@ internal const val NUDGE_TAG = "board-nudge"
  * edged in the hairline, inside the 48 dp touch target; dimmed when there's no week that way.
  */
 @Composable
-private fun StepButton(glyph: String, label: String, enabled: Boolean, size: Int = BoardMatchRules.BUTTON, onClick: () -> Unit) {
+private fun StepButton(
+    glyph: String, label: String, enabled: Boolean, size: Int = BoardMatchRules.BUTTON, tag: String = STEP_TAG, onClick: () -> Unit,
+) {
     Box(
         Modifier.size(MekaSpace.touch).clip(CircleShape)
             .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .alpha(if (enabled) 1f else 0.3f)
             .semantics { contentDescription = label }
-            .testTag(STEP_TAG),
+            .testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -1161,6 +1185,8 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, size: Int
 
 /** ‹ and › in the header (Option B match slice 4, UI tests). */
 internal const val STEP_TAG = "board-step"
+/** The open Fold's ⋯ in the header (alignment list (1)(2), UI tests). */
+internal const val OPEN_MENU_TAG = "board-open-menu"
 /** The words beside a card's dot (Option B match slice 4, UI tests). */
 internal const val AREA_LABEL_TAG = "board-area-label"
 /** "Nothing planned" under an empty past day (Option B match slice 4, UI tests). */

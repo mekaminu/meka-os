@@ -53,4 +53,25 @@ class BoardOpenFoldTest {
         assertEquals("Nothing planned", empty.spoken)
         assertNull(BoardOpenFoldRules.pastPill(day(past = false)))
     }
+
+    @Test
+    fun theOpenHeadersMenuHoldsWhatWasFourStylesOfText() {
+        val week = BoardWeek(mon26, "This week", "26 Oct–1 Nov", listOf(day(past = false)))
+        // A Friday: Review the week is offered on this week.
+        val friday = WeekBoard(mon26 + 4, listOf(week, week.copy(startEpochDay = mon26 + 7, title = "Next week")))
+        val items = BoardOpenFoldRules.menu(friday, 0, timelineOpen = true, canAddEvent = true, canPlan = true)
+        assertEquals(
+            listOf(FoldedMenuKind.AGENDA, FoldedMenuKind.TIMELINE, FoldedMenuKind.NEW_EVENT, FoldedMenuKind.PLAN_WEEK, FoldedMenuKind.REVIEW),
+            items.map { it.kind },
+        )
+        assertEquals(listOf("Agenda view", "Hide timeline", "New event", "Plan your week", "Review the week"), items.map { it.label })
+        // Shut, the toggle offers the timeline back; the lists and goals are on the page, never in the menu.
+        assertEquals("Timeline", BoardOpenFoldRules.menu(friday, 0, false, true, true)[1].label)
+        assertTrue(items.none { it.kind in setOf(FoldedMenuKind.GOALS, FoldedMenuKind.NO_DAY, FoldedMenuKind.SOMEDAY) })
+        // Next week, no calendar to add to, no planner, no room for the timeline: Agenda view alone.
+        assertEquals(listOf(FoldedMenuKind.AGENDA), BoardOpenFoldRules.menu(friday, 1, null, false, false).map { it.kind })
+        // Before Friday, no Review.
+        val wednesday = WeekBoard(mon26 + 2, listOf(week))
+        assertTrue(BoardOpenFoldRules.menu(wednesday, 0, true, true, true).none { it.kind == FoldedMenuKind.REVIEW })
+    }
 }

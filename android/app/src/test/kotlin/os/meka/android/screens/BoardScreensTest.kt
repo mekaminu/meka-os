@@ -34,6 +34,7 @@ import os.meka.android.calendar.FOLDED_MENU_TAG
 import os.meka.android.calendar.FOLDED_STRIP_TAG
 import os.meka.android.calendar.TIMELINE_TAG
 import os.meka.android.calendar.TIMELINE_TOGGLE_TAG
+import os.meka.android.calendar.OPEN_MENU_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.android.calendar.ADD_TAG
 import os.meka.android.calendar.DAY_DATE_TAG
@@ -465,15 +466,22 @@ class BoardScreensTest {
     fun unfoldedTheTimelineOpensBesideTheWeekWithTodaysTimedTask() {
         val (core, spoken) = timedCore()
         show(core)
-        assertTrue("no Timeline in the header", compose.onAllNodesWithTag(TIMELINE_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty())
+        // The alignment list (1)(2): the header's row is Today, ‹ › and ⋯; the timeline's toggle is in ⋯.
+        assertTrue("no ⋯ in the header", compose.onAllNodesWithTag(OPEN_MENU_TAG).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("Timeline still loose in the header", compose.onAllNodesWithTag(TIMELINE_TOGGLE_TAG).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-timeline"))
         ScreenShots.assertSensible(compose, "inner-dark-timeline")
         assertTrue("no timeline beside the week by default", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())
         assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
-        // Hide timeline shuts it, Timeline opens it again.
+        // ⋯ → Hide timeline shuts it, ⋯ → Timeline opens it again.
+        compose.onNodeWithTag(OPEN_MENU_TAG).performClick()
+        settle()
+        compose.onNodeWithText("Hide timeline").assertExists()
         compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
         settle()
         assertTrue("still open", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithTag(OPEN_MENU_TAG).performClick()
+        settle()
         compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
         settle()
         assertTrue("didn't open again", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())

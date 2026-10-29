@@ -1671,6 +1671,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         // The open Fold's alignment pass: every unfolded column (the Mac's too) stacks its pill the same way.
         XCTAssertTrue(BoardOpenFoldRules.shared.pillStacked(dense: true, compact: false))
         XCTAssertEqual(BoardOpenFoldRules.shared.DONE, "done")
+        // The alignment list (1)(2): the header's ⋯ holds Agenda view, the timeline's toggle, New event and Plan your week.
+        let openMenu = BoardOpenFoldRules.shared.menu(
+            board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []), weekIndex: 1, timelineOpen: KotlinBoolean(bool: true),
+            canAddEvent: true, canPlan: true
+        )
+        XCTAssertEqual(openMenu.map { $0.label }, ["Agenda view", "Hide timeline", "New event", "Plan your week"])
+        XCTAssertEqual(openMenu.first?.kind, FoldedMenuKind.agenda)
         XCTAssertEqual(match.pillLabel(b: budget), "planned")
         XCTAssertEqual(match.BUTTON, 40)
         XCTAssertEqual(match.NOTHING_PLANNED, "Nothing planned")

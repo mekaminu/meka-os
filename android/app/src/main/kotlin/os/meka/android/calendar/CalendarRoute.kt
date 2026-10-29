@@ -233,9 +233,10 @@ private fun Agenda(
 
     // Week board by hand, slice 3: folded on the Board, a compact header so the board starts high: "Calendar" with
     // Agenda · Board on one row, the summary and the calendars' key left to the Agenda.
-    val compactBoard = board && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+    // The alignment list (1): on the open Fold too, the Board's own header row is the only one ("Calendar" and the
+    // Agenda · Board switch above it left a big gap); Agenda view and New event are in its ⋯.
     Column(Modifier.fillMaxSize().background(Meka.colors.background)) {
-        if (compactBoard) {
+        if (board) {
             // The folded Week board mockup (approved 2026-10-27): no second "Calendar" header; the Board's own row is the
             // only one, and Agenda view and New event are in its ⋯ menu.
             EditLines(add.lines, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.xs))
@@ -252,17 +253,12 @@ private fun Agenda(
                 if (add.canAdd) AddEventButton(onClick = { add.onAdd(lit) })
             }
             // Option B match: the Board has no "25 events in the next 30 days" line and no colour key (the Agenda keeps them).
-            if (!board) Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
+            Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             EditLines(add.lines, Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
-            if (!board && v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
+            if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
             CalendarViewSwitch(board, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)), onBoard)
             Spacer(Modifier.height(MekaSpace.m))
-            if (!board) WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
-        }
-        // The Board view: a column per day in place of the Agenda's strip and list.
-        if (board) {
-            WeekBoardView(core, undo, onEvent, Modifier.weight(1f), onPlanWeek)
-            return@Column
+            WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
         }
         HorizontalPager(
             state = pager,

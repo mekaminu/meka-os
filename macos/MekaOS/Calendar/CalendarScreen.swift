@@ -54,6 +54,9 @@ struct CalendarScreen: View {
         }()
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                // The alignment list (1): on the Board its own header row is the only one; Agenda view and New event
+                // are in its ⋯ (the Agenda keeps "Calendar", Add event and the switch).
+                if !model.calendarShowsBoard {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Calendar")
                         .font(MekaType.greeting).tracking(MekaType.greetingTracking)
@@ -77,6 +80,7 @@ struct CalendarScreen: View {
                     }
                 }
                 .staggeredAppear(0)
+                }
                 // Option B match: the Board has no "25 events in the next 30 days" line and no colour key.
                 if !model.calendarShowsBoard {
                     Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -93,9 +97,11 @@ struct CalendarScreen: View {
             .padding(.bottom, MekaSpace.m)
 
             // Week board, slice 2: Agenda · Board; the Board takes the strip's and the agenda's place.
-            CalendarViewSwitch(palette: palette)
-                .padding(.bottom, MekaSpace.m)
-                .staggeredAppear(1)
+            if !model.calendarShowsBoard {
+                CalendarViewSwitch(palette: palette)
+                    .padding(.bottom, MekaSpace.m)
+                    .staggeredAppear(1)
+            }
             if model.calendarShowsBoard, let board = model.board, !board.weeks.isEmpty {
                 ScrollView {
                     WeekBoardScreen(board: board, palette: palette)

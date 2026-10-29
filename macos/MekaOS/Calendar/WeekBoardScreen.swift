@@ -62,7 +62,7 @@ struct WeekBoardScreen: View {
         .accessibilityLabel(head.spoken + ", " + w.title)
     }
 
-    /// Today, Review, Timeline, Plan your week and ‹ › on the header's right.
+    /// Today, ‹ › and ⋯ on the header's right.
     @ViewBuilder private var weekButtons: some View {
         // Match slice 4: the mockup's round buttons (`.btn`), 40 high, outlined on the card surface.
         Button { MekaHaptics.tick(); goTo(0) } label: {
@@ -75,24 +75,6 @@ struct WeekBoardScreen: View {
         }
         .buttonStyle(.plain)
         .help("Back to this week")
-        // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
-        if board.offersReview && week == 0 {
-            Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
-                .foregroundStyle(palette.textSecondary).font(BoardFont.label)
-                .help("Review this week: planned against done, and what kept slipping")
-        }
-        // Option B slice 5: Timeline / Hide timeline opens or shuts today's timeline beside the week.
-        Button(showTimeline ? BoardTimelineRules.shared.HIDE : BoardTimelineRules.shared.SHOW) {
-            MekaHaptics.tick()
-            withAnimation(MekaMotion.replan(reduced: reduceMotion)) { showTimeline.toggle() }
-        }
-        .foregroundStyle(palette.textSecondary).font(BoardFont.label)
-        .help(showTimeline ? "Hide today's timeline" : "Show today's timeline beside the week")
-        // Item (6): Plan your week opens the guided sheet.
-        Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
-            .foregroundStyle(palette.accent).font(BoardFont.label)
-            .keyboardShortcut("p", modifiers: [.command, .shift])
-            .help("Plan your week (⇧⌘P)")
         Button { step(-1) } label: { RoundStep(systemName: "chevron.left", palette: palette) }
             .buttonStyle(.plain)
             .opacity(week == 0 ? 0.3 : 1)
@@ -105,6 +87,60 @@ struct WeekBoardScreen: View {
             .disabled(week >= board.weeks.count - 1)
             .keyboardShortcut("]", modifiers: .command)
             .help("Next week")
+        // The alignment list (1)(2): Agenda view, Timeline, New event, Plan your week and Review are in ⋯, so the row is
+        // Obi's pill, Today, ‹ › ⋯ in one round style (BoardOpenFoldRules.menu, as on the open Fold).
+        Menu {
+            ForEach(Array(headerMenu.enumerated()), id: \.offset) { _, item in
+                Button(item.detail.isEmpty ? item.label : item.label + " · " + item.detail) { pick(item) }
+            }
+        } label: {
+            RoundStep(systemName: "ellipsis", palette: palette)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(BoardOpenFoldRules.shared.MENU_LABEL)
+        .help("Agenda view, timeline, new event, plan or review the week")
+        // The menu's shortcuts still work with it shut.
+        Group {
+            Button("") { pick(kind: FoldedMenuKind.planWeek) }.keyboardShortcut("p", modifiers: [.command, .shift])
+            Button("") { pick(kind: FoldedMenuKind.newEvent) }.keyboardShortcut("n", modifiers: [.option, .command])
+        }
+        .buttonStyle(.plain)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    /// The ⋯ menu's items for the week in view.
+    private var headerMenu: [FoldedMenuItem] {
+        BoardOpenFoldRules.shared.menu(
+            board: board, weekIndex: Int32(week), timelineOpen: KotlinBoolean(bool: showTimeline),
+            canAddEvent: !model.editAccounts.isEmpty, canPlan: true
+        )
+    }
+
+    private func pick(_ item: FoldedMenuItem) { pick(kind: item.kind) }
+
+    private func pick(kind: FoldedMenuKind) {
+        MekaHaptics.tick()
+        switch kind {
+        case FoldedMenuKind.agenda:
+            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.calendarShowsBoard = false }
+        case FoldedMenuKind.timeline:
+            withAnimation(MekaMotion.replan(reduced: reduceMotion)) { showTimeline.toggle() }
+        case FoldedMenuKind.newEvent:
+            guard !model.editAccounts.isEmpty else { return }
+            let w = board.weeks[min(week, board.weeks.count - 1)]
+            model.addEventDay = week == 0 ? board.todayEpochDay : w.startEpochDay
+        case FoldedMenuKind.planWeek:
+            model.showPlanWeek = true
+        case FoldedMenuKind.review:
+            if board.offersReview && week == 0 { model.openReflectionFromTalk() }
+        default:
+            break
+        }
     }
 
     var body: some View {
