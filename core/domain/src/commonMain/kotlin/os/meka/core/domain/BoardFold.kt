@@ -30,9 +30,36 @@ data class DayStripPill(
  * - a strip of the week's seven days across the top ([strip]): tap a pill to jump to that day, and drop a held card on
  *   a pill to move it there (the pill swells while it hovers);
  * - while a card is held near the lane's left or right edge, the lane turns a page after [FLIP_MS] ([edgeFlip]);
- * - unfolding keeps the same day in view ([focusAfterFold]).
+ * - unfolding keeps the same day in view ([focusAfterFold]); the layout is chosen by the window's width class ([wide]),
+ *   live as he folds or unfolds, the new one fading in ([RELAYOUT_FROM], [relayoutMs]), and unfolded the day's row is
+ *   brought into view ([revealScroll]).
  */
 object BoardFoldRules {
+    /** From this width (dp) the Board is the week of columns (open Fold, Mac); below it the folded one-day layout. */
+    const val WIDE_DP = 600f
+
+    /** The width class: the columns at [WIDE_DP] and wider, else the folded layout. */
+    fun wide(widthDp: Float): Boolean = widthDp >= WIDE_DP
+
+    /** As he folds or unfolds, the new layout fades in from this opacity (the old one is gone with the old width). */
+    const val RELAYOUT_FROM = 0f
+
+    /** The fade's length (ms): the appear token's 220, or the short 120 cross-fade with Reduced motion. */
+    fun relayoutMs(reduced: Boolean): Int = if (reduced) 120 else 220
+
+    /**
+     * Unfolded on a day whose row starts [rowTopDp] down the week's scroll (the weekend's row sits under the weekdays')
+     * and is [rowHeightDp] tall, in a view [viewDp] tall scrolled [scrolledDp]: where to scroll (dp) so the row shows
+     * its head and a third of the view below it, [marginDp] under the view's top; null when it already shows.
+     */
+    fun revealScroll(rowTopDp: Float, rowHeightDp: Float, viewDp: Float, scrolledDp: Float, marginDp: Float = 16f): Float? {
+        if (!(rowTopDp.isFinite() && rowHeightDp.isFinite() && viewDp.isFinite() && scrolledDp.isFinite()) || viewDp <= 0f) return null
+        val top = rowTopDp - scrolledDp
+        val need = minOf(rowHeightDp.coerceAtLeast(0f), viewDp / 3f)
+        if (top >= 0f && top + need <= viewDp) return null
+        return (rowTopDp - marginDp).coerceAtLeast(0f)
+    }
+
     /** A swipe faster than this (dp/s) turns a page whichever way it was going; slower settles on the nearest day. */
     const val FLING_DP_PER_S = 400f
 
@@ -110,10 +137,13 @@ object BoardFoldRules {
     fun weekStartIndex(index: Int): Int = index - index % 7
 
     /**
-     * The day folded in view when unfolded at week [weekIndex]: today if that week holds it, else its Monday.
+     * The day folded in view when unfolded at week [weekIndex]: the day already chosen ([current]) while that week holds
+     * it (so unfolding on Saturday and folding again comes back to Saturday), else today if that week holds it, else
+     * its Monday.
      */
-    fun focusInWeek(days: List<BoardDay>, weekIndex: Int): Long? {
+    fun focusInWeek(days: List<BoardDay>, weekIndex: Int, current: Long? = null): Long? {
         val week = days.drop(weekIndex * 7).take(7)
+        week.firstOrNull { it.epochDay == current }?.let { return it.epochDay }
         return (week.firstOrNull { it.isToday } ?: week.firstOrNull())?.epochDay
     }
 

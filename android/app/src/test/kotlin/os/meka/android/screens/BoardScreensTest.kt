@@ -2,7 +2,10 @@ package os.meka.android.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -856,6 +859,65 @@ class BoardScreensTest {
         val titles = compose.onAllNodesWithTag(os.meka.android.calendar.LIST_TITLE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole).sortedBy { it.left }
         assertEquals("a title per list", lists.size, titles.size)
         titles.take(5).forEachIndexed { i, t -> assertEquals("list $i starts at weekday $i's edge", top[i].left, t.left, 1f) }
+    }
+
+    /**
+     * (10a) Two layouts by real estate, chosen live (Meka 2026-10-25 01:54): the same Board folded (344 dp, the cover
+     * screen) shows the one-day layout; he picks Saturday on the strip, unfolds (829 dp): the week's columns with the
+     * weekend's row in view and Saturday's task there; he folds again: back on Saturday, not today. Each change fades
+     * the new layout in (the screen settles at full strength).
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun foldingAndUnfoldingSwapsTheLayoutAndKeepsTheDay() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            listOf("Fix the gate latch", "Paint the fence", "Order new bins", "Sort the loft", "Batch cook for the week", "Clean the car")
+                .forEach { core.addOnBoardSized(it, today, 60) }
+            core.addOnBoardSized("Mow the lawn", today + 3, 60)
+        }
+        val today = core.weekBoard.value.todayEpochDay
+        var screenWidth by androidx.compose.runtime.mutableStateOf(344.dp)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    Box(Modifier.width(screenWidth).fillMaxHeight()) {
+                        WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                    }
+                }
+            }
+        }
+        settle()
+        fun has(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        fun dayLine() = compose.onAllNodesWithTag(FOLDED_DAY_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
+            ?.config?.getOrNull(SemanticsProperties.ContentDescription)?.joinToString() ?: ""
+        if (!has(FOLDED_STRIP_TAG)) fail("folded (344 dp) isn't the one-day layout")
+        assertTrue("folded opens on today: ${dayLine()}", dayLine().startsWith("Wed 21"))
+        // Saturday on the strip.
+        compose.onNodeWithContentDescription(os.meka.core.domain.BoardFoldRules.pill(core.weekBoard.value.day(today + 3)!!).accessibilityLabel).performClick()
+        settle()
+        assertTrue("Saturday is in view folded: ${dayLine()}", dayLine().startsWith("Sat 24"))
+
+        // Unfold.
+        screenWidth = 829.dp
+        settle()
+        if (has(FOLDED_STRIP_TAG)) fail("unfolded (829 dp) still shows the folded strip")
+        if (!has(os.meka.android.calendar.WEEKEND_ROW_TAG)) fail("unfolded has no week of columns")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-unfolded-on-saturday"))
+        ScreenShots.assertSensible(compose, "inner-dark-unfolded-on-saturday")
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val lawn = cardBounds("Mow the lawn")
+        assertTrue("Saturday's task is in view unfolded ($lawn in $root)", lawn.top >= root.top && lawn.top < root.bottom && lawn.height > 0f)
+
+        // Fold again: back on Saturday.
+        screenWidth = 344.dp
+        settle()
+        if (!has(FOLDED_STRIP_TAG)) fail("folded again isn't the one-day layout")
+        assertTrue("folding again comes back to Saturday: ${dayLine()}", dayLine().startsWith("Sat 24"))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-folded-again"))
     }
 
     private fun show(core: MekaCore) {

@@ -88,4 +88,44 @@ class BoardFoldTest {
         assertEquals(20_002L, BoardFoldRules.focusInWeek(days, 0))
         assertEquals(20_007L, BoardFoldRules.focusInWeek(days, 1))
     }
+
+    @Test
+    fun theChosenDayStaysAcrossAFoldAndUnfold() {
+        val days = (0 until 14).map { i -> day(20_000L + i, "${19 + i}", today = i == 2) }
+        // Folded on Saturday, unfolded (this week shown): Saturday stays the day, so folding again opens on it.
+        assertEquals(20_005L, BoardFoldRules.focusInWeek(days, 0, 20_005L))
+        // Stepping to next week (Saturday isn't in it): its Monday; back to this week with nothing chosen there: today.
+        assertEquals(20_007L, BoardFoldRules.focusInWeek(days, 1, 20_005L))
+        assertEquals(20_002L, BoardFoldRules.focusInWeek(days, 0, 20_007L))
+        // Unfolding on next Thursday keeps Thursday.
+        assertEquals(20_010L, BoardFoldRules.focusInWeek(days, 1, 20_010L))
+    }
+
+    @Test
+    fun theLayoutFollowsTheWidthClassAndFadesIn() {
+        // The Fold's cover screen is ~344 dp, its inner screen ~829 dp; the split is 600 dp.
+        assertEquals(false, BoardFoldRules.wide(344f))
+        assertEquals(false, BoardFoldRules.wide(599.5f))
+        assertEquals(true, BoardFoldRules.wide(600f))
+        assertEquals(true, BoardFoldRules.wide(829f))
+        assertEquals(0f, BoardFoldRules.RELAYOUT_FROM)
+        assertEquals(220, BoardFoldRules.relayoutMs(false))
+        assertEquals(120, BoardFoldRules.relayoutMs(true))
+    }
+
+    @Test
+    fun unfoldingOnTheWeekendBringsItsRowIntoView() {
+        // The weekday row is 0..420, the weekend row starts at 436 and is 200 tall; the view is 500 tall.
+        assertEquals(420f, BoardFoldRules.revealScroll(436f, 200f, 500f, 0f))
+        // Already scrolled so the weekend's head and a third of the view show: leave it.
+        assertEquals(null, BoardFoldRules.revealScroll(436f, 200f, 500f, 300f))
+        // A weekday while scrolled down: back to the top.
+        assertEquals(0f, BoardFoldRules.revealScroll(0f, 420f, 500f, 300f))
+        // A weekday at rest, or a weekend that fits on a tall screen: nothing.
+        assertEquals(null, BoardFoldRules.revealScroll(0f, 420f, 500f, 0f))
+        assertEquals(null, BoardFoldRules.revealScroll(436f, 200f, 900f, 0f))
+        // Nothing measured: nothing.
+        assertEquals(null, BoardFoldRules.revealScroll(Float.NaN, 200f, 500f, 0f))
+        assertEquals(null, BoardFoldRules.revealScroll(436f, 200f, 0f, 0f))
+    }
 }

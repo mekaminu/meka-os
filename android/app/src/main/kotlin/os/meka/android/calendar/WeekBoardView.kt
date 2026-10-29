@@ -269,6 +269,12 @@ fun WeekBoardView(
     // Option B slice 2 (the layout): unfolded, one week at a time, Mon–Fri across, the weekend under it, the lists
     // below; the week shown, the way it last moved (for its slide) and the week's own up-and-down scroll.
     var wideNow by remember { mutableStateOf(false) }
+    // (10a) Two layouts by real estate: the layout last drawn and its fade as he folds or unfolds (the new one fades in
+    // from BoardFoldRules.RELAYOUT_FROM; until the fade starts it isn't drawn at full strength, so nothing flashes), and
+    // the day the unfolded week brings into view (with a count, so the same day again still asks).
+    var layoutWide by remember { mutableStateOf<Boolean?>(null) }
+    val relayout = remember { androidx.compose.animation.core.Animatable(1f) }
+    var revealDay by remember { mutableStateOf<Pair<Long, Int>?>(null) }
     var wideWeek by rememberSaveable { mutableStateOf(0) }
     var wideDir by remember { mutableStateOf(0) }
     val wideScroll = rememberScrollState()
@@ -392,6 +398,10 @@ fun WeekBoardView(
     CompositionLocalProvider(LocalBoardArea provides onArea) {
     BoxWithConstraints(
         modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }
+            .graphicsLayer {
+                val switching = layoutWide != null && layoutWide != wideNow
+                alpha = if (switching) BoardFoldRules.RELAYOUT_FROM else relayout.value
+            }
             // A tap outside the open add field closes it (watched only, never consumed, so the tap still does its job).
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -401,8 +411,19 @@ fun WeekBoardView(
                 }
             },
     ) {
-        val wide = maxWidth >= 600.dp
+        // (10a) The width class picks the layout, live: folded (< 600 dp) the one-day layout, unfolded the columns.
+        val wide = BoardFoldRules.wide(maxWidth.value)
         SideEffect { wideNow = wide }
+        LaunchedEffect(wide) {
+            val was = layoutWide
+            if (was != null && was != wide) {
+                relayout.snapTo(BoardFoldRules.RELAYOUT_FROM)
+                layoutWide = wide
+                relayout.animateTo(1f, androidx.compose.animation.core.tween(BoardFoldRules.relayoutMs(reduced)))
+            } else {
+                layoutWide = wide
+            }
+        }
         // By hand, slice 3: folded, one day fills the width (paged with a snap, never stopping between two days).
         // Option B slice 2: unfolded, a week's rows share the width between them (BoardWeekLayoutRules.rowWidths).
         val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / BoardWeekLayoutRules.WEEKDAYS else maxWidth - MekaSpace.xs * 2
@@ -439,7 +460,10 @@ fun WeekBoardView(
                 // Unfolded: the week holding that day, and the week in view's day kept as he steps weeks.
                 wideDir = 0
                 wideWeek = index / 7
-                snapshotFlow { wideWeek }.collect { w -> focusDay = BoardFoldRules.focusInWeek(daysNow, w) }
+                // (10a) Unfolding on a weekend day brings its row into view; the chosen day stays chosen while its
+                // week is shown, so folding again comes back to it.
+                daysNow.getOrNull(index)?.let { revealDay = it.epochDay to ((revealDay?.second ?: 0) + 1) }
+                snapshotFlow { wideWeek }.collect { w -> focusDay = BoardFoldRules.focusInWeek(daysNow, w, focusDay) }
             } else {
                 scroll.scrollTo((index * colPx).toInt())
                 daySnap.settled = index
@@ -732,7 +756,7 @@ fun WeekBoardView(
                 Row(Modifier.fillMaxSize()) {
                 WideWeek(
                     board = board, week = weekIndex, dir = wideDir, scroll = wideScroll, dragging = drag != null,
-                    rowWidth = rowWidth, openedPast = openedPast,
+                    rowWidth = rowWidth, openedPast = openedPast, reveal = revealDay,
                     modifier = Modifier.weight(1f).fillMaxHeight().appear(rememberAppearance(4)),
                     day = { day, width, onContent -> dayColumn(day, width, onContent) },
                     list = { week, column, mod ->
@@ -2509,6 +2533,7 @@ private fun WideWeek(
     dragging: Boolean,
     rowWidth: androidx.compose.ui.unit.Dp,
     openedPast: Set<Long>,
+    reveal: Pair<Long, Int>?,
     modifier: Modifier,
     day: @Composable (BoardDay, androidx.compose.ui.unit.Dp, (Float) -> Unit) -> Unit,
     list: @Composable (BoardWeek, BoardListColumn, Modifier) -> Unit,
@@ -2517,6 +2542,8 @@ private fun WideWeek(
     val density = androidx.compose.ui.platform.LocalDensity.current.density
     // Read as a yes/no so a scroll recomposes the week only when the fade turns on or off.
     val scrolledWeek by remember(scroll, density) { derivedStateOf { BoardOpenFoldRules.headFade(scroll.value / density) } }
+    // (10a) Each fold or unfold's reveal is used once (stepping back to its week later doesn't scroll again).
+    val revealed = remember { androidx.compose.runtime.mutableIntStateOf(0) }
     BoxWithConstraints(modifier) {
         val tiers = BoardWeekLayoutRules.heights(maxHeight.value)
         androidx.compose.animation.AnimatedContent(
@@ -2576,6 +2603,23 @@ private fun WideWeek(
                             weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) { h -> contents[d.epochDay] = h } } }
                         }
                     }
+                }
+                // (10a) Unfolded on a day (Saturday, say): once the rows have their heights, its row is brought into
+                // view (the weekend's sits under the weekdays'), or back to the top for a weekday while scrolled down.
+                val viewDp = maxHeight.value
+                val weekdaysNow by rememberUpdatedState(weekdaysTall.value)
+                LaunchedEffect(reveal, shown) {
+                    val (target, count) = reveal ?: return@LaunchedEffect
+                    if (count == revealed.intValue) return@LaunchedEffect
+                    val inWeekend = weekend.any { it.epochDay == target }
+                    if (!inWeekend && weekdays.none { it.epochDay == target }) return@LaunchedEffect
+                    delay(BoardFoldRules.relayoutMs(reduced).toLong() + 80L)
+                    revealed.intValue = count
+                    val top = if (inWeekend) weekdaysNow + MekaSpace.m.value else 0f
+                    val tall = if (inWeekend) BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP) else weekdaysNow
+                    val to = BoardFoldRules.revealScroll(top, tall, viewDp, scroll.value / density) ?: return@LaunchedEffect
+                    val px = (to * density).toInt()
+                    if (reduced) scroll.scrollTo(px) else scroll.animateScrollTo(px, MekaMotion.replan(false))
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,
                 // Side hustle, House, then No day yet).
