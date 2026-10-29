@@ -2602,7 +2602,8 @@ private fun BoardList(
             modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = head.spoken; heading() },
         ) {
             Text(
-                head.name, style = BoardType.date, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // On the weekdays' grid a list is a weekday wide: "Side hustle" may take two lines, never cut short.
+                head.name, style = BoardType.date, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag(LIST_TITLE_TAG),
             )
             head.count?.let {

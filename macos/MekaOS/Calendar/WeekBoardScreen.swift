@@ -1157,7 +1157,7 @@ private struct BoardListView: View {
         let head = BoardMatchRules.shared.listHead(column: column)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
-                Text(head.name).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Text(head.name).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).lineLimit(2) // a weekday wide on the grid
                 Spacer(minLength: 0)
                 if let count = head.count {
                     Text(count).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
