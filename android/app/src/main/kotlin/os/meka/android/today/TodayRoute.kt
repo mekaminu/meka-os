@@ -100,6 +100,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
@@ -1487,9 +1488,13 @@ private fun TodayPane(
             TodaySlot.ANYTIME -> {
             if (tl.anytime.isNotEmpty()) {
                 val anyStep = TodayOrderRules.stagger(TodaySlot.ANYTIME)
+                // Beside the calmer mockup (2026-10-29): the label counts the open tasks, each row is the 48 dp target
+                // with a hairline in the list's gap under it (never under the last).
+                val anyLabel = os.meka.core.domain.TodayBesideRules.anytimeLabel(tl.anytime.size)
                 itemsIndexed(tl.anytime, key = { _, t -> "d-" + t.id }) { i, t ->
-                    Headed(ANYTIME_LABEL.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play))) { m ->
-                        TaskRow(t, actions, motion = rowMotion(t.id), modifier = m)
+                    Headed(anyLabel.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play))) { m ->
+                        val rule = os.meka.core.domain.TodayBesideRules.dividerAfter(i, tl.anytime.size)
+                        TaskRow(t, actions, motion = rowMotion(t.id), modifier = if (rule) m.hairlineInGapBelow() else m)
                     }
                 }
                 if (today.doneToday.isNotEmpty() && doneChoice.show != os.meka.core.domain.DoneShow.HIDDEN) item(key = "s-anytime") { Spacer(Modifier.height(MekaSpace.l)) }
@@ -1601,15 +1606,17 @@ internal fun TaskRow(
         if (motion.landed) Meka.colors.surfaceRaised else Color.Transparent, MekaMotion.appear(Meka.reducedMotion), label = "landed",
     )
     Row(
+        // Beside the calmer mockup (2026-10-29): the row is the 48 dp target and no taller (it was 60 dp, the 44 dp
+        // tick plus 8 dp above and below); only the words keep a little air, so a two-line row still breathes.
         modifier.containerOrigin(t.id).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(glow).clickable { actions.select(t.id) }
-            .minTouch().padding(vertical = MekaSpace.xs),
+            .minTouch().testTag(TASK_ROW_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (time != null) TimeColumn(time, past = false)
         // Calmer Today (Meka 2026-10-25 15:03): a 22 dp circle in a 44 dp target, the text the target's inset after it.
         CompleteButton(t.id, t.title, actions.complete, size = TickSize.DRAWN, settle = true, onPressed = { ticking = true },
             touch = TickSize.TOUCH, bleed = time == null)
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(vertical = MekaSpace.xxs)) {
             Text(os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.taskTitle, color = titleColor,
                 textDecoration = if (ticking) TextDecoration.LineThrough else null, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = if (motion.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(t.id), motion.titleVisible) else Modifier)
@@ -1626,9 +1633,26 @@ internal fun TaskRow(
                     late && reason == null && time != null -> Meka.colors.accent
                     else -> Meka.colors.textSecondary
                 }
-                Text(it, style = MekaType.itemMeta, color = color)
+                // The calmer scale: a row's line in the 13 sp caption, as the day's times (was 15 sp beside a 16 sp title).
+                Text(it, style = MekaType.caption, color = color)
             }
         }
+    }
+}
+
+/** Every task row, for the quality gate's height check (Today beside its calmer mockup). */
+internal const val TASK_ROW_TAG = "task-row"
+
+/**
+ * The mockup's 1 px rule between task rows, drawn in the middle of the list's 8 dp gap under the row (so it sits
+ * between two rows, not on either), in the hairline colour.
+ */
+@Composable
+internal fun Modifier.hairlineInGapBelow(): Modifier {
+    val color = Meka.colors.hairline
+    return drawBehind {
+        val y = size.height + MekaSpace.xs.toPx() / 2f
+        drawLine(color, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = 1.dp.toPx())
     }
 }
 
@@ -1669,8 +1693,9 @@ internal fun DoneTodayRow(t: Task, actions: TodayActions, modifier: Modifier = M
     val haptics = rememberMekaHaptics()
     val label = os.meka.core.domain.TodayTickRules.untickLabel(t.title)
     Row(
+        // The 48 dp target and no taller, as the open rows above it (beside the calmer mockup, 2026-10-29).
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable { actions.select(t.id) }
-            .minTouch().padding(vertical = MekaSpace.xs),
+            .minTouch().testTag(TASK_ROW_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

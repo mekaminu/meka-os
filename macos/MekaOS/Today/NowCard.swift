@@ -133,7 +133,7 @@ struct NowCardFace: View {
                 .font(MekaType.caption)
                 .foregroundStyle(primary ? palette.onAccent : palette.textPrimary)
                 .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .background(Capsule().fill(primary ? palette.accent : palette.background))
+                .background(Capsule().fill(primary ? palette.accent : palette.hairline))
         }
         .buttonStyle(MekaPressStyle())
     }

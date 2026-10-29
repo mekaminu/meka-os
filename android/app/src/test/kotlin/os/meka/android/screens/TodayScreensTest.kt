@@ -28,6 +28,9 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.fold.NOW_CHIP_TAG
 import os.meka.android.fold.NOW_CARD_TAG
+import os.meka.android.today.TASK_ROW_TAG
+import os.meka.core.domain.TodayBesideRules
+import androidx.compose.ui.semantics.SemanticsProperties
 import os.meka.android.today.TodayRoute
 import os.meka.android.today.DoneFoldLine
 import os.meka.core.domain.DoneTodayRules
@@ -65,6 +68,8 @@ class TodayScreensTest {
         const val SETTLE_MS = 3_000L
         /** A two-line title adds ~22 dp to the mockup's ~122 dp card. */
         const val UP_NEXT_MAX_DP = 150f
+        /** Titles that may take two lines on the cover screen, so their rows are taller by right. */
+        val LONG_TITLES = listOf("Plan Saturday's football run with Alex")
     }
 
     /** The tallest Up next / now card on screen in dp, or null when there is none. */
@@ -94,6 +99,9 @@ class TodayScreensTest {
         // Calmer Today, slice 2 (the approved mockup): the Up next card at about half its old height (was ~185 dp with
         // a one-line title; the mockup's is ~122 dp), so it takes ~15% of the folded screen, not ~30%.
         upNextCardHeightDp()?.let { if (it > UP_NEXT_MAX_DP) fail("$name: the Up next card is $it dp tall (at most $UP_NEXT_MAX_DP)") }
+        // Beside the calmer mockup (2026-10-29): a task row with a one-line title is the 48 dp target, its line under
+        // it fitting inside (they were 60 dp, the tick padded 8 dp above and below).
+        assertRowsCompact(name)
         ScreenShots.assertShows(compose, name, "Good afternoon")
         // The re-shot after that (2026-10-22): the greeting on one line beside the watch face, on both screens.
         ScreenShots.assertOneLine(compose, name, "Good afternoon")
@@ -110,6 +118,18 @@ class TodayScreensTest {
             fail("$name: a Fasting card with no fast running")
         }
         check(core.fastingView.value.current != null == (fill == Fill.FASTING))
+    }
+
+    /** Every task row whose title fits one line is at most [TodayBesideRules.ROW_WITH_LINE_MAX_DP] dp tall. */
+    private fun assertRowsCompact(name: String) {
+        val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+        compose.onAllNodesWithTag(TASK_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().forEach { node ->
+            val words = node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }
+                ?: node.children.flatMap { c -> c.config.getOrNull(SemanticsProperties.Text).orEmpty() }.joinToString(" ") { it.text }
+            if (LONG_TITLES.any { words.contains(it) }) return@forEach
+            val dp = node.boundsInRoot.height / density
+            if (dp > TodayBesideRules.ROW_WITH_LINE_MAX_DP) fail("$name: the task row \"$words\" is $dp dp tall (at most ${TodayBesideRules.ROW_WITH_LINE_MAX_DP})")
+        }
     }
 
     private fun shownText(text: String) =

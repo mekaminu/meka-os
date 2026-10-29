@@ -4319,4 +4319,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTotal.shared.head(accounts: 1, trading: 0), "Across 1 account")
         XCTAssertNil(MoneyTotal.shared.card(w: nil))
     }
+
+    /// Today beside its calmer mockup: Anytime's label counts the open tasks, a hairline between rows only.
+    func testTodayBesideOnTheMac() {
+        XCTAssertEqual(TodayBesideRules.shared.anytimeLabel(openCount: 4), "Anytime today · 4")
+        XCTAssertEqual(TodayBesideRules.shared.anytimeLabel(openCount: 0), "Anytime today")
+        XCTAssertTrue(TodayBesideRules.shared.dividerAfter(index: 0, count: 2))
+        XCTAssertFalse(TodayBesideRules.shared.dividerAfter(index: 1, count: 2))
+    }
 }

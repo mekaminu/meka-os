@@ -3589,6 +3589,29 @@ Findings fixed on both apps:
 - Design check: no design file covers the Vault or Your data. No server change, no migration, Mac checked nightly.
 - Landed 749daba; CI run 1131 (39944777725) green first try; published 6cdbfec (vault/ 6 shots, your-data/ 4).
 
+### Quality gate — (2) the design check, Today (2026-10-29): Today beside its calmer mockup
+
+The Daily plan's Saturday "screenshot checks against every mockup", for Today (Money and the Week board had theirs).
+`docs/design/today/today-calmer.dc.html` rendered at 390 (tools/design-render/render.mjs) beside CI run 1445's
+`today/cover-dark-many` at one dp scale with the 8 dp grid and the gutter (beside.py). Item by item:
+- **Task rows:** the mockup's are 48 dp (the 44 dp tick target, `min-height:48px`, a 1 px rule under each); the Fold's
+  were 60 dp (the 44 dp tick plus 8 dp above and below) and the list's 8 dp gap, so a pitch of 68 dp, with no rule. Now
+  `TaskRow` is the 48 dp target and no taller (only the words keep 4 dp of air, so a title with its line still fits) and
+  Done today's rows the same; the Anytime rows draw a hairline in the middle of the gap below them, never under the last
+  (`TodayBesideRules.dividerAfter`). The Mac's rows keep their size (pointer-sized already) and take the same hairline.
+- **The label:** the mockup reads "ANYTIME TODAY · 4"; the app had no count. `TodayBesideRules.anytimeLabel` on both apps.
+- **A row's line** ("15 min", "Carried 2 days", "Overdue") was the 15 sp item meta beside a 16 sp title; it is now the
+  13 sp caption, as the day's times (the calmer scale).
+- **Up next's quiet pills** (Break it down, Tomorrow, Open) were the page's black on the grey card; the mockup draws them
+  a step lighter than the card (#1d1d20 on #121214). They now sit on the hairline tone, both apps (`CoverNow`, `NowCard`).
+- Matching already: the greeting and date block, the slim update banner, Up next's height and 36 dp pills, section
+  labels' 12 sp caps, the event rows at 16 sp, "2 done today ›", the capture bar.
+- Not changed (data, not layout): the shots' invented day has a work block and the Tomorrow peek, which the mockup's
+  Sunday doesn't.
+- Tests: core TodayBesideTest; TodayScreensTest fails on any task row with a one-line title over 52 dp
+  (`TodayBesideRules.ROW_WITH_LINE_MAX_DP`, `TASK_ROW_TAG`); MekaCoreBridgeTests.testTodayBesideOnTheMac. No server
+  change, no migration; Mac checked nightly.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

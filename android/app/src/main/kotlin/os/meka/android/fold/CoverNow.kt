@@ -211,10 +211,10 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
             label, style = if (primary) MekaType.captionStrong else MekaType.caption,
             color = if (primary) Meka.colors.onAccent else Meka.colors.textPrimary,
             maxLines = 1,
-            // 16 dp sides: Done · Break it down · Tomorrow fit one row on the cover screen's card; quiet ones on the
-            // raised surface's own darker tone, as the mockup draws them.
+            // 16 dp sides: Done · Break it down · Tomorrow fit one row on the cover screen's card; quiet ones a step
+            // lighter than the card, as the mockup draws them (beside it 2026-10-29 they were black on the grey card).
             modifier = Modifier.height(PillSize.DRAWN).clip(RoundedCornerShape(MekaRadius.pill))
-                .background(if (primary) Meka.colors.accent else Meka.colors.background)
+                .background(if (primary) Meka.colors.accent else Meka.colors.hairline)
                 .padding(horizontal = MekaSpace.m).wrapContentHeight(Alignment.CenterVertically),
         )
     }

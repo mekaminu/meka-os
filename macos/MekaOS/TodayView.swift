@@ -629,8 +629,19 @@ struct TodayView: View {
                             Spacer().frame(height: MekaSpace.l)
                         }
                         if !tl.anytime.isEmpty {
-                            SectionLabel("Anytime today", palette).staggeredAppear(step(.anytime), play: play)
-                            ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(step(.anytime), play: play) }
+                            // Beside the calmer mockup (2026-10-29): the label counts the open tasks and a hairline
+                            // sits between rows (never under the last), as on the Fold.
+                            let anytime = tl.anytime
+                            SectionLabel(TodayBesideRules.shared.anytimeLabel(openCount: Int32(anytime.count)), palette).staggeredAppear(step(.anytime), play: play)
+                            ForEach(Array(anytime.enumerated()), id: \.element.id) { i, t in
+                                TaskRow(task: t, reason: nil, palette: palette)
+                                    .overlay(alignment: .bottom) {
+                                        if TodayBesideRules.shared.dividerAfter(index: Int32(i), count: Int32(anytime.count)) {
+                                            Rectangle().fill(palette.hairline).frame(height: 1)
+                                        }
+                                    }
+                                    .staggeredAppear(step(.anytime), play: play)
+                            }
                         }
                         let doneChoice = model.doneTodayShown
                         if !today.doneToday.isEmpty && doneChoice.show != .hidden {
@@ -844,7 +855,8 @@ struct TaskRow: View {
                     .lineLimit(2)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: ticking)
                 if let line = subtitle {
-                    Text(line).font(MekaType.itemMeta)
+                    // The calmer scale (beside the mockup, 2026-10-29): a row's line in the caption, as the day's times.
+                    Text(line).font(MekaType.caption)
                         .foregroundStyle(isAlert ? palette.critical : ((late && reason == nil && time != nil) || (carriedLine != nil && reason == nil) ? palette.accent : palette.textSecondary))
                 }
             }
