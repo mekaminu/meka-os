@@ -82,4 +82,45 @@ class LiveMailMoneyFacadeTest {
         now += 6 * 60_000L
         assertEquals(LiveToolRules.MONEY_LOCKED, c.liveMoney("how much have I spent on coffee this month?").reply)
     }
+
+    @Test
+    fun tradingIsSummarisedOnTheOrbAndTypedOnlyWhileUnlocked() = runTest(timeout = 5.minutes) {
+        val c = core()
+        // Nothing followed: said plainly, no unlock needed.
+        assertEquals(os.meka.core.domain.TradingAskRules.EMPTY, (c.askMeka("how's my trading going?") as os.meka.core.domain.AskOutcome.Answered).answer.text)
+        c.openMoney()
+        val address = "0x" + "ab12".repeat(10)
+        assertTrue(!c.tradingWalletAdd("Main $address").refused)
+        assertTrue(c.syncNow())
+        val id = os.meka.core.domain.TradingTracker.walletId(address)
+        // The server's read of the public address.
+        val fields = listOf(
+            os.meka.core.domain.TradingWalletFields.STATE to os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TradingTracker.OK),
+            os.meka.core.domain.TradingWalletFields.READ_AT to os.meka.core.sync.FieldValue.Int64(now - 5 * 60_000L),
+            os.meka.core.domain.TradingWalletFields.EQUITY to os.meka.core.sync.FieldValue.Int64(1_234_567),
+            os.meka.core.domain.TradingWalletFields.PNL_DAY to os.meka.core.sync.FieldValue.Int64(12_050),
+            os.meka.core.domain.TradingWalletFields.POSITIONS to os.meka.core.sync.FieldValue.Text(
+                os.meka.core.domain.TradingTracker.encode(listOf(os.meka.core.domain.TradingPosition("BTC", "0.5", "60000", "62000", "51460", -4_000, 5))),
+            ),
+        )
+        fields.forEach { (f, v) -> serverOps.append(Op("srvtw${k++}", "hh", EntityTypes.TRADING_WALLET, id, f, v, clock.now(), emptyList(), "server")) }
+        assertTrue(c.syncNow())
+        // Open: the orb's money look-up gives the device's summary, quoted for Obi.
+        val orb = c.liveMoney("how's my trading going?")
+        assertEquals(false, orb.unlockMoney)
+        assertTrue("you hold \$12,345.67" in orb.reply && "BTC long 5×, 17% from liquidation" in orb.reply && "+\$120.50 today" in orb.reply, orb.reply)
+        // Typed, the same sentence and no AI.
+        val typed = (c.askMeka("what positions are open?") as os.meka.core.domain.AskOutcome.Answered).answer
+        assertTrue("1 position is open: BTC long" in typed.text, typed.text)
+        c.closeMoney()
+        // Locked: no figures on either, and Unlock under the answer.
+        val locked = c.liveMoney("how's my trading going?")
+        assertEquals(LiveToolRules.MONEY_LOCKED, locked.reply)
+        assertEquals(true, locked.unlockMoney)
+        val typedLocked = (c.askMeka("how's my trading going?") as os.meka.core.domain.AskOutcome.Answered).answer
+        assertEquals(os.meka.core.domain.TradingAskRules.LOCKED, typedLocked.text)
+        assertEquals(os.meka.core.domain.MoneyAskRules.UNLOCK, typedLocked.unlockMoney)
+        c.unlockMoneyAsk()
+        assertTrue("\$12,345.67" in c.liveMoney("how's my trading going?").reply)
+    }
 }

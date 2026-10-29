@@ -879,6 +879,26 @@ class MekaCore(
         return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.answer(q, moneyAskData()), emptyList()))
     }
 
+    /**
+     * Obi sees everything, slice 5: a trading question ([os.meka.core.domain.TradingAskRules.isAbout]) answered from the
+     * followed Hyperliquid accounts' read figures on this device, never by the AI, behind the same unlock as Money.
+     * Nothing to read needs no unlock (no figures are said). Caller is on the core.
+     */
+    private fun tradingSentence(): Pair<String, Boolean> {
+        val rules = os.meka.core.domain.TradingAskRules
+        val wallets = trading.wallets()
+        if (wallets.isEmpty()) return rules.EMPTY to false
+        if (!os.meka.core.domain.MoneyAskRules.unlocked(moneyOpen, moneyAskUntilMs, nowMs())) return rules.LOCKED to true
+        return rules.answer(wallets, os.meka.core.domain.TradingCcy.of(wallets, tradingAlertSetting().pounds), nowMs()) to false
+    }
+
+    private fun tradingAnswer(): os.meka.core.domain.AskOutcome {
+        val (text, locked) = tradingSentence()
+        return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(
+            text, emptyList(), unlockMoney = if (locked) os.meka.core.domain.MoneyAskRules.UNLOCK else null,
+        ))
+    }
+
     // ---- Money redesign, Ask Obi (slice 1): the money chat on every Money tab, answered on the device ----
 
     /** What the money chat reads (caller is on the core): Ask's money data and the Plan tab's bases from the money view. */
@@ -10152,6 +10172,8 @@ class MekaCore(
         if (!beyondHelp) directAdd(q)?.let { return it }
         // Money manager (16): "how much did I spend on takeaways?", "can I afford £300 on Saturday?" are answered from
         // his own Money here, behind his fingerprint, and never go to the AI.
+        // Obi sees everything, slice 5: "how's my trading going?" from the followed Hyperliquid accounts, same unlock.
+        if (!beyondHelp && os.meka.core.domain.TradingAskRules.isAbout(q)) return onCore { tradingAnswer() }
         if (!beyondHelp && os.meka.core.domain.MoneyAskRules.isAbout(q)) return onCore { moneyAnswer(q) }
         // The Vault, slice 3: "when does Alex's passport run out?", "do I have a copy of my licence?", "what's in my
         // Vault?" are answered from the Vault here, never sent to the AI, with Open the Vault under the answer.
@@ -11870,6 +11892,11 @@ class MekaCore(
         onCore {
             val rules = os.meka.core.domain.LiveToolRules
             when {
+                // Obi sees everything, slice 5: a trading question gets the trading summary, behind the same unlock.
+                os.meka.core.domain.TradingAskRules.isAbout(question) -> tradingSentence().let { (text, locked) ->
+                    if (locked) os.meka.core.domain.LiveMoney(rules.MONEY_LOCKED, unlockMoney = true)
+                    else os.meka.core.domain.LiveMoney(rules.moneyAnswer(text))
+                }
                 money.accounts().isEmpty() && moneyBills().isEmpty() -> os.meka.core.domain.LiveMoney(rules.MONEY_EMPTY)
                 !os.meka.core.domain.MoneyAskRules.unlocked(moneyOpen, moneyAskUntilMs, nowMs()) -> os.meka.core.domain.LiveMoney(rules.MONEY_LOCKED, unlockMoney = true)
                 else -> os.meka.core.domain.LiveMoney(rules.moneyAnswer(os.meka.core.domain.MoneyAskRules.answer(rules.moneyQuestion(question), moneyAskData())))

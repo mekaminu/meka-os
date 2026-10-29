@@ -57,7 +57,7 @@ object ObiSees {
     /** What the model is told for an area Navilife doesn't have. */
     val NO_AREA: String get() =
         "Navilife has no area by that name. Use one of: ${ObiArea.KEYS.joinToString(", ")}; for a day's calendar and tasks use " +
-            "${LiveToolRules.LOOK_UP_TOOL}, for email ${LiveToolRules.MAIL_TOOL}, for money ${LiveToolRules.MONEY_TOOL}."
+            "${LiveToolRules.LOOK_UP_TOOL}, for email ${LiveToolRules.MAIL_TOOL}, for money and trading ${LiveToolRules.MONEY_TOOL}."
     /** ... when the device couldn't read it just now. */
     const val FAILED = "Navilife couldn't read that just now. Say you can't see it at the moment."
 

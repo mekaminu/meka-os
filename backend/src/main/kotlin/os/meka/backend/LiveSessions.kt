@@ -423,13 +423,13 @@ class GeminiLiveTokens(
             },
             buildJsonObject {
                 put("name", os.meka.core.domain.LiveToolRules.MONEY_TOOL)
-                put("description", "Answer a question about his own money from his statements, worked out on his phone: spending on something over a period, what's going out soon, payday, what's safe to spend, whether he can afford an amount. Only while Money is unlocked; never gives his transactions. Not financial advice.")
+                put("description", "Answer a question about his own money from his statements, worked out on his phone: spending on something over a period, what's going out soon, payday, what's safe to spend, whether he can afford an amount, and his trading (\"how's my trading going?\": the Hyperliquid account he follows by its public address, P&L, open positions). Only while Money is unlocked; never gives his transactions. Not financial advice.")
                 putJsonObject("parameters") {
                     put("type", "OBJECT")
                     putJsonObject("properties") {
                         putJsonObject(os.meka.core.domain.LiveToolRules.QUESTION_ARG) {
                             put("type", "STRING")
-                            put("description", "His money question in his words: \"how much did I spend on takeaways last month?\", \"what's coming out this week?\", \"can I afford £300 on Saturday?\".")
+                            put("description", "His money question in his words: \"how much did I spend on takeaways last month?\", \"what's coming out this week?\", \"can I afford £300 on Saturday?\", \"how's my trading going?\".")
                         }
                     }
                     putJsonArray("required") { add(os.meka.core.domain.LiveToolRules.QUESTION_ARG) }
