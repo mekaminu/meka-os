@@ -416,20 +416,18 @@ class BoardScreensTest {
         }
 
         val gateNode = compose.onNodeWithContentDescription(label(gate)).fetchSemanticsNode()
-        assertTrue("the card has no click action: ${gateNode.config}", gateNode.config.contains(SemanticsActions.OnClick))
+        val gateConfig = "${gateNode.config} children ${gateNode.children.size}"
         compose.onNodeWithContentDescription(label(gate)).performSemanticsAction(SemanticsActions.OnClick)
         settle()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-move-sheet"))
-        ScreenShots.assertSensible(compose, "cover-dark-move-sheet")
         fun sheetShown() = compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_SHEET_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        if (!sheetShown()) {
-            val bySemantics = "MOVE TO ${compose.onAllNodesWithText("MOVE TO", useUnmergedTree = true).fetchSemanticsNodes().size}, " +
-                "titles ${compose.onAllNodesWithText("Fix the gate latch", useUnmergedTree = true).fetchSemanticsNodes().size}, " +
-                "core sheet ${os.meka.core.domain.BoardFoldedRules.moveSheet(core.weekBoard.value, gate)?.chips?.map { it.label }}"
+        val bySemantics = sheetShown()
+        if (!bySemantics) {
             compose.onNodeWithContentDescription(label(gate)).performTouchInput { click(center) }
             settle()
-            fail("no Move to sheet after the tap ($bySemantics; a real tap opens it: ${sheetShown()})")
         }
+        if (!sheetShown()) fail("no Move to sheet after a tap")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-move-sheet"))
+        ScreenShots.assertSensible(compose, "cover-dark-move-sheet")
         listOf("Tomorrow", "Wed 21", "Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday").forEach { chip ->
             if (compose.onAllNodesWithText(chip, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no $chip chip in the sheet")
         }
@@ -451,6 +449,7 @@ class BoardScreensTest {
             .single { it.label == "Tomorrow" }
         compose.runOnIdle { action.action() }
         awaitCore("Tomorrow action") { core.weekBoard.value.dayOf(bins)?.epochDay == today + 1 }
+        if (!bySemantics) fail("the screen reader's click didn't open the sheet: $gateConfig")
     }
 
     /**
