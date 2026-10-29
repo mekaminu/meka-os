@@ -893,6 +893,15 @@ class BoardScreensTest {
             }
         }
         settle()
+        // The width changes on the UI thread and its snapshot is applied at once, then the paused clock runs frames.
+        fun resize(change: () -> Unit) {
+            compose.runOnUiThread {
+                change()
+                androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+            }
+            compose.mainClock.advanceTimeByFrame()
+            settle()
+        }
         fun has(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         fun dayLine() = compose.onAllNodesWithTag(FOLDED_DAY_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
             ?.config?.getOrNull(SemanticsProperties.ContentDescription)?.joinToString() ?: ""
@@ -904,8 +913,7 @@ class BoardScreensTest {
         assertTrue("Saturday is in view folded: ${dayLine()}", dayLine().startsWith("Sat 24"))
 
         // Unfold.
-        screenWidth = 829.dp
-        settle()
+        resize { screenWidth = 829.dp }
         if (has(FOLDED_STRIP_TAG)) fail("unfolded (829 dp) still shows the folded strip")
         if (!has(os.meka.android.calendar.WEEKEND_ROW_TAG)) fail("unfolded has no week of columns")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-unfolded-on-saturday"))
@@ -915,8 +923,7 @@ class BoardScreensTest {
         assertTrue("Saturday's task is in view unfolded ($lawn in $root)", lawn.top >= root.top && lawn.top < root.bottom && lawn.height > 0f)
 
         // Fold again: back on Saturday.
-        screenWidth = 344.dp
-        settle()
+        resize { screenWidth = 344.dp }
         if (!has(FOLDED_STRIP_TAG)) fail("folded again isn't the one-day layout")
         assertTrue("folding again comes back to Saturday: ${dayLine()}", dayLine().startsWith("Sat 24"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-folded-again"))
