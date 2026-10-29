@@ -4784,3 +4784,17 @@ Done 2026-10-29 in one slice:
   went reads "Open WhatsApp" with "Find <group> in WhatsApp" under it. Help: messages.md. Sending unchanged (Level 3).
 - Tests: TriageReplyTest (Family first, always-notify, exact contact, mobile pick, duplicates, two of one name, group
   gone). Fold only; no Mac, server or migration change.
+
+## Option B on the open Fold (density pass) · slice 3, 2026-10-29: Obi's line on one line
+- Why: CI run 1444's open-Fold shot (docs/screens/week-board/beside-open.png) still wrapped Obi's pill to two lines
+  ("A clear week so / far") beside Today at 829 dp; "+ Goal" in the month's row took the room.
+- Core: `BoardOpenFoldRules.menuWithGoals` (the open ⋯ plus "Goals · up to 3" / "N this week" when the week can take
+  or has goals), `addInHeader`, `GOALS`, `goalsDetail`; `BoardMatchRules.NUDGE_LINES_BESIDE = 1` and
+  `nudgeLines(place)`. BoardOpenFoldTest.plusGoalMovesIntoTheMenuSoObisLineKeepsOneLine.
+- Fold: the header's goals show only picked goals (no "+ Goal"); ⋯ → Goals opens the goals' sheet (the folded
+  layout's, now on the open Fold too); the pill's words take one line beside Today with an ellipsis as the last resort
+  (the whole line is the pill's spoken text). BoardScreensTest.theHeaderAndAddAreTheMockupsSize checks no "+ Goal" in
+  the row, the pill no taller than the round buttons, and ⋯ → Goals reaching "+ Goal".
+- Mac: the pill beside Today keeps one whole line (fixed width), so `ViewThatFits` falls back to the stacked header
+  instead of wrapping; "+ Goal" stays in the row (the Mac window has the room). MekaCoreBridgeTests pins nudgeLines.
+  No server change, no migration. Mac checked nightly.

@@ -554,8 +554,9 @@ class BoardScreensTest {
     }
 
     /**
-     * The density pass, slice 2 (the rest of the side-by-side check): unfolded on a Wednesday, "+ Goal" sits in the
-     * header's row beside the month (no goals row of its own, no hint there); the month is the mockup's 28 sp; "+ add"
+     * The density pass, slice 2 (the rest of the side-by-side check): unfolded on a Wednesday, the week's goals have no
+     * row of their own and no hint; since 2026-10-29 "+ Goal" is in ⋯ (Goals, opening the goals' sheet) so Obi's line
+     * keeps one line beside Today; the month is the mockup's 28 sp; "+ add"
      * is a slim dashed row (under 32 dp); an empty weekday's narrow pill reads "– / …" on one line under "planned".
      * The shot is `inner-dark-dense-head` (screens branch), for docs/screens/week-board beside design-1280.png.
      */
@@ -575,9 +576,14 @@ class BoardScreensTest {
         val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
         val month = compose.onAllNodesWithTag(MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
             ?: throw AssertionError("no month in the header")
-        val goal = compose.onAllNodesWithText(os.meka.core.domain.BoardGoalRules.ADD, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
-            ?: throw AssertionError("no + Goal")
-        assertTrue("+ Goal is in the month's row ($goal vs $month)", goal.top < month.bottom && goal.bottom > month.top && goal.left >= month.right)
+        if (compose.onAllNodesWithText(os.meka.core.domain.BoardGoalRules.ADD, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("+ Goal is still in the header's row (it is in ⋯ now)")
+        }
+        // Obi's line keeps one line beside Today: the pill is no taller than the header's round buttons (and a touch).
+        compose.onAllNodesWithTag(NUDGE_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.let { pill ->
+            assertTrue("Obi's pill sits on the month's row ($pill vs $month)", pill.top < month.bottom && pill.bottom > month.top)
+            assertTrue("Obi's line wraps (${pill.height / density} dp tall)", pill.height / density <= os.meka.core.domain.BoardDenseHeadRules.BUTTON + 4f)
+        }
         if (compose.onAllNodesWithText(os.meka.core.domain.BoardGoalRules.EMPTY, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
             fail("the goals' hint still shows in the header")
         }
@@ -590,6 +596,16 @@ class BoardScreensTest {
             .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
         assertTrue("an empty weekday's pill reads \"– / …\" ($values)", values.any { it.startsWith(os.meka.core.domain.BoardDenseHeadRules.NOTHING_SHORT) })
         assertTrue("no narrow pill says \"nothing yet\" ($values)", values.none { it.contains(os.meka.core.domain.BoardPlannerRules.NOTHING_YET) })
+
+        // ⋯ → Goals opens the week's goals with + Goal.
+        compose.onNodeWithTag(OPEN_MENU_TAG).performClick()
+        settle()
+        compose.onNodeWithText(os.meka.core.domain.BoardOpenFoldRules.GOALS).performClick()
+        settle()
+        assertTrue(
+            "⋯ → Goals didn't open the goals with + Goal",
+            compose.onAllNodesWithText(os.meka.core.domain.BoardGoalRules.ADD, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+        )
     }
 
     /**

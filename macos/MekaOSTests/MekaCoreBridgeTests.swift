@@ -1667,6 +1667,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(match.nudgePlace(wide: true), BoardNudgePlace.besideToday)
         XCTAssertEqual(match.nudgePlace(wide: false), BoardNudgePlace.underTitle)
         XCTAssertEqual(match.NUDGE_MAX_WIDTH, 420)
+        // 2026-10-29: Obi's words keep one line beside Today, two under the month.
+        XCTAssertEqual(match.nudgeLines(place: BoardNudgePlace.besideToday), 1)
+        XCTAssertEqual(match.nudgeLines(place: BoardNudgePlace.underTitle), 2)
         // Option B match, slice 4: the check's gaps (area names on narrow lanes, "planned" stacked, round buttons, empty past days).
         XCTAssertTrue(match.footWords(compact: true))
         XCTAssertTrue(match.pillStacked(compact: true))

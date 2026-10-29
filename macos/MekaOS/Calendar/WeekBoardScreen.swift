@@ -159,9 +159,9 @@ struct WeekBoardScreen: View {
                         .padding(.leading, MekaSpace.m)
                     Spacer(minLength: MekaSpace.xs)
                     if let nudge {
-                        ObiNudgeLine(nudge: nudge, palette: palette)
-                            .frame(maxWidth: CGFloat(BoardMatchRules.shared.NUDGE_MAX_WIDTH))
-                            .fixedSize(horizontal: false, vertical: true)
+                        // Obi's words keep one line beside Today (BoardMatchRules.nudgeLines); a line that can't fit
+                        // makes this row too wide, so the header falls back to the pill on its own line below.
+                        ObiNudgeLine(nudge: nudge, palette: palette, place: BoardNudgePlace.besideToday)
                     }
                     weekButtons
                 }
@@ -316,9 +316,12 @@ private struct ObiNudgeLine: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let nudge: BoardNudge
     let palette: MekaPalette
+    /// Where the pill sits: beside Today its words keep one line, whole (never cut), under the title up to two.
+    var place: BoardNudgePlace = BoardNudgePlace.underTitle
 
     var body: some View {
         let tone = nudge.warns ? palette.calendar3 : palette.textSecondary
+        let beside = place == BoardNudgePlace.besideToday
         let pill = HStack(spacing: MekaSpace.xs) {
             Circle()
                 .fill(RadialGradient(
@@ -328,7 +331,8 @@ private struct ObiNudgeLine: View {
                 .frame(width: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB), height: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB))
                 .accessibilityHidden(true)
             Text(BoardNudgeRules.shared.SPEAKER).font(BoardFont.label).foregroundStyle(palette.textPrimary)
-            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.NUDGE_LINES))
+            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.nudgeLines(place: place)))
+                .fixedSize(horizontal: beside, vertical: false)
                 .id(nudge.line)
                 .transition(.opacity)
         }

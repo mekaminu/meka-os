@@ -26,6 +26,10 @@ package os.meka.core.domain
  *   scrolled, whatever passes under the header fades out over [HEAD_FADE_DP] ([headFade], [headAlpha]) instead of
  *   leaving a hard-cut sliver (a stray dashed fragment of "+ add", a row half under the strip's divider). At rest
  *   nothing fades, so the first row stays whole.
+ * - Obi's line on one line (density pass, Claude's check of CI's open-Fold shot 2026-10-29: at 829 dp "A clear week so
+ *   far" wrapped to two lines beside Today): "+ Goal" leaves the header's row for ⋯ ([menuWithGoals]: "Goals", which
+ *   opens the week's goals to pick, add or turn off), the goals already picked stay in the row as chips ([addInHeader]
+ *   false), and the pill's words keep one line there ([BoardMatchRules.nudgeLines]).
  */
 object BoardOpenFoldRules {
     /** The least the weekday row is drawn (dp): its header, pill and "+ add" with room to drop a card. */
@@ -93,6 +97,27 @@ object BoardOpenFoldRules {
             if (canPlan) add(FoldedMenuItem(FoldedMenuKind.PLAN_WEEK, PlanWeekRules.OPEN, "Obi helps"))
             if (board.offersReview && weekIndex == 0) add(FoldedMenuItem(FoldedMenuKind.REVIEW, BoardReviewRules.REVIEW, ""))
         }
+
+    /**
+     * [menu] with "Goals" last when [week] can take or has goals (the open Fold: "+ Goal" is in ⋯ so Obi's line keeps
+     * its one line in the header's row): "up to 3" while none are picked, "2 this week" once some are.
+     */
+    fun menuWithGoals(
+        board: WeekBoard, week: BoardWeek?, weekIndex: Int, timelineOpen: Boolean?, canAddEvent: Boolean, canPlan: Boolean,
+    ): List<FoldedMenuItem> {
+        val base = menu(board, weekIndex, timelineOpen, canAddEvent, canPlan)
+        if (week == null || (week.goals.isEmpty() && !week.canAddGoal)) return base
+        return base + FoldedMenuItem(FoldedMenuKind.GOALS, GOALS, goalsDetail(week.goals.size))
+    }
+
+    /** Whether "+ Goal" sits in the header's row beside the picked goals: not on the open Fold, where it is in ⋯. */
+    fun addInHeader(goalsInMenu: Boolean): Boolean = !goalsInMenu
+
+    /** The menu's goals. */
+    const val GOALS = "Goals"
+
+    /** The goals item's detail: "up to 3" with none picked, else "N this week". */
+    fun goalsDetail(picked: Int): String = if (picked <= 0) "up to ${BoardGoalRules.MAX}" else "$picked this week"
 
     /** The menu's way back to the list of days. */
     const val AGENDA = "Agenda view"

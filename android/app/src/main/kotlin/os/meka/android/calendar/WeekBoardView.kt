@@ -590,11 +590,13 @@ fun WeekBoardView(
             }
             // Density pass slice 2: unfolded, the week's goals and "+ Goal" sit in the header's row after "W44".
             val headerWeek = board.weeks.getOrNull(weekIndex)
-                ?.takeIf { BoardDenseHeadRules.goalsInHeader(wide) && (it.goals.isNotEmpty() || it.canAddGoal) }
+                ?.takeIf { BoardDenseHeadRules.goalsInHeader(wide) && it.goals.isNotEmpty() }
             val headerGoals: (@Composable (Modifier) -> Unit)? = if (headerWeek == null) null else { mod ->
+                // Obi's line on one line: "+ Goal" is in ⋯ (Goals) on the open Fold; the picked goals stay here.
                 GoalsLane(
                     week = headerWeek, core = core, undo = undo, hovered = if (drag != null) hovered else null,
                     onBounds = { key, r -> columns[key] = r }, modifier = mod, inHeader = true,
+                    showAdd = os.meka.core.domain.BoardOpenFoldRules.addInHeader(goalsInMenu = true),
                 )
             }
             if (!wide) board.weeks.getOrNull(weekIndex)?.let { week ->
@@ -635,7 +637,7 @@ fun WeekBoardView(
                 },
                 nudge = nudgePill,
                 goals = headerGoals,
-                menu = os.meka.core.domain.BoardOpenFoldRules.menu(board, weekIndex, showTimeline, onAddEvent != null, onPlanWeek != null),
+                menu = os.meka.core.domain.BoardOpenFoldRules.menuWithGoals(board, board.weeks.getOrNull(weekIndex), weekIndex, showTimeline, onAddEvent != null, onPlanWeek != null),
                 onMenu = { item ->
                     when (item.kind) {
                         FoldedMenuKind.AGENDA -> onAgenda?.invoke()
@@ -643,6 +645,7 @@ fun WeekBoardView(
                         FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
                         FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
                         FoldedMenuKind.REVIEW -> onReview()
+                        FoldedMenuKind.GOALS -> { openTray = null; goalsOpen = true }
                         else -> Unit
                     }
                 },
@@ -826,8 +829,9 @@ fun WeekBoardView(
             }
         }
 
-        // The folded mockup: ⋯ → Goals opens the week's goals in a sheet over the day (pick, + Goal, Off this week).
-        if (!wide && goalsOpen) {
+        // The folded mockup: ⋯ → Goals opens the week's goals in a sheet over the day (pick, + Goal, Off this week);
+        // the open Fold the same, its "+ Goal" being in ⋯ so Obi's line keeps one line in the header.
+        if (goalsOpen) {
             board.weeks.getOrNull(weekIndex)?.let { week ->
                 TraySheet(title = "Goals · ${week.title}", hidden = false, onClose = { haptics.tick(); goalsOpen = false }) {
                     GoalsLane(
@@ -1124,7 +1128,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, dense: Boolean = fal
         Text(BoardNudgeRules.SPEAKER, style = if (dense) BoardType.labelDense else MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
         Spacer(Modifier.width(MekaSpace.xs))
         androidx.compose.animation.Crossfade(n.line, animationSpec = MekaMotion.appear(reduced), label = "nudge-line") { line ->
-            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
+            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = BoardMatchRules.nudgeLines(BoardMatchRules.nudgePlace(dense)), overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -2379,6 +2383,7 @@ private fun GoalsLane(
     onBounds: (Long, Rect) -> Unit,
     modifier: Modifier = Modifier,
     inHeader: Boolean = false,
+    showAdd: Boolean = true,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -2395,7 +2400,7 @@ private fun GoalsLane(
                 scope.launch { show(runCatching { core.unpickBoardGoal(g.goalId, week.startEpochDay) }.getOrNull()) }
             }
         }
-        if (week.canAddGoal) {
+        if (week.canAddGoal && showAdd) {
             AddGoalChip(
                 week = week, empty = week.goals.isEmpty(), inHeader = inHeader,
                 choices = { runCatching { core.boardGoalChoices(week.startEpochDay) }.getOrDefault(emptyList()) },

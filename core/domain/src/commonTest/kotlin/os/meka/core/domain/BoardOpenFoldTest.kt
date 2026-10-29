@@ -87,6 +87,28 @@ class BoardOpenFoldTest {
     }
 
     @Test
+    fun plusGoalMovesIntoTheMenuSoObisLineKeepsOneLine() {
+        val week = BoardWeek(mon26, "This week", "26 Oct–1 Nov", listOf(day(past = false)))
+        val board = WeekBoard(mon26 + 2, listOf(week))
+        // No goals picked: "Goals · up to 3" last in ⋯, after what the menu already held.
+        val none = BoardOpenFoldRules.menuWithGoals(board, week, 0, true, true, true)
+        assertEquals(BoardOpenFoldRules.menu(board, 0, true, true, true) + FoldedMenuItem(FoldedMenuKind.GOALS, "Goals", "up to 3"), none)
+        // Two picked: "2 this week"; three (no room for another) still opens them to turn one off.
+        val g = { id: String -> BoardGoal(id, "Goal $id", 0, 1, finished = false, picked = true) }
+        assertEquals("2 this week", BoardOpenFoldRules.menuWithGoals(board, week.copy(goals = listOf(g("a"), g("b"))), 0, true, true, true).last().detail)
+        val full = week.copy(goals = listOf(g("a"), g("b"), g("c")))
+        assertEquals(FoldedMenuKind.GOALS, BoardOpenFoldRules.menuWithGoals(board, full, 0, true, true, true).last().kind)
+        // No week: the plain menu.
+        assertEquals(BoardOpenFoldRules.menu(board, 0, null, false, false), BoardOpenFoldRules.menuWithGoals(board, null, 0, null, false, false))
+        // "+ Goal" leaves the header's row only when it is in ⋯.
+        assertFalse(BoardOpenFoldRules.addInHeader(goalsInMenu = true))
+        assertTrue(BoardOpenFoldRules.addInHeader(goalsInMenu = false))
+        // Obi's words: one line beside Today, two under the title.
+        assertEquals(1, BoardMatchRules.nudgeLines(BoardNudgePlace.BESIDE_TODAY))
+        assertEquals(2, BoardMatchRules.nudgeLines(BoardNudgePlace.UNDER_TITLE))
+    }
+
+    @Test
     fun theWeekendAndTheListsSitOnTheWeekdaysGrid() {
         // The Fold's 580 dp row with no gap (each column pads itself): five weekdays of 116, the weekend two of them.
         assertEquals(116f, BoardOpenFoldRules.gridColumn(580f))

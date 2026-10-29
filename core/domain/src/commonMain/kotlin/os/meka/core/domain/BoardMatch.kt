@@ -191,8 +191,17 @@ object BoardMatchRules {
     /** The widest the pill grows beside Today, in dp/pt, so the month and the buttons keep their room. */
     const val NUDGE_MAX_WIDTH = 420
 
-    /** Lines the pill's words may take: two beside Today (the row is tight on the unfolded Fold), two under the title. */
+    /** Lines the pill's words may take under the title (the cover screen, a narrow Mac window). */
     const val NUDGE_LINES = 2
+
+    /**
+     * Lines beside Today: one (2026-10-29: two lines there read as a wrapped sentence at 829 dp; "+ Goal" moved into ⋯
+     * to give the line its room, and a line that still can't fit ends in "…", its whole words still spoken).
+     */
+    const val NUDGE_LINES_BESIDE = 1
+
+    /** The lines Obi's words take at [place]. */
+    fun nudgeLines(place: BoardNudgePlace): Int = if (place == BoardNudgePlace.BESIDE_TODAY) NUDGE_LINES_BESIDE else NUDGE_LINES
 
     /** The orb's size in the pill (the mockup's 30 px at 1280, scaled to the app's header). */
     const val NUDGE_ORB = 24
