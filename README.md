@@ -71,6 +71,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/board/inner-dark-dense-head.png](docs/screens/fold/board/inner-dark-dense-head.png)
 - [fold/board/inner-dark-dense.png](docs/screens/fold/board/inner-dark-dense.png)
 - [fold/board/inner-dark-empty.png](docs/screens/fold/board/inner-dark-empty.png)
+- [fold/board/inner-dark-first-cards.png](docs/screens/fold/board/inner-dark-first-cards.png)
 - [fold/board/inner-dark-grid.png](docs/screens/fold/board/inner-dark-grid.png)
 - [fold/board/inner-dark-lists.png](docs/screens/fold/board/inner-dark-lists.png)
 - [fold/board/inner-dark-many.png](docs/screens/fold/board/inner-dark-many.png)
