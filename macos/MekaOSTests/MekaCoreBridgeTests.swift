@@ -3125,7 +3125,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         _ = try await core.planStudyLessons(ids: ids, epochDay: nil)
         for key in ["eve", "night", "thu", "sat"] { _ = try await core.setStudySlot(courseId: id, key: key, on: true) }
         let week = try XCTUnwrap(core.studyView.value.course(id: id)?.week)
-        let row = try XCTUnwrap(week.first { $0.button != nil })
+        // Welcome was ticked today, so today's row can already read Done (when today has a session): take a Start row.
+        let row = try XCTUnwrap(week.first { $0.button == StudyWeekRules.shared.START })
         XCTAssertEqual(row.state.name, "START")
         XCTAssertEqual(row.button, StudyWeekRules.shared.START)
         let started = try await core.startStudySession(key: row.key)
