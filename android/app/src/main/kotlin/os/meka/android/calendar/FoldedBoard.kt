@@ -3,6 +3,12 @@ package os.meka.android.calendar
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -333,6 +339,144 @@ private fun FoldedCardWords(f: FoldedCard, modifier: Modifier, dot: androidx.com
     }
 }
 
+/**
+ * The folded moves (slice 3; the approved mockup): what a tap ([open]: the Move to sheet) and a swipe right ([swipe]:
+ * Tomorrow) do to a day's card on the folded phone. [editing] is the card whose own menu the sheet's Edit asked for
+ * (that card opens it, then calls [onEdited]).
+ */
+@androidx.compose.runtime.Stable
+internal class FoldedMoves(
+    val open: (BoardCard) -> Unit,
+    val swipe: (BoardCard) -> Unit,
+    val canSwipe: (BoardCard) -> Boolean,
+    val editing: String?,
+    val onEdited: () -> Unit,
+    /** Tasks moved on the folded Board so far ([FoldedMoveHint]); the hint line shows below three. */
+    val moves: Int,
+)
+
+/** How many tasks he has moved on the folded Board on this phone, for the hint line (it hides after three). */
+internal object FoldedMoveHint {
+    private const val PREFS = "meka.hints"
+    private const val KEY = "boardFoldedMoves"
+
+    fun moves(context: android.content.Context): Int =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getInt(KEY, 0)
+
+    /** One more move; returns the new count (stops counting once the hint is gone). */
+    fun moved(context: android.content.Context): Int {
+        val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        val n = prefs.getInt(KEY, 0)
+        if (n >= BoardFoldedRules.HINT_MOVES) return n
+        prefs.edit().putInt(KEY, n + 1).apply()
+        return n + 1
+    }
+}
+
+/** The mockup's quiet hint under the day's cards, until three tasks have been moved. */
+@Composable
+internal fun FoldedMoveHintLine(modifier: Modifier = Modifier) {
+    Text(
+        BoardFoldedRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
+        modifier = modifier.fillMaxWidth().padding(horizontal = MekaSpace.xxs).testTag(FOLDED_HINT_TAG),
+    )
+}
+
+/** Behind a card being swiped right: "Tomorrow ›" in the accent, filling in as [progress] nears 1. */
+@Composable
+internal fun FoldedSwipeReveal(progress: Float, modifier: Modifier) {
+    Box(
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.accent.copy(alpha = 0.08f + 0.17f * progress))
+            .padding(start = BoardFoldedRules.CARD_PAD.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            BoardFoldedRules.TOMORROW + " ›", style = MekaType.metaStrong,
+            color = Meka.colors.accent.copy(alpha = 0.4f + 0.6f * progress), maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The folded Move to sheet (the approved mockup's tap on a task): it rises over the day on a scrim with the task's
+ * title, MOVE TO and its chips (Tomorrow, the week's days with today on, its own day lit, Someday), then Done · Edit ·
+ * Close. A chip moves it and closes the sheet ("Moved “…” to Thu 22 Oct · Undo" on the bar); the scrim or Close shuts
+ * it. Reduced motion: it fades in rather than rising.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun FoldedMoveSheetView(
+    sheet: os.meka.core.domain.FoldedMoveSheet, onMove: (os.meka.core.domain.FoldedMoveChip) -> Unit,
+    onDone: () -> Unit, onEdit: () -> Unit, onClose: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val rise = remember { androidx.compose.animation.core.Animatable(if (reduced) 0f else 1f) }
+    val shown = remember { androidx.compose.animation.core.Animatable(if (reduced) 0f else 1f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (reduced) shown.animateTo(1f, MekaMotion.appear(true))
+        else rise.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 500f))
+    }
+    val scrimTaps = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(Modifier.fillMaxSize().zIndex(2f).alpha(if (reduced) shown.value else 1f).testTag(FOLDED_SHEET_TAG)) {
+        Box(
+            Modifier.fillMaxSize().background(Meka.colors.background.copy(alpha = 0.6f))
+                .clickable(interactionSource = scrimTaps, indication = null) { onClose() }
+                .semantics { contentDescription = BoardFoldedRules.CLOSE },
+        )
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .graphicsLayer { translationY = rise.value * size.height }
+                // A tap on the sheet itself stays on it (only the scrim closes it).
+                .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false) } }
+                .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                .background(Meka.colors.surfaceRaised)
+                .border(1.dp, Meka.colors.hairline, RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                .padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.m, bottom = MekaSpace.l),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        ) {
+            Box(Modifier.align(Alignment.CenterHorizontally).width(MekaSpace.xl).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline))
+            Text(sheet.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(BoardFoldedRules.MOVE_TO.uppercase(), style = MekaType.micro, color = Meka.colors.textSecondary, modifier = Modifier.semantics { heading() })
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                sheet.chips.forEach { c ->
+                    Box(
+                        Modifier.heightIn(min = MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
+                            .clickable(role = Role.Button) { haptics.light(); onMove(c) }
+                            .semantics { contentDescription = c.spoken; selected = c.lit },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            c.label, style = MekaType.itemMeta, color = if (c.lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                .background(if (c.lit) Meka.colors.accent else Meka.colors.surface)
+                                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs).testTag(FOLDED_CHIP_TAG),
+                        )
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                SheetButton(BoardFoldedRules.DONE, Meka.colors.accent, Meka.colors.onAccent, Modifier.weight(1f)) { haptics.light(); onDone() }
+                SheetButton(BoardFoldedRules.EDIT, Meka.colors.surface, Meka.colors.textPrimary, Modifier.weight(1f)) { haptics.tick(); onEdit() }
+                SheetButton(BoardFoldedRules.CLOSE, androidx.compose.ui.graphics.Color.Transparent, Meka.colors.textSecondary, Modifier.weight(1f)) { haptics.tick(); onClose() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetButton(label: String, fill: androidx.compose.ui.graphics.Color, ink: androidx.compose.ui.graphics.Color, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.height(SHEET_BUTTON).clip(RoundedCornerShape(MekaRadius.m)).background(fill)
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, style = MekaType.metaStrong, color = ink, maxLines = 1) }
+}
+
+private val SHEET_BUTTON = 48.dp
 private val FOLDED_DOT = 7.dp
 private const val DOT_DP = 5
 private val FOLDED_MENU_WIDTH = 200.dp
@@ -345,3 +489,6 @@ internal const val FOLDED_STRIP_TAG = "board-folded-strip"
 internal const val FOLDED_DAY_TAG = "board-folded-day"
 internal const val FOLDED_EVENT_TAG = "board-folded-event"
 internal const val FOLDED_TIME_TAG = "board-folded-time"
+internal const val FOLDED_SHEET_TAG = "board-folded-sheet"
+internal const val FOLDED_CHIP_TAG = "board-folded-chip"
+internal const val FOLDED_HINT_TAG = "board-folded-hint"

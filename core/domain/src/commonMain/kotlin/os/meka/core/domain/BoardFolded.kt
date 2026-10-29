@@ -32,6 +32,17 @@ data class FoldedCard(
     val spoken: String,
 )
 
+/**
+ * One chip in the folded Move to sheet: "Tomorrow", "Thu 22" or "Someday". [epochDay] is the day it moves to (null for
+ * Someday); [lit] marks the day the task is on now (tapping it just closes the sheet).
+ */
+data class FoldedMoveChip(val label: String, val epochDay: Long?, val lit: Boolean, val spoken: String) {
+    val someday: Boolean get() = epochDay == null
+}
+
+/** The folded Move to sheet for a task (the approved mockup's tap): its title, the chips, then Done · Edit · Close. */
+data class FoldedMoveSheet(val taskId: String, val title: String, val chips: List<FoldedMoveChip>)
+
 /** What the folded Board's ⋯ menu holds: everything that used to crowd the cover screen's header. */
 enum class FoldedMenuKind { AGENDA, TIMELINE, NEW_EVENT, PLAN_WEEK, REVIEW, GOALS, NO_DAY, SOMEDAY }
 
@@ -161,6 +172,57 @@ object BoardFoldedRules {
         add(FoldedMenuItem(FoldedMenuKind.NO_DAY, WeekBoardRules.NO_DAY, count(week.lane.size)))
         add(FoldedMenuItem(FoldedMenuKind.SOMEDAY, WeekBoardRules.SOMEDAY, count(board.someday.size)))
     }
+
+    /** A task swiped right this far (dp) goes to Tomorrow when let go; less springs back. */
+    const val SWIPE_DP = 96
+
+    /** The hint under the day's cards shows until he has moved this many tasks on the folded Board. */
+    const val HINT_MOVES = 3
+    const val HINT = "Tap a task to move it · or hold it and drag onto a day above · swipe right = tomorrow"
+    const val MOVE_TO = "Move to"
+    const val TOMORROW = "Tomorrow"
+    const val DONE = "Done"
+    const val EDIT = "Edit"
+    const val CLOSE = "Close"
+
+    /** The hint line shows while fewer than [HINT_MOVES] tasks were moved, on a day that has an open task to move. */
+    fun showsHint(moves: Int, day: BoardDay): Boolean = moves < HINT_MOVES && day.canDrop && day.openCards.isNotEmpty()
+
+    /**
+     * Tap a task on the folded Board: Move to "Tomorrow" (unless it is already tomorrow's), then each day of its week
+     * from today on ("Mon 26" … "Sun 1", its own day lit), then Someday (not for a repeating task, which belongs to its
+     * days). Null when [taskId] isn't an open task on a day.
+     */
+    fun moveSheet(board: WeekBoard, taskId: String): FoldedMoveSheet? {
+        val day = board.dayOf(taskId) ?: return null
+        val card = day.cards.first { it.id == taskId }
+        if (!card.canMove) return null
+        val tomorrow = board.todayEpochDay + 1
+        val week = board.weeks.firstOrNull { day.epochDay in it.startEpochDay until it.startEpochDay + 7 } ?: return null
+        val chips = buildList {
+            if (day.epochDay != tomorrow && board.day(tomorrow)?.canDrop == true) {
+                add(FoldedMoveChip(TOMORROW, tomorrow, false, "Move to tomorrow"))
+            }
+            week.days.filter { it.canDrop }.forEach { d ->
+                val lit = d.epochDay == day.epochDay
+                val spoken = CivilDate.shortLabel(d.epochDay).let { if (lit) "$it, where it is now" else "Move to $it" }
+                add(FoldedMoveChip("${d.weekday} ${d.number}", d.epochDay, lit, spoken))
+            }
+            if (!card.task.isRepeating) add(FoldedMoveChip(WeekBoardRules.SOMEDAY, null, false, "Move to Someday"))
+        }
+        return FoldedMoveSheet(taskId, card.title, chips)
+    }
+
+    /** Swipe a task right: the day it goes to (tomorrow), or null when it's already tomorrow's or can't move. */
+    fun swipeTo(board: WeekBoard, taskId: String): Long? {
+        val day = board.dayOf(taskId) ?: return null
+        if (day.cards.firstOrNull { it.id == taskId }?.canMove != true) return null
+        val tomorrow = board.todayEpochDay + 1
+        return tomorrow.takeIf { day.epochDay != it && board.day(it)?.canDrop == true }
+    }
+
+    /** How far the swiped card has gone towards Tomorrow, 0 to 1 (its "Tomorrow ›" label fills in as it goes). */
+    fun swipeProgress(dx: Float, thresholdPx: Float): Float = if (thresholdPx <= 0f) 0f else (dx / thresholdPx).coerceIn(0f, 1f)
 
     /** ⋯ → a list with nothing in it: "Nothing in Someday yet · a task's menu puts one there". */
     fun emptyList(label: String): String = "Nothing in $label yet · a task's menu puts one there"

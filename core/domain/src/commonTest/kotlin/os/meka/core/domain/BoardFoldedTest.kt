@@ -148,4 +148,64 @@ class BoardFoldedTest {
         assertEquals("Nothing in Someday yet · a task's menu puts one there", BoardFoldedRules.emptyList("Someday"))
         assertEquals("empty", BoardFoldedRules.menu(empty, empty.weeks[0], 0, false, false, false).first { it.kind == FoldedMenuKind.SOMEDAY }.detail)
     }
+
+    // Slice 3, the folded moves (Meka 2026-10-26, the approved mockup's tap, swipe and hint).
+    private fun moveBoard(): WeekBoard {
+        val thu22 = mon19 + 3
+        val repeat = BoardCard(task("r").copy(recurrenceRule = "FREQ=DAILY"), "Stretch", null, null, false, false)
+        val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").mapIndexed { i, w ->
+            val e = mon19 + i
+            val cards = when (e) {
+                thu22 -> listOf(card("a"), repeat, card("d", done = true))
+                thu22 + 1 -> listOf(card("b"))
+                else -> emptyList()
+            }
+            day(e, w, (19 + i).toString(), cards, today = e == thu22, past = e < thu22)
+        }
+        return WeekBoard(thu22, listOf(BoardWeek(mon19, "This week", "19–25 Oct", days)))
+    }
+
+    @Test
+    fun tappingATaskOffersTomorrowTheRestOfItsWeekAndSomeday() {
+        val sheet = BoardFoldedRules.moveSheet(moveBoard(), "a")!!
+        assertEquals("Title a", sheet.title)
+        assertEquals(listOf("Tomorrow", "Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday"), sheet.chips.map { it.label })
+        // Its own day is lit; past days are never offered.
+        assertEquals(listOf("Thu 22"), sheet.chips.filter { it.lit }.map { it.label })
+        assertEquals(mon19 + 4, sheet.chips.first().epochDay)
+        assertTrue(sheet.chips.last().someday)
+        assertEquals("Move to Fri 23 Oct", sheet.chips[2].spoken)
+        assertEquals("Thu 22 Oct, where it is now", sheet.chips[1].spoken)
+    }
+
+    @Test
+    fun tomorrowsTaskHasNoTomorrowChipARepeatHasNoSomedayAndADoneOneNoSheet() {
+        val b = moveBoard()
+        assertEquals(listOf("Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday"), BoardFoldedRules.moveSheet(b, "b")!!.chips.map { it.label })
+        assertFalse(BoardFoldedRules.moveSheet(b, "r")!!.chips.any { it.someday })
+        assertEquals(null, BoardFoldedRules.moveSheet(b, "d"))
+        assertEquals(null, BoardFoldedRules.moveSheet(b, "nope"))
+    }
+
+    @Test
+    fun aSwipeRightGoesToTomorrowUnlessItIsAlreadyThere() {
+        val b = moveBoard()
+        assertEquals(mon19 + 4, BoardFoldedRules.swipeTo(b, "a"))
+        assertEquals(null, BoardFoldedRules.swipeTo(b, "b"))
+        assertEquals(null, BoardFoldedRules.swipeTo(b, "d"))
+        assertEquals(0.5f, BoardFoldedRules.swipeProgress(48f, 96f))
+        assertEquals(1f, BoardFoldedRules.swipeProgress(400f, 96f))
+        assertEquals(0f, BoardFoldedRules.swipeProgress(-20f, 96f))
+    }
+
+    @Test
+    fun theHintShowsUntilThreeMovesAndOnlyOnADayWithSomethingToMove() {
+        val b = moveBoard()
+        val thu = b.day(mon19 + 3)!!
+        assertTrue(BoardFoldedRules.showsHint(0, thu))
+        assertTrue(BoardFoldedRules.showsHint(2, thu))
+        assertFalse(BoardFoldedRules.showsHint(3, thu))
+        assertFalse(BoardFoldedRules.showsHint(0, b.day(mon19 + 5)!!))
+        assertFalse(BoardFoldedRules.showsHint(0, b.day(mon19)!!))
+    }
 }

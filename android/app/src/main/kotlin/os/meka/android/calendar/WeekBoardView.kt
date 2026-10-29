@@ -114,6 +114,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -276,6 +277,13 @@ fun WeekBoardView(
     var foldTimeline by rememberSaveable { mutableStateOf(false) }
     // The folded mockup: Goals moved into ⋯ and open as a sheet over the day.
     var goalsOpen by remember { mutableStateOf(false) }
+    // The folded moves (slice 3): the task whose Move to sheet is open, the one whose own menu its Edit asked for, and
+    // how many tasks he has moved here (the hint line hides after three).
+    var moveSheetFor by remember { mutableStateOf<String?>(null) }
+    var editFor by remember { mutableStateOf<String?>(null) }
+    val hintContext = androidx.compose.ui.platform.LocalContext.current
+    var foldedMoves by remember { mutableStateOf(runCatching { FoldedMoveHint.moves(hintContext) }.getOrDefault(0)) }
+    fun countMove() { if (foldedMoves < BoardFoldedRules.HINT_MOVES) foldedMoves = runCatching { FoldedMoveHint.moved(hintContext) }.getOrDefault(foldedMoves + 1) }
     LaunchedEffect(landed) { if (landed != null) { delay(LAND_MS); landed = null } }
     // Slice 2: the free-time drop targets only show while a card is held, so their places are forgotten when it lands.
     LaunchedEffect(drag == null) { if (drag == null) freeSlots.clear() }
@@ -327,6 +335,26 @@ fun WeekBoardView(
     fun parkIn(id: String, week: Long, index: Int) {
         taps = os.meka.core.domain.InstantBoardRules.toWeek(taps, id, week, index)
         landTap(id, "Move") { core.parkOnBoard(id, week, index) }
+    }
+    // Tick a day's card (its ring, or Done in the folded Move to sheet).
+    fun completeCard(card: BoardCard, day: BoardDay) {
+        haptics.light()
+        // It keeps its place a moment, then settles below the open ones (Sunsama-style).
+        settling[card.id] = day.epochDay to day.cards.indexOfFirst { it.id == card.id }.coerceAtLeast(0)
+        taps = os.meka.core.domain.InstantBoardRules.done(taps, card.id, true)
+        scope.launch {
+            val r = runCatching { core.complete(card.id) }
+            taps = os.meka.core.domain.InstantBoardRules.forget(taps, card.id)
+            val e = r.exceptionOrNull()
+            if (e != null) {
+                settling.remove(card.id)
+                undo.show(os.meka.core.domain.InstantTapRules.failedLine("Done", e.message), null)
+                return@launch
+            }
+            undo.show("Done “${card.title}”") { core.reopen(card.id) }
+            delay(BoardHandRules.SETTLE_MS)
+            settling.remove(card.id)
+        }
     }
     val onPark: (BoardCard, Long) -> Unit = { card, week -> parkIn(card.id, week, Int.MAX_VALUE) }
     // Slice 17: Someday, a drop on a list, the card menu's Area and the nudges show at once too.
@@ -481,6 +509,7 @@ fun WeekBoardView(
             // Folded: dropped on a day's pill, it moves to the end of that day (the lane follows to show it land).
             if (d != null && pill != null) {
                 board.day(pill)?.takeIf { it.canDrop }?.let { target ->
+                    countMove()
                     landed = d.card.id
                     turnTo(board.days.indexOfFirst { it.epochDay == target.epochDay })
                     moveTo(d.card.id, target.epochDay, Int.MAX_VALUE)
@@ -650,25 +679,7 @@ fun WeekBoardView(
                         },
                         onPark = onPark,
                         onSomeday = onSomeday,
-                        onDone = { card ->
-                            haptics.light()
-                            // It keeps its place a moment, then settles below the open ones (Sunsama-style).
-                            settling[card.id] = day.epochDay to day.cards.indexOfFirst { it.id == card.id }.coerceAtLeast(0)
-                            taps = os.meka.core.domain.InstantBoardRules.done(taps, card.id, true)
-                            scope.launch {
-                                val r = runCatching { core.complete(card.id) }
-                                taps = os.meka.core.domain.InstantBoardRules.forget(taps, card.id)
-                                val e = r.exceptionOrNull()
-                                if (e != null) {
-                                    settling.remove(card.id)
-                                    undo.show(os.meka.core.domain.InstantTapRules.failedLine("Done", e.message), null)
-                                    return@launch
-                                }
-                                undo.show("Done “${card.title}”") { core.reopen(card.id) }
-                                delay(BoardHandRules.SETTLE_MS)
-                                settling.remove(card.id)
-                            }
-                        },
+                        onDone = { card -> completeCard(card, day) },
                         onUndone = { card ->
                             haptics.tick()
                             taps = os.meka.core.domain.InstantBoardRules.done(taps, card.id, false)
@@ -748,12 +759,27 @@ fun WeekBoardView(
                     )
                 }
             } else {
-                Row(
-                    Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null, flingBehavior = daySnap)
-                        .padding(horizontal = MekaSpace.xs)
-                        .appear(rememberAppearance(4)),
-                ) {
-                    board.days.forEach { day -> dayColumn(day, colWidth) }
+                // The folded moves (slice 3): a tap opens the Move to sheet; a swipe right sends the task to Tomorrow.
+                val moves = FoldedMoves(
+                    open = { card -> haptics.tick(); moveSheetFor = card.id },
+                    swipe = { card ->
+                        BoardFoldedRules.swipeTo(board, card.id)?.let { to ->
+                            haptics.light()
+                            countMove()
+                            moveTo(card.id, to, Int.MAX_VALUE)
+                        }
+                    },
+                    canSwipe = { card -> BoardFoldedRules.swipeTo(board, card.id) != null },
+                    editing = editFor, onEdited = { editFor = null }, moves = foldedMoves,
+                )
+                CompositionLocalProvider(LocalFoldedMoves provides moves) {
+                    Row(
+                        Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null, flingBehavior = daySnap)
+                            .padding(horizontal = MekaSpace.xs)
+                            .appear(rememberAppearance(4)),
+                    ) {
+                        board.days.forEach { day -> dayColumn(day, colWidth) }
+                    }
                 }
             }
         }
@@ -791,6 +817,39 @@ fun WeekBoardView(
                 }
             }
         }
+
+        // The folded moves: the Move to sheet over the day (it closes once its task has gone or he unfolds).
+        val sheetTask = moveSheetFor
+        if (!wide && sheetTask != null) {
+            val sheet = remember(board, sheetTask) { BoardFoldedRules.moveSheet(board, sheetTask) }
+            if (sheet == null) LaunchedEffect(sheetTask) { moveSheetFor = null }
+            else FoldedMoveSheetView(
+                sheet,
+                onMove = { chip ->
+                    moveSheetFor = null
+                    val to = chip.epochDay
+                    when {
+                        chip.lit -> Unit
+                        to == null -> { countMove(); board.find(sheet.taskId)?.card?.let(onSomeday) }
+                        else -> {
+                            countMove()
+                            landed = sheet.taskId
+                            turnTo(board.days.indexOfFirst { it.epochDay == to })
+                            moveTo(sheet.taskId, to, Int.MAX_VALUE)
+                        }
+                    }
+                },
+                onDone = {
+                    moveSheetFor = null
+                    val day = board.dayOf(sheet.taskId)
+                    val card = day?.cards?.firstOrNull { it.id == sheet.taskId }
+                    if (day != null && card != null) completeCard(card, day)
+                },
+                onEdit = { moveSheetFor = null; editFor = sheet.taskId },
+                onClose = { moveSheetFor = null },
+            )
+        }
+        if (wide && moveSheetFor != null) LaunchedEffect(Unit) { moveSheetFor = null }
 
         // The card being dragged follows the finger, lifted (Reduced motion: no lift).
         drag?.let { d ->
@@ -1251,6 +1310,10 @@ private fun DayColumn(
                 if (openIndex == openIds.size - 1) GapSlot(gapAt != null && gapAt >= openIds.size, gapHeight)
             }
         }
+        // The folded moves: the mockup's hint under the day's cards until three tasks have been moved.
+        LocalFoldedMoves.current?.takeIf { !showHead && BoardFoldedRules.showsHint(it.moves, day) }?.let {
+            FoldedMoveHintLine(Modifier.padding(top = MekaSpace.xs))
+        }
         // Option B match: "+ add" at the foot of every day from today, a quiet dashed button; the field opens there.
         if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd, if (showHead) BoardMatchRules.ADD else BoardFoldedRules.addLabel(day))
         // Match slice 4: a past day with nothing on it says so quietly under its date, never a bare column.
@@ -1295,6 +1358,8 @@ internal val LocalBoardCompact = staticCompositionLocalOf { false }
 internal val LocalBoardInList = staticCompositionLocalOf { false }
 /** The folded mockup, slice 2: the day's cards on the folded phone take the mockup's compact face (FoldedCardFace). */
 internal val LocalBoardFolded = staticCompositionLocalOf { false }
+/** The folded moves, slice 3: what a tap and a swipe on a folded day's card do (null unfolded). */
+internal val LocalFoldedMoves = androidx.compose.runtime.compositionLocalOf<FoldedMoves?> { null }
 
 /**
  * By hand, slice 4: a past day folded narrow, unfolded: its big number over the weekday and "3 done" (or "Nothing
@@ -1375,32 +1440,65 @@ private fun BoardCardRow(
     }
     // One gesture for the card: a tap opens its menu; held still for 250 ms it lifts (tick haptic) and follows the
     // finger until let go. Moving first is a scroll, which the board keeps. The latest callbacks, never stale ones.
-    val tap by rememberUpdatedState { menu = true }
+    // The folded moves (slice 3): on the folded phone a day's card opens the Move to sheet on a tap (its Edit opens
+    // this menu), and a swipe right sends it to Tomorrow.
+    val folded = LocalFoldedMoves.current?.takeIf { LocalBoardFolded.current && source == BoardSource.DAY }
+    if (folded != null) {
+        LaunchedEffect(folded.editing) { if (folded.editing == card.id) { menu = true; folded.onEdited() } }
+    }
+    val canSwipe = folded != null && card.canMove && folded.canSwipe(card)
+    val swipeX = remember { Animatable(0f) }
+    val rowScope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val swipeAt = with(LocalDensity.current) { BoardFoldedRules.SWIPE_DP.dp.toPx() }
+    val tap by rememberUpdatedState<() -> Unit> { if (folded != null) folded.open(card) else { menu = true } }
     val lift by rememberUpdatedState<(Offset) -> Unit> { at -> onPick(card, bounds.topLeft + at) }
     val move by rememberUpdatedState(onDrag)
     val drop by rememberUpdatedState(onDrop)
     val cancel by rememberUpdatedState(onCancel)
+    val swiped by rememberUpdatedState<(Float) -> Unit> { dx ->
+        val was = swipeX.value >= swipeAt
+        val to = if (reduced) 0f else dx.coerceAtLeast(0f)
+        rowScope.launch { swipeX.snapTo(to) }
+        if (!reduced && !was && to >= swipeAt) haptics.tick()
+    }
+    val swipeEnd by rememberUpdatedState<(Float) -> Unit> { dx ->
+        if (dx >= swipeAt) folded?.swipe(card)
+        rowScope.launch { if (reduced) swipeX.snapTo(0f) else swipeX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 600f)) }
+    }
     Box(
         modifier.alpha(ghost)
             .onGloballyPositioned { bounds = it.boundsInRoot(); onCardBounds(card.id, bounds) }
             .graphicsLayer { scaleX = land.value; scaleY = land.value }
             .then(
-                if (card.canMove) Modifier.boardCardHold(card.id, onTap = { tap() }, onLift = { lift(it) }, onMove = { move(it) }, onDrop = { drop() }, onCancel = { cancel() })
+                if (card.canMove) Modifier.boardCardHold(
+                    card.id, onTap = { tap() }, onLift = { lift(it) }, onMove = { move(it) }, onDrop = { drop() }, onCancel = { cancel() },
+                    onSwipe = { dx: Float -> swiped(dx) }.takeIf { canSwipe },
+                    onSwipeEnd = { dx: Float -> swipeEnd(dx) }.takeIf { canSwipe },
+                )
                 else Modifier,
             )
             .clip(TILE)
             .border(1.5.dp, Meka.colors.accent.copy(alpha = glow.value), TILE)
             .semantics {
                 contentDescription = card.accessibilityLabel
-                if (card.canMove) { role = Role.Button; onClick { menu = true; true } }
+                if (card.canMove) {
+                    role = Role.Button
+                    onClick { tap(); true }
+                    if (canSwipe) customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction(BoardFoldedRules.TOMORROW) { folded?.swipe(card); true })
+                }
             },
     ) {
         val tick: (() -> Unit)? = when {
             card.done -> onUndone?.let { f -> { f(card) } }
             else -> onDone?.let { f -> { f(card) } }
         }
+        // Swiping right: "Tomorrow ›" shows behind the card, filling in gold as it nears the point where it goes.
+        if (swipeX.value > 0f) FoldedSwipeReveal(BoardFoldedRules.swipeProgress(swipeX.value, swipeAt), Modifier.matchParentSize())
         // The folded mockup, slice 2: a day's card on the folded phone is the compact face (tick beside the title).
-        if (LocalBoardFolded.current && source == BoardSource.DAY) FoldedCardFace(card, tick) else CardFace(card, lifted = false, onTick = tick)
+        Box(Modifier.graphicsLayer { translationX = swipeX.value }) {
+            if (LocalBoardFolded.current && source == BoardSource.DAY) FoldedCardFace(card, tick) else CardFace(card, lifted = false, onTick = tick)
+        }
         if (card.canMove) {
             DropdownMenu(
                 expanded = menu, onDismissRequest = { menu = false },
@@ -1846,14 +1944,32 @@ internal fun Modifier.boardCardHold(
     onMove: (Offset) -> Unit,
     onDrop: () -> Unit,
     onCancel: () -> Unit,
-): Modifier = pointerInput(key) {
+    /**
+     * The folded moves (slice 3): when set, a press that moves right first (more across than down) is a swipe, not the
+     * board's scroll: every move is [onSwipe] with how far right it has gone (px), and letting go is [onSwipeEnd] with
+     * the distance (0 when taken away).
+     */
+    onSwipe: ((Float) -> Unit)? = null,
+    onSwipeEnd: ((Float) -> Unit)? = null,
+): Modifier = pointerInput(key, onSwipe != null) {
     val slop = viewConfiguration.touchSlop
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
-        val hold = awaitHold(down, slop)
+        val hold = awaitHold(down, slop, swipe = onSwipe != null)
         when (hold.kind) {
             HoldKind.TAP -> onTap()
             HoldKind.SCROLL -> Unit
+            HoldKind.SWIPE -> {
+                onSwipe?.invoke(hold.at.x - down.position.x)
+                while (true) {
+                    val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                    if (c == null) { onSwipeEnd?.invoke(0f); break }
+                    val dx = c.position.x - down.position.x
+                    c.consume()
+                    if (c.changedToUpIgnoreConsumed()) { onSwipeEnd?.invoke(dx); break }
+                    onSwipe?.invoke(dx)
+                }
+            }
             HoldKind.LIFT -> {
                 onLift(hold.at)
                 while (true) {
@@ -1869,27 +1985,41 @@ internal fun Modifier.boardCardHold(
     }
 }
 
-private enum class HoldKind { TAP, SCROLL, LIFT }
+private enum class HoldKind { TAP, SCROLL, SWIPE, LIFT }
 private class Hold(val kind: HoldKind, val at: Offset)
 
 /**
  * Waits for the press to resolve: let go within [BoardHandRules.HOLD_MS] (and not taken by a child, like the tick) is
- * a tap; moving past the touch slop first (or someone else taking it) is a scroll; held still that long, it lifts.
+ * a tap; moving past the touch slop first (or someone else taking it) is a scroll, except, with [swipe], a move to the
+ * right that is more across than down, which it takes (consumed, so the board's scroll never starts); held still that
+ * long, it lifts.
  */
-private suspend fun AwaitPointerEventScope.awaitHold(down: PointerInputChange, slop: Float): Hold {
+private suspend fun AwaitPointerEventScope.awaitHold(down: PointerInputChange, slop: Float, swipe: Boolean = false): Hold {
     var at = down.position
     val kind = withTimeoutOrNull(BoardHandRules.HOLD_MS) {
         var out = HoldKind.SCROLL
         while (true) {
             val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
             if (c.changedToUpIgnoreConsumed()) { out = if (c.isConsumed) HoldKind.SCROLL else HoldKind.TAP; break }
-            if (c.isConsumed || (c.position - down.position).getDistance() > slop) break
+            if (c.isConsumed) break
+            val d = c.position - down.position
+            if (d.getDistance() > slop) {
+                if (swipe && d.x > 0f && kotlin.math.abs(d.x) > kotlin.math.abs(d.y) * SWIPE_ACROSS) {
+                    c.consume()
+                    at = c.position
+                    out = HoldKind.SWIPE
+                }
+                break
+            }
             at = c.position
         }
         out
     } ?: HoldKind.LIFT
     return Hold(kind, at)
 }
+
+/** A swipe is a move at least this much more across than down (else it's the day's own scroll). */
+private const val SWIPE_ACROSS = 1.5f
 
 /**
  * "3h planned · 4h free" under a column's date with a slim bar (slice 3): gold as it fills, amber when the day is

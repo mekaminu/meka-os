@@ -14,6 +14,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -388,6 +390,53 @@ class BoardScreensTest {
         assertTrue("a folded card is compact (${card.height} px tall)", card.height < (title.height * 4f))
         if (compose.onAllNodesWithText("1:00").fetchSemanticsNodes().isNotEmpty()) fail("a monospace length on the folded cards")
         assertTrue("the length in words", compose.onAllNodesWithText("1h").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /**
+     * The folded moves (slice 3; the approved mockup, Meka 2026-10-27): the hint shows under the day's cards; a tap on a
+     * task opens the Move to sheet (Tomorrow, the week's days from today with Wed lit, Someday) and Fri 23 moves it there;
+     * a swipe right sends another to Tomorrow, and its screen reader action does the same for a third.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun foldedATapMovesATaskAndASwipeSendsItToTomorrow() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        val (gate, fence, bins) = runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            listOf("Fix the gate latch", "Paint the fence", "Order new bins").map { core.addOnBoardSized(it, today, 30)!! }
+        }
+        val today = core.weekBoard.value.todayEpochDay
+        fun label(id: String) = core.weekBoard.value.find(id)!!.card.accessibilityLabel
+        show(core)
+        if (compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_HINT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("no hint under the day's cards")
+        }
+
+        compose.onNodeWithContentDescription(label(gate)).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-move-sheet"))
+        ScreenShots.assertSensible(compose, "cover-dark-move-sheet")
+        val chips = compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .map { n -> n.config[SemanticsProperties.Text].joinToString("") { it.text } }
+        assertEquals(listOf("Tomorrow", "Wed 21", "Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday"), chips)
+        listOf("Done", "Edit", "Close").forEach { ScreenShots.assertShows(compose, "move sheet", it) }
+        compose.onNodeWithContentDescription("Move to Fri 23 Oct").performClick()
+        awaitCore("move to Fri") { core.weekBoard.value.dayOf(gate)?.epochDay == today + 2 }
+        if (compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()) fail("the sheet stayed open")
+
+        // Back to today (the move turned to Friday), then swipe a card right.
+        compose.onNodeWithContentDescription(os.meka.core.domain.BoardFoldRules.pill(core.weekBoard.value.day(today)!!).accessibilityLabel).performClick()
+        settle()
+        compose.onNodeWithContentDescription(label(fence)).performTouchInput {
+            swipe(start = androidx.compose.ui.geometry.Offset(width * 0.4f, centerY), end = androidx.compose.ui.geometry.Offset(width * 0.95f, centerY), durationMillis = 300)
+        }
+        awaitCore("swipe to tomorrow") { core.weekBoard.value.dayOf(fence)?.epochDay == today + 1 }
+
+        val action = compose.onNodeWithContentDescription(label(bins)).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .single { it.label == "Tomorrow" }
+        compose.runOnIdle { action.action() }
+        awaitCore("Tomorrow action") { core.weekBoard.value.dayOf(bins)?.epochDay == today + 1 }
     }
 
     /**
