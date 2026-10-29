@@ -394,7 +394,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             is LiveProtocol.Event.Heard -> main.post {
                 if (gen != generation) return@post
                 heardNow.append(e.text)
-                synchronized(audioLock) { log.heard(heardNow.toString()) }
+                synchronized(audioLock) { log.heard(heardNow.toString(), SystemClock.elapsedRealtime()) }
                 if (e.text.isNotBlank()) lastHeardAt = SystemClock.elapsedRealtime()
                 listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
             }

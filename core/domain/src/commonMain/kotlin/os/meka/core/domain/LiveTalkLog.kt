@@ -14,7 +14,7 @@ package os.meka.core.domain
  * Pure state, one per talk, used from one thread at a time (the Fold guards it with its lock).
  */
 class LiveTalkLog(private val startMs: Long) {
-    enum class Kind { TURN, STOPPED_FOR_VOICE, STOPPED_ON_SILENCE, GOING_AWAY, NEW_WINDOW, CARRIED_ON, REPEATED }
+    enum class Kind { TURN, STOPPED_FOR_VOICE, STOPPED_ON_SILENCE, GOING_AWAY, NEW_WINDOW, CARRIED_ON, REPEATED, HEARD_OTHER_LANGUAGE, SAID_OTHER_LANGUAGE }
 
     data class Entry(val atMs: Long, val kind: Kind, val words: String? = null)
 
@@ -23,6 +23,8 @@ class LiveTalkLog(private val startMs: Long) {
     private var turnStartedAt = -1L
     private var noted = false
     private var againAsked = false
+    private var heardOther = false
+    private var saidOther = false
 
     /** Turns Obi started this talk. */
     var turns = 0
@@ -43,6 +45,7 @@ class LiveTalkLog(private val startMs: Long) {
      */
     fun said(saidSoFar: String, nowMs: Long): Boolean {
         if (turnStartedAt < 0) turnStartedAt = nowMs
+        otherSaid(saidSoFar, nowMs)
         if (noted) return false
         val words = LiveTalkLogRules.words(saidSoFar)
         if (words.size < OPENING_WORDS) return false
@@ -53,19 +56,34 @@ class LiveTalkLog(private val startMs: Long) {
      * Meka's words this turn ([heardSoFar]): when he asks Obi to say it again ("sorry, what?", "say that again"), the
      * next turn may repeat once without stopping the talk.
      */
-    fun heard(heardSoFar: String) {
+    fun heard(heardSoFar: String, nowMs: Long = -1) {
         if (LiveTalkLogRules.asksAgain(heardSoFar)) againAsked = true
+        // 2026-10-29 (Obi switched language): Google transcribed him as another script; noted once a turn, never his words.
+        if (!heardOther && nowMs >= 0 && LiveTalkLogRules.otherScript(heardSoFar)) {
+            heardOther = true
+            add(Entry(nowMs, Kind.HEARD_OTHER_LANGUAGE))
+        }
     }
 
     /** Obi's turn ended at [nowMs] with [said] (a short answer is noted here, if it has [MIN_WORDS]). */
     fun turnComplete(said: String, nowMs: Long): Boolean {
+        otherSaid(said, nowMs)
         val repeat = if (!noted) {
             val words = LiveTalkLogRules.words(said)
             if (words.size >= MIN_WORDS) note(words, if (turnStartedAt >= 0) turnStartedAt else nowMs) else false
         } else false
         turnStartedAt = -1
         noted = false
+        heardOther = false
+        saidOther = false
         return repeat
+    }
+
+    private fun otherSaid(said: String, nowMs: Long) {
+        if (!saidOther && LiveTalkLogRules.otherScript(said)) {
+            saidOther = true
+            add(Entry(nowMs, Kind.SAID_OTHER_LANGUAGE))
+        }
     }
 
     /** Google stopped Obi at [nowMs]; [letThrough] whether Meka's voice was going up then (false: only silence was). */
@@ -74,6 +92,8 @@ class LiveTalkLog(private val startMs: Long) {
         add(Entry(nowMs, if (letThrough) Kind.STOPPED_FOR_VOICE else Kind.STOPPED_ON_SILENCE))
         turnStartedAt = -1
         noted = false
+        heardOther = false
+        saidOther = false
     }
 
     fun goingAway(nowMs: Long) = add(Entry(nowMs, Kind.GOING_AWAY))
@@ -123,6 +143,18 @@ object LiveTalkLogRules {
 
     private val AGAIN = Regex("""\b(say (that|it) again|repeat (that|it)|pardon|come again|what was that|what did you say|didn't catch (that|it)|missed that)\b""")
 
+    /**
+     * 2026-10-29: [text] is mostly in a script other than Latin (Devanagari, Tamil, Arabic…): at least [MIN_LETTERS]
+     * letters and more than half of them past Latin Extended. English (and accented names) never counts.
+     */
+    fun otherScript(text: String): Boolean {
+        val letters = text.filter { it.isLetter() }
+        if (letters.length < MIN_LETTERS) return false
+        return letters.count { it.code > 0x024F } * 2 > letters.length
+    }
+
+    const val MIN_LETTERS = 4
+
     /** He asked Obi to say it again. */
     fun asksAgain(heard: String): Boolean = AGAIN.containsMatchIn(heard.lowercase().replace('’', '\''))
 
@@ -138,6 +170,8 @@ object LiveTalkLogRules {
             LiveTalkLog.Kind.GOING_AWAY -> "Google said the session is closing"
             LiveTalkLog.Kind.NEW_WINDOW -> "a fresh window opened"
             LiveTalkLog.Kind.CARRIED_ON -> "the talk carried on in it"
+            LiveTalkLog.Kind.HEARD_OTHER_LANGUAGE -> "you were heard as another language"
+            LiveTalkLog.Kind.SAID_OTHER_LANGUAGE -> "Obi answered in another language"
         }
         return "$at $what"
     }

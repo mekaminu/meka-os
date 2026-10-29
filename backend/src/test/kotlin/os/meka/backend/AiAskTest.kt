@@ -649,6 +649,8 @@ class AiAskTest {
         assertTrue("one or two sentences" in LivePrompt.PERSONA)
         // 2026-10-29 (Meka: "it says hello in English, then replies in an Indian language"): Live stays in English.
         assertTrue("UNMISTAKABLY IN BRITISH ENGLISH" in LivePrompt.instruction(null))
+        // 2026-10-29: normal (non-Live) Obi keeps to English too, and treats another language as a mishearing.
+        assertTrue("Always answer in British English, whatever language his words seem to be in" in system)
         assertEquals("You've got three things on, the dentist first at ten.", r.answer)
         assertEquals(listOf("10:00 Dentist", "14:30 Parents' evening", "18:00 Football"), r.shown)
         // The wire carries it to the device.

@@ -96,4 +96,29 @@ class LiveTalkLogTest {
         assertFalse(LiveTalkRules.micHearsObi(BargeInOutput.HEADPHONES, 10_000, 10_000 + LiveTalkRules.SPEAKING_TAIL_MS))
         assertFalse(LiveTalkRules.micHearsObi(BargeInOutput.SPEAKER, 0, 100), "nothing played yet")
     }
+
+    /** 2026-10-29 (Meka: "it says hello in English, then … replies in an Indian language"): Health shows when it happened. */
+    @Test
+    fun anotherLanguageHeardOrSpokenIsNotedOnceATurnWithoutHisWords() {
+        assertTrue(LiveTalkLogRules.otherScript("आज मेरा दिन कैसा है"))
+        assertTrue(LiveTalkLogRules.otherScript("இன்று என்ன"))
+        assertFalse(LiveTalkLogRules.otherScript("What's on today, Obi?"))
+        assertFalse(LiveTalkLogRules.otherScript("Café with Zoë at Barça"), "accented Latin is English enough")
+        assertFalse(LiveTalkLogRules.otherScript("दि"), "too short to tell")
+        val log = LiveTalkLog(0)
+        log.heard("आज मेरा", 1_000)
+        log.heard("आज मेरा दिन कैसा है", 1_500)
+        log.said("आपका दिन आज", 2_000)
+        log.turnComplete("आपका दिन आज बहुत अच्छा है", 4_000)
+        log.heard("How is my day", 6_000)
+        log.said("Your day looks calm, you've got", 7_000)
+        log.turnComplete("Your day looks calm, you've got the dentist.", 9_000)
+        val lines = log.lines()
+        assertEquals(listOf("0:01 you were heard as another language", "0:02 Obi answered in another language"), lines.take(2))
+        assertEquals(1, lines.count { it.endsWith("heard as another language") })
+        assertEquals(1, lines.count { it.endsWith("answered in another language") })
+        assertFalse(lines.any { "मेरा" in it }, "never his words")
+        log.heard("फिर से बोलिए", 10_000)
+        assertEquals(2, log.lines().count { it.endsWith("heard as another language") }, "a new turn notes it again")
+    }
 }

@@ -335,7 +335,7 @@ class LiveConversation internal constructor(
             }
             is LiveProtocol.Event.Heard -> {
                 heardNow.append(e.text)
-                log.heard(heardNow.toString())
+                log.heard(heardNow.toString(), elapsedMs())
                 if (e.text.isNotBlank()) lastHeardAt = elapsedMs()
                 out.trySend(LiveEvent.Words(heardNow.toString().trim(), saidNow.toString().trim()))
             }
