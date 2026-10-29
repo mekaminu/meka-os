@@ -379,6 +379,15 @@ class BoardScreensTest {
             fail("the No day yet chip is still on the page")
         }
         assertTrue("no + Add to Wed", compose.onAllNodesWithText("+ Add to Wed").fetchSemanticsNodes().isNotEmpty())
+        // Slice 2 (Meka 2026-10-29 02:12 (f)/(h)): the tick sits beside the title, not on a line of its own under it, and
+        // a card's length is in words ("1h"), never the monospace "1:00".
+        val card = cardBounds("Fix the gate latch")
+        val tick = compose.onNodeWithContentDescription(BoardHandRules.tickLabel("Fix the gate latch", false)).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("Fix the gate latch").fetchSemanticsNode().boundsInRoot
+        assertTrue("the tick is left of the title ($tick vs $title)", tick.right <= title.left + 1f && tick.top < title.bottom && tick.bottom > title.top)
+        assertTrue("a folded card is compact (${card.height} px tall)", card.height < (title.height * 4f))
+        if (compose.onAllNodesWithText("1:00").fetchSemanticsNodes().isNotEmpty()) fail("a monospace length on the folded cards")
+        assertTrue("the length in words", compose.onAllNodesWithText("1h").fetchSemanticsNodes().isNotEmpty())
     }
 
     /**

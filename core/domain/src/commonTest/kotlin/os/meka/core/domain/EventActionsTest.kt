@@ -490,9 +490,10 @@ class EventActionsTest {
         assertEquals("Personal", CalendarRules.label(primary()))
         assertEquals("Personal", CalendarRules.label(primary(name = "Meka@Gmail.com ")))
         assertEquals("Personal", CalendarRules.name(primary()))
-        // Another calendar keeps its own name, even one named like an address that isn't the account's.
+        // Another calendar keeps its own name; one named only by an address that isn't the account's is "Shared" (Meka
+        // 2026-10-29 02:12: never an address as a calendar's name).
         assertEquals("Timestripe", CalendarRules.label(ts("t1", "Weekly goals")))
-        assertEquals("kids@group.calendar.google.com", CalendarRules.label(primary(name = "kids@group.calendar.google.com")))
+        assertEquals("Shared", CalendarRules.label(primary(name = "kids@group.calendar.google.com")))
         // Microsoft calls an account's main calendar "Calendar": "Hotmail" for a hotmail address, else "Outlook".
         assertEquals("Hotmail", CalendarRules.label(primary(provider = "microsoft", account = "meka@hotmail.co.uk", name = "Calendar")))
         assertEquals("Outlook", CalendarRules.label(primary(provider = "microsoft", account = "meka@outlook.com", name = "Calendar")))

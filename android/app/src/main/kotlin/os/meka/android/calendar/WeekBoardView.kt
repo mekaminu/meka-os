@@ -1176,7 +1176,7 @@ private fun DayColumn(
     }
     // By hand, slice 8 (the quality gate's findings): a narrow lane fits its words (BoardFitRules).
     val compact = BoardFitRules.compact(width.value)
-    CompositionLocalProvider(LocalBoardCompact provides compact) {
+    CompositionLocalProvider(LocalBoardCompact provides compact, LocalBoardFolded provides !showHead) {
     Column(
         Modifier.width(width).fillMaxHeight().padding(horizontal = MekaSpace.xxs)
             .onGloballyPositioned { onBounds(it.boundsInRoot()) }
@@ -1212,7 +1212,9 @@ private fun DayColumn(
         val events = BoardMatchRules.eventCards(day)
         if (events.isNotEmpty()) {
             Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                events.forEach { e -> EventCard(e) { onEvent(e.event) } }
+                events.forEach { e ->
+                    if (showHead) EventCard(e) { onEvent(e.event) } else FoldedEventCard(e) { onEvent(e.event) }
+                }
                 day.moreLabel?.let { Text(it, style = MekaType.micro, color = Meka.colors.textTertiary) }
             }
         }
@@ -1291,6 +1293,8 @@ internal const val STUDY_NOTE_TAG = "board-study"
 internal val LocalBoardCompact = staticCompositionLocalOf { false }
 /** Option B match, slice 2: a card in one of the lists at the board's foot (its top line only with a time or length). */
 internal val LocalBoardInList = staticCompositionLocalOf { false }
+/** The folded mockup, slice 2: the day's cards on the folded phone take the mockup's compact face (FoldedCardFace). */
+internal val LocalBoardFolded = staticCompositionLocalOf { false }
 
 /**
  * By hand, slice 4: a past day folded narrow, unfolded: its big number over the weekday and "3 done" (or "Nothing
@@ -1391,13 +1395,12 @@ private fun BoardCardRow(
                 if (card.canMove) { role = Role.Button; onClick { menu = true; true } }
             },
     ) {
-        CardFace(
-            card, lifted = false,
-            onTick = when {
-                card.done -> onUndone?.let { f -> { f(card) } }
-                else -> onDone?.let { f -> { f(card) } }
-            },
-        )
+        val tick: (() -> Unit)? = when {
+            card.done -> onUndone?.let { f -> { f(card) } }
+            else -> onDone?.let { f -> { f(card) } }
+        }
+        // The folded mockup, slice 2: a day's card on the folded phone is the compact face (tick beside the title).
+        if (LocalBoardFolded.current && source == BoardSource.DAY) FoldedCardFace(card, tick) else CardFace(card, lifted = false, onTick = tick)
         if (card.canMove) {
             DropdownMenu(
                 expanded = menu, onDismissRequest = { menu = false },
@@ -1658,7 +1661,7 @@ private fun DoneBar(p: DayProgress) {
  * that grows and fades (600 ms); tapped again it empties. Reduced motion: the fill cross-fades, no spark.
  */
 @Composable
-private fun TickTarget(
+internal fun TickTarget(
     done: Boolean, title: String, onTick: (() -> Unit)?, column: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp,
     height: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp,
     /** The drawn circle (the density pass draws 18 dp on the unfolded board). */

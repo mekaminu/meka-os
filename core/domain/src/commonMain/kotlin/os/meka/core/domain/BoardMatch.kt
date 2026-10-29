@@ -129,7 +129,8 @@ object BoardMatchRules {
         val e = c.event
         val minutes = ((e.endAtMs - e.startAtMs) / 60_000L).toInt()
         val duration = if (e.allDay || c.time == "All day" || minutes <= 0) null else BoardPlannerRules.duration(minutes)
-        val calendar = e.calendarName?.trim()?.takeIf { it.isNotEmpty() } ?: CALENDAR
+        // His own name for the calendar, else its default; an account's address is never shown (Meka 2026-10-29 (i)).
+        val calendar = (if (e.isFixture) e.calendarName?.trim()?.takeIf { it.isNotEmpty() } else CalendarRules.name(e)) ?: CALENDAR
         val spoken = buildString {
             append(c.title).append(", ")
             append(if (c.time == "All day") "all day" else c.time)

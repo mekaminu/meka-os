@@ -90,9 +90,20 @@ object CalendarRules {
      */
     fun defaultName(e: CalendarEvent): String? {
         val n = e.calendarName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (!CalendarAccountRules.isMainCalendar(e.provider, e.account, n)) return n
+        if (!CalendarAccountRules.isMainCalendar(e.provider, e.account, n)) {
+            // Meka 2026-10-29 02:12 (i): the phone's own calendar app names a Google account's main calendar after its
+            // address too, and a calendar shared by someone else carries theirs: never show an address as a name.
+            if (!looksLikeAddress(n)) return n
+            return if (n.equals(e.account?.trim(), ignoreCase = true) || e.account.isNullOrBlank()) PERSONAL else SHARED
+        }
         return if (e.provider == "google") PERSONAL else CalendarAccountRules.outlookName(e.account)
     }
+
+    /** A calendar shared with him whose only name is someone's address. */
+    const val SHARED = "Shared"
+
+    /** Whether [name] is an email address ("someone@example.com"), which is never shown as a calendar's name. */
+    fun looksLikeAddress(name: String): Boolean = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(name.trim())
 
     /** What a rename stores: trimmed, inner spaces collapsed, at most [MAX_NAME]; null (back to the default) when blank. */
     fun cleanName(typed: String): String? =

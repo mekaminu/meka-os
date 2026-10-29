@@ -65,6 +65,56 @@ class BoardFoldedTest {
         assertEquals("", BoardFoldedRules.dayLine(day(mon19 + 1, "Tue", "20")).plan)
     }
 
+    private fun event(title: String, calendar: String?, account: String? = "alex@example.com", provider: String = "google", startH: Int = 18, mins: Int = 90) =
+        CalendarEvent(
+            id = title, title = title, startAtMs = startH * 3_600_000L, endAtMs = startH * 3_600_000L + mins * 60_000L,
+            allDay = false, location = null, provider = provider, account = account, calendarName = calendar,
+        )
+
+    private fun chip(e: CalendarEvent, time: String = "18:00") = BoardChip(e.id, time, e.title, 1, e)
+
+    @Test
+    fun aPillCountsEventsTooSoABusyDayOfEventsShowsDots() {
+        val e = event("Training", "Football")
+        val busy = day(mon19, "Mon", "19").copy(chips = listOf(chip(e), chip(e.copy(id = "b"))))
+        assertEquals(2, BoardFoldedRules.dots(busy))
+        assertEquals(3, BoardFoldedRules.dots(busy.copy(cards = listOf(card("a"), card("b")))))
+    }
+
+    @Test
+    fun aFoldedTaskCardHasItsTimeOrLengthInWordsNeverMono() {
+        val timed = BoardCard(task("t"), "Review plan", "18:00", null, false, false)
+        assertEquals("18:00", BoardFoldedRules.card(timed).right)
+        val sized = BoardCard(task("s").copy(estimateMinutes = 90), "Do feedback", null, null, false, false)
+        assertEquals("1h 30", BoardFoldedRules.card(sized).right)
+        assertFalse(BoardFoldedRules.card(sized).right.contains(":"))
+        val plain = card("p")
+        assertEquals("", BoardFoldedRules.card(plain).right)
+        assertEquals("", BoardFoldedRules.card(plain).meta)
+        assertEquals("Title p", BoardFoldedRules.card(plain).spoken)
+        assertEquals("Do feedback, 1h 30", BoardFoldedRules.card(sized).spoken)
+    }
+
+    @Test
+    fun aFoldedEventCardNamesItsCalendarAndLengthNeverAnAddress() {
+        val e = event("Training", "alex@example.com")
+        val card = BoardMatchRules.eventCards(day(mon19, "Mon", "19").copy(chips = listOf(chip(e)))).single()
+        assertEquals("Personal", card.calendar)
+        val f = BoardFoldedRules.event(card)
+        assertEquals("Personal · 1h 30", f.meta)
+        assertEquals("18:00", f.right)
+        assertFalse(f.meta.contains("@"))
+        assertFalse(f.spoken.contains("@"))
+        // The phone's own calendar app (not "google") names the main calendar after the address too.
+        val phone = event("Training", "alex@example.com", provider = "device")
+        assertEquals("Personal", CalendarRules.defaultName(phone))
+        // Someone else's shared calendar is "Shared", never their address; a real name stays.
+        assertEquals("Shared", CalendarRules.defaultName(event("Swim", "sam@example.com")))
+        assertEquals("Football", CalendarRules.defaultName(event("Swim", "Football")))
+        assertTrue(CalendarRules.looksLikeAddress(" alex.b@mail.example.co.uk "))
+        assertFalse(CalendarRules.looksLikeAddress("Family @ home"))
+    }
+
     @Test
     fun aPillShowsOneShortBarAnOpenTaskUpToThree() {
         assertEquals(0, BoardFoldedRules.dots(day(mon19, "Mon", "19")))

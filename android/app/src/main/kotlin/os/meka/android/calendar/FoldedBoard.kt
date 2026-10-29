@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
@@ -50,13 +53,20 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.areaTone
+import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.mekaMenuBorder
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.BoardAreaRules
+import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
+import os.meka.core.domain.BoardEventCard
 import os.meka.core.domain.BoardFoldRules
 import os.meka.core.domain.BoardFoldedRules
 import os.meka.core.domain.BoardNudge
 import os.meka.core.domain.DayStripPill
+import os.meka.core.domain.BoardPlannerRules
+import os.meka.core.domain.FoldedCard
 import os.meka.core.domain.FoldedMenuItem
 import os.meka.core.domain.PressureFix
 
@@ -249,6 +259,81 @@ internal fun FoldedObiLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFi
     }
 }
 
+/**
+ * A task's card on the folded phone, as the mockup (slice 2; Meka 2026-10-29 02:12 (f)/(h)): 12 dp inside, the tick
+ * (20 dp, its own 48 dp target) left of the title (15 sp), one quiet line under it with the area's or source's dot and
+ * name, the time or length on the right, all in the app's sans. A done card fades (the tick's spark as before).
+ */
+@Composable
+internal fun FoldedCardFace(card: BoardCard, onTick: (() -> Unit)?) {
+    val reduced = Meka.reducedMotion
+    val f = remember(card) { BoardFoldedRules.card(card) }
+    val fade by animateFloatAsState(BoardPlannerRules.alpha(card), MekaMotion.appear(reduced), label = "folded-card-fade")
+    val area = BoardAreaRules.of(card)
+    val src = card.source
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .alpha(fade).testTag(PLANNER_CARD_TAG)
+            .padding(horizontal = BoardFoldedRules.CARD_PAD.dp, vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TickTarget(card.done, card.title, onTick, column = BoardFoldedRules.TICK.dp + MekaSpace.xxs, height = BoardFoldedRules.TICK.dp + MekaSpace.xxs, circle = BoardFoldedRules.TICK.dp)
+        Spacer(Modifier.width(MekaSpace.xs))
+        FoldedCardWords(
+            f, Modifier.weight(1f),
+            dot = when {
+                area != null -> Meka.colors.areaTone(area)
+                src != null -> Meka.colors.calendarTone(src.tone)
+                else -> null
+            },
+        )
+    }
+}
+
+/**
+ * An event's card on the folded phone: the calendar's colour bar where a task's tick sits, the title, the calendar's
+ * name (never an address) and length under it, the start on the right. A tap opens the event.
+ */
+@Composable
+internal fun FoldedEventCard(e: BoardEventCard, onOpen: () -> Unit) {
+    val f = remember(e) { BoardFoldedRules.event(e) }
+    val tone = Meka.colors.calendarTone(e.tone)
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .testTag(FOLDED_EVENT_TAG)
+            .clearAndSetSemantics { contentDescription = f.spoken; role = Role.Button }
+            .padding(horizontal = BoardFoldedRules.CARD_PAD.dp, vertical = BoardFoldedRules.CARD_PAD.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(BoardFoldedRules.EVENT_BAR.dp).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.pill)).background(tone))
+        Spacer(Modifier.width(MekaSpace.xs))
+        FoldedCardWords(f, Modifier.weight(1f), dot = tone)
+    }
+}
+
+/** The title (15 sp), the quiet line with its dot, and the time on the right: the folded cards' shared words. */
+@Composable
+private fun FoldedCardWords(f: FoldedCard, modifier: Modifier, dot: androidx.compose.ui.graphics.Color?) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Text(f.title, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (f.meta.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                if (dot != null) {
+                    Box(Modifier.size(FOLDED_DOT).clip(CircleShape).background(dot))
+                    Spacer(Modifier.width(MekaSpace.xxs + 2.dp))
+                }
+                Text(f.meta, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (f.right.isNotEmpty()) {
+            Spacer(Modifier.width(MekaSpace.xs))
+            Text(f.right, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.testTag(FOLDED_TIME_TAG))
+        }
+    }
+}
+
+private val FOLDED_DOT = 7.dp
 private const val DOT_DP = 5
 private val FOLDED_MENU_WIDTH = 200.dp
 internal const val FOLDED_MENU_LABEL = "More: agenda view, timeline, plan or review the week, goals, lists"
@@ -258,3 +343,5 @@ internal const val FOLDED_HEAD_TAG = "board-folded-head"
 internal const val FOLDED_MENU_TAG = "board-folded-menu"
 internal const val FOLDED_STRIP_TAG = "board-folded-strip"
 internal const val FOLDED_DAY_TAG = "board-folded-day"
+internal const val FOLDED_EVENT_TAG = "board-folded-event"
+internal const val FOLDED_TIME_TAG = "board-folded-time"

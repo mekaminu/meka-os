@@ -18,6 +18,20 @@ data class FoldedDayLine(
     val spoken: String,
 )
 
+/**
+ * A card on the folded Board as the mockup draws it (slice 2, Meka 2026-10-29 02:12 (f)–(i)): the tick (a task) or the
+ * calendar's colour bar (an event) left of the title, one quiet line under it (the area's or calendar's dot and name,
+ * then the length or carried note), and the time on the right, all in the app's sans ("18:00", "1h 30", never "1:30").
+ */
+data class FoldedCard(
+    val title: String,
+    /** "Work", "Personal · 1h", "Mail · Carried 2 days"; "" for nothing to say. */
+    val meta: String,
+    /** "18:00", "All day", a task's length "45m" when it has no time; "" for none. */
+    val right: String,
+    val spoken: String,
+)
+
 /** What the folded Board's ⋯ menu holds: everything that used to crowd the cover screen's header. */
 enum class FoldedMenuKind { AGENDA, TIMELINE, NEW_EVENT, PLAN_WEEK, REVIEW, GOALS, NO_DAY, SOMEDAY }
 
@@ -38,7 +52,7 @@ object BoardFoldedRules {
     /** A day's pill in the strip, dp tall. */
     const val PILL_HEIGHT = 60
 
-    /** The busy dots under a pill's number: one short bar per open task, at most this many. */
+    /** The busy dots under a pill's number: one short bar per thing on the day (an open task or an event), at most this many. */
     const val MAX_DOTS = 3
 
     /** The plan bar under the day's line, dp. */
@@ -60,8 +74,34 @@ object BoardFoldedRules {
         return FoldedHead(month, "Week $week", "$month, week $week")
     }
 
-    /** The short bars under a pill: one an open task, up to [MAX_DOTS]. */
-    fun dots(day: BoardDay): Int = day.openCards.size.coerceAtMost(MAX_DOTS)
+    /**
+     * The short bars under a pill: one for each open task and each event, up to [MAX_DOTS] (the mockup counts
+     * everything on the day, so a day of events alone still looks busy; Meka 2026-10-29 02:12 (g)).
+     */
+    fun dots(day: BoardDay): Int = (day.openCards.size + day.chips.size + day.moreChips).coerceAtMost(MAX_DOTS)
+
+    /** The card's padding inside, dp, and the tick's circle beside the title (the mockup's 12 and 20). */
+    const val CARD_PAD = 12
+    const val TICK = 20
+
+    /** An event's colour bar in the tick's place, dp wide. */
+    const val EVENT_BAR = 4
+
+    /** A task's card: its area's (or source's) name and any carried note under the title, its time or length right. */
+    fun card(card: BoardCard): FoldedCard {
+        val meta = listOfNotNull(BoardMatchRules.footLabel(card), card.line?.trim()?.takeIf { it.isNotEmpty() }).joinToString(" · ")
+        val right = card.time ?: card.task.estimateMinutes?.takeIf { it > 0 }?.let(BoardPlannerRules::hours) ?: ""
+        val spoken = listOf(card.title, right, meta).filter { it.isNotEmpty() }.joinToString(", ") + if (card.done) ", done" else ""
+        return FoldedCard(card.title, meta, right, spoken)
+    }
+
+    /** An event's card: the calendar's name (never an address) and its length under the title, its start right. */
+    fun event(e: BoardEventCard): FoldedCard {
+        val minutes = ((e.event.endAtMs - e.event.startAtMs) / 60_000L).toInt()
+        val length = if (e.duration != null && minutes > 0) BoardPlannerRules.hours(minutes) else null
+        val meta = listOfNotNull(e.calendar, length).joinToString(" · ")
+        return FoldedCard(e.title, meta, e.time, e.spoken)
+    }
 
     fun dayLine(day: BoardDay): FoldedDayLine {
         val d = CivilDate.fromEpochDay(day.epochDay)
