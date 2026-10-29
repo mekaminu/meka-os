@@ -116,6 +116,8 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
     var removedCar by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableStateOf(initialTab ?: ListTab.WAITING) }
     var open by rememberSaveable { mutableStateOf<String?>(null) }
+    // Renewals keep their email, slice 2: the Renewals tab's Coming up · All · Done.
+    var renewalTab by rememberSaveable { mutableStateOf(os.meka.core.domain.RenewalTab.COMING_UP) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val act: (suspend () -> Unit) -> Unit = { body -> scope.launch { runCatching { body() } } }
@@ -157,7 +159,10 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
             ListTab.WAITING -> waiting(view, open, toggle, core, act, leave)
             ListTab.SOMEDAY -> someday(view, open, toggle, core, act, leave)
             ListTab.DECISIONS -> decisions(view, open, toggle, core, act, leave)
-            ListTab.RENEWALS -> renewals(view.renewals, cars, core.todayEpochDay(), open, toggle, core, act, leave, removedCar, { removedCar = it }) { haptics.light() }
+            ListTab.RENEWALS -> renewals(
+                view.renewals, cars, core.todayEpochDay(), open, toggle, core, act, leave, removedCar, { removedCar = it },
+                renewalTab, { t -> if (t != renewalTab) { renewalTab = t; open = null } },
+            ) { haptics.light() }
             ListTab.SHOPPING -> shopping(view.shopping, core, act)
         }
         item(key = "add-${tab.name}") {

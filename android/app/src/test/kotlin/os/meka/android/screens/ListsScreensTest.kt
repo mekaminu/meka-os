@@ -115,7 +115,13 @@ class ListsScreensTest {
             // Nothing on: the line says what the list is for, never a bare heading over an empty box.
             fill == Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Nothing promised either way")
             tab == ListTab.SHOPPING -> ScreenShots.assertShows(compose, name, "Milk")
-            tab == ListTab.RENEWALS -> ScreenShots.assertShows(compose, name, "Car insurance")
+            tab == ListTab.RENEWALS -> {
+                ScreenShots.assertShows(compose, name, "Car insurance")
+                // Renewals keep their email, slice 2: the approved cards: tiles, the tabs and a lit cancel-by badge.
+                ScreenShots.assertShows(compose, name, "NEXT 30 DAYS")
+                ScreenShots.assertShows(compose, name, "Coming up")
+                ScreenShots.assertShows(compose, name, "cancel in 2 days")
+            }
             else -> {
                 ScreenShots.assertShows(compose, name, "Send Sam the photos")
                 if (fill == Fill.MANY) {

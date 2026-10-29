@@ -1916,6 +1916,22 @@ final class CoreModel {
     func setRenewalKind(_ id: String, _ kind: ObligationKind) { run { try await $0.setRenewalKind(id: id, kind: kind) } }
     func stopRenewal(_ id: String) { MekaHaptics.light(); run { try await $0.stopRenewal(id: id) } }
     func deleteRenewal(_ id: String) { run { try await $0.deleteRenewal(id: id) } }
+    /// Renewals keep their email, slice 2: the Done tab's Put it back. Only the id (a String) crosses to the core.
+    func reopenRenewal(_ id: String) { MekaHaptics.light(); run { _ = try await $0.reopenRenewal(id: id) } }
+
+    /// Renewals keep their email, slice 2: the Renewals list as cards for a tab (pure, from the synced lists).
+    func renewalBoard(_ tab: RenewalTab) -> RenewalBoard? {
+        guard let r = lists?.renewals else { return nil }
+        return RenewalBoardRules.shared.board(v: r, today: todayEpochDay, tab: tab)
+    }
+
+    /// The Edit sheet's rows for a card, each with what it is now (pure).
+    func renewalEditRows(_ item: RenewalItem) -> [RenewalEditRow] {
+        RenewalBoardRules.shared.editRows(i: item, today: todayEpochDay)
+    }
+
+    /// The newest copy of a renewal on the radar, so the Edit sheet follows each change.
+    func renewalItem(_ id: String) -> RenewalItem? { lists?.renewals.all.first { $0.id == id } }
 
     /// Home upkeep: the suggested home jobs against the radar today (pure, from the synced lists).
     var homeUpkeep: HomeUpkeepView? {

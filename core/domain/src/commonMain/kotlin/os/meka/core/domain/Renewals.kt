@@ -76,6 +76,13 @@ data class RenewalItem(
      * the handle Open the email asks for; null for one he typed ([MailSourceRules]).
      */
     val fromEmail: RenewalEmail? = null,
+    /**
+     * Renewals keep their email, slice 2 (the Done tab): the local day it was closed (a one-off done, or cancelled /
+     * stopped), or null while it is on the radar.
+     */
+    val closedDay: Long? = null,
+    /** "Cancelled", "Paid", "Renewed"… for a closed one; null while it is on the radar. */
+    val closedHow: String? = null,
 ) {
     /** Shown in Needs you and counted in its badge. */
     val needsAttention: Boolean get() = state != RenewalState.LATER
@@ -92,6 +99,8 @@ data class RenewalsView(
     /** Repeating costs normalised to a month and a year, in pence. */
     val monthlyPence: Long,
     val yearlyPence: Long,
+    /** Slice 2, the Done tab: closed in the last [RenewalRules.DONE_DAYS] days, newest first (never in [all]). */
+    val done: List<RenewalItem> = emptyList(),
 ) {
     val all: List<RenewalItem> get() = attention + upcoming + later
     val count: Int get() = attention.size + upcoming.size + later.size
@@ -143,6 +152,8 @@ object RenewalRules {
     const val UPCOMING_DAYS = 92
     /** Suggested due day for a new item, days from today. */
     const val DEFAULT_DUE_IN_DAYS = 30
+    /** The Done tab keeps what was closed this many days back. */
+    const val DONE_DAYS = 90
 
     fun kindLabel(k: ObligationKind): String = when (k) {
         ObligationKind.MOT -> "MOT"
@@ -612,9 +623,46 @@ class Renewals(
         return true
     }
 
+    /**
+     * Slice 2, the Done tab's **Put it back**: a closed one (done or cancelled) goes back on the radar as it was. False
+     * when it isn't closed (or is gone).
+     */
+    fun reopen(id: String): Boolean {
+        val s = replica.entity(EntityTypes.OBLIGATION, id) ?: return false
+        if (s.deleted || !terminal(s)) return false
+        replica.commitLocal(
+            EntityTypes.OBLIGATION, id,
+            mapOf(ActionableFields.LIFECYCLE to Lifecycle.ACTIVE.name.fv(), ActionableFields.COMPLETED_AT to FieldValue.Null),
+        )
+        return true
+    }
+
     // ---- Reads ----
 
-    fun items(): List<RenewalItem> {
+    fun items(): List<RenewalItem> = read { s -> !terminal(s) }
+
+    /** Slice 2, the Done tab: closed in the last [RenewalRules.DONE_DAYS] days, newest first. */
+    fun closed(): List<RenewalItem> {
+        val today = today()
+        val since = today - RenewalRules.DONE_DAYS
+        val at = HashMap<String, Long>()
+        return read { s ->
+            val done = s[ActionableFields.COMPLETED_AT].longOrNull
+            if (terminal(s) && done != null && calendar.epochDayOf(done) >= since) { at[s.ref.entityId] = done; true } else false
+        }.map { item ->
+            val s = replica.entity(EntityTypes.OBLIGATION, item.id)
+            val cancelled = s?.get(ActionableFields.LIFECYCLE)?.textOrNull?.let { enumOrNull<Lifecycle>(it) } == Lifecycle.CANCELLED
+            item.copy(
+                closedDay = at[item.id]?.let(calendar::epochDayOf),
+                closedHow = if (cancelled) RenewalBoardRules.closedWord(item.stopLabel) else item.doneLabel,
+            )
+        }.sortedWith(compareByDescending<RenewalItem> { at[it.id] ?: 0L }.thenBy { it.title })
+    }
+
+    private fun terminal(s: EntitySnapshot): Boolean =
+        s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }?.isTerminal == true
+
+    private fun read(keep: (EntitySnapshot) -> Boolean): List<RenewalItem> {
         val today = today()
         val all = replica.entities(EntityTypes.OBLIGATION)
         // Bills due, completeness: bills he has paid (one-offs closed with Paid), for a new bill's "last time".
@@ -630,7 +678,7 @@ class Renewals(
             replica.entities(EntityTypes.MAIL_FIND).filter { !it.deleted }.mapNotNull { MailRenewalRules.read(it.ref.entityId, it.fields) },
         )
         return all
-            .filter { s -> s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }?.isTerminal != true }
+            .filter(keep)
             .mapNotNull { s ->
                 val due = dueDayOf(s) ?: return@mapNotNull null
                 val kind = s[ObligationFields.KIND].textOrNull?.let { enumOrNull<ObligationKind>(it) } ?: ObligationKind.OTHER
@@ -700,6 +748,7 @@ class Renewals(
             later = rest.filter { it.dueDay > today + RenewalRules.UPCOMING_DAYS },
             monthlyPence = kotlin.math.round(yearly / 12.0).toLong(),
             yearlyPence = yearly,
+            done = closed(),
         )
     }
 

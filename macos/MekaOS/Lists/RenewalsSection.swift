@@ -13,11 +13,11 @@ struct RenewalsSection: View {
 
     var body: some View {
         let r = model.lists?.renewals
-        if let line = r?.costLine {
-            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.xs)
-        }
-        if (r?.count ?? 0) == 0 {
+        if (r?.count ?? 0) == 0 && (r?.done.isEmpty ?? true) {
             EmptyLine(text: "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one.", palette: palette)
+        } else if let board = model.renewalBoard(RenewalBoardRules.shared.tabAt(index: Int32(tab))) {
+            // Renewals keep their email, slice 2: the approved cards (tiles, Coming up · All · Done, a card each).
+            RenewalBoardView(board: board, tab: $tab, palette: palette, open: $open)
         }
         if let home = model.homeUpkeep {
             ListRowView(title: HomeUpkeepRules.shared.LABEL, meta: home.summary, due: false, expanded: open == Self.homeKey, palette: palette,
@@ -54,32 +54,19 @@ struct RenewalsSection: View {
                 }
             }
         }
-        section("Needs doing", r?.attention ?? [])
-        section("Coming up", r?.upcoming ?? [])
-        section("Later", r?.later ?? [])
+        // The disclaimer, once, at the foot of the list.
+        Text(RenewalBoardRules.shared.FOOTER).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, MekaSpace.m)
     }
 
+    /// Coming up · All · Done, as an index into the core's tabs.
+    @State private var tab = 0
     @State private var removedCar: RemovedCar?
 
     static let homeKey = "home-upkeep"
     /// The first car keeps the key it always had.
     static func carKey(_ carId: String) -> String { carId == CarRules.shared.ENTITY_ID ? "car" : "car-\(carId)" }
     static let moneyKey = "money-dates"
-
-    @ViewBuilder private func section(_ label: String, _ items: [RenewalItem]) -> some View {
-        if !items.isEmpty {
-            Text(label.uppercased())
-                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(palette.textTertiary)
-                .padding(.top, MekaSpace.m)
-            ForEach(items, id: \.id) { item in
-                ListRowView(title: item.title, meta: item.meta, due: item.needsAttention, expanded: open == item.id, palette: palette,
-                            toggle: { open = open == item.id ? nil : item.id }) {
-                    RenewalDetails(item: item, palette: palette, open: $open)
-                }
-            }
-        }
-    }
 }
 
 /// One suggested home job: its title, the line (cross-fades to "On the radar · due Sun 1 Nov" once added) and what it
@@ -225,81 +212,9 @@ private struct CarDetails: View {
     }
 }
 
-private struct RenewalDetails: View {
-    @Environment(CoreModel.self) private var model
-    let item: RenewalItem
-    let palette: MekaPalette
-    @Binding var open: String?
-    @State private var cost = ""
-    @State private var costProblem: String?
-
-    var body: some View {
-        if let subject = item.subject { Text(subject).font(MekaType.body).foregroundStyle(palette.textSecondary) }
-        if let notes = item.notes { Text(notes).font(MekaType.body).foregroundStyle(palette.textSecondary) }
-        // Renewals keep their email: who sent it and what was read, with Open the email.
-        if let box = item.fromEmail { RenewalEmailBox(id: item.id, box: box, palette: palette) }
-        HStack(spacing: MekaSpace.l) {
-            // Bills due: opens the page Meka saved as where he pays it; MEKA never pays.
-            if let link = item.payLink, let url = URL(string: link) {
-                Button(BillRules.shared.payLabel(link: link)) { MekaHaptics.light(); NSWorkspace.shared.open(url) }
-            }
-            Button(item.doneLabel) {
-                if item.repeats == RenewalRules.shared.repeatAt(index: 0) { open = nil } // a one-off leaves the list
-                model.renewalDone(item.id)
-            }
-            Button(item.stopLabel) { open = nil; model.stopRenewal(item.id) }
-            Button("Delete", role: .destructive) { open = nil; model.deleteRenewal(item.id) }
-        }
-        .rowActions(palette)
-        HStack(spacing: MekaSpace.m) {
-            DueDateField(day: item.dueDay) { model.setRenewalDue(item.id, day: $0) }
-            Menu("Repeats: \(item.repeatLabel)") {
-                ForEach(RenewalChoices.repeats, id: \.self) { rp in
-                    Button(RenewalRules.shared.repeatLabel(r: rp)) { model.setRenewalRepeat(item.id, rp) }
-                }
-            }
-            .menuStyle(.button).fixedSize()
-            Menu("Kind: \(RenewalRules.shared.kindLabel(k: item.kind))") {
-                ForEach(RenewalChoices.kinds, id: \.self) { k in
-                    Button(RenewalRules.shared.kindLabel(k: k)) { model.setRenewalKind(item.id, k) }
-                }
-            }
-            .menuStyle(.button).fixedSize()
-        }
-        HStack(spacing: MekaSpace.m) {
-            Menu("Show it…") {
-                ForEach(RenewalRules.shared.LEAD_CHOICES, id: \.label) { c in
-                    Button(c.label) { if let d = c.days?.intValue { model.setRenewalLead(item.id, days: d) } }
-                }
-            }
-            .menuStyle(.button).fixedSize()
-            Menu("Cancel by…") {
-                ForEach(RenewalRules.shared.CANCEL_CHOICES, id: \.label) { c in
-                    Button(c.label) { model.setRenewalCancelBy(item.id, daysBefore: c.days?.intValue) }
-                }
-            }
-            .menuStyle(.button).fixedSize()
-            TextField(costHint, text: $cost)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 220)
-                .onSubmit {
-                    costProblem = model.setRenewalCost(item.id, cost)
-                    if costProblem == nil { cost = "" }
-                }
-        }
-        if let costProblem { Text(costProblem).font(MekaType.caption).foregroundStyle(palette.critical) }
-        PayLinkField(item: item, palette: palette)
-    }
-
-    private var costHint: String {
-        if let p = item.costPence { return "Cost (now \(RenewalRules.shared.formatPence(pence: p.int64Value)))" }
-        return "Cost, e.g. 9.99"
-    }
-}
-
 /// Bills due: where Meka pays it ("octopus.energy"), so the reminder three days before can offer Pay. Return saves it;
 /// one that isn't a web address says so; Remove clears it. The line under the field cross-fades as it changes.
-private struct PayLinkField: View {
+struct PayLinkField: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let item: RenewalItem
@@ -346,7 +261,7 @@ enum RenewalChoices {
 }
 
 /// A compact date field over epoch days, limited to ten years either side of today (the core's range).
-private struct DueDateField: View {
+struct DueDateField: View {
     @Environment(CoreModel.self) private var model
     let day: Int64
     let set: (Int64) -> Void
@@ -419,7 +334,7 @@ struct AddRenewalRow: View {
 /// email (who sent it, the subject, the day it came, and what Navilife read as small tiles) with **Open the email**,
 /// which opens the in-app reader sheet on that exact message (the sheet's scale-fade; Reduce Motion cross-fades), Open
 /// in Gmail / Outlook at its foot. Plain text only; only the item's id (a String) crosses to the core.
-private struct RenewalEmailBox: View {
+struct RenewalEmailBox: View {
     @Environment(CoreModel.self) private var model
     let id: String
     let box: RenewalEmail

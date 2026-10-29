@@ -2372,6 +2372,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
     }
 
+    func testRenewalBoardReachesSwift() {
+        // Renewals keep their email, slice 2: the cards' tiles, tabs and words reach the Mac (only Strings cross).
+        let today = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 29)
+        let board = RenewalBoardRules.shared.board(v: RenewalsView.companion.EMPTY, today: today, tab: RenewalBoardRules.shared.tabAt(index: 0))
+        XCTAssertEqual(board.tiles.map { $0.label }, ["Next 30 days", "To cancel", "A year"])
+        XCTAssertEqual(board.tiles.map { $0.value }, ["0", "0", "—"])
+        XCTAssertTrue(board.cards.isEmpty)
+        XCTAssertNil(board.empty)
+        XCTAssertEqual(board.footer, RenewalBoardRules.shared.FOOTER)
+        XCTAssertEqual((0..<Int(RenewalBoardRules.shared.tabCount)).map { RenewalBoardRules.shared.tabAt(index: Int32($0)).label }, ["Coming up", "All", "Done"])
+        XCTAssertEqual(RenewalBoardRules.shared.costShort(pence: 2400, repeats: RenewalRules.shared.repeatAt(index: 4)), "£24/yr")
+        XCTAssertEqual(RenewalBoardRules.shared.editKeyAt(index: 0).name, "DUE")
+    }
+
     func testCarReachesSwift() {
         // Car on autopilot, slice 1: the car's rows, the registration check and display reach the Mac (only Strings cross).
         let view = CarRules.shared.view(registration: "AB12CDE", items: [])

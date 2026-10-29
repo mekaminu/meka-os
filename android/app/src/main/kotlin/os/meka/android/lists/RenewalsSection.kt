@@ -50,7 +50,8 @@ import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DueState
 import os.meka.core.domain.ObligationKind
-import os.meka.core.domain.RenewalItem
+import os.meka.core.domain.RenewalBoardRules
+import os.meka.core.domain.RenewalTab
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.RenewalRules
 import os.meka.core.domain.RenewalsView
@@ -75,18 +76,17 @@ data class NewRenewal(
 internal fun LazyListScope.renewals(
     r: RenewalsView, cars: CarsView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
-    removedCar: String? = null, setRemovedCar: (String?) -> Unit = {}, tap: () -> Unit,
+    removedCar: String? = null, setRemovedCar: (String?) -> Unit = {},
+    tab: RenewalTab = RenewalTab.COMING_UP, setTab: (RenewalTab) -> Unit = {}, tap: () -> Unit,
 ) {
-    r.costLine?.let { line ->
-        item(key = "r-cost") {
-            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs))
-        }
-    }
-    if (r.count == 0) {
+    if (r.count == 0 && r.done.isEmpty()) {
         empty(
             "renewals",
             "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one.",
         )
+    } else {
+        // Renewals keep their email, slice 2: the approved cards (tiles, Coming up · All · Done, a card each).
+        renewalBoard(RenewalBoardRules.board(r, today, tab), open, toggle, setTab, core, act, leave, tap)
     }
     homeUpkeep(HomeUpkeepRules.view(r.all, today), open, toggle, core, act, tap)
     // Two cars: one row per car, each with its own dates; the last one offers another car.
@@ -95,9 +95,7 @@ internal fun LazyListScope.renewals(
     }
     removedCar?.let { removedCarLine(it, core, act, setRemovedCar, tap) }
     moneyDates(MoneyDateRules.view(r.all, today), open, toggle, core, act, tap)
-    section("Needs doing", r.attention, today, open, toggle, core, act, leave, tap)
-    section("Coming up", r.upcoming, today, open, toggle, core, act, leave, tap)
-    section("Later", r.later, today, open, toggle, core, act, leave, tap)
+    renewalFoot()
 }
 
 /**
@@ -229,73 +227,6 @@ private fun UpkeepLine(title: String, line: String, note: String, tracked: Boole
         // Car slice 2: the radar's date differs from the DVLA's; never changed without this tap.
         else if (use != null) Action("Use the DVLA's date") { use() }
     }
-}
-
-private fun LazyListScope.section(
-    label: String, rows: List<RenewalItem>, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
-    act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, tap: () -> Unit,
-) {
-    if (rows.isEmpty()) return
-    item(key = "r-label-$label") { SectionLabel(label, Modifier.animateItem().padding(top = MekaSpace.m)) }
-    items(rows, key = { "r-${it.id}" }) { item ->
-        ListRow(item.title, item.meta, if (item.needsAttention) DueState.DUE else DueState.NONE, open == item.id, { toggle(item.id) }, Modifier.animateItem()) {
-            RenewalDetails(item, today, core, act, leave, tap)
-        }
-    }
-}
-
-@Composable
-private fun RenewalDetails(
-    item: RenewalItem, today: Long, core: MekaCore,
-    act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, tap: () -> Unit,
-) {
-    var picking by rememberSaveable(item.id) { mutableStateOf(false) }
-    var costError by rememberSaveable(item.id) { mutableStateOf<String?>(null) }
-    var badLink by rememberSaveable(item.id) { mutableStateOf(false) }
-    val uri = LocalUriHandler.current
-    val reduced = Meka.reducedMotion
-    item.subject?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
-    item.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
-    // Renewals keep their email: who sent it and what was read, with Open the email.
-    item.fromEmail?.let { RenewalEmailBox(item.id, it, core, tap) }
-    Actions {
-        // Bills due: opens the page Meka saved as where he pays it; MEKA never pays.
-        item.payLink?.let { link -> Action(BillRules.payLabel(link)) { tap(); runCatching { uri.openUri(link) } } }
-        Action(item.doneLabel) {
-            if (item.repeats == RenewalRepeat.NONE) leave { core.renewalDone(item.id) } else { tap(); act { core.renewalDone(item.id) } }
-        }
-        Action(item.stopLabel) { leave { core.stopRenewal(item.id) } }
-        Action("Delete", critical = true) { leave { core.deleteRenewal(item.id) } }
-    }
-    ChipRow(null) { Chip(RenewalRules.dueButton(item.dueDay, today), false) { picking = true } }
-    ChipRow("Repeats") {
-        RenewalRules.REPEATS.forEach { rp -> Chip(RenewalRules.repeatLabel(rp), item.repeats == rp) { act { core.setRenewalRepeat(item.id, rp) } } }
-    }
-    ChipRow("Show it") {
-        RenewalRules.LEAD_CHOICES.forEach { c -> Chip(c.label, c.days == item.leadDays) { c.days?.let { d -> act { core.setRenewalLead(item.id, d) } } } }
-    }
-    ChipRow("Cancel by") {
-        val current = item.cancelByDay?.let { (item.dueDay - it).toInt() }
-        RenewalRules.CANCEL_CHOICES.forEach { c -> Chip(c.label, c.days == current) { act { core.setRenewalCancelBy(item.id, c.days) } } }
-    }
-    KindChips(item.kind) { k -> act { core.setRenewalKind(item.id, k) } }
-    Field(item.costPence?.let { "Cost (now ${RenewalRules.formatPence(it)}), blank to clear" } ?: "Cost, e.g. 9.99") { text ->
-        costError = checkCost(text)
-        if (costError == null) act { core.setRenewalCost(item.id, text) }
-    }
-    costError?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
-    // Bills due: where he pays it (optional); the reminder three days before offers Pay when it's set.
-    Field(item.payLink?.let { "Pay link (now ${BillRules.site(it)})" } ?: "Pay link, e.g. octopus.energy") { text ->
-        val typed = text.take(SessionRules.MAX_LINK)
-        act { val ok = core.setRenewalPayLink(item.id, typed); badLink = !ok; if (ok) tap() }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        AnimatedContent(BillRules.linkLine(item, badLink), transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "pay-link-line", modifier = Modifier.weight(1f)) { l ->
-            Text(l, style = MekaType.caption, color = if (badLink) Meka.colors.critical else Meka.colors.textTertiary)
-        }
-        if (item.payLink != null) Action("Remove") { badLink = false; act { core.setRenewalPayLink(item.id, "") } }
-    }
-    if (picking) DayPickerDialog(item.dueDay, onPick = { d -> act { core.setRenewalDue(item.id, d) } }, onDismiss = { picking = false })
 }
 
 /** Add a renewal: what, then (once typing) its kind, due date, repeat, cost and cancel-by. */

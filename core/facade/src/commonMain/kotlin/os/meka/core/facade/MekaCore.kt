@@ -4427,6 +4427,19 @@ class MekaCore(
     /** "Cancelled it" / "Stop tracking": off the radar, kept as cancelled. */
     suspend fun stopRenewal(id: String) = onCore { renewals.stop(id) }
     suspend fun deleteRenewal(id: String) = onCore { renewals.delete(id) }
+    /** Renewals keep their email, slice 2: the Done tab's Put it back (a closed one goes back on the radar). Never throws. */
+    suspend fun reopenRenewal(id: String): Boolean = onCore { renewals.reopen(id) }
+
+    /**
+     * Renewals keep their email, slice 2: the Renewals list as cards for [tab] (pure, from the synced lists): the three
+     * tiles, the cards and the foot's disclaimer ([os.meka.core.domain.RenewalBoardRules]).
+     */
+    fun renewalBoard(tab: os.meka.core.domain.RenewalTab): os.meka.core.domain.RenewalBoard =
+        os.meka.core.domain.RenewalBoardRules.board(_lists.value.renewals, todayEpochDay(), tab)
+
+    /** The Edit sheet's rows for a card (Renews, Repeats, Remind me, Cancel by, Kind, Cost, Pay link). */
+    fun renewalEditRows(item: os.meka.core.domain.RenewalItem): List<os.meka.core.domain.RenewalEditRow> =
+        os.meka.core.domain.RenewalBoardRules.editRows(item, todayEpochDay())
 
     /**
      * Home upkeep: adds one of [os.meka.core.domain.HomeUpkeepRules.PRESETS] to the radar with its interval, lead time
