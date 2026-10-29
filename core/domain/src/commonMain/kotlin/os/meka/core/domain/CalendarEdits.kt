@@ -268,6 +268,8 @@ object CalendarEditRules {
      * calendar comes first: allowing editing wouldn't help there.
      */
     fun notEditableReason(event: CalendarEvent, canEdit: (provider: String, account: String) -> Boolean): String? {
+        // The Week board (j): an event read from the phone's own calendar is changed in the phone's calendar app.
+        if (event.provider == PhoneCalendarRules.PROVIDER) return PhoneCalendarRules.EDIT_LINE
         if (event.provider !in WRITABLE || event.isFixture || event.isProvisional || event.account == null) return null
         val p = providerName(event.provider)
         val cal = (event.calendarName?.trim()?.takeIf { it.isNotEmpty() && !it.equals(event.account, ignoreCase = true) })

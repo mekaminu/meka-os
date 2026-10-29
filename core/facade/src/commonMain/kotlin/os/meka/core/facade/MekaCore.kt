@@ -517,6 +517,14 @@ class MekaCore(
      */
     val calendarEditLines: StateFlow<List<os.meka.core.domain.EditLine>> = _editLines.asStateFlow()
 
+    /**
+     * The Week board (j): the phone's own calendars as the Fold last read them ([setPhoneCalendars]); in memory on this
+     * device only, never stored, synced or sent to the server. Empty on the Mac.
+     */
+    private var phoneRows: List<os.meka.core.domain.PhoneCalendarRow> = emptyList()
+    private val _phoneCalendars = MutableStateFlow<List<os.meka.core.domain.PhoneCalendarLine>?>(null)
+    /** Calendars → THIS PHONE'S CALENDARS: each one with its events in the next 5 weeks; null until the Fold has read them. */
+    val phoneCalendars: StateFlow<List<os.meka.core.domain.PhoneCalendarLine>?> = _phoneCalendars.asStateFlow()
     private val _calendarsOnToday = MutableStateFlow<List<os.meka.core.domain.CalendarChoice>>(emptyList())
     /** Calendars' "On Today" list: every calendar in the mirror and whether it shows on Today (all-day polish). */
     val calendarsOnToday: StateFlow<List<os.meka.core.domain.CalendarChoice>> = _calendarsOnToday.asStateFlow()
@@ -5846,6 +5854,18 @@ class MekaCore(
         sleepSessions = sessions
         os.meka.core.domain.SleepRules.lastNight(sessions, dayWindow(nowMs()).startMs)
     }
+    /**
+     * The Week board (j): the events the Fold read from the phone's own calendars ([rows], this week's start back to 5
+     * weeks ahead) and every calendar it found ([calendars]: name and account type), or both empty when he hasn't
+     * allowed it. Kept in memory on this device only; the views follow at once.
+     */
+    suspend fun setPhoneCalendars(rows: List<os.meka.core.domain.PhoneCalendarRow>, calendars: List<Pair<String?, String?>>) = onCore {
+        val changed = rows != phoneRows
+        phoneRows = rows
+        _phoneCalendars.value = os.meka.core.domain.PhoneCalendarRules.calendars(rows, calendars, nowMs())
+        if (changed) refresh()
+    }
+
     /** Notices as the governor would see them now (tests). */
     internal suspend fun noticesNow(): List<os.meka.core.domain.Notice> = onCore { refresh(); currentNotices() }
     /** The habits a workout could tick, for the Fold's Workouts line. */
@@ -13849,7 +13869,9 @@ class MekaCore(
         // names a calendar (the Calendar key, rows, details, Calendars) says the same thing.
         // Appointment nudges, slice 2c: a booked visit that isn't in Google or Outlook stands in as MEKA's own event.
         val cal = ZoneCalendar(timeZone)
-        val list = shown + os.meka.core.domain.AppointmentCalendarRules.events(appointments.items(), shown, cal.epochDayOf(nowMs()), cal)
+        // The Week board (j): the phone's own calendars (Fold only), minus anything the server already has.
+        val withPhone = if (phoneRows.isEmpty()) shown else shown + os.meka.core.domain.PhoneCalendarRules.events(phoneRows, shown)
+        val list = withPhone + os.meka.core.domain.AppointmentCalendarRules.events(appointments.items(), withPhone, cal.epochDayOf(nowMs()), cal)
         val names = eventActions.calendarNames()
         if (names.isEmpty()) return list
         return list.map { e -> names[os.meka.core.domain.CalendarRules.key(e)]?.let { e.copy(calendarTitle = it) } ?: e }

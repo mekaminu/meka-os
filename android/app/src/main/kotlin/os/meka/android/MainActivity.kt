@@ -159,6 +159,8 @@ class MainActivity : ComponentActivity() {
         val app = application as MekaApplication
         app.isOnScreen = true
         app.core.startSync()
+        // The Week board (j): the phone's own calendars, re-read as the app comes back (the window moves with the day).
+        app.readPhoneCalendars()
         // Self-updating phone app: look for a newer build, and bring back Android's Install prompt if one is waiting.
         app.lookForUpdate()
         app.updater.showPrompt(this)

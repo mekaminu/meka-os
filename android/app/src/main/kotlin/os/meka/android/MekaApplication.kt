@@ -311,6 +311,8 @@ open class MekaApplication : Application() {
             core.queueView.map { v -> v.waiting.map { it.id } }.distinctUntilChanged()
                 .collect { runCatching { os.meka.android.ask.QueuePages.saveWaiting(this@MekaApplication, core) } }
         }
+        // The Week board (j): the phone's own calendars (Samsung's), read on this phone only once he allows it.
+        readPhoneCalendars()
         // The News widget when its stories change (the launcher flips the cards itself), and once at process start.
         appScope.launch {
             core.newsPlace
@@ -322,6 +324,15 @@ open class MekaApplication : Application() {
 
     companion object {
         private const val GOVERNOR_SETTLE_MS = 2_000L
+    }
+
+    /**
+     * The Week board (j): reads the phone's own calendars into the core (in memory only), when allowed; at process start,
+     * each time the app comes to the screen, after Calendars' Allow, and when the phone's calendar changes.
+     */
+    fun readPhoneCalendars() {
+        if (!::core.isInitialized) return
+        runCatching { os.meka.android.calendar.PhoneCalendars.refresh(this, core, appScope) }
     }
 
     /** Looks for a newer published build (at most every 10 minutes unless [force]d); never installs anything. */

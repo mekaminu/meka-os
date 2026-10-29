@@ -47,6 +47,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- The Week board (j): the phone's own calendars (Samsung's "My calendar"), read only after he taps Allow under
+         Calendars → THIS PHONE'S CALENDARS; kept on this phone in memory, never written to, synced or sent. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Screenshots and photos, slice 2: asked only when he turns on "Notice new screenshots"; each new screenshot is
          read on the phone (ML Kit) and never kept or sent. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />

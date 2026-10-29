@@ -139,7 +139,7 @@ object CalendarRules {
     fun detail(e: CalendarEvent): String? = when {
         e.isFixture -> "FC Barcelona"
         else -> listOfNotNull(
-            when (e.provider) { "google" -> "Google"; "microsoft" -> "Outlook"; else -> null },
+            when (e.provider) { "google" -> "Google"; "microsoft" -> "Outlook"; PhoneCalendarRules.PROVIDER -> "On this phone"; else -> null },
             e.account?.trim()?.takeIf { it.isNotEmpty() },
         ).joinToString(" · ").ifEmpty { null }
     }

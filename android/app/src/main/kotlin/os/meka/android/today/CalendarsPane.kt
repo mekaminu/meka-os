@@ -140,6 +140,9 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // The Week board (j): the phone's own calendars (Samsung's), read on this phone only once he allows it.
+        Spacer(Modifier.height(MekaSpace.m))
+        PhoneCalendarsSection(core, Modifier.appear(rememberAppearance(accounts.orEmpty().size)))
         // On Today (all-day polish): a planning calendar can stay in the Calendar tab but off Today. Synced.
         if (onToday.isNotEmpty()) {
             Spacer(Modifier.height(MekaSpace.m))
