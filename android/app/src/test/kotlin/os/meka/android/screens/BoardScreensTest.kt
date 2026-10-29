@@ -713,16 +713,22 @@ class BoardScreensTest {
         show(core)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-rows-fit"))
         ScreenShots.assertSensible(compose, "inner-dark-rows-fit")
-        val row = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKDAYS_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        // Unclipped bounds: a row taller than the screen runs on below it (the week scrolls as one).
+        fun whole(n: androidx.compose.ui.semantics.SemanticsNode) = androidx.compose.ui.geometry.Rect(n.positionInRoot, androidx.compose.ui.geometry.Size(n.size.width.toFloat(), n.size.height.toFloat()))
+        val row = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKDAYS_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let(::whole)
             ?: throw AssertionError("no weekday row")
-        val last = cardBounds(titles.last())
-        assertTrue("today's last card sits inside the weekday row ($last vs $row)", last.bottom <= row.bottom + 1f && last.height > 0f)
-        val adds = compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
-        val todays = adds.firstOrNull { it.left < last.right && it.right > last.left && it.top >= last.bottom }
-            ?: throw AssertionError("no + add under today's cards ($adds vs $last)")
-        assertTrue("today's + add is not clipped ($todays vs $row)", todays.bottom <= row.bottom + 1f)
-        val dates = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
-            .filter { it.top < row.bottom && it.bottom > row.top }
+        val cards = compose.onAllNodesWithTag(PLANNER_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+            .filter { it.top >= row.top && it.top < row.bottom }
+        assertTrue("today's eight cards are in the weekday row (${cards.size})", cards.size >= titles.size)
+        cards.forEach { assertTrue("a card runs past the weekday row's foot ($it vs $row)", it.bottom <= row.bottom + 1f) }
+        val adds = compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+            .filter { it.top >= row.top && it.top < row.bottom }
+        assertTrue("+ add under today, Thursday and Friday (${adds.size})", adds.size >= 3)
+        val lowest = cards.maxOf { it.bottom }
+        assertTrue("today's + add sits under its last card", adds.any { it.top >= lowest - 1f })
+        adds.forEach { assertTrue("+ add is not clipped ($it vs $row)", it.bottom <= row.bottom + 1f) }
+        val dates = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+            .filter { it.top >= row.top && it.top < row.bottom }
         assertEquals("five weekday dates", 5, dates.size)
         assertTrue("the weekday dates are level (${dates.map { it.top }})", dates.maxOf { it.top } - dates.minOf { it.top } < 1f)
         val pills = compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes()
