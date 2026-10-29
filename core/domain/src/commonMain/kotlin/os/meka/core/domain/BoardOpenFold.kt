@@ -22,6 +22,10 @@ package os.meka.core.domain
  *   whether or not a day has a done bar or a note.
  * - "+ add" (alignment list (4), 2026-10-29): the slim dashed row's line is drawn inside its edge ([ADD_STROKE_INSET]
  *   of a 1 dp line), so the column's clip never cuts its corners off.
+ * - A clean scrolled state (alignment list (8), 2026-10-29): once the week (or the Agenda under its week strip) has
+ *   scrolled, whatever passes under the header fades out over [HEAD_FADE_DP] ([headFade], [headAlpha]) instead of
+ *   leaving a hard-cut sliver (a stray dashed fragment of "+ add", a row half under the strip's divider). At rest
+ *   nothing fades, so the first row stays whole.
  */
 object BoardOpenFoldRules {
     /** The least the weekday row is drawn (dp): its header, pill and "+ add" with room to drop a card. */
@@ -115,5 +119,24 @@ object BoardOpenFoldRules {
         if (count <= 0) return emptyList()
         val w = if (count <= GRID) gridColumn(rowDp, gapDp) else ((rowDp - gapDp * (count - 1)) / count).coerceAtLeast(0f)
         return List(count) { w }
+    }
+
+    /** How deep (dp) the top of a scrolled week or agenda fades out under its header (the 8/16/24 rhythm). */
+    const val HEAD_FADE_DP = 16f
+
+    /** Scrolled less than this (dp) counts as at rest (bounce, rounding): nothing fades. */
+    const val HEAD_SLOP_DP = 1f
+
+    /** Whether the top fades: only once the list has scrolled [offsetDp] past the slop. */
+    fun headFade(offsetDp: Float): Boolean = offsetDp.isFinite() && offsetDp > HEAD_SLOP_DP
+
+    /**
+     * Opacity of content [fromTopDp] below the scroll area's top edge while the fade is [shown] (0 hidden to 1 fully
+     * in, as it cross-fades): 0 at the edge, whole from [HEAD_FADE_DP] down; whole everywhere when not shown.
+     */
+    fun headAlpha(fromTopDp: Float, shown: Float = 1f): Float {
+        val s = shown.coerceIn(0f, 1f)
+        val ramp = (fromTopDp / HEAD_FADE_DP).coerceIn(0f, 1f)
+        return 1f - s * (1f - ramp)
     }
 }

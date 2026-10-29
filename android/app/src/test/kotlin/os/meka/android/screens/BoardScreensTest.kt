@@ -689,6 +689,41 @@ class BoardScreensTest {
         if (compose.onAllNodesWithContentDescription("Someday, 1 task").fetchSemanticsNodes().isEmpty()) fail("Someday's heading doesn't say its count")
     }
 
+    /**
+     * The open Fold's alignment list (8), the scrolled state: a full day makes the week taller than the screen; a swipe
+     * up scrolls the week as one (the lists' hairline rises), the month's row stays put above it, and the shot shows
+     * what passes under the header fading out rather than a hard-cut sliver.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun aScrolledWeekKeepsItsHeaderAndScrollsAsOne() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            repeat(12) { i -> core.addOnBoardSized("Errand ${i + 1}", today, 15) }
+        }
+        show(core)
+        fun ruleTop() = compose.onAllNodesWithTag(LISTS_RULE_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.top
+            ?: throw AssertionError("no hairline above the lists")
+        fun monthTop() = compose.onAllNodesWithTag(MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+            ?: throw AssertionError("no month in the header")
+        val ruleBefore = ruleTop()
+        val monthBefore = monthTop()
+        compose.onNodeWithTag("screen").performTouchInput {
+            swipe(
+                start = androidx.compose.ui.geometry.Offset(width * 0.3f, height * 0.85f),
+                end = androidx.compose.ui.geometry.Offset(width * 0.3f, height * 0.4f),
+                durationMillis = 300,
+            )
+        }
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-scrolled"))
+        ScreenShots.assertSensible(compose, "inner-dark-scrolled")
+        assertTrue("the week didn't scroll (hairline $ruleBefore → ${ruleTop()})", ruleTop() < ruleBefore - 40f)
+        assertEquals("the month's row moved with the week", monthBefore, monthTop(), 1f)
+    }
+
     /** Option B match: on a Saturday the unfolded board opens on next week; ‹ goes back to this week's Saturday. */
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun onASaturdayTheBoardOpensOnNextWeek() {

@@ -59,6 +59,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.footFade
+import os.meka.android.designsystem.headFade
+import androidx.compose.ui.platform.LocalDensity
+import os.meka.core.domain.BoardOpenFoldRules
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
@@ -370,11 +373,20 @@ private fun AgendaList(
     v: CalendarView, entries: List<Entry>, list: LazyListState, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit,
     onEvent: (CalendarEvent) -> Unit, openAllDay: (String) -> Unit,
 ) {
+    val density = LocalDensity.current.density
+    // Read as a yes/no so scrolling recomposes the list only when the head fade turns on or off.
+    val scrolled by remember(list, density) {
+        derivedStateOf {
+            BoardOpenFoldRules.headFade(if (list.firstVisibleItemIndex > 0) Float.MAX_VALUE else list.firstVisibleItemScrollOffset / density)
+        }
+    }
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xs, bottom = MekaSpace.xl),
         // The foot fades into the tabs rather than cutting a row in half; the xl bottom padding clears the fade.
-        modifier = Modifier.fillMaxSize().footFade(),
+        // The alignment list (8): once scrolled, rows passing under the week strip's divider fade out, never half-cut.
+        modifier = Modifier.fillMaxSize().footFade()
+            .headFade(scrolled),
     ) {
         items(entries, key = { it.key }) { e ->
             // Sections stagger in 40 ms apart on first show; later rows just glide.

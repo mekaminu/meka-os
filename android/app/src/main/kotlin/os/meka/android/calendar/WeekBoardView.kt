@@ -134,6 +134,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.headFade
 import os.meka.android.designsystem.areaTone
 import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.rememberAppearance
@@ -2513,6 +2514,9 @@ private fun WideWeek(
     list: @Composable (BoardWeek, BoardListColumn, Modifier) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    // Read as a yes/no so a scroll recomposes the week only when the fade turns on or off.
+    val scrolledWeek by remember(scroll, density) { derivedStateOf { BoardOpenFoldRules.headFade(scroll.value / density) } }
     BoxWithConstraints(modifier) {
         val tiers = BoardWeekLayoutRules.heights(maxHeight.value)
         androidx.compose.animation.AnimatedContent(
@@ -2532,7 +2536,11 @@ private fun WideWeek(
             // The density pass: the unfolded board in the mockup's proportions (BoardDenseRules).
             CompositionLocalProvider(LocalBoardDense provides true) {
             Column(
-                Modifier.fillMaxSize().verticalScroll(scroll, enabled = !dragging)
+                // The alignment list (8): once the week has scrolled, what passes under the header fades out (no
+                // stray dashed sliver of "+ add" left under it); at rest nothing fades.
+                Modifier.fillMaxSize()
+                    .headFade(scrolledWeek)
+                    .verticalScroll(scroll, enabled = !dragging)
                     .padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {

@@ -101,4 +101,26 @@ class BoardOpenFoldTest {
         assertEquals(emptyList<Float>(), BoardOpenFoldRules.gridWidths(0, 600f))
         assertEquals(0f, BoardOpenFoldRules.gridColumn(10f, 8f))
     }
+
+    @Test
+    fun aScrolledWeekFadesUnderItsHeaderAndARestingOneDoesNot() {
+        // At rest (and within the bounce slop) nothing fades, so the first card is whole.
+        assertFalse(BoardOpenFoldRules.headFade(0f))
+        assertFalse(BoardOpenFoldRules.headFade(1f))
+        assertFalse(BoardOpenFoldRules.headFade(Float.NaN))
+        // Scrolled, the top fades: a dashed sliver of "+ add" or a row under the strip's divider is never hard-cut.
+        assertTrue(BoardOpenFoldRules.headFade(2f))
+        assertTrue(BoardOpenFoldRules.headFade(400f))
+        // Shown in full: gone at the edge, half way at 8 dp, whole from 16 dp down.
+        assertEquals(16f, BoardOpenFoldRules.HEAD_FADE_DP)
+        assertEquals(0f, BoardOpenFoldRules.headAlpha(0f))
+        assertEquals(0.5f, BoardOpenFoldRules.headAlpha(8f))
+        assertEquals(1f, BoardOpenFoldRules.headAlpha(16f))
+        assertEquals(1f, BoardOpenFoldRules.headAlpha(200f))
+        // Not shown, everything whole; half faded in, the edge is half shown.
+        assertEquals(1f, BoardOpenFoldRules.headAlpha(0f, shown = 0f))
+        assertEquals(0.5f, BoardOpenFoldRules.headAlpha(0f, shown = 0.5f))
+        assertEquals(1f, BoardOpenFoldRules.headAlpha(-4f, shown = 0f))
+        assertEquals(0f, BoardOpenFoldRules.headAlpha(-4f, shown = 2f))
+    }
 }

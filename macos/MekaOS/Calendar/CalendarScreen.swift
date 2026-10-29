@@ -107,6 +107,8 @@ struct CalendarScreen: View {
                     WeekBoardScreen(board: board, palette: palette)
                         .padding(.bottom, MekaSpace.xl)
                 }
+                // The alignment list (8): once scrolled, what passes the top fades out rather than leaving a sliver.
+                .edgeFades()
                 .staggeredAppear(2)
                 .transition(.opacity)
             } else {
@@ -144,6 +146,8 @@ struct CalendarScreen: View {
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: v.sections.map(\.id))
             }
             .scrollPosition(id: $topSection, anchor: .top)
+            // The alignment list (8): rows scrolled under the week strip's divider fade out, never half-cut.
+            .edgeFades()
         }
         .transition(.opacity)
     }
