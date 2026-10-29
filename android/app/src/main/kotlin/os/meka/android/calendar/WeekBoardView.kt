@@ -1124,7 +1124,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, dense: Boolean = fal
         Text(BoardNudgeRules.SPEAKER, style = if (dense) BoardType.labelDense else MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
         Spacer(Modifier.width(MekaSpace.xs))
         androidx.compose.animation.Crossfade(n.line, animationSpec = MekaMotion.appear(reduced), label = "nudge-line") { line ->
-            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = if (dense) BoardBesideRules.HEAD_NUDGE_LINES else BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
+            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
         }
     }
 }

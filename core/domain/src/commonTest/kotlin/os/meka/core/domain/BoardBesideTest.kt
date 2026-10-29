@@ -14,13 +14,6 @@ class BoardBesideTest {
     }
 
     @Test
-    fun obisHeaderPillIsOneLine() {
-        assertEquals(1, BoardBesideRules.HEAD_NUDGE_LINES)
-        // The folded card keeps its own two lines.
-        assertTrue(BoardMatchRules.NUDGE_LINES >= BoardBesideRules.HEAD_NUDGE_LINES)
-    }
-
-    @Test
     fun foldedCardsShareTheGutter() {
         // Gutter 16, the column's outer 4 and inner 8: the pager is inset 4, so a card's edge is 4 + 4 + 8 = 16.
         val inset = BoardBesideRules.foldedPagerInset(16f, 4f, 8f)

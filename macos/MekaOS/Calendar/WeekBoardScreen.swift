@@ -328,7 +328,7 @@ private struct ObiNudgeLine: View {
                 .frame(width: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB), height: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB))
                 .accessibilityHidden(true)
             Text(BoardNudgeRules.shared.SPEAKER).font(BoardFont.label).foregroundStyle(palette.textPrimary)
-            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardBesideRules.shared.HEAD_NUDGE_LINES)) // one line, as the mockup's pill
+            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.NUDGE_LINES))
                 .id(nudge.line)
                 .transition(.opacity)
         }

@@ -8,8 +8,8 @@ package os.meka.core.domain
  * - **The lists' headings** under the weekend ("Someday", "Side hustle", "House", "No day yet") were drawn in the day
  *   dates' large type and, a weekday wide, broke mid-word ("Someda / y"). The mockup's are a size below a day's date:
  *   [LIST_HEAD_SP] semibold, on [LIST_HEAD_LINES] line, cut with "…" only if a name can't fit, never split in a word.
- * - **Obi's pill in the header** wrapped to two lines on the open Fold; the mockup's is one line ([HEAD_NUDGE_LINES]),
- *   cut with "…" (the whole line is still read out).
+ * - **Obi's pill in the header** wraps to two lines at the open Fold's 829 dp where the mockup's 1280 has room for one;
+ *   it stays two lines (the readability gate never lets a word be cut short), so it is not changed here.
  * - **The timeline's hour lines crossed an event's title** ("Commute to work" from 07:40 has the 08 line through its
  *   name): every block now has an opaque face ([BLOCKS_OPAQUE]), not only one the now-line runs under.
  * - **Folded, the day's cards sat 4 dp inside** the strip, the day's line and Obi's card: the pager's inset is now
@@ -24,9 +24,6 @@ object BoardBesideRules {
 
     /** A list's heading stays on one line: "…" if it must, never a word split over two lines. */
     const val LIST_HEAD_LINES = 1
-
-    /** Obi's line in the open Fold's and the Mac's header: one line, as the mockup's pill. */
-    const val HEAD_NUDGE_LINES = 1
 
     /** Folded, the extra space under Obi's card before the day's column: none (the column's own 8 dp top padding). */
     const val FOLDED_SPACE_AFTER_OBI_DP = 0f

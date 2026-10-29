@@ -1688,10 +1688,9 @@ final class MekaCoreBridgeTests: XCTestCase {
                                      board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))
         XCTAssertEqual(matchLists.map { match.listHead(column: $0).name }, ["Someday", "Side hustle", "House", "No day yet"])
         XCTAssertNil(match.listHead(column: matchLists[0]).count)
-        // The shots beside the mockups: the lists' headings a size below a day's date on one line, Obi's header pill one line.
+        // The shots beside the mockups: the lists' headings a size below a day's date on one line; timeline blocks opaque.
         XCTAssertLessThan(BoardBesideRules.shared.LIST_HEAD_SP, BoardDenseRules.shared.DATE_SP)
         XCTAssertEqual(BoardBesideRules.shared.LIST_HEAD_LINES, 1)
-        XCTAssertEqual(BoardBesideRules.shared.HEAD_NUDGE_LINES, 1)
         XCTAssertTrue(BoardBesideRules.shared.BLOCKS_OPAQUE)
         let commute = DayBlock(key: "c:to", title: "Commute to work", startMinute: 480, endMinute: 540, kind: DayBlockKind.commute,
                                done: false, taskId: nil, event: nil, tone: 0, column: 0, columns: 1)
