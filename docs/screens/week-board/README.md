@@ -46,3 +46,15 @@ pills stack "nothing yet / 4h" over three lines; the weekend's empty pills and "
 row at the mockup's size with "+ Goal" beside "W43", Obi's pill, Today and the round ‹ ›; "+ add" is a slim dashed row;
 the narrow pills are "planned" over "– / 4h". Still off: a tall empty gap between the weekdays and the weekend when the
 week is light (the weekday row's minimum height), and Obi's line wraps to two lines in the header at 829 dp.
+
+## Beside the mockups with column guides (2026-10-29, CI run 1444)
+
+`beside-folded.png` (folded.dc.html, left, beside `cover-dark-folded`) and `beside-open.png` (option-b.dc.html at 1280,
+top, over `inner-dark-lists` at the Fold's 829 dp), made with `tools/design-render/beside.py`: both at 2 px per dp, a
+faint line every 8 dp and the 16 dp gutter's edges in cyan.
+
+- Folded: the day's cards now sit on the gutter like the strip, the day's line and Obi's card (they were 4 dp in), with
+  one 8 dp step under Obi's card. The mockup lists a day's timed events after its tasks; the app puts them first.
+- Open: Someday, Side hustle, House and No day yet on one line, a size below a day's date (they were the dates' size,
+  "Someda / y" split); the timeline's blocks are opaque, so no hour line runs through "Commute to work". Obi's header
+  pill stays two lines at 829 dp (one line would cut words short; the mockup's 1280 has the room).
