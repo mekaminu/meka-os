@@ -31,6 +31,17 @@ class BoardOpenFoldTest {
     }
 
     @Test
+    fun everyDayHeadInARowIsAsTallAsItsTallest() {
+        // (9): a day with a done bar and an amber note sets the height; the others start their first card there too.
+        assertEquals(96f, BoardOpenFoldRules.headHeight(listOf(52f, 96f, 60f)))
+        // Not measured yet: nothing held open.
+        assertEquals(0f, BoardOpenFoldRules.headHeight(emptyList()))
+        assertEquals(40f, BoardOpenFoldRules.headHeight(listOf(Float.NaN, 40f, -3f, Float.POSITIVE_INFINITY)))
+        // The dashed "+ add" line sits inside its edge by half its width.
+        assertEquals(0.5f, BoardOpenFoldRules.ADD_STROKE_INSET)
+    }
+
+    @Test
     fun everyUnfoldedColumnStacksItsPillTheSameWay() {
         // (c) one style: the weekend's wide columns stack "planned" over the figures like the weekdays.
         assertTrue(BoardOpenFoldRules.pillStacked(dense = true, compact = false))

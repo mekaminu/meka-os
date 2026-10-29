@@ -1282,6 +1282,17 @@ private fun DayColumn(
         // Option B match (Meka 2026-10-24 14:39): the mockup's header, "27 Oct" in serif with "Mon" on the right (today
         // in gold), the thin done bar under it without words, then the budget pill, always "planned · 4h 05 / 3h".
         val head = BoardMatchRules.dayHead(day)
+        // The alignment pass (9): the head (date, done bar, pill, the amber note) is drawn as tall as the row's tallest
+        // head, measured at its own height inside, so every column's first card starts at the same y.
+        val rowHead = LocalRowHead.current
+        Box(
+            Modifier.fillMaxWidth()
+                .then(if (showHead && rowHead != null) Modifier.heightIn(min = rowHead.least.dp) else Modifier),
+        ) {
+        Column(
+            Modifier.fillMaxWidth()
+                .then(if (showHead && rowHead != null) Modifier.onSizeChanged { rowHead.report(day.epochDay, it.height / density.density) } else Modifier),
+        ) {
         if (showHead) Column(
             Modifier.fillMaxWidth().padding(bottom = MekaSpace.xxs)
                 .clearAndSetSemantics { contentDescription = day.accessibilityLabel },
@@ -1302,6 +1313,8 @@ private fun DayColumn(
         if (showHead) (day.capacity?.let(BoardPlannerRules::budget) ?: BoardOpenFoldRules.pastPill(day))?.let { BudgetPill(it, day.isToday) }
         // Folded, the day's line turns amber ("5h · 1h over") and Obi's line above carries the fix.
         if (showHead) day.pressure?.let { PressureNote(it, onEase) }
+        }
+        }
         // The day's events are cards in the column too, a blue time chip and their length (the mockup's stand-up).
         val events = BoardMatchRules.eventCards(day)
         if (events.isNotEmpty()) {
@@ -1386,6 +1399,15 @@ private fun StudyNote(line: os.meka.core.domain.StudyDayLine) {
 }
 
 internal const val STUDY_NOTE_TAG = "board-study"
+
+/**
+ * The alignment pass (9): a row of the open Fold's week: the height [least] (dp) its day heads are drawn at, and where
+ * each day reports its head's own height.
+ */
+internal class RowHead(val least: Float, val report: (Long, Float) -> Unit)
+
+/** The row a day column is drawn in, unfolded (null folded and in the lists). */
+internal val LocalRowHead = androidx.compose.runtime.compositionLocalOf<RowHead?> { null }
 
 /** By hand, slice 8: the lane being drawn is compact (BoardFitRules); trays and the folded page are roomy. */
 internal val LocalBoardCompact = staticCompositionLocalOf { false }
@@ -1901,8 +1923,12 @@ private fun AddAtTop(
             Box(
                 Modifier.fillMaxWidth().height(if (dense) BoardDenseHeadRules.ADD_HEIGHT.dp else 40.dp).testTag(ADD_TAG)
                     .drawBehind {
+                        // The alignment pass (4): the dashed line inside the edge, so the column's clip keeps its corners.
+                        val inset = BoardOpenFoldRules.ADD_STROKE_INSET.dp.toPx()
                         drawRoundRect(
-                            hairline, cornerRadius = androidx.compose.ui.geometry.CornerRadius(MekaRadius.m.toPx()),
+                            hairline, topLeft = Offset(inset, inset),
+                            size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(MekaRadius.m.toPx() - inset),
                             style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
                         )
                     }
@@ -2518,8 +2544,13 @@ private fun WideWeek(
                     BoardOpenFoldRules.rowHeight(weekdays.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKDAYS_DP).dp,
                     MekaMotion.appear(reduced), label = "board-weekdays-height",
                 )
+                val heads = remember(shown) { androidx.compose.runtime.mutableStateMapOf<Long, Float>() }
+                val weekdaysLeast = BoardOpenFoldRules.headHeight(weekdays.map { heads[it.epochDay] ?: 0f })
+                val weekdaysHead = remember(shown, weekdaysLeast) { RowHead(weekdaysLeast) { d, h -> heads[d] = h } }
                 Row(Modifier.fillMaxWidth().height(weekdaysTall).testTag(WEEKDAYS_ROW_TAG)) {
-                    weekdays.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekdayWidths[i].dp) { h -> contents[d.epochDay] = h } } }
+                    CompositionLocalProvider(LocalRowHead provides weekdaysHead) {
+                        weekdays.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekdayWidths[i].dp) { h -> contents[d.epochDay] = h } } }
+                    }
                 }
                 val weekend = BoardWeekLayoutRules.weekend(w)
                 if (weekend.isNotEmpty()) {
@@ -2529,8 +2560,12 @@ private fun WideWeek(
                         BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP).dp,
                         MekaMotion.appear(reduced), label = "board-weekend-height",
                     )
+                    val weekendLeast = BoardOpenFoldRules.headHeight(weekend.map { heads[it.epochDay] ?: 0f })
+                    val weekendHead = remember(shown, weekendLeast) { RowHead(weekendLeast) { d, h -> heads[d] = h } }
                     Row(Modifier.fillMaxWidth().height(weekendTall).testTag(WEEKEND_ROW_TAG)) {
-                        weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) { h -> contents[d.epochDay] = h } } }
+                        CompositionLocalProvider(LocalRowHead provides weekendHead) {
+                            weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) { h -> contents[d.epochDay] = h } } }
+                        }
                     }
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,

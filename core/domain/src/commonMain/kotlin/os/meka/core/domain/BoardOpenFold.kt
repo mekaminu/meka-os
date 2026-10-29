@@ -17,6 +17,11 @@ package os.meka.core.domain
  * - One grid (alignment list (5)(9), 2026-10-29): Saturday and Sunday sit under Monday and Tuesday at a weekday's width,
  *   and the lists under them (Someday, Side hustle, House, No day yet) on the same columns ([gridWidths]), so every card
  *   below the weekdays has a weekday card's width and left edge; nothing is wider or inset.
+ * - One first line (alignment list (9), 2026-10-29): a row's day heads (date, done bar, pill, the amber "stacking up"
+ *   note) are all drawn as tall as its tallest ([headHeight]), so every column's first card starts at the same y,
+ *   whether or not a day has a done bar or a note.
+ * - "+ add" (alignment list (4), 2026-10-29): the slim dashed row's line is drawn inside its edge ([ADD_STROKE_INSET]
+ *   of a 1 dp line), so the column's clip never cuts its corners off.
  */
 object BoardOpenFoldRules {
     /** The least the weekday row is drawn (dp): its header, pill and "+ add" with room to drop a card. */
@@ -37,6 +42,15 @@ object BoardOpenFoldRules {
      */
     fun rowHeight(contents: List<Float>, least: Float): Float =
         (contents.filter { it.isFinite() && it > 0f }.maxOrNull() ?: 0f).coerceAtLeast(least)
+
+    /**
+     * The height (dp) every day head in a row is drawn at, from each head's own natural height [heads]: the tallest; a
+     * head not measured yet counts as nothing (0 when none is, so nothing is held open before the first measure).
+     */
+    fun headHeight(heads: List<Float>): Float = heads.filter { it.isFinite() && it > 0f }.maxOrNull() ?: 0f
+
+    /** How far inside its edge the "+ add" row's dashed line is drawn (dp): half its 1 dp width. */
+    const val ADD_STROKE_INSET = 0.5f
 
     /** The budget pill's words stack, "planned" over the figures, on every unfolded column (and any compact lane). */
     fun pillStacked(dense: Boolean, compact: Boolean): Boolean = dense || compact

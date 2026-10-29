@@ -744,6 +744,33 @@ class BoardScreensTest {
     }
 
     /**
+     * The open Fold's alignment pass (9): today stacked up (six two-hour tasks: its amber note under the pill) beside a
+     * Thursday with one task: every day's head is drawn as tall as the tallest, so both days' first cards start level.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theOpenFoldsFirstCardsStartLevel() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            (1..6).forEach { core.addOnBoardSized("Long task $it", today, 120) }
+            core.addOnBoardSized("Book the MOT", today + 1, 30)
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-first-cards"))
+        ScreenShots.assertSensible(compose, "inner-dark-first-cards")
+        fun whole(n: androidx.compose.ui.semantics.SemanticsNode) = androidx.compose.ui.geometry.Rect(n.positionInRoot, androidx.compose.ui.geometry.Size(n.size.width.toFloat(), n.size.height.toFloat()))
+        val row = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKDAYS_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let(::whole)
+            ?: throw AssertionError("no weekday row")
+        val firsts = compose.onAllNodesWithTag(PLANNER_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+            .filter { it.top >= row.top && it.top < row.bottom }
+            .groupBy { (it.left / 8f).toInt() }.values.map { col -> col.minOf { it.top } }
+        assertEquals("a first card on today and Thursday ($firsts)", 2, firsts.size)
+        assertTrue("today's and Thursday's first cards start level ($firsts)", firsts.max() - firsts.min() < 1f)
+    }
+
+    /**
      * The open Fold's alignment pass (5): Saturday and Sunday sit under Monday and Tuesday at their width, and the lists
      * under them on the same columns, so each one's first line starts at a weekday's left edge.
      */

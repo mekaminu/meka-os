@@ -1670,6 +1670,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(match.pillStacked(compact: false))
         // The open Fold's alignment pass: every unfolded column (the Mac's too) stacks its pill the same way.
         XCTAssertTrue(BoardOpenFoldRules.shared.pillStacked(dense: true, compact: false))
+        // The alignment pass (9): a row's heads are drawn as tall as its tallest.
+        XCTAssertEqual(BoardOpenFoldRules.shared.headHeight(heads: [KotlinFloat(value: 52), KotlinFloat(value: 96)]), 96)
         XCTAssertEqual(BoardOpenFoldRules.shared.DONE, "done")
         // The alignment list (1)(2): the header's ⋯ holds Agenda view, the timeline's toggle, New event and Plan your week.
         let openMenu = BoardOpenFoldRules.shared.menu(

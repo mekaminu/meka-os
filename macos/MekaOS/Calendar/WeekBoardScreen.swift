@@ -36,6 +36,8 @@ import SwiftUI
 /// Motion: weeks push across the way you moved; a targeted column lifts (scale 1.01) and its edge blends to gold on the
 /// approve spring; cards glide to their new places (replan). Reduce Motion: cross-fades, no lift.
 struct WeekBoardScreen: View {
+    /// The alignment pass (9): each day head's own height, so a row draws them all as tall as its tallest.
+    @State private var heads: [Int64: CGFloat] = [:]
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let board: WeekBoard
@@ -228,11 +230,17 @@ struct WeekBoardScreen: View {
         withAnimation(MekaMotion.replan(reduced: reduceMotion)) { week = max(0, min(board.weeks.count - 1, target)) }
     }
 
+    /// The alignment pass (9): the height a row's day heads are drawn at, its tallest head's own (BoardOpenFoldRules).
+    private func headLeast(_ days: [BoardDay]) -> CGFloat {
+        CGFloat(BoardOpenFoldRules.shared.headHeight(heads: days.map { KotlinFloat(value: Float(heads[$0.epochDay] ?? 0)) }))
+    }
+
     /// The alignment pass (5): the weekend's row, Saturday and Sunday under Monday and Tuesday at a weekday's width.
     private func weekendRow(_ days: [BoardDay], minHeight: CGFloat) -> some View {
         BoardGridRowLayout(count: days.count, spacing: MekaSpace.xs) {
             ForEach(days, id: \.epochDay) { d in
-                BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: nil, minHeight: minHeight) { on in
+                BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: nil, minHeight: minHeight,
+                                headLeast: headLeast(days), onHead: { h in heads[d.epochDay] = h }) { on in
                     if on { target = d.epochDay } else if target == d.epochDay { target = nil }
                 }
             }
@@ -244,7 +252,8 @@ struct WeekBoardScreen: View {
         HStack(alignment: .top, spacing: MekaSpace.xs) {
             // Option B match: every day a full column (a past one dimmed), never folded narrow.
             ForEach(days, id: \.epochDay) { d in
-                BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: nil, minHeight: minHeight) { on in
+                BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: nil, minHeight: minHeight,
+                                headLeast: headLeast(days), onHead: { h in heads[d.epochDay] = h }) { on in
                     if on { target = d.epochDay } else if target == d.epochDay { target = nil }
                 }
             }
@@ -469,6 +478,10 @@ private struct BoardColumnView: View {
     var onFold: (() -> Void)? = nil
     /// Option B slice 2: the weekend's row is shorter than the weekdays'.
     var minHeight: CGFloat = 320
+    /// The alignment pass (9): the row's tallest day head, so this day's first card starts where the others' do.
+    var headLeast: CGFloat = 0
+    /// Where the day says its head's own height.
+    var onHead: ((CGFloat) -> Void)? = nil
     let onTarget: (Bool) -> Void
     /// By hand, slice 8 (the quality gate's findings): how wide the lane is drawn, so a narrow one fits its words.
     @State private var laneWidth: CGFloat = CGFloat(BoardTidyRules.shared.MAX_LANE_DP)
@@ -483,6 +496,7 @@ private struct BoardColumnView: View {
             // Option B match (Meka 2026-10-24 14:39): "27 Oct" with "Mon" on the right (today in gold), the thin
             // done bar without words, then the budget pill, always "planned · 4h 05 / 3h".
             let head = BoardMatchRules.shared.dayHead(day: day)
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 HStack(alignment: .firstTextBaseline) {
                     // The density pass: the mockup's 19 date and 11 weekday.
@@ -506,6 +520,9 @@ private struct BoardColumnView: View {
             if let pressure = day.pressure {
                 PressureNote(pressure: pressure, palette: palette)
             }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHead?($0) }
+            .frame(maxWidth: .infinity, minHeight: headLeast, alignment: .topLeading)
 
             // Option B match: the day's events are cards too, a blue time chip and their length.
             let events = BoardMatchRules.shared.eventCards(day: day)
