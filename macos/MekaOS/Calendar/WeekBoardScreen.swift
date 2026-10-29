@@ -328,7 +328,7 @@ private struct ObiNudgeLine: View {
                 .frame(width: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB), height: CGFloat(BoardDenseHeadRules.shared.NUDGE_ORB))
                 .accessibilityHidden(true)
             Text(BoardNudgeRules.shared.SPEAKER).font(BoardFont.label).foregroundStyle(palette.textPrimary)
-            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardMatchRules.shared.NUDGE_LINES))
+            Text(nudge.line).font(BoardFont.nudge).foregroundStyle(tone).lineLimit(Int(BoardBesideRules.shared.HEAD_NUDGE_LINES)) // one line, as the mockup's pill
                 .id(nudge.line)
                 .transition(.opacity)
         }
@@ -400,7 +400,8 @@ private struct BoardTimelineView: View {
                     let area = max(geo.size.width - labelWidth, 0)
                     let first = timeline.firstHour
                     let under = Set(timeline.nowUnder)
-                    // Drawn behind the blocks; a block it runs under has an opaque face, so it never crosses a title.
+                    // Drawn behind the blocks; every block has an opaque face (BoardBesideRules), so no hour line or
+                    // the now-line crosses a title.
                     if let top = timeline.nowTopDp {
                         Rectangle().fill(palette.accent).frame(width: area, height: 2)
                             .offset(x: labelWidth, y: CGFloat(top.floatValue) - 1)
@@ -408,7 +409,7 @@ private struct BoardTimelineView: View {
                     }
                     ForEach(timeline.blocks, id: \.key) { b in
                         let colW = area / CGFloat(max(b.columns, 1))
-                        block(b, opaque: under.contains(b.key))
+                        block(b, opaque: BoardBesideRules.shared.BLOCKS_OPAQUE || under.contains(b.key))
                             .frame(width: max(colW - 2, 0), height: CGFloat(b.heightDp))
                             .offset(x: labelWidth + colW * CGFloat(b.column), y: CGFloat(b.topDp(firstHour: first)))
                     }
@@ -1179,7 +1180,9 @@ private struct BoardListView: View {
         let head = BoardMatchRules.shared.listHead(column: column)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
-                Text(head.name).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).lineLimit(2) // a weekday wide on the grid
+                // The shots beside the mockups: a size below a day's date, one line, never split mid-word.
+                Text(head.name).font(BoardFont.listHead).foregroundStyle(palette.textPrimary)
+                    .lineLimit(Int(BoardBesideRules.shared.LIST_HEAD_LINES)).truncationMode(.tail)
                 Spacer(minLength: 0)
                 if let count = head.count {
                     Text(count).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
@@ -1416,6 +1419,8 @@ enum BoardFont {
     static var label: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.LABEL_SP)) } // type: ok (density pass slice 2: the mockup's header)
     /// Obi's line and a goal's title in the header, 12.
     static var nudge: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.NUDGE_SP)) } // type: ok (density pass slice 2: the mockup's header)
+    /// The lists' headings under the weekend (Someday, Side hustle…), 16 semibold (BoardBesideRules).
+    static var listHead: Font { .system(size: CGFloat(BoardBesideRules.shared.LIST_HEAD_SP), weight: .semibold) } // type: ok (the shots beside the mockups: the mockup's list heading)
     /// "+ add", 11.
     static var add: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.ADD_SP)) } // type: ok (density pass slice 2: the mockup's "+ add")
 }

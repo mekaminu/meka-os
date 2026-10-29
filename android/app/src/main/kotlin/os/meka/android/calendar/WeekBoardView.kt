@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
 import os.meka.core.domain.BoardHandRules
 import os.meka.core.domain.BoardFoldRules
+import os.meka.core.domain.BoardBesideRules
 import os.meka.core.domain.BoardFoldedRules
 import os.meka.core.domain.FoldedMenuKind
 import os.meka.core.domain.DayStripPill
@@ -426,7 +427,9 @@ fun WeekBoardView(
         }
         // By hand, slice 3: folded, one day fills the width (paged with a snap, never stopping between two days).
         // Option B slice 2: unfolded, a week's rows share the width between them (BoardWeekLayoutRules.rowWidths).
-        val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / BoardWeekLayoutRules.WEEKDAYS else maxWidth - MekaSpace.xs * 2
+        // The shots beside the mockups: folded, the pager is inset so a day's cards share the header's gutter edges.
+        val foldedInset = BoardBesideRules.foldedPagerInset(MekaSpace.gutter.value, MekaSpace.xxs.value, MekaSpace.xs.value).dp
+        val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / BoardWeekLayoutRules.WEEKDAYS else BoardBesideRules.foldedColumn(maxWidth.value, foldedInset.value).dp
         val colPx = with(density) { colWidth.toPx() }
         val panelDp = BoardTimelineRules.panelDp(maxWidth.value).dp
         val showTimeline = wide && (timelineOpen ?: BoardTimelineRules.opensByDefault(maxWidth.value, (MekaSpace.gutter * 3).value))
@@ -668,7 +671,8 @@ fun WeekBoardView(
                             scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) }
                         }
                     }
-                    Spacer(Modifier.height(MekaSpace.xs))
+                    // The shots beside the mockups: under Obi's card only the column's own top padding.
+                    Spacer(Modifier.height(BoardBesideRules.FOLDED_SPACE_AFTER_OBI_DP.dp))
                 }
             }
             // One day's column, folded or unfolded; a column that leaves (another week shown) is forgotten as a target.
@@ -813,7 +817,7 @@ fun WeekBoardView(
                 CompositionLocalProvider(LocalFoldedMoves provides moves) {
                     Row(
                         Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null, flingBehavior = daySnap)
-                            .padding(horizontal = MekaSpace.xs)
+                            .padding(horizontal = foldedInset)
                             .appear(rememberAppearance(4)),
                     ) {
                         board.days.forEach { day -> dayColumn(day, colWidth) }
@@ -1120,7 +1124,7 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, dense: Boolean = fal
         Text(BoardNudgeRules.SPEAKER, style = if (dense) BoardType.labelDense else MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
         Spacer(Modifier.width(MekaSpace.xs))
         androidx.compose.animation.Crossfade(n.line, animationSpec = MekaMotion.appear(reduced), label = "nudge-line") { line ->
-            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
+            Text(line, style = if (dense) BoardType.nudgeDense else MekaType.caption, color = tone, maxLines = if (dense) BoardBesideRules.HEAD_NUDGE_LINES else BoardMatchRules.NUDGE_LINES, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1158,6 +1162,9 @@ internal object BoardType {
     val labelDense = MekaType.itemMeta.copy(fontSize = BoardDenseHeadRules.LABEL_SP.sp, lineHeight = (BoardDenseHeadRules.LABEL_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
     val nudgeDense = MekaType.caption.copy(fontSize = BoardDenseHeadRules.NUDGE_SP.sp, lineHeight = (BoardDenseHeadRules.NUDGE_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
     val addDense = MekaType.caption.copy(fontSize = BoardDenseHeadRules.ADD_SP.sp, lineHeight = (BoardDenseHeadRules.ADD_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's "+ add", BoardDenseHeadRules)
+
+    /** The lists' headings under the weekend (Someday, Side hustle…): a size below a day's date (BoardBesideRules). */
+    val listHead = date.copy(fontSize = BoardBesideRules.LIST_HEAD_SP.sp, lineHeight = (BoardBesideRules.LIST_HEAD_SP * 1.25f).sp) // type: ok (the shots beside the mockups: the mockup's list heading, BoardBesideRules)
 }
 
 /** Even-width figures for times and lengths (the alignment pass: one typeface, no mono). */
@@ -2685,14 +2692,16 @@ private fun BoardList(
             .padding(vertical = MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        // The mockup's heading: the name in serif (the day headers' type), the count quiet in mono on the right.
+        // The mockup's heading: the name a size below the day headers', the count quiet on the right.
         Row(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = head.spoken; heading() },
         ) {
             Text(
-                // On the weekdays' grid a list is a weekday wide: "Side hustle" may take two lines, never cut short.
-                head.name, style = BoardType.date, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                // The shots beside the mockups: a size below a day's date, on one line ("…" if it must), never split
+                // mid-word as "Someda / y" was (BoardBesideRules).
+                head.name, style = BoardType.listHead, color = Meka.colors.textPrimary, maxLines = BoardBesideRules.LIST_HEAD_LINES,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag(LIST_TITLE_TAG),
             )
             head.count?.let {

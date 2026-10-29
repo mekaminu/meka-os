@@ -55,6 +55,7 @@ import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.areaTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.BoardBesideRules
 import os.meka.core.domain.BoardPlannerRules
 import os.meka.core.domain.BoardTimeline
 import os.meka.core.domain.BoardTimelineRules
@@ -192,8 +193,8 @@ private fun Hours(
                 }
                 BoxWithConstraints(Modifier.fillMaxSize().padding(start = LABEL_W)) {
                     val area = maxWidth
-                    // The alignment pass (7): the now line is drawn behind the blocks, and a block it runs under has an
-                    // opaque face, so the line never crosses an event's title.
+                    // The alignment pass (7): the now line is drawn behind the blocks, and every block has an opaque face
+                    // (the shots beside the mockups: an hour line crossed "Commute to work"), so no line crosses a title.
                     timeline.nowTopDp?.let { top ->
                         Box(
                             Modifier.fillMaxWidth().offset(y = top.dp - 1.dp).height(2.dp).background(Meka.colors.accent)
@@ -212,7 +213,8 @@ private fun Hours(
                                 .appear(rememberAppearance(minOf(i, 8))),
                             onEvent,
                             areaOf(b),
-                            opaque = b.key in under,
+                            opaque = BoardBesideRules.BLOCKS_OPAQUE,
+                            underNow = b.key in under,
                         )
                     }
                 }
@@ -228,6 +230,7 @@ private fun Block(
     onEvent: (CalendarEvent) -> Unit,
     area: os.meka.core.domain.BoardArea? = null,
     opaque: Boolean = false,
+    underNow: Boolean = opaque,
 ) {
     val tone = when (b.kind) {
         DayBlockKind.EVENT -> Meka.colors.calendarTone(b.tone)
@@ -238,7 +241,8 @@ private fun Block(
     Row(
         modifier.alpha(if (b.done) BoardPlannerRules.DONE_ALPHA else 1f)
             .clip(RoundedCornerShape(MekaRadius.s / 1.25f))
-            .then(if (opaque) Modifier.background(Meka.colors.background).testTag(TIMELINE_UNDER_NOW_TAG) else Modifier)
+            .then(if (opaque) Modifier.background(Meka.colors.background) else Modifier)
+            .then(if (underNow) Modifier.testTag(TIMELINE_UNDER_NOW_TAG) else Modifier)
             .background(tone.copy(alpha = 0.16f))
             .then(if (event != null) Modifier.clickable(role = Role.Button) { onEvent(event) } else Modifier)
             .clearAndSetSemantics {

@@ -397,6 +397,9 @@ class BoardScreensTest {
         val title = compose.onNodeWithText("Fix the gate latch").fetchSemanticsNode().boundsInRoot
         assertTrue("the tick is left of the title ($tick vs $title)", tick.right <= title.left + 1f && tick.top < title.bottom && tick.bottom > title.top)
         assertTrue("a folded card is compact (${card.height} px tall)", card.height < (title.height * 4f))
+        // The shots beside the mockups (BoardBesideRules): the day's cards share the strip's left and right edges.
+        assertEquals("a card's left edge is the strip's", strip.left, card.left, 1.5f)
+        assertEquals("a card's right edge is the strip's", strip.right, card.right, 1.5f)
         if (compose.onAllNodesWithText("1:00").fetchSemanticsNodes().isNotEmpty()) fail("a monospace length on the folded cards")
         assertTrue("the length in words", compose.onAllNodesWithText("1h").fetchSemanticsNodes().isNotEmpty())
     }
@@ -685,6 +688,13 @@ class BoardScreensTest {
             n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
         }
         assertEquals(listOf("Someday", "Side hustle", "House", "No day yet"), names)
+        // The shots beside the mockups (BoardBesideRules): every heading on one line, none broken mid-word, and a size
+        // below a day's date.
+        val heights = titles.map { it.size.height }
+        assertTrue("a list heading wraps (${heights})", heights.max() - heights.min() <= 1)
+        val date = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
+            ?: throw AssertionError("no day date")
+        assertTrue("a list heading is smaller than a day's date", heights.max() <= date.size.height)
         val rule = compose.onAllNodesWithTag(LISTS_RULE_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
             ?: throw AssertionError("no hairline above the lists")
         val card = cardBounds("Learn to juggle")
