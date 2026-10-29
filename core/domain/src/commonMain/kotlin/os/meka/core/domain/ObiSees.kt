@@ -32,7 +32,14 @@ enum class ObiArea(val key: String, val kind: AskItemKind, val label: String, va
     PROTECTED("protected", AskItemKind.PROTECTED, "Protected time", "Settings → Protected time", ProtectedRules.ASK_LINES),
     LIFE_ADMIN("life_admin", AskItemKind.LIFE_ADMIN, "Life admin hour", "Life admin", 1),
     DATE_NIGHT("date_night", AskItemKind.DATE_NIGHT, "Date night", "Date night", 1),
-    COMMUTE("commute", AskItemKind.COMMUTE, "Commute", "Work mode", CommuteAskRules.ASK_LINES);
+    COMMUTE("commute", AskItemKind.COMMUTE, "Commute", "Work mode", CommuteAskRules.ASK_LINES),
+    // Slice 3: the areas Ask didn't carry yet. All of each when the question is about it, else one counts line.
+    NEEDS_YOU("needs_you", AskItemKind.NEEDS_YOU, "Needs you", "Needs you", AskRules.NEEDS_YOU_MAX),
+    BOARD("board", AskItemKind.BOARD, "the Week board's No day yet and Someday", "Calendar → Board (⋯ No day yet, Someday)", ObiMoreRules.BOARD_MAX),
+    DECISIONS("decisions", AskItemKind.DECISIONS, "Decisions", "Lists → Decisions", ObiMoreRules.DECISIONS_MAX),
+    READING("reading", AskItemKind.READING, "Reading", "Reading", ObiMoreRules.READING_MAX),
+    // A club session's title comes from a club's calendar, so the Kids lines count as other people's words.
+    KIDS("kids", AskItemKind.KIDS, "Kids", "Kids", KidAskRules.ASK_LINES, untrusted = true);
 
     companion object {
         fun of(key: String?): ObiArea? = key?.trim()?.lowercase()?.let { k -> entries.firstOrNull { it.key == k } }

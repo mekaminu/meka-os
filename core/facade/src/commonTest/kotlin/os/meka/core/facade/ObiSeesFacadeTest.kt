@@ -7,6 +7,7 @@ import os.meka.core.domain.AskItemKind
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.ObiArea
 import os.meka.core.domain.ObiSees
+import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.TalkTurn
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
@@ -73,19 +74,38 @@ class ObiSeesFacadeTest {
         c.addFact("Car reg: AB12 CDE")
         c.addErrand("When I'm at Tesco: batteries")
         c.addWin("Shipped the new report")
+        // Slice 3: Someday, a decision and the reading list.
+        c.addSomeday("Learn the guitar", SomedayKind.IDEA)
+        c.recordDecision("Keep the old car another year", "cheaper", 90)
+        c.addReading("Dune by Frank Herbert")
         c.tick()
         val q = "How's my study going?"
+        // An area that sends one counts line unless asked about is compared on a question about it.
+        val about = mapOf(ObiArea.BOARD to "What's on Someday?", ObiArea.DECISIONS to "What did I decide?", ObiArea.READING to "Which book should I take on holiday?", ObiArea.KIDS to "What do the kids need?")
         c.askMeka(q)
         val context = server.asked.last().second
         ObiArea.entries.forEach { area ->
-            val asked = context.items.filter { it.kind == area.kind }.map { "${area.kind.wire}: ${it.line}" }
-            val looked = c.liveNavilife(area.key, q)
+            val question = about[area] ?: q
+            val ctx = if (question == q) context else {
+                val before = server.asked.size
+                c.askMeka(question)
+                assertEquals(before + 1, server.asked.size, "${area.key}: answered on the device, not asked")
+                server.asked.last().second
+            }
+            val asked = ctx.items.filter { it.kind == area.kind }.map { "${area.kind.wire}: ${it.line}" }
+            val looked = c.liveNavilife(area.key, question)
             if (asked.isEmpty()) assertTrue(looked.startsWith("Navilife has nothing in ${area.label}"), "${area.key}: $looked")
             else assertEquals(asked.joinToString("\n"), looked, area.key)
         }
         // The ones with data are really there, not just equally empty.
-        listOf(ObiArea.STUDY, ObiArea.GOALS, ObiArea.SHOPPING, ObiArea.FACTS, ObiArea.ERRANDS, ObiArea.WINS)
+        listOf(ObiArea.STUDY, ObiArea.GOALS, ObiArea.SHOPPING, ObiArea.FACTS, ObiArea.ERRANDS, ObiArea.WINS, ObiArea.BOARD, ObiArea.DECISIONS, ObiArea.READING)
             .forEach { a -> assertTrue(context.items.any { it.kind == a.kind }, a.key) }
+        // Not asked about, each of those sends just its counts line.
+        assertEquals(listOf("Week board · 0 with no day yet · 1 on Someday"), context.items.filter { it.kind == AskItemKind.BOARD }.map { it.line })
+        assertEquals(listOf("Decisions · 1 active"), context.items.filter { it.kind == AskItemKind.DECISIONS }.map { it.line })
+        assertEquals(1, context.items.count { it.kind == AskItemKind.READING })
+        // The server takes every kind the device sends (an unknown one would refuse the whole question).
+        AskItemKind.entries.forEach { assertTrue(it.wire in os.meka.core.wire.AskCodec.KINDS, it.wire) }
         assertEquals(ObiSees.NO_AREA, c.liveNavilife("money", ""))
     }
 }

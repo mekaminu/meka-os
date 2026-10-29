@@ -1321,7 +1321,7 @@ class AskMekaFacadeTest {
     }
 
     @Test
-    fun askHearsTheChildrenOnlyWhenAskedAndAnswersSizesWithoutTheAi() = runTest {
+    fun askHearsAllOfTheChildrenOnlyWhenAskedAndAnswersSizesWithoutTheAi() = runTest {
         val c = core()
         c.askMeka("What size shoes is Alex?")
         assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.KIDS }) // no children yet
@@ -1338,9 +1338,9 @@ class AskMekaFacadeTest {
         assertEquals("Sam's club fee · Football · £35 · every month · next Sun 1 Nov", kids[3])
         assertTrue(kids.any { it.startsWith("This week · ") })
         assertFalse(ctx.untrusted)
-        // A question about something else carries none of it.
+        // A question about something else carries only the counts line (Obi sees everything, slice 3).
         c.askMeka("When's the MOT?")
-        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.KIDS })
+        assertEquals(listOf("Kids · 2 children: Alex and Sam"), server.asked.last().second.items.filter { it.kind == AskItemKind.KIDS }.map { it.line })
         // Without the AI the device answers a size itself.
         server.down = true
         val out = assertIs<AskOutcome.Answered>(c.askMeka("What size shoes is Alex?"))

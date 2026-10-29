@@ -347,6 +347,9 @@ class LiveSessionsTest {
         assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
         // Typed Ask's prompt has the study lines and the same rule.
         assertTrue("Its study lines" in AskService.SYSTEM && "Never say you have no view of" in AskService.SYSTEM)
+        // Slice 3: the board's trays, decisions and reading, and the Live look-up names them.
+        listOf("Its board lines", "Its decisions lines", "Its reading lines", "A counts line means").forEach { assertTrue(it in AskService.SYSTEM, it) }
+        assertTrue(listOf("board", "decisions", "reading", "kids", "needs_you").all { it in areas })
     }
 
     @Test

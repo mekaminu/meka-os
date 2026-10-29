@@ -10268,12 +10268,17 @@ class MekaCore(
                 // Ask knows how Navilife itself works: the help entries the question mentions.
                 help = helpLines,
                 // Kids' admin, slice 4: only for a question about the children, so "what size shoes is Alex?" has an answer.
-                kids = if (kidsAsked) os.meka.core.domain.KidAskRules.askLines(kidsNow) else emptyList(),
+                // Obi sees everything, slice 3: one line ("Kids · 2 children: …") when the question is about something else.
+                kids = obiSeesLines(os.meka.core.domain.ObiArea.KIDS, q, cal, full = kidsAsked),
                 kidsFromOthers = kidsAsked && os.meka.core.domain.KidAskRules.fromOthers(kidsNow),
                 // Barça match day, slice 3: only for a question about Barça, so "what's the score?" has an answer.
                 barca = if (barcaAsked) os.meka.core.domain.BarcaAskRules.askLines(barcaEvents, barcaMarks, nowMs(), cal) else emptyList(),
                 // Obi sees everything, slice 1: his Study plan, all of it when he asks about study, a line otherwise.
                 study = obiSeesLines(os.meka.core.domain.ObiArea.STUDY, q, cal, full = studyAsked(q)),
+                // Obi sees everything, slice 3: the Week board's No day yet and Someday, decisions and Reading.
+                board = obiSeesLines(os.meka.core.domain.ObiArea.BOARD, q, cal, full = os.meka.core.domain.ObiMoreRules.boardAsked(q)),
+                decisions = obiSeesLines(os.meka.core.domain.ObiArea.DECISIONS, q, cal, full = os.meka.core.domain.ObiMoreRules.decisionsAsked(q)),
+                reading = obiSeesLines(os.meka.core.domain.ObiArea.READING, q, cal, full = os.meka.core.domain.ObiMoreRules.readingAsked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -11900,6 +11905,12 @@ class MekaCore(
             os.meka.core.domain.ObiArea.LIFE_ADMIN -> listOfNotNull(os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, now))
             os.meka.core.domain.ObiArea.DATE_NIGHT -> listOfNotNull(os.meka.core.domain.DateNightRules.askLine(dateNight.setting(), today, cal.minuteOfDay(now)))
             os.meka.core.domain.ObiArea.COMMUTE -> os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, today), cal, now, currentWake())
+            // Slice 3: the areas Ask didn't carry yet; all of each when asked ([full]), else one counts line.
+            os.meka.core.domain.ObiArea.NEEDS_YOU -> _today.value.needsYou.map { os.meka.core.domain.AskRules.needsYouLine(it) }
+            os.meka.core.domain.ObiArea.BOARD -> os.meka.core.domain.ObiMoreRules.boardLines(_board.value, _lists.value.someday, full)
+            os.meka.core.domain.ObiArea.DECISIONS -> os.meka.core.domain.ObiMoreRules.decisionLines(_lists.value.decisions, full)
+            os.meka.core.domain.ObiArea.READING -> os.meka.core.domain.ObiMoreRules.readingLines(_reading.value, full)
+            os.meka.core.domain.ObiArea.KIDS -> os.meka.core.domain.ObiMoreRules.kidsLines(_kids.value, full)
         }
         return lines.take(area.max)
     }
