@@ -433,7 +433,7 @@ internal fun FoldedMoveSheetView(
                 .background(Meka.colors.surfaceRaised)
                 .border(1.dp, Meka.colors.hairline, RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
                 .padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.m, bottom = MekaSpace.l),
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
         ) {
             Box(Modifier.align(Alignment.CenterHorizontally).width(MekaSpace.xl).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline))
             Text(sheet.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -453,7 +453,7 @@ internal fun FoldedMoveSheetView(
                             c.label, style = MekaType.itemMeta, color = if (c.lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                 .background(if (c.lit) Meka.colors.accent else Meka.colors.surface)
-                                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs).testTag(FOLDED_CHIP_TAG),
+                                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag(FOLDED_CHIP_TAG),
                         )
                     }
                 }
