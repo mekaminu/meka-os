@@ -2546,6 +2546,8 @@ private fun WideWeek(
     val revealed = remember { androidx.compose.runtime.mutableIntStateOf(0) }
     BoxWithConstraints(modifier) {
         val tiers = BoardWeekLayoutRules.heights(maxHeight.value)
+        // (10a) The week's view height, for bringing a day's row into view (read here, outside the week's content).
+        val viewDp = maxHeight.value
         androidx.compose.animation.AnimatedContent(
             targetState = week,
             modifier = Modifier.fillMaxSize(),
@@ -2606,7 +2608,6 @@ private fun WideWeek(
                 }
                 // (10a) Unfolded on a day (Saturday, say): once the rows have their heights, its row is brought into
                 // view (the weekend's sits under the weekdays'), or back to the top for a weekday while scrolled down.
-                val viewDp = maxHeight.value
                 val weekdaysNow by rememberUpdatedState(weekdaysTall.value)
                 LaunchedEffect(reveal, shown) {
                     val (target, count) = reveal ?: return@LaunchedEffect
