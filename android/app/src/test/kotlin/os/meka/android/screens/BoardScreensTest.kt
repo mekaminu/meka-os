@@ -691,7 +691,7 @@ class BoardScreensTest {
 
     /**
      * The open Fold's alignment list (8), the scrolled state: a full day makes the week taller than the screen; a swipe
-     * up scrolls the week as one (the lists' hairline rises), the month's row stays put above it, and the shot shows
+     * up scrolls the week as one (the days' dates rise together), the month's row stays put above it, and the shot shows
      * what passes under the header fading out rather than a hard-cut sliver.
      */
     @Test @Config(qualifiers = ScreenShots.INNER)
@@ -704,8 +704,9 @@ class BoardScreensTest {
             repeat(12) { i -> core.addOnBoardSized("Errand ${i + 1}", today, 15) }
         }
         show(core)
-        fun ruleTop() = compose.onAllNodesWithTag(LISTS_RULE_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.top
-            ?: throw AssertionError("no hairline above the lists")
+        // The days' dates' unclipped tops (a scrolled-off or below-the-fold node's clipped bounds are empty).
+        fun ruleTop() = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().minOfOrNull { it.positionInRoot.y }
+            ?: throw AssertionError("no day's date on the board")
         fun monthTop() = compose.onAllNodesWithTag(MONTH_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
             ?: throw AssertionError("no month in the header")
         val ruleBefore = ruleTop()
@@ -720,7 +721,7 @@ class BoardScreensTest {
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-scrolled"))
         ScreenShots.assertSensible(compose, "inner-dark-scrolled")
-        assertTrue("the week didn't scroll (hairline $ruleBefore → ${ruleTop()})", ruleTop() < ruleBefore - 40f)
+        assertTrue("the week didn't scroll (dates $ruleBefore → ${ruleTop()})", ruleTop() < ruleBefore - 40f)
         assertEquals("the month's row moved with the week", monthBefore, monthTop(), 1f)
     }
 
