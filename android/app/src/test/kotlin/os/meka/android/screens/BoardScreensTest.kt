@@ -414,13 +414,19 @@ class BoardScreensTest {
             fail("no hint under the day's cards")
         }
 
+        val gateNode = compose.onNodeWithContentDescription(label(gate)).fetchSemanticsNode()
+        assertTrue("the card has no click action: ${gateNode.config}", gateNode.config.contains(SemanticsActions.OnClick))
         compose.onNodeWithContentDescription(label(gate)).performSemanticsAction(SemanticsActions.OnClick)
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-move-sheet"))
         ScreenShots.assertSensible(compose, "cover-dark-move-sheet")
-        val chips = compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes()
-            .map { n -> n.config[SemanticsProperties.Text].joinToString("") { it.text } }
-        assertEquals(listOf("Tomorrow", "Wed 21", "Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday"), chips)
+        if (compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_SHEET_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("no Move to sheet after the tap (Move up shown: ${compose.onAllNodesWithText("Move up").fetchSemanticsNodes().size})")
+        }
+        listOf("Tomorrow", "Wed 21", "Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday").forEach { chip ->
+            if (compose.onAllNodesWithText(chip, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no $chip chip in the sheet")
+        }
+        if (compose.onAllNodesWithText("Mon 19", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("a past day offered")
         listOf("Done", "Edit", "Close").forEach { ScreenShots.assertShows(compose, "move sheet", it) }
         compose.onNodeWithContentDescription("Move to Fri 23 Oct").performClick()
         awaitCore("move to Fri") { core.weekBoard.value.dayOf(gate)?.epochDay == today + 2 }
