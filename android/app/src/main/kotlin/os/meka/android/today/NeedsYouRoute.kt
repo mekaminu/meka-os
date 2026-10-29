@@ -322,7 +322,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                         CardFinish.OPENED
                     }
                     TriageChoice.OpenChat -> {
-                        LiveReplies.open(context, card.id, card.app, card.draft)
+                        LiveReplies.open(context, card.id, card.app, card.draft, rules.replyLink(card, card.draft) ?: rules.chatLink(card))
                         runCatching { core.seenTriage(card.id) }
                         undo.show(rules.openChatLine(card, rules.appName(card.app)), null)
                         CardFinish.OPENED
@@ -361,7 +361,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 val marked = finish.markRead && LiveReplies.markRead(context, chat.ids) > 0
                 // Mark read asked for but WhatsApp refused it: open the chat so Meka marks it there.
                 if (tap == ChatFinishTap.MARK_READ && !marked) finish = finish.copy(markRead = false, clear = false, openChat = true)
-                if (finish.openChat) LiveReplies.open(context, chat.cards.last().id, chat.app, null)
+                if (finish.openChat) chat.cards.last().let { last -> LiveReplies.open(context, last.id, chat.app, null, TriageReplyRules.chatLink(last)) }
                 // Hidden from the shade only, after any Mark read (its action goes with the notification).
                 if (finish.clear) os.meka.android.work.WorkCaptureService.clear(keys)
                 val seen = runCatching { core.seenTriageChat(chat.ids) }.getOrElse { e ->
@@ -433,7 +433,17 @@ internal fun NeedsYouColumn(
     val requests by core.requests.collectAsState()
     val approvals by core.approvals.collectAsState()
     val allTriage by core.triage.collectAsState()
-    val triage = remember(allTriage, hidden) { InstantTapRules.triage(allTriage, hidden) }
+    // WhatsApp Open chat (2026-10-29): a 1:1 chat's number looked up on this phone (Family, always-notify, then a contact
+    // of exactly that name), so Open chat lands in the chat with the reply typed. In memory only, never stored or synced.
+    val lookupContext = LocalContext.current.applicationContext
+    val peopleLists by (lookupContext as MekaApplication).captures.lists.collectAsState()
+    val lookupKey = remember(allTriage) { allTriage.filter(TriageReplyRules::needsLookup).map { it.id to TriageReplyRules.who(it) } }
+    val found by androidx.compose.runtime.produceState(emptyMap<String, String>(), lookupKey, peopleLists) {
+        value = if (lookupKey.isEmpty()) emptyMap() else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { os.meka.android.work.ChatNumbers.find(lookupContext, allTriage, peopleLists) }.getOrDefault(emptyMap())
+        }
+    }
+    val triage = remember(allTriage, hidden, found) { TriageReplyRules.withNumbers(InstantTapRules.triage(allTriage, hidden), found) }
     LaunchedEffect(allTriage, stack) { moves.settle(allTriage.map { it.id } + stack.cards.map { it.id }) }
     val school by core.schoolView.collectAsState()
     val covers = school.covers

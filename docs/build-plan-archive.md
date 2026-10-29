@@ -4770,3 +4770,17 @@ Done 2026-10-29 in one slice:
   its own accent line `tidy` ("Tidy 1,048 newsletters, promos and receipts ›"), a tap opening Mail (Ask → Mail on the
   Fold, the Mail sheet on the Mac) where each account's clean-up and Approve are; the spoken line says what it means.
   MailUnreadTest.twoAccountsSharingALabelAreNamedByProvider; MekaCoreBridgeTests.testMailUnreadLineReachesSwift.
+
+### WhatsApp Open chat lands in the chat — slice 1 (2026-10-29)
+
+- Core `TriageReplyRules.needsLookup / lookupNumber / withNumbers / chatLink / groupGone / openLabel / openRoute`,
+  `ContactPhone`. The number comes from the Family list, then always-notify (only when that name has one number),
+  then a contact of exactly that name (one contact; its one number, else its one mobile); never a guess.
+- Fold: `work/ChatNumbers` reads contacts (permission already granted) in memory for Needs you only, never stored,
+  synced or sent; NeedsYouColumn fills the cards' numbers, so a 1:1 card leads with Reply in WhatsApp;
+  `LiveReplies.open(link)` opens the chat by WhatsApp's click-to-chat link once the notification has gone (Open chat,
+  Open WhatsApp to mark read); `WorkCaptureService.onListenerConnected` re-reads the shade's notifications so tap
+  targets and Reply actions survive a restart (nothing triaged or sent there); a group's card after its notification
+  went reads "Open WhatsApp" with "Find <group> in WhatsApp" under it. Help: messages.md. Sending unchanged (Level 3).
+- Tests: TriageReplyTest (Family first, always-notify, exact contact, mobile pick, duplicates, two of one name, group
+  gone). Fold only; no Mac, server or migration change.

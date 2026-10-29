@@ -151,4 +151,77 @@ class TriageReplyTest {
         assertNull(rules.cleanNumber("12"))
         assertEquals("+447700900123", rules.cleanNumber(" +44 (0)7700-900123 ".replace("(0)", "")))
     }
+
+    // WhatsApp Open chat lands in the chat (2026-10-29): a 1:1 chat's number found on the phone, never a guess.
+
+    @Test
+    fun aOneToOneChatsNumberComesFromTheFamilyListFirst() {
+        val lists = PeopleLists(family = setOf("Sam"), numbers = mapOf("Sam" to setOf("07700 900123")))
+        val contacts = listOf(ContactPhone("9", "Sam", "+44 7700 900999", mobile = true))
+        assertEquals("+447700900123", rules.lookupNumber("sam", lists, contacts))
+        // Always-notify next, when the name isn't on Family.
+        val always = PeopleLists(alwaysNotify = setOf("Jordan"), numbers = mapOf("Jordan" to setOf("+447700900456")))
+        assertEquals("+447700900456", rules.lookupNumber("Jordan", always, emptyList()))
+    }
+
+    @Test
+    fun elseAContactOfExactlyThatName() {
+        val one = listOf(ContactPhone("1", "Alex Smith", "07700 900321"))
+        assertEquals("+447700900321", rules.lookupNumber("Alex Smith", PeopleLists(), one))
+        // Not a near name.
+        assertNull(rules.lookupNumber("Alex", PeopleLists(), one))
+        // A contact with a home and a mobile: the mobile; two mobiles: no link.
+        val two = listOf(ContactPhone("1", "Alex Smith", "01632 960001"), ContactPhone("1", "Alex Smith", "07700 900321", mobile = true))
+        assertEquals("+447700900321", rules.lookupNumber("Alex Smith", PeopleLists(), two))
+        val mobiles = listOf(ContactPhone("1", "Alex Smith", "07700 900111", true), ContactPhone("1", "Alex Smith", "07700 900222", true))
+        assertNull(rules.lookupNumber("Alex Smith", PeopleLists(), mobiles))
+        // The same number written twice is one number.
+        val dup = listOf(ContactPhone("1", "Alex Smith", "07700 900321"), ContactPhone("1", "Alex Smith", "+447700900321"))
+        assertEquals("+447700900321", rules.lookupNumber("Alex Smith", PeopleLists(), dup))
+    }
+
+    @Test
+    fun twoPeopleOfTheSameNameOrNoneGiveNoLink() {
+        val twins = listOf(ContactPhone("1", "Sam", "07700 900111"), ContactPhone("2", "Sam", "07700 900222"))
+        assertNull(rules.lookupNumber("Sam", PeopleLists(), twins))
+        assertNull(rules.lookupNumber("Sam", PeopleLists(), emptyList()))
+        assertNull(rules.lookupNumber("  ", PeopleLists(), twins))
+        // A Family name with two numbers falls through to the contacts, which settle it.
+        val lists = PeopleLists(family = setOf("Sam"), numbers = mapOf("Sam" to setOf("07700 900111", "07700 900222")))
+        assertNull(rules.lookupNumber("Sam", lists, twins))
+        assertEquals("+447700900111", rules.lookupNumber("Sam", lists, twins.take(1)))
+    }
+
+    @Test
+    fun aFoundNumberTurnsOpenChatIntoReplyInWhatsApp() {
+        val c = card("a", from = "Sam · 03:14")
+        assertTrue(rules.needsLookup(c))
+        assertFalse(rules.needsLookup(card("b", mentioned = true)))
+        assertFalse(rules.needsLookup(card("c", number = "+447700900123")))
+        assertFalse(rules.needsLookup(card("d", app = CaptureApp.SMS)))
+        assertEquals(TriageCardPrimary.OPEN_CHAT, rules.primary(c, live = false))
+        val filled = rules.withNumbers(listOf(c, card("e")), mapOf("a" to "+447700900123"))
+        assertEquals("+447700900123", filled[0].number)
+        assertNull(filled[1].number)
+        assertEquals(TriageCardPrimary.REPLY_IN_APP, rules.primary(filled[0], live = false))
+        assertTrue(rules.replyLink(filled[0], filled[0].draft)!!.startsWith("https://wa.me/447700900123?text=Yes"))
+        assertEquals("https://wa.me/447700900123", rules.chatLink(filled[0]))
+        assertNull(rules.chatLink(c))
+        // A number the card already had is never replaced.
+        val had = card("f", number = "+447700900999")
+        assertEquals("+447700900999", rules.withNumbers(listOf(had), mapOf("f" to "+447700900123"))[0].number)
+    }
+
+    @Test
+    fun aGroupWhoseNotificationWentSaysOpenWhatsAppAndNamesTheGroup() {
+        val g = card("g", mentioned = true)
+        val p = rules.primary(g, live = false)
+        assertEquals(TriageCardPrimary.OPEN_CHAT, p)
+        assertEquals("Open WhatsApp", rules.openLabel(g, p, live = false))
+        assertEquals("Find Barça lads in WhatsApp · your reply is copied", rules.openRoute(g, p, live = false))
+        assertEquals("Find Barça lads in WhatsApp", rules.openRoute(g.copy(draft = null), rules.primary(g.copy(draft = null), false), live = false))
+        // While it shows, its tap target opens the group: the usual Open chat.
+        assertEquals("Open chat", rules.openLabel(g.copy(draft = null), rules.primary(g.copy(draft = null), live = true), live = true))
+        assertEquals(rules.routeLine(card("a"), TriageCardPrimary.OPEN_CHAT), rules.openRoute(card("a"), TriageCardPrimary.OPEN_CHAT, live = false))
+    }
 }

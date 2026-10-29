@@ -22,6 +22,12 @@ enum class TriageCardPrimary {
     SEEN,
 }
 
+/**
+ * One phone number of a contact on the Fold (WhatsApp Open chat, 2026-10-29), read on the phone when Meka taps and never
+ * stored, synced or sent: [contactId] tells two people of the same name apart, [mobile] the contact's mobile.
+ */
+data class ContactPhone(val contactId: String, val name: String, val number: String, val mobile: Boolean = false)
+
 /** "Send all 3": the easy replies that can go out together, each still only on Meka's tap of this one button. */
 data class TriageSendAll(val ids: List<String>, val label: String, val spoken: String)
 
@@ -43,6 +49,7 @@ object TriageReplyRules {
     const val REPLY_HINT = "Your reply"
     const val REPLY_IN_WHATSAPP = "Reply in WhatsApp"
     const val SEND_VIA_PHONE = "Send (via your phone)"
+    const val OPEN_WHATSAPP = "Open WhatsApp"
 
     /** The line under a reply card's buttons saying which way the reply will go (WhatsApp replies, slice 1, item 4). */
     const val ROUTE_SEND = "Sends from your phone"
@@ -147,6 +154,65 @@ object TriageReplyRules {
         if (name.isNotEmpty() && name.all { it.isDigit() || it in " +-()" }) return cleanNumber(name)
         return null
     }
+
+    /**
+     * Whether [card] is a one-to-one WhatsApp chat whose number the notification didn't carry (it gives a name, not a
+     * number), so the Fold looks the number up on the phone ([lookupNumber]) before Open chat or Reply in WhatsApp.
+     */
+    fun needsLookup(card: TriageCard): Boolean =
+        card.app == CaptureApp.WHATSAPP && card.group == null && !card.mentioned && card.number == null &&
+            who(card).isNotBlank() && !People.key(who(card)).startsWith("tel:")
+
+    /**
+     * A one-to-one chat's number found on the phone from [name], the person as WhatsApp showed them: the Family list
+     * first, then always-notify (each only when that name has one number), then the phone's [contacts] with exactly
+     * that name (one contact only; its one number, else its one mobile). Never a guess: two people of that name, or a
+     * contact with several numbers and no single mobile, give null. Nothing leaves the phone.
+     */
+    fun lookupNumber(name: String, lists: PeopleLists, contacts: List<ContactPhone>): String? {
+        val key = People.key(name)
+        if (key.isEmpty() || key.startsWith("tel:")) return null
+        for (listed in listOf(lists.family, lists.alwaysNotify)) {
+            val hits = listed.filter { People.key(it) == key }
+            if (hits.isEmpty()) continue
+            val nums = hits.flatMap { lists.numbers[it].orEmpty() }.mapNotNull { ContactNumbers.e164(it) }.distinctBy(People::key)
+            if (nums.size == 1) cleanNumber(nums[0])?.let { return it }
+        }
+        val same = contacts.filter { People.key(it.name) == key }
+        if (same.map { it.contactId }.distinct().size != 1) return null
+        val nums = same.mapNotNull { c -> ContactNumbers.e164(c.number)?.let { it to c.mobile } }.distinctBy { People.key(it.first) }
+        val pick = nums.singleOrNull() ?: nums.filter { it.second }.singleOrNull() ?: return null
+        return cleanNumber(pick.first)
+    }
+
+    /** [cards] with each looked-up number ([found], by card id) filled in where the card had none. */
+    fun withNumbers(cards: List<TriageCard>, found: Map<String, String>): List<TriageCard> =
+        if (found.isEmpty()) cards else cards.map { c -> if (c.number == null) found[c.id]?.let { c.copy(number = it) } ?: c else c }
+
+    /**
+     * WhatsApp's click-to-chat link opening [card]'s one-to-one chat with nothing typed (for "Open WhatsApp to mark
+     * read" and a card with no reply), or null when it isn't a 1:1 WhatsApp chat with a number.
+     */
+    fun chatLink(card: TriageCard): String? {
+        if (card.app != CaptureApp.WHATSAPP || card.group != null || card.mentioned) return null
+        return LeavingRules.waLink(card.number ?: return null, "")?.substringBefore("?text=")
+    }
+
+    /**
+     * A group's card once its notification has gone ([live] false): WhatsApp has no official link into a group, so
+     * Open chat would only open WhatsApp. The button then says so ("Open WhatsApp") and the line under it names the
+     * group to find; false otherwise (the usual label and route apply).
+     */
+    fun groupGone(card: TriageCard, primary: TriageCardPrimary, live: Boolean): Boolean =
+        primary == TriageCardPrimary.OPEN_CHAT && !live && card.app == CaptureApp.WHATSAPP && card.group != null
+
+    fun openLabel(card: TriageCard, primary: TriageCardPrimary, live: Boolean): String =
+        if (groupGone(card, primary, live)) OPEN_WHATSAPP else label(primary)
+
+    fun openRoute(card: TriageCard, primary: TriageCardPrimary, live: Boolean): String? =
+        if (groupGone(card, primary, live)) {
+            "Find ${card.group} in WhatsApp" + if (card.draft != null) " · your reply is copied" else ""
+        } else routeLine(card, primary)
 
     /** [raw] as a phone number to keep: digits (a leading + kept), 8–15 digits, never a short code; null otherwise. */
     fun cleanNumber(raw: String?): String? {

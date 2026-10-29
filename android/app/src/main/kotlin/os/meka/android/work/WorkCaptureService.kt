@@ -85,10 +85,7 @@ class WorkCaptureService : NotificationListenerService() {
             val items = runCatching { read(app, sbn, n) }.getOrDefault(emptyList())
             if (items.isEmpty()) return@launch
             // The notification's own Reply, held in memory while it shows, for Send on a Needs you card (slice 3).
-            if (app != CaptureApp.PHONE) {
-                val person = items.map { it.personName }.distinct().singleOrNull()?.takeIf { items.all { i -> i.conversation == null } }
-                LiveReplies.remember(sbn, items.map { it.id }, person)
-            }
+            if (app != CaptureApp.PHONE) rememberLive(sbn, items)
             if (meka.core.currentWorkMode().atWork) {
                 val fresh = meka.captures.add(items)
                 val lists = meka.captures.lists.value
@@ -160,6 +157,30 @@ class WorkCaptureService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         connected = java.lang.ref.WeakReference(this)
+        // WhatsApp Open chat (2026-10-29): the tap targets and Reply actions live in memory, so after the app restarts
+        // (or the listener reconnects) the notifications still in the shade are read again for them. Nothing is
+        // triaged, held or sent here: only what [LiveReplies] remembers.
+        val shown = runCatching { activeNotifications?.toList() }.getOrNull().orEmpty()
+        scope.launch {
+            val defaultSms = runCatching { Telephony.Sms.getDefaultSmsPackage(this@WorkCaptureService) }.getOrNull()
+            shown.forEach { sbn ->
+                runCatching {
+                    if (sbn.packageName == packageName) return@runCatching
+                    val n = sbn.notification ?: return@runCatching
+                    if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0 || DiscordRules.isDiscord(sbn.packageName)) return@runCatching
+                    val app = NotificationRules.appFor(sbn.packageName, n.category, defaultSms) ?: return@runCatching
+                    if (app == CaptureApp.PHONE) return@runCatching
+                    rememberLive(sbn, read(app, sbn, n))
+                }
+            }
+        }
+    }
+
+    /** The notification's own Reply and tap target, held in memory while it shows, for Send and Open chat (slice 3). */
+    private fun rememberLive(sbn: StatusBarNotification, items: List<CapturedItem>) {
+        if (items.isEmpty()) return
+        val person = items.map { it.personName }.distinct().singleOrNull()?.takeIf { items.all { i -> i.conversation == null } }
+        LiveReplies.remember(sbn, items.map { it.id }, person)
     }
 
     override fun onListenerDisconnected() {

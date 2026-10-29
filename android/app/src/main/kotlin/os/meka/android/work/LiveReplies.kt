@@ -120,10 +120,11 @@ object LiveReplies {
     }
 
     /**
-     * Opens [messageId]'s chat: the notification's own tap target while it shows, else the app ([app]). [copy] goes to
-     * the clipboard first so Meka only pastes and taps send. False when neither could be opened.
+     * Opens [messageId]'s chat: the notification's own tap target while it shows, else [link] (WhatsApp's click-to-chat
+     * link for a 1:1 chat whose number is known, so the chat itself opens even hours later), else the app ([app]).
+     * [copy] goes to the clipboard first so Meka only pastes and taps send. False when none could be opened.
      */
-    fun open(context: Context, messageId: String, app: CaptureApp?, copy: String?): Boolean {
+    fun open(context: Context, messageId: String, app: CaptureApp?, copy: String?, link: String? = null): Boolean {
         copy?.let { copyText(context, it) }
         val live = byMessage[messageId]
         live?.open?.let { pi ->
@@ -134,6 +135,7 @@ object LiveReplies {
             } else null
             if (runCatching { pi.send(context, 0, null, null, null, null, options) }.isSuccess) return true
         }
+        if (link != null && openLink(context, link)) return true
         val pkg = live?.packageName ?: when (app) {
             CaptureApp.SMS -> runCatching { Telephony.Sms.getDefaultSmsPackage(context) }.getOrNull()
             else -> "com.whatsapp"

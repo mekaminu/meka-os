@@ -131,11 +131,13 @@ internal fun TriageCardView(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             val sendable = rules.cleanReply(reply)
-            val label = rules.label(primary)
+            // A group whose notification went: WhatsApp has no link into a group, so the button says what it opens.
+            val label = rules.openLabel(card, primary, live)
             TriagePill(label, filled = true, spoken = when (primary) {
                 TriageCardPrimary.SEND -> "Send to ${rules.who(card)}: ${sendable ?: ""}"
                 TriageCardPrimary.REPLY_IN_APP -> "Open WhatsApp with your reply to ${rules.who(card)} typed: ${sendable ?: ""}"
-                TriageCardPrimary.OPEN_CHAT -> "Open the chat with ${rules.who(card)}" + if (card.draft != null) ", the reply copied" else ""
+                TriageCardPrimary.OPEN_CHAT -> (if (rules.groupGone(card, primary, live)) "Open WhatsApp, then find ${card.group}"
+                    else "Open the chat with ${rules.who(card)}") + if (card.draft != null) ", the reply copied" else ""
                 else -> label
             }) {
                 haptics.light()
@@ -158,7 +160,7 @@ internal fun TriageCardView(
             }
         }
         // Which way the reply goes (WhatsApp replies, slice 1, item 4); cross-fades when the notification comes or goes.
-        val route = rules.routeLine(card, primary)
+        val route = rules.openRoute(card, primary, live)
         Crossfade(route, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "triage-route") { line ->
             if (line != null) {
                 Text(line, style = MekaType.caption, color = Meka.colors.textTertiary,
