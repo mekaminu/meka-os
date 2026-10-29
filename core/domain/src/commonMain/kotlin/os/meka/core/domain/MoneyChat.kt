@@ -73,7 +73,6 @@ object MoneyChat {
     const val KEEP = 6
     const val MAX_MONTHS = 60
 
-    private val NOT_ADVICE = MoneyAskRules.NOT_ADVICE
 
     private val SAVE = Regex("""\b(save|saving|put (aside|away|by))\b""", RegexOption.IGNORE_CASE)
     private val A_MONTH = Regex("""\b(a|per|each|every) month\b|\bmonthly\b|/\s?m(onth)?\b|\bpcm\b""", RegexOption.IGNORE_CASE)
@@ -152,7 +151,7 @@ object MoneyChat {
         if (!monthly) {
             // "Save £1,200 by July": a total by a month.
             val by = monthAhead(q, now) ?: return MoneyChatTurn(q, "How much a month, and for how long? Try “What if I save £200 a month for 6 months?”")
-            return pace(q, amount, by, now, left, "save")
+            return pace(q, amount, by, now, left, "save", d.ask.source)
         }
         val n = monthsIn(q) ?: MoneySave.DEFAULT_MONTHS
         val total = MoneySave.balances(amount, n, 0).last()
@@ -170,21 +169,21 @@ object MoneyChat {
                     ?: "The other ${fmt(pay)} a month on the cards only keeps up with their interest."
             }
         }
-        return MoneyChatTurn(q, parts.joinToString(" ") + NOT_ADVICE, listOf(
+        return MoneyChatTurn(q, parts.joinToString(" ") + d.ask.source.notAdvice, listOf(
             MoneyChatAction(ACT_GOAL, MAKE_GOAL, amountPence = amount, months = n),
             MoneyChatAction(ACT_PLAN, SHOW),
         ))
     }
 
     /** "To have £1,200 by July, put aside about £150 a month from November (8 months)." */
-    private fun pace(q: String, total: Long, by: Int, now: Int, left: Long?, kind: String): MoneyChatTurn {
+    private fun pace(q: String, total: Long, by: Int, now: Int, left: Long?, kind: String, source: MoneySource): MoneyChatTurn {
         val n = (by - now).coerceIn(1, MAX_MONTHS)
         val each = (ceil(total.toDouble() / n / 500.0) * 500).roundToLong().coerceAtLeast(500)
         val from = monthLong(now + 1)
         val head = if (kind == "afford") "If you start now: put aside about ${fmt(each)} a month from $from and you'd have ${fmt(total)} by ${monthLong(by)} ($n month${if (n == 1) "" else "s"})."
         else "To have ${fmt(total)} by ${monthLong(by)}, put aside about ${fmt(each)} a month from $from ($n month${if (n == 1) "" else "s"})."
         val fit = MoneySave.obi(each, left).first
-        return MoneyChatTurn(q, "$head $fit$NOT_ADVICE", listOf(
+        return MoneyChatTurn(q, "$head $fit${source.notAdvice}", listOf(
             MoneyChatAction(ACT_GOAL, MAKE_GOAL, amountPence = each, months = n),
             MoneyChatAction(ACT_PLAN, SHOW),
         ))
@@ -195,7 +194,7 @@ object MoneyChat {
         val amount = MoneyAskRules.amount(q) ?: return MoneyChatTurn(q, HELLO)
         val now = thisMonth(d)
         val by = monthAhead(q, now) ?: return MoneyChatTurn(q, MoneyAskRules.answer(q, d.ask))
-        return pace(q, amount, by, now, d.save?.leftPence, "afford")
+        return pace(q, amount, by, now, d.save?.leftPence, "afford", d.ask.source)
     }
 
     /** "Card A first: it charges 24.9%, more than Card B's 22.9%. … At £600 a month they'd clear by Mar 2027." */

@@ -45,6 +45,12 @@ object MoneyTravel {
     const val FOOT = "From your own statements over the last year: payments in another currency and the foreign fees charged for them. Your card's terms say what it charges · not financial advice."
     const val NOTHING = "Nothing paid abroad in your statements in the last year, so there's no card to compare yet · your card's terms say what it charges abroad."
 
+    /** [FOOT] / [NOTHING] saying where the lines really came from (Money bugs A4, the last places). */
+    fun foot(source: MoneySource): String =
+        if (source == MoneySource.FILES) FOOT else FOOT.replaceFirst("From your own statements", source.from)
+
+    fun nothing(source: MoneySource): String = NOTHING.replaceFirst("your statements", source.held)
+
     private val CURRENCY = Regex(
         """\b(EUR|USD|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|ISK|TRY|AED|JPY|CNY|AUD|CAD|NZD|THB|MXN|ZAR|INR|SGD|HKD|MAD|EGP|BRL)\s?\d|\d\s?(EUR|USD|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|ISK|TRY|AED|JPY|CNY|AUD|CAD|NZD|THB|MXN|ZAR|INR|SGD|HKD|MAD|EGP|BRL)\b|[€$¥]\s?\d|\d\s?[€$¥]|\b(visa|mc|mastercard|exchange|fx|conversion) rate\b|@\s?\d+\.\d{3,}""",
         RegexOption.IGNORE_CASE,
@@ -71,7 +77,7 @@ object MoneyTravel {
      */
     fun view(
         lines: List<MoneyTravelLine>, names: Map<String, String>, today: Long,
-        abroadNow: Boolean = false, trip: Pair<String, Long>? = null,
+        abroadNow: Boolean = false, trip: Pair<String, Long>? = null, source: MoneySource = MoneySource.FILES,
     ): MoneyTravelView? {
         val from = today - WINDOW_DAYS + 1
         val recent = lines.filter { it.day in from..today && it.pence < 0 && it.account in names }
@@ -107,13 +113,13 @@ object MoneyTravel {
                 val total = bad.sumOf { it.fees }
                 "Every account you've paid with abroad charged foreign fees: ${fmt(total)} in the last year. A card with no foreign fees would have saved that."
             }
-            else -> NOTHING
+            else -> nothing(source)
         }
         val use = best?.let { "pay with ${it.name}: no foreign fees there before" }
             ?: worst?.let { "your cards charged foreign fees before" + (rate(it.fees, it.spent)?.let { r -> " ($r)" } ?: "") }
         val banner = when {
             !going -> null
-            abroadNow -> "You're abroad" + (use?.let { " · $it" } ?: " · nothing paid abroad in your statements yet")
+            abroadNow -> "You're abroad" + (use?.let { " · $it" } ?: " · nothing paid abroad in ${source.held} yet")
             else -> {
                 val (name, start) = trip!!
                 val whenSaid = when (val d = start - today) {
@@ -121,18 +127,18 @@ object MoneyTravel {
                     1L -> "$name tomorrow"
                     else -> "$name in $d days"
                 }
-                whenSaid + (use?.let { " · if it's abroad, $it" } ?: " · nothing paid abroad in your statements yet")
+                whenSaid + (use?.let { " · if it's abroad, $it" } ?: " · nothing paid abroad in ${source.held} yet")
             }
         }
         val spoken = listOfNotNull(banner, tip).joinToString(". ")
-        return MoneyTravelView(HEAD, tip, best != null || going, rows, banner, FOOT, spoken)
+        return MoneyTravelView(HEAD, tip, best != null || going, rows, banner, foot(source), spoken)
     }
 
     /** Ask's answer to "which card should I use abroad?": the tip, then each account's line. */
-    fun answer(v: MoneyTravelView?): String {
-        if (v == null) return NOTHING
+    fun answer(v: MoneyTravelView?, source: MoneySource = MoneySource.FILES): String {
+        if (v == null) return nothing(source)
         val lines = v.rows.take(MoneyAskRules.SHOWN).joinToString(" ") { "${it.name}: ${it.line}." }
-        return listOfNotNull(v.banner?.let { "$it." }, v.tip, lines.ifEmpty { null }).joinToString(" ") + MoneyAskRules.NOT_ADVICE
+        return listOfNotNull(v.banner?.let { "$it." }, v.tip, lines.ifEmpty { null }).joinToString(" ") + source.notAdvice
     }
 
     /** The trip that matters for [today]: on now, or the next one starting within [TRIP_AHEAD_DAYS] (name and first day). */

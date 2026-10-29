@@ -4105,6 +4105,19 @@ dims it, so the sliver reads as plain dimmed background; it fades with the scrim
 MoneyBugsLayoutTest (four chips at 280 dp wrap to two rows, each one line tall; a Dark pane over a red screen shows no
 red in the sliver or the corner wedges). No core change, no server change, no migration. Mac checked nightly.
 
+#### Money bugs (A4), the last places (2026-10-29): Paying abroad, Challenges and Ask say where the lines came from
+
+The footers were fixed in A4; Paying abroad, Challenges and Ask's money answers still said "your statements" when his
+lines came from his banks through Lunch Flow. Core `MoneySource` gains `held` ("your statements" / "your bank payments" /
+"your payments"), `heldCap` and `notAdvice` (the end of a money answer: " From your own statements · not financial
+advice." for files, " From your banks through Lunch Flow · not financial advice." otherwise). `MoneyTravel.view` and
+`answer` take the source (nothing paid abroad, the banner, the foot); `MoneyChallenges.view`/`streaks` (how far the lines
+reach, an empty month, Goals' note); `MoneyAskData.source` (how far the lines reach, nothing due, every answer's end, and
+Obi's Plan chat via `MoneyChat`); `MoneyAskRules.LOCKED` says "your own payments". `Money.kt` passes the source it
+already worked out; the facade's `moneyAskData` and `moneyStreaks` work it out from the accounts with lines. Test:
+MoneySourceTest.travelChallengesAndAskSayWhereTheLinesCameFrom. Core only, no server change, no migration. Mac checked
+nightly.
+
 #### Money redesign (B) — slice B1 (2026-10-26): five tabs instead of one long page
 
 Mockup v4 (approved 2026-10-25 09:30), `docs/design/money/Main.dc.html`. Core `MoneyTabs` (core/domain/MoneyTabs.kt):

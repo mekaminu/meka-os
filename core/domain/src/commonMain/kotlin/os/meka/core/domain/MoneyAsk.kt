@@ -29,10 +29,12 @@ data class MoneyAskData(
     val payday: MoneyPaydayView?,
     /** Money manager (17): paying abroad, for "which card should I use abroad?" ([MoneyTravel]). */
     val travel: MoneyTravelView? = null,
+    /** Where the lines came from, so answers never say "your statements" for bank lines (Money bugs A4, the last places). */
+    val source: MoneySource = MoneySource.FILES,
 )
 
 object MoneyAskRules {
-    const val LOCKED = "That's in Money, behind your fingerprint. Unlock it and I'll answer from your statements, on this device only."
+    const val LOCKED = "That's in Money, behind your fingerprint. Unlock it and I'll answer from your own payments, on this device only."
     const val UNLOCK = "Unlock Money to answer"
     const val UNLOCK_REASON = "Answer from your money"
     const val EMPTY = "Money has nothing to go on yet · import a statement or connect your banks in Ask → Life → Money."
@@ -194,7 +196,7 @@ object MoneyAskRules {
     fun answer(question: String, d: MoneyAskData): String {
         val q = question.trim()
         return when {
-            ABROAD.containsMatchIn(q) && !AFFORD.containsMatchIn(q) -> MoneyTravel.answer(d.travel)
+            ABROAD.containsMatchIn(q) && !AFFORD.containsMatchIn(q) -> MoneyTravel.answer(d.travel, d.source)
             AFFORD.containsMatchIn(q) -> answerAfford(q, d)
             SAFE.containsMatchIn(q) -> answerSafe(d)
             OUT.containsMatchIn(q) -> answerOut(q, d)
@@ -227,9 +229,9 @@ object MoneyAskRules {
             else -> ""
         }
         val reach = buildList {
-            if (p.to < first) add("Your statements start ${MoneyRules.dayMonth(first)}, so there's nothing that far back.")
-            else if (p.from < first) add("Your statements start ${MoneyRules.dayMonth(first)}, so that's from then.")
-            if (p.to > last && p.to >= first) add("Your statements reach ${CivilDate.shortLabel(last)}.")
+            if (p.to < first) add("${d.source.heldCap} start ${MoneyRules.dayMonth(first)}, so there's nothing that far back.")
+            else if (p.from < first) add("${d.source.heldCap} start ${MoneyRules.dayMonth(first)}, so that's from then.")
+            if (p.to > last && p.to >= first) add("${d.source.heldCap} reach ${CivilDate.shortLabel(last)}.")
         }
         if (p.to < first) return reach.joinToString(" ")
         val head = if (n == 0 || spent <= 0) "Nothing${what.ifEmpty { " spent" }} ${p.said}." else
@@ -284,7 +286,7 @@ object MoneyAskRules {
         if (d.lines.isEmpty() && d.upcoming.isEmpty()) return EMPTY
         val w = outWindow(q, d.today, d.payday?.paydayDay)
         val due = d.upcoming.filter { it.dueDay in w.from..w.to && it.pence > 0 }.sortedWith(compareBy({ it.dueDay }, { it.title }))
-        if (due.isEmpty()) return "Nothing regular is due to come out ${w.said}, as far as your statements, Lists → Renewals and your cards show."
+        if (due.isEmpty()) return "Nothing regular is due to come out ${w.said}, as far as ${d.source.held}, Lists → Renewals and your cards show."
         val total = due.sumOf { it.pence }
         val shown = due.take(SHOWN).map { "${it.title} ${fmt(it.pence)} on ${CivilDate.shortLabel(it.dueDay)}" }
         val rest = due.size - shown.size
@@ -303,7 +305,7 @@ object MoneyAskRules {
         val p = d.payday ?: return EMPTY
         if (p.payLine == null) return p.notReady ?: MoneyPayday.NOT_READY
         val safe = p.safe ?: return "${p.balanceLine ?: "Type your pay account's balance under Until payday in Money"}, then ask again."
-        return "$safe. ${p.payLine}." + NOT_ADVICE
+        return "$safe. ${p.payLine}." + d.source.notAdvice
     }
 
     /** The day [q] names ("on Saturday", "tomorrow", "today"), on or after [today]; null when none. */
@@ -332,7 +334,7 @@ object MoneyAskRules {
         val a = fmt(amount)
         if (day != null && day >= payday) {
             return "${CivilDate.DAY_LONG[CivilDate.isoDayOfWeek(day) - 1]} is after payday on ${CivilDate.shortLabel(payday)}, so $a would come out of the next pay. " +
-                "Until then you have about ${fmt(pounds(left.coerceAtLeast(0)))} after the bills." + NOT_ADVICE
+                "Until then you have about ${fmt(pounds(left.coerceAtLeast(0)))} after the bills." + d.source.notAdvice
         }
         val after = left - amount
         val daysLeft = (payday - (day ?: d.today)).coerceAtLeast(1)
@@ -343,7 +345,7 @@ object MoneyAskRules {
             after < MoneyPayday.LOW_PENCE -> "Only just: $before; $a$on leaves about ${fmt(pounds(after))}, about ${fmt(pounds(after / daysLeft))} a day until payday on ${CivilDate.shortLabel(payday)}."
             else -> "Yes, by your numbers: $before; $a$on leaves about ${fmt(pounds(after))}, about ${fmt(pounds(after / daysLeft))} a day until payday on ${CivilDate.shortLabel(payday)}."
         }
-        return text + NOT_ADVICE
+        return text + d.source.notAdvice
     }
 
     /** What's due to go out: [regular] payments' next days (from [today]) and [bills], a bill that is a regular payment counted once. */

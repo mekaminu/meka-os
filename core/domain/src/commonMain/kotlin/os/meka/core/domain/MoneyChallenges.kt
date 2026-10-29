@@ -268,24 +268,27 @@ object MoneyChallenges {
         }.toMap()
     }
 
-    fun view(lines: List<MoneyChallengeLine>, setting0: MoneyChallengeSetting, today: Long, own: List<MoneyOwnCategory> = emptyList()): MoneyChallengesView? {
+    fun view(
+        lines: List<MoneyChallengeLine>, setting0: MoneyChallengeSetting, today: Long, own: List<MoneyOwnCategory> = emptyList(),
+        source: MoneySource = MoneySource.FILES,
+    ): MoneyChallengesView? {
         if (lines.isEmpty()) return null
         // A cap on a category he deleted waits unseen (Undo brings the category and its cap back).
         val live = own.mapTo(HashSet()) { it.id }
         val setting = setting0.copy(ownCaps = setting0.ownCaps.filterKeys { it in live })
         val first = lines.minOf { it.day }
         val through = minOf(today, lines.maxOf { it.day })
-        val throughLine = if (through < today) "Your statements reach ${CivilDate.shortLabel(through)}, so that's as far as these count" else null
+        val throughLine = if (through < today) "${source.heldCap} reach ${CivilDate.shortLabel(through)}, so that's as far as these count" else null
         if (!setting.any) return MoneyChallengesView(HEAD, INTRO, false, null, null, emptyList(), null, FUN_HINT, CAP_HINT, FOOT)
 
-        val noSpend = if (!setting.noSpend) null else noSpendView(lines, today, through, first)
+        val noSpend = if (!setting.noSpend) null else noSpendView(lines, today, through, first, source)
         val funMoney = setting.funPence?.let { funView(lines, it, today, through, first) }
         val caps = (setting.caps.map { (c, cap) -> capView(lines, c, cap, today, through, first) } +
             ownCapBars(lines, setting, own, today).values).sortedByDescending { it.share }
         return MoneyChallengesView(HEAD, null, setting.noSpend, noSpend, funMoney, caps, throughLine, FUN_HINT, CAP_HINT, FOOT)
     }
 
-    private fun noSpendView(lines: List<MoneyChallengeLine>, today: Long, through: Long, first: Long): MoneyNoSpendView {
+    private fun noSpendView(lines: List<MoneyChallengeLine>, today: Long, through: Long, first: Long, source: MoneySource): MoneyNoSpendView {
         val d = CivilDate.fromEpochDay(today)
         val monthStart = CivilDate.toEpochDay(d.year, d.month, 1)
         val byDay = lines.groupBy { it.day }
@@ -298,7 +301,7 @@ object MoneyChallenges {
         var best = 0; var run = 0
         days.forEach { if (it) { run++; best = maxOf(best, run) } else run = 0 }
         val month = CivilDate.MONTH_LONG[d.month - 1]
-        val line = if (days.isEmpty()) "Nothing from $month in your statements yet"
+        val line = if (days.isEmpty()) "Nothing from $month in ${source.held} yet"
             else "${n(count, "no-spend day")} in $month · of ${n(days.size, "day")} so far"
         val streakLine = when {
             days.isEmpty() -> null
@@ -382,9 +385,12 @@ object MoneyChallenges {
      * 9 this month", "Within it 3 weeks in a row · on track this week"), lit while a run is going. Null with none set or no
      * statements; never an amount.
      */
-    fun streaks(lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, today: Long, own: List<MoneyOwnCategory> = emptyList()): MoneyStreaksView? {
+    fun streaks(
+        lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, today: Long, own: List<MoneyOwnCategory> = emptyList(),
+        source: MoneySource = MoneySource.FILES,
+    ): MoneyStreaksView? {
         if (!setting.any) return null
-        val v = view(lines, setting, today, own) ?: return null
+        val v = view(lines, setting, today, own, source) ?: return null
         val rows = buildList {
             v.noSpend?.takeIf { it.days.isNotEmpty() }?.let { ns ->
                 val month = CivilDate.MONTH_LONG[CivilDate.fromEpochDay(today).month - 1]
@@ -400,7 +406,7 @@ object MoneyChallenges {
         }
         if (rows.isEmpty()) return null
         val through = minOf(today, lines.maxOf { it.day })
-        val note = if (through < today) "Counted to ${CivilDate.shortLabel(through)}, where your statements reach" else null
+        val note = if (through < today) "Counted to ${CivilDate.shortLabel(through)}, where ${source.held} reach" else null
         return MoneyStreaksView(STREAKS_HEAD, rows, note, STREAKS_FOOT)
     }
 

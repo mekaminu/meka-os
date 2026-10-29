@@ -20,6 +20,22 @@ enum class MoneySource {
     /** "From your statements" and the like, to start a footer. */
     val from: String get() = "From $phrase"
 
+    /**
+     * Where the lines are held, mid-sentence ("nothing paid abroad in your bank payments yet", "Your payments reach Tue 6 Oct"):
+     * "your statements" for statement files alone, "your bank payments" through Lunch Flow, "your payments" for both.
+     */
+    val held: String get() = when (this) {
+        FILES -> "your statements"
+        BANK -> "your bank payments"
+        BOTH -> "your payments"
+    }
+
+    /** [held] starting a sentence: "Your bank payments". */
+    val heldCap: String get() = held.replaceFirstChar { it.uppercaseChar() }
+
+    /** The end of a money answer: " From your own statements · not financial advice." or where the lines really came from. */
+    val notAdvice: String get() = if (this == FILES) MoneyAskRules.NOT_ADVICE else " $from · not financial advice."
+
     /** How the figures were worked out: on this device, and for statement files alone, nothing sent. */
     val worked: String get() = if (this == FILES) "Worked out on this device, nothing sent." else "Worked out on this device."
 

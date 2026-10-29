@@ -853,8 +853,8 @@ object MoneyRules {
             bank = bank,
             business = business,
             shared = shared,
-            challenges = if (partial) MoneyChallenges.view(challengeLines, challenges, today, own) else null,
-            travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
+            challenges = if (partial) MoneyChallenges.view(challengeLines, challenges, today, own, source) else null,
+            travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip, source) else null,
             year = if (partial) MoneyYear.view(yearLines, today, source) else null,
             review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }, source),
             categoryOrder = MoneyPaymentSheet.order(

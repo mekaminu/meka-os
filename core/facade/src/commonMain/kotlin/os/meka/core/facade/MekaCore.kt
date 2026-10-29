@@ -857,11 +857,12 @@ class MekaCore(
             os.meka.core.domain.MoneyTips.regular(lines, today),
             os.meka.core.domain.BillRules.withoutCards(bills, cards, today) + os.meka.core.domain.MoneyCards.bills(cards, today), today,
         )
+        val source = os.meka.core.domain.MoneySource.ofLines(accounts, txns.mapTo(HashSet()) { it.account })
         val travel = os.meka.core.domain.MoneyTravel.view(
             os.meka.core.domain.MoneyRules.travelLines(accounts, txns, rules), accounts.associate { it.id to it.name }, today,
-            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), today),
+            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), today), source,
         )
-        return os.meka.core.domain.MoneyAskData(lines, today, upcoming, view.payday, travel)
+        return os.meka.core.domain.MoneyAskData(lines, today, upcoming, view.payday, travel, source)
     }
 
     /**
@@ -1518,12 +1519,15 @@ class MekaCore(
         if (!setting.any) return null
         val own = money.ownCategories()
         val ownRules = if (setting.ownCaps.isEmpty()) emptyMap() else money.ownRules()
-        val lines = os.meka.core.domain.MoneyRules.askLines(money.accounts(), money.txns(), money.rules())
+        val accounts = money.accounts()
+        val txns = money.txns()
+        val source = os.meka.core.domain.MoneySource.ofLines(accounts, txns.mapTo(HashSet()) { it.account })
+        val lines = os.meka.core.domain.MoneyRules.askLines(accounts, txns, money.rules())
             .map { l ->
                 val o = ownRules[l.merchant]?.takeIf { l.category == os.meka.core.domain.MoneyCategory.OTHER }
                 os.meka.core.domain.MoneyChallengeLine(l.day, l.pence, l.category, o)
             }
-        return os.meka.core.domain.MoneyChallenges.streaks(lines, setting, todayEpochDay(), own)
+        return os.meka.core.domain.MoneyChallenges.streaks(lines, setting, todayEpochDay(), own, source)
     }
 
     private fun moneyAbroadNow(): Boolean = runCatching {
