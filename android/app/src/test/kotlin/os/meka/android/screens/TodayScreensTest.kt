@@ -31,6 +31,7 @@ import os.meka.android.fold.NOW_CARD_TAG
 import os.meka.android.today.TASK_ROW_TAG
 import os.meka.core.domain.TodayBesideRules
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import os.meka.android.today.TodayRoute
 import os.meka.android.today.DoneFoldLine
 import os.meka.core.domain.DoneTodayRules
