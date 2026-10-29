@@ -55,6 +55,8 @@ import androidx.compose.ui.semantics.heading
 import os.meka.core.domain.BoardLookRules
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.BoardPlannerRules
+import os.meka.core.domain.BoardOpenFoldRules
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import os.meka.core.domain.CardChip
@@ -136,7 +138,6 @@ import os.meka.android.designsystem.areaTone
 import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.core.domain.BoardCapacity
 import os.meka.core.domain.BoardNudge
 import os.meka.core.domain.BoardNudgeRules
 import os.meka.core.domain.BoardNudgePlace
@@ -171,7 +172,6 @@ import os.meka.core.domain.BoardMatchRules
 import os.meka.core.domain.BoardDenseRules
 import os.meka.core.domain.BoardDenseHeadRules
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontFamily
 
 /**
  * Calendar's Board view on the Fold (Week board and roll-over, slice 2; core [WeekBoardRules]): a column per day from
@@ -637,7 +637,7 @@ fun WeekBoardView(
             }
             // One day's column, folded or unfolded; a column that leaves (another week shown) is forgotten as a target.
             @Composable
-            fun dayColumn(day: BoardDay, width: androidx.compose.ui.unit.Dp) {
+            fun dayColumn(day: BoardDay, width: androidx.compose.ui.unit.Dp, onContent: ((Float) -> Unit)? = null) {
                     val gap = insertAt?.takeIf { it.first == day.epochDay }?.let { (_, to) ->
                         drag?.let { d -> BoardHandRules.gapBefore(day.openCards.map { it.id }, d.card.id, to) }
                     }
@@ -713,6 +713,7 @@ fun WeekBoardView(
                         onEase = { fix ->
                             scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) }
                         },
+                        onContentHeight = onContent,
                     )
             }
             if (wide) {
@@ -721,7 +722,7 @@ fun WeekBoardView(
                     board = board, week = weekIndex, dir = wideDir, scroll = wideScroll, dragging = drag != null,
                     rowWidth = rowWidth, openedPast = openedPast,
                     modifier = Modifier.weight(1f).fillMaxHeight().appear(rememberAppearance(4)),
-                    day = { day, width -> dayColumn(day, width) },
+                    day = { day, width, onContent -> dayColumn(day, width, onContent) },
                     list = { week, column, mod ->
                         BoardList(
                             column, week, board, hovered = if (drag != null) hovered else null, dragging = drag?.card?.id,
@@ -1080,20 +1081,20 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, dense: Boolean = fal
 private fun Color.compositeOverWhite(): Color = Color(red + (1f - red) * 0.6f, green + (1f - green) * 0.6f, blue + (1f - blue) * 0.6f, 1f)
 
 /**
- * Option B match: the mockup's type. Its serif (Fraunces) for the month and the dates is the platform's serif here (no
- * font is bundled), its mono (JetBrains Mono) for times the platform's monospace; the weights and sizes are the mockup's.
+ * Option B match: the mockup's weights and sizes. The open Fold's alignment pass (Meka 2026-10-29 02:12 (e)): one
+ * typeface, as the folded layout, no serif or mono; times and figures keep even widths with tabular numbers.
  */
 internal object BoardType {
-    /** "October 2026": the greeting token (34, semibold) in serif. */
-    val month = MekaType.greeting.copy(fontFamily = FontFamily.Serif)
-    /** "Oct 2026" on the cover screen, and each day's "27 Oct": the now-title token (22, semibold) in serif. */
-    val monthFolded = MekaType.nowTitle.copy(fontFamily = FontFamily.Serif)
-    val date = MekaType.nowTitle.copy(fontFamily = FontFamily.Serif)
-    /** "W44" beside the month: the item-title token in mono (the cover screen: item meta). */
-    val week = MekaType.itemTitle.copy(fontFamily = FontFamily.Monospace)
-    val weekFolded = MekaType.itemMeta.copy(fontFamily = FontFamily.Monospace)
-    /** Times, lengths and the budget's figures: the micro token in mono. */
-    val mono = MekaType.micro.copy(fontFamily = FontFamily.Monospace)
+    /** "October 2026": the greeting token (34, semibold). */
+    val month = MekaType.greeting
+    /** "Oct 2026" on the cover screen, and each day's "27 Oct": the now-title token (22, semibold). */
+    val monthFolded = MekaType.nowTitle
+    val date = MekaType.nowTitle
+    /** "W44" beside the month: the item-title token (the cover screen: item meta), tabular figures. */
+    val week = MekaType.itemTitle.copy(fontFeatureSettings = TABULAR)
+    val weekFolded = MekaType.itemMeta.copy(fontFeatureSettings = TABULAR)
+    /** Times, lengths and the budget's figures: the micro token, tabular figures. */
+    val mono = MekaType.micro.copy(fontFeatureSettings = TABULAR)
     val monoSmall = mono
 
     // The density pass (BoardDenseRules): the unfolded board and its lists in the mockup's proportions.
@@ -1110,6 +1111,9 @@ internal object BoardType {
     val nudgeDense = MekaType.caption.copy(fontSize = BoardDenseHeadRules.NUDGE_SP.sp, lineHeight = (BoardDenseHeadRules.NUDGE_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's header, BoardDenseHeadRules)
     val addDense = MekaType.caption.copy(fontSize = BoardDenseHeadRules.ADD_SP.sp, lineHeight = (BoardDenseHeadRules.ADD_SP * 1.3f).sp) // type: ok (density pass slice 2: the mockup's "+ add", BoardDenseHeadRules)
 }
+
+/** Even-width figures for times and lengths (the alignment pass: one typeface, no mono). */
+private const val TABULAR = "tnum"
 
 /** The density pass: the lane being drawn is on the unfolded board or the Mac-sized layout (BoardDenseRules). */
 internal val LocalBoardDense = staticCompositionLocalOf { false }
@@ -1208,8 +1212,11 @@ private fun DayColumn(
     onEvent: (CalendarEvent) -> Unit,
     onTag: (BoardCard, String?) -> Unit,
     onEase: (PressureFix) -> Unit,
+    /** The open Fold's alignment pass: the column's whole content height (dp), so its row can fit its fullest day. */
+    onContentHeight: ((Float) -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
+    val density = androidx.compose.ui.platform.LocalDensity.current
     // Item (10): a day stacking up wears an amber edge (the gold landing edge wins while a card is held over it).
     val glow by animateColorAsState(
         when {
@@ -1243,6 +1250,7 @@ private fun DayColumn(
             .border(1.dp, glow, RoundedCornerShape(MekaRadius.m))
             .alpha(if (day.isPast) 0.6f else 1f)
             .verticalScroll(vScroll, enabled = dragging == null)
+            .then(if (onContentHeight == null) Modifier else Modifier.onSizeChanged { onContentHeight(it.height / density.density) })
             .padding(horizontal = if (compact) MekaSpace.xxs else MekaSpace.xs, vertical = MekaSpace.xs),
     ) {
         // Option B match (Meka 2026-10-24 14:39): the mockup's header, "27 Oct" in serif with "Mon" on the right (today
@@ -1264,7 +1272,8 @@ private fun DayColumn(
             }
             BoardLookRules.progress(day)?.let { DoneBar(it) }
         }
-        if (showHead) day.capacity?.let { BudgetPill(it, day.isToday) }
+        // The alignment pass (c): one pill on every column, a past day's saying what was done.
+        if (showHead) (day.capacity?.let(BoardPlannerRules::budget) ?: BoardOpenFoldRules.pastPill(day))?.let { BudgetPill(it, day.isToday) }
         // Folded, the day's line turns amber ("5h · 1h over") and Obi's line above carries the fix.
         if (showHead) day.pressure?.let { PressureNote(it, onEase) }
         // The day's events are cards in the column too, a blue time chip and their length (the mockup's stand-up).
@@ -2075,10 +2084,9 @@ private val FREE_MAX_H = 64.dp
  * gently then (Reduced motion: steady). Colours cross-fade and the bar's width glides as estimates change.
  */
 @Composable
-private fun BudgetPill(c: BoardCapacity, today: Boolean) {
+private fun BudgetPill(b: os.meka.core.domain.PlannerBudget, today: Boolean) {
     val reduced = Meka.reducedMotion
     val amber = Meka.colors.calendar3
-    val b = BoardPlannerRules.budget(c)
     val compact = LocalBoardCompact.current
     val fill by animateFloatAsState(b.fill, MekaMotion.appear(reduced), label = "budget-fill")
     val tone by animateColorAsState(if (b.over) amber else Meka.colors.accent, MekaMotion.appear(reduced), label = "budget-tone")
@@ -2100,7 +2108,7 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
             .clearAndSetSemantics { contentDescription = b.spoken },
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
-            if (BoardMatchRules.pillStacked(compact)) {
+            if (BoardOpenFoldRules.pillStacked(dense, compact)) {
                 // Match slice 4: a narrow lane stacks "planned" over the figures, so the word stays and "nothing yet /
                 // 6h 15" keeps its whole line (it may still wrap rather than be cut short).
                 Column {
@@ -2126,6 +2134,9 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
         }
     }
 }
+
+/** The unfolded weekday row (the open Fold's alignment pass, UI tests). */
+internal const val WEEKDAYS_ROW_TAG = "board-weekdays-row"
 
 /** The day's budget pill (Option B slice 1, UI tests). */
 internal const val BUDGET_TAG = "board-budget"
@@ -2439,7 +2450,7 @@ private fun WideWeek(
     rowWidth: androidx.compose.ui.unit.Dp,
     openedPast: Set<Long>,
     modifier: Modifier,
-    day: @Composable (BoardDay, androidx.compose.ui.unit.Dp) -> Unit,
+    day: @Composable (BoardDay, androidx.compose.ui.unit.Dp, (Float) -> Unit) -> Unit,
     list: @Composable (BoardWeek, BoardListColumn, Modifier) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -2466,17 +2477,28 @@ private fun WideWeek(
                     .padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
+                // The alignment pass (a)(b)(d): each row as tall as its fullest day, so no column scrolls on its own
+                // (its header leaving) or cuts a card off, and a quiet week leaves no gap; the week scrolls as one.
+                val contents = remember(shown) { androidx.compose.runtime.mutableStateMapOf<Long, Float>() }
                 val weekdays = BoardWeekLayoutRules.weekdays(w)
                 val weekdayWidths = BoardWeekLayoutRules.rowWidths(weekdays, rowWidth.value, openedPast)
-                Row(Modifier.fillMaxWidth().height(tiers.weekdays.dp)) {
-                    weekdays.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekdayWidths[i].dp) } }
+                val weekdaysTall by androidx.compose.animation.core.animateDpAsState(
+                    BoardOpenFoldRules.rowHeight(weekdays.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKDAYS_DP).dp,
+                    MekaMotion.appear(reduced), label = "board-weekdays-height",
+                )
+                Row(Modifier.fillMaxWidth().height(weekdaysTall).testTag(WEEKDAYS_ROW_TAG)) {
+                    weekdays.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekdayWidths[i].dp) { h -> contents[d.epochDay] = h } } }
                 }
                 val weekend = BoardWeekLayoutRules.weekend(w)
                 if (weekend.isNotEmpty()) {
                     // The density pass: Saturday and Sunday no wider than one and a half weekdays, left-aligned.
                     val weekendWidths = BoardDenseRules.weekendWidths(weekend, rowWidth.value, weekdayWidths.maxOrNull() ?: 0f, openedPast)
-                    Row(Modifier.fillMaxWidth().height(tiers.weekend.dp)) {
-                        weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) } }
+                    val weekendTall by androidx.compose.animation.core.animateDpAsState(
+                        BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP).dp,
+                        MekaMotion.appear(reduced), label = "board-weekend-height",
+                    )
+                    Row(Modifier.fillMaxWidth().height(weekendTall)) {
+                        weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) { h -> contents[d.epochDay] = h } } }
                     }
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,

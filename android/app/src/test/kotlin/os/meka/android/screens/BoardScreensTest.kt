@@ -36,6 +36,7 @@ import os.meka.android.calendar.TIMELINE_TAG
 import os.meka.android.calendar.TIMELINE_TOGGLE_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.android.calendar.ADD_TAG
+import os.meka.android.calendar.DAY_DATE_TAG
 import os.meka.android.calendar.LIST_TITLE_TAG
 import os.meka.android.calendar.LISTS_RULE_TAG
 import os.meka.android.calendar.AREA_LABEL_TAG
@@ -693,6 +694,39 @@ class BoardScreensTest {
         val block = tl.blocks.firstOrNull { it.title == "Send the quote" } ?: throw AssertionError("no block: ${tl.blocks}")
         assertEquals("19:00–19:45", block.label)
         return core to block.spoken
+    }
+
+    /**
+     * The open Fold's alignment pass (Meka 2026-10-29 02:12, W44): eight tasks on today make its column the fullest;
+     * the weekday row grows to hold them all, so today's last card and its "+ add" sit inside the row (nothing
+     * clipped) and every day's date stays level with the others; every column, past days included, wears a pill.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theOpenFoldsRowsFitTheirFullestDay() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        val titles = (1..8).map { "Busy task $it" }
+        runBlocking {
+            core.tick()
+            titles.forEach { core.addOnBoardSized(it, core.weekBoard.value.todayEpochDay, 30) }
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-rows-fit"))
+        ScreenShots.assertSensible(compose, "inner-dark-rows-fit")
+        val row = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKDAYS_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            ?: throw AssertionError("no weekday row")
+        val last = cardBounds(titles.last())
+        assertTrue("today's last card sits inside the weekday row ($last vs $row)", last.bottom <= row.bottom + 1f && last.height > 0f)
+        val adds = compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        val todays = adds.firstOrNull { it.left < last.right && it.right > last.left && it.top >= last.bottom }
+            ?: throw AssertionError("no + add under today's cards ($adds vs $last)")
+        assertTrue("today's + add is not clipped ($todays vs $row)", todays.bottom <= row.bottom + 1f)
+        val dates = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+            .filter { it.top < row.bottom && it.bottom > row.top }
+        assertEquals("five weekday dates", 5, dates.size)
+        assertTrue("the weekday dates are level (${dates.map { it.top }})", dates.maxOf { it.top } - dates.minOf { it.top } < 1f)
+        val pills = compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes()
+        assertEquals("a pill on every day of the week, past ones too", 7, pills.size)
     }
 
     private fun show(core: MekaCore) {

@@ -50,11 +50,11 @@ struct WeekBoardScreen: View {
     /// Option B slice 5 (refinement 2): today's timeline beside the week; open unless he hides it.
     @AppStorage("board.timeline") private var showTimeline = true
 
-    /// Option B match: "October 2026  W44", the month in serif, the ISO week in mono.
+    /// Option B match: "October 2026  W44", the month and the ISO week in one typeface.
     @ViewBuilder private func weekTitle(_ w: BoardWeek) -> some View {
         let head = BoardMatchRules.shared.weekHead(startEpochDay: w.startEpochDay)
         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-            // Density pass slice 2: the mockup's header, the month 28 serif and "W44" 12 mono (BoardDenseHeadRules).
+            // Density pass slice 2: the mockup's header, the month 28 and "W44" 12 (BoardDenseHeadRules).
             Text(head.month).font(BoardFont.month).foregroundStyle(palette.textPrimary).lineLimit(1)
             Text(head.week).font(BoardFont.weekTag).foregroundStyle(palette.textTertiary).lineLimit(1)
         }
@@ -442,12 +442,12 @@ private struct BoardColumnView: View {
         let compact = BoardFitRules.shared.compact(laneDp: Float(laneWidth))
         let tagBelow = BoardFitRules.shared.tagBelow(compact: compact)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            // Option B match (Meka 2026-10-24 14:39): "27 Oct" in serif with "Mon" on the right (today in gold), the thin
+            // Option B match (Meka 2026-10-24 14:39): "27 Oct" with "Mon" on the right (today in gold), the thin
             // done bar without words, then the budget pill, always "planned · 4h 05 / 3h".
             let head = BoardMatchRules.shared.dayHead(day: day)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 HStack(alignment: .firstTextBaseline) {
-                    // The density pass: the mockup's 19 serif date and 11 weekday.
+                    // The density pass: the mockup's 19 date and 11 weekday.
                     Text(head.date).font(BoardFont.date)
                         .foregroundStyle(day.isToday ? palette.accent : palette.textPrimary).lineLimit(1)
                     Spacer(minLength: 0)
@@ -456,8 +456,9 @@ private struct BoardColumnView: View {
                 if let progress = BoardLookRules.shared.progress(day: day) {
                     DayProgressBar(progress: progress, palette: palette)
                 }
-                if let capacity = day.capacity {
-                    BudgetPill(capacity: capacity, today: day.isToday, palette: palette, compact: compact)
+                // The open Fold's alignment pass (c): one pill on every column, a past day's saying what was done.
+                if let b = day.capacity.map({ BoardPlannerRules.shared.budget(c: $0) }) ?? BoardOpenFoldRules.shared.pastPill(day: day) {
+                    BudgetPill(b: b, today: day.isToday, palette: palette, compact: compact)
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -999,19 +1000,18 @@ private struct RoundStep: View {
 /// gently then; colours cross-fade and the width glides. Reduce Motion: steady, no glide.
 private struct BudgetPill: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    let capacity: BoardCapacity
+    let b: PlannerBudget
     let today: Bool
     let palette: MekaPalette
     var compact: Bool = false
     @State private var breathe = false
 
     var body: some View {
-        let b = BoardPlannerRules.shared.budget(c: capacity)
         let tone = b.over ? palette.calendar3 : palette.accent
         let edge = b.over ? palette.calendar3.opacity(0.7) : (today ? palette.accent : palette.hairline)
         VStack(spacing: 0) {
             HStack(spacing: MekaSpace.xs) {
-                if BoardMatchRules.shared.pillStacked(compact: compact) {
+                if BoardOpenFoldRules.shared.pillStacked(dense: true, compact: compact) {
                     // Match slice 4: a narrow lane stacks "planned" over the figures, so the word is never dropped.
                     VStack(alignment: .leading, spacing: 0) {
                         Text(BoardMatchRules.shared.pillLabel(b: b)).font(BoardFont.mono)
@@ -1054,8 +1054,7 @@ private struct BudgetPill: View {
     }
 
     private func startBreathing() {
-        let over = BoardPlannerRules.shared.budget(c: capacity).over
-        guard over, !reduceMotion else { breathe = false; return }
+        guard b.over, !reduceMotion else { breathe = false; return }
         withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { breathe = true }
     }
 }
@@ -1115,12 +1114,12 @@ private struct BoardListView: View {
     var body: some View {
         let someday = column.tray == BoardTray.someday
         let cards = column.cards
-        // Option B match, slice 2: the mockup's heading, the name in serif (the day headers' type) and the count quiet
+        // Option B match, slice 2: the mockup's heading, the name in the day headers' type and the count quiet
         // in mono on the right; no box round the list, only a held card over it lifts it with the gold edge.
         let head = BoardMatchRules.shared.listHead(column: column)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
-                Text(head.name).font(MekaType.nowTitle).fontDesign(.serif).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Text(head.name).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
                 Spacer(minLength: 0)
                 if let count = head.count {
                     Text(count).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
@@ -1335,24 +1334,23 @@ extension MekaPalette {
     }
 }
 
-/// Option B match: the mockup's mono (JetBrains Mono) for times and figures is the micro token in the system's
-/// monospaced design; its serif (Fraunces) for the month and the dates is the greeting and now-title tokens with
-/// `.fontDesign(.serif)` (New York).
+/// Option B match: the mockup's sizes. The open Fold's alignment pass (Meka 2026-10-29 02:12 (e)): one typeface, as the
+/// folded layout, no serif or mono; times and figures keep even widths with monospaced digits.
 enum BoardFont {
     /// The density pass (BoardDenseRules): times, lengths and the budget's figures at the mockup's 10.5 in mono.
-    static var mono: Font { .system(size: CGFloat(BoardDenseRules.shared.CHIP_SP), design: .monospaced) } // type: ok (the density pass: the mockup's sizes)
-    /// A day's date in serif, 19 (was the now-title token).
-    static var date: Font { .system(size: CGFloat(BoardDenseRules.shared.DATE_SP), weight: .semibold, design: .serif) } // type: ok (the density pass: the mockup's sizes)
+    static var mono: Font { .system(size: CGFloat(BoardDenseRules.shared.CHIP_SP), design: .default).monospacedDigit() } // type: ok (the density pass: the mockup's sizes)
+    /// A day's date, 19 (was the now-title token).
+    static var date: Font { .system(size: CGFloat(BoardDenseRules.shared.DATE_SP), weight: .semibold) } // type: ok (the density pass: the mockup's sizes)
     /// The weekday beside it, 11.
     static var weekday: Font { .system(size: CGFloat(BoardDenseRules.shared.WEEKDAY_SP)) } // type: ok (the density pass: the mockup's sizes)
     /// A card's title, 13.5.
     static var title: Font { .system(size: CGFloat(BoardDenseRules.shared.TITLE_SP)) } // type: ok (the density pass: the mockup's sizes)
     /// The area's name in a card's foot, 11.
     static var foot: Font { .system(size: CGFloat(BoardDenseRules.shared.FOOT_SP)) } // type: ok (the density pass: the mockup's sizes)
-    /// Density pass slice 2 (BoardDenseHeadRules): "October 2026", 28 serif semibold.
-    static var month: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.MONTH_SP), weight: .semibold, design: .serif) } // type: ok (density pass slice 2: the mockup's header)
+    /// Density pass slice 2 (BoardDenseHeadRules): "October 2026", 28 semibold.
+    static var month: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.MONTH_SP), weight: .semibold) } // type: ok (density pass slice 2: the mockup's header)
     /// "W44" beside it, 12 mono.
-    static var weekTag: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.WEEK_SP), design: .monospaced) } // type: ok (density pass slice 2: the mockup's header)
+    static var weekTag: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.WEEK_SP), design: .default).monospacedDigit() } // type: ok (density pass slice 2: the mockup's header)
     /// Today, Hide timeline, Review, Plan your week and Obi's name, 13.
     static var label: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.LABEL_SP)) } // type: ok (density pass slice 2: the mockup's header)
     /// Obi's line and a goal's title in the header, 12.

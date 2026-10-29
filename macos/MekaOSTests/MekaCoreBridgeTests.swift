@@ -1668,6 +1668,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(match.footWords(compact: true))
         XCTAssertTrue(match.pillStacked(compact: true))
         XCTAssertFalse(match.pillStacked(compact: false))
+        // The open Fold's alignment pass: every unfolded column (the Mac's too) stacks its pill the same way.
+        XCTAssertTrue(BoardOpenFoldRules.shared.pillStacked(dense: true, compact: false))
+        XCTAssertEqual(BoardOpenFoldRules.shared.DONE, "done")
         XCTAssertEqual(match.pillLabel(b: budget), "planned")
         XCTAssertEqual(match.BUTTON, 40)
         XCTAssertEqual(match.NOTHING_PLANNED, "Nothing planned")
