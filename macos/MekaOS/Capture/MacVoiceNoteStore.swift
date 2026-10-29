@@ -21,6 +21,16 @@ final class MacVoiceNoteStore {
     /// The notes, newest first (nil until first read).
     private(set) var notes: [VoiceNote]?
 
+    /// Obi sees everything, slice 4: told the list whenever it changes (CoreModel hands it to the core, so Ask and
+    /// Live's look-up can read the notes).
+    @ObservationIgnored var onChange: (([VoiceNote]) -> Void)?
+
+    /// Sets the notes and tells [onChange].
+    private func publish(_ all: [VoiceNote]) {
+        notes = all
+        onChange?(all)
+    }
+
     @ObservationIgnored private var key: SymmetricKey?
     @ObservationIgnored private var keyLooked = false
 
@@ -97,13 +107,13 @@ final class MacVoiceNoteStore {
         guard ensureFolder(), let blob = encrypt(Data(VoiceNoteRules.shared.encodeList(notes: all).utf8)) else { return false }
         do { try blob.write(to: indexFile(), options: [.atomic]) } catch { return false }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: indexFile().path)
-        notes = VoiceNoteRules.shared.ordered(notes: all)
+        publish(VoiceNoteRules.shared.ordered(notes: all))
         return true
     }
 
     /// Reads the notes (and publishes them). Never throws.
     func load() {
-        notes = canKeep ? readIndex() : []
+        publish(canKeep ? readIndex() : [])
     }
 
     /// Keeps a finished recording: encrypts its ".part.m4a" into the recording and adds `note` to the index. False when
@@ -144,11 +154,11 @@ final class MacVoiceNoteStore {
     /// Deletes the notes past 30 days (unless kept), recordings no note owns and leftover ".part.m4a" files, except the
     /// one being recorded (`recording`).
     func sweep(now: Date = Date(), recording: String? = nil) {
-        guard canKeep else { notes = []; return }
+        guard canKeep else { publish([]); return }
         let all = readIndex()
         let gone = Set(VoiceNoteRules.shared.expired(notes: all, nowMs: Int64(now.timeIntervalSince1970 * 1000)).map(\.id))
         let left = all.filter { !gone.contains($0.id) }
-        if gone.isEmpty { notes = left } else { writeIndex(left) }
+        if gone.isEmpty { publish(left) } else { writeIndex(left) }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: Self.folder().path)) ?? []
         let keepPart = recording.map { $0 + ".part.m4a" }
         // A ".part.m4a" isn't a recording any note owns, so the core lists it with the orphans.

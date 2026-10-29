@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study"), BOARD("board"), DECISIONS("decisions"), READING("reading") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study"), BOARD("board"), DECISIONS("decisions"), READING("reading"), EMERGENCY("emergency"), NEWS("news"), VOICE_NOTES("voice_notes"), HEALTH("health"), VAULT("vault") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -310,6 +310,8 @@ object AskRules {
                 kids: List<String> = emptyList(), kidsFromOthers: Boolean = false,
                 barca: List<String> = emptyList(), study: List<String> = emptyList(),
                 board: List<String> = emptyList(), decisions: List<String> = emptyList(), reading: List<String> = emptyList(),
+                emergency: List<String> = emptyList(), news: List<String> = emptyList(), voiceNotes: List<String> = emptyList(),
+                health: List<String> = emptyList(), vault: List<String> = emptyList(),
                 days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
                 movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
@@ -432,6 +434,12 @@ object AskRules {
             board.take(ObiArea.BOARD.max).map { AskItem("", AskItemKind.BOARD, line(it)) },
             decisions.take(ObiArea.DECISIONS.max).map { AskItem("", AskItemKind.DECISIONS, line(it)) },
             reading.take(ObiArea.READING.max).map { AskItem("", AskItemKind.READING, line(it)) },
+            // Slice 4 ([ObiRestRules]): the emergency card, News, voice notes, Health's status and the Vault's list.
+            emergency.take(ObiArea.EMERGENCY.max).map { AskItem("", AskItemKind.EMERGENCY, line(it)) },
+            news.take(ObiArea.NEWS.max).map { AskItem("", AskItemKind.NEWS, line(it)) },
+            voiceNotes.take(ObiArea.VOICE_NOTES.max).map { AskItem("", AskItemKind.VOICE_NOTES, line(it)) },
+            health.take(ObiArea.HEALTH.max).map { AskItem("", AskItemKind.HEALTH, line(it)) },
+            vault.take(ObiArea.VAULT.max).map { AskItem("", AskItemKind.VAULT, line(it)) },
         )
         val moreFull = more.filter { it.size > 1 }.flatten()
         val moreCounts = more.filter { it.size == 1 }.flatten()
@@ -454,7 +462,7 @@ object AskRules {
         val keptRefs = kept.map { it.ref }.toSet()
         // Things his wife added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || dayItems.any { it.kind == AskItemKind.EVENT })
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || news.size > 1 || dayItems.any { it.kind == AskItemKind.EVENT })
     }
 
     /** Needs you's rows Ask sends (all of them, up to the cap); Live's look-up reads the same lines ([ObiArea.NEEDS_YOU]). */

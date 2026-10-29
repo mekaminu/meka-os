@@ -9,6 +9,8 @@ import os.meka.core.domain.ObiArea
 import os.meka.core.domain.ObiSees
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.TalkTurn
+import os.meka.core.domain.VoiceNote
+import os.meka.core.domain.VoiceNoteWords
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.PullRequest
@@ -78,10 +80,16 @@ class ObiSeesFacadeTest {
         c.addSomeday("Learn the guitar", SomedayKind.IDEA)
         c.recordDecision("Keep the old car another year", "cheaper", 90)
         c.addReading("Dune by Frank Herbert")
+        // Slice 4: the emergency card, the Vault and a voice note (News stays empty, Health unchecked).
+        c.addEmergency("call", "GP: Dr Lee, 01632 960000")
+        c.addDocument("Railcard 05/2027")
+        c.holdVoiceNotes(listOf(VoiceNote("n1", now - 3_600_000L, 83_000L, VoiceNoteWords.HEARD, "Book the car in on Friday")))
         c.tick()
         val q = "How's my study going?"
         // An area that sends one counts line unless asked about is compared on a question about it.
-        val about = mapOf(ObiArea.BOARD to "What's on Someday?", ObiArea.DECISIONS to "What did I decide?", ObiArea.READING to "Which book should I take on holiday?", ObiArea.KIDS to "What do the kids need?")
+        val about = mapOf(ObiArea.BOARD to "What's on Someday?", ObiArea.DECISIONS to "What did I decide?", ObiArea.READING to "Which book should I take on holiday?", ObiArea.KIDS to "What do the kids need?",
+            ObiArea.EMERGENCY to "Who do I call in an emergency?", ObiArea.NEWS to "Anything in the news?", ObiArea.VOICE_NOTES to "What did I say in my voice notes?",
+            ObiArea.HEALTH to "Is the app connected properly?", ObiArea.VAULT to "Is anything expiring soon?")
         c.askMeka(q)
         val context = server.asked.last().second
         ObiArea.entries.forEach { area ->
@@ -104,6 +112,17 @@ class ObiSeesFacadeTest {
         assertEquals(listOf("Week board · 0 with no day yet · 1 on Someday"), context.items.filter { it.kind == AskItemKind.BOARD }.map { it.line })
         assertEquals(listOf("Decisions · 1 active"), context.items.filter { it.kind == AskItemKind.DECISIONS }.map { it.line })
         assertEquals(1, context.items.count { it.kind == AskItemKind.READING })
+        // Slice 4: the same, and asked about, each sends all of it.
+        assertEquals(listOf("Emergency card · 1 line: 1 to call"), context.items.filter { it.kind == AskItemKind.EMERGENCY }.map { it.line })
+        assertEquals(1, context.items.count { it.kind == AskItemKind.VAULT })
+        assertEquals(1, context.items.count { it.kind == AskItemKind.VOICE_NOTES })
+        // Health unchecked sends nothing unless asked; asked, it says so.
+        assertEquals(0, context.items.count { it.kind == AskItemKind.HEALTH })
+        assertTrue(os.meka.core.domain.ObiRestRules.HEALTH_NOT_CHECKED in c.liveNavilife("health", ""))
+        assertTrue("Who to call · GP · Dr Lee, 01632 960000" in c.liveNavilife("emergency", ""))
+        assertTrue("Book the car in on Friday" in c.liveNavilife("voice_notes", ""))
+        assertTrue("Vault · Railcard" in c.liveNavilife("vault", ""))
+        assertTrue(c.liveNavilife("news", "").startsWith("Navilife has nothing in News yet; it would be on the Ask → Daily → News screen"))
         // The server takes every kind the device sends (an unknown one would refuse the whole question).
         AskItemKind.entries.forEach { assertTrue(it.wire in os.meka.core.wire.AskCodec.KINDS, it.wire) }
         assertEquals(ObiSees.NO_AREA, c.liveNavilife("money", ""))

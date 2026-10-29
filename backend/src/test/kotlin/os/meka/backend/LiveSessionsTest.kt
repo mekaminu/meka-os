@@ -350,6 +350,9 @@ class LiveSessionsTest {
         // Slice 3: the board's trays, decisions and reading, and the Live look-up names them.
         listOf("Its board lines", "Its decisions lines", "Its reading lines", "A counts line means").forEach { assertTrue(it in AskService.SYSTEM, it) }
         assertTrue(listOf("board", "decisions", "reading", "kids", "needs_you").all { it in areas })
+        // Slice 4: the places that were Later.
+        listOf("Its emergency lines", "Its news lines", "Its voice_notes lines", "Its health lines", "Its vault lines").forEach { assertTrue(it in AskService.SYSTEM, it) }
+        assertTrue(listOf("emergency", "news", "voice_notes", "health", "vault").all { it in areas })
     }
 
     @Test

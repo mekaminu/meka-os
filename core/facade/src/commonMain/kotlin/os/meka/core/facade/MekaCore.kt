@@ -3762,6 +3762,14 @@ class MekaCore(
         }
     }
 
+    private val _heldVoiceNotes = MutableStateFlow<List<os.meka.core.domain.VoiceNote>?>(null)
+
+    /**
+     * Obi sees everything, slice 4: the voice notes this device keeps (the Fold's and the Mac's own stores call this
+     * whenever their list changes), so Ask and Live's look-up can read them. Kept in memory only; null until told.
+     */
+    fun holdVoiceNotes(notes: List<os.meka.core.domain.VoiceNote>) { _heldVoiceNotes.value = notes.toList() }
+
     /** "Voice note · 14:02" for a note made at [atMs] (the subject its words are read under). */
     fun voiceNoteSubject(atMs: Long): String =
         os.meka.core.domain.VoiceNoteRules.subject(ZoneCalendar(timeZone).minuteOfDay(atMs))
@@ -10279,6 +10287,12 @@ class MekaCore(
                 board = obiSeesLines(os.meka.core.domain.ObiArea.BOARD, q, cal, full = os.meka.core.domain.ObiMoreRules.boardAsked(q)),
                 decisions = obiSeesLines(os.meka.core.domain.ObiArea.DECISIONS, q, cal, full = os.meka.core.domain.ObiMoreRules.decisionsAsked(q)),
                 reading = obiSeesLines(os.meka.core.domain.ObiArea.READING, q, cal, full = os.meka.core.domain.ObiMoreRules.readingAsked(q)),
+                // Obi sees everything, slice 4: the emergency card, News, voice notes, Health's status and the Vault.
+                emergency = obiSeesLines(os.meka.core.domain.ObiArea.EMERGENCY, q, cal, full = os.meka.core.domain.ObiRestRules.emergencyAsked(q)),
+                news = obiSeesLines(os.meka.core.domain.ObiArea.NEWS, q, cal, full = os.meka.core.domain.ObiRestRules.newsAsked(q)),
+                voiceNotes = obiSeesLines(os.meka.core.domain.ObiArea.VOICE_NOTES, q, cal, full = os.meka.core.domain.ObiRestRules.voiceNotesAsked(q)),
+                health = obiSeesLines(os.meka.core.domain.ObiArea.HEALTH, q, cal, full = os.meka.core.domain.ObiRestRules.healthAsked(q)),
+                vault = obiSeesLines(os.meka.core.domain.ObiArea.VAULT, q, cal, full = os.meka.core.domain.ObiRestRules.vaultAsked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -11911,6 +11925,13 @@ class MekaCore(
             os.meka.core.domain.ObiArea.DECISIONS -> os.meka.core.domain.ObiMoreRules.decisionLines(_lists.value.decisions, full)
             os.meka.core.domain.ObiArea.READING -> os.meka.core.domain.ObiMoreRules.readingLines(_reading.value, full)
             os.meka.core.domain.ObiArea.KIDS -> os.meka.core.domain.ObiMoreRules.kidsLines(_kids.value, full)
+            // Slice 4: the places that were Later; all of each when asked ([full]), else one counts line.
+            os.meka.core.domain.ObiArea.EMERGENCY -> os.meka.core.domain.ObiRestRules.emergencyLines(_emergency.value, full)
+            os.meka.core.domain.ObiArea.NEWS -> os.meka.core.domain.ObiRestRules.newsLines(_newsPlace.value, full)
+            os.meka.core.domain.ObiArea.VOICE_NOTES -> os.meka.core.domain.ObiRestRules.voiceNoteLines(
+                _heldVoiceNotes.value?.let { voiceNoteRows(it, onMac = false) }.orEmpty(), full)
+            os.meka.core.domain.ObiArea.HEALTH -> os.meka.core.domain.ObiRestRules.healthLines(_health.value, full)
+            os.meka.core.domain.ObiArea.VAULT -> os.meka.core.domain.ObiRestRules.vaultLines(_documents.value, full)
         }
         return lines.take(area.max)
     }

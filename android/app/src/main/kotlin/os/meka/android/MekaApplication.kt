@@ -248,6 +248,12 @@ open class MekaApplication : Application() {
         }
         // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
         appScope.launch { runCatching { core.holdCaptured(captures.items.value, captures.lists.value) } }
+        // Obi sees everything, slice 4: the voice notes this phone keeps reach the core in memory (read once at start,
+        // then whenever the list changes), so Ask and Live's look-up can answer "what did I say in my voice notes?".
+        appScope.launch {
+            runCatching { os.meka.android.capture.VoiceNoteStore.load(this@MekaApplication) }
+            os.meka.android.capture.VoiceNoteStore.notes.collect { notes -> notes?.let { runCatching { core.holdVoiceNotes(it) } } }
+        }
         // People, slice 4: the Family, Always notify and watched lists (they stay on this phone) give those people a
         // People row; passed to this phone's core in memory whenever they change, and once at process start.
         appScope.launch {

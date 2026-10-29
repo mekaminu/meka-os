@@ -132,11 +132,12 @@ object ObiCoverage {
         HelpPlace.MONEY -> ObiReach.Tool(LiveToolRules.MONEY_TOOL)
         HelpPlace.MAIL -> ObiReach.Tool(LiveToolRules.MAIL_TOOL)
         HelpPlace.BRIEF, HelpPlace.WEEK_AHEAD, HelpPlace.SHUTDOWN, HelpPlace.CALENDARS -> ObiReach.Tool(LiveToolRules.LOOK_UP_TOOL)
-        HelpPlace.EMERGENCY -> ObiReach.Later("the emergency card's numbers and where things are")
-        HelpPlace.NEWS -> ObiReach.Later("the news hub's headlines (Barça's matches already reach him)")
-        HelpPlace.VOICE_NOTES -> ObiReach.Later("voice notes' summaries")
-        HelpPlace.HEALTH -> ObiReach.Later("Health's status rows")
-        HelpPlace.VAULT -> ObiReach.Later("the Vault's documents list (names and dates, never contents)")
+        // Slice 4 ([ObiRestRules]): the places that were Later.
+        HelpPlace.EMERGENCY -> ObiReach.Areas(listOf(ObiArea.EMERGENCY))
+        HelpPlace.NEWS -> ObiReach.Areas(listOf(ObiArea.NEWS))
+        HelpPlace.VOICE_NOTES -> ObiReach.Areas(listOf(ObiArea.VOICE_NOTES))
+        HelpPlace.HEALTH -> ObiReach.Areas(listOf(ObiArea.HEALTH))
+        HelpPlace.VAULT -> ObiReach.Areas(listOf(ObiArea.VAULT))
         HelpPlace.BEDSIDE, HelpPlace.ABOUT_YOU, HelpPlace.NOTIFICATIONS, HelpPlace.SPEAK_UP, HelpPlace.APPEARANCE,
         HelpPlace.VOICE, HelpPlace.TALK, HelpPlace.FAMILY, HelpPlace.WATCH, HelpPlace.RECOVERY, HelpPlace.AUTONOMY,
         HelpPlace.AI, HelpPlace.ACTIVITY, HelpPlace.SETUP, HelpPlace.YOUR_DATA, HelpPlace.SETTINGS,

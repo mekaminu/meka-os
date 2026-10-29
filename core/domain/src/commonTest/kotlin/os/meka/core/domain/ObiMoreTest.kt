@@ -81,7 +81,8 @@ class ObiMoreTest {
     fun everyPlaceInNavilifeSaysHowObiReachesIt() {
         // The `when` is exhaustive; this pins what isn't readable yet, so nothing is left out quietly.
         val later = HelpPlace.entries.filter { ObiCoverage.reach(it) is ObiReach.Later }.toSet()
-        assertEquals(setOf(HelpPlace.EMERGENCY, HelpPlace.NEWS, HelpPlace.VOICE_NOTES, HelpPlace.HEALTH, HelpPlace.VAULT), later)
+        // Slice 4 reached the last five (the emergency card, News, voice notes, Health, the Vault): none is left.
+        assertEquals(emptySet(), later)
         // Every tile in Ask's Life grid is a place with a reach of its own.
         LifeTile.entries.forEach { t ->
             val place = HelpPlace.entries.single { it.name == t.name }

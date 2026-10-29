@@ -520,6 +520,9 @@ final class CoreModel {
         core.helpOnMac = true
         // The Vault, slice 2a: the Secure Enclave agreement key and CryptoKit hold the household's Vault key.
         core.vaultCrypto = MacVaultCrypto()
+        // Obi sees everything, slice 4: the voice notes this Mac keeps reach the core (now, and whenever they change).
+        MacVoiceNoteStore.shared.onChange = { notes in core.holdVoiceNotes(notes: notes) }
+        MacVoiceNoteStore.shared.load()
         // Trading approvals, slice 2: this Mac's Touch ID-only approval key is known (synced) before the first yes, so
         // Kestrel can pin it. Nothing without Touch ID and a Secure Enclave.
         if MacBiometric.available, let approvalKey = MacApprovalKey.publicKey() {

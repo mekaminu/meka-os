@@ -39,7 +39,13 @@ enum class ObiArea(val key: String, val kind: AskItemKind, val label: String, va
     DECISIONS("decisions", AskItemKind.DECISIONS, "Decisions", "Lists → Decisions", ObiMoreRules.DECISIONS_MAX),
     READING("reading", AskItemKind.READING, "Reading", "Reading", ObiMoreRules.READING_MAX),
     // A club session's title comes from a club's calendar, so the Kids lines count as other people's words.
-    KIDS("kids", AskItemKind.KIDS, "Kids", "Kids", KidAskRules.ASK_LINES, untrusted = true);
+    KIDS("kids", AskItemKind.KIDS, "Kids", "Kids", KidAskRules.ASK_LINES, untrusted = true),
+    // Slice 4 ([ObiRestRules]): the places that were Later. Headlines are other people's words.
+    EMERGENCY("emergency", AskItemKind.EMERGENCY, "the emergency card", "Ask → Life → Emergency card", ObiRestRules.EMERGENCY_MAX),
+    NEWS("news", AskItemKind.NEWS, "News", "Ask → Daily → News", ObiRestRules.NEWS_MAX, untrusted = true),
+    VOICE_NOTES("voice_notes", AskItemKind.VOICE_NOTES, "Voice notes", "Ask → Daily → Voice notes", ObiRestRules.VOICE_NOTES_MAX),
+    HEALTH("health", AskItemKind.HEALTH, "Navilife's health (what's working)", "Ask → Settings → Health", ObiRestRules.HEALTH_MAX),
+    VAULT("vault", AskItemKind.VAULT, "the Vault's documents", "Ask → Settings → Vault", ObiRestRules.VAULT_MAX);
 
     companion object {
         fun of(key: String?): ObiArea? = key?.trim()?.lowercase()?.let { k -> entries.firstOrNull { it.key == k } }
