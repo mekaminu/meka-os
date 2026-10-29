@@ -436,11 +436,11 @@ internal fun NeedsYouColumn(
     // WhatsApp Open chat (2026-10-29): a 1:1 chat's number looked up on this phone (Family, always-notify, then a contact
     // of exactly that name), so Open chat lands in the chat with the reply typed. In memory only, never stored or synced.
     val lookupContext = LocalContext.current.applicationContext
-    val peopleLists by (lookupContext as MekaApplication).captures.lists.collectAsState()
+    val lookupLists by (lookupContext as MekaApplication).captures.lists.collectAsState()
     val lookupKey = remember(allTriage) { allTriage.filter(TriageReplyRules::needsLookup).map { it.id to TriageReplyRules.who(it) } }
-    val found by androidx.compose.runtime.produceState(emptyMap<String, String>(), lookupKey, peopleLists) {
+    val found by androidx.compose.runtime.produceState(emptyMap<String, String>(), lookupKey, lookupLists) {
         value = if (lookupKey.isEmpty()) emptyMap() else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { os.meka.android.work.ChatNumbers.find(lookupContext, allTriage, peopleLists) }.getOrDefault(emptyMap())
+            runCatching { os.meka.android.work.ChatNumbers.find(lookupContext, allTriage, lookupLists) }.getOrDefault(emptyMap())
         }
     }
     val triage = remember(allTriage, hidden, found) { TriageReplyRules.withNumbers(InstantTapRules.triage(allTriage, hidden), found) }
