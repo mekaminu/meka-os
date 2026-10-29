@@ -10,7 +10,7 @@ package os.meka.core.domain
  * - A row is as tall as its fullest day ([rowHeight]), never less than [LEAST_WEEKDAYS_DP] / [LEAST_WEEKEND_DP]: no
  *   column scrolls by itself or cuts a card off, and a quiet week leaves no gap; the week scrolls as one.
  * - One pill everywhere on the columns ([pillStacked]): "planned" over the figures, the same height on every day.
- * - A past day wears the same pill ([pastPill]): "done" over "2 of 3" (or "–"), its bar filled by what was done.
+ * - A past day wears the same pill ([pastPill]): "done" over "2 of 3" (or "none"), its bar filled by what was done.
  */
 object BoardOpenFoldRules {
     /** The least the weekday row is drawn (dp): its header, pill and "+ add" with room to drop a card. */
@@ -23,7 +23,7 @@ object BoardOpenFoldRules {
     const val DONE = "done"
 
     /** A past day with nothing on it: its pill's value. */
-    const val NOTHING = "–"
+    const val NOTHING = "none"
 
     /**
      * A row's height (dp) from each of its columns' content height [contents] (head, cards and "+ add"): the fullest
@@ -36,7 +36,7 @@ object BoardOpenFoldRules {
     fun pillStacked(dense: Boolean, compact: Boolean): Boolean = dense || compact
 
     /**
-     * A past day's pill in the budget pill's style: "done" over "2 of 3" (its tasks done of its tasks), or "–" when it
+     * A past day's pill in the budget pill's style: "done" over "2 of 3" (its tasks done of its tasks), or "none" when it
      * had none; the bar is the share done. Null for today and later (they have the budget pill).
      */
     fun pastPill(day: BoardDay): PlannerBudget? {

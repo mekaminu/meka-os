@@ -48,7 +48,7 @@ class BoardOpenFoldTest {
         assertFalse(p.over)
         assertEquals("2 of 3 done", p.spoken)
         val empty = BoardOpenFoldRules.pastPill(day(past = true))!!
-        assertEquals("–", empty.value)
+        assertEquals("none", empty.value)
         assertEquals(0f, empty.fill)
         assertEquals("Nothing planned", empty.spoken)
         assertNull(BoardOpenFoldRules.pastPill(day(past = false)))
