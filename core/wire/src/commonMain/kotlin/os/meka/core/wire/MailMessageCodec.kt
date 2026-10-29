@@ -32,7 +32,11 @@ object MailMessageCodec {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    data class Request(val kind: String, val id: String, val batch: String? = null, val images: Boolean = false) {
+    /**
+     * [peek] (Renewals keep their email, slice 3): the app reads the email only to fill a Renewals item's cost after his
+     * Add, not to show it, so Mail's "Mark an email read when I open it" doesn't apply. Sent only when true.
+     */
+    data class Request(val kind: String, val id: String, val batch: String? = null, val images: Boolean = false, val peek: Boolean = false) {
         companion object {
             const val ITEM = "item"
             const val TIDIED = "tidied"
@@ -68,6 +72,7 @@ object MailMessageCodec {
         put("id", r.id)
         r.batch?.let { put("batch", it) }
         put("images", r.images)
+        if (r.peek) put("peek", true)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("mail message request") {
@@ -77,7 +82,7 @@ object MailMessageCodec {
         val id = handle(str(o, "id")) ?: throw IllegalArgumentException("id")
         val batch = handle(str(o, "batch"))
         if (kind == Request.TIDIED && batch == null) throw IllegalArgumentException("batch")
-        Request(kind, id, batch, (o["images"] as? JsonPrimitive)?.booleanOrNull ?: false)
+        Request(kind, id, batch, (o["images"] as? JsonPrimitive)?.booleanOrNull ?: false, (o["peek"] as? JsonPrimitive)?.booleanOrNull ?: false)
     }
 
     fun encodeResponse(r: Response): String = buildJsonObject {

@@ -114,4 +114,22 @@ class MailSourceTest {
         assertEquals(listOf("Amount", "Due"), b.tiles.map { it.label })
         assertEquals("£82.50", b.tiles[0].value)
     }
+
+    @Test
+    fun theWholeEmailsRenewalPriceFillsACostNeverWritten() {
+        // Slice 3: the price beside the renewal words, not an offer elsewhere in the email.
+        assertEquals(2400L, MailRenewalRules.bodyPrice("Save £5 at our shop!\n\nYour plan renews on 3 Nov for £24.00 a year."))
+        assertEquals(41230L, MailRenewalRules.bodyPrice("Renewal price: £412.30. Your policy renews on 1 Dec."))
+        assertNull(MailRenewalRules.bodyPrice("Save £5 at our shop this week. Thanks for being with us."))
+        assertNull(MailRenewalRules.bodyPrice("Your plan renews soon."))
+        assertNull(MailRenewalRules.bodyPrice(null))
+        // Far past the renewal words: not taken.
+        assertNull(MailRenewalRules.bodyPrice("Your plan renews on 3 Nov." + " ".repeat(5) + "x".repeat(300) + " for £9.99"))
+        // Only a Cost never written: a cost he set or cleared stands.
+        val text = "It renews on 3 Nov for £24.00."
+        assertEquals(mapOf(ObligationFields.COST_MINOR to 2400L.fv(), ObligationFields.CURRENCY to "GBP".fv()), MailSourceRules.costFill(emptyMap(), text))
+        assertNull(MailSourceRules.costFill(mapOf(ObligationFields.COST_MINOR to os.meka.core.sync.FieldValue.Null), text))
+        assertNull(MailSourceRules.costFill(mapOf(ObligationFields.COST_MINOR to 999L.fv()), text))
+        assertNull(MailSourceRules.costFill(emptyMap(), "Nothing to see here."))
+    }
 }

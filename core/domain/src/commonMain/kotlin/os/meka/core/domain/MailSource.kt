@@ -1,6 +1,7 @@
 package os.meka.core.domain
 
 import os.meka.core.sync.FieldValue
+import os.meka.core.sync.fv
 
 /*
  * Renewals keep their email (Meka, 2026-10-28 20:14: "I got this but can't even find the email to get the details"),
@@ -135,6 +136,18 @@ object MailSourceRules {
                 .joinToString(". ") + ".",
             account = account, receivedDay = day,
         )
+    }
+
+    /**
+     * Renewals keep their email, slice 3: the Cost to write on a Renewals item from its whole email's [text] (the reader
+     * opened at his tap, or read once after his Add), only when the item never had one ([ObligationFields.COST_MINOR]
+     * never written: a cost he cleared stays cleared) and the email names a renewal price ([MailRenewalRules.bodyPrice]).
+     * Null: nothing to write.
+     */
+    fun costFill(fields: Map<String, FieldValue>, text: String?): Map<String, FieldValue>? {
+        if (ObligationFields.COST_MINOR in fields) return null
+        val pence = MailRenewalRules.bodyPrice(text) ?: return null
+        return mapOf(ObligationFields.COST_MINOR to pence.fv(), ObligationFields.CURRENCY to "GBP".fv())
     }
 
     /** The reader's stand-in while the email loads, or when it can't be read. */

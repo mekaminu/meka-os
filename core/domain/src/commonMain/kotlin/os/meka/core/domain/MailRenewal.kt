@@ -276,6 +276,27 @@ object MailRenewalRules {
         return CivilDate.toEpochDay(y, mo, d)
     }
 
+    /** Renewals keep their email, slice 3: how much of an email's text [bodyPrice] reads. */
+    const val BODY_MAX = 20_000
+    private val SPACES = Regex("""\s+""")
+
+    /**
+     * Renewals keep their email, slice 3: the renewal price the whole email names, for an item whose subject and
+     * preview didn't: the first £ amount right after a price word ([price]) within 80 characters before or 160 after a
+     * renewal word ("Your plan renews on 3 Nov for £24.00", "Renewal price: £412.30 · your policy renews …"), so a
+     * "save £5" elsewhere in the email isn't taken. Null when none, or past [BODY_MAX]. Someone else's words: only a
+     * number comes out of it (ADR-006).
+     */
+    fun bodyPrice(text: String?): Long? {
+        val t = text?.take(BODY_MAX)?.replace(SPACES, " ")?.takeIf { it.isNotBlank() } ?: return null
+        for (m in RENEWAL.findAll(t)) {
+            val from = (m.range.first - 80).coerceAtLeast(0)
+            val to = (m.range.last + 1 + 160).coerceAtMost(t.length)
+            price(listOf(t.substring(from, to)))?.let { return it }
+        }
+        return null
+    }
+
     /** The first £ amount right after a price word, in the subject then the preview. */
     private fun price(texts: List<String>): Long? {
         for (t in texts) {

@@ -13,6 +13,10 @@ class MailMessageCodecTest {
         assertEquals(req, MailMessageCodec.decodeRequest(MailMessageCodec.encodeRequest(req)))
         val item = MailMessageCodec.Request(MailMessageCodec.Request.ITEM, "mi42abcdef")
         assertEquals(item, MailMessageCodec.decodeRequest(MailMessageCodec.encodeRequest(item)))
+        // Renewals keep their email, slice 3: a peek goes round; an older app's request reads as not one.
+        val peek = MailMessageCodec.Request(MailMessageCodec.Request.FIND, "mf42abcdef", peek = true)
+        assertEquals(peek, MailMessageCodec.decodeRequest(MailMessageCodec.encodeRequest(peek)))
+        assertFalse(MailMessageCodec.encodeRequest(item).contains("peek"))
         val resp = MailMessageCodec.Response(
             state = "ok", from = MailMessageCodec.Person("Alex", "alex@example.com"),
             to = listOf(MailMessageCodec.Person(null, "sam@example.com")), cc = emptyList(), atMs = 1_790_985_600_000L,

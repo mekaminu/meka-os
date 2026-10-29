@@ -38,6 +38,7 @@ class MailReaderFacadeTest {
         private val sync = os.meka.core.testing.FaultyTransport(SyncService(serverOps))
         val asked = mutableListOf<MailMessageCodec.Request>()
         var down = false
+        var html = "<p>Are you still OK to drive?</p>"
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply =
@@ -47,7 +48,7 @@ class MailReaderFacadeTest {
             if (down) throw TransportException("offline")
             return MailMessageCodec.Response(
                 "ok", MailMessageCodec.Person("Sam Taylor", "sam@example.com"), listOf(MailMessageCodec.Person("Alex", "alex@example.com")),
-                atMs = now - hour, subject = "Saturday", html = "<p>Are you still OK to drive?</p>",
+                atMs = now - hour, subject = "Saturday", html = html,
                 attachments = listOf(
                     MailMessageCodec.Attachment("route.pdf", 52_000, "application/pdf"),
                     MailMessageCodec.Attachment("menu.docx", 9_000, null),
@@ -168,5 +169,32 @@ class MailReaderFacadeTest {
         // Turned on in Mail: the reader says opening it marked it read (the server does the marking).
         assertEquals(os.meka.core.domain.MailAutopilotPanelRules.readerReadSwitchedLine(true), fold.setMailReaderMarksRead(true).line)
         assertTrue(fold.readMailItem(id).note.endsWith(MailReaderRules.MARKS_READ_NOTE))
+    }
+
+    @Test
+    fun aRenewalsCostComesFromTheWholeEmailWhenThePreviewHadNone() = runTest {
+        // Renewals keep their email, slice 3: the preview named no price; the email does.
+        val received = os.meka.core.domain.CivilDate.toEpochDay(2026, 10, 16)
+        val r = os.meka.core.domain.MailRenewalRules.read("Streamly", null, "Your membership renews soon", "It renews on 3 Nov", received)!!
+        assertNull(r.pence)
+        val find = os.meka.core.domain.MailRenewalRules.findId("acc1", "m1", r)
+        os.meka.core.domain.MailRenewalRules.serverFields(r, "Personal", "Your membership renews soon", received, "Streamly").forEach { (f, v) ->
+            serverOps.append(Op("srvmr${k++}", "hh", EntityTypes.MAIL_FIND, find, f, v, clock.now(), emptyList(), "server"))
+        }
+        server.html = "<p>Hi Alex, save £5 on our shop this week.</p><p>Your plan renews on 3 Nov for £24.00 a year.</p>"
+        val fold = core()
+        assertTrue(fold.syncNow())
+        fold.addMailFind(find)
+        val item = os.meka.core.domain.MailRenewalRules.obligationId(find)
+        fun cost() = fold.listsView.value.renewals.let { it.attention + it.upcoming + it.later }.single { it.id == item }.costPence
+        // After the tap: the email is peeked at (never marked read) and its price becomes Cost.
+        fold.fillCostAfterAdd(find, item)
+        assertTrue(server.asked.any { it.kind == MailMessageCodec.Request.FIND && it.id == find && it.peek })
+        assertEquals(2400L, cost())
+        // Opening the email later (his own open, not a peek) never writes over a Cost already there.
+        server.html = "<p>Your plan renews on 3 Nov for £30.00 a year.</p>"
+        assertNull(fold.readRenewalEmail(item).problem)
+        assertTrue(server.asked.any { it.id == find && !it.peek })
+        assertEquals(2400L, cost())
     }
 }

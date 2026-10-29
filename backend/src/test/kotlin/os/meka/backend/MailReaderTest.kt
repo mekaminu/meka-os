@@ -204,6 +204,9 @@ class MailReaderTest {
                 os.meka.core.domain.MailAutopilotFields.READER_MARKS_READ, os.meka.core.sync.FieldValue.Bool(true), clock.now(), emptyList(), "fold",
             ))
         }
+        // Renewals keep their email, slice 3: a peek (filling a cost after his Add) is never his open: not marked.
+        assertEquals(MailMessageAnswer.OK, i.readMailMessage("home", request.copy(peek = true)).state)
+        assertEquals(emptyList<String>(), box.markedRead)
         assertEquals(MailMessageAnswer.OK, i.readMailMessage("home", request).state)
         assertEquals(listOf("p0"), box.markedRead)
         // Gone: nothing is marked.

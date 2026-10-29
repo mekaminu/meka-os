@@ -7793,6 +7793,8 @@ class MekaCore(
             os.meka.core.domain.MailSourceRules.fallback(box, cal, nowMs()), images,
         )
         if (view.problem != null) return view
+        // Slice 3: the email he opened names the price the preview didn't: the item's Cost is filled (never over his).
+        onCore { fillRenewalCost(id, view.text) }
         val facts = lastMailFacts ?: if (box.account == os.meka.core.domain.MailLabel.OUTLOOK.label) emptyList() else try {
             accountsApi?.mailAccounts()?.also { lastMailFacts = it }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
@@ -7801,6 +7803,33 @@ class MekaCore(
             done = true, accounts = facts.orEmpty(), cal = cal,
         )
         return view.copy(openLink = link)
+    }
+
+    /**
+     * Renewals keep their email, slice 3: writes the Cost its whole email names ([os.meka.core.domain.MailSourceRules.costFill])
+     * on the Renewals item [itemId], when it never had one. Returns whether it wrote. Call on the core.
+     */
+    private fun fillRenewalCost(itemId: String, text: String?): Boolean {
+        val s = replica.entity(os.meka.core.domain.EntityTypes.OBLIGATION, itemId)?.takeIf { !it.deleted } ?: return false
+        val fill = os.meka.core.domain.MailSourceRules.costFill(s.fields, text) ?: return false
+        replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, itemId, fill)
+        refresh()
+        return true
+    }
+
+    /**
+     * Renewals keep their email, slice 3: after **Add** on a renewal whose subject and preview named no price, its email
+     * is read once (a peek: never marked read, nothing kept) and the price it names becomes the new item's Cost. Off the
+     * tap's path: Add has already shown; a failure just leaves Cost empty (Open the email tries again).
+     */
+    internal suspend fun fillCostAfterAdd(findId: String, itemId: String) {
+        val api = accountsApi ?: return
+        val r = try {
+            api.mailMessage(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.FIND, findId, peek = true))
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { null } ?: return
+        if (r.state != os.meka.core.domain.MailMessageAnswer.OK) return
+        val text = r.text ?: r.html?.let { os.meka.core.domain.MailHtmlSanitizer.text(it) }
+        onCore { fillRenewalCost(itemId, text) }
     }
 
     /**
@@ -8176,6 +8205,10 @@ class MekaCore(
         val revive = if (before?.deleted == true) mapOf(os.meka.core.sync.DELETED_FIELD to false.fv()) else emptyMap()
         replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, R.obligationFields(f, nowMs(), cal) + revive)
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
+        // Renewals keep their email, slice 3: no price in the preview: read it from the whole email, after the tap.
+        if (f.pence == null && before?.fields?.containsKey(os.meka.core.domain.ObligationFields.COST_MINOR) != true) {
+            scope.launch { runCatching { fillCostAfterAdd(id, oid) } }
+        }
         mailFindUndo = {
             if (before == null) {
                 replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, mapOf(

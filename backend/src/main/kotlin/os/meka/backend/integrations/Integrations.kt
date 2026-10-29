@@ -444,7 +444,8 @@ class Integrations(
                     ?: return os.meka.core.wire.MailMessageCodec.Response(answer.GONE)
                 // Slice 3: Mail's "Mark an email read when I open it" (off unless he turned it on): his own open, so
                 // it's marked read in his mail too; best effort, the email is shown either way.
-                if (readerMarksRead(householdId)) {
+                // Renewals keep their email, slice 3: a peek (to fill a cost after his Add) is never his open.
+                if (!request.peek && readerMarksRead(householdId)) {
                     markRead(m, token, listOf(id), true)
                     runCatching { ms.markSeen(a.id, listOf(id)) }
                 }
