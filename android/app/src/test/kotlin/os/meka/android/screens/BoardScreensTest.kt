@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.click
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -420,8 +421,14 @@ class BoardScreensTest {
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "cover-dark-move-sheet"))
         ScreenShots.assertSensible(compose, "cover-dark-move-sheet")
-        if (compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_SHEET_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
-            fail("no Move to sheet after the tap (Move up shown: ${compose.onAllNodesWithText("Move up").fetchSemanticsNodes().size})")
+        fun sheetShown() = compose.onAllNodesWithTag(os.meka.android.calendar.FOLDED_SHEET_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        if (!sheetShown()) {
+            val bySemantics = "MOVE TO ${compose.onAllNodesWithText("MOVE TO", useUnmergedTree = true).fetchSemanticsNodes().size}, " +
+                "titles ${compose.onAllNodesWithText("Fix the gate latch", useUnmergedTree = true).fetchSemanticsNodes().size}, " +
+                "core sheet ${os.meka.core.domain.BoardFoldedRules.moveSheet(core.weekBoard.value, gate)?.chips?.map { it.label }}"
+            compose.onNodeWithContentDescription(label(gate)).performTouchInput { click(center) }
+            settle()
+            fail("no Move to sheet after the tap ($bySemantics; a real tap opens it: ${sheetShown()})")
         }
         listOf("Tomorrow", "Wed 21", "Thu 22", "Fri 23", "Sat 24", "Sun 25", "Someday").forEach { chip ->
             if (compose.onAllNodesWithText(chip, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no $chip chip in the sheet")
