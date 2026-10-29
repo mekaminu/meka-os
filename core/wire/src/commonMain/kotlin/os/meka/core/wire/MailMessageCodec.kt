@@ -36,6 +36,8 @@ object MailMessageCodec {
         companion object {
             const val ITEM = "item"
             const val TIDIED = "tidied"
+            /** Renewals keep their email: a Renewals item's email by its find's id (or a server-written item's own id). */
+            const val FIND = "find"
         }
     }
 
@@ -71,7 +73,7 @@ object MailMessageCodec {
     fun decodeRequest(body: String): Request = wrap("mail message request") {
         val o = json.parseToJsonElement(body).jsonObject
         checkVersion(o)
-        val kind = str(o, "kind")?.takeIf { it == Request.ITEM || it == Request.TIDIED } ?: throw IllegalArgumentException("kind")
+        val kind = str(o, "kind")?.takeIf { it == Request.ITEM || it == Request.TIDIED || it == Request.FIND } ?: throw IllegalArgumentException("kind")
         val id = handle(str(o, "id")) ?: throw IllegalArgumentException("id")
         val batch = handle(str(o, "batch"))
         if (kind == Request.TIDIED && batch == null) throw IllegalArgumentException("batch")
@@ -167,7 +169,7 @@ object MailMessageCodec {
     fun decodeAttachmentRequest(body: String): AttachmentRequest = wrap("mail attachment request") {
         val o = json.parseToJsonElement(body).jsonObject
         checkVersion(o)
-        val kind = str(o, "kind")?.takeIf { it == Request.ITEM || it == Request.TIDIED } ?: throw IllegalArgumentException("kind")
+        val kind = str(o, "kind")?.takeIf { it == Request.ITEM || it == Request.TIDIED || it == Request.FIND } ?: throw IllegalArgumentException("kind")
         val id = handle(str(o, "id")) ?: throw IllegalArgumentException("id")
         val batch = handle(str(o, "batch"))
         if (kind == Request.TIDIED && batch == null) throw IllegalArgumentException("batch")

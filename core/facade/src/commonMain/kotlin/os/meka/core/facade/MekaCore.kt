@@ -7763,6 +7763,34 @@ class MekaCore(
     }
 
     /**
+     * Renewals keep their email (Meka, 2026-10-28), slice 1: **Open the email** on a Renewals card made from an email
+     * ([os.meka.core.domain.RenewalItem.fromEmail]): that exact message read whole from its provider now (through the
+     * server, by Navilife's own handle), with Open in Gmail / Outlook at the reader's foot; when it's gone or can't be
+     * read the reader says so over what the card already has. Nothing is kept; not marked read (unless Mail's setting).
+     */
+    suspend fun readRenewalEmail(id: String, images: Boolean = false): os.meka.core.domain.MailReaderView {
+        val cal = ZoneCalendar(timeZone)
+        val box = onCore { renewals.items().firstOrNull { it.id == id }?.fromEmail }
+            ?: return os.meka.core.domain.MailReaderRules.view(
+                os.meka.core.domain.MailMessageAnswer(os.meka.core.domain.MailMessageAnswer.UNKNOWN),
+                os.meka.core.domain.MailReaderFallback("Unknown sender", "", null, nowMs(), "your"), nowMs(), cal, images, null, false,
+            )
+        val view = readMail(
+            os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.FIND, box.handle, images = images),
+            os.meka.core.domain.MailSourceRules.fallback(box, cal, nowMs()), images,
+        )
+        if (view.problem != null) return view
+        val facts = lastMailFacts ?: if (box.account == os.meka.core.domain.MailLabel.OUTLOOK.label) emptyList() else try {
+            accountsApi?.mailAccounts()?.also { lastMailFacts = it }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        val link = os.meka.core.domain.MailOpenRules.itemLink(
+            box.account, view.from, view.fromAddress, view.subject, box.receivedDay?.let { cal.toEpochMs(it, 12 * 60) } ?: nowMs(),
+            done = true, accounts = facts.orEmpty(), cal = cal,
+        )
+        return view.copy(openLink = link)
+    }
+
+    /**
      * Read the full email, slice 2: the reader's attachment [index] (of [view]) fetched from the provider now and made
      * ready to open — a picture or PDF for Navilife's own viewer (only when its bytes are one), another file for another
      * app (after the reader's confirm), or a line why not. A file that could run something, or over 15 MB, isn't

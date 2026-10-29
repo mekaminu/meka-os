@@ -71,6 +71,11 @@ data class RenewalItem(
      * paid one ([BillRules.previousCost]). Null otherwise.
      */
     val prevCostPence: Long? = null,
+    /**
+     * Renewals keep their email, slice 1: "From the email" (who sent it, the subject, when it came, what was read) and
+     * the handle Open the email asks for; null for one he typed ([MailSourceRules]).
+     */
+    val fromEmail: RenewalEmail? = null,
 ) {
     /** Shown in Needs you and counted in its badge. */
     val needsAttention: Boolean get() = state != RenewalState.LATER
@@ -620,6 +625,10 @@ class Renewals(
             val due = dueDayOf(s) ?: return@mapNotNull null
             PaidBill(s[ActionableFields.TITLE].textOrNull ?: return@mapNotNull null, due, cost)
         }
+        // Renewals keep their email: the finds whose Add made an item, by that item's id.
+        val finds = MailSourceRules.findsByItem(
+            replica.entities(EntityTypes.MAIL_FIND).filter { !it.deleted }.mapNotNull { MailRenewalRules.read(it.ref.entityId, it.fields) },
+        )
         return all
             .filter { s -> s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }?.isTerminal != true }
             .mapNotNull { s ->
@@ -660,7 +669,14 @@ class Renewals(
                     payLink = SessionRules.cleanAppLink(s[ObligationFields.PAY_LINK].textOrNull),
                     forChild = s[ObligationFields.FOR_CHILD].textOrNull?.takeIf { it.isNotBlank() },
                     prevCostPence = prev,
-                )
+                ).let { item ->
+                    val find = finds[s.ref.entityId]
+                    when {
+                        find != null -> item.copy(fromEmail = MailSourceRules.box(find, today))
+                        MailSourceRules.fromServerMail(s.fields) -> item.copy(fromEmail = MailSourceRules.box(item, today))
+                        else -> item
+                    }
+                }
             }
     }
 

@@ -7641,6 +7641,13 @@ final class CoreModel {
         return try? await core.readMailItem(id: id, images: images)
     }
 
+    /// Renewals keep their email (2026-10-28): Open the email on a Renewals row made from an email, that exact message
+    /// read now through Navilife's server (nothing kept). Only the item's id (a String) and a Bool cross to the core.
+    func readRenewalEmail(_ id: String, images: Bool) async -> MailReaderView? {
+        guard let core else { return nil }
+        return try? await core.readRenewalEmail(id: id, images: images)
+    }
+
     /// Read the full email, slice 2: one of the reader's attachments fetched now through Navilife's server, ready for the
     /// in-app viewer (a picture or PDF) or another app (after the sheet's confirm). The handle and the row are read here,
     /// on the main actor, into plain Strings and numbers; only those cross to the core.

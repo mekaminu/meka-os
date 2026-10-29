@@ -291,4 +291,37 @@ class MailReaderTest {
         box.fails = IllegalStateException("provider HTTP 503")
         assertEquals(MailMessageAnswer.FAILED, ask("home", 0, "consent.pdf").state)
     }
+
+    @Test
+    fun aRenewalKeepsItsEmailAndOpenTheEmailReadsThatOne() {
+        // Renewals keep their email (2026-10-28): the find keeps the sender's name and its message on the server's
+        // mirror row; the FIND handle reads that exact email, and a handle that isn't this household's reads nothing.
+        val box = Mailbox()
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val i = world(box, ms, ops)
+        box.headers["r1"] = MailHeader(
+            "r1", "t-r1", "billing@streamly.example", "Streamly", "Your membership renews soon", now - 60_000, unread = true, inInbox = true,
+            preview = "Your Streamly membership renews on 20 Oct for £10.99 a month · cancel by 18 Oct to avoid the charge",
+        )
+        box.whole["r1"] = letter.copy(from = MailPerson("Streamly", "billing@streamly.example"), subject = "Your membership renews soon")
+        val acc = connect(i)
+        i.syncAccount(acc)
+        val finds = os.meka.backend.integrations.EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
+        val (id, fields) = finds.entries.single { os.meka.core.domain.MailRenewalRules.read(it.key, it.value)?.kind == "RENEWAL" }
+        val f = os.meka.core.domain.MailRenewalRules.read(id, fields)!!
+        assertEquals("Streamly", f.fromName)
+        assertEquals(1099L, f.pence)
+        assertEquals(os.meka.core.domain.CivilDate.toEpochDay(2026, 10, 18), f.cancelByDay)
+        // The provider's ids never reach the apps.
+        assertFalse(fields.values.any { it.toString().contains("r1") }, fields.toString())
+        val r = i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.FIND, id))
+        assertEquals(MailMessageAnswer.OK, r.state)
+        assertEquals("Your membership renews soon", r.subject)
+        assertEquals(listOf("r1"), box.read)
+        assertEquals(MailMessageAnswer.UNKNOWN, i.readMailMessage("other", MailMessageCodec.Request(MailMessageCodec.Request.FIND, id)).state)
+        // Gone from the mailbox: said so.
+        box.whole.remove("r1")
+        assertEquals(MailMessageAnswer.GONE, i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.FIND, id)).state)
+    }
 }

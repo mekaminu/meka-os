@@ -256,6 +256,8 @@ private fun RenewalDetails(
     val reduced = Meka.reducedMotion
     item.subject?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
     item.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
+    // Renewals keep their email: who sent it and what was read, with Open the email.
+    item.fromEmail?.let { RenewalEmailBox(item.id, it, core, tap) }
     Actions {
         // Bills due: opens the page Meka saved as where he pays it; MEKA never pays.
         item.payLink?.let { link -> Action(BillRules.payLabel(link)) { tap(); runCatching { uri.openUri(link) } } }

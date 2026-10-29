@@ -236,6 +236,8 @@ private struct RenewalDetails: View {
     var body: some View {
         if let subject = item.subject { Text(subject).font(MekaType.body).foregroundStyle(palette.textSecondary) }
         if let notes = item.notes { Text(notes).font(MekaType.body).foregroundStyle(palette.textSecondary) }
+        // Renewals keep their email: who sent it and what was read, with Open the email.
+        if let box = item.fromEmail { RenewalEmailBox(id: item.id, box: box, palette: palette) }
         HStack(spacing: MekaSpace.l) {
             // Bills due: opens the page Meka saved as where he pays it; MEKA never pays.
             if let link = item.payLink, let url = URL(string: link) {
@@ -410,5 +412,58 @@ struct AddRenewalRow: View {
         guard problem == nil else { return }
         title = ""; cost = ""; cancelBy = nil; due = nil; kind = .other
         repeats = RenewalRules.shared.defaultRepeat(k: .other)
+    }
+}
+
+/// Renewals keep their email (Meka, 2026-10-28), slice 1, on the Mac: **From the email** on a Renewals row made from an
+/// email (who sent it, the subject, the day it came, and what Navilife read as small tiles) with **Open the email**,
+/// which opens the in-app reader sheet on that exact message (the sheet's scale-fade; Reduce Motion cross-fades), Open
+/// in Gmail / Outlook at its foot. Plain text only; only the item's id (a String) crosses to the core.
+private struct RenewalEmailBox: View {
+    @Environment(CoreModel.self) private var model
+    let id: String
+    let box: RenewalEmail
+    let palette: MekaPalette
+    @State private var reading = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(MailSourceRules.shared.BOX_TITLE.uppercased()).font(MekaType.captionStrong).foregroundStyle(palette.textTertiary)
+                Text(box.from).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                if let subject = box.subject {
+                    Text(subject).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(2)
+                }
+                Text(box.received).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                if !box.tiles.isEmpty {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(box.tiles, id: \.label) { t in
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(t.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                Text(t.value).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                            }
+                            .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                            .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.background))
+                        }
+                    }
+                    .padding(.top, MekaSpace.xxs)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(box.spoken)
+            MailNeedsPill(label: box.openLabel, palette: palette, spoken: "\(box.openLabel), \(box.from)") {
+                MekaHaptics.light()
+                reading = true
+            }
+            .padding(.top, MekaSpace.xxs)
+        }
+        .padding(MekaSpace.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .sheet(isPresented: $reading) {
+            let itemId = id
+            MailReaderSheet(palette: palette, load: { images in await model.readRenewalEmail(itemId, images: images) }, actions: [],
+                            attachment: { v, a in await model.openMailAttachment(v, a) })
+        }
     }
 }

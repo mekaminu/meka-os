@@ -18,6 +18,8 @@ import os.meka.core.domain.MailRefundRules
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.MailRenewalRules
+import os.meka.core.domain.MailSourceRules
+import os.meka.core.domain.ActionableFields
 import os.meka.core.domain.MailPromiseRules
 import os.meka.core.domain.SchoolMailRules
 import os.meka.core.domain.LifeAuditRules
@@ -504,11 +506,41 @@ class Integrations(
                     ms.messages(a.id).firstOrNull { MailNeedsRules.itemId(a.id, it.id) == request.id }?.id,
                 ).distinct()
             }
+            os.meka.core.wire.MailMessageCodec.Request.FIND -> {
+                val row = store.transaction { store.mirror(householdId, a.id) }[request.id] ?: return null
+                MailSourceRules.messageOf(row.remoteId)?.let { return listOf(it) }
+                sourceAgain(householdId, a, ms, request.id)
+            }
             else -> {
                 val batch = request.batch ?: return null
                 ms.tidied(a.id, batch).firstOrNull { MailTidiedRules.key(a.id, it.id) == request.id }?.let { listOf(it.movedId, it.id).distinct() }
             }
         }
+
+    /**
+     * Renewals keep their email, slice 1: an item written before its email was kept, found again among the account's
+     * kept headers: a find by the same subject (else sender) on the day it came ([MailSourceRules.sameEmail]); a bill,
+     * return or warranty by the email whose id makes the item's own id. Empty when none is found.
+     */
+    private fun sourceAgain(householdId: String, a: AccountRow, ms: MailStore, id: String): List<String> {
+        val headers = ms.messages(a.id)
+        reader.entity(householdId, EntityTypes.MAIL_FIND, id)?.let { fields ->
+            val f = MailRenewalRules.read(id, fields) ?: return emptyList()
+            return headers.filter { h ->
+                MailSourceRules.sameEmail(f.merchant, f.receivedDay, f.subject, h.fromName, h.fromAddress, h.subject, LONDON.epochDayOf(h.receivedAtMs))
+            }.sortedByDescending { it.receivedAtMs }.map { it.id }
+        }
+        headers.firstOrNull { MailReturnRules.obligationId(a.id, it.id) == id || MailWarrantyRules.obligationId(a.id, it.id) == id }
+            ?.let { return listOf(it.id) }
+        val title = reader.entity(householdId, EntityTypes.OBLIGATION, id)?.get(ActionableFields.TITLE)?.textOrNull?.lowercase() ?: return emptyList()
+        val maybe = headers.filter { h -> MailReceiptRules.merchant(h.fromName, h.fromAddress)?.lowercase()?.let { it in title } == true }
+        if (maybe.isEmpty()) return emptyList()
+        val previews = ms.previews(a.id, maybe.map { it.id })
+        return maybe.filter { h ->
+            val bill = MailBillRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, LONDON.epochDayOf(h.receivedAtMs))
+            bill != null && MailBillRules.obligationId(a.id, h.id, bill) == id
+        }.map { it.id }
+    }
 
     /** The email made safe for the apps: sanitised HTML, the text, who, when and the files' names and sizes. */
     private fun mailMessageResponse(f: os.meka.core.domain.MailMessageFacts, images: Boolean): os.meka.core.wire.MailMessageCodec.Response {
@@ -1046,7 +1078,8 @@ class Integrations(
         for ((h, day, r) in reads.sortedBy { it.first.receivedAtMs }) {
             val id = MailRenewalRules.findId(a.id, h.id, r)
             if (id in written || mirror.containsKey(id) || MailRenewalRules.alreadyOnRadar(r.merchant, r.renewDay, radar, LONDON)) continue
-            writeMail(a, id, MailRenewalRules.serverFields(r, account, h.subject, day), EntityTypes.MAIL_FIND)
+            writeMail(a, id, MailRenewalRules.serverFields(r, account, h.subject, day, h.fromName), EntityTypes.MAIL_FIND,
+                MailSourceRules.remoteId(h.id, h.threadId))
             written += id
         }
     }
@@ -1129,7 +1162,7 @@ class Integrations(
         for ((h, day, bill) in reads.sortedBy { it.first.receivedAtMs }) {
             val id = MailBillRules.obligationId(a.id, h.id, bill)
             if (id in written || mirror.containsKey(id) || MailBillRules.alreadyOnRadar(bill, radar, LONDON)) continue
-            writeMail(a, id, MailBillRules.fields(bill, account, day, nowMs, LONDON), EntityTypes.OBLIGATION)
+            writeMail(a, id, MailBillRules.fields(bill, account, day, nowMs, LONDON), EntityTypes.OBLIGATION, MailSourceRules.remoteId(h.id, h.threadId))
             written += id
         }
     }
@@ -1785,7 +1818,7 @@ class Integrations(
         if (ret.lastDay < LONDON.epochDayOf(now())) return false
         val id = MailReturnRules.obligationId(a.id, h.id)
         if (store.transaction { store.mirror(a.householdId, a.id) }.containsKey(id)) return false
-        writeMail(a, id, MailReturnRules.fields(ret, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION)
+        writeMail(a, id, MailReturnRules.fields(ret, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION, MailSourceRules.remoteId(h.id, h.threadId))
         return true
     }
 
@@ -1802,7 +1835,7 @@ class Integrations(
         if (w.endDay < LONDON.epochDayOf(now())) return false
         val id = MailWarrantyRules.obligationId(a.id, h.id)
         if (store.transaction { store.mirror(a.householdId, a.id) }.containsKey(id)) return false
-        writeMail(a, id, MailWarrantyRules.fields(w, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION)
+        writeMail(a, id, MailWarrantyRules.fields(w, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION, MailSourceRules.remoteId(h.id, h.threadId))
         return true
     }
 
@@ -2247,12 +2280,16 @@ class Integrations(
         if (wrote) runCatching { onChanged(a.householdId) }
     }
 
-    private fun writeMail(a: AccountRow, id: String, fields: Map<String, FieldValue>, type: String) {
+    /**
+     * [remoteId] (Renewals keep their email): the email an item was read from ([MailSourceRules.remoteId]), kept on its
+     * mirror row only, so Open the email reads that exact message; never synced.
+     */
+    private fun writeMail(a: AccountRow, id: String, fields: Map<String, FieldValue>, type: String, remoteId: String? = null) {
         val wrote = store.transaction {
             ops.transaction {
                 store.lockAccount(a.id)
                 val prev = store.mirror(a.householdId, a.id)[id]
-                write(a, id, 0, 0, false, prev, fields, type)
+                write(a, id, 0, 0, false, prev, fields, type, remoteId = remoteId ?: prev?.remoteId)
             }
         }
         if (wrote) runCatching { onChanged(a.householdId) }

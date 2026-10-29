@@ -26,6 +26,8 @@ data class MailRenewal(
     val merchant: String?,
     val kind: ObligationKind,
     val repeat: RenewalRepeat,
+    /** Renewals keep their email, slice 1: the last day to cancel when the email says ("cancel by 20 Nov"), else null. */
+    val cancelByDay: Long? = null,
 )
 
 /** What a find became: still to answer, added to the radar, or not needed. */
@@ -71,6 +73,10 @@ data class MailFind(
     val seen: Int? = null,
     /** Money slice 13c ([MoneyBusinessMail]): an invoice find's way, [MoneyBusinessMail.IN] or [MoneyBusinessMail.OUT]; else null. */
     val direction: String? = null,
+    /** Renewals keep their email, slice 1 (server-written on finds from now on): the sender's own name, else null. */
+    val fromName: String? = null,
+    /** Renewals keep their email, slice 1: the cancel-by day the email named ([MailRenewal.cancelByDay]), else null. */
+    val cancelByDay: Long? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -114,6 +120,10 @@ object MailFindFields {
     const val SEEN = "seen"
     /** Money slice 13c (server-written, once): an invoice find's way, "in" (paid to him) or "out" (a cost). */
     const val DIRECTION = "direction"
+    /** Renewals keep their email, slice 1 (server-written, once): the sender's display name (else its domain's name). */
+    const val FROM_NAME = "fromName"
+    /** Renewals keep their email, slice 1 (server-written, once): a renewal's cancel-by day (local epoch day). */
+    const val CANCEL_BY = "cancelByDay"
 }
 
 data class MailFindRow(
@@ -185,6 +195,11 @@ object MailRenewalRules {
         """\b(?:(?:will\s+)?(?:auto-?)?renews?(?:\s+automatically)?(?:\s+on)?|renewing\s+on|(?:renewal|expiry|end)\s+date(?:\s+is)?|due\s+for\s+renewal(?:\s+on)?|(?:expires|ends|runs\s+out)(?:\s+on)?)\b""",
         RegexOption.IGNORE_CASE,
     )
+    /** Renewals keep their email: the words a cancel-by day follows ("cancel by 20 Nov", "cancel before 12/11/2026"). */
+    private val CANCEL_WORDS = Regex(
+        """\b(?:cancel(?:\s+(?:any\s+time\s+)?(?:by|before|until|up\s+to))|cancell?ation\s+deadline(?:\s+is)?|to\s+cancel,?\s+(?:do\s+so\s+)?(?:by|before))\b:?""",
+        RegexOption.IGNORE_CASE,
+    )
     /** "12/12/2026", "12/12/26", "12.12.2026": day first, as in the UK. */
     private val NUMERIC = Regex("""^\W{0,6}?(\d{1,2})[/.](\d{1,2})[/.](\d{2}|\d{4})(?!\d)""")
     /** Words a renewal price follows first ("for £10.99", "renewal price: £412", "premium of £380.20"). */
@@ -225,7 +240,20 @@ object MailRenewalRules {
             merchant = MailReceiptRules.merchant(fromName, fromAddress),
             kind = kind,
             repeat = repeat,
+            cancelByDay = cancelBy(texts, receivedDay, day),
         )
+    }
+
+    /** The cancel-by day the email names: on or after the email and on or before the renewal day; else null. */
+    internal fun cancelBy(texts: List<String>, receivedDay: Long, renewDay: Long): Long? {
+        for (t in texts) {
+            for (m in CANCEL_WORDS.findAll(t)) {
+                val after = t.substring(m.range.last + 1).take(40)
+                val day = numeric(after) ?: MailWeekRules.dayOf(after, receivedDay)
+                if (day != null && day in receivedDay..renewDay) return day
+            }
+        }
+        return null
     }
 
     private fun renewDay(texts: List<String>, receivedDay: Long): Long? {
@@ -286,7 +314,7 @@ object MailRenewalRules {
     }
 
     /** The find's fields, written once by the server. */
-    fun serverFields(r: MailRenewal, account: String, subject: String?, receivedDay: Long): Map<String, FieldValue> = linkedMapOf(
+    fun serverFields(r: MailRenewal, account: String, subject: String?, receivedDay: Long, fromName: String? = null): Map<String, FieldValue> = linkedMapOf(
         MailFindFields.KIND to KIND_RENEWAL.fv(),
         MailFindFields.ACCOUNT to account.fv(),
         MailFindFields.MERCHANT to (r.merchant?.fv() ?: FieldValue.Null),
@@ -297,9 +325,15 @@ object MailRenewalRules {
         MailFindFields.RECEIVED_DAY to receivedDay.fv(),
         MailFindFields.SUBJECT to (subject?.trim()?.take(MAX_SUBJECT)?.takeIf { it.isNotEmpty() }?.fv() ?: FieldValue.Null),
         MailFindFields.TRUST to Trust.UNTRUSTED_EXTERNAL.name.fv(),
+        MailFindFields.FROM_NAME to (senderName(fromName)?.fv() ?: FieldValue.Null),
+        MailFindFields.CANCEL_BY to (r.cancelByDay?.fv() ?: FieldValue.Null),
     )
 
     const val MAX_SUBJECT = 120
+    const val MAX_FROM = 80
+
+    /** Renewals keep their email: the sender's display name as kept on a find (quotes trimmed, at most [MAX_FROM]). */
+    fun senderName(fromName: String?): String? = fromName?.trim()?.trim('"', '\'')?.trim()?.take(MAX_FROM)?.takeIf { it.isNotEmpty() }
 
     /** A find read from its fields; null when the server's half is missing or unreadable. */
     fun read(id: String, f: Map<String, FieldValue>): MailFind? {
@@ -337,6 +371,8 @@ object MailRenewalRules {
             who = f[MailFindFields.WHO]?.textOrNull,
             seen = f[MailFindFields.SEEN]?.longOrNull?.toInt(),
             direction = f[MailFindFields.DIRECTION]?.textOrNull,
+            fromName = f[MailFindFields.FROM_NAME]?.textOrNull?.takeIf { it.isNotBlank() },
+            cancelByDay = f[MailFindFields.CANCEL_BY]?.longOrNull,
         )
     }
 
@@ -500,6 +536,8 @@ object MailRenewalRules {
             out[ObligationFields.COST_MINOR] = it.fv()
             out[ObligationFields.CURRENCY] = "GBP".fv()
         }
+        // Renewals keep their email: the cancel-by day the email named.
+        f.cancelByDay?.takeIf { it <= f.renewDay }?.let { out[ObligationFields.CANCEL_BY_AT] = calendar.toEpochMs(it, Lists.DATE_MINUTE).fv() }
         return out
     }
 }

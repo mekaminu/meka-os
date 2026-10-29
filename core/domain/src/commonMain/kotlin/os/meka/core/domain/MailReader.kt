@@ -435,6 +435,8 @@ data class MailReaderSource(val kind: String, val id: String, val batch: String?
     companion object {
         const val ITEM = "item"
         const val TIDIED = "tidied"
+        /** Renewals keep their email: a Renewals item's email, by its find's id (or a server-written item's own id). */
+        const val FIND = "find"
     }
 }
 
