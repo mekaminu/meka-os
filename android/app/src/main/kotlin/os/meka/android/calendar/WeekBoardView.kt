@@ -2164,6 +2164,12 @@ private fun BudgetPill(b: os.meka.core.domain.PlannerBudget, today: Boolean) {
 /** The unfolded weekday row (the open Fold's alignment pass, UI tests). */
 internal const val WEEKDAYS_ROW_TAG = "board-weekdays-row"
 
+/** The unfolded weekend's row (the alignment pass (5): its days on the weekdays' grid). */
+internal const val WEEKEND_ROW_TAG = "board-weekend-row"
+
+/** One of the unfolded lists under the weekend, on the weekdays' grid. */
+internal const val LIST_COLUMN_TAG = "board-list-column"
+
 /** The day's budget pill (Option B slice 1, UI tests). */
 internal const val BUDGET_TAG = "board-budget"
 /** The budget pill's figures on a narrow lane, under "planned" (Option B match slice 4, UI tests). */
@@ -2517,22 +2523,28 @@ private fun WideWeek(
                 }
                 val weekend = BoardWeekLayoutRules.weekend(w)
                 if (weekend.isNotEmpty()) {
-                    // The density pass: Saturday and Sunday no wider than one and a half weekdays, left-aligned.
-                    val weekendWidths = BoardDenseRules.weekendWidths(weekend, rowWidth.value, weekdayWidths.maxOrNull() ?: 0f, openedPast)
+                    // The alignment pass (5): Saturday and Sunday under Monday and Tuesday at a weekday's width.
+                    val weekendWidths = BoardOpenFoldRules.gridWidths(weekend.size, rowWidth.value)
                     val weekendTall by androidx.compose.animation.core.animateDpAsState(
                         BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP).dp,
                         MekaMotion.appear(reduced), label = "board-weekend-height",
                     )
-                    Row(Modifier.fillMaxWidth().height(weekendTall)) {
+                    Row(Modifier.fillMaxWidth().height(weekendTall).testTag(WEEKEND_ROW_TAG)) {
                         weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) { h -> contents[d.epochDay] = h } } }
                     }
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,
                 // Side hustle, House, then No day yet).
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Meka.colors.hairline).testTag(LISTS_RULE_TAG))
-                Row(Modifier.fillMaxWidth().height(tiers.lists.dp), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-                    BoardMatchRules.lists(w, board).forEach { column ->
-                        key(column.key) { list(w, column, Modifier.weight(1f).fillMaxHeight()) }
+                // The alignment pass (5): the lists on the same columns, each inset as a day's cards are (DayColumn's two paddings).
+                val lists = BoardMatchRules.lists(w, board)
+                val listWidths = BoardOpenFoldRules.gridWidths(lists.size, rowWidth.value)
+                Row(Modifier.fillMaxWidth().height(tiers.lists.dp)) {
+                    lists.forEachIndexed { i, column ->
+                        key(column.key) {
+                            list(w, column, Modifier.width(listWidths[i].dp).fillMaxHeight().padding(horizontal = MekaSpace.xxs + if (BoardFitRules.compact(listWidths[i])) MekaSpace.xxs else MekaSpace.xs)
+                                    .testTag(LIST_COLUMN_TAG))
+                        }
                     }
                 }
             }

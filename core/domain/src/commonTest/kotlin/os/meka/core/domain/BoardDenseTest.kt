@@ -8,17 +8,10 @@ import kotlin.test.assertTrue
 
 /** The Week board's density pass: the mockup's proportions on the open Fold and the Mac. */
 class BoardDenseTest {
-    private val mon26 = CivilDate.toEpochDay(2026, 10, 26)
-
     private fun task(id: String, estimate: Int? = null) =
         Task(id, id, null, Lifecycle.ACTIVE, null, null, null, 0, null, null, 0, null, false).copy(estimateMinutes = estimate)
 
     private fun card(id: String, time: String? = null, estimate: Int? = null) = BoardCard(task(id, estimate), "Title $id", time, null, false, false)
-
-    private fun day(epoch: Long) = BoardDay(
-        epochDay = epoch, weekday = "Sat", number = "31", isToday = false, isPast = false, place = null, placeLabel = null,
-        chips = emptyList(), moreChips = 0, cards = emptyList(), countLine = "", accessibilityLabel = "Saturday 31 October",
-    )
 
     @Test
     fun theTimelineIsThereByDefaultOnTheOpenFoldAndTheMac() {
@@ -42,15 +35,6 @@ class BoardDenseTest {
         assertEquals("", BoardDenseRules.chip(card("b", estimate = 45)))
         assertEquals("12:30", BoardDenseRules.chip(card("c", time = "12:30", estimate = 30)))
         assertEquals("0:30", BoardDenseRules.duration(card("c", time = "12:30", estimate = 30)))
-    }
-
-    @Test
-    fun theWeekendIsNoWiderThanOneAndAHalfWeekdays() {
-        val weekend = listOf(day(mon26 + 5), day(mon26 + 6))
-        val w = BoardDenseRules.weekendWidths(weekend, 580f, 116f, emptySet())
-        assertEquals(listOf(174f, 174f), w)
-        // A narrow row shares what it has.
-        assertEquals(listOf(100f, 100f), BoardDenseRules.weekendWidths(weekend, 200f, 116f, emptySet()))
     }
 
     @Test

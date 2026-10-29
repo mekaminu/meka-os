@@ -14,6 +14,9 @@ package os.meka.core.domain
  * - One header (alignment list (1)(2), 2026-10-24): no "Calendar" title or Agenda · Board switch above the board; the
  *   month's row holds Obi's pill, Today, ‹ › and a ⋯ in the same round style, and ⋯ ([menu]) holds what were four
  *   different text styles: Agenda view, Timeline / Hide timeline, New event, Plan your week, Review the week.
+ * - One grid (alignment list (5)(9), 2026-10-29): Saturday and Sunday sit under Monday and Tuesday at a weekday's width,
+ *   and the lists under them (Someday, Side hustle, House, No day yet) on the same columns ([gridWidths]), so every card
+ *   below the weekdays has a weekday card's width and left edge; nothing is wider or inset.
  */
 object BoardOpenFoldRules {
     /** The least the weekday row is drawn (dp): its header, pill and "+ add" with room to drop a card. */
@@ -81,4 +84,22 @@ object BoardOpenFoldRules {
 
     /** The ⋯ button's spoken name. */
     const val MENU_LABEL = "More: Agenda view, timeline, new event, plan your week"
+
+    /** The columns of the board's grid: Monday to Friday. */
+    const val GRID = 5
+
+    /** One column of the grid in a row [rowDp] wide with [gapDp] between columns. */
+    fun gridColumn(rowDp: Float, gapDp: Float = 0f): Float =
+        ((rowDp - gapDp * (GRID - 1)) / GRID).coerceAtLeast(0f)
+
+    /**
+     * The widths of [count] columns under the weekdays (the weekend's days, or the lists) in a row [rowDp] wide with
+     * [gapDp] between: each a weekday column, from the row's left edge. More than [GRID] share the row equally rather
+     * than run off its edge.
+     */
+    fun gridWidths(count: Int, rowDp: Float, gapDp: Float = 0f): List<Float> {
+        if (count <= 0) return emptyList()
+        val w = if (count <= GRID) gridColumn(rowDp, gapDp) else ((rowDp - gapDp * (count - 1)) / count).coerceAtLeast(0f)
+        return List(count) { w }
+    }
 }

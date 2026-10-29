@@ -1707,12 +1707,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(tl.panelDp(boardDp: 1280), 260, accuracy: 0.01)
         XCTAssertTrue(tl.opensByDefault(boardDp: 1280, spareDp: 48))
         XCTAssertEqual(tl.HIDE, "Hide timeline")
-        // The density pass: the mockup's proportions, no "Any time" chip, the weekend at most 1.5 weekdays wide.
+        // The density pass: the mockup's proportions, no "Any time" chip, the weekend on the weekdays' grid.
         let dense = BoardDenseRules.shared
         XCTAssertTrue(dense.timelineByDefault(boardDp: 829, spareDp: 48))
         XCTAssertEqual(dense.DATE_SP, 19, accuracy: 0.01)
         XCTAssertEqual(dense.CARD_PAD, 10)
-        XCTAssertEqual(dense.WEEKEND_SCALE, 1.5, accuracy: 0.01)
+        // The alignment pass (5): the weekend and the lists on the weekdays' grid.
+        let grid = BoardOpenFoldRules.shared.gridWidths(count: 2, rowDp: 600, gapDp: 8).map { CGFloat(truncating: $0) }
+        XCTAssertEqual(grid.count, 2)
+        XCTAssertEqual(grid[0], 113.6, accuracy: 0.01)
         // Density pass slice 2: the header at the mockup's size, the goals in its row, a narrow pill's one line of figures.
         let head = BoardDenseHeadRules.shared
         XCTAssertEqual(head.MONTH_SP, 28, accuracy: 0.01)

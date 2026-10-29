@@ -74,4 +74,20 @@ class BoardOpenFoldTest {
         val wednesday = WeekBoard(mon26 + 2, listOf(week))
         assertTrue(BoardOpenFoldRules.menu(wednesday, 0, true, true, true).none { it.kind == FoldedMenuKind.REVIEW })
     }
+
+    @Test
+    fun theWeekendAndTheListsSitOnTheWeekdaysGrid() {
+        // The Fold's 580 dp row with no gap (each column pads itself): five weekdays of 116, the weekend two of them.
+        assertEquals(116f, BoardOpenFoldRules.gridColumn(580f))
+        assertEquals(listOf(116f, 116f), BoardOpenFoldRules.gridWidths(2, 580f))
+        // The four lists the same width as a weekday, never stretched across the row.
+        assertEquals(List(4) { 116f }, BoardOpenFoldRules.gridWidths(4, 580f))
+        // The Mac's row with an 8 pt gap: (600 - 4 × 8) / 5.
+        assertTrue(kotlin.math.abs(BoardOpenFoldRules.gridColumn(600f, 8f) - 113.6f) < 0.001f)
+        BoardOpenFoldRules.gridWidths(2, 600f, 8f).forEach { assertTrue(kotlin.math.abs(it - 113.6f) < 0.001f) }
+        // More than five share the row; none and a squeezed row give nothing below zero.
+        assertEquals(List(6) { 100f }, BoardOpenFoldRules.gridWidths(6, 600f))
+        assertEquals(emptyList<Float>(), BoardOpenFoldRules.gridWidths(0, 600f))
+        assertEquals(0f, BoardOpenFoldRules.gridColumn(10f, 8f))
+    }
 }

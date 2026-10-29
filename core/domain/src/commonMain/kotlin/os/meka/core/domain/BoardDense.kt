@@ -14,8 +14,7 @@ package os.meka.core.domain
  *   columns keep [MIN_COLUMN_DP] beside it (the mockup always has it; "Hide timeline" stays his choice).
  * - **No "Any time" chip** ([chip]): a task with no time shows no chip, its length alone on the right; the gold chip only
  *   for a set time, blue for events. A card with neither has no top line at all.
- * - **The weekend underneath is smaller** ([weekendWidths]): Saturday and Sunday are at most [WEEKEND_SCALE] times a
- *   weekday column wide (they were half the row each, full-width cards in body type), left-aligned.
+ * - The weekend underneath sits on the weekdays' grid: [BoardOpenFoldRules.gridWidths] (alignment list (5), 2026-10-29).
  */
 object BoardDenseRules {
     /** A day's date in serif ("27 Oct"), sp. */
@@ -48,9 +47,6 @@ object BoardDenseRules {
     /** The least a weekday column keeps beside the open timeline, dp (about 110 at the Fold's 830 with the 200 panel). */
     const val MIN_COLUMN_DP = 100f
 
-    /** The weekend's columns are at most this many weekday columns wide. */
-    const val WEEKEND_SCALE = 1.5f
-
     /**
      * Whether the timeline starts open on a board [boardDp] wide ([spareDp] for the gutters and the gap): whenever the
      * five weekday columns keep [MIN_COLUMN_DP] beside the panel ([BoardTimelineRules.panelDp]).
@@ -69,13 +65,4 @@ object BoardDenseRules {
 
     /** The length on the right ("0:45"), "" for none (for Swift). */
     fun duration(card: BoardCard): String = top(card)?.duration ?: ""
-
-    /**
-     * Saturday's and Sunday's widths under the weekdays: the row's equal share, but never wider than [WEEKEND_SCALE]
-     * weekday columns ([weekdayDp]), so their cards look like the week's rather than full-width slabs.
-     */
-    fun weekendWidths(weekend: List<BoardDay>, rowDp: Float, weekdayDp: Float, opened: Set<Long>): List<Float> {
-        val cap = weekdayDp * WEEKEND_SCALE
-        return BoardWeekLayoutRules.rowWidths(weekend, rowDp, opened).map { w -> if (weekdayDp > 0f) minOf(w, cap) else w }
-    }
 }

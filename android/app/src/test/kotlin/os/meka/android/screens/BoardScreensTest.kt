@@ -743,6 +743,36 @@ class BoardScreensTest {
         assertEquals("a pill on every day of the week, past ones too", 7, pills.size)
     }
 
+    /**
+     * The open Fold's alignment pass (5): Saturday and Sunday sit under Monday and Tuesday at their width, and the lists
+     * under them on the same columns, so each one's first line starts at a weekday's left edge.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theOpenFoldsWeekendAndListsSitOnTheWeekdaysGrid() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking { core.tick() }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-grid"))
+        ScreenShots.assertSensible(compose, "inner-dark-grid")
+        fun whole(n: androidx.compose.ui.semantics.SemanticsNode) = androidx.compose.ui.geometry.Rect(n.positionInRoot, androidx.compose.ui.geometry.Size(n.size.width.toFloat(), n.size.height.toFloat()))
+        val weekdays = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKDAYS_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let(::whole)
+            ?: throw AssertionError("no weekday row")
+        val weekend = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKEND_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let(::whole)
+            ?: throw AssertionError("no weekend row")
+        val dates = compose.onAllNodesWithTag(DAY_DATE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole)
+        val top = dates.filter { it.top >= weekdays.top && it.top < weekdays.bottom }.sortedBy { it.left }
+        val under = dates.filter { it.top >= weekend.top && it.top < weekend.bottom }.sortedBy { it.left }
+        assertEquals("five weekday dates", 5, top.size)
+        assertEquals("two weekend dates", 2, under.size)
+        under.forEachIndexed { i, d -> assertEquals("weekend day $i starts at weekday $i's edge", top[i].left, d.left, 1f) }
+        val lists = compose.onAllNodesWithTag(os.meka.android.calendar.LIST_COLUMN_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole).sortedBy { it.left }
+        assertTrue("the lists under the weekend (${lists.size})", lists.size >= 2)
+        val titles = compose.onAllNodesWithTag(os.meka.android.calendar.LIST_TITLE_TAG, useUnmergedTree = true).fetchSemanticsNodes().map(::whole).sortedBy { it.left }
+        assertEquals("a title per list", lists.size, titles.size)
+        titles.take(5).forEachIndexed { i, t -> assertEquals("list $i starts at weekday $i's edge", top[i].left, t.left, 1f) }
+    }
+
     private fun show(core: MekaCore) {
         compose.mainClock.autoAdvance = false
         compose.setContent {

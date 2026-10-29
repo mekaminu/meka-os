@@ -190,8 +190,10 @@ struct WeekBoardScreen: View {
                 // Option B match, slice 2: a hairline, then the lists as the mockup's card columns, in its order
                 // (Someday, Side hustle, House, then No day yet).
                 Rectangle().fill(palette.hairline).frame(height: 1).accessibilityHidden(true)
-                HStack(alignment: .top, spacing: MekaSpace.m) {
-                    ForEach(BoardMatchRules.shared.lists(week: w, board: board), id: \.key) { column in
+                // The alignment pass (5): the lists on the weekdays' columns, inset as a day's cards are.
+                let lists = BoardMatchRules.shared.lists(week: w, board: board)
+                BoardGridRowLayout(count: lists.count, spacing: MekaSpace.xs) {
+                    ForEach(lists, id: \.key) { column in
                         let key = listKey(column)
                         BoardListView(column: column, week: w, board: board, palette: palette, targeted: target == key) { on in
                             if on { target = key } else if target == key { target = nil }
@@ -226,9 +228,9 @@ struct WeekBoardScreen: View {
         withAnimation(MekaMotion.replan(reduced: reduceMotion)) { week = max(0, min(board.weeks.count - 1, target)) }
     }
 
-    /// The density pass: the weekend's row, each day at most one and a half weekday columns wide.
+    /// The alignment pass (5): the weekend's row, Saturday and Sunday under Monday and Tuesday at a weekday's width.
     private func weekendRow(_ days: [BoardDay], minHeight: CGFloat) -> some View {
-        WeekendRowLayout(days: days, spacing: MekaSpace.xs) {
+        BoardGridRowLayout(count: days.count, spacing: MekaSpace.xs) {
             ForEach(days, id: \.epochDay) { d in
                 BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: nil, minHeight: minHeight) { on in
                     if on { target = d.epochDay } else if target == d.epochDay { target = nil }
@@ -1174,6 +1176,7 @@ private struct BoardListView: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, MekaSpace.xs) // the alignment pass (5): inset as a day's cards are
         .frame(maxWidth: .infinity, minHeight: CGFloat(BoardWeekLayoutRules.shared.MIN_LISTS_DP), alignment: .topLeading)
         .modifier(BoardListZone(palette: palette, targeted: targeted))
         .dropDestination(for: String.self) { ids, _ in
@@ -1395,16 +1398,14 @@ enum BoardFont {
     static var add: Font { .system(size: CGFloat(BoardDenseHeadRules.shared.ADD_SP)) } // type: ok (density pass slice 2: the mockup's "+ add")
 }
 
-/// The density pass: Saturday and Sunday under the weekdays, each the row's share but at most one and a half weekday
-/// columns wide (BoardDenseRules.weekendWidths), left-aligned, so their cards look like the week's.
-struct WeekendRowLayout: Layout {
-    let days: [BoardDay]
+/// The alignment pass (5): the columns under the weekdays (the weekend's days, the lists), each a weekday column wide
+/// from the row's left edge (BoardOpenFoldRules.gridWidths), so their cards line up with the week's.
+struct BoardGridRowLayout: Layout {
+    let count: Int
     let spacing: CGFloat
 
     private func widths(_ row: CGFloat) -> [CGFloat] {
-        let weekday = (row - spacing * CGFloat(BoardWeekLayoutRules.shared.WEEKDAYS - 1)) / CGFloat(BoardWeekLayoutRules.shared.WEEKDAYS)
-        let share = row - spacing * CGFloat(max(days.count - 1, 0))
-        return BoardDenseRules.shared.weekendWidths(weekend: days, rowDp: Float(max(share, 0)), weekdayDp: Float(max(weekday, 0)), opened: [])
+        BoardOpenFoldRules.shared.gridWidths(count: Int32(count), rowDp: Float(max(row, 0)), gapDp: Float(spacing))
             .map { CGFloat(truncating: $0) }
     }
 
