@@ -286,15 +286,29 @@ struct TodayView: View {
                             .accessibilityLabel(trading.spoken)
                             .staggeredAppear(0, play: play)
                     }
-                    // Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can
-                    // tidy" (several accounts: "Unread mail · Personal 412 · Outlook 82 · …"); quiet, cross-fades.
+                    // Inbox fixes, slice 7: "Personal · 412 unread" (several accounts: "Unread mail · Gmail 1,048 ·
+                    // Outlook 154 · Business 28", the provider when two share a label); quiet, cross-fades. Under it
+                    // (Reconnect clears at once, (2)) "Tidy 1,048 newsletters, promos and receipts ›" in the accent:
+                    // a click opens Mail, where each account's clean-up lists what goes where and its Approve.
                     if let unread = model.today?.mailUnread {
-                        Text(unread.text).font(MekaType.caption)
-                            .foregroundStyle(unread.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                            .contentTransition(.opacity)
-                            .animation(MekaMotion.appear(reduced: reduceMotion), value: unread.text)
-                            .accessibilityLabel(unread.spoken)
-                            .staggeredAppear(0, play: play)
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text(unread.text).font(MekaType.caption)
+                                .foregroundStyle(unread.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                                .accessibilityLabel(unread.spoken)
+                            if let tidy = unread.tidy {
+                                Button {
+                                    MekaHaptics.tick()
+                                    model.showMail = true
+                                } label: {
+                                    Text(tidy).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Opens Mail's clean-up")
+                            }
+                        }
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: unread.text + (unread.tidy ?? ""))
+                        .staggeredAppear(0, play: play)
                     }
                     // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
                     // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
@@ -711,6 +725,8 @@ struct TodayView: View {
                 resignedAt = Date()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                // Reconnect clears at once: back from a sign-in page, the accounts are checked again straight away.
+                Task { await model.returnedToApp() }
                 let away = resignedAt.map { Date().timeIntervalSince($0) } ?? 0
                 guard let back = DayRingOpen.onReturn(away: away, reduced: reduceMotion) else { return }
                 ringPlay = back

@@ -583,6 +583,17 @@ class Integrations(
         }
     }
 
+    /**
+     * Reconnect clears at once (Meka 2026-10-24 14:47): the moment a sign-in completes, the account's sign-in line is
+     * written fresh (an expired one turns fine) and, when it changed, the household's devices are nudged, before the
+     * "Connected" page shows; so by the time he is back in the app Today's red line has gone. Never throws.
+     */
+    fun noteConnected(accountId: String) {
+        val a = store.account(accountId) ?: return
+        if (a.provider !in providers && a.provider !in mail) return
+        runCatching { if (applySignIn(a)) onChanged(a.householdId) }
+    }
+
     /** Writes one account's sign-in state when it changed; returns whether the state itself changed. */
     internal fun applySignIn(a: AccountRow): Boolean = store.transaction {
         ops.transaction {

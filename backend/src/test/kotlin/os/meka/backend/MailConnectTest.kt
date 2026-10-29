@@ -215,4 +215,34 @@ class MailConnectTest {
         assertTrue(withHome.disconnectMail("home", "gmail", "alex@example.com"))
         assertEquals("s:OK", state())
     }
+
+    @Test
+    fun signingInAgainClearsTheExpiredLineAtOnce() {
+        val hhStore = InMemoryIntegrationStore(listOf("home"))
+        var nudged = 0
+        val withHome = Integrations(
+            hhStore, InMemoryServerOpStore(), mapOf("google" to calendar), { p -> if (p == "google" || p == "microsoft") OAuthClient("cid-$p", "s") else null },
+            Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail, "outlook_mail" to outlook),
+            onChanged = { nudged++ },
+        )
+        gmail.granted = gmailScopes
+        val url = assertIs<Integrations.StartResult.Url>(withHome.start("home", "gmail")).url
+        val id = assertIs<Integrations.CallbackResult.Connected>(withHome.callback("google", stateOf(url), "code", null)).accountId
+        fun state() = hhStore.mirror("home", id)[os.meka.core.domain.SignInRules.entityId(id)]
+            ?.fieldOps?.get(os.meka.core.domain.SignInFields.STATE)?.second
+        // Google refuses the sign-in: the next check marks it expired.
+        hhStore.markError(id, "needs_reconnect", "invalid_grant")
+        withHome.noteSignIns()
+        assertEquals("s:EXPIRED", state())
+        val before = nudged
+        // Reconnect: the callback, then at once (not at the next check) the line turns fine and the devices hear of it.
+        val again = assertIs<Integrations.StartResult.Url>(withHome.start("home", "gmail")).url
+        assertEquals(id, assertIs<Integrations.CallbackResult.Connected>(withHome.callback("google", stateOf(again), "code", null)).accountId)
+        withHome.noteConnected(id)
+        assertEquals("s:OK", state())
+        assertEquals(before + 1, nudged)
+        // Nothing changed the second time: no nudge.
+        withHome.noteConnected(id)
+        assertEquals(before + 1, nudged)
+    }
 }

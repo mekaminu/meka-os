@@ -335,6 +335,15 @@ open class MekaApplication : Application() {
         runCatching { os.meka.android.calendar.PhoneCalendars.refresh(this, core, appScope) }
     }
 
+    /**
+     * Reconnect clears at once (Meka 2026-10-24 14:47): back in the app after a Connect / Reconnect's sign-in page, the
+     * core pulls the server's changes and checks the accounts at once, so Today's red sign-in line and Health's row go.
+     */
+    fun returnedToApp() {
+        if (!::core.isInitialized) return
+        appScope.launch { runCatching { core.returnedToApp(os.meka.android.ask.HealthDevice.facts(this@MekaApplication)) } }
+    }
+
     /** Looks for a newer published build (at most every 10 minutes unless [force]d); never installs anything. */
     fun lookForUpdate(force: Boolean = false) {
         if (!core.isConnected) return

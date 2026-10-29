@@ -1063,13 +1063,30 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
-                    // Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can
-                    // tidy" (several accounts: "Unread mail · Personal 412 · Outlook 82 · …"); quiet, cross-fades as it changes.
+                    // Inbox fixes, slice 7: "Personal · 412 unread" (several accounts: "Unread mail · Gmail 1,048 · Outlook
+                    // 154 · Business 28", the provider when two share a label); quiet, cross-fades as it changes. Under it
+                    // (Reconnect clears at once, (2)) "Tidy 1,048 newsletters, promos and receipts ›" in the accent: a tap
+                    // opens Mail, where each account's clean-up lists what goes where and its Approve.
                     today.mailUnread?.let { unread ->
+                        val mailApp = LocalContext.current.applicationContext as? MekaApplication
+                        val mailHaptics = rememberMekaHaptics()
                         Crossfade(unread, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-unread-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = l.spoken }) {
+                                Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
+                                l.tidy?.let { tidy ->
+                                    Text(tidy, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.testTag("mail-unread-tidy")
+                                            .clickable(role = Role.Button) {
+                                                mailHaptics.light()
+                                                mailApp?.let { app ->
+                                                    app.openMail.value = true
+                                                    app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
+                                                }
+                                            }
+                                            .padding(vertical = MekaSpace.xxs))
+                                }
+                            }
                         }
                     }
                     // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the

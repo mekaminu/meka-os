@@ -2422,6 +2422,21 @@ final class CoreModel {
         guard let core else { return }
         checkingHealth = true
         defer { checkingHealth = false }
+        let device = await macDeviceHealth(core)
+        _ = try? await core.refreshHealth(device: device, force: force)
+    }
+
+    /// Reconnect clears at once (Meka 2026-10-24 14:47): as MEKA comes back to the front after a Connect / Reconnect's
+    /// sign-in page, the core pulls the server's changes and checks the accounts again at once (it does nothing
+    /// otherwise), so Today's red sign-in line and Health's row go. The Mac's facts are made here and handed over once.
+    func returnedToApp() async {
+        guard let core else { return }
+        let device = await macDeviceHealth(core)
+        _ = try? await core.returnedToApp(device: device)
+    }
+
+    /// This Mac's own facts for Health, made fresh on the main actor for one hand-over to the core.
+    private func macDeviceHealth(_ core: MekaCore) async -> DeviceHealth {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         // Notifications never seen, the Mac's half: whether macOS lets MEKA notify, "This Mac" and the last post.
         let allowed = await MacNotifier.allowed()
@@ -2432,7 +2447,7 @@ final class CoreModel {
                                   updateHidden: false, installedCode: nil, updateFailure: nil, sizeBytes: nil, previousSizeBytes: nil,
                                   notifications: notifications, callerLookups: nil, face: MacFaceStore.shared.health(),
                                   stageClosed: MacStageLog.last(), voiceInUse: core.speechVoiceInUse())
-        _ = try? await core.refreshHealth(device: device, force: force)
+        return device
     }
 
     // MARK: Family (family sharing with his wife, slice 4)

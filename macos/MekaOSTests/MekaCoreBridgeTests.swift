@@ -98,6 +98,9 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testMailUnreadLineReachesSwift() {
         XCTAssertNil(MailUnreadRules.shared.todayLine(backlogs: [], nowMs: 0))
         XCTAssertEqual(MailUnreadRules.shared.NONE_UNREAD, "Mail · nothing unread ✓")
+        // Reconnect clears at once, (2): what "can tidy" means, as its own line under the counts.
+        XCTAssertEqual(MailUnreadRules.shared.tidyLine(tidy: 1048), "Tidy 1,048 newsletters, promos and receipts ›")
+        XCTAssertNil(MailUnreadRules.shared.tidyLine(tidy: 0))
     }
 
     func testRepeatingTaskThroughTheBridge() async throws {

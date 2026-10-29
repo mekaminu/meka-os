@@ -7612,8 +7612,29 @@ class MekaCore(
      * Calendar editing: [editing] asks the provider for permission to add and change events as well (Allow editing,
      * or Reconnect on an account that had it). The server records whether it was actually granted.
      */
-    suspend fun startConnect(provider: String, editing: Boolean): ConnectStart =
-        accountsApi?.startConnect(provider, editing) ?: ConnectStart.Failed("Connect this device to your server first.")
+    suspend fun startConnect(provider: String, editing: Boolean): ConnectStart {
+        // Reconnect clears at once: the first return to the app after this checks the accounts again ([returnedToApp]).
+        onCore { connectStartedAtMs = nowMs() }
+        return accountsApi?.startConnect(provider, editing) ?: ConnectStart.Failed("Connect this device to your server first.")
+    }
+
+    /** When a Connect / Reconnect last opened a sign-in page (in memory; [os.meka.core.domain.SignInRules.recheckOnReturn]). */
+    private var connectStartedAtMs: Long? = null
+
+    /**
+     * Reconnect clears at once (Meka 2026-10-24 14:47): the apps call this as they come back to the front. After a
+     * Connect or Reconnect tap it pulls the server's changes now (the server writes the sign-in as fine the moment the
+     * provider hands it back, and nudges) and checks the accounts again, so Today's red sign-in line, the mail line and
+     * Health's row follow at once instead of at the next quarter-hour check. Returns whether it checked.
+     */
+    suspend fun returnedToApp(device: os.meka.core.domain.DeviceHealth): Boolean {
+        val due = onCore { os.meka.core.domain.SignInRules.recheckOnReturn(connectStartedAtMs, _health.value?.checkedAtMs, nowMs()) }
+        if (!due) return false
+        runCatchingNotCancel { syncNow() }
+        refreshHealth(device, force = true)
+        onCore { refresh() }
+        return true
+    }
 
     /**
      * Stop editing on one account: the server stops changing it at once. Returns the accounts as they are now, or null
@@ -9737,7 +9758,8 @@ class MekaCore(
      */
     suspend fun refreshHealth(device: os.meka.core.domain.DeviceHealth, force: Boolean = true): os.meka.core.domain.HealthView {
         val last = _health.value
-        if (!force && last != null && nowMs() - last.checkedAtMs < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS) {
+        val afterSignIn = os.meka.core.domain.SignInRules.recheckOnReturn(connectStartedAtMs, last?.checkedAtMs, nowMs())
+        if (!force && !afterSignIn && last != null && nowMs() - last.checkedAtMs < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS) {
             return refreshHealthLocal(device, last)
         }
         val connected = isConnected

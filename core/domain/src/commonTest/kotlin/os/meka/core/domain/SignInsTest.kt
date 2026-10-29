@@ -121,4 +121,18 @@ class SignInsTest {
         val notices = SignInRules.notices(listOf(ending, expired), now, cal)
         assertEquals(listOf("Reconnect from Today to keep Navilife reading alex@example.com", "Navilife stopped reading alex@example.net · Reconnect from Today"), notices.map { it.text })
     }
+
+    @Test
+    fun backFromASignInPageChecksAgainOnce() {
+        val t = 1_790_985_600_000L
+        // Never tapped Connect / Reconnect: Today's usual quarter-hour wait.
+        assertFalse(SignInRules.recheckOnReturn(null, t - 60_000L, t))
+        // Tapped Reconnect after the last check: the return checks at once, even before any check at all.
+        assertTrue(SignInRules.recheckOnReturn(t - 30_000L, t - 120_000L, t))
+        assertTrue(SignInRules.recheckOnReturn(t - 30_000L, null, t))
+        // Once checked after the tap, no more.
+        assertFalse(SignInRules.recheckOnReturn(t - 30_000L, t - 10_000L, t))
+        // A sign-in page left for over an hour isn't waited on.
+        assertFalse(SignInRules.recheckOnReturn(t - SignInRules.RECHECK_WITHIN_MS - 1, null, t))
+    }
 }

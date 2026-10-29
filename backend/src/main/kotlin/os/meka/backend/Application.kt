@@ -563,6 +563,8 @@ fun Application.mekaSync(
                 }
                 val page = when (result) {
                     is Integrations.CallbackResult.Connected -> {
+                        // Reconnect clears at once: the sign-in line turns fine (and the devices are nudged) right now.
+                        withContext(Dispatchers.IO) { runCatching { integrations.noteConnected(result.accountId) } }
                         background { runCatching { integrations.syncAccount(result.accountId) } }
                         resultPage("Connected", connectedText(result))
                     }

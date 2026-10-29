@@ -79,6 +79,21 @@ object SignInRules {
     /** An expired sign-in's heads-up is stale after this (the line on Today stays until reconnected). */
     const val EXPIRED_NOTICE_STALE_MS = 2 * DAY_MS
 
+    /**
+     * Reconnect clears at once (Meka 2026-10-24 14:47: after Google's "Connected" page, Today's red line and Health's red
+     * Calendar row still showed): a sign-in page opened at [connectStartedAtMs] is checked again the first time the app
+     * comes back after it ([lastCheckedAtMs]: the accounts' last check, null before any), within [RECHECK_WITHIN_MS].
+     * One fresh check per Connect / Reconnect tap; the quarter-hour wait of Today's open doesn't apply to it.
+     */
+    fun recheckOnReturn(connectStartedAtMs: Long?, lastCheckedAtMs: Long?, nowMs: Long): Boolean {
+        val started = connectStartedAtMs ?: return false
+        if (nowMs - started > RECHECK_WITHIN_MS || nowMs < started) return false
+        return lastCheckedAtMs == null || lastCheckedAtMs <= started
+    }
+
+    /** A sign-in page left open longer than this is no longer waited on. */
+    const val RECHECK_WITHIN_MS = 60 * 60_000L
+
     /** The entity id for an account: [key] is the server's own stable key for it (never the address). */
     fun entityId(key: String): String = ENTITY_PREFIX + key.filter { it.isLetterOrDigit() }.lowercase().take(40)
 

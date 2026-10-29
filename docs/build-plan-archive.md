@@ -4725,3 +4725,25 @@ The item's "Next": both layouts beside their mockups with a column-guide overlay
 - folded, the day's cards 4 dp inside the strip, day line and Obi's card (pager 8 + column 4 + inner 8 = 20 against the 16 gutter): the pager is inset `foldedPagerInset(16, 4, 8)` = 4 and a page is `foldedColumn(width, 4)` wide, so the cards sit on the gutter; the extra 8 dp under Obi's card is gone (`FOLDED_SPACE_AFTER_OBI_DP`).
 Not changed (noted for the acceptance pass): the folded mockup lists a day's timed events after its tasks, the app before them; ‹ is dimmed on the first week the board holds (by design).
 Core `BoardBeside.kt` (BoardBesideRules), BoardBesideTest; Android WeekBoardView (lists' heading, header nudge, folded inset), BoardTimelineView (opaque blocks); BoardScreensTest: the folded card's edges are the strip's, the lists' headings all one height and no taller than a day's date. Mac WeekBoardScreen (list heading, header nudge, opaque blocks), MekaCoreBridgeTests. No server change, no migration; Mac checked nightly.
+
+
+## Reconnect clears at once, and Today's mail line names accounts clearly (Meka 2026-10-24 14:47)
+
+Original ask: **Take first (small, after the two above; Meka 2026-10-24 14:47):** (1) **Reconnect clears at once**: after the Google "Connected" page, Today's red "Google sign-in expired · Reconnect" line and Health's red Calendar row still showed; when the app comes back to the front after a reconnect it refreshes the accounts straight away (and the server pushes an account-changed nudge), so the warning goes the moment it's fixed. (2) **Today's mail line names accounts clearly**: it read "Personal 154 · Personal 1,048 · Business 28" (two "Personal"s: Outlook and Gmail); use the provider when two share a label ("Outlook 154 · Gmail 1,048 · Business 28") and say what "1,048 Navilife can tidy" means with a tap to start the clean-up.
+
+Done 2026-10-29 in one slice:
+- **Server** (`Integrations.noteConnected`, called by the OAuth callback before the "Connected" page): the account's
+  `context_mode/sign_in.<key>` is written at once from its new status (an EXPIRED one turns OK) and, when it changed,
+  `onChanged` nudges the household's devices; the account's first sync still runs in the background. Before this the line
+  only changed at the next `syncAll`'s `noteSignIns`. MailConnectTest.signingInAgainClearsTheExpiredLineAtOnce.
+- **Core** (`SignInRules.recheckOnReturn`, `MekaCore.returnedToApp`): `startConnect` notes when a sign-in page opened
+  (memory only); the first return to the app within an hour, before the accounts were checked again, syncs now, checks
+  Health against the server (forced) and rebuilds Today; `refreshHealth(force = false)` (Today's open) skips its
+  quarter-hour wait in the same case. Android calls it from `MainActivity.onStart`, the Mac from Today's
+  `didBecomeActive`. SignInsTest.backFromASignInPageChecksAgainOnce.
+- **Mail line** (`MailUnreadRules`): the backlog is matched to its account by the server's account key first (two
+  accounts sharing "Personal" no longer both read as one); several accounts are named by label, by provider when two
+  share a label, by full name if that doesn't tell them apart (`shortNames`); the tidy count moved off the counts onto
+  its own accent line `tidy` ("Tidy 1,048 newsletters, promos and receipts ›"), a tap opening Mail (Ask → Mail on the
+  Fold, the Mail sheet on the Mac) where each account's clean-up and Approve are; the spoken line says what it means.
+  MailUnreadTest.twoAccountsSharingALabelAreNamedByProvider; MekaCoreBridgeTests.testMailUnreadLineReachesSwift.
