@@ -176,6 +176,14 @@ class MekaCore(
     private var newsDownAskedMs: Long? = null
     private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
+    /**
+     * The Week board (j): the phone's own calendars as the Fold last read them ([setPhoneCalendars]); in memory on this
+     * device only, never stored, synced or sent to the server. Empty on the Mac.
+     */
+    private var phoneRows: List<os.meka.core.domain.PhoneCalendarRow> = emptyList()
+    private val _phoneCalendars = MutableStateFlow<List<os.meka.core.domain.PhoneCalendarLine>?>(null)
+    /** Calendars → THIS PHONE'S CALENDARS: each one with its events in the next 5 weeks; null until the Fold has read them. */
+    val phoneCalendars: StateFlow<List<os.meka.core.domain.PhoneCalendarLine>?> = _phoneCalendars.asStateFlow()
     private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
     // Annual leave (V1, slice 1): booked days are days off for work mode, like a bank holiday.
     private val leave = os.meka.core.domain.Leave(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -517,14 +525,6 @@ class MekaCore(
      */
     val calendarEditLines: StateFlow<List<os.meka.core.domain.EditLine>> = _editLines.asStateFlow()
 
-    /**
-     * The Week board (j): the phone's own calendars as the Fold last read them ([setPhoneCalendars]); in memory on this
-     * device only, never stored, synced or sent to the server. Empty on the Mac.
-     */
-    private var phoneRows: List<os.meka.core.domain.PhoneCalendarRow> = emptyList()
-    private val _phoneCalendars = MutableStateFlow<List<os.meka.core.domain.PhoneCalendarLine>?>(null)
-    /** Calendars → THIS PHONE'S CALENDARS: each one with its events in the next 5 weeks; null until the Fold has read them. */
-    val phoneCalendars: StateFlow<List<os.meka.core.domain.PhoneCalendarLine>?> = _phoneCalendars.asStateFlow()
     private val _calendarsOnToday = MutableStateFlow<List<os.meka.core.domain.CalendarChoice>>(emptyList())
     /** Calendars' "On Today" list: every calendar in the mirror and whether it shows on Today (all-day polish). */
     val calendarsOnToday: StateFlow<List<os.meka.core.domain.CalendarChoice>> = _calendarsOnToday.asStateFlow()
