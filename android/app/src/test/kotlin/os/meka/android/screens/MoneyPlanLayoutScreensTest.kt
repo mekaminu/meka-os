@@ -173,6 +173,7 @@ class MoneyPlanLayoutScreensTest {
         tap("money-ideas-show-again")
         repeat(40) { if (!shows("money-idea-${idea.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(shows("money-idea-${idea.id}"), "Show them again should bring the idea back")
+        if (shows("money-idea-sheet")) fail("Show them again brought the idea back with its sheet still open (walk-through A4)")
         // Obi's wording: Ask Obi to look again sits in the card's foot; with no server here it says so and comes back.
         assertTrue(shows("money-check-look-again"), "the money check should offer Ask Obi to look again")
         tap("money-check-look-again")
@@ -193,6 +194,7 @@ class MoneyPlanLayoutScreensTest {
         assertTrue(showsText(MoneyPlanLayout.WHAT_IF_TRY), "the What if… row says what it's for while nothing is on")
         tap("money-whatif-row")
         assertTrue(shows("money-whatif-sheet") && showsText(MoneyForecast.EXTRA_HINT), "What if… should open the what-ifs")
+        if (shows("money-idea-sheet")) fail("an idea's sheet sits under the What if… sheet (walk-through A4)")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-whatif"))
         tap("money-whatif-sheet-done")
 

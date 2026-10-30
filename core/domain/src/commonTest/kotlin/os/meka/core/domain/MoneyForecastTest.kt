@@ -33,7 +33,7 @@ class MoneyForecastTest {
         assertFalse(f.leftLit)
         assertEquals(listOf("By Apr 2027 · 6 months", "By Oct 2027 · 12 months"), f.rows.map { it.label })
         assertEquals(listOf("+£2,640", "+£5,280"), f.rows.map { it.amount })
-        assertEquals("put by at your pace", f.rows[0].line)
+        assertEquals("all that's left over, at your pace", f.rows[0].line)
         assertEquals("From Jul – Sep 2026 (3 whole months) · your average month, not a promise · not financial advice", f.basis)
         // What-ifs: the biggest everyday categories, never bills; coffee is under £20 a month.
         assertEquals(listOf("Halve Eating out", "Halve Groceries"), f.cuts.map { it.label })
@@ -45,8 +45,8 @@ class MoneyForecastTest {
         val f = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("eating_out"), extraPence = 20_000))!!
         assertTrue(f.cuts.first { it.key == "eating_out" }.on)
         // £150 + £200 = £350 a month more: £2,100 in 6 months, £4,200 in 12.
-        assertEquals("put by at your pace · +£2,100 with your what-ifs", f.rows[0].line)
-        assertEquals("put by at your pace · +£4,200 with your what-ifs", f.rows[1].line)
+        assertEquals("all that's left over, at your pace · +£2,100 with your what-ifs", f.rows[0].line)
+        assertEquals("all that's left over, at your pace · +£4,200 with your what-ifs", f.rows[1].line)
         assertEquals("+£200 a month coming in · your own figure", f.extraLine)
     }
 
@@ -150,22 +150,22 @@ class MoneyForecastTest {
         assertEquals("Trading as it's gone", off.trading?.label)
         assertEquals("+£100 a month", off.trading?.line)
         assertFalse(off.trading!!.on)
-        assertEquals("put by at your pace", off.rows[0].line)
+        assertEquals("all that's left over, at your pace", off.rows[0].line)
         assertTrue(off.tradingLine!!.startsWith("Trading: your Hyperliquid result a month from September and August, after fees and funding"))
         // Two cut chips only: trading has its own.
         assertEquals(listOf("eating_out", "groceries"), off.cuts.map { it.key })
         val on = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf(MoneyForecast.TRADING_KEY)), pace)!!
         assertTrue(on.trading!!.on)
-        assertEquals("put by at your pace · +£570 with your what-ifs", on.rows[0].line)
-        assertEquals("put by at your pace · +£1,150 with your what-ifs", on.rows[1].line)
+        assertEquals("all that's left over, at your pace · +£570 with your what-ifs", on.rows[0].line)
+        assertEquals("all that's left over, at your pace · +£1,150 with your what-ifs", on.rows[1].line)
         // A losing pace counts against him, said plainly.
         val losing = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("trading")), MoneyTradingPace(-6_375, "the last 30 days"))!!
         assertEquals("−£60 a month", losing.trading?.line)
-        assertEquals("put by at your pace · −£380 with your what-ifs", losing.rows[0].line)
+        assertEquals("all that's left over, at your pace · −£380 with your what-ifs", losing.rows[0].line)
         // Without a pace the "trading" key does nothing and there's no chip.
         val none = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("trading")))!!
         assertNull(none.trading)
-        assertEquals("put by at your pace", none.rows[0].line)
+        assertEquals("all that's left over, at your pace", none.rows[0].line)
     }
 
     @Test

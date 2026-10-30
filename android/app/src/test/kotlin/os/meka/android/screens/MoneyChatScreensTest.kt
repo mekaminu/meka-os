@@ -78,7 +78,9 @@ class MoneyChatScreensTest {
                 "01/$mm/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
                     "05/$mm/2026,SALARY OAKFIELD LTD,2500.00\n" +
                     "09/$mm/2026,TESCO STORES 2041,-64.90\n" +
-                    "15/$mm/2026,STREAMLY.COM,-10.99\n"
+                    "15/$mm/2026,STREAMLY.COM,-10.99\n" +
+                    // The same months as Plan's shots (walk-through A12), so Ask Obi's what-if and Plan's agree.
+                    (if (m < 10) "28/$mm/2026,TESCO STORES 2041,-58.20\n" else "")
             } +
             (1..12).joinToString("") { d -> "${d.toString().padStart(2, '0')}/10/2026,COSTA COFFEE,-4.80\n" }
     }

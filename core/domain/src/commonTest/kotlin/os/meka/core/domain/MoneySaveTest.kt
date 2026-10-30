@@ -96,4 +96,21 @@ class MoneySaveTest {
         assertEquals(MoneyTab.PLAN, MoneyTabs.tabOf(MoneySection.SAVE))
         assertFalse(MoneySection.SAVE in MoneyTabs.sections(MoneyTab.PLAN, v.copy(save = null)))
     }
+
+    /** Walk-through A4: saving more never leaves more spare, in the slider's line and Obi's alike. */
+    @Test
+    fun savingMoreNeverLeavesMoreSpare() {
+        val left = 222_000L
+        val spare = Regex("""about £([\d,]+)""")
+        fun said(amount: Long): Long = spare.find(MoneySave.obi(amount, left).first)!!.groupValues[1].replace(",", "").toLong()
+        var last = Long.MAX_VALUE
+        for (a in listOf(25_000L, 50_000L, 110_000L, 115_000L, 150_000L, 200_000L)) {
+            val now = said(a)
+            assertTrue(now <= last, "£${a / 100} a month leaves £$now, more than a smaller amount's £$last")
+            last = now
+        }
+        // The slider's split line names the same spare as Obi's line.
+        val v = MoneySave.view(110_000, 6, 0, base(left))
+        assertTrue("about £1,120" in v.split && "about £1,120" in v.obi, v.split + " / " + v.obi)
+    }
 }

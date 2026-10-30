@@ -1271,8 +1271,9 @@ fun MoneyPane(
                 ideaSheetId = null
                 ideaStep(i)
             },
-            onRemind = { scope.launch { runCatching { core.moneyIdeaRemind(i.id) }.getOrNull()?.let(say) } },
-            onNotFor = { scope.launch { runCatching { core.moneyIdeaNotFor(i.id) }.getOrNull()?.let(say) } })
+            // The sheet closes with the idea (walk-through A4): left open, Show them again brought it back on top of the page.
+            onRemind = { ideaSheetId = null; scope.launch { runCatching { core.moneyIdeaRemind(i.id) }.getOrNull()?.let(say) } },
+            onNotFor = { ideaSheetId = null; scope.launch { runCatching { core.moneyIdeaNotFor(i.id) }.getOrNull()?.let(say) } })
         SheetSaid(said)
     }
     // Layout rules on Plan (e): the forecast's what-ifs (cuts, trading at its pace, extra a month) in a sheet.

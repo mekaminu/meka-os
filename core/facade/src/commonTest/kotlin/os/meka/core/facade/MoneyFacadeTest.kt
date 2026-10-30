@@ -536,14 +536,14 @@ class MoneyFacadeTest {
         assertTrue(fold.moneyForecastExtra("lots").refused)
         val g = fold.moneyView.value.forecast!!
         assertTrue(g.cuts.first().on)
-        assertEquals("put by at your pace · +£2,100 with your what-ifs", g.rows[0].line)
+        assertEquals("all that's left over, at your pace · +£2,100 with your what-ifs", g.rows[0].line)
         // Never synced: the Mac sees the plain forecast.
         fold.syncNow(); mac.syncNow()
         mac.openMoney()
-        assertEquals("put by at your pace", mac.moneyView.value.forecast!!.rows[0].line)
+        assertEquals("all that's left over, at your pace", mac.moneyView.value.forecast!!.rows[0].line)
         // Locking drops them.
         fold.closeMoney(); fold.openMoney()
-        assertEquals("put by at your pace", fold.moneyView.value.forecast!!.rows[0].line)
+        assertEquals("all that's left over, at your pace", fold.moneyView.value.forecast!!.rows[0].line)
     }
 
     @Test

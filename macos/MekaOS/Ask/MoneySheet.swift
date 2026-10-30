@@ -1588,9 +1588,10 @@ struct MoneySheet: View {
                     }
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 }
-                Button(MoneyCheck.shared.REMIND) { Task { said = await model.moneyIdeaRemind(id: id) } }
+                // The popover closes with the idea (walk-through A4), so Show them again doesn't bring it back open.
+                Button(MoneyCheck.shared.REMIND) { ideaOpenId = nil; Task { said = await model.moneyIdeaRemind(id: id) } }
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textPrimary)
-                Button(MoneyCheck.shared.NOT_FOR_ME) { Task { said = await model.moneyIdeaNotFor(id: id) } }
+                Button(MoneyCheck.shared.NOT_FOR_ME) { ideaOpenId = nil; Task { said = await model.moneyIdeaNotFor(id: id) } }
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 Spacer()
                 Button(MoneyCards.shared.DONE) { ideaOpenId = nil }.keyboardShortcut(.defaultAction)

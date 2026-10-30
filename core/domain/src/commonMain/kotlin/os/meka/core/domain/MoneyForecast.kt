@@ -187,7 +187,7 @@ object MoneyForecast {
             val label = "By ${monthShort(thisMonth + h)} · $h months"
             val base = when {
                 income <= 0 -> "spent at this pace"
-                at >= 0 -> "put by at your pace"
+                at >= 0 -> "all that's left over, at your pace"
                 else -> "more out than in at your pace"
             }
             val shown = if (income <= 0) "−" + fmt(roundTen(out * h)) else signed(at)
