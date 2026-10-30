@@ -79,10 +79,10 @@ internal fun MailMomentSection(
                 card.streakLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
             }
             Row(Modifier.padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                MailNeedsPill(MailMomentRules.START, spoken = "Start the ten-minute inbox: ${card.headline}", onClick = {
+                MailCardPill(MailMomentRules.START, spoken = "Start the ten-minute inbox: ${card.headline}", onClick = {
                     haptics.medium(); scope.launch { runCatching { core.startMailMoment() } }
                 })
-                MailNeedsPill(MailMomentRules.NOT_TODAY, quiet = true, spoken = "Not today: hide the ten-minute inbox until tomorrow", onClick = {
+                MailCardPill(MailMomentRules.NOT_TODAY, quiet = true, spoken = "Not today: hide the ten-minute inbox until tomorrow", onClick = {
                     haptics.tick()
                     scope.launch {
                         val said = runCatching { core.notTodayMailMoment() }.getOrNull() ?: return@launch
@@ -128,7 +128,7 @@ private fun MomentSession(session: MailMomentSession, core: MekaCore, undo: (Str
         if (row == null) {
             Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 session.streakLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-moment-streak")) }
-                MailNeedsPill(MailMomentRules.CLOSE, spoken = "Close the ten-minute inbox", onClick = {
+                MailCardPill(MailMomentRules.CLOSE, spoken = "Close the ten-minute inbox", onClick = {
                     haptics.light(); scope.launch { runCatching { core.endMailMoment() } }
                 })
             }
@@ -181,13 +181,13 @@ private fun MomentSession(session: MailMomentSession, core: MekaCore, undo: (Str
         }
     }
     session.row?.let { up ->
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             if (session.left > 1) {
-                MailNeedsPill(MailMomentRules.SKIP, quiet = true, spoken = "Skip this email for now; it comes round again", onClick = {
+                MailCardPill(MailMomentRules.SKIP, quiet = true, spoken = "Skip this email for now; it comes round again", onClick = {
                     haptics.tick(); scope.launch { runCatching { core.skipMailMoment(up.id) } }
                 })
             }
-            MailNeedsPill(MailMomentRules.FINISH, quiet = true, spoken = "Finish for now; the rest stay in From your mail", onClick = {
+            MailCardPill(MailMomentRules.FINISH, quiet = true, spoken = "Finish for now; the rest stay in From your mail", onClick = {
                 haptics.light(); scope.launch { runCatching { core.endMailMoment() } }
             })
         }

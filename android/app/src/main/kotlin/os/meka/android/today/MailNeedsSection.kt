@@ -119,7 +119,7 @@ internal fun MailNeedsSection(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); open = !open }
+            Modifier.fillMaxWidth().heightIn(min = MekaSpace.touch).clickable(role = Role.Button) { haptics.tick(); open = !open }
                 .semantics(mergeDescendants = true) { contentDescription = "${card.title}. ${card.headline}" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -329,19 +329,19 @@ internal fun MailNeedsRowView(
                         .semantics { contentDescription = "Navilife's draft reply to ${row.from}: $draft" },
                 )
                 Text(MailAutoDraftRules.DRAFT_LABEL, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    MailNeedsPill(
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    MailCardPill(
                         MailAutoDraftRules.SEND, spoken = "Send Navilife's draft to ${row.from} now",
                         onClick = { onSend(draft) { } },
                     )
-                    MailNeedsPill(
+                    MailCardPill(
                         MailAutoDraftRules.EDIT, spoken = "Edit the draft before sending",
                         onClick = { haptics.light(); text = draft; lastDraft = draft; draftLine = MailDraftRules.DRAFTED_LINE; replying = true },
                     )
                     if (onNotNeeded != null) {
-                        MailNeedsPill(MailAutoDraftRules.NOT_NEEDED, spoken = "No reply needed to ${row.from}; put the draft away", onClick = onNotNeeded)
+                        MailCardPill(MailAutoDraftRules.NOT_NEEDED, spoken = "No reply needed to ${row.from}; put the draft away", onClick = onNotNeeded)
                     }
-                    MailNeedsPill(MailAutoDraftRules.LATER, spoken = "Remind me about ${row.subject} tomorrow at 8", onClick = onSnooze)
+                    MailCardPill(MailAutoDraftRules.LATER, spoken = "Remind me about ${row.subject} tomorrow at 8", onClick = onSnooze)
                 }
             }
         }
@@ -396,13 +396,13 @@ internal fun MailNeedsRowView(
                 }
                 if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
                 // Send · Draft it · Cancel wrap on the narrow cover screen rather than squeezing.
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    MailNeedsPill(
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    MailCardPill(
                         MailNeedsRules.SEND, enabled = problem == null,
                         spoken = "Send this reply to ${row.from} now", onClick = { onSend(text) { replying = false; text = ""; lastDraft = null; draftLine = null } },
                     )
                     if (MailDraftRules.canDraft(text, lastDraft)) {
-                        MailNeedsPill(
+                        MailCardPill(
                             if (drafting) MailDraftRules.DRAFTING else MailDraftRules.label(text), quiet = true, enabled = !drafting,
                             spoken = "Let Navilife draft a reply to ${row.from} for you to check; nothing is sent",
                             onClick = {
@@ -417,7 +417,7 @@ internal fun MailNeedsRowView(
                             },
                         )
                     }
-                    MailNeedsPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the reply without sending", onClick = { replying = false })
+                    MailCardPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the reply without sending", onClick = { replying = false })
                 }
             }
         }
@@ -463,31 +463,31 @@ internal fun MailNeedsRowView(
         }
         FlowRow(
             Modifier.padding(top = MekaSpace.xxs).animateContentSize(MekaMotion.expand(reduced)),
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             actions.shown.filter(::offered).forEach { a ->
-                MailNeedsPill(
+                MailCardPill(
                     pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a),
                     enabled = !(a == MailRowAction.SUGGEST && suggesting), onClick = { perform(a) },
                 )
             }
             if (actions.more.isNotEmpty()) {
-                MailNeedsPill(
+                MailCardPill(
                     if (more) MailRowActionRules.FEWER else MailRowActionRules.MORE, spoken = MailRowActionRules.moreSpoken(more, row),
                     onClick = { haptics.tick(); more = !more },
                 )
             }
             if (more) actions.more.forEach { a ->
-                MailNeedsPill(pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a), onClick = { perform(a) })
+                MailCardPill(pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a), onClick = { perform(a) })
             }
         }
         // The days unfold on the expand spring (reduced motion: cross-fade); the email leaves once one is tapped.
         AnimatedVisibility(choosingDay && onToDay != null, enter = unfold(), exit = fold()) {
             Column(Modifier.fillMaxWidth().testTag("mail-to-day-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(BoardFeedRules.PICK, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     toDays().forEach { d ->
-                        MailNeedsPill(d.label, spoken = "${d.spoken}: ${row.subject}", onClick = { choosingDay = false; onToDay?.invoke(d.day) })
+                        MailCardPill(d.label, spoken = "${d.spoken}: ${row.subject}", onClick = { choosingDay = false; onToDay?.invoke(d.day) })
                     }
                 }
             }
@@ -518,11 +518,11 @@ private fun MailSendAllBar(
 ) {
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth().testTag("mail-send-all"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             AnimatedVisibility(sendLabel != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut()) {
-                MailNeedsPill(sendLabel ?: "", spoken = sendSpoken ?: "", onClick = onSendAll)
+                MailCardPill(sendLabel ?: "", spoken = sendSpoken ?: "", onClick = onSendAll)
             }
-            MailNeedsPill(draftLabel, quiet = true, enabled = !drafting, spoken = draftSpoken, onClick = onDraft)
+            MailCardPill(draftLabel, quiet = true, enabled = !drafting, spoken = draftSpoken, onClick = onDraft)
         }
         val shown = if (sendLabel != null) MailSendAllRules.LINE else line
         AnimatedContent(shown, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-send-all-line") { l ->
@@ -536,7 +536,7 @@ internal fun MailNeedsPill(
     label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, critical: Boolean = false,
     /**
      * Works by hand (quality gate): the slim pill drawn inside a 48 dp touch target, as Lists' chips (Needs you's
-     * To a day… chips first; the mail cards' pills keep their own size until their by-hand test).
+     * To a day… chips and every mail card's pills, through [MailCardPill]).
      */
     touch: Boolean = false,
     onClick: () -> Unit,
@@ -563,6 +563,16 @@ internal fun MailNeedsPill(
 }
 
 /**
+ * Works by hand (quality gate, Needs you's mail cards): every pill on a mail card is [MailNeedsPill] drawn as before
+ * inside a 48 dp touch, so the rows of pills sit with no extra gap (the touch leaves 7 dp above and below each).
+ */
+@Composable
+internal fun MailCardPill(
+    label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, critical: Boolean = false,
+    onClick: () -> Unit,
+) = MailNeedsPill(label, spoken = spoken, quiet = quiet, enabled = enabled, critical = critical, touch = true, onClick = onClick)
+
+/**
  * Inbox autopilot, slice 6b-3: "Time to chase" in Needs you — each Waiting for item made from an email whose chase day
  * has come: who, what, which account and since when, with **Chase** (an editor that opens holding Navilife's short
  * chase, his to change; it goes from that account, in the email's thread, only when he taps Send, at the server's next
@@ -587,7 +597,7 @@ internal fun MailChaseSection(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); open = !open }
+            Modifier.fillMaxWidth().heightIn(min = MekaSpace.touch).clickable(role = Role.Button) { haptics.tick(); open = !open }
                 .semantics(mergeDescendants = true) { contentDescription = "${card.title}. ${card.headline}" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -695,33 +705,33 @@ private fun MailChaseRowView(
                     if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-chase-draft-line"))
                 }
                 if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    MailNeedsPill(
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    MailCardPill(
                         MailNeedsRules.SEND, enabled = problem == null && !drafting,
                         spoken = "Send this chase to ${row.from} now", onClick = { onSend(text) { chasing = false; lastDraft = null; draftLine = null } },
                     )
                     if (MailChaseDraftRules.canDraft(text, row.draft, lastDraft)) {
-                        MailNeedsPill(
+                        MailCardPill(
                             if (drafting) MailChaseDraftRules.DRAFTING else MailChaseDraftRules.label(text, lastDraft), quiet = true, enabled = !drafting,
                             spoken = "Let Navilife write the chase to ${row.from} from your email; nothing is sent",
                             onClick = { haptics.light(); draft() },
                         )
                     }
-                    MailNeedsPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the chase without sending", onClick = { chasing = false })
+                    MailCardPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the chase without sending", onClick = { chasing = false })
                 }
             }
         }
         FlowRow(
             Modifier.padding(top = MekaSpace.xxs),
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            if (!chasing) MailNeedsPill(
+            if (!chasing) MailCardPill(
                 MailChaseRules.CHASE, spoken = "Chase ${row.from} by email; Navilife drafts it, nothing is sent until you tap Send",
                 // Opening a fresh chase asks the AI once for one written from the email; the plain one shows meanwhile.
                 onClick = { chasing = true; if (MailChaseDraftRules.autoDraft(row) && lastDraft == null) draft() },
             )
-            MailNeedsPill(MailChaseRules.GOT_IT, spoken = "Got it: ${row.title} arrived, off Waiting for", onClick = onGot)
-            MailNeedsPill(MailChaseRules.NOT_YET, quiet = true, spoken = "Not yet: chase ${row.from} again in 3 days", onClick = onNotYet)
+            MailCardPill(MailChaseRules.GOT_IT, spoken = "Got it: ${row.title} arrived, off Waiting for", onClick = onGot)
+            MailCardPill(MailChaseRules.NOT_YET, quiet = true, spoken = "Not yet: chase ${row.from} again in 3 days", onClick = onNotYet)
         }
     }
 }
@@ -757,7 +767,7 @@ internal fun MailFindSection(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); open = !open }
+            Modifier.fillMaxWidth().heightIn(min = MekaSpace.touch).clickable(role = Role.Button) { haptics.tick(); open = !open }
                 .semantics(mergeDescendants = true) { contentDescription = "${card.title}. ${card.headline}" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -809,20 +819,20 @@ private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: ()
         }
         FlowRow(
             Modifier.padding(top = MekaSpace.xxs),
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            MailNeedsPill(row.addLabel, spoken = row.addSpoken, onClick = onAdd)
-            MailNeedsPill(row.notNeededLabel, spoken = row.notNeededSpoken, quiet = true, onClick = onNotNeeded)
+            MailCardPill(row.addLabel, spoken = row.addSpoken, onClick = onAdd)
+            MailCardPill(row.notNeededLabel, spoken = row.notNeededSpoken, quiet = true, onClick = onNotNeeded)
             row.waitPill?.let { pill ->
-                MailNeedsPill(pill, spoken = row.waitSpoken ?: pill, quiet = true, onClick = { waitOpen = !waitOpen })
+                MailCardPill(pill, spoken = row.waitSpoken ?: pill, quiet = true, onClick = { waitOpen = !waitOpen })
             }
         }
         AnimatedVisibility(waitOpen && row.waits.isNotEmpty(), enter = unfold(), exit = fold()) {
             Column(Modifier.padding(top = MekaSpace.xs).testTag("mail-find-wait-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 row.waitHeading?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     row.waits.forEach { c ->
-                        MailNeedsPill(c.label, spoken = c.spoken, quiet = !c.chosen, onClick = { waitOpen = false; if (!c.chosen) onWait(c.days) })
+                        MailCardPill(c.label, spoken = c.spoken, quiet = !c.chosen, onClick = { waitOpen = false; if (!c.chosen) onWait(c.days) })
                     }
                 }
             }

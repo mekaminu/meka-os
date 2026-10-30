@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -31,6 +32,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -88,7 +90,7 @@ internal fun ArchivedForYouSection(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); open = !open }
+            Modifier.fillMaxWidth().heightIn(min = MekaSpace.touch).clickable(role = Role.Button) { haptics.tick(); open = !open }
                 .semantics(mergeDescendants = true) { contentDescription = card.spoken },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -121,7 +123,7 @@ internal fun ArchivedForYouSection(
                 // Slice 3: "+ 4 earlier tidies · in All tidied mail" opens the whole list.
                 card.moreLine?.let {
                     Text(it, style = MekaType.itemMeta, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { haptics.light(); openAll() })
+                        modifier = Modifier.clickable(role = Role.Button) { haptics.light(); openAll() }.minTouch())
                 }
                 Text(card.note, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             }
@@ -279,7 +281,7 @@ internal fun ArchivedEmailPreviewPanel(
             )
         }
         androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             ArchivedPill(MailReaderRules.READ_WHOLE, spoken = "${MailReaderRules.READ_WHOLE}, ${pv.subject}") { reading = true }
             run {
@@ -328,9 +330,11 @@ internal fun ArchivedPill(label: String, spoken: String, quiet: Boolean = false,
         label, style = MekaType.itemMeta,
         color = if (quiet) Meka.colors.textSecondary else Meka.colors.accent,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-            .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = spoken }
+            // Works by hand (quality gate): the slim pill drawn inside a 48 dp touch, as the other mail cards' pills.
+            .minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
