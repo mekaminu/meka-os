@@ -4933,3 +4933,6 @@ no migration.
   so it is switched off (`agendaByHandOff`); suspects: performScrollToNode reaching the week strip's HorizontalPager, or
   the Board/detail panes' animations with the paused clock. Next time: scroll only the agenda list (a test tag), and
   run it alone first.
+- CI run 1462 (745419c, agendaByHand off) hung the same way, so the hang is in the rest of the slice (the
+  shoppingByHand tab tap, or a layout change: the Lists Tabs restructure, CalendarViewSwitch's Box, EventRow minTouch).
+  Both commits reverted (code only) to keep main green. Redo: one change per push, the Lists tab tap on its own.

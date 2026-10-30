@@ -2267,27 +2267,16 @@ private fun PressureNote(p: DayPressure, onEase: (PressureFix) -> Unit) {
 fun CalendarViewSwitch(board: Boolean, modifier: Modifier = Modifier, onChange: (Boolean) -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    // Works by hand (quality gate): the switch is drawn 32 dp tall as before, and each side answers a 48 dp touch that
-    // reaches 8 dp above and below the drawn track.
-    Box(modifier.height(MekaSpace.touch)) {
-        Box(Modifier.matchParentSize().padding(vertical = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface))
-        Row {
-            listOf(false to WeekBoardRules.VIEW_AGENDA, true to WeekBoardRules.VIEW_BOARD).forEach { (isBoard, label) ->
-                val lit = isBoard == board
-                val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "view-$label")
-                Box(
-                    Modifier.height(MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
-                        .clickable(role = Role.Tab) { if (!lit) { haptics.tick(); onChange(isBoard) } },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier.height(MekaSpace.xl).clip(RoundedCornerShape(MekaRadius.pill)).background(fill).padding(horizontal = MekaSpace.m),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(label, style = MekaType.caption, color = if (lit) Meka.colors.textPrimary else Meka.colors.textTertiary, maxLines = 1)
-                    }
-                }
-            }
+    Row(modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)) {
+        listOf(false to WeekBoardRules.VIEW_AGENDA, true to WeekBoardRules.VIEW_BOARD).forEach { (isBoard, label) ->
+            val lit = isBoard == board
+            val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "view-$label")
+            Text(
+                label, style = MekaType.caption, color = if (lit) Meka.colors.textPrimary else Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                    .clickable(role = Role.Tab) { if (!lit) { haptics.tick(); onChange(isBoard) } }
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
         }
     }
 }

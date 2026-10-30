@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -313,18 +312,12 @@ fun EditLines(lines: List<EditLine>, modifier: Modifier = Modifier) {
 @Composable
 fun AddEventButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = rememberMekaHaptics()
-    // Works by hand (quality gate): the slim pill as before, inside a 48 dp touch.
-    Box(
-        modifier.height(MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
-            .clickable(role = Role.Button) { haptics.tick(); onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            "+ Add event", style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        )
-    }
+    Text(
+        "+ Add event", style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1,
+        modifier = modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button) { haptics.tick(); onClick() }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
 
 @Composable
