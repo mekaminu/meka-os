@@ -74,11 +74,21 @@ object AiSpendRules {
     /** Health and Settings when Anthropic refuses the key itself (revoked, expired or not allowed to use the API). */
     const val REFUSED_LINE = "Key refused by Anthropic · make a new key in Anthropic's Console and paste it into Secrets Manager"
 
-    fun lines(month: List<AiMonthUse>): List<AiSpendLine> {
+    /** The last row when the month's whole spend is more than its features add up to (walk-through A5, 2026-10-30). */
+    const val UNSPLIT = "Not split by feature"
+
+    /**
+     * [spentCents]: the month's whole spend as the heading says it. When it is more than the rows add up to (spend the
+     * server metered before it split by feature, or under a cent per feature), the rest is its own last row,
+     * "Not split by feature · $15.48", so the rows always add up to the heading.
+     */
+    fun lines(month: List<AiMonthUse>, spentCents: Long? = null): List<AiSpendLine> {
         val used = month.filter { it.calls > 0 || it.cents > 0 }
         if (used.isEmpty()) return emptyList()
-        val total = used.sumOf { it.cents }
-        return used.groupBy { AiTodayRules.groupOf(it.feature) }
+        val split = used.sumOf { it.cents }
+        val rest = (spentCents ?: 0L) - split
+        val total = if (rest > 0) split + rest else split
+        val rows = used.groupBy { AiTodayRules.groupOf(it.feature) }
             .map { (g, rows) -> Triple(g, rows.sumOf { it.calls }, rows.sumOf { it.cents }) }
             .sortedWith(compareByDescending<Triple<AiTodayRules.Group, Long, Long>> { it.third }.thenByDescending { it.second }.thenBy { it.first.ordinal })
             .map { (g, calls, cents) ->
@@ -86,6 +96,7 @@ object AiSpendRules {
                 val c = if (calls == 1L) "1 $unit" else "$calls ${unit}s"
                 AiSpendLine(g.label, "$c · ${cost(cents)}", if (total > 0) (cents.toFloat() / total).coerceIn(0f, 1f) else 0f)
             }
+        return if (rest > 0) rows + AiSpendLine(UNSPLIT, cost(rest), (rest.toFloat() / total).coerceIn(0f, 1f)) else rows
     }
 
     /** "under 1¢" for nothing metered, "85¢" below a dollar, else "$1.20". */
@@ -95,7 +106,7 @@ object AiSpendRules {
         else -> AskRules.dollars(cents)
     }
 
-    /** The unfolded row's heading line: "This month by feature · $2.05 in all". */
+    /** The unfolded row's heading line: "This month by feature · $2.05 in all"; with [lines] built from the same total, the rows add up to it. */
     fun heading(lines: List<AiSpendLine>, spentCents: Long?): String? {
         if (lines.isEmpty()) return null
         return listOfNotNull("This month by feature", spentCents?.let { "${cost(it)} in all" }).joinToString(" · ")

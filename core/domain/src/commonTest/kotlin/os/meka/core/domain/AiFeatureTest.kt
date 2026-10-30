@@ -57,7 +57,7 @@ class AiFeatureTest {
         assertEquals("While it can't be reached", AskRules.STATUS_UNKNOWN.fallbackHeading)
         // The spend still shows beside it.
         val month = listOf(AiMonthUse("ask.talk", 40, 120))
-        assertEquals(1, AskRules.statusView("on", null, 2000, 2000, "over", month).spend.size)
+        assertEquals(listOf("Talk", AiSpendRules.UNSPLIT), AskRules.statusView("on", null, 2000, 2000, "over", month).spend.map { it.label })
         // Every line is short enough for one or two caption lines.
         AiFeature.entries.forEach { f -> AiMode.entries.forEach { m -> assertTrue((AiFeatureRules.prefix(m)?.length ?: 0) + f.fallback.length < 160) } }
     }

@@ -137,6 +137,8 @@ class AiScreensTest {
                 if (!onScreen("Until it answers again")) fail("$name: what still works isn't headed")
                 AiSpendRules.lines(month).forEach { if (!onScreen(it.detail)) fail("$name: \"${it.label} · ${it.detail}\" isn't shown") }
                 if (!onScreen("412 clips")) fail("$name: Voice isn't counted in clips")
+                // Walk-through A5: the rows add up to "$18.30 in all", the rest on its own row.
+                if (!onScreen(AiSpendRules.UNSPLIT) || !onScreen("\$15.48")) fail("$name: the spend not split by feature isn't its own row")
             }
         }
     }

@@ -607,7 +607,7 @@ object AskRules {
         month: List<AiMonthUse> = emptyList(), keyRefused: Boolean = false,
     ): AiStatusView {
         val base = statusLine(state, reason, spentCents, budgetCents, level)
-        val lines = AiSpendRules.lines(month)
+        val lines = AiSpendRules.lines(month, spentCents)
         val heading = AiSpendRules.heading(lines, spentCents)
         val view = when {
             keyRefused && state != "off" -> AiStatusView(AiSpendRules.REFUSED_LINE, lit = true, canAsk = true, refused = true, spend = lines, spendHeading = heading)

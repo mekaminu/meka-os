@@ -63,4 +63,21 @@ class AiSpendTest {
             AiTodayRules.line(listOf(AiDayUse("voice.polly", 12, 4_000), AiDayUse("ask.talk", 3, 6_000))),
         )
     }
+
+    @Test
+    fun theRowsAlwaysAddUpToTheHeading() {
+        // Walk-through A5: "$18.30 in all" over rows worth $2.82.
+        val month = listOf(AiMonthUse("ask.talk", 40, 182), AiMonthUse("mail.sort", 300, 100))
+        val view = AskRules.statusView("on", null, 1830, 2000, "ok", month)
+        assertEquals("This month by feature · $18.30 in all", view.spendHeading)
+        assertEquals(listOf("Talk", "Mail", AiSpendRules.UNSPLIT), view.spend.map { it.label })
+        assertEquals("$15.48", view.spend.last().detail)
+        assertEquals(1548f / 1830f, view.spend.last().share)
+        assertEquals(182f / 1830f, view.spend.first().share)
+        // When the rows already add up (or the server sends no total), there's no extra row.
+        assertEquals(listOf("Talk", "Mail"), AskRules.statusView("on", null, 282, 2000, "ok", month).spend.map { it.label })
+        assertEquals(listOf("Talk", "Mail"), AiSpendRules.lines(month).map { it.label })
+        // A total under what the rows say (rounding) never makes a negative row.
+        assertEquals(2, AiSpendRules.lines(month, 280).size)
+    }
 }
