@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -62,6 +63,9 @@ import os.meka.core.facade.MekaCore
  * 40 ms apart and arrive, move and leave with the list's item motion; an opened row grows on the expand spring and its
  * lists fade in; a lit row's line blends to the accent; Kept gives a light haptic. Reduced motion: cross-fades.
  */
+/** People's list, for the by-hand tests' bounded scroll. */
+const val PEOPLE_LIST_TAG = "people-list"
+
 @Composable
 fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -70,7 +74,7 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
     val v by core.peopleView.collectAsState()
     var open by remember { mutableStateOf<String?>(null) }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(PEOPLE_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

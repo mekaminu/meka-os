@@ -1,5 +1,6 @@
 package os.meka.android.screens
 
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,7 +9,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
@@ -19,10 +30,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.ERRANDS_LIST_TAG
 import os.meka.android.ask.ErrandsPane
+import os.meka.android.ask.MEALS_LIST_TAG
 import os.meka.android.ask.MealsPane
+import os.meka.android.ask.PEOPLE_LIST_TAG
 import os.meka.android.ask.PeoplePane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -62,8 +77,9 @@ class LifePlacesScreensTest {
 
     private companion object { const val SETTLE_MS = 3_000L }
 
-    private enum class Place(val area: String, val title: String) {
-        PEOPLE("people", "People"), ERRANDS("errands", "Errands"), DINNERS("dinners", "Dinners"),
+    private enum class Place(val area: String, val title: String, val listTag: String) {
+        PEOPLE("people", "People", PEOPLE_LIST_TAG), ERRANDS("errands", "Errands", ERRANDS_LIST_TAG),
+        DINNERS("dinners", "Dinners", MEALS_LIST_TAG),
     }
 
     private enum class Fill { EMPTY, ONE, MANY }
@@ -105,7 +121,7 @@ class LifePlacesScreensTest {
         }
     }
 
-    private fun shoot(place: Place, name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+    private fun shoot(place: Place, name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -179,6 +195,166 @@ class LifePlacesScreensTest {
                 if (fill == Fill.MANY && v.week.count { it.mealId != null } != 3) fail("$name: the week doesn't hold its three dinners")
             }
         }
+        return core
+    }
+
+    /** Runs the main looper and the frames by turns (a tap's change reaches the recomposer through the looper). */
+    private fun turns(ms: Long = SETTLE_MS) {
+        repeat((ms / 100).toInt()) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
+    /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle. */
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns()
+    }
+
+    /**
+     * Scrolls the pane's own list (bounded: at most 20 steps of 60 % down, then 40 up, never performScrollToNode with
+     * the clock paused) until a node matching [m] is composed, then returns the matches, failing with [what] if none.
+     */
+    private fun reach(place: Place, name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
+        fun found() = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+        if (!found()) {
+            val list = compose.onNodeWithTag(place.listTag)
+            val step = list.fetchSemanticsNode().size.height * 0.6f
+            for (dy in List(20) { step } + List(40) { -step }) {
+                if (found()) break
+                list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+                compose.mainClock.advanceTimeBy(1_000)
+            }
+            turns(500)
+        }
+        val n = compose.onAllNodes(m)
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no $what")
+        return n
+    }
+
+    private fun tap(place: Place, name: String, what: String, matcher: SemanticsMatcher) {
+        reach(place, name, matcher and hasClickAction(), "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    /** Types [text] into the field TalkBack reads as [hint] and presses Done on the keyboard. */
+    private fun type(place: Place, name: String, hint: String, text: String) {
+        val field = hasContentDescription(hint) and hasSetTextAction()
+        reach(place, name, field, "\"$hint\" field")[0].performTextInput(text)
+        turns(500)
+        compose.onAllNodes(field)[0].performImeAction()
+    }
+
+    private fun shows(m: SemanticsMatcher) = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+
+    /** Every button drawn answers a 48 dp touch (Errands' Done and Remove, Dinners' Remove and near-me's pill were ~30). */
+    private fun assertTouchTargets(name: String) {
+        val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .fetchSemanticsNodes()
+            .filter { it.size.height / compose.density.density < 47.5f }
+            .map { n ->
+                val label = n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString()
+                    ?: n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } ?: "?"
+                "\"$label\" ${(n.size.height / compose.density.density).toInt()} dp"
+            }
+        if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * Works by hand, People: a tap on a person opens what's owed either way; each Kept is a 48 dp touch and takes its
+     * promise off; a second tap folds the person again.
+     */
+    private fun peopleByHand(core: MekaCore) {
+        val name = "people-by-hand"
+        val p = Place.PEOPLE
+        assertTouchTargets(name)
+        val alex = core.peopleView.value.rows.firstOrNull { it.name == "Alex" } ?: fail("$name: Alex isn't on People")
+        val promise = alex.promised.firstOrNull() ?: fail("$name: nothing promised to Alex")
+        val kept = hasContentDescription("Kept: ${promise.title}")
+        tap(p, name, "Alex", hasContentDescription(alex.spoken))
+        until { shows(kept) }
+        if (!shows(kept)) fail("$name: tapping Alex didn't open what's owed")
+        ScreenShots.assertShows(compose, name, "WAITING FOR")
+        assertTouchTargets(name)
+        tap(p, name, "Kept", kept)
+        until { core.peopleView.value.rows.first { it.key == alex.key }.promised.none { it.id == promise.id } }
+        if (core.peopleView.value.rows.first { it.key == alex.key }.promised.any { it.id == promise.id }) {
+            fail("$name: Kept left \"${promise.title}\" on Alex")
+        }
+        if (core.listsView.value.promised.any { it.id == promise.id }) fail("$name: Kept on People didn't keep it on Lists")
+        val now = core.peopleView.value.rows.first { it.key == alex.key }
+        val other = now.promised.firstOrNull() ?: fail("$name: Alex's other promise went too")
+        tap(p, name, "Alex", hasContentDescription(now.spoken))
+        until { !shows(hasContentDescription("Kept: ${other.title}")) }
+        if (shows(hasContentDescription("Kept: ${other.title}"))) fail("$name: a second tap on Alex didn't fold him")
+    }
+
+    /**
+     * Works by hand, Errands: every button a 48 dp touch; Done moves an errand to Done lately and Back returns it;
+     * Remove takes one off; the field adds a typed line at its place.
+     */
+    private fun errandsByHand(core: MekaCore) {
+        val name = "errands-by-hand"
+        val p = Place.ERRANDS
+        assertTouchTargets(name)
+        val first = core.errandsView.value.places.first().rows.first()
+        tap(p, name, "Done", hasContentDescription("Done: ${first.shown}"))
+        until { core.errandsView.value.done.any { it.id == first.id } }
+        if (core.errandsView.value.done.none { it.id == first.id }) fail("$name: Done didn't tick \"${first.shown}\"")
+        reach(p, name, hasText("Done lately", ignoreCase = true), "Done lately label")
+        assertTouchTargets(name)
+        tap(p, name, "Back", hasContentDescription("Back: ${first.shown}"))
+        until { core.errandsView.value.done.none { it.id == first.id } }
+        if (core.errandsView.value.done.any { it.id == first.id }) fail("$name: Back left \"${first.shown}\" in Done lately")
+        val pharmacy = core.errandsView.value.places.flatMap { it.rows }.first { it.title.contains("collect the order") }
+        tap(p, name, "Remove", hasContentDescription("Remove ${pharmacy.shown}"))
+        until { core.errandsView.value.places.flatMap { it.rows }.none { it.id == pharmacy.id } }
+        if (core.errandsView.value.places.flatMap { it.rows }.any { it.id == pharmacy.id }) fail("$name: Remove left \"${pharmacy.shown}\"")
+        type(p, name, ErrandRules.HINT, "Butcher: sausages for Saturday")
+        until { core.errandsView.value.places.any { g -> g.rows.any { it.title.contains("sausages") } } }
+        if (core.errandsView.value.places.none { g -> g.rows.any { it.title.contains("sausages") } }) fail("$name: Done on the field added nothing")
+        reach(p, name, hasText("sausages", substring = true, ignoreCase = true), "new errand on screen")
+    }
+
+    /**
+     * Works by hand, Dinners: a tap on an unplanned day opens its favourites (48 dp chips) and one plans it; Add to
+     * shopping puts the week's ingredients on the list and Undo takes them back; Remove takes a favourite off; the field
+     * adds a favourite.
+     */
+    private fun dinnersByHand(core: MekaCore) {
+        val name = "dinners-by-hand"
+        val p = Place.DINNERS
+        assertTouchTargets(name)
+        val day = core.mealsView.value.week.first { it.mealId == null }
+        val fav = core.mealsView.value.favourites.last()
+        tap(p, name, day.label, hasContentDescription(day.spoken))
+        val chip = hasText(fav.title) and hasClickAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)
+        until { shows(chip) }
+        if (!shows(chip)) fail("$name: tapping ${day.label} didn't open the favourites")
+        assertTouchTargets(name)
+        compose.onAllNodes(chip)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.mealsView.value.week.first { it.day == day.day }.mealId == fav.id }
+        if (core.mealsView.value.week.first { it.day == day.day }.mealId != fav.id) fail("$name: the chip didn't plan ${fav.title}")
+        val label = core.mealsView.value.shoppingLabel ?: fail("$name: no Add to shopping with four dinners planned")
+        val before = core.listsView.value.shopping.toBuy.size
+        tap(p, name, label, hasText(label))
+        until { core.listsView.value.shopping.toBuy.size > before }
+        if (core.listsView.value.shopping.toBuy.size <= before) fail("$name: \"$label\" added nothing to shopping")
+        tap(p, name, "Undo", hasText("Undo"))
+        until { core.listsView.value.shopping.toBuy.size == before }
+        if (core.listsView.value.shopping.toBuy.size != before) fail("$name: Undo left ${core.listsView.value.shopping.toBuy.size - before} on shopping")
+        val gone = core.mealsView.value.favourites.first { it.title.startsWith("Pasta") }
+        tap(p, name, "Remove", hasContentDescription("Remove ${gone.title}"))
+        until { core.mealsView.value.favourites.none { it.id == gone.id } }
+        if (core.mealsView.value.favourites.any { it.id == gone.id }) fail("$name: Remove left ${gone.title}")
+        type(p, name, MealRules.ADD_HINT, "Leek soup: leeks, potatoes, stock")
+        until { core.mealsView.value.favourites.any { it.title.startsWith("Leek soup") } }
+        if (core.mealsView.value.favourites.none { it.title.startsWith("Leek soup") }) fail("$name: Done on the field added no favourite")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverEmpty() = shoot(Place.PEOPLE, "cover-dark-empty", Fill.EMPTY)
@@ -194,6 +370,13 @@ class LifePlacesScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverManyLight() = shoot(Place.ERRANDS, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
     @Test @Config(qualifiers = ScreenShots.INNER) fun errandsInnerEmpty() = shoot(Place.ERRANDS, "inner-dark-empty", Fill.EMPTY)
     @Test @Config(qualifiers = ScreenShots.INNER) fun errandsInnerMany() = shoot(Place.ERRANDS, "inner-dark-many", Fill.MANY)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun peopleByHand() { peopleByHand(shoot(Place.PEOPLE, "cover-dark-people-by-hand", Fill.MANY)) }
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun errandsByHand() { errandsByHand(shoot(Place.ERRANDS, "cover-dark-errands-by-hand", Fill.MANY)) }
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun dinnersByHand() { dinnersByHand(shoot(Place.DINNERS, "cover-dark-dinners-by-hand", Fill.MANY)) }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverEmpty() = shoot(Place.DINNERS, "cover-dark-empty", Fill.EMPTY)
     @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverOne() = shoot(Place.DINNERS, "cover-dark-one", Fill.ONE)

@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -83,6 +84,9 @@ import os.meka.core.facade.MekaCore
  * cross-fades through "Finding where you are…" to "Saved … here" (light haptic; a tick when refused). Reduced motion:
  * cross-fades.
  */
+/** Errands' list, for the by-hand tests' bounded scroll. */
+const val ERRANDS_LIST_TAG = "errands-list"
+
 @Composable
 fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -119,7 +123,7 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
     )
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(ERRANDS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -156,11 +160,11 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Crossfade(near.statusLine, animationSpec = MekaMotion.appear(reduced), label = "errand-near-line",
                         modifier = Modifier.weight(1f).then(
-                            if (near.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) } else Modifier,
+                            if (near.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) }.minTouch() else Modifier,
                         )) { l -> Text(l, style = MekaType.caption, color = nearColor) }
                     Box(
+                        // Works by hand (quality gate): the slim pill drawn inside its 48 dp touch.
                         Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
-                            .background(Meka.colors.surfaceRaised)
                             .clickable(role = Role.Button) {
                                 haptics.tick()
                                 nearOn = !nearOn
@@ -170,6 +174,8 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
                                     askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                                 } else if (nearOn && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                             }
+                            .minTouch()
+                            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                     ) { Text(near.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent) }
                 }
@@ -292,6 +298,7 @@ private fun ErrandRowView(row: ErrandRow, modifier: Modifier, primary: String, o
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onPrimary)
                 .semantics { contentDescription = "$primary: ${row.shown}" }
+                .minTouch()
                 .padding(MekaSpace.xs),
         )
         Text(
@@ -299,6 +306,7 @@ private fun ErrandRowView(row: ErrandRow, modifier: Modifier, primary: String, o
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${row.shown}" }
+                .minTouch()
                 .padding(MekaSpace.xs),
         )
     }

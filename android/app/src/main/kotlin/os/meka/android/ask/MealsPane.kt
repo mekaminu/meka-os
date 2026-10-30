@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -66,6 +67,9 @@ import os.meka.core.facade.MekaCore
  * chosen chip's colour blends with a tick haptic; Add to shopping gives a light haptic; favourites arrive and leave with
  * the list's item motion. Reduced motion: cross-fades.
  */
+/** Dinners' list, for the by-hand tests' bounded scroll. */
+const val MEALS_LIST_TAG = "meals-list"
+
 @Composable
 fun MealsPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -82,7 +86,7 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
     )
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(MEALS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -235,6 +239,7 @@ private fun MealRowView(row: MealRow, modifier: Modifier, onRemove: () -> Unit) 
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${row.title}" }
+                .minTouch()
                 .padding(MekaSpace.xs),
         )
     }

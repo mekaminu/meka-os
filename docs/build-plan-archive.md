@@ -4880,6 +4880,22 @@ FastingScreensTest measures every stage and History row on screen in every shot 
 MekaCoreBridgeTests.testFastingBesideOnTheMac. Fold `goals/FastingPane.kt`, Mac `Goals/FastingSheet.swift`. No server
 change, no migration. Mac checked nightly.
 
+### Quality gate — (3) works by hand, Life's places (2026-10-30)
+
+LifePlacesScreensTest gains three by-hand tests on the closed Fold, full set, under HangWatch, scrolling each pane's
+own list in bounded steps (new tags PEOPLE_LIST_TAG, ERRANDS_LIST_TAG, MEALS_LIST_TAG):
+
+- **peopleByHand**: every button a 48 dp touch; a tap on Alex opens YOU PROMISED / WAITING FOR; Kept takes the
+  promise off People and Lists; a second tap folds him.
+- **errandsByHand**: Done moves an errand to Done lately, Back returns it, Remove takes one off, a typed
+  "Butcher: …" line and Done on the keyboard adds it.
+- **dinnersByHand**: a tap on an unplanned day opens its favourites and a chip plans it; Add N ingredients to
+  shopping adds them and Undo takes them back; Remove takes a favourite off; the field adds a favourite.
+
+Found and fixed first (Fold): an errand's Done / Back and Remove and a favourite's Remove were ~30 dp to tap (now
+`minTouch`, the words unchanged); Near-me reminders' On/Off pill was ~32 dp (now the slim pill drawn inside a 48 dp
+touch) and its lit status line 48 dp too. Fold only; no core or server change, no migration.
+
 ### Quality gate — (3) works by hand, Lists and the Vault (2026-10-30)
 
 The screen tests counted taps per file: Lists, the Vault, Car, the places pages, Settings, Calendar, Needs you and Ask
