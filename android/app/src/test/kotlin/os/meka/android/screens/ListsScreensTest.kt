@@ -199,9 +199,14 @@ class ListsScreensTest {
         compose.onAllNodes(field)[0].performImeAction()
     }
 
-    /** Every button drawn answers a 48 dp touch (an opened row's Kept and Delete, the chips, shopping's Remove were ~30 dp). */
+    /**
+     * Every button and tab drawn answers a 48 dp touch (an opened row's Kept and Delete, the chips, shopping's Remove were
+     * ~30 dp; the five tabs 40 dp).
+     */
     private fun assertTouchTargets(name: String) {
-        val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        val tappable = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) or
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+        val small = compose.onAllNodes(hasClickAction() and tappable)
             .fetchSemanticsNodes()
             .filter { it.size.height / compose.density.density < 47.5f }
             .map { n ->
@@ -256,6 +261,16 @@ class ListsScreensTest {
         until { core.listsView.value.shopping.toBuy.size >= 5 }
         val titles = core.listsView.value.shopping.toBuy.map { it.title.lowercase() }
         if ("eggs" !in titles || "butter" !in titles) fail("$name: the field didn't add eggs and butter ($titles)")
+
+        // The tabs: a tap on Waiting lights it and Promises comes back.
+        val waiting = hasTestTag(LIST_TAB_TAG) and hasContentDescription(ListTab.WAITING.label, substring = true) and hasClickAction()
+        val shown = compose.onAllNodes(waiting)
+        if (shown.fetchSemanticsNodes().isEmpty()) fail("$name: no Waiting tab")
+        shown[0].performSemanticsAction(SemanticsActions.OnClick)
+        val lit = waiting and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        until { compose.onAllNodes(lit).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(lit).fetchSemanticsNodes().isEmpty()) fail("$name: tapping Waiting didn't light it")
+        assertTouchTargets(name)
     }
 
     /** All five tabs, each label whole inside its slot (TabLabelCut, set from the label's own layout). */

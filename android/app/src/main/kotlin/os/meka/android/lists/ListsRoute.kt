@@ -277,12 +277,14 @@ internal fun LazyListScope.empty(key: String, line: String) = item(key = "empty-
 @Composable
 private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: (ListTab) -> Unit) {
     val tabs = ListTab.entries
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(MekaSpace.xxs)) {
+    // Works by hand (quality gate): the track and the lit pill look as before (a 40 dp pill inside a 48 dp track), but
+    // each tab's touch is the track's full 48 dp height, not the 40 dp pill.
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(horizontal = MekaSpace.xxs)) {
         val slot = maxWidth / tabs.size
         val roomForCounts = slot >= 104.dp
         val shortLabels = slot < 84.dp
         val x by animateDpAsState(slot * tabs.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "lists-pill")
-        Box(Modifier.offset(x = x).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
+        Box(Modifier.offset(x = x).padding(vertical = MekaSpace.xxs).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
             tabs.forEach { t ->
                 val count = when (t) {
@@ -300,7 +302,7 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                 )
                 var cut by remember(t) { mutableStateOf(false) }
                 Box(
-                    Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    Modifier.weight(1f).height(MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Tab) { choose(t) }
                         .testTag(LIST_TAB_TAG)
                         .clearAndSetSemantics {

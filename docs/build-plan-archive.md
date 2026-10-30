@@ -4912,3 +4912,19 @@ no migration.
   first (it's a LazyColumn taller than the cover screen).
 - Car's buttons already had their 48 dp targets (minTouch since slice 22 and the Lists chip fix), so no screen change.
   Test only; Fold only (the Mac clicks); no core or server change, no migration.
+
+
+### Quality gate (3) works by hand: the Calendar's Agenda and Lists' tabs (2026-10-30)
+
+- CalendarScreensTest.agendaByHand (closed Fold, the MANY week plus three more all-day things on Fri 23 Oct and the long
+  planning event hidden from my day): asserts every Role.Button and Role.Tab answers a 48 dp touch, then +1 more unfolds
+  the fourth all-day thing (all four titles reachable), Show empties every section's hidden list, a non-today day pill
+  becomes selected, Swimming lesson opens its detail (Close) and Close shuts it, Board hides the Agenda's summary line.
+- Fixed first on the Fold: CalendarRoute EventRow and AgendaAllDayRow `minTouch()` (a one-line event with no place was
+  37 dp); HiddenRow's title and Show `minTouch()` (~26 dp); AllDayMore gains `touch = true` for the agenda (Today keeps
+  its compact line); CalendarViewSwitch is a 32 dp drawn track inside a 48 dp box with each side's 48 dp touch (the gaps
+  around it in the Agenda header 8 dp less, so the track sits where it did); AddEventButton a slim pill in a 48 dp box.
+- Lists' Tabs: the track's vertical padding moved onto the lit pill, so each tab's touch is the track's full 48 dp while
+  the drawn track (48) and pill (40) look as before. ListsScreensTest's touch check covers tabs; shoppingByHand taps
+  the Promises tab and checks it lights.
+- No core or server change, no migration. Mac unchanged (pointer clicks).

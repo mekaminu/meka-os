@@ -49,6 +49,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import os.meka.android.calendar.EventActionHandlers
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.mekaMenuBorder
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -301,9 +302,11 @@ internal fun AllDayRow(
 
 /** "+2 more" under the all-day rows: unfolds the rest (they spring in with the list's item motion). */
 @Composable
-internal fun AllDayMore(label: String, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+internal fun AllDayMore(label: String, onOpen: () -> Unit, modifier: Modifier = Modifier, touch: Boolean = false) {
+    // [touch]: the Calendar's agenda gives the line a 48 dp touch (works by hand); Today keeps its compact line.
     Row(
-        modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }.padding(vertical = MekaSpace.xxs),
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }
+            .then(if (touch) Modifier.minTouch() else Modifier.padding(vertical = MekaSpace.xxs)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.width(TIME_COLUMN))
