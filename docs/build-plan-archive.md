@@ -5088,3 +5088,20 @@ screen must answer a 48 dp touch (its shot tests now have block bodies, since `s
 Found and fixed first (Fold): Appointments' Went and Remove and School's Remove (~30 dp) and Fill in (~36 dp) now
 answer a 48 dp touch (`minTouch`), the words drawn as before. Kids' buttons were already 48 dp. Fold only (the Mac
 clicks); no core or server change, no migration.
+
+### Quality gate — (3) works by hand, Settings (2026-10-30)
+
+SettingsScreensTest gains two by-hand tests on the closed Fold, under HangWatch, scrolling each pane's own list in
+bounded steps (new tags SETTINGS_LIST_TAG, ABOUT_YOU_LIST_TAG); every button and switch on screen must answer a 48 dp
+touch:
+
+- **settingsByHand** (connected): every Settings row that opens a place opens that one; Appearance unfolds in place;
+  Light takes and Dark puts it back; a Motion chip (Expressive or Subtle), a Done today chip and a News ticker chip each
+  take; Topics › and Play the opening answer; a second tap folds Appearance.
+- **aboutYouByHand** (every line filled, two children): Done on Your name keeps what's typed; a blank Home clears it and
+  Undo puts it back; Watch for requests turns off and on; Remove takes a child off and Undo brings them back; the child
+  field adds one.
+
+Found and fixed first (Fold): Appearance's Topics › (~24 dp) and Play the opening (~34 dp pill), the Motion check's
+fix line, and About you's Remove on a child (~30 dp) now answer a 48 dp touch (`minTouch`), each drawn as before (the
+pill keeps its size inside a taller touch). Fold only (the Mac clicks); no core or server change, no migration.

@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaSpace
@@ -29,6 +30,9 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.ShellNav
 import os.meka.core.domain.AiStatusView
 import os.meka.core.facade.MekaCore
+
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val SETTINGS_LIST_TAG = "settings-list"
 
 /**
  * Ask → Settings (Fold review 2026-10-12, item 7): every setting, behind one row on Ask. Work mode, Protected time,
@@ -52,7 +56,7 @@ fun SettingsPane(
     var ai by remember { mutableStateOf<AiStatusView?>(null) }
     LaunchedEffect(Unit) { ai = runCatching { core.aiStatus() }.getOrNull() }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(SETTINGS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

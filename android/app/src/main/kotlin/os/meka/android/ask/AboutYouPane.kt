@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -58,6 +59,9 @@ import os.meka.core.domain.AboutSaved
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.facade.MekaCore
 
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val ABOUT_YOU_LIST_TAG = "about-you-list"
+
 /**
  * Ask → Settings → About you (rule 13, slice 1): who's who, home and work, typed once and kept in Meka's own synced data
  * rather than MEKA's code. Each line is a field holding what's there; Done saves it (blank clears it, with Undo). The
@@ -84,7 +88,7 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(ABOUT_YOU_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -138,7 +142,9 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
                 Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Button) { scope.launch { runCatching { core.removeAboutYouChild(c.index) }.getOrNull()?.let { react("children", it) } } }
-                        .semantics { contentDescription = "Remove ${c.name}" }.padding(MekaSpace.xs))
+                        .semantics { contentDescription = "Remove ${c.name}" }
+                        // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                        .minTouch().padding(horizontal = MekaSpace.xs))
             }
         }
         item(key = "children-add") {

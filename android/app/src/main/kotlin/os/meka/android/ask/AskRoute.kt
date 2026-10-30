@@ -659,7 +659,8 @@ internal fun AppearanceRow(
                 ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
                 Text("Topics ›", style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = openTopics)
-                        .padding(MekaSpace.xxs))
+                        // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                        .minTouch().padding(horizontal = MekaSpace.xxs))
             }
             // How the Fold reports it is held (bedside clock slice 1), live, so the bedside clock's trigger can be seen.
             os.meka.android.fold.FoldPostureLines(Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xxs))
@@ -713,7 +714,7 @@ private fun MotionCheckSection(motion: MotionControl, playOpening: () -> Unit) {
             line, style = MekaType.caption,
             color = if (fix != null) Meka.colors.accent else Meka.colors.textPrimary,
             modifier = if (fix != null) Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button) { haptics.tick(); motion.set(fix) } else Modifier,
+                .clickable(role = Role.Button) { haptics.tick(); motion.set(fix) }.minTouch() else Modifier,
         )
     }
     Row(
@@ -722,8 +723,10 @@ private fun MotionCheckSection(motion: MotionControl, playOpening: () -> Unit) {
     ) {
         Text(MotionCheckRules.PLAY_OPENING_LINE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
         Text(MotionCheckRules.PLAY_OPENING, style = MekaType.caption, color = Meka.colors.onAccent,
-            modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+            // Works by hand (quality gate (3)): the touch is 48 dp tall round the pill, the pill drawn as before.
+            modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button) { haptics.light(); playOpening() }
+                .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                 .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
     }
 }
