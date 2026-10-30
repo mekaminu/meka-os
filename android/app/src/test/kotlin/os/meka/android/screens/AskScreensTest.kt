@@ -216,7 +216,8 @@ class AskScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
-    private val close = hasText("Close") and hasClickAction()
+    /** A pane's way back: Close, or News's "‹ Ask". */
+    private val close = (hasText("Close") or hasText("‹ Ask")) and hasClickAction()
 
     /** Ask with a full life (and six things with "milk" in them, so the field's matches run past five). */
     private fun handSetUp(): Pair<MekaCore, Pair<MutableList<ShellDestination>, MutableList<OpenItem>>> {
