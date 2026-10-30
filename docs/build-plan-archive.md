@@ -4950,3 +4950,13 @@ no migration.
   pane reads System.currentTimeMillis for the parked time and timer while the test's compose clock is paused, and
   performScrollToNode / performTextInput wait for idle. Next: make carByHand safe and turn it back on (pin the pane's
   clock, scroll only the pane's own list), then Agenda · Board's 48 dp switch, Lists' tabs and agendaByHand.
+- Made safe (2026-10-30): `android/app/src/test/.../screens/HangWatch.kt`, a JUnit rule: a test still running after
+  5 minutes gets every live thread's stack printed to stderr (the unit tests' log now shows `standard_error`), its
+  thread interrupted (a Thread.sleep or latch wait ends, so the test fails), and if it is still running 30 s later the
+  test JVM halts, so the android job fails in minutes and the log says where it hung. CarScreensTest has it as its
+  outermost rule (order 0, the compose rule order 1); `carCoverByHand` (cover, one car) runs carByHand again; its
+  scrolls now go to the pane's own LazyColumn (`CAR_LIST_TAG`, the only main-code change) instead of the first
+  scrollable on screen. HangWatchTest (plain JUnit): a quick test passes with no interrupt left; a 60 s sleep under a
+  300 ms limit is interrupted and fails within seconds; the report names the test and each thread. The pane's own
+  clock is not pinned: nothing in the pane writes state from the clock during composition (the `now` tick is a
+  30 s delay on the compose clock), so the clock is not the likely cause; the stack will say.

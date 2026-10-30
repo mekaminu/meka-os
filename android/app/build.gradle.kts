@@ -74,7 +74,7 @@ android {
                 // "STARTED" line (CI runs 1461, 1462 and 1463 hung with no name, 2026-10-30).
                 it.testLogging {
                     exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-                    events("started", "failed")
+                    events("started", "failed", "standard_error")
                 }
             }
         }

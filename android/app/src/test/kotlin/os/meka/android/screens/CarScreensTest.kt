@@ -14,11 +14,9 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
@@ -35,6 +33,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.CAR_LIST_TAG
 import os.meka.android.ask.CarPane
 import os.meka.android.ask.ParkingStore
 import os.meka.android.designsystem.Meka
@@ -63,7 +62,11 @@ import kotlin.test.fail
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], application = ShotApplication::class)
 class CarScreensTest {
-    @get:Rule
+    /** Outermost: a hang fails within minutes with every thread's stack, instead of holding CI to its limit. */
+    @get:Rule(order = 0)
+    val hangWatch = HangWatch()
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
@@ -184,7 +187,8 @@ class CarScreensTest {
 
     /** Scrolls the pane until a node matching [m] is composed, then returns the matches (failing with [what] if none). */
     private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
-        runCatching { compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(m) }
+        // Only the pane's own list scrolls (not the first scrollable on screen, which could be a chip row).
+        runCatching { compose.onNodeWithTag(CAR_LIST_TAG).performScrollToNode(m) }
         until { compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty() }
         val found = compose.onAllNodes(m)
         if (found.fetchSemanticsNodes().isEmpty()) fail("$name: no $what")
@@ -260,11 +264,10 @@ class CarScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverOne() { shoot("cover-dark-one", Fill.ONE) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverMany() { shoot("cover-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
-    // carByHand hangs now and then: CI run 1465's re-run logged "CarScreensTest > carByHand STARTED" at 07:36 and nothing
-    // more until the 40-minute limit (2026-10-30; the same hang most likely stopped runs 1461–1463, blamed on Calendar).
-    // Off until it is made safe: the pane reads the phone's own clock for the parked time and timer.
-    @Suppress("unused")
-    private fun carByHandOff() { carByHand(shoot("cover-dark-by-hand", Fill.ONE)) }
+    // carByHand hung once (CI run 1465's re-run logged "CarScreensTest > carByHand STARTED" and nothing more until the
+    // 40-minute limit). Back on 2026-10-30 under HangWatch, scrolling only the pane's list: a hang now fails within
+    // minutes with every thread's stack in the log, so it can be found.
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverByHand() { carByHand(shoot("cover-dark-by-hand", Fill.ONE)) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerEmpty() { shoot("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerMany() { shoot("inner-dark-many", Fill.MANY) }
 }

@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -267,7 +268,7 @@ fun CarPane(
     val askCoarse = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { fuelTick++ }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(CAR_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -581,6 +582,8 @@ private fun BluetoothRow(
     }
 }
 
+/** The pane's own list, so a test scrolls it and nothing else on screen. */
+internal const val CAR_LIST_TAG = "car-list"
 private const val FUEL_HEADING = "FUEL NEARBY"
 private const val FUEL_ALLOW = "Allow"
 private const val FUEL_AGAIN = "Look again"
