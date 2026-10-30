@@ -292,7 +292,7 @@ private fun CardToDay(card: DecisionCard, toDays: () -> List<FeedDay>, onToDay: 
                 Text(BoardFeedRules.PICK, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(horizontal = MekaSpace.xs))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     toDays().forEach { d ->
-                        MailNeedsPill(d.label, spoken = "${d.spoken}: ${card.title}", onClick = { haptics.medium(); choosing = false; onToDay(d.day) })
+                        MailNeedsPill(d.label, spoken = "${d.spoken}: ${card.title}", touch = true, onClick = { haptics.medium(); choosing = false; onToDay(d.day) })
                     }
                 }
             }

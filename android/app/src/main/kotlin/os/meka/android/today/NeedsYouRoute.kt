@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
@@ -88,7 +89,7 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val undo = rememberEventUndo()
     val actions = todayActions(core, scope, { selectedId }, { selectedId = it }, undo)
-    val selected = today.needsYou.map { it.task }.firstOrNull { it.id == selectedId }
+    val selected = rememberOpenTask(core, selectedId, today.needsYou.map { it.task }, today)
     var showAfterWork by rememberSaveable { mutableStateOf(false) }
     val app = LocalContext.current.applicationContext as MekaApplication
     val openAfterWork by app.openAfterWork.collectAsState()
@@ -129,6 +130,20 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
     }
 }
 
+
+/**
+ * The task [selectedId] names: one of [known] (the screen's own tasks), else read from the core, so a reminder under
+ * Coming up (due tomorrow, not one of Today's tasks) opens its detail too (works by hand, Needs you: its tap did
+ * nothing). Read again whenever [today] changes, so the detail follows edits and closes when the task goes.
+ */
+@Composable
+internal fun rememberOpenTask(core: MekaCore, selectedId: String?, known: List<Task>, today: Any): Task? {
+    val own = known.firstOrNull { it.id == selectedId }
+    val other by androidx.compose.runtime.produceState<Task?>(null, selectedId, own == null, today) {
+        value = if (selectedId == null || own != null) null else runCatching { core.taskForDetail(selectedId) }.getOrNull()
+    }
+    return own ?: other?.takeIf { it.id == selectedId }
+}
 
 /** The stack's moves, and the cards set aside with "Later" on this screen (nothing is written; back of the stack). */
 internal class DecisionMoves(
@@ -418,6 +433,9 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
     }
 }
 
+/** The Needs you list, so a by-hand test scrolls it in bounded steps (never performScrollToNode with the clock paused). */
+const val NEEDS_YOU_LIST_TAG = "needs-you-list"
+
 /**
  * The Needs you list: its title, the after-work card, then the stack (or "Nothing needs you" beside the breathing
  * check ring). The tab shows it with the big title; the command centre with a smaller heading that carries the count.
@@ -519,7 +537,7 @@ internal fun NeedsYouColumn(
     }
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
-        modifier.footFade(),
+        modifier.footFade().testTag(NEEDS_YOU_LIST_TAG),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

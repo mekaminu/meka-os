@@ -4999,3 +4999,17 @@ no migration.
   `ScreensHangGuardTest` (reads the test sources): every `*ScreensTest.kt` has HangWatch; no performScrollToNode while
   the clock was last set paused in the same test or helper; and a sample proves the scan sees one. Test only; no app,
   core or server change, no migration.
+- Needs you by hand (2026-10-30): `NeedsYouScreensTest.coverByHand` (cover, the full stack) under HangWatch, reaching rows
+  by bounded ScrollBy steps on Needs you's LazyColumn (`NEEDS_YOU_LIST_TAG`, NeedsYouRoute.kt), never
+  performScrollToNode. It checks every Button/Checkbox/Tab is 48 dp, then: ← Tomorrow takes the top task off the stack
+  (snoozed); To a day… on the next unfolds the day chips (48 dp each) and the first chip puts the task on that day, off
+  the stack; ↑ Open on the next opens its detail (Close shows) and Close shuts it; Done → takes it off; the Coming up
+  reminder (Check the passport dates, tomorrow 09:15) opens its detail. `shoot` returns the core, so the shot tests use
+  block bodies. Found and fixed: (a) **a Coming up reminder opened nothing**: `selected` only looked in Today's
+  needsYou tasks; `rememberOpenTask` (NeedsYouRoute.kt) falls back to the new read-only `MekaCore.taskForDetail(id)`
+  (re-read when Today changes; null once deleted), used by Needs you and the open Fold's command centre (TodayRoute);
+  ComingUpFacadeTest.aComingUpReminderOpensItsTaskForTheDetail. (b) Under 48 dp: To a day…'s chips (`MailNeedsPill`
+  gains `touch = true`: the slim pill drawn inside a `minTouch` target; the mail cards' pills keep their size until
+  their own by-hand test), the undo bar's Undo (`minTouch`; the message keeps the 8 dp above and below, so the bar looks
+  as before), a habit row without a pace line and "+N more" (`minTouch`). Fold only (the Mac clicks); core read-only
+  addition, no server change, no migration.

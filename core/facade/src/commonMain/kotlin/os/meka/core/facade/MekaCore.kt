@@ -8475,6 +8475,12 @@ class MekaCore(
         discordChanged()
     }
 
+    /**
+     * Works by hand, Needs you: the task a row opens when it isn't one of Today's own (a reminder under Coming up, due
+     * tomorrow), so its detail can open over the screen; null once it's deleted. Read only.
+     */
+    suspend fun taskForDetail(id: String): os.meka.core.domain.Task? = onCore { tasks.get(id) }
+
     private fun liveTask(id: String?): Boolean {
         val e = id?.let { replica.entity(os.meka.core.domain.EntityTypes.TASK, it) } ?: return false
         return !e.deleted

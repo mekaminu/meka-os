@@ -396,7 +396,8 @@ private fun TodayRouteContent(
             val layout = CommandCentreRules.layout(maxWidth.value)
             val twoPane = layout != CommandLayout.SINGLE
             val all = (today.needsYou.map { it.task } + today.fromYesterday.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
-            val selected = all.firstOrNull { it.id == selectedId }
+            // A reminder under Coming up in the command centre opens its task too (rememberOpenTask).
+            val selected = rememberOpenTask(core, selectedId, all, today)
             val columns = CommandCentreRules.columns(layout, taskOpen = selected != null)
             // In the command centre an open task stands in for Needs you; back (or Close) brings Needs you back.
             BackHandler(enabled = twoPane && selected != null) { selectedId = null }

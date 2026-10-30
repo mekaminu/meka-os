@@ -10,6 +10,7 @@ import os.meka.core.sync.SyncService
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Fold review 2026-10-12 17:56, slice 4: Needs you's Coming up and Up next's Break it down, through the facade. */
@@ -53,5 +54,17 @@ class ComingUpFacadeTest {
         assertEquals(listOf(NowAction.DONE, NowAction.BREAK_DOWN, NowAction.TOMORROW), fold.upNextCard()!!.actions)
         fold.addSteps(id, "boxes\nbin bags")
         assertTrue(fold.upNextCard()!!.offers(NowAction.OPEN_TASK))
+    }
+
+    @Test
+    fun aComingUpReminderOpensItsTaskForTheDetail() = runTest {
+        val fold = core("android")
+        val id = fold.addTask("Check the passport dates")
+        fold.setReminder(id, now + 23 * hour) // 09:00 tomorrow: under Coming up, not one of Today's own tasks
+        assertEquals(listOf(id), fold.today.value.comingUp.map { it.id })
+        assertEquals("Check the passport dates", fold.taskForDetail(id)?.title)
+        fold.delete(id)
+        assertNull(fold.taskForDetail(id))
+        assertNull(fold.taskForDetail("nothing"))
     }
 }

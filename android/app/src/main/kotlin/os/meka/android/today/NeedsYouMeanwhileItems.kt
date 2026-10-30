@@ -28,6 +28,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
@@ -113,6 +114,8 @@ private fun MeanwhileHabit(h: HabitItem, tick: () -> Unit, modifier: Modifier) {
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
             .semantics(mergeDescendants = true) { contentDescription = NeedsYouMeanwhileRules.tickLabel(h) }
             .clickable(role = Role.Checkbox) { tick() }
+            // Works by hand (quality gate): a habit without a pace line still answers a 48 dp touch.
+            .minTouch()
             .padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -144,5 +147,6 @@ private fun MeanwhileRow(l: MeanwhileLine, open: () -> Unit, modifier: Modifier,
 private fun MeanwhileMore(text: String, open: () -> Unit, modifier: Modifier) {
     Text(text, style = MekaType.caption, color = Meka.colors.accent,
         modifier = modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Open Lists") { open() }
-            .padding(vertical = MekaSpace.xxs))
+            // Works by hand (quality gate): "+2 more" keeps its look; the tap reaches the 48 dp around it.
+            .minTouch())
 }

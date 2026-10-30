@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -532,16 +533,32 @@ private fun MailSendAllBar(
 
 @Composable
 internal fun MailNeedsPill(
-    label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, critical: Boolean = false, onClick: () -> Unit,
+    label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, critical: Boolean = false,
+    /**
+     * Works by hand (quality gate): the slim pill drawn inside a 48 dp touch target, as Lists' chips (Needs you's
+     * To a day… chips first; the mail cards' pills keep their own size until their by-hand test).
+     */
+    touch: Boolean = false,
+    onClick: () -> Unit,
 ) {
+    val color = when { !enabled -> Meka.colors.textTertiary; critical -> Meka.colors.critical; quiet -> Meka.colors.textSecondary; else -> Meka.colors.accent }
+    val shape = RoundedCornerShape(MekaRadius.pill)
     Text(
-        label, style = MekaType.itemMeta,
-        color = when { !enabled -> Meka.colors.textTertiary; critical -> Meka.colors.critical; quiet -> Meka.colors.textSecondary; else -> Meka.colors.accent },
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-            .background(Meka.colors.surface)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = spoken }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        label, style = MekaType.itemMeta, color = color,
+        modifier = if (touch) {
+            Modifier.clip(shape)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = spoken }
+                .minTouch()
+                .clip(shape).background(Meka.colors.surface)
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+        } else {
+            Modifier.clip(shape)
+                .background(Meka.colors.surface)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = spoken }
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+        },
     )
 }
 

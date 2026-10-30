@@ -358,11 +358,12 @@ fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier) {
         val shown = last ?: return@AnimatedVisibility
         Row(
             Modifier.fillMaxWidth().padding(MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
-                .background(Meka.colors.surfaceRaised).minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
+                .background(Meka.colors.surfaceRaised).minTouch().padding(horizontal = MekaSpace.l),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(shown.message, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            // The message keeps the bar's 8 dp above and below; Undo takes the bar's full 48 dp (works by hand).
+            Text(shown.message, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f).padding(vertical = MekaSpace.xs))
             val action = shown.undo
             if (action != null) {
                 Text(
@@ -371,7 +372,7 @@ fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier) {
                         haptics.light()
                         undo.clear()
                         scope.launch { runCatching { action() } }
-                    }.padding(start = MekaSpace.m, top = MekaSpace.xs, bottom = MekaSpace.xs),
+                    }.minTouch().padding(start = MekaSpace.m),
                 )
             }
         }
