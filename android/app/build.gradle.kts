@@ -70,7 +70,12 @@ android {
             all {
                 it.systemProperty("roborazzi.test.record", "true")
                 // A failed shot names what it found (the cut or nonsense lines) in the CI log, not only in the report.
-                it.testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+                // Each test's start is logged too, so a test that hangs to the job's limit is named by the log's last
+                // "STARTED" line (CI runs 1461, 1462 and 1463 hung with no name, 2026-10-30).
+                it.testLogging {
+                    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+                    events("started", "failed")
+                }
             }
         }
     }
