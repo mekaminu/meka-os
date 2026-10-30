@@ -304,6 +304,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/money/inner-dark-trading-tiles.png](docs/screens/fold/money/inner-dark-trading-tiles.png)
 - [fold/money/inner-light-accounts.png](docs/screens/fold/money/inner-light-accounts.png)
 - [fold/money/inner-light-many.png](docs/screens/fold/money/inner-light-many.png)
+- [fold/needs-you/cover-dark-by-hand.png](docs/screens/fold/needs-you/cover-dark-by-hand.png)
 - [fold/needs-you/cover-dark-empty.png](docs/screens/fold/needs-you/cover-dark-empty.png)
 - [fold/needs-you/cover-dark-many.png](docs/screens/fold/needs-you/cover-dark-many.png)
 - [fold/needs-you/cover-dark-one.png](docs/screens/fold/needs-you/cover-dark-one.png)
