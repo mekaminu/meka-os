@@ -2539,21 +2539,13 @@ struct MoneySheet: View {
                     readOnlyMark
                 }
             }
-            if let e = t.empty {
-                HStack(alignment: .top) {
-                    Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                    readOnlyMark
-                }
+            // The walk-through's A4: before figures, one short line; Read-only is said at the foot, and there's no
+            // Dollars · Pounds row with nothing to show in either (MoneyTradingLayout.note).
+            if let n = MoneyTradingLayout.shared.note(t: t) {
+                Text(n).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
             }
-            if let w = MoneyTradingLayout.shared.waiting(t: t) {
-                HStack(alignment: .top) {
-                    Text(w).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                    readOnlyMark
-                }
-            }
-            if let c = t.currency { tradingCurrency(c) }
             ForEach(t.pnl, id: \.label) { r in
                 HStack {
                     Text(r.label).font(MekaType.body).foregroundStyle(palette.textSecondary)
@@ -2809,32 +2801,6 @@ struct MoneySheet: View {
                 said = CoreModel.MoneySaid(line: "Couldn't save the spreadsheet there · try another place", refused: true, undo: nil)
             }
         }
-    }
-
-    /// Trading tracker, slice 12: SHOW IN · Dollars · Pounds (synced through the alerts setting) and what it means.
-    private func tradingCurrency(_ c: TradingCurrencyView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            HStack(spacing: MekaSpace.xs) {
-                Text(c.label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                ForEach(c.chips, id: \.key) { ch in
-                    Button {
-                        guard !ch.on else { return }
-                        let kind = ch.kind
-                        let key = ch.key
-                        Task { said = await model.setTradingAlert(kind: kind, key: key) }
-                    } label: {
-                        Text(ch.label).font(MekaType.caption).foregroundStyle(ch.on ? palette.accent : palette.textSecondary)
-                            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                    }
-                    .buttonStyle(MekaPressStyle())
-                    .accessibilityLabel(ch.spoken)
-                }
-            }
-            Text(c.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
-        }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: c.line)
     }
 
     private func alertChips(_ label: String, _ chips: [TradingAlertChip]) -> some View {

@@ -90,7 +90,7 @@ class TradingTrackerTest {
         assertEquals(1, store.wallets().size)
         var v = TradingTracker.view(store.wallets(), now, cal)
         assertNull(v.total)
-        assertTrue(v.wallets.single().line.endsWith(TradingTracker.WAITING.replaceFirstChar { it.lowercase() }))
+        assertTrue(v.wallets.single().line.endsWith(TradingTracker.NOT_READ))
         // What the server writes.
         val id = TradingTracker.walletId(a1)
         r.commitLocal(EntityTypes.TRADING_WALLET, id, mapOf(

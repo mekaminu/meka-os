@@ -313,6 +313,8 @@ object TradingTracker {
     /** Slice 12: the foot while he reads TRADING in pounds. */
     const val FOOT_GBP = "Read from Hyperliquid's public data with your public address only · no keys, nothing here can trade · in pounds at the European Central Bank's dollar rate, prices in dollars · deposits and withdrawals aren't counted as profit · not trading advice"
     const val WAITING = "Reading it from Hyperliquid · within a minute or two"
+    /** YOUR ADDRESSES' line for an address not read yet (the equity card says it's reading, once). */
+    const val NOT_READ = "not read yet"
 
     /** Slice 2: trades are added up over the last [TRADES_DAYS] days, read again hourly. */
     const val TRADES_DAYS = 30
@@ -348,7 +350,7 @@ object TradingTracker {
         return TradingAddressTyped(m.value.lowercase(), label.takeIf { it.isNotEmpty() })
     }
 
-    fun addedSaid(label: String, address: String) = "Added $label · ${short(address)} · " + WAITING.replaceFirstChar { it.lowercase() }
+    fun addedSaid(label: String, address: String) = "Added $label · ${short(address)} · its figures within a minute or two"
 
     /** Positions as lines of `coin|size|entry|mark|liquidation|unrealisedCents|leverage` (at most [MAX_POSITIONS]). */
     fun encode(positions: List<TradingPosition>): String = positions.take(MAX_POSITIONS).joinToString("\n") { p ->
@@ -626,7 +628,8 @@ object TradingTracker {
                 w.state == ERROR -> "${short(w.address)} · couldn't read it from Hyperliquid" +
                     (w.triedAtMs?.let { " at ${HealthRules.at(it, nowMs, cal)}" } ?: "") + " · trying again soon" +
                     (w.readAtMs?.let { " · last ${HealthRules.at(it, nowMs, cal)}" } ?: "")
-                w.equityCents == null -> "${short(w.address)} · " + WAITING.replaceFirstChar { it.lowercase() }
+                // The walk-through's A4: the equity card already says it's reading; the row only that it isn't yet.
+                w.equityCents == null -> "${short(w.address)} · $NOT_READ"
                 else -> "${short(w.address)} · ${ccy.amt(w.equityCents)}" + (drop?.let { " · ${pct(it)} below this month's high" } ?: "") +
                     (w.readAtMs?.let { " · updated ${HealthRules.at(it, nowMs, cal)}" } ?: "")
             }

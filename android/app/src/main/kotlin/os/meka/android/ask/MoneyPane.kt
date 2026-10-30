@@ -161,7 +161,6 @@ import os.meka.core.domain.TradingExportRules
 import os.meka.core.domain.TradingExportView
 import os.meka.core.domain.TradingReviewView
 import os.meka.core.domain.TradingTradesView
-import os.meka.core.domain.TradingCurrencyView
 import os.meka.core.domain.TradingView
 import os.meka.core.domain.TradingCurrencyRules
 import os.meka.core.domain.TradingEquityCard
@@ -1463,8 +1462,8 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
 }
 
 /**
- * Layout rules on Trading: the equity card — the total and a Read-only mark (mockup), what it is in the other currency and
- * when it was read, Dollars · Pounds, then today, the week, the month and all time (up in brass).
+ * Layout rules on Trading: the equity card — once read, the mockup's card (TradingEquityCardBlock); before that one short
+ * line (MoneyTradingLayout.note) and nothing else.
  */
 @Composable
 private fun TradingEquityBlock(t: TradingView, range: String, onRange: (String) -> Unit, onAlert: (String, String) -> Unit) {
@@ -1487,19 +1486,13 @@ private fun TradingEquityBlock(t: TradingView, range: String, onRange: (String) 
             ReadOnlyMark()
         }
     }
-    t.empty?.let { e ->
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-            ReadOnlyMark()
+    // The walk-through's A4: before figures, one short line; Read-only is said at the foot, and there's no
+    // Dollars · Pounds row with nothing to show in either (MoneyTradingLayout.note).
+    MoneyTradingLayout.note(t)?.let { l ->
+        Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "trading-note") { n ->
+            Text(n, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.fillMaxWidth().testTag("money-trading-note"))
         }
     }
-    MoneyTradingLayout.waiting(t)?.let { l ->
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-            ReadOnlyMark()
-        }
-    }
-    t.currency?.let { c -> CurrencyRow(c, onAlert) }
     t.pnl.forEach { r ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(r.label, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
@@ -1737,31 +1730,6 @@ private fun TradingAddressFields(onAdd: (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field(MoneyTradingLayout.ADD_HINT, modifier = Modifier.testTag("money-address-field"), value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
         Text(MoneyTradingLayout.ADD_SHEET_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
-    }
-}
-
-/**
- * Trading tracker, slice 12: SHOW IN · Dollars · Pounds (synced through the alerts setting), with a line saying what it
- * means; the chosen chip in brass, the line cross-fading when it changes.
- */
-@Composable
-private fun CurrencyRow(c: TradingCurrencyView, onPick: (String, String) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Text(c.label, style = MekaType.caption, color = Meka.colors.textSecondary)
-            c.chips.forEach { ch -> key(ch.kind + ch.key) {
-                val col by animateColorAsState(if (ch.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-ccy-${ch.key}")
-                Text(ch.label, style = MekaType.caption, color = col,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-                        .clickable(role = Role.RadioButton) { if (!ch.on) onPick(ch.kind, ch.key) }
-                        .semantics { contentDescription = ch.spoken }.minTouch()
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
-            } }
-        }
-        Crossfade(c.line, animationSpec = MekaMotion.appear(reduced), label = "trading-ccy-line") { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
-        }
     }
 }
 

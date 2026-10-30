@@ -185,8 +185,13 @@ class MoneyTradingLayoutScreensTest {
         pick(MoneyTab.TRADING)
         val t = core.moneyView.value.trading ?: fail("Trading has no view with an address in")
         assertTrue(shows("money-trading-card"), "equity should sit in one card")
-        assertTrue(shows("money-trading-readonly"), "the equity card should carry the Read-only mark")
-        assertTrue(showsText(TradingTracker.WAITING), "before the first read the equity card says it's reading")
+        // The walk-through's A4: before figures, one line saying it's reading, said once; no Read-only mark (the foot
+        // says it) and no Dollars · Pounds row with nothing to show in either.
+        assertTrue(shows("money-trading-note"), "before the first read the equity card says it's reading")
+        assertEquals(1, compose.onAllNodesWithText("Reading it from Hyperliquid", substring = true, ignoreCase = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().size, "reading from Hyperliquid should be said once")
+        if (shows("money-trading-readonly")) fail("the Read-only mark sits on a card with no figures")
+        if (showsText("Dollars")) fail("the Dollars · Pounds row still shows before any figures")
         if (showsText(TradingTracker.FOOT)) fail("the tracker's long source line still sits on the page")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-layout"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-layout")

@@ -66,6 +66,28 @@ class MoneyTradingLayoutTest {
         assertNull(MoneyTradingLayout.waiting(empty))
     }
 
+    /** The walk-through's A4: before figures, one short line, Read-only only at the foot, reading said once. */
+    @Test
+    fun beforeFiguresTheCardSaysOneThingOnce() {
+        val cal = object : LocalCalendar {
+            override fun epochDayOf(epochMs: Long) = epochMs.floorDiv(86_400_000L)
+            override fun minuteOfDay(epochMs: Long) = 0
+            override fun toEpochMs(epochDay: Long, minuteOfDay: Int) = epochDay * 86_400_000L
+        }
+        val empty = TradingTracker.view(emptyList(), 0L, cal)
+        val emptyNote = assertNotNull(MoneyTradingLayout.note(empty))
+        assertEquals(MoneyTradingLayout.EMPTY_LINE, emptyNote)
+        assertFalse(emptyNote.contains("Read-only"), "the foot says Read-only; the card's line doesn't repeat it")
+        val add = MoneyTradingLayout.addRow(empty)
+        assertFalse(add.line.contains("Read-only"))
+        assertTrue(add.line.length <= 36, "the first add row's line fits one line on the cover screen")
+        val unread = TradingWallet("w", "0x" + "ab12".repeat(10), "Main", TradingTracker.OK, null, null, null, null, null, null, null, null, emptyList())
+        val waiting = TradingTracker.view(listOf(unread), 0L, cal)
+        assertEquals(TradingTracker.WAITING, MoneyTradingLayout.note(waiting))
+        assertFalse(waiting.wallets.single().line.contains("Reading it", ignoreCase = true), "reading is said once, on the equity card")
+        assertNull(MoneyTradingLayout.note(view(1)))
+    }
+
     @Test
     fun theAddressFieldSitsBehindOneRow() {
         // Layout rule (e): no field on the page; one row opens the sheet with it.
