@@ -348,7 +348,7 @@ struct FastingSheet: View {
             }
             ForEach(s.history, id: \.id) { h in
                 // One line as in the mockup: span · length · goal (beside the mockup, 2026-10-30, FastingBesideRules).
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Circle().fill(h.onGoal ? palette.accent : palette.accent.opacity(0.4)).frame(width: 9, height: 9)
                     Text(h.span).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
                     Spacer(minLength: MekaSpace.xs)

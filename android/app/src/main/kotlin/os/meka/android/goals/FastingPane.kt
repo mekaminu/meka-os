@@ -493,14 +493,14 @@ private fun StageRow(row: FastingStageRow, fasting: Boolean, open: Boolean, onCl
         else -> Meka.colors.hairline
     }
     val dim = fasting && !row.reached
-    val pad by animateDpAsState(if (open) MekaSpace.s else 0.dp, MekaMotion.expand(Meka.reducedMotion), label = "stage-pad")
+    val pad by animateDpAsState(if (open) MekaSpace.xs else 0.dp, MekaMotion.expand(Meka.reducedMotion), label = "stage-pad")
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
             .background(if (row.here) accent.copy(alpha = 0.1f) else Meka.colors.surface)
             .clickable(role = Role.Button) { onClick() }
             .graphicsLayer { alpha = if (dim) 0.7f else 1f }
             // The row is the 48 dp touch target and no taller (was 64 dp: 8 dp more above and below); open, it keeps
-            // 12 dp above and below its words.
+            // 8 dp above and below its words.
             .padding(horizontal = MekaSpace.m, vertical = pad)
             .minTouch()
             .testTag(STAGE_ROW_TAG),
@@ -579,11 +579,11 @@ private fun HistoryLine(h: FastingHistoryRow, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (h.onGoal) Meka.colors.accent else Meka.colors.accent.copy(alpha = 0.4f)))
-        Spacer(Modifier.width(MekaSpace.s))
+        Spacer(Modifier.width(MekaSpace.xs))
         Text(h.span, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(MekaSpace.xs))
         Text(h.length, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
-        Spacer(Modifier.width(MekaSpace.s))
+        Spacer(Modifier.width(MekaSpace.xs))
         Text(
             FastingBesideRules.goalOnRow(h.goal), style = MekaType.caption, maxLines = 1, textAlign = TextAlign.End,
             color = if (h.onGoal) Meka.colors.accent else Meka.colors.textTertiary,

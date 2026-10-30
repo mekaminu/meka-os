@@ -4868,7 +4868,7 @@ CI run 1456's `fasting/cover-dark-one`, `-one-below`, `-many-below` and `today/c
 6. What's happening now: **matches**.
 7. The stages: each row 64 dp (the 48 dp touch target plus 8 dp above and below) with the list's 16 dp between, so the
    seven ran past two screens → **each row the 48 dp target, 8 dp apart, the label 8 dp above and the note under them
-   as one block** (as the mockup's 44 px rows, 8 px gap); an open row keeps 12 dp above and below its words.
+   as one block** (as the mockup's 44 px rows, 8 px gap); an open row keeps 8 dp above and below its words.
 8. This week: **matches** (label with "N of N on goal · streak" on the right, seven rings).
 9. History: rows 64 dp tall with the length stacked over the goal word, 16 dp apart → **one line each: span · length ·
    goal**, the 48 dp target, 8 dp apart; the goal in whole hours short ("6h short", as the mockup; "40m short" under an
