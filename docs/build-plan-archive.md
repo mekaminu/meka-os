@@ -4852,3 +4852,30 @@ The Mac: Bought / Packed cards, each group a card with the title-case name and a
 as one capsule ending on Add (Return adds too). Core TripBesideRules; TripBesideTest, TripListsScreensTest,
 MekaCoreBridgeTests.testTripListsBesideOnTheMac. No server change, no migration. Mac checked nightly.
 
+
+### Quality gate — (2) the design check, Fasting (2026-10-30): Fasting beside its mockup
+
+`docs/design/fasting/fasting.dc.html` and `today-card.dc.html` rendered at 390 (tools/design-render/render.mjs) beside
+CI run 1456's `fasting/cover-dark-one`, `-one-below`, `-many-below` and `today/cover-dark-fasting` (the closed Fold,
+344 dp). Differences found, item by item, and what changed:
+
+1. Back link and the plan chip: **match**.
+2. The title: the 34 sp greeting → **28 sp** (the mockup's).
+3. The time in the ring: the same 34 sp → **46 sp bold**, the screen's one big number (the Mac 36 pt bold, its scale).
+4. Started and Goal tiles: **match**; the pencil stays beside the label (the earlier re-shot moved it there so the value
+   keeps the tile's width on the cover screen).
+5. End fast and More options: **match** (the app's prompt reads "Started by mistake?" while fasting, as built).
+6. What's happening now: **matches**.
+7. The stages: each row 64 dp (the 48 dp touch target plus 8 dp above and below) with the list's 16 dp between, so the
+   seven ran past two screens → **each row the 48 dp target, 8 dp apart, the label 8 dp above and the note under them
+   as one block** (as the mockup's 44 px rows, 8 px gap); an open row keeps 12 dp above and below its words.
+8. This week: **matches** (label with "N of N on goal · streak" on the right, seven rings).
+9. History: rows 64 dp tall with the length stacked over the goal word, 16 dp apart → **one line each: span · length ·
+   goal**, the 48 dp target, 8 dp apart; the goal in whole hours short ("6h short", as the mockup; "40m short" under an
+   hour), read out in full ("Sat 17 to Sun 18, 9h 30m, 6h 30m short"). The Mac's rows the same line.
+10. The Today card: **matches** (ring with the time, FASTING, the stage, Ends in, End); unchanged.
+
+Core `FastingBesideRules` (TITLE_SP, TIME_SP, ROW_DP, ROW_MAX_DP, ROW_GAP_DP, goalOnRow, spoken); FastingBesideTest;
+FastingScreensTest measures every stage and History row on screen in every shot (at most 52 dp, 8 dp apart);
+MekaCoreBridgeTests.testFastingBesideOnTheMac. Fold `goals/FastingPane.kt`, Mac `Goals/FastingSheet.swift`. No server
+change, no migration. Mac checked nightly.

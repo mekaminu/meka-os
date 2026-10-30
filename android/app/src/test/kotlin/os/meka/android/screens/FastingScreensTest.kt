@@ -28,6 +28,9 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.FastingPane
 import os.meka.android.goals.GoalsRoute
+import os.meka.android.goals.HISTORY_ROW_TAG
+import os.meka.android.goals.STAGE_ROW_TAG
+import os.meka.core.domain.FastingBesideRules
 import os.meka.core.domain.FastingRules
 import os.meka.core.domain.FastingScreenRules
 import os.meka.core.facade.MekaCore
@@ -99,6 +102,7 @@ class FastingScreensTest {
     }
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+        stageRowsSeen = 0
         val core = prepared(fill, theme)
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -158,12 +162,39 @@ class FastingScreensTest {
                 ScreenShots.assertOneLine(compose, name, "→")
             }
         }
+        if (stageRowsSeen == 0) fail("$name: no stage row was ever on screen to measure")
+    }
+
+    /** The most stage rows seen measured in one look, over a shot's scroll. */
+    private var stageRowsSeen = 0
+
+    /**
+     * Beside the mockup (2026-10-30, FastingBesideRules): every closed stage and History row is the 48 dp touch target
+     * (at most [FastingBesideRules.ROW_MAX_DP]), and stage rows sit [FastingBesideRules.ROW_GAP_DP] dp apart (they
+     * were 64 dp tall, 16 dp apart).
+     */
+    private fun assertRowsAsTheMockup(name: String) {
+        val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+        for (tag in listOf(STAGE_ROW_TAG, HISTORY_ROW_TAG)) {
+            val rows = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+            if (tag == STAGE_ROW_TAG) stageRowsSeen = maxOf(stageRowsSeen, rows.size)
+            rows.forEach { r ->
+                val dp = r.height / density
+                if (dp > FastingBesideRules.ROW_MAX_DP) fail("$name: a $tag is $dp dp tall (at most ${FastingBesideRules.ROW_MAX_DP})")
+            }
+            // Gaps only between rows wholly on screen (a row cut by the screen's edge reports its visible part).
+            rows.filter { it.height / density >= FastingBesideRules.ROW_DP - 1 }.sortedBy { it.top }.zipWithNext { a, b ->
+                val gap = (b.top - a.bottom) / density
+                if (kotlin.math.abs(gap - FastingBesideRules.ROW_GAP_DP) > 1f) fail("$name: $gap dp between two ${tag}s (the mockup's ${FastingBesideRules.ROW_GAP_DP})")
+            }
+        }
     }
 
     private fun check(name: String) {
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertReadable(compose, name, FastingScreenRules.STAGES.map { it.name }, mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
+        assertRowsAsTheMockup(name)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

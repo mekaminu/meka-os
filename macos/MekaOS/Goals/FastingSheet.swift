@@ -15,6 +15,11 @@ import SwiftUI
 /// reaching its goal bursts the ring once (once per fast on this Mac). Reduce Motion: no sweep, breath or burst; the
 /// unfolds cross-fade.
 struct FastingSheet: View {
+    /// The mockup's title and ring time at the Mac's scale (the phone's 28 and 46 sp, FastingBesideRules, as the Mac's
+    /// greeting is to the phone's: 26 to 34).
+    static var titleFont: Font { Font.system(size: MekaTextScale.size(22), weight: .semibold) } // type: ok, beside the mockup (FastingBesideRules.TITLE_SP at the Mac's scale)
+    static var timeFont: Font { Font.system(size: MekaTextScale.size(36), weight: .bold) } // type: ok, beside the mockup (FastingBesideRules.TIME_SP at the Mac's scale)
+
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -91,7 +96,7 @@ struct FastingSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Fasting")
-                    .font(MekaType.greeting).tracking(MekaType.greetingTracking)
+                    .font(Self.titleFont).tracking(MekaType.greetingTracking)
                     .foregroundStyle(palette.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
@@ -342,18 +347,19 @@ struct FastingSheet: View {
                 Text(FastingScreenRules.shared.HISTORY_EMPTY).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             }
             ForEach(s.history, id: \.id) { h in
-                HStack(spacing: MekaSpace.m) {
+                // One line as in the mockup: span · length · goal (beside the mockup, 2026-10-30, FastingBesideRules).
+                HStack(spacing: MekaSpace.s) {
                     Circle().fill(h.onGoal ? palette.accent : palette.accent.opacity(0.4)).frame(width: 9, height: 9)
                     Text(h.span).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
                     Spacer(minLength: MekaSpace.xs)
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(h.length).font(MekaType.metaStrong).monospacedDigit().foregroundStyle(palette.textPrimary)
-                        Text(h.goal).font(MekaType.caption).foregroundStyle(h.onGoal ? palette.accent : palette.textTertiary)
-                    }
+                    Text(h.length).font(MekaType.metaStrong).monospacedDigit().foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(FastingBesideRules.shared.goalOnRow(goal: h.goal)).font(MekaType.caption)
+                        .foregroundStyle(h.onGoal ? palette.accent : palette.textTertiary).lineLimit(1)
                 }
                 .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(FastingBesideRules.shared.spoken(row: h))
             }
         }
         .padding(.top, MekaSpace.xs)
@@ -422,7 +428,7 @@ private struct FastingBigRing: View {
             VStack(spacing: MekaSpace.xxs) {
                 Text(s.topLine.uppercased())
                     .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textSecondary)
-                Text(s.bigTime).font(MekaType.greeting).monospacedDigit().foregroundStyle(palette.textPrimary)
+                Text(s.bigTime).font(FastingSheet.timeFont).monospacedDigit().foregroundStyle(palette.textPrimary)
                     .contentTransition(.numericText())
                 if !s.isFasting {
                     Text(FastingRules.shared.IDLE_RING_CAPTION).font(MekaType.caption).foregroundStyle(palette.textTertiary)

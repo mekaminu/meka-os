@@ -2,9 +2,11 @@ package os.meka.android.goals
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -32,7 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -40,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,7 +66,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -78,6 +83,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.EvidenceTone
+import os.meka.core.domain.FastingBesideRules
 import os.meka.core.domain.FastingHistoryRow
 import os.meka.core.domain.FastingRules
 import os.meka.core.domain.FastingScreen
@@ -211,7 +217,7 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String 
         } }
         item(key = "title") {
             Text(
-                "Fasting", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                "Fasting", style = FastingTitle, color = Meka.colors.textPrimary,
                 modifier = Modifier.semantics { heading() }.appear(rememberAppearance(0)),
             )
         }
@@ -320,21 +326,28 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String 
                 }
             }
         }
-        item(key = "stages-label") { SectionLabel(FastingScreenRules.STAGES_TITLE, Modifier.padding(top = MekaSpace.xs)) }
-        items(s.stages, key = { "stage-${it.stage.id}" }) { row ->
-            StageRow(row, s.isFasting, stageOpen == row.stage.id) {
-                haptics.tick(); stageOpen = if (stageOpen == row.stage.id) null else row.stage.id
+        // The stages are one block as in the mockup: the label, the rows 8 dp apart, the note (beside the mockup, 2026-10-30).
+        item(key = "stages") {
+            Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(FastingBesideRules.ROW_GAP_DP.dp)) {
+                SectionLabel(FastingScreenRules.STAGES_TITLE)
+                s.stages.forEach { row ->
+                    StageRow(row, s.isFasting, stageOpen == row.stage.id) {
+                        haptics.tick(); stageOpen = if (stageOpen == row.stage.id) null else row.stage.id
+                    }
+                }
+                Text(FastingScreenRules.STAGES_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
-        item(key = "stages-note") {
-            Text(FastingScreenRules.STAGES_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
-        }
         item(key = "week") { WeekSection(s, Modifier.padding(top = MekaSpace.xs)) }
-        item(key = "history-label") { SectionLabel("History", Modifier.padding(top = MekaSpace.xs)) }
-        if (s.history.isEmpty()) item(key = "history-empty") {
-            Text(FastingScreenRules.HISTORY_EMPTY, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        item(key = "history") {
+            Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.replan(Meka.reducedMotion)), verticalArrangement = Arrangement.spacedBy(FastingBesideRules.ROW_GAP_DP.dp)) {
+                SectionLabel("History")
+                if (s.history.isEmpty()) {
+                    Text(FastingScreenRules.HISTORY_EMPTY, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                }
+                s.history.forEach { h -> key(h.id) { HistoryLine(h) } }
+            }
         }
-        items(s.history, key = { "fast-${it.id}" }) { h -> HistoryLine(h, Modifier.animateItem()) }
     }
     }
 }
@@ -412,7 +425,7 @@ private fun BigRing(s: FastingScreen, burst: Float, modifier: Modifier = Modifie
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(s.topLine.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
-                Text(s.bigTime, style = MekaType.greeting, color = Meka.colors.textPrimary)
+                Text(s.bigTime, style = FastingTime, color = Meka.colors.textPrimary)
                 if (!s.isFasting) Text(FastingRules.IDLE_RING_CAPTION, style = MekaType.caption, color = Meka.colors.textTertiary)
                 Text(s.subLine, style = MekaType.caption, color = Meka.colors.accent, textAlign = TextAlign.Center)
             }
@@ -480,13 +493,17 @@ private fun StageRow(row: FastingStageRow, fasting: Boolean, open: Boolean, onCl
         else -> Meka.colors.hairline
     }
     val dim = fasting && !row.reached
+    val pad by animateDpAsState(if (open) MekaSpace.s else 0.dp, MekaMotion.expand(Meka.reducedMotion), label = "stage-pad")
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
             .background(if (row.here) accent.copy(alpha = 0.1f) else Meka.colors.surface)
             .clickable(role = Role.Button) { onClick() }
             .graphicsLayer { alpha = if (dim) 0.7f else 1f }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .minTouch(),
+            // The row is the 48 dp touch target and no taller (was 64 dp: 8 dp more above and below); open, it keeps
+            // 12 dp above and below its words.
+            .padding(horizontal = MekaSpace.m, vertical = pad)
+            .minTouch()
+            .testTag(STAGE_ROW_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -554,19 +571,29 @@ private fun WeekRing(d: FastingWeekRing, modifier: Modifier) {
 
 @Composable
 private fun HistoryLine(h: FastingHistoryRow, modifier: Modifier = Modifier) {
+    // One line as in the mockup: span · length · goal, the row the 48 dp touch target (beside the mockup, 2026-10-30).
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).minTouch(),
+            .semantics(mergeDescendants = true) { contentDescription = FastingBesideRules.spoken(h) }
+            .padding(horizontal = MekaSpace.m).minTouch().testTag(HISTORY_ROW_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (h.onGoal) Meka.colors.accent else Meka.colors.accent.copy(alpha = 0.4f)))
-        Spacer(Modifier.width(MekaSpace.m))
-        Text(h.span, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(MekaSpace.s))
+        Text(h.span, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(MekaSpace.xs))
-        // The length over its goal word, so "Sat 17 → Sun 18" keeps one line beside "6h 30m short" (the re-shot).
-        Column(horizontalAlignment = Alignment.End) {
-            Text(h.length, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
-            Text(h.goal, style = MekaType.caption, color = if (h.onGoal) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
-        }
+        Text(h.length, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
+        Spacer(Modifier.width(MekaSpace.s))
+        Text(
+            FastingBesideRules.goalOnRow(h.goal), style = MekaType.caption, maxLines = 1, textAlign = TextAlign.End,
+            color = if (h.onGoal) Meka.colors.accent else Meka.colors.textTertiary,
+        )
     }
 }
+
+internal const val STAGE_ROW_TAG = "fasting-stage-row"
+internal const val HISTORY_ROW_TAG = "fasting-history-row"
+
+/** The mockup's title and ring time (FastingBesideRules). */
+private val FastingTitle = MekaType.greeting.copy(fontSize = FastingBesideRules.TITLE_SP.sp, lineHeight = (FastingBesideRules.TITLE_SP * 1.15f).sp) // type: ok (beside the mockup: its sizes, FastingBesideRules)
+private val FastingTime = MekaType.greeting.copy(fontSize = FastingBesideRules.TIME_SP.sp, fontWeight = FontWeight.Bold, lineHeight = (FastingBesideRules.TIME_SP * 1.1f).sp, letterSpacing = (-0.01f).em) // type: ok (beside the mockup: its sizes, FastingBesideRules)
