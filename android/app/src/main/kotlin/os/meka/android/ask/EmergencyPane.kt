@@ -24,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,6 +48,9 @@ import os.meka.core.domain.EmergencyRow
 import os.meka.core.domain.EmergencyRules
 import os.meka.core.facade.MekaCore
 
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val EMERGENCY_LIST_TAG = "emergency-list"
+
 /**
  * Ask → More → Emergency card (V1, slice 1): who to call, where things are and key accounts by name, one typed line at
  * a time under each part ("GP: Dr Patel, 01632 123456"), each with Remove. his wife reads the same card on her family
@@ -68,7 +72,7 @@ fun EmergencyPane(core: MekaCore, onClose: () -> Unit) {
     val said = remember { mutableStateMapOf<String, EmergencyAdded>() }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(EMERGENCY_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -145,7 +149,8 @@ private fun EmergencyRowView(row: EmergencyRow, modifier: Modifier, onRemove: ()
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${row.title}" }
-                .padding(MekaSpace.xs),
+                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }

@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,6 +50,9 @@ import os.meka.core.domain.LeaveRow
 import os.meka.core.domain.LeaveRules
 import os.meka.core.domain.Recurrence
 import os.meka.core.facade.MekaCore
+
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val LEAVE_LIST_TAG = "leave-list"
 
 /**
  * Ask → More → Annual leave (annual leave planner, slice 1): the allowance and the days booked against it this leave
@@ -79,7 +83,7 @@ fun LeavePane(core: MekaCore, onClose: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(LEAVE_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -177,13 +181,13 @@ private fun Stepper(label: String, value: String, less: () -> Unit, more: () -> 
         Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         Text("−", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button, onClick = less)
-                .semantics { contentDescription = "$label: fewer" }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                .semantics { contentDescription = "$label: fewer" }.minTouch().padding(horizontal = MekaSpace.m))
         Crossfade(value, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "leave-$label") { t ->
             Text(t, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         }
         Text("+", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button, onClick = more)
-                .semantics { contentDescription = "$label: more" }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                .semantics { contentDescription = "$label: more" }.minTouch().padding(horizontal = MekaSpace.m))
     }
 }
 
@@ -206,9 +210,12 @@ private fun HolidayRowView(h: LeaveHoliday, modifier: Modifier, onBook: () -> Un
         h.bookLabel?.let { label ->
             Text(
                 label, style = MekaType.captionStrong, color = Meka.colors.onAccent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                // Works by hand (quality gate (3)): the pill drawn as before inside a 48 dp touch, as the chips.
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button, onClick = onBook)
                     .semantics { contentDescription = "$label for ${h.title}" }
+                    .minTouch()
+                    .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
         }
@@ -234,7 +241,8 @@ private fun LeaveRowView(row: LeaveRow, modifier: Modifier, onRemove: () -> Unit
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${row.title}" }
-                .padding(MekaSpace.xs),
+                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }

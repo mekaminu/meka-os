@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +52,9 @@ import os.meka.core.domain.DateNightRow
 import os.meka.core.domain.DateNightRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.facade.MekaCore
+
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val DATE_NIGHT_LIST_TAG = "date-night-list"
 
 /**
  * Ask → More → Date night (date night, slice 1): the evening picked once (a weekday chip, a start time, and which of
@@ -80,7 +84,7 @@ fun DateNightPane(core: MekaCore, onClose: () -> Unit) {
         v.nights.firstOrNull()?.day?.takeIf { weekday == v.weekday && v.on } ?: DateNightRules.firstNight(weekday, core.todayEpochDay())
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(DATE_NIGHT_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -182,7 +186,8 @@ private fun NightRow(row: DateNightRow, modifier: Modifier, onToggle: () -> Unit
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onToggle)
                 .semantics { contentDescription = (if (row.skipped) "Keep ${row.label}" else "Skip ${row.label}") }
-                .padding(MekaSpace.xs),
+                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }

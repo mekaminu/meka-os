@@ -5049,3 +5049,22 @@ no migration.
   their own by-hand test), the undo bar's Undo (`minTouch`; the message keeps the 8 dp above and below, so the bar looks
   as before), a habit row without a pace line and "+N more" (`minTouch`). Fold only (the Mac clicks); core read-only
   addition, no server change, no migration.
+
+### Quality gate — (3) works by hand, Kept's places (2026-10-30)
+
+KeptPlacesScreensTest gains four by-hand tests on the closed Fold, full set, under HangWatch, scrolling each pane's
+own list in bounded steps (new tags DATE_NIGHT_LIST_TAG, LEAVE_LIST_TAG, EMERGENCY_LIST_TAG, FACTS_LIST_TAG); every
+button and switch on screen must answer a 48 dp touch:
+
+- **dateNightByHand**: Skip this one skips a night and Keep it keeps it again; a time chip moves the start, a weekday
+  chip the evening, the other Starts chip the first night; Turn off turns it off.
+- **leaveByHand**: Book on a school holiday books its work days; Remove takes Spain off; the field adds "Mon 16 Nov";
+  − / + move the allowance and the leave year's start, and back.
+- **emergencyByHand**: Remove takes a line off Who to call; each part's field adds a line to that part.
+- **factsByHand**: Copy says what it copied; Keep from AI / Let MEKA use it flip the car reg and back; Remove takes it
+  off; the field adds "Bin day: Tuesday".
+
+Found and fixed first (Fold): Date night's Skip this one / Keep it, Leave's Remove and the Emergency card's Remove were
+~30 dp to tap (now `minTouch`, the word unchanged); Leave's − / + (~40 dp) now `minTouch`; Leave's Book pill (~32 dp)
+is drawn as before inside a 48 dp touch, as the chips. The shot tests use block bodies, as `shoot` returns the core.
+Fold only (the Mac clicks); no core or server change, no migration.

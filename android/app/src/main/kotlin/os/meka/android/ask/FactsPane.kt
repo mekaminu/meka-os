@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,6 +54,9 @@ import os.meka.core.domain.FactRow
 import os.meka.core.domain.FactRules
 import os.meka.core.facade.MekaCore
 
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val FACTS_LIST_TAG = "facts-list"
+
 /**
  * Ask → More → What MEKA knows (V1, facts page, slice 1): the facts Meka keeps so MEKA can answer from them — the
  * car's reg, the GP, sizes, the utilities — one typed line at a time ("Car reg: AB12 CDE"; the same name again changes
@@ -77,7 +81,7 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
     var said by remember { mutableStateOf<FactAdded?>(null) }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(FACTS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
