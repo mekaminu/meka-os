@@ -292,7 +292,7 @@ fun AskRoute(
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
         val columns = os.meka.core.domain.LifeTileRules.columns(maxWidth.value)
         LazyColumn(
-            Modifier.fillMaxSize(),
+            Modifier.fillMaxSize().testTag(ASK_LIST_TAG),
             state = listState,
             contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -517,6 +517,9 @@ internal fun MoreRow(
         if (opens) Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
     }
 }
+
+/** Ask's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val ASK_LIST_TAG = "ask-list"
 
 /** The box round a Life tile's icon, so the quality gate's shots can check it sits on the name's first line. */
 internal const val TILE_ICON_TAG = "life-tile-icon"

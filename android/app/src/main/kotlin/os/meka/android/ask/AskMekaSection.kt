@@ -406,7 +406,9 @@ fun AskMekaSection(
                     modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Button) { if (talk.active) { haptics.tick(); talk.stop() } else startTalking() }
                         .testTag(ASK_MIC_TAG)
-                        .semantics { contentDescription = if (talk.active) "Stop talking to Navilife" else "Talk to Navilife" },
+                        .semantics { contentDescription = if (talk.active) "Stop talking to Navilife" else "Talk to Navilife" }
+                        // Works by hand (quality gate (3)): a 48 dp touch, the 36 dp orb drawn as before.
+                        .minTouch(),
                 )
             }
         }
@@ -666,7 +668,9 @@ private fun AskAutoRow(a: AskAutoDone, modifier: Modifier, onUndo: () -> Unit) {
             modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button, onClick = onUndo)
                 .semantics { contentDescription = "Undo: ${a.line}" }
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                .minTouch()
+                .padding(horizontal = MekaSpace.m))
     }
 }
 

@@ -5105,3 +5105,14 @@ touch:
 Found and fixed first (Fold): Appearance's Topics › (~24 dp) and Play the opening (~34 dp pill), the Motion check's
 fix line, and About you's Remove on a child (~30 dp) now answer a 48 dp touch (`minTouch`), each drawn as before (the
 pill keeps its size inside a taller touch). Fold only (the Mac clicks); no core or server change, no migration.
+
+### Quality gate (3), works by hand: Ask (2026-10-30)
+AskScreensTest gains askTilesByHand and askRowsByHand (closed Fold, a full life plus six "milk" things, under
+HangWatch, bounded scrolls of Ask's own list `ASK_LIST_TAG`, never performScrollToNode):
+- **askTilesByHand**: To set up folds and unfolds by its Open/Closed state, ending open; every Life tile, live and
+  under To set up, opens its place (Lists, Goals: handed to the shell) or its pane, and Close drops the pane.
+- **askRowsByHand**: typing "milk" shows the matches and "See all 7 matches"; See all opens Search everything and Close
+  drops it; a match opens where it lives; a blank field folds the matches; the status row (Setup/Health), each Daily
+  row (not the bedside clock, which takes the whole app from MekaApplication) and Settings open, and Close drops each.
+Fixed first (Fold): the field's mic (a 36 dp orb) and an answer's Undo on what Obi did on his own (~36 dp) now answer a
+48 dp touch, each drawn as before. Fold only (the Mac clicks); no core or server change, no migration.
