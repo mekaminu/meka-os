@@ -186,7 +186,8 @@ object SetupRules {
             )
         fun account(provider: String, key: String, title: String): SetupStep {
             val signed = accounts.filter { it.provider == provider }
-            return if (signed.isNotEmpty()) SetupStep(key, title, "Connected · " + signed.joinToString(", ") { it.email }, SetupState.DONE)
+            // Named by each account's title, never its address (walk-through A2); the facade titles them apart.
+            return if (signed.isNotEmpty()) SetupStep(key, title, "Connected · " + signed.joinToString(", ") { it.title }, SetupState.DONE)
             else SetupStep(key, title, "Connect it so its events show in Today and the Calendar", SetupState.TODO, SetupFix.CALENDARS, "Connect")
         }
         val calendars = accounts.filter { isCalendar(it.provider) }

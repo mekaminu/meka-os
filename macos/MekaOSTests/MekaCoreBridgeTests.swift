@@ -1588,7 +1588,7 @@ final class MekaCoreBridgeTests: XCTestCase {
                                  title: CalendarAccountRules.shared.title(provider: "google", email: "me@gmail.com", names: [:]),
                                  eventsLine: "No events in the next 30 days", newsDown: [], syncedAt: nil)
         XCTAssertEqual(a.title, "Personal")
-        XCTAssertEqual(a.statusLine(syncedAt: "08:29"), "Google · me@gmail.com · synced 08:29")
+        XCTAssertEqual(a.statusLine(syncedAt: "08:29"), "Google · synced 08:29")
         XCTAssertEqual(a.eventsLine, "No events in the next 30 days")
     }
 

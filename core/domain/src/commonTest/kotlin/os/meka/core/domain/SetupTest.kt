@@ -72,7 +72,7 @@ class SetupTest {
         assertEquals(SetupState.LATER, v.step("trains.live").state)
         assertNull(v.todayLine)
         assertFalse(SetupRules.cardShown(v, hiddenOnDay = null, today = day))
-        assertEquals("Connected · meka@gmail.com", v.step("calendar.google").line)
+        assertEquals("Connected · Personal", v.step("calendar.google").line)
         assertEquals("Allowed on Google · add and move events from Navilife", v.step("calendar.editing").line)
         assertEquals("Jordan always ring", v.step("calls.family").line)
         assertEquals("Speaking as Amy", v.step("voice.picked").line)

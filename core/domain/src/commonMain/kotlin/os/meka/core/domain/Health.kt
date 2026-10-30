@@ -304,9 +304,9 @@ object HealthRules {
                 signIn?.state == SignInState.ENDING && (signIn.untilMs ?: 0L) > f.nowMs ->
                     reconnect("$who sign-in ends ${at(signIn.untilMs!!, f.nowMs, cal)}", HealthState.WARN)
                 a.status == "error" -> HealthRow(key, title, listOfNotNull("The last check failed", synced).joinToString(" · "), HealthState.WARN)
-                a.lastSyncAtMs == null -> HealthRow(key, title, "$who · ${a.email} · not synced yet", HealthState.WARN)
+                a.lastSyncAtMs == null -> HealthRow(key, title, "$who · not synced yet", HealthState.WARN)
                 f.nowMs - a.lastSyncAtMs > CALENDAR_STALE_MS -> HealthRow(key, title, "Not updated since ${at(a.lastSyncAtMs, f.nowMs, cal)}", HealthState.WARN)
-                else -> HealthRow(key, title, "$who · ${a.email} · $synced", HealthState.OK)
+                else -> HealthRow(key, title, "$who · $synced", HealthState.OK)
             }
         }
     }

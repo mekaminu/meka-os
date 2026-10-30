@@ -54,7 +54,7 @@ class HealthTest {
         assertFalse(v.critical)
         assertNull(v.todayLine)
         assertEquals("Connected · last synced 14:03", v.row("server").line)
-        assertEquals("Google · meka@gmail.com · synced 14:02", v.row("calendar:google:meka@gmail.com").line)
+        assertEquals("Google · synced 14:02", v.row("calendar:google:meka@gmail.com").line)
         assertEquals("Weather, Headlines, Fixtures · up to date", v.row("feeds").line)
         assertEquals("On · last voice message Thu 8 Oct 12:05", v.row("calls").line)
         assertEquals("Version 0.1.214 · up to date", v.row("update").line)

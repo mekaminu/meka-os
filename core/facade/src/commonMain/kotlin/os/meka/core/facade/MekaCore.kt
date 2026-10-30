@@ -7684,9 +7684,12 @@ class MekaCore(
         // Whether each account's events come through (Meka's 10:48 screenshots): every mirrored event, hidden ones too.
         val mirrored = onCore { events.all() }
         val now = nowMs()
+        // Two accounts of the same name are told apart by number, never by address (walk-through A2).
+        val titles = os.meka.core.domain.CalendarAccountRules.distinctTitles(accounts.map { it.provider to it.email }, names)
         return accounts.map {
             it.copy(
-                title = os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names),
+                title = titles[os.meka.core.domain.CalendarAccountRules.key(it.provider, it.email)]
+                    ?: os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names),
                 eventsLine = os.meka.core.domain.CalendarAccountRules.eventsLine(it.provider, it.email, it.status, it.lastSyncAtMs != null, mirrored, now),
                 syncedAt = os.meka.core.domain.CalendarAccountRules.syncedAt(it.lastSyncAtMs, now, ZoneCalendar(timeZone)),
             )
@@ -9813,7 +9816,10 @@ class MekaCore(
         val names = onCore { eventActions.calendarNames() }
         val facts = HealthServerFacts(
             server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult, it.speechGoogle, it.speechGoogleFailedAtMs, it.speechGooglePollyForMs, it.speechGooglePollyNow) },
-            accounts?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) }?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
+            accounts?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) }?.let { cals ->
+                val titles = os.meka.core.domain.CalendarAccountRules.distinctTitles(cals.map { it.provider to it.email }, names)
+                cals.map { os.meka.core.domain.HealthAccount(it.provider, it.email, titles[os.meka.core.domain.CalendarAccountRules.key(it.provider, it.email)] ?: os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) }
+            },
             ai, nowMs(), mail, live,
         )
         onCore { lastHealthServer = facts }

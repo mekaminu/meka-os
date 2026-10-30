@@ -6,8 +6,8 @@ package os.meka.core.domain
  * - Every feed reads as what it is: the second news feed's raw id "news_more" is "Headlines", like BBC News's.
  * - A Google or Outlook account is titled with its main calendar's name, the one the Calendar key shows: Meka's own
  *   ([CalendarMarkFields.NAME]) when he renamed it, else "Personal" (Google) / "Hotmail" or "Outlook" (Microsoft);
- *   the address moves to the line under it ("Google · meka@gmail.com · synced 08:29"), so it's still there to tell two
- *   accounts apart.
+ *   the address is never shown (walk-through A2, 2026-10-30); two accounts of the same name are told apart by
+ *   [CalendarAccountRules.distinctTitles] ("Personal", "Personal 2").
  */
 object CalendarAccountRules {
     /** "Google" · "Outlook" · "Headlines" (both news feeds) · "Fixtures" · "Bank holidays" · "Weather" · "Train lines". */
@@ -109,22 +109,41 @@ object CalendarAccountRules {
         lastSyncAtMs?.let { HealthRules.at(it, nowMs, cal) }
 
     /**
+     * Each account's title, told apart (walk-through A2, 2026-10-30: the address was the only thing that told two
+     * accounts apart, so it sat on every line): [title] for each, and when two signed-in accounts would read the same
+     * ("Personal" twice) the later ones by address get " 2", " 3"… Meka can rename either from its calendar's name.
+     * Keyed by "provider|address" (address lower-cased).
+     */
+    fun distinctTitles(accounts: List<Pair<String, String>>, names: Map<String, String> = emptyMap()): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        val seen = HashMap<String, Int>()
+        accounts.sortedWith(compareBy({ it.first }, { it.second.trim().lowercase() })).forEach { (provider, email) ->
+            val key = key(provider, email)
+            if (key in out) return@forEach
+            val base = title(provider, email, names)
+            if (!isMailAccount(provider, email)) { out[key] = base; return@forEach }
+            val n = (seen[base.lowercase()] ?: 0) + 1
+            seen[base.lowercase()] = n
+            out[key] = if (n == 1) base else "$base $n"
+        }
+        return out
+    }
+
+    /** [distinctTitles]' key for an account. */
+    fun key(provider: String, email: String): String = provider + "|" + email.trim().lowercase()
+
+    /**
      * The line under the title. [syncedAt] is the last sync's time as the device writes it ("08:29"), or null before
-     * the first one. A signed-in account carries its address: "Google · meka@gmail.com · synced 08:29". When the
-     * account's [title] is already its provider's name ("Outlook" over "Outlook · …" said it twice, quality gate slice
-     * 36) the line starts at the address. An expired account names its address after the state ("Access expired for
-     * alex.work@example.com"), so a long address never leaves the line ending on "·" with "access expired" under it.
+     * the first one. A signed-in account never shows its address (walk-through A2): "Google · synced 08:29", the title
+     * names it. When the account's [title] is already its provider's name ("Outlook" over "Outlook · …" said it twice,
+     * quality gate slice 36) the line starts at the state ("Synced 08:29", "Access expired").
      */
     fun statusLine(provider: String, email: String, status: String, syncedAt: String?, title: String? = null): String {
         val mail = isMailAccount(provider, email)
         val label = providerLabel(provider)
         val prefix: String? = label.takeUnless { title?.trim().equals(it, ignoreCase = true) }
-        if (mail && status == "needs_reconnect") {
-            val what = "access expired for ${email.trim()}"
-            return if (prefix != null) "$prefix · $what" else what.replaceFirstChar { it.uppercase() }
-        }
         val who: String? = when {
-            mail -> listOfNotNull(prefix, email.trim()).joinToString(" · ")
+            mail -> prefix
             provider in KIND_TITLED -> email.trim().ifEmpty { null }
             else -> label
         }

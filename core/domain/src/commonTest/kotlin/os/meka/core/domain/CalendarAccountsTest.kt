@@ -24,10 +24,10 @@ class CalendarAccountsTest {
         assertEquals("Personal", CalendarAccountRules.title("google", "meka@gmail.com"))
         assertEquals("Hotmail", CalendarAccountRules.title("microsoft", "meka@hotmail.co.uk"))
         assertEquals("Outlook", CalendarAccountRules.title("microsoft", "meka@outlook.com"))
-        assertEquals("Google · meka@gmail.com · synced 08:29", CalendarAccountRules.statusLine("google", "meka@gmail.com", "ok", "08:29"))
-        assertEquals("Outlook · meka@hotmail.co.uk · first sync in progress", CalendarAccountRules.statusLine("microsoft", "meka@hotmail.co.uk", "ok", null))
-        assertEquals("Google · access expired for meka@gmail.com", CalendarAccountRules.statusLine("google", "meka@gmail.com", "needs_reconnect", "08:29"))
-        assertEquals("Google · meka@gmail.com · couldn't sync last time · retrying", CalendarAccountRules.statusLine("google", "meka@gmail.com", "error", null))
+        assertEquals("Google · synced 08:29", CalendarAccountRules.statusLine("google", "meka@gmail.com", "ok", "08:29"))
+        assertEquals("Outlook · first sync in progress", CalendarAccountRules.statusLine("microsoft", "meka@hotmail.co.uk", "ok", null))
+        assertEquals("Google · access expired", CalendarAccountRules.statusLine("google", "meka@gmail.com", "needs_reconnect", "08:29"))
+        assertEquals("Google · couldn't sync last time · retrying", CalendarAccountRules.statusLine("google", "meka@gmail.com", "error", null))
     }
 
     @Test
@@ -120,7 +120,7 @@ class CalendarAccountsTest {
     fun anExpiredAccountsLineLeavesReconnectToItsButton() {
         val line = CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "needs_reconnect", "08:29")
         assertFalse("Reconnect" in line, line)
-        assertTrue(line.startsWith("Outlook · access expired for"), line)
+        assertEquals("Outlook · access expired", line)
     }
 
     @Test
@@ -128,15 +128,15 @@ class CalendarAccountsTest {
         // Quality gate slice 36: the expired Outlook card read "Outlook" over "Outlook · alex.work@example.com ·" with
         // "access expired" alone on the next line.
         val expired = CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "needs_reconnect", "08:29", title = "Outlook")
-        assertEquals("Access expired for alex.work@example.com", expired)
+        assertEquals("Access expired", expired)
         val kept = LoneWordGlue.kept(expired)
         assertFalse(kept.trimEnd().endsWith("·"), kept)
-        assertEquals("alex.work@example.com · synced 08:29",
+        assertEquals("Synced 08:29",
             CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "ok", "08:29", title = "Outlook"))
-        // A title of its own keeps the provider on the line, so two accounts still tell apart.
-        assertEquals("Outlook · meka@hotmail.co.uk · synced 08:29",
+        // A title of its own keeps the provider on the line.
+        assertEquals("Outlook · synced 08:29",
             CalendarAccountRules.statusLine("microsoft", "meka@hotmail.co.uk", "ok", "08:29", title = "Hotmail"))
-        assertEquals("Google · access expired for sam@example.com",
+        assertEquals("Google · access expired",
             CalendarAccountRules.statusLine("google", "sam@example.com", "needs_reconnect", null, title = "Personal"))
         // Feeds are unchanged.
         assertEquals("Headlines · synced 08:29", CalendarAccountRules.statusLine("news", "BBC News", "ok", "08:29", title = "BBC News"))
@@ -158,5 +158,29 @@ class CalendarAccountsTest {
         assertEquals(null, CalendarRules.detailShort("FC Barcelona"))
         assertEquals(null, CalendarRules.detailShort(null))
         assertEquals("alex.work@example.com", CalendarChoice("k", "Outlook", "Outlook · alex.work@example.com", true).detailShort)
+    }
+
+    @Test
+    fun noAddressIsEverShownAndTwoAccountsOfOneNameAreToldApart() {
+        // Walk-through A2, 2026-10-30: Settings → Calendars showed "Google · alex@example.com" and "Access expired for
+        // alex.work@…" as if the address were the account's name.
+        for (status in listOf("ok", "error", "needs_reconnect")) for (title in listOf(null, "Personal", "Outlook")) {
+            val line = CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", status, "08:29", title)
+            assertFalse('@' in line || "alex" in line, line)
+        }
+        val titles = CalendarAccountRules.distinctTitles(listOf(
+            "google" to "sam@example.com", "google" to "Alex@example.com", "microsoft" to "alex@hotmail.co.uk",
+            "microsoft" to "alex@outlook.com", "news" to "BBC News", "google" to "alex@example.com",
+        ), mapOf("google|alex@example.com|alex@example.com" to "Home"))
+        assertEquals("Home", titles[CalendarAccountRules.key("google", "Alex@example.com")])
+        assertEquals("Personal", titles[CalendarAccountRules.key("google", "sam@example.com")])
+        assertEquals("Hotmail", titles[CalendarAccountRules.key("microsoft", "alex@hotmail.co.uk")])
+        assertEquals("Outlook", titles[CalendarAccountRules.key("microsoft", "alex@outlook.com")])
+        assertEquals("BBC News", titles[CalendarAccountRules.key("news", "BBC News")])
+        assertEquals(5, titles.size)
+        // Two Gmail accounts with no names of their own: the second by address is "Personal 2".
+        val two = CalendarAccountRules.distinctTitles(listOf("google" to "sam@example.com", "google" to "alex@example.com"))
+        assertEquals("Personal", two[CalendarAccountRules.key("google", "alex@example.com")])
+        assertEquals("Personal 2", two[CalendarAccountRules.key("google", "sam@example.com")])
     }
 }

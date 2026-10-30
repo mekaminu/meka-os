@@ -1509,7 +1509,7 @@ class MekaCoreTest {
         fold.renameCalendar("google|meka@gmail.com|meka@gmail.com", "Home")
         val accounts = fold.connectedAccounts()
         assertEquals("Home", accounts[0].title)
-        assertEquals("Google · meka@gmail.com · synced 08:29", accounts[0].statusLine("08:29"))
+        assertEquals("Google · synced 08:29", accounts[0].statusLine("08:29"))
         assertEquals("Headlines · first sync in progress", accounts[2].statusLine(null))
         // Not synced yet: no events line (the status line says "first sync in progress").
         assertNull(accounts[1].eventsLine)

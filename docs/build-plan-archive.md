@@ -5128,3 +5128,7 @@ stray dash. Checked and left as they are: the capture bar is laid out below Toda
 row; the many shot is a viewport mid-list under the foot fade. The now line's "N anytime tasks" includes Up next (what's
 left to fit in; WorkHoursTest pins it, Fold review 2026-10-09) while ANYTIME TODAY · N counts the rows under it.
 Fold only; no core or server change, no migration. Screens re-taken by CI (voice-notes, today).
+
+
+### Found and fixing, slice 2 (2026-10-30): A2, no address as an account's name
+Core `CalendarAccountRules.statusLine` no longer writes a signed-in account's address ("Google · synced 08:29", "Google · access expired", "Synced 08:29" under an Outlook-titled card); new `distinctTitles`/`key` number same-named accounts ("Personal 2", by provider then address), used by `MekaCore.connectedAccounts` and Health's server facts; Health's calendar rows drop the address; Setup's calendar steps list the accounts' titles. Tests: CalendarAccountsTest (noAddressIsEverShownAndTwoAccountsOfOneNameAreToldApart and the updated lines), HealthTest, SetupTest, MekaCoreTest, the Mac bridge test.
