@@ -110,6 +110,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/calendars/inner-dark-by-hand.png](docs/screens/fold/calendars/inner-dark-by-hand.png)
 - [fold/calendars/inner-dark-empty.png](docs/screens/fold/calendars/inner-dark-empty.png)
 - [fold/calendars/inner-dark-many.png](docs/screens/fold/calendars/inner-dark-many.png)
+- [fold/car/cover-dark-by-hand.png](docs/screens/fold/car/cover-dark-by-hand.png)
 - [fold/car/cover-dark-empty.png](docs/screens/fold/car/cover-dark-empty.png)
 - [fold/car/cover-dark-many.png](docs/screens/fold/car/cover-dark-many.png)
 - [fold/car/cover-dark-one.png](docs/screens/fold/car/cover-dark-one.png)
