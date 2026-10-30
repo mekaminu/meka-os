@@ -95,6 +95,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/brief/cover-light-many.png](docs/screens/fold/brief/cover-light-many.png)
 - [fold/brief/inner-dark-empty.png](docs/screens/fold/brief/inner-dark-empty.png)
 - [fold/brief/inner-dark-many.png](docs/screens/fold/brief/inner-dark-many.png)
+- [fold/calendar/cover-dark-by-hand.png](docs/screens/fold/calendar/cover-dark-by-hand.png)
 - [fold/calendar/cover-dark-empty.png](docs/screens/fold/calendar/cover-dark-empty.png)
 - [fold/calendar/cover-dark-many.png](docs/screens/fold/calendar/cover-dark-many.png)
 - [fold/calendar/cover-dark-one.png](docs/screens/fold/calendar/cover-dark-one.png)
