@@ -49,7 +49,11 @@ import os.meka.core.sync.InMemoryReplicaStore
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], application = ShotApplication::class)
 class MoneySaveScreensTest {
-    @get:Rule
+    /** Outermost: a hang fails within minutes with every thread's stack, instead of holding CI to its limit. */
+    @get:Rule(order = 0)
+    val hangWatch = HangWatch()
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London

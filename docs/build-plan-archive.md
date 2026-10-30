@@ -4991,3 +4991,11 @@ no migration.
   height then 1 s of clock, at most 20 down and 40 up. `assertTouchTargets` counts tabs (Role.Tab) as well as buttons.
   `shoppingByHand` ends with `tabsByHand`: tap Promises, it lights and its promise shows, every button and tab 48 dp;
   tap Shopping, it lights and Coffee beans is back. Fold only (the Mac clicks); no core or server change, no migration.
+- Every screens test under HangWatch (2026-10-30): the scan for "other hand tests that pause the clock and use
+  performScrollToNode" found none: all 34 performScrollToNode calls in the screens tests (Study 13, Money's set, Brief,
+  Review, Shutdown, Trip lists, Week ahead) run with `mainClock.autoAdvance = true` set first, so the paused-clock hang
+  (CI run 1467) can't happen there and no bounded scroll was needed. The 52 `*ScreensTest` classes not yet guarded now
+  declare `HangWatch()` as rule order 0 with the compose rule order 1 (same as Car, Calendar, Lists).
+  `ScreensHangGuardTest` (reads the test sources): every `*ScreensTest.kt` has HangWatch; no performScrollToNode while
+  the clock was last set paused in the same test or helper; and a sample proves the scan sees one. Test only; no app,
+  core or server change, no migration.
