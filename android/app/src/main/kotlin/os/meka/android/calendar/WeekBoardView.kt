@@ -1181,6 +1181,9 @@ internal val LocalBoardDense = staticCompositionLocalOf { false }
 internal const val MONTH_TAG = "board-month"
 /** A day's serif date (Option B match, UI tests). */
 internal const val DAY_DATE_TAG = "board-day-date"
+
+/** A day head's empty room for its done bar (no cards), so the pills line up (the walk-through's A6). */
+internal const val BAR_SLOT_TAG = "board-bar-slot"
 /** An event's card in a day's column (Option B match, UI tests). */
 internal const val EVENT_CARD_TAG = "board-event-card"
 /** The "+ add" button at the foot of a column (Option B match, UI tests). */
@@ -1345,6 +1348,8 @@ private fun DayColumn(
                 Text(head.weekday, style = if (dense) BoardType.weekdayDense else MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1)
             }
             BoardLookRules.progress(day)?.let { DoneBar(it) }
+            // The walk-through's A6: a day with no cards keeps the bar's room, so its pill lines up with its neighbours'.
+            if (BoardOpenFoldRules.barSlot(day)) Spacer(Modifier.padding(top = MekaSpace.xxs).height(2.dp).testTag(BAR_SLOT_TAG))
         }
         // The alignment pass (c): one pill on every column, a past day's saying what was done.
         if (showHead) (day.capacity?.let(BoardPlannerRules::budget) ?: BoardOpenFoldRules.pastPill(day))?.let { BudgetPill(it, day.isToday) }
@@ -2202,7 +2207,7 @@ private fun BudgetPill(b: os.meka.core.domain.PlannerBudget, today: Boolean) {
                 // 6h 15" keeps its whole line (it may still wrap rather than be cut short).
                 Column {
                     Text(BoardMatchRules.pillLabel(b), style = figures, color = Meka.colors.textTertiary, maxLines = 1)
-                    // Density pass slice 2: unfolded the figures keep one line ("– / 4h"), so the pill is two lines at most.
+                    // Density pass slice 2: unfolded the figures keep one line ("0m / 4h"), so the pill is two lines at most.
                     Text(
                         if (dense) BoardDenseHeadRules.pillValue(b, narrow = true) else BoardPlannerRules.compactLine(b),
                         style = figures, color = if (b.over) amber else Meka.colors.textPrimary,

@@ -10,7 +10,9 @@ package os.meka.core.domain
  * - A row is as tall as its fullest day ([rowHeight]), never less than [LEAST_WEEKDAYS_DP] / [LEAST_WEEKEND_DP]: no
  *   column scrolls by itself or cuts a card off, and a quiet week leaves no gap; the week scrolls as one.
  * - One pill everywhere on the columns ([pillStacked]): "planned" over the figures, the same height on every day.
- * - A past day wears the same pill ([pastPill]): "done" over "2 of 3" (or "none"), its bar filled by what was done.
+ * - A past day wears the same pill ([pastPill]): "done" over "2 of 3" (or "no tasks"), its bar filled by what was done.
+ * - Every pill on one line (the walk-through's A6, 2026-10-30: Fri's pill sat higher than Wed/Thu's): a day with no
+ *   cards keeps its done bar's room ([barSlot]), empty, so every pill in a row starts at the same y.
  * - One header (alignment list (1)(2), 2026-10-24): no "Calendar" title or Agenda · Board switch above the board; the
  *   month's row holds Obi's pill, Today, ‹ › and a ⋯ in the same round style, and ⋯ ([menu]) holds what were four
  *   different text styles: Agenda view, Timeline / Hide timeline, New event, Plan your week, Review the week.
@@ -41,8 +43,14 @@ object BoardOpenFoldRules {
     /** The past day's pill's label. */
     const val DONE = "done"
 
-    /** A past day with nothing on it: its pill's value. */
-    const val NOTHING = "none"
+    /** A past day with nothing on it: its pill's value ("done · none" read as nothing done; A6, 2026-10-30). */
+    const val NOTHING = "no tasks"
+
+    /**
+     * Whether a day head keeps its done bar's room with no bar drawn: a day with no cards (no [BoardLookRules.progress])
+     * holds the 2 dp line's place, so its pill lines up with the days beside it that have a bar.
+     */
+    fun barSlot(day: BoardDay): Boolean = BoardLookRules.progress(day) == null
 
     /**
      * A row's height (dp) from each of its columns' content height [contents] (head, cards and "+ add"): the fullest
@@ -64,7 +72,7 @@ object BoardOpenFoldRules {
     fun pillStacked(dense: Boolean, compact: Boolean): Boolean = dense || compact
 
     /**
-     * A past day's pill in the budget pill's style: "done" over "2 of 3" (its tasks done of its tasks), or "none" when it
+     * A past day's pill in the budget pill's style: "done" over "2 of 3" (its tasks done of its tasks), or "no tasks" when it
      * had none; the bar is the share done. Null for today and later (they have the budget pill).
      */
     fun pastPill(day: BoardDay): PlannerBudget? {

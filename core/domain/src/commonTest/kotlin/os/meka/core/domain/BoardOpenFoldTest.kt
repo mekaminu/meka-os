@@ -59,10 +59,18 @@ class BoardOpenFoldTest {
         assertFalse(p.over)
         assertEquals("2 of 3 done", p.spoken)
         val empty = BoardOpenFoldRules.pastPill(day(past = true))!!
-        assertEquals("none", empty.value)
+        assertEquals("no tasks", empty.value)
         assertEquals(0f, empty.fill)
         assertEquals("Nothing planned", empty.spoken)
         assertNull(BoardOpenFoldRules.pastPill(day(past = false)))
+    }
+
+    @Test
+    fun aDayWithNoCardsKeepsItsDoneBarsRoomSoThePillsLineUp() {
+        // The walk-through's A6 (2026-10-30): Fri (no cards, no bar) had its pill higher than Wed/Thu's.
+        assertTrue(BoardOpenFoldRules.barSlot(day(past = false)))
+        assertTrue(BoardOpenFoldRules.barSlot(day(past = true)))
+        assertFalse(BoardOpenFoldRules.barSlot(day(past = false, cards = listOf(card("a")))))
     }
 
     @Test

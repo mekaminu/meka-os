@@ -13,7 +13,7 @@ package os.meka.core.domain
  * - **"+ add" is a slim dashed row** ([ADD_HEIGHT], [ADD_SP]): 28 high with 11 type, as the mockup's (it was a 40 dp
  *   slab), the touch target still the platform's minimum around it.
  * - **The narrow pills on one or two lines** ([pillValue]): a narrow lane stacks "planned" over its figures, and the
- *   figures keep one line: "nothing yet / 4h" becomes "– / 4h" there (the spoken line still says "nothing planned"),
+ *   figures keep one line: "nothing yet / 4h" becomes "0m / 4h" there (the spoken line still says "nothing planned"),
  *   so no pill wraps to three lines. The weekend's pills and "+ add" take the same smaller sizes.
  */
 object BoardDenseHeadRules {
@@ -44,8 +44,8 @@ object BoardDenseHeadRules {
     /** "+ add", sp. */
     const val ADD_SP = 11f
 
-    /** Nothing planned yet, on a narrow lane's one line of figures. */
-    const val NOTHING_SHORT = "–"
+    /** Nothing planned yet, on a narrow lane's one line of figures: "0m / 4h" (a bare dash read as a fault; A6, 2026-10-30). */
+    const val NOTHING_SHORT = "0m"
 
     /** Whether the week's goals sit in the header's row (unfolded and the Mac) rather than a row of their own. */
     fun goalsInHeader(wide: Boolean): Boolean = wide
@@ -54,7 +54,7 @@ object BoardDenseHeadRules {
     fun goalHint(empty: Boolean, inHeader: Boolean): Boolean = empty && !inHeader
 
     /**
-     * The budget pill's figures: on a narrow lane "nothing yet / 4h" is "– / 4h" so the figures keep one line under
+     * The budget pill's figures: on a narrow lane "nothing yet / 4h" is "0m / 4h" so the figures keep one line under
      * "planned"; elsewhere (and once anything is planned) the figures as they are.
      */
     fun pillValue(b: PlannerBudget, narrow: Boolean): String =

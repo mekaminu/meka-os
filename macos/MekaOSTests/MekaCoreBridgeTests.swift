@@ -1737,7 +1737,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(head.BUTTON, 36)
         XCTAssertFalse(head.goalHint(empty: true, inHeader: true))
         let empty = BoardPlannerRules.shared.budget(c: BoardCapacity(plannedMin: 0, freeMin: 240, unsized: 0))
-        XCTAssertEqual(head.pillValue(b: empty, narrow: true), "– / 4h")
+        XCTAssertEqual(head.pillValue(b: empty, narrow: true), "0m / 4h")
         let block = DayBlock(key: "t:a", title: "Send the quote", startMinute: 750, endMinute: 795, kind: DayBlockKind.task,
                              done: false, taskId: "a", event: nil, tone: 0, column: 0, columns: 1)
         XCTAssertEqual(block.label, "12:30–13:15")

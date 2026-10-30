@@ -517,6 +517,9 @@ private struct BoardColumnView: View {
                 }
                 if let progress = BoardLookRules.shared.progress(day: day) {
                     DayProgressBar(progress: progress, palette: palette)
+                } else if BoardOpenFoldRules.shared.barSlot(day: day) {
+                    // The walk-through's A6: a day with no cards keeps the bar's room, so the pills line up.
+                    Color.clear.frame(height: 2)
                 }
                 // The open Fold's alignment pass (c): one pill on every column, a past day's saying what was done.
                 if let b = day.capacity.map({ BoardPlannerRules.shared.budget(c: $0) }) ?? BoardOpenFoldRules.shared.pastPill(day: day) {
@@ -1081,7 +1084,7 @@ private struct BudgetPill: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(BoardMatchRules.shared.pillLabel(b: b)).font(BoardFont.mono)
                             .foregroundStyle(palette.textTertiary).lineLimit(1)
-                        // Density pass slice 2: the figures keep one line ("– / 4h"), so the pill is two lines at most.
+                        // Density pass slice 2: the figures keep one line ("0m / 4h"), so the pill is two lines at most.
                         Text(BoardDenseHeadRules.shared.pillValue(b: b, narrow: true)).font(BoardFont.mono)
                             .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(1)
                     }

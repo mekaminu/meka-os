@@ -38,8 +38,9 @@ class BoardDenseHeadTest {
 
     @Test
     fun aNarrowPillKeepsItsFiguresOnOneLine() {
-        // "nothing yet / 4h" wrapped to a third line in a 116 dp lane; there it is "– / 4h" under "planned".
-        assertEquals("– / 4h", BoardDenseHeadRules.pillValue(budget(0, 240), narrow = true))
+        // "nothing yet / 4h" wrapped to a third line in a 116 dp lane; there it is "0m / 4h" under "planned" (a bare
+        // "– / 4h" read as a fault in the walk-through, A6 2026-10-30).
+        assertEquals("0m / 4h", BoardDenseHeadRules.pillValue(budget(0, 240), narrow = true))
         assertEquals("nothing yet / 4h", BoardDenseHeadRules.pillValue(budget(0, 240), narrow = false))
         // Once anything is planned the figures are the mockup's as they are.
         assertEquals("4h 05 / 3h", BoardDenseHeadRules.pillValue(budget(245, 180), narrow = true))

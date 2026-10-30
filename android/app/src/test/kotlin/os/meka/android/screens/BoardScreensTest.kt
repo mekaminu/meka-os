@@ -555,6 +555,14 @@ class BoardScreensTest {
         assertTrue("the timeline sits right of today's card ($timeline vs $card)", timeline.left >= card.right)
         val bins = cardBounds("Order new bins")
         assertTrue("tomorrow's card is beside today's, not off screen ($bins)", bins.right <= timeline.left + 1f)
+        // The walk-through's A6 (2026-10-30): every weekday's pill on one line (Fri's, with no cards, sat higher than
+        // Wed/Thu's with their done bars), and none reads "– / 2h" or "done · none".
+        val pills = compose.onAllNodesWithTag(BUDGET_VALUE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        val tops = pills.map { it.boundsInRoot.top / density }.sorted().take(5)
+        assertEquals("five weekday pills", 5, tops.size)
+        assertTrue("the weekdays' pills start at one height ($tops dp)", tops.last() - tops.first() < 1f)
+        val words = pills.mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+        assertTrue("no pill reads a bare dash or \"none\" ($words)", words.none { it.startsWith("–") || it == "none" })
     }
 
     /**
@@ -598,7 +606,7 @@ class BoardScreensTest {
         assertTrue("+ add is a slim row (${adds.max()} dp)", adds.max() < 32f)
         val values = compose.onAllNodesWithTag(BUDGET_VALUE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
             .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
-        assertTrue("an empty weekday's pill reads \"– / …\" ($values)", values.any { it.startsWith(os.meka.core.domain.BoardDenseHeadRules.NOTHING_SHORT) })
+        assertTrue("an empty weekday's pill reads \"0m / …\" ($values)", values.any { it.startsWith(os.meka.core.domain.BoardDenseHeadRules.NOTHING_SHORT) })
         assertTrue("no narrow pill says \"nothing yet\" ($values)", values.none { it.contains(os.meka.core.domain.BoardPlannerRules.NOTHING_YET) })
 
         // ⋯ → Goals opens the week's goals with + Goal.
