@@ -4960,3 +4960,13 @@ no migration.
   300 ms limit is interrupted and fails within seconds; the report names the test and each thread. The pane's own
   clock is not pinned: nothing in the pane writes state from the clock during composition (the `now` tick is a
   30 s delay on the compose clock), so the clock is not the likely cause; the stack will say.
+- CI run 1467 (a04cbb4): HangWatch fired after 5 minutes and stopped the test JVM 30 s later (android job red in 11 m
+  instead of 40). The test thread was in `CarScreensTest.reach` → `performScrollToNode`, reaching the DATES row after
+  Drove off's Undo had pushed it below the cover screen, and the interrupt didn't end it (a busy loop, not a wait).
+  Cause: a lazy list's ScrollBy semantics action animates the scroll; with `mainClock.autoAdvance = false` the
+  animation never moves, so performScrollToNode keeps asking for another scroll and never reaches the end. Run 1460
+  passed because the row happened to be composed already. Fix: `reach` does its own scrolling: ScrollBy 60 % of the
+  list's height on the pane's own list, then `advanceTimeBy(1 000)` so the animation lands, at most 20 steps down and
+  40 up, then the old settle wait. Other screens tests that pause the clock and call performScrollToNode carry the same
+  risk when their target starts below the screen (agendaByHand's hang in 1461 fits); they get the same bounded scroll
+  when they are next touched.

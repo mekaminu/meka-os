@@ -19,7 +19,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -185,11 +184,24 @@ class CarScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
-    /** Scrolls the pane until a node matching [m] is composed, then returns the matches (failing with [what] if none). */
+    /**
+     * Scrolls the pane's own list until a node matching [m] is composed, then returns the matches (failing with [what]
+     * if none). Not performScrollToNode: a lazy list's scroll action animates, and with the test's clock paused the
+     * animation never moves, so performScrollToNode kept asking for one more scroll for ever (CI run 1467's HangWatch
+     * stack: carByHand hung in it reaching the DATES row once Undo pushed the row below the screen). Here each step
+     * asks for 60 % of the list's height, then runs the clock so the animation lands; at most 20 steps down, then 40
+     * up (a part above the screen), so it always ends.
+     */
     private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
-        // Only the pane's own list scrolls (not the first scrollable on screen, which could be a chip row).
-        runCatching { compose.onNodeWithTag(CAR_LIST_TAG).performScrollToNode(m) }
-        until { compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty() }
+        fun found() = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+        val list = compose.onNodeWithTag(CAR_LIST_TAG)
+        val step = list.fetchSemanticsNode().size.height * 0.6f
+        for (dy in List(20) { step } + List(40) { -step }) {
+            if (found()) break
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+            compose.mainClock.advanceTimeBy(1_000)
+        }
+        until { found() }
         val found = compose.onAllNodes(m)
         if (found.fetchSemanticsNodes().isEmpty()) fail("$name: no $what")
         return found
