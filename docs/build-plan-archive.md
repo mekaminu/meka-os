@@ -4941,3 +4941,12 @@ no migration.
   48 dp box). Not in this piece: CalendarViewSwitch's 48 dp Box (and the Agenda header's gaps around it), Lists' Tabs,
   the shoppingByHand tab tap, agendaByHand. Test: CalendarScreensTest's cover shots with a full week read every event
   row's height (no taps, no scrolling) and fail under 48 dp. If this piece's CI hangs, the cause is in these rows.
+- CI run 1463 (9208bee) looked hung at 29 minutes and was cancelled. e916dd1 made the android unit tests log each
+  test's STARTED line (android/app/build.gradle.kts testLogging events "started", "failed"). Run 1465 then built
+  everything, this piece included, with BUILD SUCCESSFUL in 27 m 37 s (it was cancelled by mistake in its publish step).
+  Its re-run hung: the log's last test line was "CarScreensTest > carByHand STARTED" (07:36), then nothing until the
+  40-minute limit. So the hang is Car's hand test (landed in 1460, green once), which most likely also stopped 1461–1463;
+  the Calendar and Lists changes were blamed wrongly. carByHand is switched off (`carByHandOff`, no @Test). Suspect: the
+  pane reads System.currentTimeMillis for the parked time and timer while the test's compose clock is paused, and
+  performScrollToNode / performTextInput wait for idle. Next: make carByHand safe and turn it back on (pin the pane's
+  clock, scroll only the pane's own list), then Agenda · Board's 48 dp switch, Lists' tabs and agendaByHand.
