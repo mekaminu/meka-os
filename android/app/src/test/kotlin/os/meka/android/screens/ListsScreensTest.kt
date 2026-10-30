@@ -6,13 +6,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.foundation.background
@@ -38,6 +37,7 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.lists.LISTS_LIST_TAG
 import os.meka.android.lists.LIST_TAB_TAG
 import os.meka.android.lists.ListTab
 import os.meka.android.lists.ListsRoute
@@ -63,7 +63,11 @@ import kotlin.random.Random
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], application = ShotApplication::class)
 class ListsScreensTest {
-    @get:Rule
+    /** Outermost: a hang fails within minutes with every thread's stack, instead of holding CI to its limit. */
+    @get:Rule(order = 0)
+    val hangWatch = HangWatch()
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
@@ -174,34 +178,50 @@ class ListsScreensTest {
         turns()
     }
 
-    /** Taps the first node [matcher] finds that answers a tap, scrolling the list to it first. */
-    private fun tap(name: String, what: String, matcher: SemanticsMatcher) {
-        val m = matcher and hasClickAction()
-        if (compose.onAllNodes(m).fetchSemanticsNodes().isEmpty()) {
-            runCatching { compose.onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(m) }
+    /**
+     * Scrolls the screen's own list until a node matching [m] is composed, then returns the matches (failing with [what]
+     * if none). Not performScrollToNode: with the test's clock paused a lazy list's animated scroll never lands, so it
+     * asked for one more scroll for ever (CI runs 1461–1467: the hang behind the reverted Lists tab slice). Each step asks
+     * for 60 % of the list's height, then runs the clock; at most 20 steps down, then 40 up, so it always ends.
+     */
+    private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
+        fun found() = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+        if (!found()) {
+            val list = compose.onNodeWithTag(LISTS_LIST_TAG)
+            val step = list.fetchSemanticsNode().size.height * 0.6f
+            for (dy in List(20) { step } + List(40) { -step }) {
+                if (found()) break
+                list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+                compose.mainClock.advanceTimeBy(1_000)
+            }
             turns(500)
         }
         val n = compose.onAllNodes(m)
-        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$what\" to tap")
-        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no $what")
+        return n
+    }
+
+    /** Taps the first node [matcher] finds that answers a tap, scrolling the list to it first. */
+    private fun tap(name: String, what: String, matcher: SemanticsMatcher) {
+        reach(name, matcher and hasClickAction(), "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
     }
 
     /** Types [text] into the field TalkBack reads as [hint] and presses Done on the keyboard. */
     private fun type(name: String, hint: String, text: String) {
         val field = hasContentDescription(hint) and hasSetTextAction()
-        if (compose.onAllNodes(field).fetchSemanticsNodes().isEmpty()) {
-            runCatching { compose.onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(field) }
-            turns(500)
-        }
-        if (compose.onAllNodes(field).fetchSemanticsNodes().isEmpty()) fail("$name: no \"$hint\" field")
-        compose.onAllNodes(field)[0].performTextInput(text)
+        reach(name, field, "\"$hint\" field")[0].performTextInput(text)
         turns(500)
         compose.onAllNodes(field)[0].performImeAction()
     }
 
-    /** Every button drawn answers a 48 dp touch (an opened row's Kept and Delete, the chips, shopping's Remove were ~30 dp). */
+    /**
+     * Every button and tab drawn answers a 48 dp touch (an opened row's Kept and Delete, the chips, shopping's Remove were
+     * ~30 dp; the five tabs 40 dp).
+     */
     private fun assertTouchTargets(name: String) {
-        val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        val tappable = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) or
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+        val small = compose.onAllNodes(hasClickAction() and tappable)
             .fetchSemanticsNodes()
             .filter { it.size.height / compose.density.density < 47.5f }
             .map { n ->
@@ -256,6 +276,22 @@ class ListsScreensTest {
         until { core.listsView.value.shopping.toBuy.size >= 5 }
         val titles = core.listsView.value.shopping.toBuy.map { it.title.lowercase() }
         if ("eggs" !in titles || "butter" !in titles) fail("$name: the field didn't add eggs and butter ($titles)")
+        tabsByHand(name)
+    }
+
+    /** The tabs by hand: a tap on Promises lights it and its promise shows; a tap on Shopping brings the list back. */
+    private fun tabsByHand(name: String) {
+        fun tab(t: ListTab) = hasTestTag(LIST_TAB_TAG) and hasContentDescription(t.label, substring = true) and hasClickAction()
+        fun lit(t: ListTab) = tab(t) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        reach(name, tab(ListTab.WAITING), "Promises tab")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(lit(ListTab.WAITING)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(lit(ListTab.WAITING)).fetchSemanticsNodes().isEmpty()) fail("$name: tapping Promises didn't light it")
+        reach(name, hasText("Send Sam the photos"), "promise on Promises")
+        assertTouchTargets(name)
+        reach(name, tab(ListTab.SHOPPING), "Shopping tab")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(lit(ListTab.SHOPPING)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(lit(ListTab.SHOPPING)).fetchSemanticsNodes().isEmpty()) fail("$name: tapping Shopping didn't light it")
+        reach(name, hasText("Coffee beans", substring = true), "Coffee beans back on Shopping")
     }
 
     /** All five tabs, each label whole inside its slot (TabLabelCut, set from the label's own layout). */

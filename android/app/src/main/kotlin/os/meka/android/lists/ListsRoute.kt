@@ -94,6 +94,9 @@ import os.meka.android.designsystem.sharedPlace
 
 /** Test tag of each Lists tab, and whether its label is cut at the slot's edges (read by ListsScreensTest). */
 const val LIST_TAB_TAG = "list-tab"
+
+/** Test tag of the Lists screen's own list, scrolled in bounded steps by ListsScreensTest (never performScrollToNode). */
+const val LISTS_LIST_TAG = "lists-list"
 val TabLabelCut = SemanticsPropertyKey<Boolean>("TabLabelCut")
 
 /** The lists, in the order of the tabs; [short] is the label when five don't fit (the closed Fold). */
@@ -134,7 +137,7 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize().background(Meka.colors.background),
+        Modifier.fillMaxSize().background(Meka.colors.background).testTag(LISTS_LIST_TAG),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -277,12 +280,14 @@ internal fun LazyListScope.empty(key: String, line: String) = item(key = "empty-
 @Composable
 private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: (ListTab) -> Unit) {
     val tabs = ListTab.entries
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(MekaSpace.xxs)) {
+    // Works by hand (quality gate): the track and the lit pill look as before (a 40 dp pill inside a 48 dp track), but
+    // each tab's touch is the track's full 48 dp height, not the 40 dp pill.
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(horizontal = MekaSpace.xxs)) {
         val slot = maxWidth / tabs.size
         val roomForCounts = slot >= 104.dp
         val shortLabels = slot < 84.dp
         val x by animateDpAsState(slot * tabs.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "lists-pill")
-        Box(Modifier.offset(x = x).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
+        Box(Modifier.offset(x = x).padding(vertical = MekaSpace.xxs).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
             tabs.forEach { t ->
                 val count = when (t) {
@@ -300,7 +305,7 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                 )
                 var cut by remember(t) { mutableStateOf(false) }
                 Box(
-                    Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    Modifier.weight(1f).height(MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Tab) { choose(t) }
                         .testTag(LIST_TAB_TAG)
                         .clearAndSetSemantics {

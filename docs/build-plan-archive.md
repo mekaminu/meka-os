@@ -4983,3 +4983,11 @@ no migration.
   buttons under 48 dp: Prep task, Hide from my day and the Remind me chips ("5 min") at 33 dp. EventDetailPane's
   ActionChip and ReminderChips now draw the same chip inside a 48 dp touch (`TouchTarget`, private), and Open in Maps
   and the Open in <calendar> line are `minTouch()` rows instead of xs padding.
+  CI run 1470 green (first attempt stopped on the known ShutdownScreensTest.shutDownByHand flake, green on re-run).
+- Lists' tabs by hand (2026-10-30): the five tabs answer the track's full 48 dp (`MekaSpace.touch`); the track keeps
+  only horizontal xxs padding and the lit pill sits 4 dp in, still drawn 40 dp, so the look is unchanged.
+  `ListsScreensTest` runs under HangWatch; its `tap`/`type` no longer call performScrollToNode (the hang risk with the
+  clock paused) but a bounded `reach` on the Lists LazyColumn (`LISTS_LIST_TAG`, ListsRoute.kt): ScrollBy 60 % of its
+  height then 1 s of clock, at most 20 down and 40 up. `assertTouchTargets` counts tabs (Role.Tab) as well as buttons.
+  `shoppingByHand` ends with `tabsByHand`: tap Promises, it lights and its promise shows, every button and tab 48 dp;
+  tap Shopping, it lights and Coffee beans is back. Fold only (the Mac clicks); no core or server change, no migration.
