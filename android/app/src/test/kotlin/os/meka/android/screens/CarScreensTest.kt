@@ -3,10 +3,27 @@ package os.meka.android.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import android.os.Looper
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -15,6 +32,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.CarPane
@@ -23,6 +41,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.CarRules
+import os.meka.core.domain.FuelKind
 import os.meka.core.domain.ParkedSpot
 import os.meka.core.domain.ParkingRules
 import os.meka.core.domain.ParkingTimerRules
@@ -79,7 +98,10 @@ class CarScreensTest {
         ParkingStore.store(context, spots)
     }
 
-    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+    /** How many times the DATES row's tap reached [CarPane]'s onDates. */
+    private var datesTapped = 0
+
+    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -93,7 +115,7 @@ class CarScreensTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    CarPane(core, onClose = {}, onDates = {})
+                    CarPane(core, onClose = {}, onDates = { datesTapped++ })
                 }
             }
         }
@@ -130,12 +152,115 @@ class CarScreensTest {
             if (ScreenShots.texts(compose).any { it == "Ended" }) fail("$name: an \"Ended\" button beside a running timer")
             ScreenShots.assertShows(compose, name, "The Golf")
         }
+        return core
     }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverEmpty() = shoot("cover-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverOne() = shoot("cover-dark-one", Fill.ONE)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverMany() = shoot("cover-dark-many", Fill.MANY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverManyLight() = shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerEmpty() = shoot("inner-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerMany() = shoot("inner-dark-many", Fill.MANY)
+    /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle. */
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        repeat(30) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
+    /** Every button drawn answers a 48 dp touch. */
+    private fun assertTouchTargets(name: String) {
+        val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .fetchSemanticsNodes()
+            .filter { it.size.height / compose.density.density < 47.5f }
+            .map { n ->
+                val label = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                    ?: n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString() ?: "?"
+                "\"$label\" ${(n.size.height / compose.density.density).toInt()} dp"
+            }
+        if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
+    }
+
+    /** Scrolls the pane until a node matching [m] is composed, then returns the matches (failing with [what] if none). */
+    private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
+        runCatching { compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(m) }
+        until { compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty() }
+        val found = compose.onAllNodes(m)
+        if (found.fetchSemanticsNodes().isEmpty()) fail("$name: no $what")
+        return found
+    }
+
+    /**
+     * Works by hand (quality gate (3)): with one car parked and a timer running, +15 min moves the timer's end, Stop timer
+     * ends it and Undo brings it back; the bay field takes a new bay by the keyboard's Done; Drove off clears the spot and
+     * Undo returns it; the DATES row opens the dates; Change fuel unfolds the four fuels and Diesel is kept. Every button
+     * on screen answers a 48 dp touch, before and after each part opens.
+     */
+    private fun carByHand(core: MekaCore) {
+        val name = "car-by-hand"
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        val car = CarRules.ENTITY_ID
+        assertTouchTargets(name)
+
+        // The timer: +15 min, then Stop timer and Undo.
+        val before = core.parkingTimersView.value.rows.firstOrNull { it.carId == car }?.timer ?: fail("$name: no timer to start with")
+        reach(name, hasText("+15 min") and hasClickAction(), "+15 min chip")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.parkingTimersView.value.rows.firstOrNull { it.carId == car }?.timer != before }
+        if (core.parkingTimersView.value.rows.firstOrNull { it.carId == car }?.timer == before) fail("$name: +15 min left the timer as it was")
+        reach(name, hasContentDescription("Stop timer: ", substring = true) and hasClickAction(), "Stop timer")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { core.parkingTimersView.value.rows.none { it.carId == car } }
+        if (core.parkingTimersView.value.rows.any { it.carId == car }) fail("$name: Stop timer left the timer running")
+        val undo = hasText("Undo") and hasClickAction()
+        assertTouchTargets(name)
+        reach(name, undo, "Undo after Stop timer")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.parkingTimersView.value.rows.any { it.carId == car } }
+        if (core.parkingTimersView.value.rows.none { it.carId == car }) fail("$name: Undo didn't bring the timer back")
+
+        // The bay: typed, then Done on the keyboard.
+        val bay = hasContentDescription(ParkingRules.LABEL_HINT) and hasSetTextAction()
+        reach(name, bay, "bay field")[0].performTextInput("level 2 row b")
+        until { false }
+        compose.onAllNodes(bay)[0].performImeAction()
+        until { ParkingStore.spots(context)[car]?.label == "Level 2 · Row B" }
+        if (ParkingStore.spots(context)[car]?.label != "Level 2 · Row B") fail("$name: Done on the bay field kept \"${ParkingStore.spots(context)[car]?.label}\"")
+        ScreenShots.assertShows(compose, name, "Level 2 · Row B")
+
+        // Drove off, then Undo.
+        reach(name, hasContentDescription("${ParkingRules.DROVE_OFF}: ", substring = true) and hasClickAction(), "Drove off")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { ParkingStore.spots(context)[car] == null }
+        if (ParkingStore.spots(context)[car] != null) fail("$name: Drove off kept the spot")
+        assertTouchTargets(name)
+        reach(name, undo, "Undo after Drove off")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { ParkingStore.spots(context)[car] != null }
+        if (ParkingStore.spots(context)[car] == null) fail("$name: Undo didn't put the spot back")
+
+        // DATES opens the dates.
+        val tapsBefore = datesTapped
+        reach(name, hasText(ParkingRules.DATES_ACTION, substring = true) and hasClickAction(), "Dates row")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { datesTapped > tapsBefore }
+        if (datesTapped == tapsBefore) fail("$name: the DATES row's tap opened nothing")
+
+        // Fuel: Change unfolds the four, Diesel is kept.
+        reach(name, hasContentDescription("Change fuel for ", substring = true) and hasClickAction(), "Change fuel")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        val diesel = hasText(FuelKind.B7.label) and hasClickAction()
+        reach(name, diesel, "Diesel choice")
+        assertTouchTargets(name)
+        compose.onAllNodes(diesel)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.carsView.value.cars.first { it.carId == car }.fuel == FuelKind.B7 }
+        if (core.carsView.value.cars.first { it.carId == car }.fuel != FuelKind.B7) fail("$name: picking Diesel didn't keep it")
+        assertTouchTargets(name)
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverEmpty() { shoot("cover-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverOne() { shoot("cover-dark-one", Fill.ONE) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverMany() { shoot("cover-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carByHand() { carByHand(shoot("cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerEmpty() { shoot("inner-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerMany() { shoot("inner-dark-many", Fill.MANY) }
 }

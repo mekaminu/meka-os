@@ -4901,3 +4901,14 @@ same chip serves Car's parking choices, Meals, Date night, Activity's filters an
 its Remove (now read "Remove <thing>"), Clear and Shop mode ~32 dp (now 48). Lists' five tabs are 40 dp tall (a
 `Role.Tab`, left for the layout review). The Mac is clicked with a pointer, so no change there. No core or server change,
 no migration.
+
+### Quality gate — (3) works by hand, Car (2026-10-30)
+
+- **CarScreensTest.carByHand** (closed Fold, one car named and registered, parked with a bay, a 2 h timer running):
+  every button on screen answers a 48 dp touch; +15 min moves the timer's end; Stop timer ends it and Undo brings it
+  back; "level 2 row b" in the bay field and Done on the keyboard keeps "Level 2 · Row B" and shows it; Drove off clears
+  the spot and Undo returns it; a tap on the DATES row reaches onDates; Change fuel unfolds the four fuels and Diesel is
+  kept on the car. The touch check runs again after each part opens (Undo, the fuel list). The pane scrolls to each part
+  first (it's a LazyColumn taller than the cover screen).
+- Car's buttons already had their 48 dp targets (minTouch since slice 22 and the Lists chip fix), so no screen change.
+  Test only; Fold only (the Mac clicks); no core or server change, no migration.
