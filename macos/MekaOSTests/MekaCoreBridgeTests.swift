@@ -4336,6 +4336,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(StudyBesideRules.shared.endChipLabel(label: "Mon 23 Nov · 4 wks", narrow: true), "23 Nov · 4 wks")
     }
 
+    func testTripListsBesideOnTheMac() {
+        // Trip lists beside its mockup (2026-10-30): the field's Add, and a group's card rounds its head and its last row.
+        XCTAssertEqual(TripBesideRules.shared.ADD, "Add")
+        let pieces = TripBesideRules.shared.pieces(open: true, rowIds: ["a", "b"], menuOpen: false, sheetFor: nil)
+        XCTAssertEqual(pieces, [TripBesideRules.shared.HEAD, "a", "b"])
+        XCTAssertTrue(TripBesideRules.shared.pieceOf(key: TripBesideRules.shared.HEAD, pieces: pieces).roundTop)
+        XCTAssertFalse(TripBesideRules.shared.pieceOf(key: "a", pieces: pieces).roundBottom)
+        XCTAssertTrue(TripBesideRules.shared.pieceOf(key: "b", pieces: pieces).roundBottom)
+    }
+
     func testTodayBesideOnTheMac() {
         XCTAssertEqual(TodayBesideRules.shared.anytimeLabel(openCount: 4), "Anytime today · 4")
         XCTAssertEqual(TodayBesideRules.shared.anytimeLabel(openCount: 0), "Anytime today")

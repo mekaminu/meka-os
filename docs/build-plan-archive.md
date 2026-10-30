@@ -4824,3 +4824,31 @@ Done 2026-10-29 in one slice:
 - Mac: the pill beside Today keeps one whole line (fixed width), so `ViewThatFits` falls back to the stacked header
   instead of wrapping; "+ Goal" stays in the row (the Mac window has the room). MekaCoreBridgeTests pins nudgeLines.
   No server change, no migration. Mac checked nightly.
+
+### Quality gate — (2) the design check, Trip lists (2026-10-30): Trip lists beside its mockup
+
+`docs/design/trip/trip-lists.dc.html` rendered at 390 (tools/design-render/render.mjs) beside CI's
+`trip-lists/cover-dark-pack` (the closed Fold, 344 dp). Differences found, item by item, and what changed:
+
+1. Header (title, dates, countdown): **matches**; the mockup's ⋯ in the corner stays a tap on the header in the app
+   (who's going and the leave time), as built in slice 2d.
+2. Bought / Packed: loose text over two bars → **two small cards** (surface, 16 dp radius, 16 × 8 dp inside), the
+   count in the secondary grey, not bold, 8 dp apart.
+3. The tabs: **match**.
+4. Obi's card: chips, Add all and Not now were painted as 48 dp tall pills → **slim pills** (about 33 dp drawn) inside
+   the same 48 dp touch targets; the chip rows no longer add 8 dp on top of the targets.
+5. The add field: no button → **one pill ending on a gold Add** (the item-meta size, as the mockup's 15); Done on the
+   keyboard still adds. New "works by hand" test: typing then tapping Add puts it on the list and clears the field.
+6. Everyone · Me · Kids: slim pills as 4.
+7. Groups: a caps label over loose rows → **each group a card** (16 dp inside, 16 dp radius, 8 dp above), its name in
+   title case (15 sp semibold), the count and chevron in the secondary grey, a faint line on top of every row. The
+   Fold's list draws a group as several lazy items (head, menu, rows, sheets), so each draws its piece of the card
+   (`TripBesideRules.pieces/pieceOf`, `Modifier.tripCard`), running through half the list's gap so they join; the head
+   rounds the top, the last piece the bottom; a dragged row or head carries its piece. Rows keep their ⋯ (Meka's
+   editing ask, 26 Oct), which the mockup predates.
+8. Save as a template and the foot line: **match**.
+
+The Mac: Bought / Packed cards, each group a card with the title-case name and a hairline between rows, and the field
+as one capsule ending on Add (Return adds too). Core TripBesideRules; TripBesideTest, TripListsScreensTest,
+MekaCoreBridgeTests.testTripListsBesideOnTheMac. No server change, no migration. Mac checked nightly.
+

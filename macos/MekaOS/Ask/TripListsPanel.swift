@@ -231,7 +231,7 @@ struct TripListsPanel: View {
             goingEditor(v)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
-        HStack(spacing: MekaSpace.m) {
+        HStack(spacing: MekaSpace.xs) {
             bar(v.bought)
             bar(v.packed)
         }
@@ -263,20 +263,27 @@ struct TripListsPanel: View {
         .padding(.top, MekaSpace.xs)
         .staggeredAppear(2)
         suggestCard(v)
-        TextField(v.tab(list: tab).hint, text: $text)
-            .textFieldStyle(.roundedBorder)
-            .accessibilityLabel(TripListRules.shared.ADD_DESCRIPTION)
-            .onSubmit {
-                let typed = text
-                let open = tab
-                text = ""
-                Task {
-                    let r = await model.addTripItem(tripId, typed, open: open)
-                    said = r
-                    if let r, !r.refused { tab = r.list }
-                    askFor = (r?.askGroups.isEmpty == false && r?.id != nil) ? r : nil
-                }
-            }
+        // Beside its mockup (2026-10-30): one pill ending on a gold Add; Return adds too.
+        HStack(spacing: MekaSpace.xs) {
+            TextField(v.tab(list: tab).hint, text: $text)
+                .textFieldStyle(.plain)
+                .font(MekaType.itemMeta)
+                .accessibilityLabel(TripListRules.shared.ADD_DESCRIPTION)
+                .onSubmit { addTyped() }
+            Button(TripBesideRules.shared.ADD) { addTyped() }
+                .buttonStyle(.plain)
+                .font(MekaType.captionStrong)
+                .foregroundStyle(palette.onAccent)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xxs)
+                .background(palette.accent, in: Capsule())
+                .accessibilityLabel(TripBesideRules.shared.ADD_DESCRIPTION)
+                .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(.leading, MekaSpace.m)
+        .padding(.trailing, MekaSpace.xxs)
+        .padding(.vertical, MekaSpace.xxs)
+        .background(palette.background, in: Capsule())
         Text(said?.line ?? TripListRules.shared.ADD_NOTE).font(MekaType.caption)
             .foregroundStyle(said?.refused == true ? palette.accent : (said == nil ? palette.textTertiary : palette.textSecondary))
             .fixedSize(horizontal: false, vertical: true)
@@ -558,12 +565,27 @@ struct TripListsPanel: View {
         }
     }
 
+    /// What's typed in the add field goes onto its list (the open tab unless the words say another).
+    private func addTyped() {
+        let typed = text
+        guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let open = tab
+        text = ""
+        Task {
+            let r = await model.addTripItem(tripId, typed, open: open)
+            said = r
+            if let r, !r.refused { tab = r.list }
+            askFor = (r?.askGroups.isEmpty == false && r?.id != nil) ? r : nil
+        }
+    }
+
+    /// Beside its mockup (2026-10-30): a small card, "Bought" · "3 of 9" over a thin bar.
     private func bar(_ p: TripProgress) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
                 Text(p.label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 Spacer()
-                Text(p.line).font(MekaType.captionStrong).foregroundStyle(palette.textPrimary)
+                Text(p.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -574,15 +596,29 @@ struct TripListsPanel: View {
             .frame(height: 4)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: p.fraction)
         }
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(p.label) \(p.line)")
     }
 
     private func isDone(_ r: TripListRow) -> Bool { pending[r.id] ?? r.done }
 
-    @ViewBuilder
+    /// Beside its mockup (2026-10-30): each group is a card, its name in title case, a faint line between rows.
     private func group(_ g: TripListGroup, editable: [String], allNames: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            groupInside(g, editable: editable, allNames: allNames)
+        }
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.xxs)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .padding(.top, MekaSpace.xs)
+    }
+
+    @ViewBuilder
+    private func groupInside(_ g: TripListGroup, editable: [String], allNames: [String]) -> some View {
         let open = !folded.contains(g.key)
         let done = g.rows.filter { isDone($0) }.count
         let allDone = !g.rows.isEmpty && done == g.rows.count
@@ -591,13 +627,13 @@ struct TripListsPanel: View {
             if open { folded.insert(g.key) } else { folded.remove(g.key) }
         } label: {
             HStack(spacing: MekaSpace.xs) {
-                Text(g.name.uppercased())
-                    .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                    .foregroundStyle(palette.textTertiary)
+                Text(g.name)
+                    .font(MekaType.upNextCardTitle)
+                    .foregroundStyle(palette.textPrimary)
                 Spacer()
                 Text(g.rows.isEmpty ? TripGroupRules.shared.EMPTY : (allDone ? "All done" : "\(done) of \(g.rows.count)")).font(MekaType.caption)
-                    .foregroundStyle(allDone ? palette.success : palette.textTertiary)
-                Image(systemName: "chevron.down").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .foregroundStyle(allDone ? palette.success : palette.textSecondary)
+                Image(systemName: "chevron.down").font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .rotationEffect(.degrees(open ? 180 : 0))
             }
             .contentShape(Rectangle())
@@ -606,7 +642,7 @@ struct TripListsPanel: View {
             .animation(MekaMotion.appear(reduced: reduceMotion), value: dropTarget)
         }
         .buttonStyle(MekaPressStyle())
-        .padding(.top, MekaSpace.xs)
+        .padding(.vertical, MekaSpace.xs)
         .accessibilityLabel("\(g.name), \(allDone ? "all done" : "\(done) of \(g.rows.count)")")
         // Slice 4b: drag a thing onto a group's head to move it there; drag a head onto another to take its place.
         .modifier(GroupHeadDrag(name: g.name, editable: g.editable))
@@ -639,7 +675,10 @@ struct TripListsPanel: View {
                 return da != db ? !da : a.offset < b.offset
             }.map(\.element)
             ForEach(rows, id: \.id) { r in
-                row(r, group: g.name, allNames: allNames)
+                VStack(spacing: 0) {
+                    Rectangle().fill(palette.hairline).frame(height: 1)
+                    row(r, group: g.name, allNames: allNames)
+                }
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }

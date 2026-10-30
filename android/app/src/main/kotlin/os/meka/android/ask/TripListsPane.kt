@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,23 +29,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,19 +51,32 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,11 +93,12 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
+import os.meka.core.domain.TripBesideRules
 import os.meka.core.domain.TripGroupDone
 import os.meka.core.domain.TripGroupRules
+import os.meka.core.domain.TripLeaveSaved
 import os.meka.core.domain.TripList
 import os.meka.core.domain.TripListAdded
-import os.meka.core.domain.TripLeaveSaved
 import os.meka.core.domain.TripListCopied
 import os.meka.core.domain.TripListGroup
 import os.meka.core.domain.TripListRemoved
@@ -141,6 +153,10 @@ import os.meka.core.facade.MekaCore
  * press and hold a group's head and drag it up or down to reorder the groups. Near the list's top or foot the list
  * scrolls. Holding without moving still opens the thing's sheet (or the group's menu). Reduced motion: the lifted row
  * still follows the finger (it is the gesture), the lit head fades instead of easing.
+ *
+ * Beside its mockup (2026-10-30, [TripBesideRules]): Bought and Packed are two small cards; the chips, buttons and
+ * filters are slim pills inside their 48 dp targets; the add field ends on a gold Add; each group is a card (its name in
+ * title case, a faint line between rows), drawn piece by piece across the list's items ([tripCard]).
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -327,7 +343,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
             }
         }
         item(key = "bars") {
-            Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 ProgressBar(v.bought, Modifier.weight(1f))
                 ProgressBar(v.packed, Modifier.weight(1f))
             }
@@ -400,7 +416,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         }
         item(key = "field") {
             Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(v.tab(tab).hint, description = TripListRules.ADD_DESCRIPTION) { text ->
+                TripAddField(v.tab(tab).hint, description = TripListRules.ADD_DESCRIPTION) { text ->
                     scope.launch {
                         val r = runCatching { core.addTripItem(tripId, text, tab) }.getOrNull()
                         if (r?.refused == false) { haptics.light(); tab = r.list } else haptics.reject()
@@ -539,11 +555,10 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                         val on = w == whoShown
                         Text(
                             w.label, style = MekaType.caption, color = if (on) Meka.colors.onAccent else Meka.colors.textPrimary,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                                .background(if (on) Meka.colors.accent else Meka.colors.surface)
+                            modifier = Modifier
                                 .clickable(role = Role.Tab) { haptics.tick(); who = w }
                                 .semantics { if (on) stateDescription = "Selected" }
-                                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                                .slimPill(if (on) Meka.colors.accent else Meka.colors.surface),
                         )
                     }
                 }
@@ -582,6 +597,9 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         }
         for (g in groups) {
             val open = folded[g.key] != true
+            // Beside its mockup: the group is one card drawn across its head, menu, rows and sheet.
+            val shownRows = if (open) g.rows.sortedBy { pending[it.id] ?: it.done } else emptyList()
+            val pieces = TripBesideRules.pieces(open, shownRows.map { it.id }, menuFor == g.key && g.editable, sheetFor)
             item(key = "group-${g.key}") {
                 DisposableEffect(g.name) { onDispose { drag.heads.remove(g.name) } }
                 var top by remember { mutableFloatStateOf(0f) }
@@ -608,6 +626,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                     Modifier.animateItem()
                         .onGloballyPositioned { val b = it.boundsInRoot(); top = b.top; if (!dragging) drag.heads[g.name] = b }
                         .graphicsLayer { if (dragging) { translationY = drag.offsetY + drag.scrolled; shadowElevation = 8f } }
+                        .tripCard(TripBesideRules.pieceOf(TripBesideRules.HEAD, pieces))
                         .then(headDrag),
                     lit = lit,
                     onMenu = if (g.editable) ({ haptics.tick(); menuFor = if (menuFor == g.key) null else g.key }) else null,
@@ -617,7 +636,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
             }
             if (menuFor == g.key && g.editable) {
                 item(key = "group-menu-${g.key}") {
-                    Column(Modifier.animateItem()) {
+                    Column(Modifier.animateItem().tripCard(TripBesideRules.pieceOf(TripBesideRules.MENU, pieces))) {
                         TripGroupMenu(
                             g, first = editable.firstOrNull() == g.name, last = editable.lastOrNull() == g.name,
                             onRename = { typed ->
@@ -645,8 +664,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
             }
             if (open) {
                 // A row ticked here sinks at once (a stable sort keeps the rest in their order).
-                val rows = g.rows.sortedBy { pending[it.id] ?: it.done }
-                for (row in rows) {
+                for (row in shownRows) {
                     item(key = "item-${row.id}") {
                         var top by remember { mutableFloatStateOf(0f) }
                         val lifted = drag.item == row.id && drag.moved
@@ -655,6 +673,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                             Modifier.animateItem()
                                 .onGloballyPositioned { top = it.positionInRoot().y }
                                 .graphicsLayer { if (lifted) { translationY = drag.offsetY + drag.scrolled; shadowElevation = 8f; alpha = 0.92f } }
+                                .tripCard(TripBesideRules.pieceOf(row.id, pieces))
                                 .tripDraggable(
                                     "item-${row.id}-${g.name}",
                                     onStart = { y -> haptics.tick(); drag.start(row.id, null, g.name, top + y) },
@@ -675,7 +694,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                     if (sheetFor == row.id) {
                         item(key = "sheet-${row.id}") {
                             val qty = row.qty.removePrefix("× ").toIntOrNull() ?: 1
-                            Column(Modifier.animateItem()) {
+                            Column(Modifier.animateItem().tripCard(TripBesideRules.pieceOf(TripBesideRules.SHEET + row.id, pieces))) {
                                 TripItemSheet(
                                     row, tab, g.name, allGroups, qty,
                                     onName = { typed ->
@@ -788,40 +807,43 @@ private fun SuggestCard(card: TripSuggestion, keys: Set<String>, onAdd: (Set<Str
                 .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.95f), accent.copy(alpha = 0.35f)))))
             Text(card.lead, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             for (c in card.chips) {
                 if (c.key !in keys) continue
                 Text(
                     c.label, style = MekaType.caption, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    modifier = Modifier
                         .clickable(role = Role.Button, onClickLabel = "Add") { onAdd(setOf(c.key)) }
                         .semantics { contentDescription = "Add ${c.spoken}" }
-                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-suggest-chip-${c.key}"),
+                        .testTag("trip-suggest-chip-${c.key}").slimPill(Meka.colors.surfaceRaised),
                 )
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(TripSuggestRules.ADD_ALL, style = MekaType.captionStrong, color = Meka.colors.onAccent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(accent)
-                    .clickable(role = Role.Button) { onAdd(keys) }
-                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-suggest-add-all"))
+                modifier = Modifier.clickable(role = Role.Button) { onAdd(keys) }
+                    .testTag("trip-suggest-add-all").slimPill(accent))
             Text(TripSuggestRules.NOT_NOW, style = MekaType.captionStrong, color = Meka.colors.textPrimary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .clickable(role = Role.Button) { onNotNow(keys) }
-                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-suggest-not-now"))
+                modifier = Modifier.clickable(role = Role.Button) { onNotNow(keys) }
+                    .testTag("trip-suggest-not-now").slimPill(Meka.colors.surfaceRaised))
         }
     }
 }
 
-/** "Bought" · "3 of 9" over a thin bar filling to its share. */
+/** A small card: "Bought" · "3 of 9" over a thin bar filling to its share (beside its mockup, 2026-10-30). */
 @Composable
 private fun ProgressBar(p: TripProgress, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     val fill by animateFloatAsState(p.fraction, MekaMotion.appear(reduced), label = "trip-bar")
-    Column(modifier.semantics(mergeDescendants = true) { contentDescription = "${p.label} ${p.line}" }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+    Column(
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .semantics(mergeDescendants = true) { contentDescription = "${p.label} ${p.line}" },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
         Row(Modifier.fillMaxWidth()) {
             Text(p.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-            Text(p.line, style = MekaType.captionStrong, color = Meka.colors.textPrimary)
+            Text(p.line, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(fill).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
@@ -844,7 +866,7 @@ private fun GroupHead(
     // Slice 4b: the drop target under a dragged thing.
     val glow by animateColorAsState(if (lit) Meka.colors.accent.copy(alpha = 0.18f) else Meka.colors.accent.copy(alpha = 0f), MekaMotion.appear(reduced), label = "trip-group-lit")
     Row(
-        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(glow)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(glow)
             .combinedClickable(role = Role.Button, onClick = onToggle, onLongClick = onMenu, onLongClickLabel = if (onMenu != null) "Change the group" else null)
             .semantics(mergeDescendants = true) {
                 contentDescription = "${g.name}, $count, " + if (open) "tap to fold" else "tap to open"
@@ -854,9 +876,9 @@ private fun GroupHead(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(g.name.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
-        Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textTertiary)
-        Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+        Text(g.name, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textSecondary)
+        Text("⌄", style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.rotate(turn))
         if (onMenu != null) {
             Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMenu)
@@ -892,5 +914,76 @@ private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick:
         Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpen)
                 .semantics { contentDescription = "Change ${row.text}" }.minTouch().testTag("trip-item-more-${row.id}"))
+    }
+}
+
+/**
+ * Beside its mockup: one piece of a group's card. The card's colour is drawn behind the item, running through half the
+ * list's gap above and below so the pieces join into one card; the head rounds the top, the last piece the bottom, and
+ * every row but the head has a faint line on top. The card's top gap and its inside (16 dp either side) come here too.
+ */
+private fun Modifier.tripCard(piece: TripBesideRules.Piece): Modifier = composed {
+    val fill = Meka.colors.surface
+    val line = Meka.colors.hairline
+    val radius = MekaRadius.m
+    val inset = TripBesideRules.CARD_PAD_DP.dp
+    val half = MekaSpace.xs / 2
+    this
+        .padding(top = if (piece.roundTop) MekaSpace.xs else 0.dp)
+        .drawBehind {
+            val r = radius.toPx()
+            val top = if (piece.roundTop) 0f else -half.toPx()
+            val bottom = if (piece.roundBottom) size.height else size.height + half.toPx()
+            val shape = RoundRect(
+                Rect(0f, top, size.width, bottom),
+                topLeft = if (piece.roundTop) CornerRadius(r) else CornerRadius.Zero,
+                topRight = if (piece.roundTop) CornerRadius(r) else CornerRadius.Zero,
+                bottomRight = if (piece.roundBottom) CornerRadius(r) else CornerRadius.Zero,
+                bottomLeft = if (piece.roundBottom) CornerRadius(r) else CornerRadius.Zero,
+            )
+            drawPath(Path().apply { addRoundRect(shape) }, fill)
+            if (piece.lineOnTop) {
+                val y = top
+                drawLine(line, Offset(inset.toPx(), y), Offset(size.width - inset.toPx(), y), strokeWidth = 1.dp.toPx())
+            }
+        }
+        .padding(horizontal = MekaSpace.m)
+        .padding(bottom = if (piece.roundBottom) MekaSpace.xxs else 0.dp)
+}
+
+/** Beside its mockup: a slim pill ([TripBesideRules.PILL_DP] drawn) centred in its 48 dp touch target. Put it last. */
+private fun Modifier.slimPill(color: Color): Modifier =
+    minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(color).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+
+/** Beside its mockup: the add field as one pill ending on a gold Add (Done on the keyboard adds too). */
+@Composable
+private fun TripAddField(hint: String, description: String, onDone: (String) -> Unit) {
+    var text by rememberSaveable(hint) { mutableStateOf("") }
+    val submit = { if (text.isNotBlank()) { onDone(text); text = "" } }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+            .padding(start = MekaSpace.m, end = MekaSpace.xxs).testTag("trip-add-field"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Box(Modifier.weight(1f)) {
+            if (text.isEmpty()) Text(hint, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = MekaType.itemMeta.copy(color = Meka.colors.textPrimary),
+                cursorBrush = SolidColor(Meka.colors.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = description },
+            )
+        }
+        Text(
+            TripBesideRules.ADD, style = MekaType.captionStrong, color = Meka.colors.onAccent,
+            modifier = Modifier.clickable(role = Role.Button) { submit() }
+                .semantics { contentDescription = TripBesideRules.ADD_DESCRIPTION }
+                .testTag("trip-add").slimPill(Meka.colors.accent),
+        )
     }
 }

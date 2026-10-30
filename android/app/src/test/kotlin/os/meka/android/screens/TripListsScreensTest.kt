@@ -21,6 +21,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
+import androidx.compose.ui.text.AnnotatedString
+import os.meka.core.domain.TripListRules
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -183,6 +185,24 @@ class TripListsScreensTest {
         compose.waitUntil(5_000L) {
             core.tripListsView.value.single().tab(TripList.PACK).groups.first { it.name == "Clothes" }.rows.any { it.id == boarding.id }
         }
+    }
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun theFieldsAddButtonAddsWhatWasTyped() {
+        // Beside its mockup (2026-10-30): the add field ends on a gold Add; a tap adds what's typed and clears the field.
+        val (core, tripId) = small()
+        show(core, tripId)
+        val field = hasSetTextAction() and hasContentDescription(TripListRules.ADD_DESCRIPTION)
+        compose.mainClock.autoAdvance = true
+        compose.onNode(field).performTextInput("pack 2 chargers")
+        compose.waitForIdle()
+        compose.onNodeWithTag("trip-add").performClick()
+        compose.waitUntil(5_000L) {
+            core.tripListsView.value.single { it.tripId == tripId }.tab(TripList.PACK).groups.flatMap { it.rows }
+                .any { it.text.contains("charger", ignoreCase = true) }
+        }
+        compose.onNode(field).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
     @Test
