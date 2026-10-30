@@ -370,13 +370,16 @@ class AdminPlacesScreensTest {
         tap(p, name, "Undo", undo)
         until { choreNow() != null }
         if (choreNow() == null) fail("$name: Undo didn't bring ${chore.title} back")
+        // Each child's card has its own chore and pocket money fields; the first composed one takes the words.
+        fun chores() = core.kidsView.value.kids.flatMap { it.money.chores }
         type(p, name, KidChoreRules.CHORE_HINT, "Feed the cat")
-        until { kid("Sam").money.chores.any { it.title == "Feed the cat" } }
-        if (kid("Sam").money.chores.none { it.title == "Feed the cat" }) fail("$name: Done on the chore field added nothing")
-        val pocket = kid("Sam").money.pocketValue
+        until { chores().any { it.title == "Feed the cat" } }
+        if (chores().none { it.title == "Feed the cat" }) fail("$name: Done on the chore field added nothing")
+        fun pockets() = core.kidsView.value.kids.map { it.money.pocketValue }
+        val pocket = pockets()
         type(p, name, KidChoreRules.POCKET_HINT, "£6", replace = true)
-        until { kid("Sam").money.pocketValue != pocket }
-        if (kid("Sam").money.pocketValue == pocket) fail("$name: the pocket money field kept $pocket")
+        until { pockets() != pocket }
+        if (pockets() == pocket) fail("$name: the pocket money field kept $pocket")
         assertTouchTargets(name)
     }
 
