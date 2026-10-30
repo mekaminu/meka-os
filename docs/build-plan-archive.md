@@ -4979,3 +4979,7 @@ no migration.
   touch per side, and the Agenda head's gaps around it are 8 dp less (no top padding, xs spacer below) so the track
   sits where it did. Test kept: four all-day things on Fri 23 (+1 more), the long-titled event hidden (Show). Fold only;
   no core or server change, no migration. Lists' tabs come next, on their own.
+  CI run 1469 (46a9ddb): no hang (HangWatch quiet; the android job 10 m); agendaByHand failed on the event detail's
+  buttons under 48 dp: Prep task, Hide from my day and the Remind me chips ("5 min") at 33 dp. EventDetailPane's
+  ActionChip and ReminderChips now draw the same chip inside a 48 dp touch (`TouchTarget`, private), and Open in Maps
+  and the Open in <calendar> line are `minTouch()` rows instead of xs padding.

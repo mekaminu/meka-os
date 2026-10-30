@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalContext
 import os.meka.android.MekaApplication
 import os.meka.core.domain.ReminderRules
@@ -374,7 +375,7 @@ private fun DetailContent(
                         "Open in Maps", style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clickable(role = Role.Button) {
                             runCatching { uriHandler.openUri("geo:0,0?q=" + Uri.encode(query)) }
-                        }.padding(vertical = MekaSpace.xs),
+                        }.minTouch(),
                     )
                 }
             }
@@ -390,7 +391,7 @@ private fun DetailContent(
                         modifier = Modifier.clickable(role = Role.Button) {
                             haptics.light()
                             runCatching { uriHandler.openUri(o.url) }
-                        }.padding(vertical = MekaSpace.xs),
+                        }.minTouch(),
                     )
                 }
             }
@@ -427,13 +428,14 @@ private fun ReminderChips(label: String, choices: List<Int>, current: Int, text:
                 val bg by androidx.compose.animation.animateColorAsState(
                     if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "reminder-chip",
                 )
-                Text(
-                    text(m), style = MekaType.itemMeta, color = if (on) Meka.colors.onAccent else Meka.colors.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                        .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
-                        .clickable(role = Role.Button) { onPick(if (on) 0 else m) }
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                )
+                TouchTarget({ onPick(if (on) 0 else m) }) {
+                    Text(
+                        text(m), style = MekaType.itemMeta, color = if (on) Meka.colors.onAccent else Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                            .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    )
+                }
             }
         }
     }
@@ -524,13 +526,24 @@ private fun GreyedChip(label: String) {
 
 @Composable
 private fun ActionChip(label: String, onTap: () -> Unit) {
-    Text(
-        label, style = MekaType.itemMeta, color = Meka.colors.accent,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-            .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
-            .clickable(role = Role.Button) { onTap() }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-    )
+    // Works by hand (quality gate (3)): the chip is drawn as before (~33 dp) inside a 48 dp touch.
+    TouchTarget(onTap) {
+        Text(
+            label, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        )
+    }
+}
+
+/** A 48 dp touch around a slimmer drawn chip, so the tap height never stretches the chip itself. */
+@Composable
+private fun TouchTarget(onTap: () -> Unit, chip: @Composable () -> Unit) {
+    Box(
+        Modifier.heightIn(min = MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onTap() },
+        contentAlignment = Alignment.Center,
+    ) { chip() }
 }
 
 /**
