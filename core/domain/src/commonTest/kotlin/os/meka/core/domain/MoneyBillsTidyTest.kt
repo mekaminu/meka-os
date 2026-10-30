@@ -7,7 +7,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Money review (Meka 2026-10-26 22:12), Bills: no form sits open on the page. A card is one row ("due ? · tap to add"
+ * Money review (Meka 2026-10-26 22:12), Bills: no form sits open on the page. A card is one row ("Add its due day"
  * until its due day is in) and Until payday is one line, each opening a sheet. Invented cards and amounts (rule 13).
  */
 class MoneyBillsTidyTest {

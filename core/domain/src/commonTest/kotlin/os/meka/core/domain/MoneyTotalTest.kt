@@ -64,4 +64,32 @@ class MoneyTotalTest {
         assertEquals("Across trading", MoneyTotal.head(0, 1))
         assertEquals(MoneyTotal.NONE, MoneyTotal.head(0, 0))
     }
+
+    @Test
+    fun withNoBalanceInOnlyWhatHeTypedOutsideLeadsAndNothingSaysPartial() {
+        // Walk-through A4: two accounts with no balance and a typed pension read "Across 2 accounts £42,000",
+        // "Outside £42,000" twice and "Partial" with nothing counted.
+        val accounts = listOf(
+            MoneyAccount("a-cur", "Current account", "csv", 1L),
+            MoneyAccount("a-sav", "Savings", "csv", 1L),
+        )
+        val items = listOf(MoneyWorthItem("n-pension", "Pension", false, 4_200_000, today))
+        val w = MoneyWorth.view(accounts, emptyList(), items, emptyList(), today)
+        val c = MoneyTotal.card(w)!!
+        assertEquals(MoneyTotal.OUTSIDE_ONLY, c.head)
+        assertEquals("£42,000", c.total)
+        assertNull(c.breakdown)
+        assertEquals("Not counted yet · 2 accounts have no balance", w.missingLine)
+        // One balance in: the head counts only it, the breakdown has two parts, and Partial is true again.
+        val one = MoneyWorth.view(listOf(accounts[0].copy(balance = MoneyBalance(100_000, today, typed = true)), accounts[1]),
+            emptyList(), items, emptyList(), today)
+        val c1 = MoneyTotal.card(one)!!
+        assertEquals("Across 1 account", c1.head)
+        assertEquals("Cash £1,000 · outside £42,000", c1.breakdown)
+        assertEquals("Partial · 1 account has no balance yet", one.missingLine)
+        // Cash alone: no breakdown repeating the total.
+        val cash = MoneyWorth.view(listOf(accounts[0].copy(balance = MoneyBalance(100_000, today, typed = true))),
+            emptyList(), emptyList(), emptyList(), today)
+        assertNull(MoneyTotal.card(cash)!!.breakdown)
+    }
 }

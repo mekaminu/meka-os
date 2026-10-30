@@ -34,7 +34,25 @@ object MoneyTotal {
         else -> "Across $accounts account${if (accounts == 1) "" else "s"}" + if (trading > 0) " and trading" else ""
     }
 
-    /** The breakdown's parts in the mockup's order; a part shows only when there's something in it. */
+    /** Shown over the total when only what he typed outside his accounts is counted (walk-through A4, 2026-10-30). */
+    const val OUTSIDE_ONLY = "Outside these accounts"
+
+    /**
+     * Found and fixing A4 (walk-through 2026-10-30): the head counts only the accounts and cards in the total. With no
+     * balance on either account and only a typed pension, it read "Across 2 accounts £42,000"; now "Outside these
+     * accounts", and before anything is counted it still says how many accounts there are to fill in.
+     */
+    fun headFor(w: MoneyWorthView): String {
+        if (w.total == null) return head(w.accountCount, w.tradingCount)
+        val counted = w.rows.count { (it.kind == MoneyWorth.ACCOUNT || it.kind == MoneyWorth.CARD) && it.amount.isNotEmpty() }
+        if (counted == 0 && w.tradingCount == 0 && w.rows.any { it.kind == MoneyWorth.TYPED }) return OUTSIDE_ONLY
+        return head(counted, w.tradingCount)
+    }
+
+    /**
+     * The breakdown's parts in the mockup's order; a part shows only when there's something in it. A breakdown of one
+     * part only repeats the total ("Outside £42,000" under £42,000, then again on the Outside row), so it's left out.
+     */
     fun breakdown(w: MoneyWorthView): String? {
         if (w.total == null) return null
         val parts = mutableListOf<String>()
@@ -43,13 +61,14 @@ object MoneyTotal {
         if (w.tradingCount > 0) parts += "trading ${MoneyWorth.signed(w.tradingPence)}"
         if (w.rows.any { it.kind == MoneyWorth.CARD && it.amount.isNotEmpty() }) parts += "owed on cards ${MoneyRules.fmt(w.cardsOwePence)}"
         if (w.rows.any { it.kind == MoneyWorth.TYPED }) parts += "outside ${MoneyWorth.signed(w.typedPence)}"
-        return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
+        if (parts.size < 2) return null
+        return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
     }
 
     /** The card; null before Money has a net worth block at all. */
     fun card(w: MoneyWorthView?): MoneyTotalCard? {
         w ?: return null
-        val head = head(w.accountCount, w.tradingCount)
+        val head = headFor(w)
         val line = breakdown(w)
         val spoken = if (w.total != null) {
             "Total ${w.total}, ${head.replaceFirstChar { it.lowercase() }}." + (line?.let { " $it." } ?: "") + (w.missingLine?.let { " $it." } ?: "")

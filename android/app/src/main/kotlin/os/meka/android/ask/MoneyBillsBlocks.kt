@@ -128,7 +128,7 @@ internal fun MoneyBillRowView(r: MoneyBillRow, modifier: Modifier = Modifier) {
 
 /**
  * Money review (Meka 2026-10-26 22:12, Bills: "remove the inline forms"): his cards as one card of one-line rows, "Amex
- * Platinum · Due Fri 30 Oct · in 3 days" with the statement on the right (or "Due ? · tap to add"), each opening the card's
+ * Platinum · Due Fri 30 Oct · in 3 days" with the statement on the right (or "Add its due day"), each opening the card's
  * sheet. A lit line (due soon, near the limit, 0% ending, a fee) wears the accent.
  */
 @Composable

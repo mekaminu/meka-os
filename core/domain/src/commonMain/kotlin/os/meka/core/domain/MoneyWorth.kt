@@ -103,6 +103,16 @@ object MoneyWorth {
         else -> "Partial · $missing accounts have no balance yet"
     }
 
+    /**
+     * Found and fixing A4 (walk-through 2026-10-30): with no account or card counted at all (only what he typed outside
+     * them, or trading), "Partial" read as if part of them were in. Say none of them is counted yet instead.
+     */
+    fun noneCountedLine(missing: Int): String? = when (missing) {
+        0 -> null
+        1 -> "Not counted yet · 1 account has no balance"
+        else -> "Not counted yet · $missing accounts have no balance"
+    }
+
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 
     /** "£1,840", "−£640". */
@@ -249,7 +259,8 @@ object MoneyWorth {
                 else -> "Down ${fmt(-d)} since the end of $before"
             }
         } else null
-        val missingLine = partialLine(missing)
+        val anyAccountCounted = rows.any { (it.kind == ACCOUNT || it.kind == CARD) && it.amount.isNotEmpty() }
+        val missingLine = if (counted && !anyAccountCounted) noneCountedLine(missing) else partialLine(missing)
         val split = if (counted) "You have ${fmt(have)} · you owe ${fmt(owe)}" else null
         val chartLine = when {
             !counted -> null

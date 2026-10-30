@@ -68,7 +68,7 @@ data class MoneyCardRow(
 
 /**
  * Money review (Meka 2026-10-26 22:12, Bills): a card as one row on Bills, "Amex Platinum · Due Fri 30 Oct · in 3 days ·
- * £640", or "due ? · tap to add" before its due day is in; a tap opens the card's sheet (the lines, Paid and the typed
+ * £640", or "Add its due day" before its due day is in; a tap opens the card's sheet (the lines, Paid and the typed
  * fields), so no form ever sits open on the page. [lit] when it's due within three days, near its limit, near the end
  * of 0% or charged a fee; [amount] is the statement, when typed.
  */
@@ -110,8 +110,8 @@ object MoneyCards {
     const val BAD_APR = "Type the card's APR, e.g. 24.9%."
     const val NOT_A_CARD = "That account isn't marked as a card."
     const val NO_DUE = "Type the day of the month the payment is due"
-    /** A card row before its due day is in (Money review: "Amex Platinum · due ? · tap to add"). */
-    const val ADD_DETAILS = "Due ? · tap to add"
+    /** A card row before its due day is in (walk-through A4, 2026-10-30: no literal "Due ?" on screen). */
+    const val ADD_DETAILS = "Add its due day"
     /** A card row with its due day but no statement yet. */
     const val ADD_STATEMENT = "tap to add the statement"
     /** Accounts: the one-time setup that used to sit under the cards on Bills. */

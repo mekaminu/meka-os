@@ -751,7 +751,7 @@ fun MoneyPane(
                     }
                 }
             }
-            // Slice 7: his cards (this month only). Money review: one card of one-line rows ("due ? · tap to add"), each
+            // Slice 7: his cards (this month only). Money review: one card of one-line rows ("Add its due day"), each
             // opening the card's sheet with its details, Paid and the fields; the accounts that could be a card are on Accounts.
             v.cards?.takeIf { has(MoneySection.CARDS) }?.let { cv ->
                 item(key = "cards-head") {

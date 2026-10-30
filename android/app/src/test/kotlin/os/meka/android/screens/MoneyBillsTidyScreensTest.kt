@@ -42,7 +42,7 @@ import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 
 /**
- * Money review (Meka 2026-10-26 22:12, Bills: "remove the inline forms"): on Bills a card is one row ("Due ? · tap to
+ * Money review (Meka 2026-10-26 22:12, Bills: "remove the inline forms"): on Bills a card is one row ("Add its due day"; was "Due ? · tap to
  * add") that opens its sheet with the fields, Until payday is one row that opens its sheet with the balance field, no
  * field sits open on the page and the regular payments don't repeat the bills; the accounts that could be a card are on
  * Accounts. Shot on the cover screen in Dark. Invented data (rule 13).
