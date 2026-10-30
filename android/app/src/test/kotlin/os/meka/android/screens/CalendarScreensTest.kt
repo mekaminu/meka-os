@@ -1,10 +1,19 @@
 package os.meka.android.screens
 
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -15,13 +24,15 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
-import org.junit.Assert.fail
+import kotlin.test.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.Shadows
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.calendar.AGENDA_LIST_TAG
 import os.meka.android.calendar.CalendarRoute
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -29,6 +40,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.MekaSchema
+import os.meka.core.domain.WeekBoardRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
@@ -49,7 +61,10 @@ import kotlin.random.Random
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], application = ShotApplication::class)
 class CalendarScreensTest {
-    @get:Rule
+    @get:Rule(order = 0)
+    val hangWatch = HangWatch()
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private val london = TimeZone.of("Europe/London")
@@ -73,7 +88,7 @@ class CalendarScreensTest {
     }
 
     /** Writes the events into [store] as the server's calendar mirror does, before the core opens it. */
-    private fun seed(store: ReplicaStore, fill: Fill) {
+    private fun seed(store: ReplicaStore, fill: Fill, hand: Boolean = false) {
         if (fill == Fill.EMPTY) return
         var n = 0
         val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${n++}" }
@@ -92,13 +107,18 @@ class CalendarScreensTest {
         event("ev4", longTitle, at(22, 10, 0), at(22, 11, 30), "Personal")
         event("ev5", "Inset day", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
         event("ev6", "Football training", at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
+        if (!hand) return
+        // Works by hand: four all-day things on Friday, so "+1 more" shows under the first three.
+        event("ev7", "Book fair", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
+        event("ev8", "Mufti day", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
+        event("ev9", "Bin day", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
     }
 
-    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, hand: Boolean = false): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
-        seed(store, fill)
+        seed(store, fill, hand)
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = store, transport = null,
             secureRandom = Random(13), timeZone = { london }, nowMs = { now },
@@ -108,6 +128,13 @@ class CalendarScreensTest {
             core.tick()
             if (fill == Fill.MANY) core.schedule(core.addTask("Pay the window cleaner"), at(22, 12, 0))
             core.tick()
+            // Works by hand: one event hidden from my day, so the day's foot has a Show to tap.
+            if (hand) {
+                val long = core.calendarView.value.sections.flatMap { it.rows }.firstOrNull { it.title == longTitle }?.event
+                    ?: fail("$name: no \"$longTitle\" to hide")
+                core.hideEvent(long.id)
+                core.tick()
+            }
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -137,6 +164,7 @@ class CalendarScreensTest {
                 if (name.startsWith("cover")) assertEventRowsTouch(name)
             }
         }
+        return core
     }
 
     /**
@@ -152,27 +180,135 @@ class CalendarScreensTest {
         if (small.isNotEmpty()) fail("$name: event rows under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
-    @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverEmpty() = shoot("cover-dark-empty", Fill.EMPTY)
+
+    /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle. */
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        repeat(30) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
+    private fun shows(m: SemanticsMatcher) = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+
+    /** Every button and tab drawn answers a 48 dp touch. */
+    private fun assertTouchTargets(name: String) {
+        val tappable = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) or
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+        val small = compose.onAllNodes(hasClickAction() and tappable)
+            .fetchSemanticsNodes()
+            .filter { it.size.height / compose.density.density < 47.5f }
+            .map { n ->
+                val label = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                    ?: n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString() ?: "?"
+                "\"$label\" ${(n.size.height / compose.density.density).toInt()} dp"
+            }
+        if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * Scrolls the Agenda's own list (never the week strip) until a node matching [m] is composed, then returns the
+     * matches (failing with [what] if none). Not performScrollToNode: with the test's clock paused a lazy list's animated
+     * scroll never lands and performScrollToNode asks again for ever (CI run 1467's HangWatch stack, Car; agendaByHand
+     * hung the same way in run 1461). Each step asks for 60 % of the list's height and runs the clock; at most 20 steps
+     * down, then 40 up, so it always ends.
+     */
+    private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
+        val list = compose.onNodeWithTag(AGENDA_LIST_TAG)
+        val step = list.fetchSemanticsNode().size.height * 0.6f
+        for (dy in List(20) { step } + List(40) { -step }) {
+            if (shows(m)) break
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+            compose.mainClock.advanceTimeBy(1_000)
+        }
+        until { shows(m) }
+        if (!shows(m)) fail("$name: no $what")
+        return compose.onAllNodes(m)
+    }
+
+    /**
+     * Works by hand (quality gate (3)): on the Agenda with a full week, a day off with four all-day things and one event
+     * hidden from my day, every button and tab answers a 48 dp touch (the Agenda · Board switch included); "+1 more"
+     * unfolds the fourth all-day thing; Show brings the hidden event back; a day pill lights its day; an event opens its
+     * detail and Close shuts it; Board switches the view. Under HangWatch, and every scroll is bounded.
+     */
+    private fun agendaByHand(core: MekaCore) {
+        val name = "calendar-by-hand"
+        assertTouchTargets(name)
+
+        // "+1 more" under Friday's all-day rows.
+        reach(name, hasText("+1 more") and hasClickAction(), "\"+1 more\"")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !shows(hasText("+1 more")) }
+        if (shows(hasText("+1 more"))) fail("$name: \"+1 more\" didn't unfold")
+        listOf("Inset day", "Book fair", "Mufti day", "Bin day").forEach { reach(name, hasText(it), "\"$it\" after +1 more") }
+        assertTouchTargets(name)
+
+        // Show on the hidden event.
+        reach(name, hasText("Show") and hasClickAction(), "Show on the hidden event")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.calendarView.value.sections.all { it.hidden.isEmpty() } }
+        if (core.calendarView.value.sections.any { it.hidden.isNotEmpty() }) fail("$name: Show left the event hidden")
+
+        // A day pill (in the week strip above the list) lights its day.
+        val week = core.calendarView.value.weeks.first()
+        val day = week.days.firstOrNull { it.sectionId != null && !it.isToday } ?: fail("$name: no other day to tap")
+        val pill = hasContentDescription(day.accessibilityLabel) and hasClickAction()
+        until { shows(pill) }
+        if (!shows(pill)) fail("$name: no pill for ${day.accessibilityLabel}")
+        compose.onAllNodes(pill)[0].performSemanticsAction(SemanticsActions.OnClick)
+        val lit = pill and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        until { shows(lit) }
+        if (!shows(lit)) fail("$name: tapping ${day.accessibilityLabel} didn't light it")
+
+        // An event opens its detail; Close shuts it.
+        reach(name, hasText("Swimming lesson") and hasClickAction(), "Swimming lesson to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
+        val close = hasText("Close") and hasClickAction()
+        until { shows(close) }
+        if (!shows(close)) fail("$name: tapping Swimming lesson opened nothing")
+        assertTouchTargets(name)
+        compose.onAllNodes(close)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !shows(close) }
+        if (shows(close)) fail("$name: Close left the detail open")
+
+        // Board switches the view (the Agenda's own list goes with it).
+        val board = hasText(WeekBoardRules.VIEW_BOARD) and hasClickAction()
+        until { shows(board) }
+        if (!shows(board)) fail("$name: no Board switch")
+        compose.onAllNodes(board)[0].performSemanticsAction(SemanticsActions.OnClick)
+        val agenda = androidx.compose.ui.test.hasTestTag(AGENDA_LIST_TAG)
+        until { !shows(agenda) }
+        if (shows(agenda)) fail("$name: Board left the Agenda showing")
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverOne() = shoot("cover-dark-one", Fill.ONE)
+    fun agendaByHand() { agendaByHand(shoot("cover-dark-by-hand", Fill.MANY, hand = true)) }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverMany() = shoot("cover-dark-many", Fill.MANY)
+    fun coverEmpty() { shoot("cover-dark-empty", Fill.EMPTY) }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverManyLight() = shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
+    fun coverOne() { shoot("cover-dark-one", Fill.ONE) }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverMany() { shoot("cover-dark-many", Fill.MANY) }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerEmpty() = shoot("inner-dark-empty", Fill.EMPTY)
+    fun innerEmpty() { shoot("inner-dark-empty", Fill.EMPTY) }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerOne() = shoot("inner-dark-one", Fill.ONE)
+    fun innerOne() { shoot("inner-dark-one", Fill.ONE) }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerMany() = shoot("inner-dark-many", Fill.MANY)
+    fun innerMany() { shoot("inner-dark-many", Fill.MANY) }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT)
+    fun innerManyLight() { shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT) }
 }

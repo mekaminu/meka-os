@@ -4970,3 +4970,12 @@ no migration.
   40 up, then the old settle wait. Other screens tests that pause the clock and call performScrollToNode carry the same
   risk when their target starts below the screen (agendaByHand's hang in 1461 fits); they get the same bounded scroll
   when they are next touched.
+- Calendar's Agenda by hand, back on (2026-10-30): `CalendarScreensTest.agendaByHand` (from the reverted e858b6e)
+  returns under HangWatch. Its `reach` no longer tries performScrollToNode on every scrollable (the week strip
+  included); it scrolls only the Agenda's LazyColumn, tagged `AGENDA_LIST_TAG` in CalendarRoute, by ScrollBy 60 % of
+  its height then `advanceTimeBy(1 000)`, at most 20 down and 40 up. The week strip's day pill and the Board switch sit
+  above the list, so they are waited for, not scrolled to; Board is checked by the Agenda's list leaving the screen.
+  With it, the Agenda · Board switch (`CalendarViewSwitch`, WeekBoardView.kt) is a 32 dp drawn track inside a 48 dp
+  touch per side, and the Agenda head's gaps around it are 8 dp less (no top padding, xs spacer below) so the track
+  sits where it did. Test kept: four all-day things on Fri 23 (+1 more), the long-titled event hidden (Show). Fold only;
+  no core or server change, no migration. Lists' tabs come next, on their own.

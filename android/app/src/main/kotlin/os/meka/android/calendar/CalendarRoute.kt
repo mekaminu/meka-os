@@ -62,6 +62,7 @@ import os.meka.android.designsystem.footFade
 import os.meka.android.designsystem.headFade
 import os.meka.android.designsystem.minTouch
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import os.meka.core.domain.BoardOpenFoldRules
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
@@ -260,8 +261,10 @@ private fun Agenda(
             Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             EditLines(add.lines, Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
-            CalendarViewSwitch(board, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)), onBoard)
-            Spacer(Modifier.height(MekaSpace.m))
+            // The switch's 48 dp touch reaches 8 dp above and below its drawn track, so the gaps around it are 8 dp
+            // less and the track sits where it did.
+            CalendarViewSwitch(board, Modifier.appear(rememberAppearance(1)), onBoard)
+            Spacer(Modifier.height(MekaSpace.xs))
             WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
         }
         HorizontalPager(
@@ -387,7 +390,7 @@ private fun AgendaList(
         // The foot fades into the tabs rather than cutting a row in half; the xl bottom padding clears the fade.
         // The alignment list (8): once scrolled, rows passing under the week strip's divider fade out, never half-cut.
         modifier = Modifier.fillMaxSize().footFade()
-            .headFade(scrolled),
+            .headFade(scrolled).testTag(AGENDA_LIST_TAG),
     ) {
         items(entries, key = { it.key }) { e ->
             // Sections stagger in 40 ms apart on first show; later rows just glide.
@@ -571,3 +574,6 @@ private fun TaskRow(r: TimelineRow, modifier: Modifier) {
         }
     }
 }
+
+/** The Agenda's own list, so the screens tests scroll it (and not the week strip) in bounded steps. */
+internal const val AGENDA_LIST_TAG = "agenda-list"
