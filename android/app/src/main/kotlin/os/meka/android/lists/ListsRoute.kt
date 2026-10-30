@@ -378,7 +378,8 @@ internal fun Actions(content: @Composable () -> Unit) {
 internal fun Action(label: String, critical: Boolean = false, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemTitle, color = if (critical) Meka.colors.critical else Meka.colors.accent,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs),
+        // Works by hand (quality gate): the word keeps its look, the tap reaches the 48 dp target around it.
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }.minTouch(),
     )
 }
 
@@ -403,11 +404,16 @@ private fun KindChoices(current: SomedayKind, choose: (SomedayKind) -> Unit) {
 @Composable
 internal fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
     val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "chip")
+    // Works by hand (quality gate): a slim pill drawn inside its 48 dp touch target (the touch is outside the drawn
+    // pill, as TouchPill), so a chip row stays light and every chip answers a finger.
     Text(
         label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
             .semantics { selected = lit }
-            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            .clickable(role = Role.Button) { onClick() }
+            .minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
 

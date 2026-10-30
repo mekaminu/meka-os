@@ -4879,3 +4879,25 @@ Core `FastingBesideRules` (TITLE_SP, TIME_SP, ROW_DP, ROW_MAX_DP, ROW_GAP_DP, go
 FastingScreensTest measures every stage and History row on screen in every shot (at most 52 dp, 8 dp apart);
 MekaCoreBridgeTests.testFastingBesideOnTheMac. Fold `goals/FastingPane.kt`, Mac `Goals/FastingSheet.swift`. No server
 change, no migration. Mac checked nightly.
+
+### Quality gate — (3) works by hand, Lists and the Vault (2026-10-30)
+
+The screen tests counted taps per file: Lists, the Vault, Car, the places pages, Settings, Calendar, Needs you and Ask
+had none. This slice takes Lists and the Vault.
+
+- **ListsScreensTest.promisesByHand** (closed Fold, one promise): tap the promise → its Kept and Delete show; every
+  button on screen answers a 48 dp touch; "By today" moves its day (the row's line changes); Kept takes it off; type
+  "Parcel from Oakfield Garden Centre" in Waiting for… and press Done on the keyboard → it is on the list and on screen.
+- **ListsScreensTest.shoppingByHand** (closed Fold, five things): every button a 48 dp touch; the ring ticks Milk into
+  Got; Clear empties Got; Remove takes Bread off; "eggs, butter" in the field adds both.
+- **VaultScreensTest.vaultByHand** (closed Fold, one document): every button a 48 dp touch; "Railcard 05/2027" and
+  Done adds its row; a tap on the row opens Add a copy and Remove (48 dp each); Remove takes it off.
+
+Found and fixed first (Fold): an opened row's Kept · Chased · Got it · Delete · Revisit · Replace… and the add forms'
+Add were ~30 dp to tap (`Action` now `minTouch`, the word unchanged); every Lists chip (date presets, Someday kinds,
+Waiting for / I promised) was ~32 dp (`Chip` is now the slim pill drawn inside a 48 dp target, the TouchPill way; the
+same chip serves Car's parking choices, Meals, Date night, Activity's filters and the Today motion card, which get the
+48 dp touch too); Shopping's ring was a 22 dp target (now 22 drawn in 44, bleeding into the row's start as on Today),
+its Remove (now read "Remove <thing>"), Clear and Shop mode ~32 dp (now 48). Lists' five tabs are 40 dp tall (a
+`Role.Tab`, left for the layout review). The Mac is clicked with a pointer, so no change there. No core or server change,
+no migration.

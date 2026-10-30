@@ -2,13 +2,12 @@ package os.meka.android.lists
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -25,12 +24,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.TickRing
+import os.meka.android.designsystem.TickSize
+import os.meka.android.designsystem.bleedStart
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.android.today.ShopModeScreen
@@ -58,7 +59,7 @@ internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspe
                 Text(
                     ShopModeRules.OPEN, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { haptics.light(); shopping = true }
-                        .padding(MekaSpace.xs),
+                        .minTouch().padding(horizontal = MekaSpace.xs),
                 )
             }
         }
@@ -79,7 +80,7 @@ internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspe
                 Text(
                     "Clear", style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { act { core.clearGotShopping() } }
-                        .padding(MekaSpace.xs),
+                        .minTouch().padding(horizontal = MekaSpace.xs),
                 )
             }
         }
@@ -90,16 +91,16 @@ internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspe
 @Composable
 private fun ShoppingRow(s: ShoppingItem, core: MekaCore, act: (suspend () -> Unit) -> Unit, modifier: Modifier) {
     val haptics = rememberMekaHaptics()
-    Row(modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-        TickRing(
-            s.got,
-            Modifier.size(22.dp).clip(CircleShape)
+    Row(modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        // Works by hand (quality gate): the 22 dp ring answers a 44 dp touch that bleeds into the row's start, as on Today.
+        Box(
+            Modifier.bleedStart(TickSize.BLEED).size(TickSize.TOUCH).clip(CircleShape)
                 .semantics { contentDescription = (if (s.got) "Put back " else "Got ") + s.title }
                 .clickable(role = Role.Checkbox) {
                     if (s.got) { haptics.tick(); act { core.putBackShopping(s.id) } } else { haptics.light(); act { core.gotShopping(s.id) } }
                 },
-        )
-        Spacer(Modifier.width(MekaSpace.m))
+            contentAlignment = Alignment.Center,
+        ) { TickRing(s.got, Modifier.size(TickSize.DRAWN)) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(s.title, style = MekaType.body, color = if (s.got) Meka.colors.textTertiary else Meka.colors.textPrimary)
             s.meta?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
@@ -107,7 +108,8 @@ private fun ShoppingRow(s: ShoppingItem, core: MekaCore, act: (suspend () -> Uni
         Text(
             "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { act { core.removeShopping(s.id) } }
-                .padding(MekaSpace.xs),
+                .semantics { contentDescription = "Remove ${s.title}" }
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }

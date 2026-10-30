@@ -6,6 +6,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -75,7 +86,7 @@ class VaultScreensTest {
         }
     }
 
-    private fun shoot(place: Place, name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+    private fun shoot(place: Place, name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -134,17 +145,73 @@ class VaultScreensTest {
             if (fill == Fill.MANY && v.rows.size != 6) fail("$name: ${v.rows.size} rows for six documents")
             if (fill == Fill.MANY && v.rows.none { it.statusLit }) fail("$name: the licence running out next month isn't lit")
         }
+        return core
     }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverEmpty() = shoot(Place.VAULT, "cover-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverOne() = shoot(Place.VAULT, "cover-dark-one", Fill.ONE)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverMany() = shoot(Place.VAULT, "cover-dark-many", Fill.MANY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverManyLight() = shoot(Place.VAULT, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun vaultInnerEmpty() = shoot(Place.VAULT, "inner-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun vaultInnerMany() = shoot(Place.VAULT, "inner-dark-many", Fill.MANY)
+    /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle. */
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        repeat(30) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun yourDataCoverEmpty() = shoot(Place.YOUR_DATA, "cover-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun yourDataCoverMany() = shoot(Place.YOUR_DATA, "cover-dark-many", Fill.MANY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun yourDataCoverManyLight() = shoot(Place.YOUR_DATA, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun yourDataInnerMany() = shoot(Place.YOUR_DATA, "inner-dark-many", Fill.MANY)
+    /** Every button drawn answers a 48 dp touch. */
+    private fun assertTouchTargets(name: String) {
+        val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .fetchSemanticsNodes()
+            .filter { it.size.height / compose.density.density < 47.5f }
+            .map { n ->
+                val label = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                    ?: n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString() ?: "?"
+                "\"$label\" ${(n.size.height / compose.density.density).toInt()} dp"
+            }
+        if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * Works by hand (quality gate (3)): typing a document and Done on the keyboard adds its row; a tap on the row opens
+     * Add a copy and Remove (each a 48 dp touch); Remove takes it off.
+     */
+    private fun vaultByHand(core: MekaCore) {
+        val name = "vault-by-hand"
+        assertTouchTargets(name)
+        val field = hasContentDescription(DocumentRules.ADD_SPOKEN) and hasSetTextAction()
+        if (compose.onAllNodes(field).fetchSemanticsNodes().isEmpty()) fail("$name: no add field")
+        compose.onAllNodes(field)[0].performTextInput("Railcard 05/2027")
+        until { false }
+        compose.onAllNodes(field)[0].performImeAction()
+        until { core.documentsView.value.rows.any { "Railcard" in it.title } }
+        val row = core.documentsView.value.rows.firstOrNull { "Railcard" in it.title } ?: fail("$name: Done on the field added no Railcard")
+        ScreenShots.assertShows(compose, name, row.title)
+        val rowNode = compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction())
+        if (rowNode.fetchSemanticsNodes().isEmpty()) fail("$name: the Railcard row doesn't answer a tap")
+        rowNode[0].performSemanticsAction(SemanticsActions.OnClick)
+        val remove = hasContentDescription("Remove ${row.title}") and hasClickAction()
+        until { compose.onAllNodes(remove).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(remove).fetchSemanticsNodes().isEmpty()) fail("$name: opening the row showed no Remove")
+        assertTouchTargets(name)
+        compose.onAllNodes(remove)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.documentsView.value.rows.none { it.id == row.id } }
+        if (core.documentsView.value.rows.any { it.id == row.id }) fail("$name: Remove left the Railcard")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverEmpty() { shoot(Place.VAULT, "cover-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverOne() { shoot(Place.VAULT, "cover-dark-one", Fill.ONE) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverMany() { shoot(Place.VAULT, "cover-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverManyLight() { shoot(Place.VAULT, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun vaultByHand() { vaultByHand(shoot(Place.VAULT, "cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun vaultInnerEmpty() { shoot(Place.VAULT, "inner-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun vaultInnerMany() { shoot(Place.VAULT, "inner-dark-many", Fill.MANY) }
+
+    @Test @Config(qualifiers = ScreenShots.COVER) fun yourDataCoverEmpty() { shoot(Place.YOUR_DATA, "cover-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun yourDataCoverMany() { shoot(Place.YOUR_DATA, "cover-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun yourDataCoverManyLight() { shoot(Place.YOUR_DATA, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun yourDataInnerMany() { shoot(Place.YOUR_DATA, "inner-dark-many", Fill.MANY) }
 }
