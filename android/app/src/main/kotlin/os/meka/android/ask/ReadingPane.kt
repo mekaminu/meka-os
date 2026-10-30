@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -58,6 +59,9 @@ import os.meka.core.domain.ReadingRow
 import os.meka.core.domain.ReadingRules
 import os.meka.core.domain.ReadingSaid
 import os.meka.core.facade.MekaCore
+
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val READING_LIST_TAG = "reading-list"
 
 /**
  * Ask → Daily → Reading (reading and learning, slice 1): one field adds a book, podcast or course; ON THE GO lists
@@ -90,7 +94,7 @@ fun ReadingPane(core: MekaCore, onClose: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(READING_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

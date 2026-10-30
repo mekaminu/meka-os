@@ -71,6 +71,9 @@ import os.meka.core.domain.VaultFileRules
 import os.meka.core.domain.VaultLockRules
 import os.meka.core.facade.MekaCore
 
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val TRIPS_LIST_TAG = "trips-list"
+
 /**
  * Ask → More → Trips (travel mode, slice 1): one field for trips and their bookings — "Barcelona 14–18 Nov", then
  * "Flight BA478 Sat 14 Nov 07:40 ref ABC123", "Hotel Arts 14–18 Nov" — a row per trip (on now, then to come, then
@@ -151,7 +154,7 @@ private fun TripsHome(core: MekaCore, onClose: () -> Unit, onOpenLists: (String)
     )
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(TRIPS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

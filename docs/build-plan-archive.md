@@ -4880,6 +4880,26 @@ FastingScreensTest measures every stage and History row on screen in every shot 
 MekaCoreBridgeTests.testFastingBesideOnTheMac. Fold `goals/FastingPane.kt`, Mac `Goals/FastingSheet.swift`. No server
 change, no migration. Mac checked nightly.
 
+### Quality gate — (3) works by hand, Plans' places (2026-10-30)
+
+PlansPlacesScreensTest gains four by-hand tests on the closed Fold, full set, under HangWatch, scrolling each pane's
+own list in bounded steps (new tags TRIPS_LIST_TAG, GIFTS_LIST_TAG, BINS_LIST_TAG, READING_LIST_TAG); every button
+and switch on screen must answer a 48 dp touch before and after each part opens:
+
+- **tripsByHand**: a tap on a trip opens its timeline; × takes a booking off and Undo (within its 6 s) puts it back;
+  Remove trip takes the trip; the field adds "Rome 20–22 Nov".
+- **giftsByHand**: a tap opens an occasion; × takes an idea off and the idea field adds one; To a day… unfolds its day
+  chips and one makes the task on the Board, Undo takes it back; Gift sorted marks it; Remove takes it off.
+- **binsByHand**: Remove takes the food caddy off and the field adds it back; a reminder chip that's off moves the
+  evening's heads-up.
+- **readingByHand**: how far moves a book on; Start, Finished, Undo, Put down, Pick up and Remove each move a row; the
+  goal field sets 20 books and Clear takes it off; the field adds a book up next.
+
+Found and fixed first (Fold): Bins' Remove was ~32 dp to tap (now `minTouch`, the word unchanged); Bins' reminder chips
+(~24 dp) are the slim pill inside a 48 dp touch (`SettingChip(touch = true)`); To a day…'s day chips (Gifts and School)
+are the slim pill inside a 48 dp touch (`MailNeedsPill(touch = true)`). The test files' shot tests now use block
+bodies, as `shoot` returns the core. Fold only; no core or server change, no migration.
+
 ### Quality gate — (3) works by hand, Life's places (2026-10-30)
 
 LifePlacesScreensTest gains three by-hand tests on the closed Fold, full set, under HangWatch, scrolling each pane's

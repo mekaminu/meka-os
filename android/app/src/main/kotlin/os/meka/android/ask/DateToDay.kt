@@ -62,7 +62,7 @@ internal fun DateToDay(
                 Text(BoardFeedRules.PICK, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     days().forEach { d ->
-                        MailNeedsPill(d.label, spoken = "${d.spoken}: $title", onClick = { haptics.medium(); choosing = false; onToDay(d.day) })
+                        MailNeedsPill(d.label, spoken = "${d.spoken}: $title", touch = true, onClick = { haptics.medium(); choosing = false; onToDay(d.day) })
                     }
                 }
             }

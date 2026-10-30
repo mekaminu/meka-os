@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -52,6 +53,9 @@ import os.meka.core.domain.BinRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.facade.MekaCore
 
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val BINS_LIST_TAG = "bins-list"
+
 /**
  * Ask → More → Bins (bin days, slice 1): each bin typed once with its day — "Black bin Tue fortnightly from 13 Oct",
  * "Food caddy every Tuesday" — a row per bin with its pattern and next collection (a day later after a bank holiday),
@@ -76,7 +80,7 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
     )
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(BINS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -139,7 +143,7 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     v.remindChoices.forEach { m ->
                         val label = LocalClock.formatMinute(m)
-                        SettingChip(label, m == v.remindMinute, "Bins reminder at $label") {
+                        SettingChip(label, m == v.remindMinute, "Bins reminder at $label", touch = true) {
                             haptics.tick()
                             scope.launch {
                                 runCatching { core.setBinReminder(m) }.getOrNull()?.let { said = BinAdded(it, refused = false) }
@@ -178,7 +182,8 @@ private fun BinRowView(row: BinRow, modifier: Modifier, removeLabel: String = "R
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = removeLabel }
-                .padding(MekaSpace.xs),
+                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }
