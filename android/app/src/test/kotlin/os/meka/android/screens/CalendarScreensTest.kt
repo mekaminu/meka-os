@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
@@ -13,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -131,8 +134,22 @@ class CalendarScreensTest {
             Fill.MANY -> {
                 ScreenShots.assertShows(compose, name, "Swimming lesson")
                 ScreenShots.assertShows(compose, name, "Call with Sam")
+                if (name.startsWith("cover")) assertEventRowsTouch(name)
             }
         }
+    }
+
+    /**
+     * Works by hand (quality gate (3), first piece; build plan: redo the reverted Agenda slice one piece per push): every
+     * event row on screen, even a one-line one with no place, answers a 48 dp touch. Read only, no taps or scrolling.
+     */
+    private fun assertEventRowsTouch(name: String) {
+        val small = listOf("Dentist", "Call with Sam", "Swimming lesson").flatMap { title ->
+            compose.onAllNodes(hasClickAction() and hasText(title, substring = true)).fetchSemanticsNodes()
+                .filter { it.size.height / compose.density.density < 47.5f }
+                .map { "\"$title\" ${(it.size.height / compose.density.density).toInt()} dp" }
+        }
+        if (small.isNotEmpty()) fail("$name: event rows under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

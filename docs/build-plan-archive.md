@@ -4936,3 +4936,8 @@ no migration.
 - CI run 1462 (745419c, agendaByHand off) hung the same way, so the hang is in the rest of the slice (the
   shoppingByHand tab tap, or a layout change: the Lists Tabs restructure, CalendarViewSwitch's Box, EventRow minTouch).
   Both commits reverted (code only) to keep main green. Redo: one change per push, the Lists tab tap on its own.
+- Redo, piece 1 (2026-10-30): the Agenda's row touches only, as in e858b6e (EventRow and AgendaAllDayRow `minTouch()`,
+  HiddenRow's title and Show `minTouch()`, AllDayMore `touch = true` in the agenda, AddEventButton a slim pill in a
+  48 dp box). Not in this piece: CalendarViewSwitch's 48 dp Box (and the Agenda header's gaps around it), Lists' Tabs,
+  the shoppingByHand tab tap, agendaByHand. Test: CalendarScreensTest's cover shots with a full week read every event
+  row's height (no taps, no scrolling) and fail under 48 dp. If this piece's CI hangs, the cause is in these rows.

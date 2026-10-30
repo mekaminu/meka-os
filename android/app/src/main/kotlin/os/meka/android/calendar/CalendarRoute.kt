@@ -60,6 +60,7 @@ import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.footFade
 import os.meka.android.designsystem.headFade
+import os.meka.android.designsystem.minTouch
 import androidx.compose.ui.platform.LocalDensity
 import os.meka.core.domain.BoardOpenFoldRules
 import os.meka.android.designsystem.MekaMotion
@@ -398,7 +399,7 @@ private fun AgendaList(
                 // The "All day" group as Today shows it: the label once, one row each, "+2 more" unfolds the rest.
                 is Entry.AllDayHead -> AllDayLabel(e.section.allDayLabel, m.padding(start = os.meka.android.today.TIME_COLUMN))
                 is Entry.AllDay -> AgendaAllDayRow(e.item, v.toneOf(e.item.event), m) { onEvent(e.item.event) }
-                is Entry.AllDayMoreLine -> AllDayMore(e.text, { openAllDay(e.section.id) }, m)
+                is Entry.AllDayMoreLine -> AllDayMore(e.text, { openAllDay(e.section.id) }, m, touch = true)
                 is Entry.Empty -> Text(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
@@ -489,7 +490,9 @@ private const val WORK_LABEL_DIM = 0.75f
 @Composable
 private fun EventRow(r: TimelineRow, past: Boolean, tone: Int?, modifier: Modifier) {
     val fixture = r.event?.isFixture == true
-    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
+    // Works by hand (quality gate): a one-line event (no place, Google's calendar) was 37 dp to tap; every row is at
+    // least the 48 dp touch, its lines centred in it.
+    Row(modifier.fillMaxWidth().minTouch().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past)
         DotColumn(tone, past)
         Column(Modifier.weight(1f)) {
@@ -525,7 +528,7 @@ private fun DotColumn(tone: Int?, past: Boolean = false) {
 private fun AgendaAllDayRow(item: AllDayItem, tone: Int, modifier: Modifier, onOpen: () -> Unit) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }
-            .padding(vertical = MekaSpace.xs),
+            .minTouch().padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
         Spacer(Modifier.width(os.meka.android.today.TIME_COLUMN))
@@ -541,16 +544,17 @@ private fun AgendaAllDayRow(item: AllDayItem, tone: Int, modifier: Modifier, onO
 @Composable
 private fun HiddenRow(event: CalendarEvent, modifier: Modifier, onOpen: () -> Unit, onShow: () -> Unit) {
     val haptics = rememberMekaHaptics()
-    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+    // Works by hand (quality gate): the title and Show each answer a 48 dp touch (they were about 26 dp).
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Spacer(Modifier.width(os.meka.android.today.TIME_COLUMN))
         Text(
             event.title, style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.weight(1f).clickable(role = Role.Button) { onOpen() },
+            modifier = Modifier.weight(1f).clickable(role = Role.Button) { onOpen() }.minTouch(),
         )
         Text(
             "Show", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { haptics.light(); onShow() }
-                .padding(start = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
+                .minTouch().padding(start = MekaSpace.m),
         )
     }
 }
