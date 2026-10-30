@@ -357,19 +357,19 @@ class LifePlacesScreensTest {
         if (core.mealsView.value.favourites.none { it.title.startsWith("Leek soup") }) fail("$name: Done on the field added no favourite")
     }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverEmpty() = shoot(Place.PEOPLE, "cover-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverOne() = shoot(Place.PEOPLE, "cover-dark-one", Fill.ONE)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverMany() = shoot(Place.PEOPLE, "cover-dark-many", Fill.MANY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverManyLight() = shoot(Place.PEOPLE, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun peopleInnerEmpty() = shoot(Place.PEOPLE, "inner-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun peopleInnerMany() = shoot(Place.PEOPLE, "inner-dark-many", Fill.MANY)
+    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverEmpty() { shoot(Place.PEOPLE, "cover-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverOne() { shoot(Place.PEOPLE, "cover-dark-one", Fill.ONE) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverMany() { shoot(Place.PEOPLE, "cover-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverManyLight() { shoot(Place.PEOPLE, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun peopleInnerEmpty() { shoot(Place.PEOPLE, "inner-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun peopleInnerMany() { shoot(Place.PEOPLE, "inner-dark-many", Fill.MANY) }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverEmpty() = shoot(Place.ERRANDS, "cover-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverOne() = shoot(Place.ERRANDS, "cover-dark-one", Fill.ONE)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverMany() = shoot(Place.ERRANDS, "cover-dark-many", Fill.MANY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverManyLight() = shoot(Place.ERRANDS, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun errandsInnerEmpty() = shoot(Place.ERRANDS, "inner-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun errandsInnerMany() = shoot(Place.ERRANDS, "inner-dark-many", Fill.MANY)
+    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverEmpty() { shoot(Place.ERRANDS, "cover-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverOne() { shoot(Place.ERRANDS, "cover-dark-one", Fill.ONE) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverMany() { shoot(Place.ERRANDS, "cover-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsCoverManyLight() { shoot(Place.ERRANDS, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun errandsInnerEmpty() { shoot(Place.ERRANDS, "inner-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun errandsInnerMany() { shoot(Place.ERRANDS, "inner-dark-many", Fill.MANY) }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun peopleByHand() { peopleByHand(shoot(Place.PEOPLE, "cover-dark-people-by-hand", Fill.MANY)) }
@@ -378,10 +378,10 @@ class LifePlacesScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun dinnersByHand() { dinnersByHand(shoot(Place.DINNERS, "cover-dark-dinners-by-hand", Fill.MANY)) }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverEmpty() = shoot(Place.DINNERS, "cover-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverOne() = shoot(Place.DINNERS, "cover-dark-one", Fill.ONE)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverMany() = shoot(Place.DINNERS, "cover-dark-many", Fill.MANY)
-    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverManyLight() = shoot(Place.DINNERS, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun dinnersInnerEmpty() = shoot(Place.DINNERS, "inner-dark-empty", Fill.EMPTY)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun dinnersInnerMany() = shoot(Place.DINNERS, "inner-dark-many", Fill.MANY)
+    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverEmpty() { shoot(Place.DINNERS, "cover-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverOne() { shoot(Place.DINNERS, "cover-dark-one", Fill.ONE) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverMany() { shoot(Place.DINNERS, "cover-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun dinnersCoverManyLight() { shoot(Place.DINNERS, "cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun dinnersInnerEmpty() { shoot(Place.DINNERS, "inner-dark-empty", Fill.EMPTY) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun dinnersInnerMany() { shoot(Place.DINNERS, "inner-dark-many", Fill.MANY) }
 }
