@@ -245,7 +245,7 @@ object StudyRules {
         "Add lessons. Paste the course outline, one lesson a line; a line like Module 1: Foundations starts a module, and a time at the end like 45 min is the lesson's length"
     const val ADD_LESSONS_NOTE = "One lesson a line. \"Module 2: Core skills\" starts a module; \"45 min\" at the end says how long."
     const val NO_LESSONS = "No lessons yet"
-    const val EMPTY_COURSE = "Paste the course outline above: its modules and lessons, and how long each takes if it says."
+    const val EMPTY_COURSE = "Paste the course outline below: its modules and lessons, and how long each takes if it says."
     const val NOT_READ = "Paste the course outline, one lesson a line."
     const val COURSE_NOT_READ = "Type the course's name."
     const val GONE = "That course has gone."

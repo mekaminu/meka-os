@@ -25,6 +25,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -63,11 +64,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -115,6 +118,7 @@ import os.meka.core.domain.StudyDeletedRow
 import os.meka.core.domain.StudyLessonRow
 import os.meka.core.domain.StudyModule
 import os.meka.core.domain.StudyRemoved
+import os.meka.core.domain.StudyBesideRules
 import os.meka.core.domain.StudyRules
 import os.meka.core.domain.StudyScanRules
 import os.meka.core.domain.PictureTextRules
@@ -252,6 +256,8 @@ internal fun StudyPane(
     var outline by rememberSaveable(courseId) { mutableStateOf("") }
     // Slice 3: the line a screenshot's read left under the field ("Reading the picture…", "Read 14 lessons…"), until Add.
     var scanned by remember(courseId) { mutableStateOf<String?>(null) }
+    // Study beside its mockup: the dashed "+ Add lessons" row at the foot of LESSONS was tapped (the field opens there).
+    var addTapped by rememberSaveable(courseId) { mutableStateOf(false) }
     // The tap's result in the next frame: what this screen ticked, until the view says the same.
     val pending = remember { mutableStateMapOf<String, Boolean>() }
     // Plan a lesson for a day: the day picked here (null = not planned), shown at once until the view says the same.
@@ -424,6 +430,7 @@ internal fun StudyPane(
             }
         }
     }
+    val fieldOpen = StudyBesideRules.fieldOpen(c?.total ?: 0, addTapped, outline, scanned != null)
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "study-said",
     )
@@ -505,12 +512,14 @@ internal fun StudyPane(
             )
         }
         item(key = "lessons-label") { SectionLabel("Lessons", Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1))) }
+        // Study beside its mockup: the course's lines ("Added …", "Planned …") and Undo stay under LESSONS; the outline field
+        // moved to the foot of the list behind the dashed "+ Add lessons" row (StudyBesideRules.fieldOpen).
         item(key = "field") {
             Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                OutlineField(outline, { outline = it }, add)
-                ScreenshotAction(fromScreenshot)
-                Crossfade(scanned ?: said?.line ?: StudyRules.ADD_LESSONS_NOTE, animationSpec = MekaMotion.appear(reduced), label = "study-added") { line ->
-                    Text(line, style = MekaType.caption, color = if (said != null || scanned != null) saidColor else Meka.colors.textTertiary)
+                AnimatedVisibility(said != null && !fieldOpen, enter = unfold(), exit = fold()) {
+                    Crossfade(said?.line.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "study-said-top") { line ->
+                        Text(line, style = MekaType.caption, color = saidColor, modifier = Modifier.testTag("study-said"))
+                    }
                 }
                 AnimatedVisibility(
                     visible = removed != null,
@@ -652,6 +661,22 @@ internal fun StudyPane(
                 }
             }
         }
+        item(key = "add-lessons") {
+            Column(Modifier.animateItem().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                AnimatedVisibility(!fieldOpen, enter = unfold(), exit = fold()) {
+                    AddLessonsRow { haptics.tick(); addTapped = true }
+                }
+                AnimatedVisibility(fieldOpen, enter = unfold(), exit = fold()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        OutlineField(outline, { outline = it }, add)
+                        ScreenshotAction(fromScreenshot)
+                        Crossfade(scanned ?: said?.line ?: StudyRules.ADD_LESSONS_NOTE, animationSpec = MekaMotion.appear(reduced), label = "study-added") { line ->
+                            Text(line, style = MekaType.caption, color = if (said != null || scanned != null) saidColor else Meka.colors.textTertiary)
+                        }
+                    }
+                }
+            }
+        }
         if (c.deleted.isNotEmpty()) {
             item(key = "deleted-head") {
                 DeletedHead(c.deleted.size, showDeleted, Modifier.animateItem().padding(top = MekaSpace.l)) { haptics.tick(); showDeleted = !showDeleted }
@@ -754,7 +779,7 @@ private fun WeekCard(
     val reduced = Meka.reducedMotion
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m).testTag("study-week"),
+            .padding(StudyBesideRules.CARD_PAD_DP.dp).testTag("study-week"),
     ) {
         SectionLabel(StudyWeekRules.LABEL)
         rows.forEach { row ->
@@ -884,11 +909,15 @@ private fun PlanCard(
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth().testTag("study-plan"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface).padding(MekaSpace.l),
+            // Study beside its mockup: 16 dp inside (was 24); on the closed Fold the dates drop their weekday, two to a row.
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface).padding(StudyBesideRules.CARD_PAD_DP.dp),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
         ) {
             SectionLabel(StudyRules.PLAN)
-            ChipGroup(StudyRules.FINISH_LABEL, plan.ends, "study-end", onFinish)
+            BoxWithConstraints {
+                val narrow = StudyBesideRules.narrow(maxWidth.value)
+                ChipGroup(StudyRules.FINISH_LABEL, plan.ends.map { it.copy(label = StudyBesideRules.endChipLabel(it.label, narrow)) }, "study-end", onFinish)
+            }
             ChipGroup(StudyRules.SESSION_LABEL, plan.lens, "study-len", onSession)
             ChipGroup(StudyRules.SLOTS_LABEL, plan.slots, "study-slot", onSlot)
             Crossfade(plan.perWeek to plan.perWeekSub, animationSpec = MekaMotion.appear(reduced), label = "study-per-week") { (big, sub) ->
@@ -1270,6 +1299,31 @@ private fun AddInto(m: StudyModule, modifier: Modifier, onAdd: (String) -> Unit)
                 tag = "study-add-into-field-${m.key}",
             )
         }
+    }
+}
+
+/**
+ * Study beside its mockup: the dashed "+ Add lessons · paste the course outline" row closing LESSONS (the mockup's,
+ * 1 dp dashed in the hairline colour, the app's 16 dp corners, the words in the accent, centred); a tap opens the outline field.
+ */
+@Composable
+private fun AddLessonsRow(onClick: () -> Unit) {
+    val line = Meka.colors.hairline
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = StudyBesideRules.ADD_ROW_DESCRIPTION }
+            .drawBehind {
+                val inset = 0.5.dp.toPx()
+                drawRoundRect(
+                    line, topLeft = Offset(inset, inset), size = Size(size.width - 2 * inset, size.height - 2 * inset),
+                    cornerRadius = CornerRadius(MekaRadius.m.toPx()),
+                    style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
+                )
+            }
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("study-add-lessons"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(StudyBesideRules.ADD_ROW, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2)
     }
 }
 

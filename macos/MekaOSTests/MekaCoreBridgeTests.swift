@@ -4325,6 +4325,17 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     /// Today beside its calmer mockup: Anytime's label counts the open tasks, a hairline between rows only.
+    func testStudyBesideOnTheMac() {
+        // Study beside its mockup (2026-10-30): the dashed "+ Add lessons" row and when the field opens; the Mac is wide,
+        // so its finish dates keep their weekday.
+        XCTAssertEqual(StudyBesideRules.shared.ADD_ROW, "+ Add lessons · paste the course outline")
+        XCTAssertTrue(StudyBesideRules.shared.fieldOpen(lessons: 0, tapped: false, typed: "", scanning: false))
+        XCTAssertFalse(StudyBesideRules.shared.fieldOpen(lessons: 8, tapped: false, typed: "", scanning: false))
+        XCTAssertTrue(StudyBesideRules.shared.fieldOpen(lessons: 8, tapped: true, typed: "", scanning: false))
+        XCTAssertEqual(StudyBesideRules.shared.endChipLabel(label: "Mon 23 Nov · 4 wks", narrow: false), "Mon 23 Nov · 4 wks")
+        XCTAssertEqual(StudyBesideRules.shared.endChipLabel(label: "Mon 23 Nov · 4 wks", narrow: true), "23 Nov · 4 wks")
+    }
+
     func testTodayBesideOnTheMac() {
         XCTAssertEqual(TodayBesideRules.shared.anytimeLabel(openCount: 4), "Anytime today · 4")
         XCTAssertEqual(TodayBesideRules.shared.anytimeLabel(openCount: 0), "Anytime today")

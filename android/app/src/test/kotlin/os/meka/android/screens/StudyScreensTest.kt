@@ -38,6 +38,9 @@ import os.meka.android.calendar.STUDY_NOTE_TAG
 import os.meka.android.calendar.WeekBoardView
 import os.meka.android.shell.ShellDestination
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -153,6 +156,29 @@ class StudyScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun planCoverDark() = shootPlan("cover-dark-plan", ThemeChoice.DARK)
     @Test @Config(qualifiers = ScreenShots.COVER) fun planCoverLight() = shootPlan("cover-light-plan", ThemeChoice.LIGHT)
+
+    @Test
+    @Config(qualifiers = ScreenShots.COVER)
+    fun besideItsMockupTheDatesSitTwoToARowAndTheFieldWaitsBehindTheDashedRow() {
+        // Study beside its mockup (2026-10-30): on the closed Fold the finish dates drop their weekday so two share a row,
+        // and a course with lessons shows "+ Add lessons" at the foot instead of an open field; a tap opens it there.
+        val (core, id) = filled(ThemeChoice.DARK)
+        show(core, id)
+        val ends = core.studyView.value.course(id)!!.plan.ends
+        compose.onNodeWithText("23 Nov · 4 wks").assertExists()
+        compose.onAllNodesWithText("Mon 23 Nov · 4 wks").assertCountEquals(0)
+        val first = compose.onNodeWithTag("study-end-${ends[0].key}").getUnclippedBoundsInRoot()
+        val second = compose.onNodeWithTag("study-end-${ends[1].key}").getUnclippedBoundsInRoot()
+        assertEquals(first.top, second.top, "the first two finish dates share a row")
+        compose.onAllNodesWithTag("study-outline").assertCountEquals(0)
+        scrollTo(hasTestTag("study-add-lessons"))
+        compose.onNodeWithText(os.meka.core.domain.StudyBesideRules.ADD_ROW).assertExists()
+        compose.onNodeWithTag("study-add-lessons").performClick()
+        compose.mainClock.advanceTimeBy(1_000L)
+        compose.onNodeWithTag("study-outline").assertExists()
+        compose.onNodeWithTag("study-from-screenshot").assertExists()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-add-lessons"))
+    }
 
     @Test
     @Config(qualifiers = ScreenShots.COVER)

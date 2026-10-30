@@ -143,6 +143,8 @@ struct StudySheet: View {
     let onClose: () -> Void
     let onRemoved: (CoreModel.TripUndo) -> Void
     @State private var outline = ""
+    /// Study beside its mockup: the dashed "+ Add lessons" row was clicked (the field opens at the foot of LESSONS).
+    @State private var addTapped = false
     @State private var said: CoreModel.StudySaid?
     /// Slice 3: the line a screenshot's read left under the field ("Reading the picture on this Mac…", "Read 14 lessons…").
     @State private var scanned: String?
@@ -277,41 +279,13 @@ struct StudySheet: View {
             weekCard(c.week, nudge: tapNudge ?? c.nudge, checkin: tapCheckin ?? c.checkin).padding(.top, MekaSpace.m).staggeredAppear(1)
         }
         SectionLabel("Lessons", palette).padding(.top, MekaSpace.l).staggeredAppear(1)
-        TextField(StudyRules.shared.ADD_LESSONS_HINT, text: $outline, axis: .vertical)
-            .lineLimit(1...8)
-            .textFieldStyle(.roundedBorder)
-            .accessibilityLabel(StudyRules.shared.ADD_LESSONS_DESCRIPTION)
-            .onSubmit(add)
-            .staggeredAppear(1)
-        HStack(spacing: MekaSpace.m) {
-            Button("+ " + StudyScanRules.shared.ACTION_MAC, action: chooseScreenshot)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.caption)
-                .foregroundStyle(palette.accent)
-                .accessibilityLabel(StudyScanRules.shared.ACTION_DESCRIPTION)
-            Button(StudyScanRules.shared.PASTE_MAC, action: pasteScreenshot)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.caption)
-                .foregroundStyle(palette.textSecondary)
-            Spacer()
-        }
-        .staggeredAppear(1)
-        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-            Text(scanned ?? said?.line ?? StudyRules.shared.ADD_LESSONS_NOTE).font(MekaType.caption)
-                .foregroundStyle(said?.refused == true ? palette.accent : (said == nil && scanned == nil ? palette.textTertiary : palette.textSecondary))
+        // Study beside its mockup: the course's lines stay under LESSONS; the outline field waits behind the dashed
+        // "+ Add lessons" row at the foot of the list (StudyBesideRules.fieldOpen).
+        if let said, !fieldOpen(c) {
+            Text(said.line).font(MekaType.caption)
+                .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: scanned)
-            Spacer()
-            if !outline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button("Add lessons", action: add)
-                    .buttonStyle(MekaPressStyle())
-                    .font(MekaType.captionStrong)
-                    .foregroundStyle(palette.accent)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .transition(.opacity)
-            }
+                .transition(.opacity)
         }
         if let removed {
             HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
@@ -349,6 +323,7 @@ struct StudySheet: View {
                     module(m, open: opened[m.key] ?? (m.key == firstOpen), names: names, index: i, keys: keys)
                 }
                 addModuleRow
+                addLessons(c).padding(.top, MekaSpace.xs)
                 if !c.deleted.isEmpty { deletedSection(c.deleted) }
                 Text(StudyRules.shared.NOTE + " Right-click a lesson or a module to rename, move or delete it; drag one onto another to change the order.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -762,6 +737,72 @@ struct StudySheet: View {
         .buttonStyle(MekaPressStyle())
         .disabled(state == "DONE")
         .accessibilityLabel(state == "START" ? "Start \(row.dayLabel)'s session" : (state == "ON" ? "Done, tick \(ids.count) lessons" : "Session done"))
+    }
+
+    /// Study beside its mockup: "+ Add lessons · paste the course outline" as a dashed row closing LESSONS; a click
+    /// opens the outline field there (always open for a course with no lessons, and while anything is in it).
+    private func fieldOpen(_ c: StudyCourseView) -> Bool {
+        StudyBesideRules.shared.fieldOpen(lessons: c.total, tapped: addTapped, typed: outline, scanning: scanned != nil)
+    }
+
+    @ViewBuilder
+    private func addLessons(_ c: StudyCourseView) -> some View {
+        if fieldOpen(c) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                TextField(StudyRules.shared.ADD_LESSONS_HINT, text: $outline, axis: .vertical)
+                    .lineLimit(1...8)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(StudyRules.shared.ADD_LESSONS_DESCRIPTION)
+                    .onSubmit(add)
+                HStack(spacing: MekaSpace.m) {
+                    Button("+ " + StudyScanRules.shared.ACTION_MAC, action: chooseScreenshot)
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel(StudyScanRules.shared.ACTION_DESCRIPTION)
+                    Button(StudyScanRules.shared.PASTE_MAC, action: pasteScreenshot)
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.textSecondary)
+                    Spacer()
+                }
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(scanned ?? said?.line ?? StudyRules.shared.ADD_LESSONS_NOTE).font(MekaType.caption)
+                        .foregroundStyle(said?.refused == true ? palette.accent : (said == nil && scanned == nil ? palette.textTertiary : palette.textSecondary))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: scanned)
+                    Spacer()
+                    if !outline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button("Add lessons", action: add)
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.captionStrong)
+                            .foregroundStyle(palette.accent)
+                            .keyboardShortcut(.return, modifiers: .command)
+                            .transition(.opacity)
+                    }
+                }
+            }
+            .transition(.opacity)
+        } else {
+            Button {
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { addTapped = true }
+            } label: {
+                Text(StudyBesideRules.shared.ADD_ROW)
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(palette.hairline, style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(StudyBesideRules.shared.ADD_ROW_DESCRIPTION)
+            .transition(.opacity)
+        }
     }
 
     private func chipRow(_ label: String, _ chips: [StudyChip], _ tap: @escaping (StudyChip) -> Void) -> some View {

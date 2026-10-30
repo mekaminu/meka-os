@@ -3612,6 +3612,32 @@ The Daily plan's Saturday "screenshot checks against every mockup", for Today (M
   (`TodayBesideRules.ROW_WITH_LINE_MAX_DP`, `TASK_ROW_TAG`); MekaCoreBridgeTests.testTodayBesideOnTheMac. No server
   change, no migration; Mac checked nightly.
 
+### Quality gate — (2) the design check, Study (2026-10-30): Study beside its mockup
+
+The Daily plan's Saturday "screenshot checks against every mockup", for Study (pulled forward on Fri 30 Oct).
+`docs/design/study/study-plan.dc.html` rendered at 390 beside CI run 1453's `study/cover-dark-plan`,
+`cover-dark-course` and `cover-dark-this-week` (the closed Fold, 344 dp) at one dp scale (beside.py). Item by item:
+- **YOUR PLAN's inside:** the mockup's card has 16 dp inside; the Fold's had 24 (THIS WEEK 24 across, 16 down). Both are
+  now 16 (`StudyBesideRules.CARD_PAD_DP`); the Mac's were 16 already.
+- **FINISH BY:** the mockup puts two dates on the first row; on the 344 dp cover "Mon 23 Nov · 4 wks" twice didn't fit
+  the card's inside, so the three sat one under another (three 48 dp rows). Where the card's inside is under 300 dp the
+  chip drops its weekday ("23 Nov · 4 wks", `endChipLabel`), so two share a row; the spoken label keeps the whole date;
+  the open Fold and the Mac keep the weekday.
+- **LESSONS:** the mockup lists the modules, then a dashed "+ Add lessons · paste the course outline or a link" row; the
+  app had the outline field always open at the top (layout rule (e), no open inputs). Now the modules come first and the
+  dashed row closes the list ("… or a link" left out: links aren't read); a tap opens the field there with From a
+  screenshot and the how-to line (`fieldOpen`: open at once for a course with no lessons, and while anything is typed or
+  a screenshot's read shows). "Added …" / "Planned …" lines and Undo stay under the LESSONS label while the field is
+  shut; the empty course's line now says "Paste the course outline below". Mac: the same row (a dashed 12 pt rounded
+  outline), a click opens the field in the list.
+- Matching already: the ring and title block, the session and slot chips, "N sessions a week" with its sub line and the
+  fit line, THIS WEEK's rows with Start, the toggles.
+- Not changed: the app's "Next: <lesson>" line under the title and the "N lessons suggested …" line (features the mockup
+  predates); THIS WEEK stays a card (Money's layout rules: every section a card); a module's ≡ grip.
+- Tests: core StudyBesideTest; StudyScreensTest.besideItsMockupTheDatesSitTwoToARowAndTheFieldWaitsBehindTheDashedRow
+  (the first two dates share a row, no field until the row is tapped; shot `study/cover-dark-add-lessons`);
+  MekaCoreBridgeTests.testStudyBesideOnTheMac. No server change, no migration; Mac checked nightly.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.
