@@ -110,13 +110,14 @@ object ObiRestRules {
         if (v == null) return if (full) listOf(HEALTH_NOT_CHECKED) else emptyList()
         val head = listOf("Navilife's health", tidy(v.summary), tidy(v.checkedLine)).filter { it.isNotEmpty() }.joinToString(" · ")
         if (!full) return listOf(head)
-        val order = listOf(HealthState.BAD, HealthState.WARN, HealthState.UNKNOWN, HealthState.OK)
+        val order = listOf(HealthState.BAD, HealthState.WARN, HealthState.UNKNOWN, HealthState.OFF, HealthState.OK)
         return listOf(head) + v.rows.sortedBy { order.indexOf(it.state) }.take(HEALTH_ROWS).map { r ->
             val state = when (r.state) {
                 HealthState.OK -> "fine"
                 HealthState.WARN -> "worth a look"
                 HealthState.BAD -> "broken"
                 HealthState.UNKNOWN -> "not known yet"
+                HealthState.OFF -> "switched off"
             }
             listOfNotNull(tidy(r.title), tidy(r.line).takeIf { it.isNotEmpty() }, r.detail?.let(::tidy)?.takeIf { it.isNotEmpty() }, state,
                 r.fixLabel?.let { "fix: ${tidy(it)}" }).joinToString(" · ")

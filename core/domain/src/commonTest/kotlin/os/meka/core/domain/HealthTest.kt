@@ -158,7 +158,13 @@ class HealthTest {
     @Test
     fun theCallAssistantNeedsTheServiceAndTheRoleOnlyWhileOn() {
         val off = HealthRules.view(facts(callAssistantOn = false, device = fold.copy(callRoleHeld = false), server = server.copy(calls = false)), cal).row("calls")
-        assertEquals(HealthState.OK to HealthFix.WORK, off.state to off.fix)
+        // The walk-through's A7: switched off by his choice is its own grey state, not the working green, and never counted.
+        assertEquals(HealthState.OFF to HealthFix.WORK, off.state to off.fix)
+        assertFalse(off.needsLook)
+        val offOnly = HealthRules.view(facts(callAssistantOn = false), cal)
+        assertEquals(HealthState.OFF, offOnly.row("calls").state)
+        assertEquals(0, offOnly.attention)
+        assertEquals("Everything's working", offOnly.summary)
         val noService = HealthRules.view(facts(server = server.copy(calls = false)), cal).row("calls")
         assertEquals(HealthState.BAD, noService.state)
         // Spam calls still ring, slice 1: the lost role's Fix (and Today's red line) is on the Spam calls row.
@@ -204,6 +210,8 @@ class HealthTest {
 
         val sleepy = HealthRules.view(facts(device = fold.copy(batteryExempt = false)), cal)
         assertEquals(HealthFix.BATTERY to HealthState.WARN, sleepy.row("battery").fix to sleepy.row("battery").state)
+        // The walk-through's A7: a short button, so the row's own words keep their width on the closed Fold.
+        assertEquals("Keep awake", sleepy.row("battery").fixLabel)
         // Battery has its own line on Today.
         assertNull(sleepy.todayLine)
         assertEquals(HealthState.BAD, HealthRules.view(facts(device = fold.copy(batteryStopped = true)), cal).row("battery").state)

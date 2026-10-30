@@ -263,6 +263,9 @@ class WatchHealthScreensTest {
         ScreenShots.assertNoLoneWords(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertNoDotStartingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
+        // The walk-through's A7: a row he switched off never wears the working green.
+        v.rows.filter { it.line.startsWith("Off ·") && it.state == os.meka.core.domain.HealthState.OK }
+            .forEach { fail("$name: ${it.title} is off but drawn as working") }
         val server0 = v.rows.first { it.key == "server" }
         when (fill) {
             Fill.EMPTY -> if (server0.line != "This device isn't connected yet") fail("$name: not connected, the server row says \"${server0.line}\"")

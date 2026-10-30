@@ -303,6 +303,8 @@ fun healthColor(state: HealthState): Color = when (state) {
     HealthState.WARN -> Meka.colors.accent
     HealthState.BAD -> Meka.colors.critical
     HealthState.UNKNOWN -> Meka.colors.textTertiary
+    // Off by his choice (the walk-through's A7): neither the working green nor a fault's colour.
+    HealthState.OFF -> Meka.colors.textTertiary
 }
 
 private fun spokenState(state: HealthState) = when (state) {
@@ -310,6 +312,7 @@ private fun spokenState(state: HealthState) = when (state) {
     HealthState.WARN -> "needs a look"
     HealthState.BAD -> "not working"
     HealthState.UNKNOWN -> "couldn't check"
+    HealthState.OFF -> "off"
 }
 
 @Composable

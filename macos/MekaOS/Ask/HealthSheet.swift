@@ -118,6 +118,8 @@ private struct HealthRowView: View {
         case .warn: palette.accent
         case .bad: palette.critical
         case .unknown: palette.textTertiary
+        // Off by his choice (the walk-through's A7): neither the working green nor a fault's colour.
+        case .off: palette.textTertiary
         }
     }
 
@@ -127,6 +129,7 @@ private struct HealthRowView: View {
         case .warn: "needs a look"
         case .bad: "not working"
         case .unknown: "couldn't check"
+        case .off: "off"
         }
     }
 

@@ -8,7 +8,14 @@ package os.meka.core.domain
  * the server (`POST /v1/health/household`, the calendar list and the AI's status). A fact that couldn't be read is
  * [HealthState.UNKNOWN] ("Couldn't check"), never a tick.
  */
-enum class HealthState { OK, WARN, BAD, UNKNOWN }
+enum class HealthState {
+    OK, WARN, BAD, UNKNOWN,
+    /**
+     * Switched off by his own choice (the walk-through's A7, 2026-10-30: "Call assistant · Off" wore the working
+     * green). Neither working nor a fault: a quiet grey dot, never counted as needing a look.
+     */
+    OFF,
+}
 
 /** What a row's button does; the apps map each to their own screen or call. */
 enum class HealthFix {
@@ -186,6 +193,11 @@ object HealthRules {
     const val CLOCK_SKEW_MS = 5 * MIN
     /** How often Today asks the server (the screen itself asks every time it opens). */
     const val TODAY_REFRESH_MS = 15 * MIN
+    /**
+     * The Battery row's button (the walk-through's A7: "Keep Navilife awake" squeezed the row's own words into three
+     * narrow lines on the closed Fold). The row already says it's Navilife; Setup's step keeps the longer words.
+     */
+    const val BATTERY_FIX = "Keep awake"
 
     /** How long each feed may go without updating before it's worth a look (their own refresh periods, with room). */
     fun feedStaleMs(provider: String): Long = when (provider) {
@@ -346,7 +358,7 @@ object HealthRules {
         val title = "Call assistant"
         val last = f.lastVoiceMessageMs?.let { "last voice message ${at(it, f.nowMs, cal)}" } ?: "no voice messages yet"
         return when {
-            !f.callAssistantOn -> HealthRow("calls", title, "Off · switch it on in Work mode", HealthState.OK, HealthFix.WORK, "Work mode")
+            !f.callAssistantOn -> HealthRow("calls", title, "Off · switch it on in Work mode", HealthState.OFF, HealthFix.WORK, "Work mode")
             f.server == null -> HealthRow("calls", title, "On · couldn't check the phone service", HealthState.UNKNOWN)
             !f.server.calls -> HealthRow("calls", title, "On, but the phone service isn't set up on the server", HealthState.BAD)
             // The Spam calls row below carries the Fix (and Today's red line), so this one only says why.
@@ -433,8 +445,8 @@ object HealthRules {
     private fun battery(f: HealthFacts): HealthRow? {
         val exempt = f.device.batteryExempt ?: return null
         return when {
-            f.device.batteryStopped -> HealthRow("battery", "Battery", "Navilife was stopped today, likely by Samsung's battery saver", HealthState.BAD, HealthFix.BATTERY, "Keep Navilife awake")
-            !exempt -> HealthRow("battery", "Battery", "Samsung may put Navilife to sleep", HealthState.WARN, HealthFix.BATTERY, "Keep Navilife awake")
+            f.device.batteryStopped -> HealthRow("battery", "Battery", "Navilife was stopped today, likely by Samsung's battery saver", HealthState.BAD, HealthFix.BATTERY, BATTERY_FIX)
+            !exempt -> HealthRow("battery", "Battery", "Samsung may put Navilife to sleep", HealthState.WARN, HealthFix.BATTERY, BATTERY_FIX)
             else -> HealthRow("battery", "Battery", "Allowed to run in the background", HealthState.OK)
         }
     }
