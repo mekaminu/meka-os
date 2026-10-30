@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -219,9 +220,15 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
                 )
             }
         }
-        Box(Modifier.weight(1f).height(1.dp).background(Meka.colors.accent.copy(alpha = 0.5f)))
+        // The hairline takes what is left, but a sliver isn't drawn (walk-through 2026-10-30, A3): after a long line
+        // ("Nothing else planned after 18:50") the few dp left read as a stray dash.
+        val hair = Meka.colors.accent.copy(alpha = 0.5f)
+        Box(Modifier.weight(1f).height(1.dp).drawBehind { if (size.width >= NOW_HAIRLINE_MIN.toPx()) drawRect(hair) })
     }
 }
+
+/** The shortest hairline the now line draws; less is left blank. */
+internal val NOW_HAIRLINE_MIN = 24.dp
 
 /**
  * The "All day" group's label, once above its rows (all-day polish, Meka 2026-10-07 22:37): "All day", or

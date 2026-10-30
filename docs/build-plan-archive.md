@@ -5116,3 +5116,15 @@ HangWatch, bounded scrolls of Ask's own list `ASK_LIST_TAG`, never performScroll
   row (not the bedside clock, which takes the whole app from MekaApplication) and Settings open, and Close drops each.
 Fixed first (Fold): the field's mic (a 36 dp orb) and an answer's Undo on what Obi did on his own (~36 dp) now answer a
 48 dp touch, each drawn as before. Fold only (the Mac clicks); no core or server change, no migration.
+
+## Found and fixing (the first walk-through's faults, 2026-10-30)
+
+Slice 1 (2026-10-30): **A1** VoiceNotesPane's NoteRow: the expandable words area (title, words, Mentions, cards line)
+was `clip(RoundedCornerShape(16 dp)).clickable`, and its text sits flush with that area's edges, so the corner cut the
+first glyph of the top line and of the bottom line ("ιoday", "ιhu", "answer them", "the shed"); the clip is gone (the
+card's own clip shapes it; the press shows across the area). **A3** TimelineViews.NowLine: the hairline after the words
+is drawn only when at least 24 dp is left (`NOW_HAIRLINE_MIN`), so "Nothing else planned after 18:50" no longer ends in a
+stray dash. Checked and left as they are: the capture bar is laid out below Today's list (a Column), so it never covers a
+row; the many shot is a viewport mid-list under the foot fade. The now line's "N anytime tasks" includes Up next (what's
+left to fit in; WorkHoursTest pins it, Fold review 2026-10-09) while ANYTIME TODAY · N counts the rows under it.
+Fold only; no core or server change, no migration. Screens re-taken by CI (voice-notes, today).

@@ -236,7 +236,9 @@ private fun NoteRow(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onExpand)
+            // No rounded clip here (walk-through 2026-10-30, A1): the words sit flush with this area's edges, so a 16 dp
+            // corner cut the first letter of the top line ("ιoday") and of the bottom one; the card's own clip shapes it.
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onExpand)
                 .semantics(mergeDescendants = true) { contentDescription = row.title + ". " + row.text }
                 // A note with no words is two short lines (~39 dp): the row still answers a 48 dp touch (quality gate).
                 .minTouch(),
