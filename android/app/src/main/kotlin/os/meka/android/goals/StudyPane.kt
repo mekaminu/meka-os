@@ -1320,7 +1320,7 @@ private fun AddLessonsRow(onClick: () -> Unit) {
                     style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
                 )
             }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("study-add-lessons"),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("study-add-lessons"),
         contentAlignment = Alignment.Center,
     ) {
         Text(StudyBesideRules.ADD_ROW, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2)
