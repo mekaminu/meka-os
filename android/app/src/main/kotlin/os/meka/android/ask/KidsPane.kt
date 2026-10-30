@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -57,6 +58,9 @@ import os.meka.core.domain.KidWeekDay
 import os.meka.core.domain.KidsRules
 import os.meka.core.domain.KidsWeekRules
 import os.meka.core.facade.MekaCore
+
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val KIDS_LIST_TAG = "kids-list"
 
 /**
  * Ask → Life → Kids (Kids' admin, slice 1): a card per child from About you with their sizes — shoes, football boots,
@@ -96,7 +100,7 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
     val moneySaid = remember { mutableStateMapOf<String, KidSaved>() }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(KIDS_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

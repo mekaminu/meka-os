@@ -53,6 +53,9 @@ import os.meka.core.domain.SchoolTerms
 import os.meka.core.domain.SchoolTermsAdded
 import os.meka.core.facade.MekaCore
 
+/** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
+const val SCHOOL_LIST_TAG = "school-list"
+
 /**
  * Ask → More → School (school rhythm, slice 1): Theo's and Finn's school year, typed once, one line each — "INSET
  * 27 Oct", "Half term 26–30 Oct", "Theo PE Tue", "Finn's trip 20 Nov" — in three groups: days off, dates and every
@@ -98,7 +101,7 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
     )
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag(SCHOOL_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -257,7 +260,8 @@ private fun SchoolRowView(row: SchoolRow, modifier: Modifier, onRemove: () -> Un
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${row.title}" }
-                .padding(MekaSpace.xs),
+                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                .minTouch().padding(horizontal = MekaSpace.xs),
         )
     }
 }
@@ -323,7 +327,8 @@ private fun TermsCard(
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Button) { onFill(c.id) }
                         .semantics { contentDescription = "Fill in ${c.name}'s holidays" }
-                        .padding(MekaSpace.xs),
+                        // Works by hand (quality gate (3)): a 48 dp touch, the words drawn as before.
+                        .minTouch().padding(horizontal = MekaSpace.xs),
                 )
             }
         }

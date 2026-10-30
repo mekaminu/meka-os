@@ -5068,3 +5068,23 @@ Found and fixed first (Fold): Date night's Skip this one / Keep it, Leave's Remo
 ~30 dp to tap (now `minTouch`, the word unchanged); Leave's − / + (~40 dp) now `minTouch`; Leave's Book pill (~32 dp)
 is drawn as before inside a 48 dp touch, as the chips. The shot tests use block bodies, as `shoot` returns the core.
 Fold only (the Mac clicks); no core or server change, no migration.
+
+### Quality gate — (3) works by hand, Admin's places (2026-10-30)
+
+AdminPlacesScreensTest gains three by-hand tests on the closed Fold, full set, under HangWatch, scrolling each pane's
+own list in bounded steps (new tags APPOINTMENTS_LIST_TAG, KIDS_LIST_TAG, SCHOOL_LIST_TAG); every button and switch on
+screen must answer a 48 dp touch (its shot tests now have block bodies, since `shoot` returns the core):
+
+- **appointmentsByHand**: Went moves the dentist's "last went" line to today; a Common ones chip adds one; Remove takes
+  the dentist off; the field adds "Physio every 3 months, last 1 Oct".
+- **kidsByHand**: All still fit says so; Clear takes Alex's shoe size off and Undo puts it back; an empty size field
+  keeps what's typed; a fee's Paid moves it on and Undo back, Remove takes it off, the fee field adds one; today's dot
+  ticks Sam's chore, Paid notes the week and Undo takes it back, Remove and Undo, the chore field adds "Feed the cat",
+  the pocket money field keeps a new amount.
+- **schoolByHand**: Fill in and Undo (when a council is offered); Remove takes half term off; the field adds "Sam PE
+  Thu"; the INSET field adds a day off; To a day… on a date unfolds its chips, a chip makes the task and Undo takes it
+  back.
+
+Found and fixed first (Fold): Appointments' Went and Remove and School's Remove (~30 dp) and Fill in (~36 dp) now
+answer a 48 dp touch (`minTouch`), the words drawn as before. Kids' buttons were already 48 dp. Fold only (the Mac
+clicks); no core or server change, no migration.
