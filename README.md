@@ -560,6 +560,8 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/work/inner-dark-by-hand.png](docs/screens/fold/work/inner-dark-by-hand.png)
 - [fold/work/inner-dark-empty.png](docs/screens/fold/work/inner-dark-empty.png)
 - [fold/work/inner-dark-many.png](docs/screens/fold/work/inner-dark-many.png)
+- [fold/working-on/cover-dark-answer-sheet.png](docs/screens/fold/working-on/cover-dark-answer-sheet.png)
+- [fold/working-on/cover-dark-answered.png](docs/screens/fold/working-on/cover-dark-answered.png)
 - [fold/working-on/cover-dark-ask-sheet.png](docs/screens/fold/working-on/cover-dark-ask-sheet.png)
 - [fold/working-on/cover-dark-by-hand.png](docs/screens/fold/working-on/cover-dark-by-hand.png)
 - [fold/working-on/cover-dark-empty.png](docs/screens/fold/working-on/cover-dark-empty.png)
