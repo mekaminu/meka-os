@@ -234,6 +234,7 @@ class LifeAdminScreensTest {
         skip[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.lifeAdminView.value.skipped }
         if (!core.lifeAdminView.value.skipped) fail("$name: Skip this week left the hour booked")
+        ScreenShots.awaitShows(compose, name, LifeAdminRules.KEEP_LABEL)
         val keep = compose.onAllNodes(hasText(LifeAdminRules.KEEP_LABEL) and hasClickAction())
         if (keep.fetchSemanticsNodes().isEmpty()) fail("$name: no Keep it once skipped")
         keep[0].performSemanticsAction(SemanticsActions.OnClick)

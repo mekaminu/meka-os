@@ -186,15 +186,15 @@ class WorkScreensTest {
         val stop = compose.onAllNodes(hasText("Stop work now") and hasClickAction())
         if (stop.fetchSemanticsNodes().isEmpty()) fail("Work: no Stop work now at work")
         stop[0].performSemanticsAction(SemanticsActions.OnClick)
-        repeat(40) {
-            if (!core.workMode.value.atWork) return@repeat
+        var i = 0
+        while (core.workMode.value.atWork && i++ < 40) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
             compose.mainClock.advanceTimeBy(100)
         }
         turns()
         if (core.workMode.value.atWork) fail("Work: Stop work now left work on")
-        ScreenShots.assertShows(compose, "work-by-hand", "Start work now")
+        ScreenShots.awaitShows(compose, "work-by-hand", "Start work now")
         ScreenShots.assertShows(compose, "work-by-hand", "Back to my hours")
         val sat = compose.onAllNodes(hasContentDescription("Sat") and hasClickAction())
         if (sat.fetchSemanticsNodes().isEmpty()) fail("Work: no Saturday chip")

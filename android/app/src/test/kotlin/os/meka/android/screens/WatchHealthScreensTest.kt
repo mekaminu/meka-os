@@ -187,7 +187,7 @@ class WatchHealthScreensTest {
             fill == Fill.EMPTY -> if (v.rows.isNotEmpty() || v.problem != null) fail("$name: $v with nothing linked")
             fill == Fill.ONE -> {
                 if (v.rows.size != 1) fail("$name: ${v.rows.size} rows for one watch")
-                ScreenShots.assertShows(compose, name, "Linked today")
+                ScreenShots.awaitShows(compose, name, "Linked today")
             }
             fill == Fill.MANY -> {
                 if (v.rows.size != 2) fail("$name: ${v.rows.size} rows for two watches")

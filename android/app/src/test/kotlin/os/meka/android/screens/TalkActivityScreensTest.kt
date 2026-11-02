@@ -140,7 +140,7 @@ class TalkActivityScreensTest {
         }
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         if (TalkAutoListen.talkOver(context)) fail("Talk: Turn off didn't turn Talk over off")
-        ScreenShots.assertShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
+        ScreenShots.awaitShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
         if (compose.onAllNodes(hasText(off.action!!) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
             fail("Talk: no ${off.action} after Turn off")
         }

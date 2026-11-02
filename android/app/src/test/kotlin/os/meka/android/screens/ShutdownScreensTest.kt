@@ -410,7 +410,7 @@ class ShutdownScreensTest {
         tap(name, "Shut down", hasText("Shut down"))
         until { core.shutdownView.value.doneToday }
         if (!core.shutdownView.value.doneToday) fail("$name: Shut down didn't shut the day down")
+        ScreenShots.awaitShows(compose, name, "Day shut down")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("shutdown", name))
-        ScreenShots.assertShows(compose, name, "Day shut down")
     }
 }

@@ -10,6 +10,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
+import android.os.Looper
+import org.robolectric.Shadows
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DurationGlue
@@ -156,6 +158,27 @@ object ScreenShots {
     }
 
     /** Fails unless [text] is on screen (as words or as what TalkBack reads), e.g. the greeting for the core's time. */
+    /** True when a node's text or description contains [text] (merged or not). */
+    fun shows(compose: ComposeContentTestRule, text: String): Boolean =
+        compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+
+    /**
+     * Waits, by turns, until [text] is on screen, then asserts it (the flaky screen tests, 2026-10-26–30: the core had
+     * changed but the screen hadn't caught up yet). Each turn runs the main looper, gives the core's own thread a little
+     * real time and moves the frame clock on; it stops as soon as the text shows, and fails after [turns] turns.
+     * Never a skip: a screen that never shows the text still fails.
+     */
+    fun awaitShows(compose: ComposeContentTestRule, name: String, text: String, turns: Int = 80) {
+        var i = 0
+        while (!shows(compose, text) && i++ < turns) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        assertShows(compose, name, text)
+    }
+
     fun assertShows(compose: ComposeContentTestRule, name: String, text: String) {
         val found = compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true), useUnmergedTree = true)
             .fetchSemanticsNodes()
