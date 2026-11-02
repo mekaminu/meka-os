@@ -255,4 +255,12 @@ class LifeAdminTest {
         val due = LifeAdminJob("task:u", LifeAdminJobKind.TASK, "Fill in the form", "overdue since Mon 12 Oct", "x", overdue = true)
         assertEquals("overdue since Mon 12 Oct", DateGlue.plain(due.lineShown!!))
     }
+
+    @Test
+    fun offLightsNoStartTime() {
+        // Walk-through A11: Off showed its hour still lit.
+        val m = LifeAdminRules.START_CHOICES[1]
+        assertFalse(LifeAdminRules.START_CHOICES.any { LifeAdminRules.startLit(on = false, startMin = m, choice = it) })
+        assertEquals(listOf(m), LifeAdminRules.START_CHOICES.filter { LifeAdminRules.startLit(on = true, startMin = m, choice = it) })
+    }
 }

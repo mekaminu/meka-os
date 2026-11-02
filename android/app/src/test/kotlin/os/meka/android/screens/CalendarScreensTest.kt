@@ -124,6 +124,8 @@ class CalendarScreensTest {
             secureRandom = Random(13), timeZone = { london }, nowMs = { now },
         )
         context.useCoreForScreens(core)
+        // The first-time swipe hint has played, so the Agenda isn't shot with a row mid-nudge (walk-through A11).
+        os.meka.android.calendar.SwipeHint.markShown(context)
         runBlocking {
             core.tick()
             if (fill == Fill.MANY) core.schedule(core.addTask("Pay the window cleaner"), at(22, 12, 0))

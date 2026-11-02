@@ -213,4 +213,12 @@ class DateNightTest {
         assertEquals("skip date night on Friday 16 October", TalkRules.phrase(fri.proposal, sat, past = false))
         assertEquals("skipped date night tonight", TalkRules.phrase(fri.proposal, fri16, past = true))
     }
+
+    @Test
+    fun offLightsNoStartTime() {
+        // Walk-through A11: Off showed 19:00 still lit.
+        val m = DateNightRules.START_CHOICES[2]
+        assertFalse(DateNightRules.START_CHOICES.any { DateNightRules.startLit(on = false, startMin = m, choice = it) })
+        assertEquals(listOf(m), DateNightRules.START_CHOICES.filter { DateNightRules.startLit(on = true, startMin = m, choice = it) })
+    }
 }

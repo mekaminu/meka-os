@@ -165,6 +165,12 @@ class WatchHealthScreensTest {
             if (server!!.listed < 2) fail("$name: Watch didn't read the watches on open")
             Thread.sleep(100)
             server.refuse = DeviceLinkCodec.ERR_CODE
+            // Typed into the field first, as he would: a wrong code is said only under the code it's about (A11).
+            compose.onAllNodes(hasContentDescription("Code from the watch") and hasSetTextAction())[0].performTextInput("1234 5678")
+            repeat(5) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                compose.mainClock.advanceTimeBy(100)
+            }
             runBlocking { check(!core.linkWatch("1234 5678")) }
         }
         settle("watch", name)
@@ -186,6 +192,7 @@ class WatchHealthScreensTest {
             fill == Fill.MANY -> {
                 if (v.rows.size != 2) fail("$name: ${v.rows.size} rows for two watches")
                 if (v.problem != WatchLinkRules.WRONG_CODE) fail("$name: a wrong code says \"${v.problem}\"")
+                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(WatchLinkRules.WRONG_CODE))
                 // The newest first.
                 if (v.rows.first().title != WatchLinkRules.DEFAULT_NAME) fail("$name: the older watch is first: ${v.rows}")
             }

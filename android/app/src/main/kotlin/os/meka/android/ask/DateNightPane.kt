@@ -112,7 +112,7 @@ fun DateNightPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 ChipLine {
                     DateNightRules.START_CHOICES.forEach { m ->
-                        Chip(LocalClock.formatMinute(m), v.startMin == m) { set(v.weekday, m, anchor(v.weekday)) }
+                        Chip(LocalClock.formatMinute(m), DateNightRules.startLit(v.on, v.startMin, m)) { set(v.weekday, m, anchor(v.weekday)) }
                     }
                 }
             }

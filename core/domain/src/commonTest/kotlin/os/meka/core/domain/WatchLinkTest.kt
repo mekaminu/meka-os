@@ -104,4 +104,16 @@ class WatchLinkTest {
         assertTrue(WatchLinkRules.linkedId("watch-a") != WatchLinkRules.unlinkedId("watch-a"))
         assertEquals("Unlinked Galaxy Watch", WatchLinkRules.unlinkedSummary("Galaxy Watch"))
     }
+
+    @Test
+    fun aWrongCodeIsSaidOnlyUnderACode() {
+        // Walk-through A11: "That code doesn't match" sat under an empty field.
+        assertNull(WatchLinkRules.problemShown(WatchLinkRules.WRONG_CODE, ""))
+        assertNull(WatchLinkRules.problemShown(WatchLinkRules.WRONG_CODE, "  "))
+        assertEquals(WatchLinkRules.WRONG_CODE, WatchLinkRules.problemShown(WatchLinkRules.WRONG_CODE, "1234 5678"))
+        // Other problems aren't about the typed code: they stay.
+        assertEquals(WatchLinkRules.NOT_CONNECTED, WatchLinkRules.problemShown(WatchLinkRules.NOT_CONNECTED, ""))
+        assertEquals(WatchLinkRules.TOO_MANY, WatchLinkRules.problemShown(WatchLinkRules.TOO_MANY, ""))
+        assertNull(WatchLinkRules.problemShown(null, "1234"))
+    }
 }

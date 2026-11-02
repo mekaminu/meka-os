@@ -93,6 +93,9 @@ object DateNightRules {
     const val SHOWN = 4
 
     val START_CHOICES: List<Int> = listOf(18 * 60, 18 * 60 + 30, 19 * 60, 19 * 60 + 30, 20 * 60)
+
+    /** A start time's chip is lit only while date night is on: Off lights nothing (walk-through A11). */
+    fun startLit(on: Boolean, startMin: Int, choice: Int): Boolean = on && startMin == choice
     val WEEKDAY_CHOICES: List<String> = LocalClock.DAY_SHORT
 
     const val OFF_LINE = "Off · pick an evening and Navilife keeps it clear every two weeks"

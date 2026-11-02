@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +42,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -214,8 +217,10 @@ internal fun SettingChip(label: String, on: Boolean, spoken: String, touch: Bool
         ) {
             Text(
                 label, style = MekaType.caption, color = fg, maxLines = 1,
+                // Drawn at the Done pill's 32 dp (walk-through A11: these read 20–23 dp tall), the word centred.
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+                    .heightIn(min = 32.dp).wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = MekaSpace.m),
             )
         }
         return

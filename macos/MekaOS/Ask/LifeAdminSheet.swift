@@ -35,7 +35,7 @@ struct LifeAdminSheet: View {
             .staggeredAppear(3)
             HStack(spacing: MekaSpace.xs) {
                 ForEach(rules.START_CHOICES.map { $0.int32Value }, id: \.self) { m in
-                    chip(LocalClock.companion.formatMinute(m: m), lit: v.startMin == m) {
+                    chip(LocalClock.companion.formatMinute(m: m), lit: LifeAdminRules.shared.startLit(on: v.on, startMin: v.startMin, choice: m)) {
                         model.setLifeAdmin(weekday: v.weekday, startMin: m)
                     }
                 }

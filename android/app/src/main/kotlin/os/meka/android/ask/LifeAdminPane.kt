@@ -116,7 +116,7 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 ChipLine {
                     LifeAdminRules.START_CHOICES.forEach { m ->
-                        LifeAdminChip(LocalClock.formatMinute(m), v.startMin == m) { set(v.weekday, m) }
+                        LifeAdminChip(LocalClock.formatMinute(m), LifeAdminRules.startLit(v.on, v.startMin, m)) { set(v.weekday, m) }
                     }
                 }
             }

@@ -38,7 +38,7 @@ struct WatchSheet: View {
                         .disabled(model.watchLinkBusy || typed.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .staggeredAppear(2)
-                if let problem = view.problem {
+                if let problem = WatchLinkRules.shared.problemShown(problem: view.problem, typed: typed) {
                     Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.accent)
                         .fixedSize(horizontal: false, vertical: true)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))

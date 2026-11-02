@@ -95,6 +95,11 @@ object SwipeHint {
         prefs.edit().putBoolean(KEY, true).apply()
         return true
     }
+
+    /** As if the hint had played: screenshot tests call it so a shot never catches a row mid-nudge (walk-through A11). */
+    fun markShown(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, true).commit()
+    }
 }
 
 /** What the undo bar is offering: "Hidden from your day" with Undo. */

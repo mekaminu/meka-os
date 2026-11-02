@@ -85,6 +85,13 @@ object WatchLinkRules {
         )
     }
 
+    /**
+     * The line under the code field: a wrong code is said only while the field still holds a code, so it never sits
+     * under an empty field (walk-through A11); every other problem shows as it is.
+     */
+    fun problemShown(problem: String?, typed: String): String? =
+        if (problem == WRONG_CODE && typed.isBlank()) null else problem
+
     /** The server's refusal (`code` · `wait` · `revoked`) in words. */
     fun refusal(reason: String?): String = when (reason) {
         "wait" -> TOO_MANY

@@ -395,8 +395,9 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
                 Text(lv.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Text(LoneWordGlue.kept(lv.intro), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off", touch = true) { a.setLive(false) }
+                    // On · Off, the same order as Face and Memory (walk-through A11).
                     SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on", touch = true) { a.setLive(true) }
+                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off", touch = true) { a.setLive(false) }
                 }
                 Crossfade(lv.line to lv.meterLine, animationSpec = MekaMotion.appear(reduced), label = "live-line") { (line, meter) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {

@@ -113,6 +113,9 @@ object LifeAdminRules {
     const val TODAY_FROM_MIN = 7 * 60
 
     val START_CHOICES: List<Int> = listOf(9 * 60, 10 * 60, 13 * 60, 18 * 60, 19 * 60, 20 * 60)
+
+    /** A start time's chip is lit only while the hour is on: Off lights nothing (walk-through A11). */
+    fun startLit(on: Boolean, startMin: Int, choice: Int): Boolean = on && startMin == choice
     val WEEKDAY_CHOICES: List<String> = LocalClock.DAY_SHORT
 
     const val OFF_LINE = "Off · pick a day and Navilife books one hour a week for the small admin jobs"

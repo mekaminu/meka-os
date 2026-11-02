@@ -56,8 +56,9 @@ struct VoiceSheet: View {
             Text(lv.intro).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             Picker(lv.title, selection: Binding(get: { lv.on }, set: { model.setLiveOn($0) })) {
-                Text(LiveTalkRules.shared.OFF_LABEL).tag(false)
+                // On · Off, the same order as Face and Memory (walk-through A11).
                 Text(LiveTalkRules.shared.ON_LABEL).tag(true)
+                Text(LiveTalkRules.shared.OFF_LABEL).tag(false)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
