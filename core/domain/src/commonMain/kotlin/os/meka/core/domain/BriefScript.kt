@@ -151,6 +151,8 @@ data class BriefStory(
     val trading: String? = null,
     /** Protected time, slice 5: "Your evening is protected from 7 o'clock." ([ProtectedRules.briefSentence]), after the kind of day. */
     val protectedTime: String? = null,
+    /** Car completeness slice 2: "Before you drive: MOT ran out Sat 31 Oct, book one before you drive." ([CarLapseRules.spoken]), straight after the kind of day, weekends too. */
+    val carLapse: String? = null,
     /** Week board slice 5: "Two carried over from earlier days and five planned, about 4 hours in all." ([DayPlan.sentence]), before the focus. */
     val plan: String? = null,
     /** Week board item (10): "Thursday is stacking up: …" ([DayPressure.spoken]), after the plan. */
@@ -198,6 +200,7 @@ object BriefScriptRules {
         val out = mutableListOf<String>()
         out += CallNameRules.opening(v.greeting, name)
         dayKind(v)?.let { out += it }
+        s.carLapse?.let { out += it }
         s.protectedTime?.let { out += it }
 
         // Getting there and the weather.

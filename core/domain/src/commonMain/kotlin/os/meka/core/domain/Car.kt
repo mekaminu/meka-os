@@ -588,3 +588,44 @@ object CarAskRules {
         return (listOf(head) + view.lapses + listOfNotNull(dvla, view.historyLine) + rows).take(ASK_LINES)
     }
 }
+
+/**
+ * Car on autopilot, completeness slice 2 (2026-11-02; non-AI, pure): **the morning brief and the week ahead lead with a
+ * date that ran out** ([CarView.lapses]: an MOT, car tax or insurance passed with none to come, or the DVLA's Untaxed /
+ * SORN). With more than one car each line names its car ("The Golf · MOT ran out …"); with one car it doesn't. Read
+ * aloud too, so it's heard before he drives. Nothing here leaves the device.
+ */
+object CarLapseRules {
+    /** Every car's lapses in order (first car first), each named by its car when there are two or more. */
+    fun lines(cars: CarsView): List<String> =
+        cars.cars.flatMap { v -> v.lapses.map { if (cars.count > 1) "${v.title} · $it" else it } }
+
+    /** The brief's lit line under the date: the first thing that ran out and "· 1 more"; null while all is well. */
+    fun briefLine(cars: CarsView): String? = lines(cars).takeIf { it.isNotEmpty() }?.let(CarRules::lapsedSummary)
+
+    /** The week ahead's line under the summary: "Car · MOT ran out Sat 31 Oct · book one before you drive"; null with none. */
+    fun weekLine(lapses: List<String>): String? = lapses.takeIf { it.isNotEmpty() }?.let { "Car · " + CarRules.lapsedSummary(it) }
+
+    /**
+     * Said straight after the kind of day, every one of them (at most [MAX_SPOKEN]): "Before you drive: MOT ran out
+     * Sat 31 Oct, book one before you drive." Null with none.
+     */
+    fun spoken(lapses: List<String>): String? {
+        if (lapses.isEmpty()) return null
+        val said = lapses.take(MAX_SPOKEN).joinToString("; ") { it.replace(" · ", ", ") }
+        return "Before you drive: $said."
+    }
+
+    /** The week ahead read aloud: "Car: MOT ran out Sat 31 Oct, book one before you drive." */
+    fun weekSpoken(line: String): String = line.replaceFirst("Car · ", "Car: ").replace(" · ", ", ") + "."
+
+    /**
+     * The radar items the brief's car line already says (a car's MOT, tax or insurance before [today]), so "On your
+     * lists" doesn't say them again.
+     */
+    fun saidIds(items: List<RenewalItem>, today: Long): Set<String> =
+        items.filter { i -> i.dueDay < today && CarRules.LAPSES.any { id -> CarRules.preset(id)?.let { CarRules.matches(it, i) } == true } }
+            .map { it.id }.toSet()
+
+    const val MAX_SPOKEN = 3
+}

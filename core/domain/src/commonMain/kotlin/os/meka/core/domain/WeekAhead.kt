@@ -88,6 +88,8 @@ data class WeekAheadView(
     val balance: String? = null,
     /** Call assistant completeness: "Calls · your call assistant took 4 in the last 7 days · 1 urgent" ([CallWeekRules.line]); null with none. */
     val calls: String? = null,
+    /** Car completeness slice 2: "Car · MOT ran out Sat 31 Oct · book one before you drive" lit ([CarLapseRules.weekLine]); null while all is well. */
+    val car: String? = null,
 ) {
     /**
      * This view with its balance line, read out straight after the summary ("Your week ahead. … Balance as planned,
@@ -167,6 +169,8 @@ data class WeekAheadInputs(
     val protectedSetting: ProtectedSetting? = null,
     /** Call assistant completeness: the held calls (synced), for the week's "calls taken" line ([CallWeekRules]). */
     val calls: List<HeldCall> = emptyList(),
+    /** Car completeness slice 2: what has run out on each car ([CarLapseRules.lines]), said first. */
+    val carLapses: List<String> = emptyList(),
 )
 
 /**
@@ -468,8 +472,10 @@ object WeekAheadRules {
         val goals = goalPick(inputs.goals, ws)
         val mail = MailWeekRules.line(inputs.mail, inputs.waiting, dayList, nowMs, title(today))
         val calls = CallWeekRules.line(inputs.calls, nowMs, cal)
+        val car = CarLapseRules.weekLine(inputs.carLapses)
         val spoken = buildList {
             add("Your week ahead. ${summary.replace(" · ", ", ")}.")
+            car?.let { add(CarLapseRules.weekSpoken(it)) }
             mail?.let { add(MailWeekRules.spokenLine(it)) }
             calls?.let { add(CallWeekRules.spoken(it)) }
             ProtectedRules.weekSpoken(protectedLine, inputs.protectedSetting)?.let { add(it) }
@@ -478,7 +484,7 @@ object WeekAheadRules {
             spokenGoals(goals).takeIf { it.isNotEmpty() }?.let { add(it) }
         }.joinToString(" ")
         return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals, mail,
-            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs), protectedLine, calls = calls)
+            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs), protectedLine, calls = calls, car = car)
     }
 
     // ---- Slice 2: the time setting ----

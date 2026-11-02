@@ -48,6 +48,14 @@ struct WeekAheadSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
+            // Car completeness slice 2: "Car · MOT ran out Sat 31 Oct · book one before you drive", in red, first.
+            if let car = v.car {
+                Text(LoneWordGlue.shared.kept(line: car)).font(MekaType.caption).foregroundStyle(palette.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: car)
+                    .staggeredAppear(1)
+            }
             // Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week".
             if let mail = v.mail {
                 Text(LoneWordGlue.shared.kept(line: mail)).font(MekaType.caption).foregroundStyle(palette.textSecondary)

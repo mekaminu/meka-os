@@ -86,6 +86,11 @@ data class MorningBriefView(
     val story: BriefStory = BriefStory.EMPTY,
     /** Protected time, slice 5: "Protected from 19:00 tonight" under the date ([ProtectedRules.briefLine]); null with none. */
     val protectedLine: String? = null,
+    /**
+     * Car completeness slice 2: "MOT ran out Sat 31 Oct · book one before you drive" lit under the date
+     * ([CarLapseRules.briefLine]); null while every car is legal.
+     */
+    val carLine: String? = null,
     /** Week board slice 5: "3 carried over · 5 planned · about 4h" under the day's summary ([BoardTodayRules.plan]); null with nothing to do. */
     val planLine: String? = null,
     /** Week board item (10): "Thursday is stacking up: Trip form, Council tax and Gym" within two days; null otherwise. */

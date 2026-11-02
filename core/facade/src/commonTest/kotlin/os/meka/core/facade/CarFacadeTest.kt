@@ -27,6 +27,32 @@ class CarFacadeTest {
         secureRandom = Random(device.hashCode()), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
+    /** Car completeness slice 2: a run-out MOT leads the brief and the week ahead on both apps, and isn't said twice. */
+    @Test
+    fun aRunOutMotLeadsTheBriefAndTheWeekAheadOnBothApps() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.setCarRegistration("ab12 cde"))
+        assertNull(fold.briefView.value.carLine)
+        assertNull(fold.weekAheadView.value.car)
+        val mot = fold.addCarDate("mot")!!
+        fold.setRenewalDue(mot, fold.todayEpochDay() - 2) // Sat 10 Oct
+        fold.syncNow(); mac.syncNow()
+        val line = "MOT ran out Sat 10 Oct · book one before you drive"
+        for (c in listOf(fold, mac)) {
+            assertEquals(line, c.briefView.value.carLine)
+            assertEquals("Car · $line", c.weekAheadView.value.car)
+            assertTrue(c.briefView.value.story.carLapse!!.startsWith("Before you drive: MOT ran out Sat 10 Oct"))
+            assertTrue(c.briefView.value.attention.none { it.id == "r-$mot" })
+            assertTrue(c.weekAheadView.value.spoken.contains("Car: MOT ran out Sat 10 Oct, book one before you drive."))
+        }
+        // Renewed: all gone again.
+        fold.setRenewalDue(mot, fold.todayEpochDay() + 300)
+        fold.syncNow(); mac.syncNow()
+        assertNull(mac.briefView.value.carLine)
+        assertNull(mac.weekAheadView.value.car)
+    }
+
     @Test
     fun withTwoCarsTheTileListsEachOnBothApps() = runTest {
         val fold = core("android")

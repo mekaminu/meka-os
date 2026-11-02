@@ -28,6 +28,10 @@ struct BriefSheet: View {
                 Text(LoneWordGlue.shared.kept(line: [v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · ")))
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)
+                // Car completeness slice 2: "MOT ran out Sat 31 Oct · book one before you drive", in red under the date.
+                if let line = v.carLine {
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.critical).staggeredAppear(0)
+                }
                 // Protected time, slice 5: "Protected from 19:00 tonight" / "Protected all day · tasks wait for Mon 19 Oct".
                 if let line = v.protectedLine {
                     Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)

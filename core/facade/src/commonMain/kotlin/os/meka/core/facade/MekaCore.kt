@@ -13332,6 +13332,9 @@ class MekaCore(
         val occasionItems = gifts.items()
         // Travel mode, slice 1: the trips with their bookings.
         val tripItems = trips.items()
+        // Car completeness slice 2: each car's view now (the brief and the week ahead lead with what ran out).
+        val carsNow = os.meka.core.domain.CarRules.views(car.cars(), listsNow.renewals.all, carCheck(), todayDay, cal)
+        val carLapses = os.meka.core.domain.CarLapseRules.lines(carsNow)
         // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
         val weekAheadInputs = os.meka.core.domain.WeekAheadInputs(
             // Appointment nudges, slice 2c: a booked visit is said once, as its Google event when it has one.
@@ -13358,6 +13361,8 @@ class MekaCore(
             protectedSetting = protectedTime.setting(),
             // Call assistant completeness: the week's "calls taken" line (counts only).
             calls = held.calls(),
+            // Car completeness slice 2: an MOT, tax or insurance that ran out, said first.
+            carLapses = carLapses,
         )
         // Taps feel instant, slice 7: the week ahead is kept while everything it reads and the minute are unchanged.
         val weekAheadNow = viewMemo.keep("Week ahead", listOf(weekAheadInputs, minuteNow(), timeZone())) {
@@ -13602,7 +13607,7 @@ class MekaCore(
             listOf(
                 all, dayEvents, allEvents, marks, workState, notifySettings, _lists.value, _goals.value, _fasting.value, today,
                 forecast, placesLine, schoolToday, holidays, workHolidays, leaveDays, leaveHours, office, briefToday, briefNeedsYou, briefMail,
-                minuteNow(), timeZone(),
+                carLapses, minuteNow(), timeZone(),
             ),
         ) {
             brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
@@ -13643,7 +13648,15 @@ class MekaCore(
                             trading = os.meka.core.domain.TradingTodayRules.briefSentence(t.trading, it.story.length),
                             // Protected time, slice 5: "Your evening is protected from 7 o'clock."
                             protectedTime = os.meka.core.domain.ProtectedRules.briefSentence(protectedTime.setting(), todayDay, workState.schedule, holidays),
+                            // Car completeness slice 2: "Before you drive: MOT ran out …", weekends too.
+                            carLapse = os.meka.core.domain.CarLapseRules.spoken(carLapses),
                         ),
+                        // Car completeness slice 2: the lit line under the date, and "On your lists" no longer repeats it.
+                        carLine = os.meka.core.domain.CarLapseRules.briefLine(carsNow),
+                        attention = if (carLapses.isEmpty()) it.attention else {
+                            val said = os.meka.core.domain.CarLapseRules.saidIds(_lists.value.renewals.all, todayDay).map { id -> "r-$id" }.toSet()
+                            it.attention.filterNot { a -> a.id in said }
+                        },
                         // Protected time, slice 5: "Protected from 19:00 tonight" under the date.
                         protectedLine = os.meka.core.domain.ProtectedRules.briefLine(protectedTime.setting(), todayDay, workState.schedule, holidays),
                     )

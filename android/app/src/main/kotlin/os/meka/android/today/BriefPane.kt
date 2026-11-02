@@ -166,6 +166,8 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                     modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.BRIEF)))
                 Text(LoneWordGlue.kept(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · ")), style = MekaType.itemMeta,
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                // Car completeness slice 2: "MOT ran out Sat 31 Oct · book one before you drive", in red under the date.
+                v.carLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.critical, modifier = Modifier.padding(top = MekaSpace.xxs)) }
                 // Protected time, slice 5: "Protected from 19:00 tonight" / "Protected all day · tasks wait for Mon 19 Oct".
                 v.protectedLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".

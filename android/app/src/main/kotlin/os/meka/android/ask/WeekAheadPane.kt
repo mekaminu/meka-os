@@ -138,6 +138,14 @@ fun WeekAheadPane(
                 Text(LoneWordGlue.measured(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
+        // Car completeness slice 2: "Car · MOT ran out Sat 31 Oct · book one before you drive", in red, first (cross-fades as it changes).
+        v.car?.let { car ->
+            item(key = "car") {
+                Crossfade(car, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-car", modifier = Modifier.animateItem()) { c ->
+                    Text(LoneWordGlue.measured(c), style = MekaType.caption, color = Meka.colors.critical, modifier = Modifier.appear(rememberAppearance(1)))
+                }
+            }
+        }
         // Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week" (cross-fades as it changes).
         v.mail?.let { mail ->
             item(key = "mail") {

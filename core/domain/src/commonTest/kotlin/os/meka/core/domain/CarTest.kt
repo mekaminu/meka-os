@@ -346,4 +346,39 @@ class CarTest {
         assertEquals("Car tax ran out Tue 10 Nov · tax it before you drive", lines[1])
         assertTrue(lines.size <= CarAskRules.ASK_LINES)
     }
+
+    /** Car completeness slice 2: the brief's and the week ahead's lines, each car named once there are two. */
+    @Test
+    fun theBriefAndTheWeekAheadSayWhatRanOutNamingTheCarWhenThereAreTwo() {
+        val mot = "MOT ran out Sat 31 Oct · book one before you drive"
+        val tax = "Untaxed · tax it before you drive"
+        val one = CarsView(listOf(CarView.EMPTY.copy(lapses = listOf(mot, tax))), true)
+        assertEquals(listOf(mot, tax), CarLapseRules.lines(one))
+        assertEquals("$mot · 1 more", CarLapseRules.briefLine(one))
+        assertEquals("Car · $mot · 1 more", CarLapseRules.weekLine(CarLapseRules.lines(one)))
+        assertEquals("Before you drive: MOT ran out Sat 31 Oct, book one before you drive; Untaxed, tax it before you drive.",
+            CarLapseRules.spoken(CarLapseRules.lines(one)))
+        assertEquals("Car: MOT ran out Sat 31 Oct, book one before you drive.", CarLapseRules.weekSpoken("Car · $mot"))
+
+        val two = CarsView(listOf(CarView.EMPTY.copy(title = "The Golf"), CarView.EMPTY.copy(title = "The van", lapses = listOf(tax))), true)
+        assertEquals(listOf("The van · $tax"), CarLapseRules.lines(two))
+        assertEquals("The van · $tax", CarLapseRules.briefLine(two))
+
+        val fine = CarsView(listOf(CarView.EMPTY), true)
+        assertNull(CarLapseRules.briefLine(fine))
+        assertNull(CarLapseRules.weekLine(CarLapseRules.lines(fine)))
+        assertNull(CarLapseRules.spoken(emptyList()))
+    }
+
+    /** The radar items the car line already says: a car's MOT, tax or insurance in the past, not its service or home insurance. */
+    @Test
+    fun theBriefDoesntSayARunOutDateTwice() {
+        at(2026, 11, 2)
+        val mot = r.addCarDate("mot", today(), "AB12CDE")
+        r.setDue(mot, today() - 2)
+        val service = r.addCarDate("service", today(), "AB12CDE")
+        r.setDue(service, today() - 2)
+        r.add("Home insurance", ObligationKind.INSURANCE, today() - 1, RenewalRepeat.YEARLY)
+        assertEquals(setOf(mot), CarLapseRules.saidIds(r.items(), today()))
+    }
 }

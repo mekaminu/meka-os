@@ -402,6 +402,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         for d in v.days { for l in d.lines { XCTAssertFalse(l.text.isEmpty) } }
         // Call assistant completeness: no calls taken yet, so no Calls line.
         XCTAssertNil(v.calls)
+        // Car completeness slice 2: nothing has run out, so no Car line.
+        XCTAssertNil(v.car)
         XCTAssertEqual(NoticeSource.weekAhead.defaultTier, NoticeTier.headsUp)
         XCTAssertEqual(NotifyRules.shared.targetName(t: NoticeTarget.weekAhead), "WEEK_AHEAD")
         // Sunday 11 Oct 2026 looks at the week from Monday 12 Oct.
