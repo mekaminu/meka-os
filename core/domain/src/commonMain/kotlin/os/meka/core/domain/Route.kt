@@ -505,13 +505,40 @@ object RouteRules {
             fun say(t: String) = t.replace(" · ", ", ").replace(" — or ", ". Or ").replace(" — ", ". ")
             return RouteLine(text, lit = lit, spoken = "Trains: " + say(text), brief = say(name(r.firstId, r) + " · " + rest))
         }
-        if (legs.isEmpty()) return null
-        if (legs.all { level(it.second) == LineLevel.GOOD }) {
-            val text = legs.joinToString(" · ") { name(it.first, r) } + " · good service"
-            return RouteLine(text, lit = false, spoken = "Trains: " + text.replace(" · ", ", "))
+        // Places completeness: why there are no live times, when they should be there (the rail key and his home station).
+        val why = liveMissing(s.board)
+        val whyText = why?.let { " · ${it.first}" }.orEmpty()
+        val whySaid = why?.let { ". ${it.second}" }.orEmpty()
+        if (legs.isEmpty()) {
+            why ?: return null
+            val text = name(r.firstId, r) + whyText
+            return RouteLine(text, lit = false, spoken = "Trains: " + name(r.firstId, r) + whySaid)
         }
-        val text = legs.joinToString(" · ") { (id, sev) -> part(id, sev, r) } + fallback
-        return RouteLine(text, lit = true, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — ", ". "))
+        if (legs.all { level(it.second) == LineLevel.GOOD }) {
+            val base = legs.joinToString(" · ") { name(it.first, r) } + " · good service"
+            return RouteLine(base + whyText, lit = false, spoken = "Trains: " + base.replace(" · ", ", ") + whySaid)
+        }
+        val base = legs.joinToString(" · ") { (id, sev) -> part(id, sev, r) } + fallback
+        return RouteLine(base + whyText, lit = true, spoken = "Trains: " + base.replace(" · ", ", ").replace(" — ", ". ") + whySaid)
+    }
+
+    /**
+     * Places completeness ("train cards say why there's no live data"): when his home station is in About you and the
+     * server's last read of the live board failed, a short reason for Today's line and the words Listen says for it.
+     * "no live times · check your station in About you" (a station National Rail doesn't know), "no live times · rail
+     * key refused", "no live times right now" (the feed didn't answer). Null when the board read fine, hasn't been read
+     * yet, or there's no home station (Today shows TfL's status as before). The server writes the state on every read
+     * (every few minutes on a weekday's commute), so it is current while Today's line shows.
+     */
+    fun liveMissing(b: TrainBoard): Pair<String, String>? {
+        Household.names.homeStation ?: return null
+        return when (b.state) {
+            TrainBoard.NO_STATION -> "no live times · check your station in About you" to
+                "Live train times need your station's name as National Rail has it, in About you."
+            TrainBoard.KEY -> "no live times · rail key refused" to "Live train times are off: National Rail refused the rail key."
+            TrainBoard.ERROR -> "no live times right now" to "Live train times aren't coming through right now."
+            else -> null
+        }
     }
 
     /** "07:12 on time, platform 3, arrives 07:41". */
@@ -523,7 +550,8 @@ object RouteRules {
      * The status as Ask MEKA hears it ("are the trains OK?"): one line, any time it is fresh. "train lines on Meka's
      * route (TfL status, checked 08:30): South Rail good service; North Rail good service; Metro minor delays". With
      * a fresh live board also "next trains from Oakfield to Oakfield Junction (live departures, checked 07:05): 07:12
-     * on time, platform 3, arrives 07:41; …". Empty when stale, unknown or without a route.
+     * on time, platform 3, arrives 07:41; …". When the last read of the live board failed, why ([liveMissing]). Empty when
+     * stale, unknown or without a route.
      */
     fun askLines(s: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar, office: OfficeWindow? = null): List<String> {
         val r = route() ?: return emptyList()
@@ -536,6 +564,7 @@ object RouteRules {
             }
         }
         val b = s.board
+        liveMissing(b)?.let { out += "live departures for Meka's trains: " + it.second.removeSuffix(".").replaceFirstChar { c -> c.lowercase() } }
         if (boardFresh(b, nowMs)) {
             val next = upcoming(b, nowMs, cal, n = TrainBoardCodec.MAX)
             val home = Household.names.homeStation ?: "his home station"

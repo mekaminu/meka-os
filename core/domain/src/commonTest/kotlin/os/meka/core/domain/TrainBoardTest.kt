@@ -84,13 +84,52 @@ class TrainBoardTest {
         assertEquals("South Rail · Metro line · good service", RouteRules.todayLine(snap(live(dir = TrainBoard.PM), tfl, at(7)), office, at(7, 10), cal)!!.text)
         assertEquals("South Rail · Metro line · good service", RouteRules.todayLine(snap(live(checked = at(6, 35)), tfl, at(7)), office, at(7, 1), cal)!!.text)
         assertNull(RouteRules.todayLine(snap(live(checked = at(6, 35))), office, at(7, 1), cal))
-        // A board whose state isn't ok isn't shown.
-        assertNull(RouteRules.todayLine(snap(live().copy(state = TrainBoard.ERROR)), office, at(7, 10), cal))
+        // A board whose state isn't ok isn't shown; the line says why there are no live times.
+        assertEquals("South Rail · no live times right now", RouteRules.todayLine(snap(live().copy(state = TrainBoard.ERROR)), office, at(7, 10), cal)!!.text)
         // Outside the commute: nothing.
         assertNull(RouteRules.todayLine(snap(live()), office, at(11), cal))
         // The evening's board on the way home.
         val pm = live(dir = TrainBoard.PM, checked = at(17, 5), list = listOf(TrainDeparture(17 * 60 + 20, 17 * 60 + 20)))
         assertEquals("South Rail · 17:20 on time", RouteRules.todayLine(snap(pm), office, at(17, 10), cal)!!.text)
+    }
+
+    @Test
+    fun todaySaysWhyThereAreNoLiveTimes() {
+        val tfl = listOf(LineState(InventedRoute.FIRST, 10), LineState(InventedRoute.ONWARD, 10))
+        // The feed didn't answer: TfL's status, then why; not lit for that alone.
+        val down = RouteRules.todayLine(snap(live().copy(state = TrainBoard.ERROR), tfl, at(7)), office, at(7, 10), cal)!!
+        assertEquals("South Rail · Metro line · good service · no live times right now", down.text)
+        assertTrue(!down.lit)
+        assertEquals("Trains: South Rail, Metro line, good service. Live train times aren't coming through right now.", down.spoken)
+        assertEquals("South Rail, Metro line, good service. Live train times aren't coming through right now.", down.brief)
+        // A station National Rail doesn't know, and a refused key.
+        assertEquals("South Rail · Metro line · good service · no live times · check your station in About you",
+            RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.NO_STATION), tfl, at(7)), office, at(7, 10), cal)!!.text)
+        assertEquals("South Rail · Metro line · good service · no live times · rail key refused",
+            RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.KEY), tfl, at(7)), office, at(7, 10), cal)!!.text)
+        // Trouble on the line stays lit, with why after it.
+        val bad = listOf(LineState(InventedRoute.FIRST, 6), LineState(InventedRoute.ONWARD, 10))
+        val both = RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.ERROR), bad, at(7)), office, at(7, 10), cal)!!
+        assertEquals("South Rail severe delays · Metro line good service · no live times right now", both.text)
+        assertTrue(both.lit)
+        // Without TfL's status, why alone.
+        val alone = RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.ERROR)), office, at(7, 10), cal)!!
+        assertEquals("South Rail · no live times right now", alone.text)
+        assertEquals("Trains: South Rail. Live train times aren't coming through right now.", alone.spoken)
+        // Not read yet, read fine, outside the commute, or no home station: nothing new.
+        assertNull(RouteRules.todayLine(snap(TrainBoard.EMPTY), office, at(7, 10), cal))
+        assertNull(RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.ERROR)), office, at(11), cal))
+        assertEquals("South Rail · Metro line · good service", RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.OK), tfl, at(7)), office, at(7, 10), cal)!!.text)
+        Household.set(Household.names.copy(homeStation = null))
+        assertEquals("South Rail · Metro line · good service", RouteRules.todayLine(snap(TrainBoard(state = TrainBoard.ERROR), tfl, at(7)), office, at(7, 10), cal)!!.text)
+        assertNull(RouteRules.liveMissing(TrainBoard(state = TrainBoard.KEY)))
+    }
+
+    @Test
+    fun askHearsWhyThereAreNoLiveTimes() {
+        assertEquals(listOf("live departures for Meka's trains: live train times aren't coming through right now"),
+            RouteRules.askLines(snap(TrainBoard(state = TrainBoard.ERROR)), at(7, 10), cal))
+        assertTrue(RouteRules.askLines(snap(TrainBoard.EMPTY), at(7, 10), cal).isEmpty())
     }
 
     @Test
