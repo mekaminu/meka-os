@@ -66,14 +66,18 @@ import os.meka.core.facade.MekaCore
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PlanWeekPane(core: MekaCore, onClose: () -> Unit, onAccepted: (String) -> Unit) {
+fun PlanWeekPane(
+    core: MekaCore, onClose: () -> Unit, onAccepted: (String) -> Unit,
+    /** Ada plans with you, part 1: Change on Obi's draft opens on the Suggested spread with the draft's days. */
+    initial: WeekPlan? = null,
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    var plan by remember { mutableStateOf<WeekPlan?>(null) }
-    var step by remember { mutableIntStateOf(0) }
+    var plan by remember { mutableStateOf(initial) }
+    var step by remember { mutableIntStateOf(if (initial != null) PlanWeekRules.STEPS.size - 1 else 0) }
     var forward by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { plan = runCatching { core.planWeek() }.getOrNull() }
+    LaunchedEffect(Unit) { if (plan == null) plan = runCatching { core.planWeek() }.getOrNull() }
     BackHandler { if (step > 0) { forward = false; step-- } else onClose() }
 
     Column(Modifier.fillMaxSize().padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l)) {
@@ -136,6 +140,8 @@ fun PlanWeekPane(core: MekaCore, onClose: () -> Unit, onAccepted: (String) -> Un
                             haptics.light()
                             scope.launch {
                                 val line = runCatching { core.acceptWeekPlan(p) }.getOrNull()
+                                // Accepted here, Obi's draft on the Board has done its job.
+                                core.dropWeekDraft()
                                 onClose()
                                 if (line != null) onAccepted(line)
                             }

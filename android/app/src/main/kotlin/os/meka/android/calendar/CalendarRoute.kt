@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -135,13 +136,30 @@ fun CalendarRoute(core: MekaCore) {
     // Item (6) part 2: "plan my week" said to Obi, or Plan now on Sunday's Needs you card, lands here with the pane up.
     val planApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
     val askedToPlan = planApp?.openPlanWeek?.collectAsState()?.value ?: false
+    // Ada plans with you, part 1: Obi drafts the week on the Board as faint cards (Keep all · Change · Start over); a
+    // week with nothing to place opens the four steps as before. Change opens them on the spread with the draft's days.
+    var planFrom by remember { mutableStateOf<os.meka.core.domain.WeekPlan?>(null) }
+    val draftScope = rememberCoroutineScope()
+    val draftWeek: () -> Unit = {
+        draftScope.launch {
+            if (runCatching { core.draftWeek() }.getOrNull() == null) { planFrom = null; planning = true }
+        }
+    }
     LaunchedEffect(askedToPlan) {
-        if (askedToPlan) { board = true; planning = true; planApp?.openPlanWeek?.value = false }
+        if (askedToPlan) { board = true; planApp?.openPlanWeek?.value = false; draftWeek() }
     }
     Box(Modifier.fillMaxSize()) {
-        Agenda(core, v, handlers, showAgain, addHeader, board, { board = it }, undo, onPlanWeek = { planning = true }) { openEvent = it }
+        Agenda(
+            core, v, handlers, showAgain, addHeader, board, { board = it }, undo, onPlanWeek = draftWeek,
+            onPlanSteps = { plan -> planFrom = plan; planning = true },
+        ) { openEvent = it }
         MekaPane(visible = planning) {
-            PlanWeekPane(core, onClose = { planning = false }, onAccepted = { line -> undo.show(line) { core.undoWeekPlan() } })
+            key(planFrom) {
+                PlanWeekPane(
+                    core, onClose = { planning = false; planFrom = null },
+                    onAccepted = { line -> undo.show(line) { core.undoWeekPlan() } }, initial = planFrom,
+                )
+            }
         }
         MekaPane(visible = openEvent != null) {
             shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }, undo = undo) }
@@ -202,7 +220,8 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
 @Composable
 private fun Agenda(
     core: MekaCore, v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, add: AddHeader,
-    board: Boolean, onBoard: (Boolean) -> Unit, undo: EventUndo, onPlanWeek: () -> Unit, onEvent: (CalendarEvent) -> Unit,
+    board: Boolean, onBoard: (Boolean) -> Unit, undo: EventUndo, onPlanWeek: () -> Unit,
+    onPlanSteps: (os.meka.core.domain.WeekPlan?) -> Unit, onEvent: (CalendarEvent) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -248,6 +267,7 @@ private fun Agenda(
             WeekBoardView(
                 core, undo, onEvent, Modifier.weight(1f), onPlanWeek,
                 onAgenda = { onBoard(false) },
+                onPlanSteps = onPlanSteps,
                 onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
             )
             return@Column

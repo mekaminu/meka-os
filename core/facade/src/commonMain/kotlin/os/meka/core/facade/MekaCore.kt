@@ -3011,6 +3011,35 @@ class MekaCore(
         true
     }
     private var planUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
+
+    // ---- Ada plans with you, part 1: Obi drafts the week ----
+
+    private val _weekDraft = MutableStateFlow<os.meka.core.domain.WeekDraft?>(null)
+    /**
+     * Obi's draft of the week ([os.meka.core.domain.WeekDraftRules]), drawn on the Board as faint cards with Keep all ·
+     * Change · Start over; null when there is none. On this device only: nothing moves until [keepWeekDraft].
+     */
+    val weekDraft: StateFlow<os.meka.core.domain.WeekDraft?> = _weekDraft.asStateFlow()
+
+    /** Drafts the week from the suggested spread; null (and no draft) when there's nothing to place. */
+    suspend fun draftWeek(): os.meka.core.domain.WeekDraft? = onCore {
+        os.meka.core.domain.WeekDraftRules.draft(planWeekFrom(boardNow())).also { _weekDraft.value = it }
+    }
+
+    /** Keep all: every move in the draft at once (as Accept plan), the draft goes; [undoWeekPlan] puts them back. */
+    suspend fun keepWeekDraft(): String? {
+        val draft = _weekDraft.value ?: return null
+        val line = acceptWeekPlan(draft.plan)
+        _weekDraft.value = null
+        return line
+    }
+
+    /** Start over, or a plan accepted in the steps: the draft goes, nothing moves. */
+    fun dropWeekDraft() { _weekDraft.value = null }
+
+    /** The draft's faint cards on [day] of the live [board] (for Swift: a list, never a map). */
+    fun weekDraftGhosts(board: os.meka.core.domain.WeekBoard, day: Long): List<os.meka.core.domain.GhostCard> =
+        os.meka.core.domain.WeekDraftRules.ghostsOn(_weekDraft.value, board, day)
     /** The planned week before the last Accept (-1: none), put back by [undoWeekPlan]; null when nothing to put back. */
     private var planMarkUndo: Long? = null
 

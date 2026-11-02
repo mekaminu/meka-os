@@ -543,6 +543,41 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun obisDraftShowsGhostsKeepAllMovesEveryOneAndUndoPutsThemBack() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val mot = fold.addTask("Book MOT")
+        val gate = fold.addTask("Fix the gate")
+        fold.tick()
+        val monday = fold.weekBoard.value.weeks[0].startEpochDay
+        fold.parkOnBoard(mot, monday, 0)
+        fold.parkOnBoard(gate, monday, 1)
+
+        val draft = fold.draftWeek()!!
+        assertEquals(draft, fold.weekDraft.value)
+        val board = fold.weekBoard.value
+        val ghosts = board.days.flatMap { fold.weekDraftGhosts(board, it.epochDay) }
+        assertEquals(setOf(mot, gate), ghosts.map { it.taskId }.toSet())
+        // Nothing moves until Keep all; the draft is this device's only.
+        assertEquals(2, fold.weekBoard.value.weeks[0].lane.size)
+        assertNull(mac.weekDraft.value)
+
+        assertTrue(fold.keepWeekDraft()!!.startsWith("Week planned · 2 tasks"))
+        assertNull(fold.weekDraft.value)
+        assertTrue(fold.weekBoard.value.weeks[0].lane.isEmpty())
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.weekBoard.value.weeks[0].lane.isEmpty())
+        assertTrue(fold.undoWeekPlan())
+        assertEquals(setOf(mot, gate), fold.weekBoard.value.weeks[0].lane.map { it.id }.toSet())
+
+        // Start over: the draft goes, nothing moves.
+        fold.draftWeek()
+        fold.dropWeekDraft()
+        assertNull(fold.weekDraft.value)
+        assertNull(fold.keepWeekDraft())
+        assertEquals(2, fold.weekBoard.value.weeks[0].lane.size)
+    }
+
+    @Test
     fun sundaysPlanYourWeekCardOpensTheFlowAndLeavesEverywhereOncePlanned() = runTest {
         now = 1_792_953_000_000L // Sun 25 Oct 2026, 18:30 in London
         val fold = core("android"); val mac = core("mac")

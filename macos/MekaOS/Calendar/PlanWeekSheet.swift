@@ -62,7 +62,15 @@ struct PlanWeekSheet: View {
         }
         .padding(MekaSpace.l)
         .frame(width: 520)
-        .task { plan = await model.planWeek() }
+        .task {
+            // Ada plans with you, part 1: Change on Obi's draft opens on the Suggested spread with the draft's days.
+            if let from = model.planWeekFrom {
+                plan = from
+                step = steps.count - 1
+            } else {
+                plan = await model.planWeek()
+            }
+        }
     }
 
     private var stepTransition: AnyTransition {

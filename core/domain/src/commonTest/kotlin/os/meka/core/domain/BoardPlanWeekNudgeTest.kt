@@ -90,7 +90,7 @@ class BoardPlanWeekNudgeTest {
         assertEquals(TalkPlace.PLAN, TalkOpenRules.request("plan my day", TalkOpenRules.FOLD))
         assertEquals(TalkPlace.REFLECT, TalkOpenRules.request("reflect on my week", TalkOpenRules.FOLD))
         assertNull(TalkOpenRules.request("plan my week", TalkOpenRules.WATCH))
-        assertEquals(PlanWeekNudgeRules.OPENING, TalkOpenRules.opening(TalkPlace.PLAN_WEEK))
+        assertEquals(WeekDraftRules.OPENING, TalkOpenRules.opening(TalkPlace.PLAN_WEEK))
         assertEquals(PlanWeekNudgeRules.OPENED, TalkOpenRules.remembered(TalkPlace.PLAN_WEEK))
         assertEquals(TalkPlace.PLAN_WEEK, (TalkRules.reply("plan my week", 0, TalkOpenRules.FOLD) as? TalkReply.Open)?.place)
     }

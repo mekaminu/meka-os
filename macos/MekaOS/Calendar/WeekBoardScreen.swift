@@ -137,7 +137,8 @@ struct WeekBoardScreen: View {
             let w = board.weeks[min(week, board.weeks.count - 1)]
             model.addEventDay = week == 0 ? board.todayEpochDay : w.startEpochDay
         case FoldedMenuKind.planWeek:
-            model.showPlanWeek = true
+            // Ada plans with you, part 1: Obi drafts the week as faint cards (the steps when nothing is left to place).
+            model.draftWeek()
         case FoldedMenuKind.review:
             if board.offersReview && week == 0 { model.openReflectionFromTalk() }
         default:
@@ -178,6 +179,12 @@ struct WeekBoardScreen: View {
             }
             .buttonStyle(.borderless)
             .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
+
+            // Ada plans with you, part 1: Obi's draft bar while its faint cards are on the board.
+            if let draft = model.weekDraft, WeekDraftRules.shared.showing(draft: draft, board: board) {
+                WeekDraftBar(draft: draft, palette: palette)
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            }
 
             // Option B slice 2 (the layout; Meka's refinement 1): Monday to Friday as five columns across, the weekend
             // as two shorter columns underneath, then No day yet and Someday as lists, each a place to drop a card.
@@ -581,6 +588,11 @@ private struct BoardColumnView: View {
             ForEach(Array(day.cards.enumerated()), id: \.element.id) { i, card in
                 BoardCardView(card: card, spot: .day(day), board: board, palette: palette, compact: compact)
             }
+            // Ada plans with you, part 1: Obi's draft puts its faint cards after the day's own, until Keep all.
+            ForEach(model.weekDraftGhosts(board, epochDay: day.epochDay), id: \.taskId) { ghost in
+                GhostCardView(ghost: ghost, palette: palette)
+                    .transition(.opacity)
+            }
 
             if glow && day.openCards.isEmpty {
                 Text(WeekBoardRules.shared.DROP_HERE).font(MekaType.caption).foregroundStyle(palette.accent)
@@ -772,6 +784,63 @@ private enum CardSpot {
     var dayEpoch: Int64? {
         if case .day(let d) = self { return d.epochDay }
         return nil
+    }
+}
+
+/// Ada plans with you, part 1: Obi's draft bar, "✦ Obi's draft · 3 tasks over 3 days", what goes where under it, then
+/// Keep all (gold, ⌘↩), Change and Start over.
+private struct WeekDraftBar: View {
+    @Environment(CoreModel.self) private var model
+    let draft: WeekDraft
+    let palette: MekaPalette
+
+    var body: some View {
+        let rules = WeekDraftRules.shared
+        HStack(alignment: .center, spacing: MekaSpace.m) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(draft.line).font(MekaType.itemMeta).foregroundStyle(palette.accent).lineLimit(2)
+                Text(draft.said).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+            }
+            Spacer(minLength: MekaSpace.xs)
+            Button(rules.START_OVER) { model.startWeekOver() }.foregroundStyle(palette.textSecondary)
+            Button(rules.CHANGE) { model.changeWeekDraft() }.foregroundStyle(palette.textPrimary)
+            Button(rules.KEEP_ALL) { model.keepWeekDraft() }
+                .foregroundStyle(palette.accent)
+                .keyboardShortcut(.return, modifiers: [.command])
+        }
+        .font(MekaType.itemMeta)
+        .buttonStyle(.borderless)
+        .padding(.horizontal, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(draft.line)
+    }
+}
+
+/// One faint card of Obi's draft: ✦ and its duration on top, the title, a dashed gold edge.
+private struct GhostCardView: View {
+    let ghost: GhostCard
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack {
+                Text(WeekDraftRules.shared.MARK).font(MekaType.micro).foregroundStyle(palette.accent)
+                Spacer(minLength: 0)
+                Text(ghost.duration).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+            }
+            Text(ghost.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
+        }
+        .padding(MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(
+            RoundedRectangle(cornerRadius: MekaRadius.s)
+                .strokeBorder(palette.accent, style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+        )
+        .opacity(Double(WeekDraftRules.shared.GHOST_ALPHA))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ghost.spoken)
     }
 }
 

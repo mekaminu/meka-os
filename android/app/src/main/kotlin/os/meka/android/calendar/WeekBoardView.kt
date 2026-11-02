@@ -224,8 +224,11 @@ fun WeekBoardView(
     core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> Unit, modifier: Modifier = Modifier, onPlanWeek: (() -> Unit)? = null,
     /** Folded, the ⋯ menu's Agenda view and New event (the Calendar's own header steps aside on the cover screen). */
     onAgenda: (() -> Unit)? = null, onAddEvent: (() -> Unit)? = null,
+    /** Ada plans with you, part 1: Change (the draft's plan) or Start over (null) on Obi's draft opens the four steps. */
+    onPlanSteps: ((os.meka.core.domain.WeekPlan?) -> Unit)? = null,
 ) {
     val coreBoard by core.weekBoard.collectAsState()
+    val weekDraft by core.weekDraft.collectAsState()
     // Taps feel instant, slice 13: Done, Not done and a drop show in the next frame over the core's board
     // (InstantBoardRules); each tap is forgotten when its call returns, the core's board having caught up by then.
     var taps by remember { mutableStateOf(emptyMap<String, os.meka.core.domain.BoardTap>()) }
@@ -418,7 +421,9 @@ fun WeekBoardView(
             },
         )
     }
-    CompositionLocalProvider(LocalBoardArea provides onArea, LocalBoardHints provides hints) {
+    // Ada plans with you, part 1: Obi's draft of the week, its faint cards read from the live board.
+    val draftShown = remember(weekDraft, board) { weekDraft?.takeIf { os.meka.core.domain.WeekDraftRules.showing(it, board) } }
+    CompositionLocalProvider(LocalBoardArea provides onArea, LocalBoardHints provides hints, LocalWeekDraft provides draftShown) {
     BoxWithConstraints(
         modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }
             .graphicsLayer {
@@ -699,6 +704,25 @@ fun WeekBoardView(
                     // The shots beside the mockups: under Obi's card only the column's own top padding.
                     Spacer(Modifier.height(BoardBesideRules.FOLDED_SPACE_AFTER_OBI_DP.dp))
                 }
+            }
+            // Ada plans with you, part 1: Obi's draft bar over the days while its faint cards are on the board.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = draftShown != null,
+                enter = if (reduced) androidx.compose.animation.fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(spring(stiffness = 600f)) + androidx.compose.animation.fadeIn(),
+                exit = if (reduced) androidx.compose.animation.fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(spring(stiffness = 600f)) + androidx.compose.animation.fadeOut(),
+            ) {
+                val d = draftShown ?: weekDraft
+                if (d != null) WeekDraftBar(
+                    d, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.xs),
+                    onKeep = {
+                        haptics.light()
+                        scope.launch {
+                            runCatching { core.keepWeekDraft() }.getOrNull()?.let { line -> undo.show(line) { core.undoWeekPlan() } }
+                        }
+                    },
+                    onChange = { haptics.tick(); onPlanSteps?.invoke(d.plan) },
+                    onStartOver = { haptics.tick(); core.dropWeekDraft(); onPlanSteps?.invoke(null) },
+                )
             }
             // One day's column, folded or unfolded; a column that leaves (another week shown) is forgotten as a target.
             @Composable
@@ -991,6 +1015,66 @@ private fun BoardHintRow(hint: os.meka.core.domain.BoardHint, onApply: () -> Uni
             TouchPill(hint.action, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
             TouchPill(os.meka.core.domain.BoardHintRules.NOT_NOW, fill = Meka.colors.surfaceRaised, ink = Meka.colors.textSecondary, onClick = onDismiss)
         }
+    }
+}
+
+/** Ada plans with you, part 1: Obi's draft of the week while its faint cards show (null otherwise). */
+private val LocalWeekDraft = androidx.compose.runtime.staticCompositionLocalOf<os.meka.core.domain.WeekDraft?> { null }
+
+/** The draft's bar and its faint cards, for the UI tests. */
+internal const val WEEK_DRAFT_TAG = "week-draft"
+internal const val GHOST_CARD_TAG = "ghost-card"
+
+/**
+ * Obi's draft bar: "✦ Obi's draft · 3 tasks over 3 days", what goes where in a line under it, then Keep all (gold),
+ * Change and Start over. It grows in over the days (reduced motion: a fade) and goes the same way.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun WeekDraftBar(draft: os.meka.core.domain.WeekDraft, modifier: Modifier, onKeep: () -> Unit, onChange: () -> Unit, onStartOver: () -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .testTag(WEEK_DRAFT_TAG)
+            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+    ) {
+        Text(draft.line, style = MekaType.itemMeta, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(draft.said, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        FlowRow(Modifier.padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            TouchPill(os.meka.core.domain.WeekDraftRules.KEEP_ALL, fill = Meka.colors.accent, ink = Meka.colors.onAccent, onClick = onKeep)
+            TouchPill(os.meka.core.domain.WeekDraftRules.CHANGE, fill = Meka.colors.background, ink = Meka.colors.textPrimary, onClick = onChange)
+            TouchPill(os.meka.core.domain.WeekDraftRules.START_OVER, fill = Meka.colors.background, ink = Meka.colors.textSecondary, onClick = onStartOver)
+        }
+    }
+}
+
+/** One faint card of Obi's draft: ✦ and its duration on top, the title, a dashed gold edge; it fades in where it would go. */
+@Composable
+private fun GhostCardView(g: os.meka.core.domain.GhostCard) {
+    val reduced = Meka.reducedMotion
+    val shown = remember(g.taskId) { Animatable(if (reduced) 1f else 0f) }
+    LaunchedEffect(g.taskId) { if (!reduced) shown.animateTo(1f, MekaMotion.appear(false)) }
+    val edge = Meka.colors.accent
+    Column(
+        Modifier.fillMaxWidth().alpha(os.meka.core.domain.WeekDraftRules.GHOST_ALPHA * shown.value)
+            .drawBehind {
+                val r = MekaRadius.s.toPx()
+                drawRoundRect(
+                    edge, cornerRadius = androidx.compose.ui.geometry.CornerRadius(r, r),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = 1.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+                    ),
+                )
+            }
+            .testTag(GHOST_CARD_TAG)
+            .clearAndSetSemantics { contentDescription = g.spoken }
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+    ) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(os.meka.core.domain.WeekDraftRules.MARK, style = MekaType.micro, color = Meka.colors.accent)
+            Spacer(Modifier.weight(1f))
+            Text(g.duration, style = MekaType.micro, color = Meka.colors.textTertiary)
+        }
+        Text(g.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1477,6 +1561,11 @@ private fun DayColumn(
                 // The end of the open cards (done ones sit below).
                 if (openIndex == openIds.size - 1) GapSlot(gapAt != null && gapAt >= openIds.size, gapHeight)
             }
+        }
+        // Ada plans with you, part 1: Obi's draft puts its faint cards after the day's own, until Keep all.
+        val ghosts = LocalWeekDraft.current?.let { os.meka.core.domain.WeekDraftRules.ghostsOn(it, board, day.epochDay) }.orEmpty()
+        if (ghosts.isNotEmpty()) Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            ghosts.forEach { g -> key("ghost-" + g.taskId) { GhostCardView(g) } }
         }
         // The folded moves: the mockup's hint under the day's cards until three tasks have been moved.
         LocalFoldedMoves.current?.takeIf { !showHead && BoardFoldedRules.showsHint(it.moves, day) }?.let {

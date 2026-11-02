@@ -1614,6 +1614,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TimelineRules.shared.restLabel(until: nil, work: nil, anytime: 0), "Nothing else planned today")
     }
 
+    /// Ada plans with you, part 1: Obi's draft of the week reaches Swift.
+    func testWeekDraftReachesSwift() {
+        let rules = WeekDraftRules.shared
+        XCTAssertEqual(rules.KEEP_ALL, "Keep all")
+        XCTAssertEqual(rules.CHANGE, "Change")
+        XCTAssertEqual(rules.START_OVER, "Start over")
+        let ghost = GhostCard(taskId: "t1", title: "Book MOT", day: 20_000, minutes: 30, why: "No day yet")
+        XCTAssertEqual(ghost.duration, "0:30")
+        XCTAssertEqual(ghost.spoken, "Obi's draft: Book MOT, about 30m, no day yet")
+    }
+
     /// Ada plans with you, part 2: Obi's ✦ thoughts on the Board reach Swift.
     func testBoardHintsReachSwift() {
         let rules = BoardHintRules.shared

@@ -1083,7 +1083,56 @@ final class CoreModel {
         go(to: .calendar, reduced: MotionSetting.reduced)
         showBrief = false
         calendarShowsBoard = true
+        draftWeek()
+    }
+
+    /// Ada plans with you, part 1: Obi's draft of the week on this Mac (the core holds it; nothing moves until Keep all).
+    var weekDraft: WeekDraft?
+    /// Change on the draft: the four steps open on the Suggested spread with these days; nil opens them from the start.
+    var planWeekFrom: WeekPlan?
+
+    /// "Plan your week", "plan my week" or Plan now: Obi drafts the week as faint cards on the Board; a week with
+    /// nothing to place opens the four steps as before.
+    func draftWeek() {
+        guard let core else { return }
+        Task {
+            let draft = try? await core.draftWeek()
+            withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = draft }
+            if draft == nil { planWeekFrom = nil; showPlanWeek = true }
+        }
+    }
+
+    /// Keep all: every move in the draft at once; the bar says "Week planned · …" with one Undo for all.
+    func keepWeekDraft() {
+        guard let core else { return }
+        MekaHaptics.light()
+        withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = nil }
+        Task {
+            guard let line = try? await core.keepWeekDraft() else { return }
+            offerEventUndo(line, .weekPlan)
+        }
+    }
+
+    /// Change: the four steps open on the Suggested spread with the draft's days.
+    func changeWeekDraft() {
+        MekaHaptics.tick()
+        planWeekFrom = weekDraft?.plan
         showPlanWeek = true
+    }
+
+    /// Start over: the draft goes (nothing moved) and the four steps open from the start.
+    func startWeekOver() {
+        MekaHaptics.tick()
+        core?.dropWeekDraft()
+        withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = nil }
+        planWeekFrom = nil
+        showPlanWeek = true
+    }
+
+    /// The draft's faint cards on `epochDay` of `board` (the board being drawn).
+    func weekDraftGhosts(_ board: WeekBoard, epochDay: Int64) -> [GhostCard] {
+        guard weekDraft != nil, let core else { return [] }
+        return core.weekDraftGhosts(board: board, day: epochDay)
     }
 
     /// "Take me there" said to Talk after a help answer (Ask knows how Navilife works, slice 3): Ask comes forward and
@@ -4002,6 +4051,10 @@ final class CoreModel {
     /// Accept plan: every row he left with a day goes there; the bar says "Week planned · …" with one Undo for all.
     func acceptWeekPlan(_ plan: WeekPlan) async {
         guard let core else { return }
+        // Accepted in the steps, Obi's draft on the Board has done its job.
+        core.dropWeekDraft()
+        weekDraft = nil
+        planWeekFrom = nil
         guard let line = try? await core.acceptWeekPlan(plan: plan) else { return }
         MekaHaptics.light()
         offerEventUndo(line, .weekPlan)

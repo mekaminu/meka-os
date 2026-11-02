@@ -233,7 +233,7 @@ object TalkOpenRules {
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENING
         TalkPlace.REFLECT -> ReflectionRules.OPENING
         TalkPlace.SHUTDOWN -> OPENING_SHUTDOWN
-        TalkPlace.PLAN_WEEK -> PlanWeekNudgeRules.OPENING
+        TalkPlace.PLAN_WEEK -> WeekDraftRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
