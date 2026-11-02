@@ -115,6 +115,7 @@ class TripListsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Seville trip")
         ScreenShots.assertShows(compose, name, "2 days to go")
+        ScreenShots.assertNotCornerClipped(compose, name, "2 days to go")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun packCoverDark() = shoot("cover-dark-pack")
@@ -302,6 +303,7 @@ class TripListsScreensTest {
         ScreenShots.assertShows(compose, name, "2 people")
         ScreenShots.assertShows(compose, name, "leave home 06:30 Wednesday")
         ScreenShots.assertShows(compose, name, "WHO'S GOING")
+        ScreenShots.assertNotCornerClipped(compose, name, "leave home 06:30 Wednesday")
         // A chip lights in the next frame; the core's write lands after.
         compose.onNodeWithTag("trip-going-kids").performClick()
         compose.mainClock.advanceTimeBy(16L)

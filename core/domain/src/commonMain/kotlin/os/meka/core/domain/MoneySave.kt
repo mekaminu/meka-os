@@ -42,6 +42,12 @@ data class MoneySaveBase(val leftPence: Long?, val thisMonth: Int, val startPenc
 object MoneySave {
     const val HEAD = "WHAT IF I SAVE…"
     const val EACH = "Each month"
+
+    /**
+     * The split's last part (walk-through 2026-11-02 A2): what's left once this saving *and* the usual spending are out,
+     * i.e. the forecast's "About £X a month left over" less the amount, so the two figures on the Plan page agree.
+     */
+    const val LEFT_AFTER = "left each month after saving this and your usual spending: about"
     const val MIN_PENCE = 2_500L
     const val MAX_PENCE = 200_000L
     const val STEP_PENCE = 2_500L
@@ -122,7 +128,7 @@ object MoneySave {
         val split = buildList {
             add("You put in ${fmt(paidIn)}")
             if (interest >= 50) add("interest about ${fmt(MoneyForecast.roundTen(interest).coerceAtLeast(100))}")
-            base.leftPence?.takeIf { it >= 1_000 }?.let { add("left each month after usual spending: about ${fmt(MoneyForecast.roundTen(it - amt).coerceAtLeast(0))}") }
+            base.leftPence?.takeIf { it >= 1_000 }?.let { add("$LEFT_AFTER ${fmt((MoneyForecast.roundTen(it) - amt).coerceAtLeast(0))}") }
         }.joinToString(" · ")
         val (obi, lit) = obi(amt, base.leftPence)
         val monthChips = MONTHS.map { m ->

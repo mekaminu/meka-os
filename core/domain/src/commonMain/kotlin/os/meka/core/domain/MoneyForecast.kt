@@ -179,19 +179,21 @@ object MoneyForecast {
             val shown = signed(roundTen(t.pencePerMonth)) + " a month"
             MoneyCutChip(TRADING_KEY, TRADING_LABEL, shown, tradingOn, "$TRADING_LABEL, $shown" + if (tradingOn) ", on" else "")
         }
-        val saved = cuttable.filter { it.first in whatIf.cuts }.sumOf { it.third / 2 } + whatIf.extraPence +
-            (if (tradingOn) trading!!.pencePerMonth else 0L)
+        // Walk-through 2026-11-02 A2: the horizons multiply the monthly figures as shown (£2,220 a month → +£13,320 in
+        // 6 months), so they add up on the page, rather than rounding the unrounded total.
+        val saved = cuttable.filter { it.first in whatIf.cuts }.sumOf { roundTen(it.third / 2) } + whatIf.extraPence +
+            (if (tradingOn) roundTen(trading!!.pencePerMonth) else 0L)
         val thisMonth = MoneyRules.monthOf(today)
         val rows = listOf(6, 12).map { h ->
-            val at = roundTen(net * h)
+            val at = leftRounded * h
             val label = "By ${monthShort(thisMonth + h)} · $h months"
             val base = when {
                 income <= 0 -> "spent at this pace"
                 at >= 0 -> "all that's left over, at your pace"
                 else -> "more out than in at your pace"
             }
-            val shown = if (income <= 0) "−" + fmt(roundTen(out * h)) else signed(at)
-            val more = if (saved != 0L) " · ${signed(roundTen(saved * h))} with your what-ifs" else ""
+            val shown = if (income <= 0) "−" + fmt(roundTen(out) * h) else signed(at)
+            val more = if (saved != 0L) " · ${signed(saved * h)} with your what-ifs" else ""
             MoneyForecastRow(label, shown, base + more, lit = income > 0 && at < 0, spoken = "$label, $shown, $base$more")
         }
         val span = if (n == 1) monthShort(months.first()) else "${Recurrence.MONTH_SHORT[months.first() % 12]} – ${monthShort(months.last())}"

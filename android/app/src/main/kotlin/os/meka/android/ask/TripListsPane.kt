@@ -265,7 +265,9 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         }
         item(key = "head") {
             Column(
-                Modifier.fillMaxWidth().appear(rememberAppearance(0)).clip(RoundedCornerShape(MekaRadius.m))
+                Modifier.fillMaxWidth().appear(rememberAppearance(0))
+                    // No rounded clip: the countdown sits flush in its bottom-left corner and lost its first glyph
+                    // (walk-through 2026-11-02 A1); the press shows across the head.
                     .clickable(role = Role.Button, onClickLabel = TripListRules.EDIT) { haptics.tick(); editing = !editing }
                     .semantics(mergeDescendants = true) { if (editing) stateDescription = "Editing who's going" }
                     .testTag("trip-head"),

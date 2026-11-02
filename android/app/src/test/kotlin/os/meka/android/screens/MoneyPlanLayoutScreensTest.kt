@@ -188,6 +188,8 @@ class MoneyPlanLayoutScreensTest {
         repeat(40) { if (!shows("money-idea-${lead.id}")) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(shows("money-idea-${lead.id}"), "Show them again should bring the lead back")
 
+        // What if I save names what's left after the saving as well as the spending (walk-through 2026-11-02 A2).
+        if (showsText("left each month after usual spending")) fail("What if I save's left-over figure says it's before the saving")
         // The forecast: no field on the page; What if… opens the cuts and the extra-a-month field.
         scrollTo("money-forecast-card")
         if (showsText(MoneyForecast.EXTRA_HINT)) fail("the extra-a-month field sits open on the page")

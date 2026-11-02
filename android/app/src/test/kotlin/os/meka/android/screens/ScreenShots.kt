@@ -1,5 +1,6 @@
 package os.meka.android.screens
 
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -388,5 +389,53 @@ object ScreenShots {
         }
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         if (bad.isNotEmpty()) fail("$name ends a line with a dot:\n" + bad.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * The quality gate's "no first letter shaved by a rounded corner" (walk-through 2026-11-02 A1: Trip lists' "2 days to
+     * go" lost its "2" to the head's `clip(RoundedCornerShape(..))`, whose text sat flush in its bottom-left corner; the
+     * voice notes' "ιoday" and Money's year row before it): fails when the text containing [text] reaches into a rounded
+     * corner of a clip on any of its ancestors, i.e. part of its box lies outside that corner's arc.
+     */
+    fun assertNotCornerClipped(compose: ComposeContentTestRule, name: String, text: String) {
+        val nodes = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+        if (nodes.isEmpty()) fail("$name: \"$text\" isn't on screen")
+        nodes.forEach { n ->
+            val box = n.boundsInRoot
+            var info: androidx.compose.ui.layout.LayoutInfo? = n.layoutInfo
+            while (info != null) {
+                for (m in info.getModifierInfo()) {
+                    val shape = roundedClip(m.modifier) ?: continue
+                    if (!m.coordinates.isAttached) continue
+                    val clip = m.coordinates.boundsInRoot()
+                    val size = androidx.compose.ui.geometry.Size(clip.width, clip.height)
+                    val d = compose.density
+                    val tl = shape.topStart.toPx(size, d); val tr = shape.topEnd.toPx(size, d)
+                    val bl = shape.bottomStart.toPx(size, d); val br = shape.bottomEnd.toPx(size, d)
+                    fun outside(cx: Float, cy: Float, r: Float, x: Float, y: Float): Boolean {
+                        val dx = x - cx; val dy = y - cy
+                        return dx * dx + dy * dy > (r + 0.5f) * (r + 0.5f)
+                    }
+                    val cut = listOf(
+                        box.left < clip.left + tl && box.top < clip.top + tl && outside(clip.left + tl, clip.top + tl, tl, maxOf(box.left, clip.left), maxOf(box.top, clip.top)),
+                        box.right > clip.right - tr && box.top < clip.top + tr && outside(clip.right - tr, clip.top + tr, tr, minOf(box.right, clip.right), maxOf(box.top, clip.top)),
+                        box.left < clip.left + bl && box.bottom > clip.bottom - bl && outside(clip.left + bl, clip.bottom - bl, bl, maxOf(box.left, clip.left), minOf(box.bottom, clip.bottom)),
+                        box.right > clip.right - br && box.bottom > clip.bottom - br && outside(clip.right - br, clip.bottom - br, br, minOf(box.right, clip.right), minOf(box.bottom, clip.bottom)),
+                    )
+                    if (cut.any { it }) fail("$name: \"$text\" sits in a rounded clip's corner, so its edge is shaved")
+                }
+                info = info.parentInfo
+            }
+        }
+    }
+
+    /** The rounded shape of a `clip(RoundedCornerShape(..))` (a graphics layer with clip on), else null. */
+    private fun roundedClip(modifier: androidx.compose.ui.Modifier): androidx.compose.foundation.shape.CornerBasedShape? {
+        if (!modifier.javaClass.name.contains("GraphicsLayer")) return null
+        fun field(n: String): Any? = runCatching {
+            modifier.javaClass.getDeclaredField(n).also { it.isAccessible = true }.get(modifier)
+        }.getOrNull()
+        if (field("clip") != true) return null
+        return field("shape") as? androidx.compose.foundation.shape.CornerBasedShape
     }
 }

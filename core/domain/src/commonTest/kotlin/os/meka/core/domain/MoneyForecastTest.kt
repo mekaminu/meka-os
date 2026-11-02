@@ -156,12 +156,13 @@ class MoneyForecastTest {
         assertEquals(listOf("eating_out", "groceries"), off.cuts.map { it.key })
         val on = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf(MoneyForecast.TRADING_KEY)), pace)!!
         assertTrue(on.trading!!.on)
-        assertEquals("all that's left over, at your pace · +£570 with your what-ifs", on.rows[0].line)
-        assertEquals("all that's left over, at your pace · +£1,150 with your what-ifs", on.rows[1].line)
+        // The chip says +£100 a month, so the horizons say six and twelve of that (walk-through 2026-11-02 A2).
+        assertEquals("all that's left over, at your pace · +£600 with your what-ifs", on.rows[0].line)
+        assertEquals("all that's left over, at your pace · +£1,200 with your what-ifs", on.rows[1].line)
         // A losing pace counts against him, said plainly.
         val losing = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("trading")), MoneyTradingPace(-6_375, "the last 30 days"))!!
         assertEquals("−£60 a month", losing.trading?.line)
-        assertEquals("all that's left over, at your pace · −£380 with your what-ifs", losing.rows[0].line)
+        assertEquals("all that's left over, at your pace · −£360 with your what-ifs", losing.rows[0].line)
         // Without a pace the "trading" key does nothing and there's no chip.
         val none = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("trading")))!!
         assertNull(none.trading)
@@ -177,5 +178,21 @@ class MoneyForecastTest {
         val v = MoneyRules.view(accounts, txns, emptyMap(), oct16, LocalCalendar.UTC, 0, nowMs = nowMs, trading = listOf(wallet(1)))
         assertEquals("+£100 a month", v.forecast?.trading?.line)
         assertNull(MoneyRules.view(accounts, txns, emptyMap(), oct16, LocalCalendar.UTC, 0, nowMs = nowMs).forecast?.trading)
+    }
+
+    @Test
+    fun theHorizonsAreTheMonthAsShownTimesTheMonths() {
+        // Walk-through 2026-11-02 A2: £2,223.33 a month shows as "About £2,220"; 6 and 12 months must read +£13,320 and
+        // +£26,640, not the unrounded +£13,340 and +£26,680.
+        val odd = (7..9).flatMap { m ->
+            listOf(
+                line(d(m, 1), 250_000, "SALARY OAKFIELD", MoneyCategory.INCOME),
+                line(d(m, 2), -27_667, "RENT", MoneyCategory.BILLS),
+            )
+        }
+        val f = MoneyForecast.view(odd, oct16, MoneyWhatIf(extraPence = 1_000))!!
+        assertEquals("About £2,220 a month left over", f.left)
+        assertEquals(listOf("+£13,320", "+£26,640"), f.rows.map { it.amount })
+        assertEquals("all that's left over, at your pace · +£60 with your what-ifs", f.rows[0].line)
     }
 }

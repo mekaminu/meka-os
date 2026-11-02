@@ -64,7 +64,7 @@ class MoneySaveTest {
         val fits = MoneySave.view(30_000, 6, 0, base(95_000))
         assertTrue(fits.obi.startsWith("£300 a month still leaves about £650 spare"), fits.obi)
         assertFalse(fits.obiLit)
-        assertTrue("left each month after usual spending: about £650" in fits.split)
+        assertTrue("left each month after saving this and your usual spending: about £650" in fits.split, fits.split)
         val doable = MoneySave.view(70_000, 6, 0, base(95_000))
         assertTrue(doable.obi.startsWith("Doable"), doable.obi)
         val tight = MoneySave.view(90_000, 6, 0, base(95_000))
@@ -112,5 +112,12 @@ class MoneySaveTest {
         // The slider's split line names the same spare as Obi's line.
         val v = MoneySave.view(110_000, 6, 0, base(left))
         assertTrue("about £1,120" in v.split && "about £1,120" in v.obi, v.split + " / " + v.obi)
+    }
+
+    @Test
+    fun whatIsLeftIsTheForecastsMonthLessTheSaving() {
+        // Walk-through 2026-11-02 A2: the forecast says "About £2,220 a month left over"; saving £1,100 leaves £1,120.
+        val v = MoneySave.view(110_000, 6, 0, base(221_730))
+        assertTrue("left each month after saving this and your usual spending: about £1,120" in v.split, v.split)
     }
 }

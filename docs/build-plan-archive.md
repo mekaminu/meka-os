@@ -5207,3 +5207,19 @@ Original item: **(Deferred, not Take first any more: Meka added both courses by 
 
 - [~] Places, location weather, per-day work hours and trains (completeness)
   - *Completeness slice 1, 2026-11-02 (core only, so the Fold and the Mac alike through the shared Today line; core touched, so Mac checked nightly):* **Today says why there are no live times.** Core `RouteRules.liveMissing(board)`: with a home station in About you and the board's last read state NO_STATION / KEY / ERROR (the server writes the state on every read, every few minutes on a weekday's commute, keeping the last good departures), a short reason and its spoken words; `todayLine` appends it after TfL's status (good service or trouble; lit only by the trouble) and, when TfL hasn't been read, shows "<first line> · no live times right now" alone, unlit; the brief and Listen use the same words; `askLines` adds "live departures for Meka's trains: …" so Ask can say why. No home station, a board not read yet or read fine: unchanged. Tests: TrainBoardTest (todaySaysWhyThereAreNoLiveTimes, askHearsWhyThereAreNoLiveTimes; the old "an error board shows nothing" case now shows the reason). No UI, server or migration change.
+
+## Found and fixing, week 2 (the weekly walk-through's faults, 2026-11-02)
+
+Slice 1 (2026-11-02): **A1** TripListsPane's head was `clip(RoundedCornerShape(16 dp)).clickable`, its text flush with the
+head's edges, so with no "Add who's going" line under it the countdown sat in the bottom-left corner and lost its "2"
+(`trip-lists/cover-dark-going.png`); the clip is gone (the press shows across the head). New quality-gate check
+`ScreenShots.assertNotCornerClipped(compose, name, text)`: walks the text's layout ancestors for a graphics layer with
+clip on and a corner-based shape and fails when the text's box reaches outside one of its corner arcs; TripListsScreensTest
+runs it on the pack and going shots. The Mac's panel has no clip. **A2** MoneySave's split said "left each month after
+usual spending: about £1,120" for what's left after the saving too; it now reads "left each month after saving this and
+your usual spending" (`MoneySave.LEFT_AFTER`) and starts from the forecast's rounded month (£2,220 − £1,100). MoneyForecast's
+6- and 12-month rows multiply the month as shown (`leftRounded * h`, `roundTen(out) * h`) and the what-ifs the chips as
+shown (each halved category's rounded line, trading's rounded pace), so £2,220 a month reads +£13,320 / +£26,640 and a
++£100 trading chip +£600 / +£1,200. MoneyForecastTest (+1, trading figures updated), MoneySaveTest (+1), a guard in
+MoneyPlanLayoutScreensTest. Both apps through the core; no server change, no migration.
+
