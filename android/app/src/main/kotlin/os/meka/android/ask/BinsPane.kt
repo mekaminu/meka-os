@@ -1,5 +1,8 @@
 package os.meka.android.ask
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -27,11 +30,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -48,6 +54,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.android.work.SettingChip
 import os.meka.core.domain.BinAdded
+import os.meka.core.domain.BinCouncilRules
 import os.meka.core.domain.BinRow
 import os.meka.core.domain.BinRules
 import os.meka.core.domain.LocalClock
@@ -62,6 +69,9 @@ const val BINS_LIST_TAG = "bins-list"
  * each with Remove. Slice 3: one-offs typed in the same field ("Black bin Sat 2 Jan instead of 29 Dec", "No black bin
  * 29 Dec") list under ONE-OFFS, each with Remove (the collection goes on its usual day again). The evening before, Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
  * Completeness: REMINDER's chips (17:00 to 21:00) move that heads-up, synced so the Mac reminds at the same time.
+ * Council dates (2026-11-02): COUNCIL'S DATES → "Use the council's dates" opens Android's file picker for the bin
+ * calendar (.ics) downloaded from the council's bin-day page; it is read here (nothing sent) and the bins follow the
+ * council's dates on both devices; "Use my own days" goes back to what he typed.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
  * cross-fade (a refused line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with the list's
@@ -75,6 +85,23 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
     val reduced = Meka.reducedMotion
     val v by core.binsView.collectAsState()
     var said by remember { mutableStateOf<BinAdded?>(null) }
+    val context = LocalContext.current
+    val pickCalendar = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { s ->
+                        s.readBytes().takeIf { it.size <= BinCouncilRules.MAX_CHARS * 2 }?.decodeToString()
+                    }
+                }.getOrNull()
+            }
+            val r = if (text == null) BinAdded(BinCouncilRules.TOO_BIG, refused = true)
+            else runCatching { core.useCouncilBins(text) }.getOrNull()?.let { BinAdded(it.line, it.refused) }
+            if (r?.refused == false) haptics.light() else haptics.tick()
+            said = r
+        }
+    }
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "bins-said",
     )
@@ -156,8 +183,32 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // Council dates: the council's own calendar file, read here.
+        item(key = "council-label") {
+            SectionLabel("COUNCIL'S DATES", Modifier.animateItem().padding(top = MekaSpace.m))
+        }
+        item(key = "council-use") {
+            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                v.councilLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SettingChip(if (v.councilLine == null) "Use the council's dates" else "Pick a newer calendar", false,
+                        "Use the council's dates: pick the bin calendar file from your council", touch = true) {
+                        haptics.tick()
+                        pickCalendar.launch(arrayOf("text/calendar", "text/x-vcalendar", "application/ics", "application/octet-stream", "text/plain"))
+                    }
+                    if (v.councilLine != null) {
+                        SettingChip("Use my own days", false, "Use the bin days you typed instead of the council's", touch = true) {
+                            haptics.tick()
+                            scope.launch {
+                                runCatching { core.useTypedBins() }.getOrNull()?.let { said = BinAdded(it.line, it.refused) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item(key = "council") {
-            Text(BinRules.COUNCIL, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(v.footLine, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }

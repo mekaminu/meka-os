@@ -6347,6 +6347,33 @@ final class CoreModel {
 
     func removeBin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBin(id: id) } }
 
+    /// Bin days, council dates: uses the council's bin calendar (the .ics file's text, read on this Mac, nothing sent);
+    /// only a String crosses to the core and only a String and a Bool come back.
+    func useCouncilBins(_ text: String) async -> BinSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.useCouncilBins(text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return BinSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// "Use my own days": the bins go back to the patterns typed; ones only the council's calendar had go.
+    func useTypedBins() async -> BinSaid? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            let r = try await core.useTypedBins()
+            return BinSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Bin days completeness: the evening reminder's time (synced, so the Fold reminds at it too); only an Int32 crosses.
     func setBinReminder(minute: Int) {
         MekaHaptics.tick()

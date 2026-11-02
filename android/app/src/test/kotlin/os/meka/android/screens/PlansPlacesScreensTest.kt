@@ -386,6 +386,9 @@ class PlansPlacesScreensTest {
         tap(p, name, "a reminder chip", off)
         until { core.binsView.value.remindMinute != before }
         if (core.binsView.value.remindMinute == before) fail("$name: the reminder chip didn't move the heads-up")
+        // Council dates: the chip that opens the file picker for the council's bin calendar is there and reachable.
+        reach(p, name, hasContentDescription("Use the council's dates", substring = true), "Use the council's dates")
+        assertTouchTargets(name)
     }
 
     /**

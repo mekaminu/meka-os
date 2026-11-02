@@ -141,4 +141,24 @@ class BinsFacadeTest {
         fold.tick()
         assertNull(fold.watchTile().binsLine)
     }
+
+    @Test
+    fun theCouncilsCalendarPickedOnTheFoldGivesBothAppsItsDates() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        // An invented council's calendar: the black bin every other Tuesday from 13 Oct.
+        val events = (0..5).joinToString("") { k ->
+            val day = 13 + 14 * k
+            val (m, d) = if (day <= 31) 10 to day else if (day <= 61) 11 to day - 31 else 12 to day - 61
+            "BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:2026${m.toString().padStart(2, '0')}${d.toString().padStart(2, '0')}\r\nSUMMARY:Black bin collection\r\nEND:VEVENT\r\n"
+        }
+        val said = fold.useCouncilBins("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${events}END:VCALENDAR\r\n")
+        assertTrue(!said.refused, said.line)
+        assertEquals("Council dates for Black bin · 6 collections to Tue 22 Dec", said.line)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("Every other Tuesday · council dates"), mac.binsView.value.rows.map { it.line })
+        assertEquals("Council dates · read Sat 10 Oct", mac.binsView.value.councilLine)
+        assertEquals("Removed 1 bin only the council's calendar had", mac.useTypedBins().line)
+        assertTrue(mac.binsView.value.rows.isEmpty())
+    }
 }

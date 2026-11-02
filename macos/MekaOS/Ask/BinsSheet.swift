@@ -1,12 +1,15 @@
+import AppKit
 @preconcurrency import MekaKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Ask → More → Bins on the Mac (bin days, slice 1), like the Fold's BinsPane: each bin typed once with its day
 /// ("Black bin Tue fortnightly from 13 Oct", "Food caddy every Tuesday"), a row per bin with its pattern and next
 /// collection (a day later after a bank holiday), each with Remove. Slice 3: one-offs typed in the same field ("Black
 /// bin Sat 2 Jan instead of 29 Dec", "No black bin 29 Dec") list under ONE-OFFS, each with Remove. Completeness:
-/// REMINDER picks the evening heads-up's time (17:00 to 21:00, synced with the Fold). Only Strings and an Int32 cross
-/// to the core.
+/// REMINDER picks the evening heads-up's time (17:00 to 21:00, synced with the Fold). Council dates (2026-11-02): COUNCIL'S
+/// DATES → "Use the council's dates…" opens a panel for the council's bin calendar (.ics), read on this Mac (nothing
+/// sent); "Use my own days" goes back to what was typed. Only Strings and an Int32 cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (a refused line lit in
 /// the accent); rows stagger in and arrive or leave on the expand spring; Add gives a light haptic (a tick when
@@ -100,7 +103,23 @@ struct BinsSheet: View {
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: v.remindLine)
             }
-            Text(BinRules.shared.COUNCIL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            // Council dates: the council's own calendar file, read on this Mac.
+            Text("COUNCIL'S DATES")
+                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.top, MekaSpace.xs)
+            if let line = v?.councilLine {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                Button(v?.councilLine == nil ? "Use the council's dates…" : "Pick a newer calendar…") { chooseCalendar() }
+                    .accessibilityLabel("Use the council's dates: pick the bin calendar file from your council")
+                if v?.councilLine != nil {
+                    Button("Use my own days") { Task { said = await model.useTypedBins() } }
+                }
+            }
+            Text(v?.footLine ?? BinRules.shared.COUNCIL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -111,6 +130,25 @@ struct BinsSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 460)
         .background(palette.surface)
+    }
+
+    /// An open panel for the council's bin calendar (.ics); its text is read here and handed to the core as a String.
+    private func chooseCalendar() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.calendarEvent, .ics, .plainText, .text, .data]
+        panel.allowsMultipleSelection = false
+        panel.message = "Pick the bin calendar (.ics) from your council's bin-day page · read on this Mac, nothing sent"
+        panel.prompt = "Use it"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, encoding: .isoLatin1))
+            if let text {
+                said = await model.useCouncilBins(text)
+            } else {
+                MekaHaptics.tick()
+                said = CoreModel.BinSaid(line: BinCouncilRules.shared.TOO_BIG, refused: true)
+            }
+        }
     }
 }
 

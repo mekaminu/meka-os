@@ -5468,6 +5468,16 @@ class MekaCore(
     suspend fun removeBin(id: String): Boolean = onCore { bins.remove(id) }
 
     /**
+     * Bin days, council dates (2026-11-02): uses the council's bin calendar ([text], an .ics file he picked; read on
+     * the device, nothing sent): each bin in it follows the council's dates, Christmas weeks included, on both devices.
+     * Refused (nothing written) with a plain line when it isn't a calendar or has no collections ahead.
+     */
+    suspend fun useCouncilBins(text: String): os.meka.core.domain.BinCouncilSaid = onCore { bins.useCouncil(text, bankHolidays.calendar()) }
+
+    /** "Use my own days": the bins go back to the patterns he typed; ones only the council's calendar had go. */
+    suspend fun useTypedBins(): os.meka.core.domain.BinCouncilSaid = onCore { bins.useTyped() }
+
+    /**
      * Bin days, completeness: the evening reminder's time (a chip, 17:00 to 21:00; synced, so both devices remind at
      * it). Returns the line to show ("Reminder at 20:00 · on both devices"), or null when nothing changed.
      */

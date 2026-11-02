@@ -25,6 +25,14 @@ object BinFields {
     const val ANCHOR = "anchorDay"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
+    /** Council dates (2026-11-02): "council" while the pattern comes from the council's calendar, else "typed" or absent. */
+    const val SOURCE = "source"
+    /** When the council's calendar was last read into this bin (ms). */
+    const val COUNCIL_AT = "councilAtMs"
+    /** The typed pattern kept for "Use my own days" while the council's dates are in use (absent: the council made the bin). */
+    const val TYPED_WEEKDAY = "typedWeekday"
+    const val TYPED_EVERY = "typedEveryWeeks"
+    const val TYPED_ANCHOR = "typedAnchorDay"
 }
 
 /**
@@ -40,10 +48,12 @@ object BinMoveFields {
     const val SKIPPED = "skipped"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
+    /** Council dates (2026-11-02): true when the council's calendar made this one-off ("Use my own days" takes it back). */
+    const val COUNCIL = "council"
 }
 
 /** One stored one-off: the bin's collection on [fromDay] goes on [toDay] instead, or not at all (null). */
-data class BinMove(val id: String, val binId: String, val fromDay: Long, val toDay: Long?)
+data class BinMove(val id: String, val binId: String, val fromDay: Long, val toDay: Long?, val council: Boolean = false)
 
 /** What one typed line says ([BinRules.read]). [dated] is false when a fortnightly bin's week was guessed (no date typed). */
 data class BinEntry(val name: String, val weekday: Int, val everyWeeks: Int, val anchorDay: Long, val dated: Boolean = true)
@@ -53,7 +63,13 @@ data class BinItem(
     val id: String, val name: String, val weekday: Int, val everyWeeks: Int, val anchorDay: Long, val addedAtMs: Long,
     /** One-off moves (slice 3), any order. */
     val moves: List<BinMove> = emptyList(),
-)
+    /** Council dates: when the council's calendar was read into this bin, or null while it is his typed pattern. */
+    val councilAtMs: Long? = null,
+    /** The typed pattern kept for "Use my own days" (weekday, every, anchor), or null when the council made the bin. */
+    val typed: Triple<Int, Int, Long>? = null,
+) {
+    val council: Boolean get() = councilAtMs != null
+}
 
 /** A row in the Bins pane: "Black bin" · "Every other Tuesday" · "Next: Tue 13 Oct" (or "Tomorrow · a day later for the bank holiday"). */
 data class BinRow(val id: String, val name: String, val line: String, val note: String?, val spoken: String)
@@ -73,6 +89,10 @@ data class BinsView(
     val remindChoices: List<Int> = BinRules.REMIND_CHOICES,
     /** "Reminder the evening before at 19:00 · Today says it from 16:00". */
     val remindLine: String = BinRules.remindLine(BinRules.NOTICE_MIN),
+    /** Council dates: "Council dates · read Mon 2 Nov · to Fri 5 Feb", or null while every bin is typed. */
+    val councilLine: String? = null,
+    /** The foot line: how to fill the bins from the council (or that they are). */
+    val footLine: String = BinRules.COUNCIL,
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
 
@@ -121,7 +141,9 @@ object BinRules {
     const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
     const val NOT_READ = "Navilife couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
     const val SHIFT_NOTE = "a day later for the bank holiday"
-    const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Your council's own collection days can fill this later."
+    const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Or use the council's own dates: download the bin calendar (.ics) from its bin-day page and pick it with Use the council's dates."
+    /** The foot line while some bins follow the council's calendar. */
+    const val COUNCIL_IN_USE = "From your council's calendar, read on this device; nothing is sent. Pick a newer calendar the same way when the council publishes one, or Use my own days to go back to what you typed."
     /** A one-off moves a collection at most this many days either way. */
     const val MOVE_MAX_DAYS = 14
     /** A bin's start date with no year is the nearest: up to half a year back counts as already started. */
@@ -293,7 +315,7 @@ object BinRules {
         val from = f.f(BinMoveFields.FROM).longOrNull ?: return@mapNotNull null
         val skipped = f.f(BinMoveFields.SKIPPED).boolOrNull == true
         val to = if (skipped) null else f.f(BinMoveFields.TO).longOrNull ?: return@mapNotNull null
-        BinMove(id, bin, from, to)
+        BinMove(id, bin, from, to, council = f.f(BinMoveFields.COUNCIL).boolOrNull == true)
     }.sortedBy { it.id }.groupBy { it.binId }
 
     /** The live bins from each entity's fields; unreadable ones are skipped. */
@@ -304,7 +326,13 @@ object BinRules {
         if (weekday !in 1..7) return@mapNotNull null
         val every = (s.f(BinFields.EVERY_WEEKS).longOrNull ?: 1L).toInt().coerceIn(1, 4)
         val anchor = s.f(BinFields.ANCHOR).longOrNull ?: return@mapNotNull null
-        BinItem(id, name, weekday, every, anchor, s.f(BinFields.ADDED_AT).longOrNull ?: 0L)
+        val council = s.f(BinFields.SOURCE).textOrNull == BinCouncilRules.SOURCE
+        val typedDay = s.f(BinFields.TYPED_WEEKDAY).longOrNull?.toInt()?.takeIf { it in 1..7 }
+        val typedAnchor = s.f(BinFields.TYPED_ANCHOR).longOrNull
+        val typed = if (typedDay != null && typedAnchor != null)
+            Triple(typedDay, (s.f(BinFields.TYPED_EVERY).longOrNull ?: 1L).toInt().coerceIn(1, 4), typedAnchor) else null
+        BinItem(id, name, weekday, every, anchor, s.f(BinFields.ADDED_AT).longOrNull ?: 0L,
+            councilAtMs = if (council) s.f(BinFields.COUNCIL_AT).longOrNull ?: 0L else null, typed = typed)
     }.sortedWith(compareBy<BinItem> { it.addedAtMs }.thenBy { it.name.lowercase() }.thenBy { it.id })
 
     fun fields(e: BinEntry, nowMs: Long): Map<String, FieldValue> = mapOf(
@@ -412,12 +440,14 @@ object BinRules {
         val rows = bins.map { b ->
             val next = next(b, today, holidays)
             val note = next?.let { "Next: ${dayWord(it, today)}" + (note(b, it)?.let { n -> " · $n" } ?: "") }
-            val line = patternLabel(b)
+            val line = patternLabel(b) + if (b.council) " · council dates" else ""
             BinRow(b.id, b.name, line, note, listOfNotNull(b.name, line, note).joinToString(". "))
         }
         val firstDay = bins.mapNotNull { next(it, today, holidays) }.minOrNull()
         val summary = firstDay?.let { "Next: ${names(onDay(bins, it, holidays))} · ${dayWord(it, today)}" } ?: EMPTY_LINE
-        return BinsView(rows, summary, oneOffRows(bins, today), remindMinute, choices, remindLine(remindMinute))
+        val council = BinCouncilRules.inUseLine(bins)
+        return BinsView(rows, summary, oneOffRows(bins.map { b -> b.copy(moves = b.moves.filter { !it.council }) }, today),
+            remindMinute, choices, remindLine(remindMinute), council, if (council != null) COUNCIL_IN_USE else COUNCIL)
     }
 
     /** A reminder minute he may pick: a quarter hour from 16:00 (Today's line) to 22:00. */
@@ -544,7 +574,8 @@ object BinRules {
     fun askLines(bins: List<BinItem>, today: Long, holidays: HolidayCalendar): List<String> {
         if (bins.isEmpty()) return emptyList()
         val more = if (bins.size > ASK_BINS) " · the first $ASK_BINS below" else ""
-        val head = "Bins · ${bins.size} ${if (bins.size == 1) "bin" else "bins"} · typed by Meka$more"
+        val from = if (bins.any { it.council }) "from the council's calendar" else "typed by Meka"
+        val head = "Bins · ${bins.size} ${if (bins.size == 1) "bin" else "bins"} · $from$more"
         val each = bins.take(ASK_BINS).map { b ->
             val next = next(b, today, holidays)
             val then = next?.let { next(b, it + 1, holidays) }
@@ -563,6 +594,7 @@ object BinRules {
         val oneOffs = bins.flatMap { b -> b.moves.map { b to it } }
             .filter { (_, m) -> maxOf(m.fromDay, m.toDay ?: m.fromDay) >= today }
             .sortedBy { it.second.fromDay }.take(ASK_DAYS)
+            .filter { (_, m) -> !m.council }
             .map { (b, m) -> "One-off · ${b.name} · ${moveLabel(m)}" }
         return listOf(head) + each + collections + oneOffs
     }
@@ -589,7 +621,85 @@ class Bins(
             .map { b -> moves[b.id]?.let { b.copy(moves = it) } ?: b }
     }
 
-    fun view(holidays: HolidayCalendar): BinsView = BinRules.view(items(), calendar.epochDayOf(nowMs()), holidays, remindMinute())
+    fun view(holidays: HolidayCalendar): BinsView {
+        val bins = items()
+        val v = BinRules.view(bins, calendar.epochDayOf(nowMs()), holidays, remindMinute())
+        return v.councilLine?.let { v.copy(councilLine = BinCouncilRules.inUseLine(bins, calendar)) } ?: v
+    }
+
+    /**
+     * Council dates (2026-11-02): uses the council's calendar file [text] (read here, nothing sent): each bin in it
+     * gets the council's pattern and a one-off wherever the council's date differs; a bin already there by name keeps
+     * its typed pattern for [useTyped]; its earlier council one-offs, and any typed one-off inside the calendar's
+     * dates, give way to the council's. Bins the calendar doesn't name are left as typed.
+     */
+    fun useCouncil(text: String, holidays: HolidayCalendar = HolidayCalendar.NONE): BinCouncilSaid {
+        val today = calendar.epochDayOf(nowMs())
+        val read = BinCouncilRules.read(text, today, holidays)
+        if (read is CouncilRead.Refused) return BinCouncilSaid(read.line, refused = true)
+        val found = (read as CouncilRead.Bins).bins
+        val now = nowMs()
+        val bins = items()
+        for (c in found) {
+            val existing = bins.firstOrNull { it.name.equals(c.name, ignoreCase = true) }
+            val id = existing?.id ?: newId()
+            val fields = mutableMapOf(
+                BinFields.NAME to (existing?.name ?: c.name).fv(),
+                BinFields.WEEKDAY to c.weekday.toLong().fv(),
+                BinFields.EVERY_WEEKS to c.everyWeeks.toLong().fv(),
+                BinFields.ANCHOR to c.anchorDay.fv(),
+                BinFields.SOURCE to BinCouncilRules.SOURCE.fv(),
+                BinFields.COUNCIL_AT to now.fv(),
+                BinFields.DELETED to false.fv(),
+            )
+            if (existing == null) fields[BinFields.ADDED_AT] = now.fv()
+            else if (!existing.council) {
+                fields[BinFields.TYPED_WEEKDAY] = existing.weekday.toLong().fv()
+                fields[BinFields.TYPED_EVERY] = existing.everyWeeks.toLong().fv()
+                fields[BinFields.TYPED_ANCHOR] = existing.anchorDay.fv()
+            }
+            replica.commitLocal(EntityTypes.BIN, id, fields)
+            val first = c.days.first(); val last = c.days.last()
+            existing?.moves?.filter { it.council || it.fromDay in first..last }?.forEach {
+                replica.commitLocal(EntityTypes.BIN_MOVE, it.id, mapOf(BinMoveFields.DELETED to true.fv()))
+            }
+            for ((from, to) in c.moves) {
+                replica.commitLocal(EntityTypes.BIN_MOVE, newId(), mapOf(
+                    BinMoveFields.BIN to id.fv(),
+                    BinMoveFields.FROM to from.fv(),
+                    BinMoveFields.TO to (to ?: from).fv(),
+                    BinMoveFields.SKIPPED to (to == null).fv(),
+                    BinMoveFields.COUNCIL to true.fv(),
+                    BinMoveFields.ADDED_AT to now.fv(),
+                    BinMoveFields.DELETED to false.fv(),
+                ))
+            }
+        }
+        return BinCouncilSaid(BinCouncilRules.usedLine(found, today), refused = false, canUndo = true)
+    }
+
+    /**
+     * "Use my own days": every bin on the council's dates goes back to its typed pattern (one the council's calendar
+     * made is removed), and the council's one-offs go.
+     */
+    fun useTyped(): BinCouncilSaid {
+        var kept = 0; var removed = 0
+        for (b in items().filter { it.council }) {
+            val t = b.typed
+            if (t == null) {
+                replica.commitLocal(EntityTypes.BIN, b.id, mapOf(BinFields.DELETED to true.fv())); removed++
+            } else {
+                replica.commitLocal(EntityTypes.BIN, b.id, mapOf(
+                    BinFields.WEEKDAY to t.first.toLong().fv(), BinFields.EVERY_WEEKS to t.second.toLong().fv(),
+                    BinFields.ANCHOR to t.third.fv(), BinFields.SOURCE to BinCouncilRules.TYPED.fv(),
+                )); kept++
+            }
+            b.moves.filter { it.council }.forEach {
+                replica.commitLocal(EntityTypes.BIN_MOVE, it.id, mapOf(BinMoveFields.DELETED to true.fv()))
+            }
+        }
+        return BinCouncilSaid(BinCouncilRules.typedLine(kept, removed), refused = kept + removed == 0)
+    }
 
     /** Completeness: the evening reminder's minute (synced, both devices). */
     fun remindMinute(): Int = BinRules.readRemind(replica.entity(EntityTypes.CONTEXT_MODE, BinRules.SETTING_ID)?.fields)
@@ -630,7 +740,12 @@ class Bins(
         val existing = bins.firstOrNull { it.name.equals(e.name, ignoreCase = true) }
         val id = existing?.id ?: newId()
         val fields = BinRules.fields(e, nowMs()).let { f -> if (existing != null) f - BinFields.ADDED_AT else f }
+            .let { f -> if (existing?.council == true) f + (BinFields.SOURCE to BinCouncilRules.TYPED.fv()) else f }
         replica.commitLocal(EntityTypes.BIN, id, fields)
+        // Council dates: a pattern typed over the council's takes the bin back, so its council one-offs go too.
+        if (existing?.council == true) existing.moves.filter { it.council }.forEach {
+            replica.commitLocal(EntityTypes.BIN_MOVE, it.id, mapOf(BinMoveFields.DELETED to true.fv()))
+        }
         return BinAdded(BinRules.addedLine(e, today, replaced = existing != null), refused = false)
     }
 
