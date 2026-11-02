@@ -443,6 +443,11 @@ sealed interface TalkEffect {
      * (`MekaCore.draftWeekSpoken`), then report what to say with [TalkFlow.drafted]; nothing moves until Keep all.
      */
     data object DraftWeek : TalkEffect
+    /**
+     * Ada plans with you, part 1, slice 3: "I lost the afternoon, re-plan" said to Obi. Re-plan the rest of today on this
+     * device (`MekaCore.replanDaySpoken`), then report what to say with [TalkFlow.replanned]; nothing moves until Keep all.
+     */
+    data object ReplanDay : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
     data object StopSpeaking : TalkEffect
     /**
@@ -543,9 +548,9 @@ object TalkFlow {
                 TalkHelpRules.OPENING,
             )
             // Ada plans with you, part 1, slice 2: "plan my week" drafts the week first, so Obi can say what he drafted.
-            is TalkReply.Open -> if (r.place == TalkPlace.PLAN_WEEK) TalkStep(
+            is TalkReply.Open -> if (r.place == TalkPlace.PLAN_WEEK || r.place == TalkPlace.REPLAN_DAY) TalkStep(
                 t.copy(phase = TalkPhase.THINKING, pending = emptyList(), conversation = t.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
-                listOf(TalkEffect.DraftWeek),
+                listOf(if (r.place == TalkPlace.REPLAN_DAY) TalkEffect.ReplanDay else TalkEffect.DraftWeek),
             ) else say(
                 t.copy(pending = emptyList(), endAfterSpeaking = true, openAfter = r.place, conversation = t.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
                 TalkOpenRules.opening(r.place),
@@ -627,6 +632,16 @@ object TalkFlow {
     fun drafted(s: TalkSession, line: String): TalkStep {
         if (s.phase != TalkPhase.THINKING) return TalkStep(s, emptyList())
         return say(s.copy(endAfterSpeaking = true, openAfter = TalkPlace.PLAN_WEEK), line.ifBlank { WeekDraftRules.NOTHING_SPOKEN })
+    }
+
+    /**
+     * Ada plans with you, part 1, slice 3: the rest of today is re-planned ([TalkEffect.ReplanDay]); Obi says [line]
+     * ([DayReplanRules.spoken]), then the conversation ends and the Board opens with the re-plan on it (as it is, when
+     * nothing needed to move). Only while thinking: a stop meanwhile leaves it.
+     */
+    fun replanned(s: TalkSession, line: String): TalkStep {
+        if (s.phase != TalkPhase.THINKING) return TalkStep(s, emptyList())
+        return say(s.copy(endAfterSpeaking = true, openAfter = TalkPlace.REPLAN_DAY), line.ifBlank { DayReplanRules.SPOKEN_NONE })
     }
 
     /**

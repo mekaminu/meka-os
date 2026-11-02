@@ -1628,6 +1628,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         let asked = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my week", places: TalkOpenRules.shared.MAC)
         XCTAssertTrue(asked.effects.first is TalkEffectDraftWeek)
         XCTAssertTrue(TalkFlow.shared.drafted(s: asked.session, line: "Hi").effects.first is TalkEffectSpeak)
+        // Part 1, slice 3: "I lost the afternoon, re-plan" re-plans the rest of today, then he says it.
+        XCTAssertEqual(DayReplanRules.shared.spoken(draft: nil), DayReplanRules.shared.SPOKEN_FITS)
+        XCTAssertEqual(DayReplanRules.shared.keptLine(moved: 2), "Today re-planned · 2 tasks moved")
+        let lost = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "I lost the afternoon", places: TalkOpenRules.shared.MAC)
+        XCTAssertTrue(lost.effects.first is TalkEffectReplanDay)
+        XCTAssertTrue(TalkFlow.shared.replanned(s: lost.session, line: "Hi").effects.first is TalkEffectSpeak)
     }
 
     /// Ada plans with you, part 2: Obi's ✦ thoughts on the Board reach Swift.

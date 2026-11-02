@@ -532,6 +532,8 @@ final class TalkController {
             else if open.place == TalkPlace.shutdown { model?.openShutdownFromTalk() }
             // "Plan my week" (Week board item (6) part 2): Calendar on the Board with Plan your week up.
             else if open.place == TalkPlace.planWeek { model?.openPlanWeek() }
+            // "I lost the afternoon, re-plan" (Ada plans with you, part 1, slice 3): the Board as it is, re-plan on it.
+            else if open.place == TalkPlace.replanDay { model?.openBoardFromTalk() }
         } else if let openHelp = effect as? TalkEffectOpenHelp {
             // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens its sheet, as the
             // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.
@@ -546,6 +548,17 @@ final class TalkController {
                 let line = await model.draftWeekSpoken()
                 guard gen == generation else { return }
                 apply(TalkFlow.shared.drafted(s: session, line: line))
+            }
+        } else if effect is TalkEffectReplanDay {
+            // Ada plans with you, part 1, slice 3: "I lost the afternoon, re-plan" re-plans the rest of today, then Obi
+            // says what he moved. Only a String comes back from the core.
+            level = 0
+            let gen = generation
+            Task {
+                guard let model else { return }
+                let line = await model.replanDaySpoken()
+                guard gen == generation else { return }
+                apply(TalkFlow.shared.replanned(s: session, line: line))
             }
         } else if effect is TalkEffectMuteSpeakingUp {
             // Speaking up, slice 2: "shh" to Obi mutes his speaking up for 2 hours on every device.

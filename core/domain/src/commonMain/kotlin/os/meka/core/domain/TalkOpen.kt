@@ -15,7 +15,11 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT, SHUTDOWN, PLAN_WEEK }
+enum class TalkPlace {
+    PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT, SHUTDOWN, PLAN_WEEK,
+    /** Ada plans with you, part 1, slice 3: "I lost the afternoon, re-plan" ([DayReplanRules]); the Board opens. */
+    REPLAN_DAY,
+}
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -39,19 +43,19 @@ object TalkOpenRules {
     const val OPENED_SHUTDOWN = "Opened Shut down the day."
 
     /** What a device without a bedside clock (the Mac) can open. */
-    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK)
+    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK, TalkPlace.REPLAN_DAY)
 
     /**
      * The Fold: the planner, the bedside clock, the ten-minute inbox and Find my car (car and parking, slice 1: where
      * the car is parked is kept on the phone only, so the Mac has nothing to open).
      */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK)
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK, TalkPlace.REPLAN_DAY)
 
     /**
      * The Mac (voice notes into actions, slice 3): the planner, the ten-minute inbox and a voice note, which the Mac now
      * records too; no bedside clock and no Find my car (the parked spot stays on the phone).
      */
-    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK)
+    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK, TalkPlace.REPLAN_DAY)
 
     /** The Galaxy Watch's Capture (voice notes into actions, slice 4): only a voice note opens from what it hears. */
     val WATCH: Set<TalkPlace> = setOf(TalkPlace.VOICE_NOTE)
@@ -174,6 +178,39 @@ object TalkOpenRules {
         add(listOf("plan", "your", "week")); add(listOf("open", "plan", "your", "week"))
     }
 
+    /**
+     * Ada plans with you, part 1, slice 3: "I lost the afternoon", "I've lost my morning, re-plan", "re-plan my day",
+     * "replan the rest of today", "my afternoon's gone, re-plan" (what's left once [DROP] is gone; "re-plan" heard as
+     * two words counts as one). Re-plans the rest of today as Obi's draft; nothing moves until Keep all.
+     */
+    private val REPLAN_DAY: Set<List<String>> = buildSet {
+        val parts = listOf("afternoon", "morning", "day", "evening", "today")
+        val lost = buildList {
+            for (who in listOf(emptyList(), listOf("i've"), listOf("ive"), listOf("i", "have"), listOf("have"), listOf("we've"))) {
+                for (verb in listOf("lost", "wasted", "blown")) for (det in listOf("the", "my")) parts.forEach { add(who + verb + det + it) }
+            }
+            for (det in listOf(listOf("the"), listOf("my"))) {
+                parts.forEach { add(det + it + "is" + "gone"); add(det + listOf("${it}'s", "gone")); add(det + listOf("${it}s", "gone")) }
+            }
+            for (det in listOf(emptyList(), listOf("my"), listOf("the"))) {
+                add(det + listOf("day", "has", "gone", "wrong")); add(det + listOf("day's", "gone", "wrong")); add(det + listOf("days", "gone", "wrong"))
+            }
+        }
+        val replans = buildList {
+            val whats = listOf(
+                listOf("my", "day"), listOf("the", "day"), listOf("today"), listOf("my", "today"), listOf("day"),
+                listOf("the", "rest", "of", "the", "day"), listOf("the", "rest", "of", "my", "day"), listOf("the", "rest", "of", "today"),
+                listOf("rest", "of", "the", "day"), listOf("rest", "of", "my", "day"), listOf("rest", "of", "today"),
+                listOf("my", "afternoon"), listOf("the", "afternoon"), listOf("my", "evening"), listOf("the", "evening"),
+            )
+            for (pre in listOf(emptyList(), listOf("please"), listOf("do", "a"))) {
+                add(pre + "replan"); whats.forEach { add(pre + "replan" + it) }
+            }
+        }
+        lost.forEach { l -> add(l); replans.forEach { r -> add(l + r) } }
+        replans.forEach { add(it) }
+    }
+
     /** "Bedside clock", "open the bedside clock", "show me the bedside clock", "night clock", "bedside mode". */
     private val BEDSIDE = setOf(
         listOf("bedside", "clock"), listOf("the", "bedside", "clock"), listOf("open", "bedside", "clock"),
@@ -210,7 +247,7 @@ object TalkOpenRules {
 
     /** As [request], opening only what [places] holds ("bedside clock" on the Fold). */
     fun request(utterance: String, places: Set<TalkPlace>): TalkPlace? {
-        val ws = ReadOutRules.words(utterance).filter { it !in DROP }
+        val ws = joinReplan(ReadOutRules.words(utterance)).filter { it !in DROP }
         return when {
             ws in PLAN && TalkPlace.PLAN in places -> TalkPlace.PLAN
             ws in BEDSIDE && TalkPlace.BEDSIDE in places -> TalkPlace.BEDSIDE
@@ -220,8 +257,20 @@ object TalkOpenRules {
             ws in REFLECT && TalkPlace.REFLECT in places -> TalkPlace.REFLECT
             ws in SHUTDOWN && TalkPlace.SHUTDOWN in places -> TalkPlace.SHUTDOWN
             ws in PLAN_WEEK && TalkPlace.PLAN_WEEK in places -> TalkPlace.PLAN_WEEK
+            ws in REPLAN_DAY && TalkPlace.REPLAN_DAY in places -> TalkPlace.REPLAN_DAY
             else -> null
         }
+    }
+
+    /** "re plan" (from "re-plan") and "re-plan" become "replan". */
+    private fun joinReplan(ws: List<String>): List<String> {
+        if ("re" !in ws) return ws
+        val out = mutableListOf<String>()
+        var i = 0
+        while (i < ws.size) {
+            if (ws[i] == "re" && i + 1 < ws.size && ws[i + 1] == "plan") { out += "replan"; i += 2 } else { out += ws[i]; i++ }
+        }
+        return out
     }
 
     /** What MEKA says before opening [place]. */
@@ -234,6 +283,7 @@ object TalkOpenRules {
         TalkPlace.REFLECT -> ReflectionRules.OPENING
         TalkPlace.SHUTDOWN -> OPENING_SHUTDOWN
         TalkPlace.PLAN_WEEK -> WeekDraftRules.OPENING
+        TalkPlace.REPLAN_DAY -> DayReplanRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
@@ -246,6 +296,7 @@ object TalkOpenRules {
         TalkPlace.REFLECT -> ReflectionRules.OPENED
         TalkPlace.SHUTDOWN -> OPENED_SHUTDOWN
         TalkPlace.PLAN_WEEK -> PlanWeekNudgeRules.OPENED
+        TalkPlace.REPLAN_DAY -> DayReplanRules.OPENED
     }
 }
 

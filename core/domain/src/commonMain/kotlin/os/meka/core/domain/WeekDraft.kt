@@ -18,7 +18,11 @@ data class GhostCard(val taskId: String, val title: String, val day: Long, val m
  */
 data class WeekDraft(val plan: WeekPlan) {
     /** The bar's line: "✦ Obi's draft · 6 tasks over 4 days · office evenings kept light". */
-    val line: String get() = "${WeekDraftRules.MARK} ${WeekDraftRules.TITLE} · ${plan.spreadLine}"
+    val line: String
+        get() = if (isReplan) DayReplanRules.line(plan) else "${WeekDraftRules.MARK} ${WeekDraftRules.TITLE} · ${plan.spreadLine}"
+
+    /** Part 1, slice 3: "I lost the afternoon, re-plan" — the rest of today, not the week ([DayReplanRules]). */
+    val isReplan: Boolean get() = plan.replanDay != null
 
     /** What a voice reply or the bar's second line says: "Council tax on Thu 29, Book MOT on Sat 31 · Fri kept light". */
     val said: String get() = WeekDraftRules.said(this)
@@ -89,7 +93,7 @@ object WeekDraftRules {
         val placing = p.placing
         val firsts = placing.take(2).joinToString(", ") { r -> "${r.title} on ${p.dayLabel(r.chosen!!)}" }
         val more = (placing.size - 2).takeIf { it > 0 }?.let { " and $it more" } ?: ""
-        val tail = lightDay(draft)?.let { " · ${it.label} kept light" } ?: ""
+        val tail = if (draft.isReplan) "" else lightDay(draft)?.let { " · ${it.label} kept light" } ?: ""
         return firsts + more + tail
     }
 

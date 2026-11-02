@@ -721,7 +721,11 @@ fun WeekBoardView(
                         }
                     },
                     onChange = { haptics.tick(); onPlanSteps?.invoke(d.plan) },
-                    onStartOver = { haptics.tick(); core.dropWeekDraft(); onPlanSteps?.invoke(null) },
+                    // A re-plan of today (part 1, slice 3) just goes; the week's draft opens the steps from the start.
+                    onStartOver = {
+                        haptics.tick(); core.dropWeekDraft()
+                        if (d.isReplan) undo.show(os.meka.core.domain.WeekDraftRules.DROPPED, null) else onPlanSteps?.invoke(null)
+                    },
                 )
             }
             // One day's column, folded or unfolded; a column that leaves (another week shown) is forgotten as a target.

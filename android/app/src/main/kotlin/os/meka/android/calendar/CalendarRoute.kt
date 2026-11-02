@@ -148,6 +148,11 @@ fun CalendarRoute(core: MekaCore) {
     LaunchedEffect(askedToPlan) {
         if (askedToPlan) { board = true; planApp?.openPlanWeek?.value = false; draftWeek() }
     }
+    // Part 1, slice 3: after "I lost the afternoon, re-plan", the Board as it is (the re-plan is already drawn on it).
+    val askedForBoard = planApp?.openBoard?.collectAsState()?.value ?: false
+    LaunchedEffect(askedForBoard) {
+        if (askedForBoard) { board = true; planApp?.openBoard?.value = false }
+    }
     Box(Modifier.fillMaxSize()) {
         Agenda(
             core, v, handlers, showAgain, addHeader, board, { board = it }, undo, onPlanWeek = draftWeek,

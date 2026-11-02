@@ -53,6 +53,11 @@ data class WeekPlan(
     val goals: List<BoardGoal>,
     /** Week board item (8): the one line carried from last week's review ("From your review · Run 5k"), on step 1. */
     val carryLine: String? = null,
+    /**
+     * Ada plans with you, part 1, slice 3: set when this is "I lost the afternoon, re-plan" for today (the day it
+     * re-plans) rather than the week ([DayReplanRules]); Keep all then says "Today re-planned" and doesn't mark the week planned.
+     */
+    val replanDay: Long? = null,
 ) {
     /** The days a row can go to, by chip. */
     fun day(d: Long): PlanDay? = days.firstOrNull { it.day == d }
@@ -152,16 +157,7 @@ object PlanWeekRules {
         if (week == null) return WeekPlan(start, title, range, emptyList(), emptyList(), emptyList())
 
         val dueOn: (Task) -> Long? = { t -> t.dueAtMs?.let(calendar::epochDayOf) }
-        val days = window.mapNotNull { board.day(it) }.map { d ->
-            val due = board.days.flatMap { it.openCards }.filter { dueOn(it.task) == d.epochDay }.map { "Due · ${it.title}" }
-            val chips = allChips(d.epochDay, events, calendar)
-            val office = d.place == BoardPlace.OFFICE
-            val free = d.capacity?.let { c ->
-                val room = if (office) minOf(c.freeMin, OFFICE_EVENING_MIN) else c.freeMin
-                "${TaskEstimateRules.label(room)} free" + if (office) " · office evening" else ""
-            }
-            PlanDay(d.epochDay, label(d.epochDay, today), d.placeLabel, chips + due, free, d.pressure != null)
-        }
+        val days = window.mapNotNull { board.day(it) }.map { d -> planDay(board, d, events, today, calendar) }
 
         // Step 1: what's left to place.
         val todayCol = board.day(today)
@@ -208,8 +204,20 @@ object PlanWeekRules {
         return WeekPlan(start, title, range, days, rows, week.goals)
     }
 
+    /** Step 2's row for [d]: its chip, place, what's fixed (events and tasks due) and its free time. */
+    internal fun planDay(board: WeekBoard, d: BoardDay, events: List<CalendarEvent>, today: Long, calendar: LocalCalendar): PlanDay {
+        val due = board.days.flatMap { it.openCards }.filter { c -> c.task.dueAtMs?.let(calendar::epochDayOf) == d.epochDay }.map { "Due · ${it.title}" }
+        val chips = allChips(d.epochDay, events, calendar)
+        val office = d.place == BoardPlace.OFFICE
+        val free = d.capacity?.let { c ->
+            val room = if (office) minOf(c.freeMin, OFFICE_EVENING_MIN) else c.freeMin
+            "${TaskEstimateRules.label(room)} free" + if (office) " · office evening" else ""
+        }
+        return PlanDay(d.epochDay, label(d.epochDay, today), d.placeLabel, chips + due, free, d.pressure != null)
+    }
+
     /** Room left on a day for the spread: free time (capped on an office day, none when stacking up) less what's planned. */
-    private fun room(d: BoardDay): Int {
+    internal fun room(d: BoardDay): Int {
         if (d.pressure != null) return -10_000
         val c = d.capacity ?: return -10_000
         val free = if (d.place == BoardPlace.OFFICE) minOf(c.freeMin, OFFICE_EVENING_MIN) else c.freeMin

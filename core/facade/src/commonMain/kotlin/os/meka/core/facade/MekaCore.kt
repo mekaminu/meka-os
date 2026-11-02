@@ -2995,9 +2995,15 @@ class MekaCore(
             days += day
         }
         planUndo = undos
-        // Item (6) part 2: the week is planned, so Sunday's card leaves on every device (Undo brings it back).
-        planMarkUndo = if (undos.isEmpty()) null else planWeekMarks.mark(plan.weekStart) ?: -1L
-        if (undos.isEmpty()) null else os.meka.core.domain.PlanWeekRules.acceptedLine(undos.size, days.size)
+        // Item (6) part 2: the week is planned, so Sunday's card leaves on every device (Undo brings it back). A re-plan
+        // of today (part 1, slice 3) doesn't plan the week.
+        val replan = plan.replanDay != null
+        planMarkUndo = if (undos.isEmpty() || replan) null else planWeekMarks.mark(plan.weekStart) ?: -1L
+        when {
+            undos.isEmpty() -> null
+            replan -> os.meka.core.domain.DayReplanRules.keptLine(undos.size)
+            else -> os.meka.core.domain.PlanWeekRules.acceptedLine(undos.size, days.size)
+        }
     }
 
     /** Undo after [acceptWeekPlan]: every task back where it was, in its place. False when nothing to undo. */
@@ -3032,6 +3038,28 @@ class MekaCore(
      */
     suspend fun draftWeekSpoken(): String =
         os.meka.core.domain.WeekDraftRules.spoken(runCatching { draftWeek() }.getOrNull())
+
+    /**
+     * Ada plans with you, part 1, slice 3: "I lost the afternoon, re-plan" — the rest of today re-planned
+     * ([os.meka.core.domain.DayReplanRules]) and shown as Obi's draft (faint cards ahead, Keep all · Change · Start over);
+     * null (and no draft) when what's left still fits. Nothing moves until [keepWeekDraft].
+     */
+    suspend fun replanDay(): os.meka.core.domain.WeekDraft? = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val shown = os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) }
+        val plan = os.meka.core.domain.DayReplanRules.plan(boardNow(), shown, cal.epochDayOf(nowMs()), cal)
+        plan?.let { os.meka.core.domain.WeekDraftRules.draft(it) }.also { _weekDraft.value = it }
+    }
+
+    /**
+     * "I lost the afternoon, re-plan" said to Obi (part 1, slice 3): re-plans as [replanDay] does and returns what he
+     * says about it ([os.meka.core.domain.DayReplanRules.spoken]); a String, so the Mac hands nothing else across.
+     * Never throws.
+     */
+    suspend fun replanDaySpoken(): String = runCatching { replanDay() }.fold(
+        onSuccess = { os.meka.core.domain.DayReplanRules.spoken(it) },
+        onFailure = { os.meka.core.domain.DayReplanRules.SPOKEN_NONE },
+    )
 
     /** Keep all: every move in the draft at once (as Accept plan), the draft goes; [undoWeekPlan] puts them back. */
     suspend fun keepWeekDraft(): String? {

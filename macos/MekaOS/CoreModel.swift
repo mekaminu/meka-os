@@ -1108,6 +1108,25 @@ final class CoreModel {
         return (try? await core.draftWeekSpoken()) ?? WeekDraftRules.shared.NOTHING_SPOKEN
     }
 
+    /// "I lost the afternoon, re-plan" said to Obi (part 1, slice 3): re-plans the rest of today as faint cards on the
+    /// days ahead and returns what he says about it. The draft comes back to the main actor; nothing is sent to the core.
+    func replanDaySpoken() async -> String {
+        guard let core else { return DayReplanRules.shared.SPOKEN_NONE }
+        guard let draft = try? await core.replanDay() else {
+            withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = nil }
+            return DayReplanRules.shared.SPOKEN_FITS
+        }
+        withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = draft }
+        return DayReplanRules.shared.spoken(draft: draft)
+    }
+
+    /// After a re-plan by voice (part 1, slice 3): Calendar opens on the Board as it is, the re-plan drawn on it.
+    func openBoardFromTalk() {
+        go(to: .calendar, reduced: MotionSetting.reduced)
+        showBrief = false
+        calendarShowsBoard = true
+    }
+
     /// Keep all: every move in the draft at once; the bar says "Week planned · …" with one Undo for all.
     func keepWeekDraft() {
         guard let core else { return }
@@ -1129,8 +1148,11 @@ final class CoreModel {
     /// Start over: the draft goes (nothing moved) and the four steps open from the start.
     func startWeekOver() {
         MekaHaptics.tick()
+        let replan = weekDraft?.isReplan ?? false
         core?.dropWeekDraft()
         withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = nil }
+        // A re-plan of today (part 1, slice 3) just goes; the week's draft opens the steps from the start.
+        if replan { return }
         planWeekFrom = nil
         showPlanWeek = true
     }

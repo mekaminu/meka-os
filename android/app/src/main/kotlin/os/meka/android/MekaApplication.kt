@@ -91,6 +91,8 @@ open class MekaApplication : Application() {
      * the Board with Plan your week up, then clears it.
      */
     val openPlanWeek = MutableStateFlow(false)
+    /** Ada plans with you, part 1, slice 3: Calendar opens on the Board as it is (after "I lost the afternoon, re-plan"). */
+    val openBoard = MutableStateFlow(false)
     /** The bedside clock opened by hand (Ask → Daily → Bedside clock, or Talk "bedside clock"); ‹ Back clears it. */
     val openBedside = MutableStateFlow(false)
     /** Today's health line → Ask → More → Health (Reliability first, item 3). */

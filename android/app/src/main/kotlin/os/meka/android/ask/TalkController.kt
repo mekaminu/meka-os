@@ -491,6 +491,12 @@ class TalkController(
                     app?.openDestination?.value = os.meka.android.shell.ShellDestination.CALENDAR
                     app?.openPlanWeek?.value = true
                 }
+                // Part 1, slice 3: after a re-plan, Calendar opens on the Board as it is (the re-plan's faint cards on it).
+                os.meka.core.domain.TalkPlace.REPLAN_DAY -> {
+                    val app = context.applicationContext as? os.meka.android.MekaApplication
+                    app?.openDestination?.value = os.meka.android.shell.ShellDestination.CALENDAR
+                    app?.openBoard?.value = true
+                }
                 // Bedside clock slice 1: "bedside clock" said to Talk opens it; ‹ Back leaves it.
                 os.meka.core.domain.TalkPlace.BEDSIDE -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openBedside?.value = true }
                 // Car and parking, slice 1: "where did I park?" opens Ask → Life → Car with Find my car open.
@@ -529,6 +535,17 @@ class TalkController(
                     val line = core.draftWeekSpoken()
                     if (gen != generation) return@launch
                     apply(TalkFlow.drafted(session, line))
+                }
+            }
+            // Ada plans with you, part 1, slice 3: "I lost the afternoon, re-plan" re-plans the rest of today, then Obi
+            // says what he moved.
+            TalkEffect.ReplanDay -> {
+                level = 0f
+                val gen = generation
+                scope.launch {
+                    val line = core.replanDaySpoken()
+                    if (gen != generation) return@launch
+                    apply(TalkFlow.replanned(session, line))
                 }
             }
             TalkEffect.StopSpeaking -> stopSaying()
