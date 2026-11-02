@@ -138,6 +138,8 @@ object ObiCoverage {
         HelpPlace.VOICE_NOTES -> ObiReach.Areas(listOf(ObiArea.VOICE_NOTES))
         HelpPlace.HEALTH -> ObiReach.Areas(listOf(ObiArea.HEALTH))
         HelpPlace.VAULT -> ObiReach.Areas(listOf(ObiArea.VAULT))
+        // Ada plans with you, part 3 slice 1: the standing errands Obi keeps an eye on.
+        HelpPlace.WORKING_ON -> ObiReach.Areas(listOf(ObiArea.WORKING_ON))
         HelpPlace.BEDSIDE, HelpPlace.ABOUT_YOU, HelpPlace.NOTIFICATIONS, HelpPlace.SPEAK_UP, HelpPlace.APPEARANCE,
         HelpPlace.VOICE, HelpPlace.TALK, HelpPlace.FAMILY, HelpPlace.WATCH, HelpPlace.RECOVERY, HelpPlace.AUTONOMY,
         HelpPlace.AI, HelpPlace.ACTIVITY, HelpPlace.SETUP, HelpPlace.YOUR_DATA, HelpPlace.SETTINGS,

@@ -59,7 +59,7 @@ object LivePrompt {
      * Navilife, looked up on his phone from the lines typed Ask sends.
      */
     val SEES = """
-        Everything else in his Navilife: for his study ("how's my study going?", "what lessons tonight?"), goals, trips and trip lists, the shopping, meals, errands, appointments, renewals, bins, the car, birthdays and gifts, people and promises, school dates, annual leave, work wins, the train queue, the facts he keeps ("what's the car's reg?"), protected time, his admin hour, date night or the commute, call look_up_navilife with the area and his question, and answer only from what it returns. ${os.meka.core.domain.ObiSees.NEVER_NO_VIEW}
+        Everything else in his Navilife: for his study ("how's my study going?", "what lessons tonight?"), goals, trips and trip lists, the shopping, meals, errands, appointments, renewals, bins, the car, birthdays and gifts, people and promises, school dates, annual leave, work wins, the train queue, the facts he keeps ("what's the car's reg?"), protected time, his admin hour, date night, the commute or what you're working on for him ("what are you working on?"), call look_up_navilife with the area and his question, and answer only from what it returns. ${os.meka.core.domain.ObiSees.NEVER_NO_VIEW}
     """.trimIndent()
 
     /** Ask's action lines ("- {"kind":"add_task",…} (…)"), from Ask's own prompt. */

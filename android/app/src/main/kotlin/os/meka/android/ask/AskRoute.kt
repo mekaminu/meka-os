@@ -413,6 +413,10 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.PROTECTED) { ProtectedTimePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.NOTIFICATIONS) { NotificationsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.SPEAK_UP) { SpeakUpPane(core, onClose = { pane = null }) }
+        // Ada plans with you, part 3 slice 1: what Obi keeps an eye on; a card's button opens the screen that holds it.
+        MekaPane(visible = pane == MoreItem.WORKING_ON) {
+            WorkingOnPane(core, onClose = { pane = null }, onOpen = { place -> pane = null; openHelp(place) })
+        }
         MekaPane(visible = pane == MoreItem.AUTONOMY) { AutonomyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ACTIVITY) { ActivityPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.YOUR_DATA) { YourData(core, onClose = { pane = null }) }

@@ -2057,6 +2057,25 @@ class MekaCore(
         _doneTodayChoice.value = os.meka.core.domain.DoneTodayRules.view(doneTodaySettings.setting(), todayEpochDay())
     }
 
+    private val workingOnSettings = os.meka.core.domain.WorkingOnSettings(replica)
+
+    /**
+     * Ada plans with you, part 3 slice 1: what Obi is working on, the standing errands (Renewals watcher, Birthday
+     * keeper, Follow-up chaser) over the radar, Gifts and Waiting for as the last refresh has them. Rules, no AI. Core only.
+     */
+    private fun workingOnNow(): os.meka.core.domain.WorkingOnView = os.meka.core.domain.WorkingOnRules.view(
+        workingOnSettings.setting(), renewals.view(), gifts.view(), _lists.value.waiting, todayEpochDay(),
+    )
+
+    /** Ask → Daily → Obi is working on: the cards and the switches. */
+    suspend fun workingOnView(): os.meka.core.domain.WorkingOnView = onCore { workingOnNow() }
+
+    /** Turns a standing errand on or off by its code ("renewals", "birthdays", "follow_ups"), synced; the pane as it now reads. */
+    suspend fun setStandingErrand(code: String, on: Boolean): os.meka.core.domain.WorkingOnView = onCore {
+        os.meka.core.domain.StandingErrand.of(code)?.let { workingOnSettings.set(it, on) }
+        workingOnNow()
+    }
+
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
      * What MEKA may do (V1, policy engine UI, slice 1): the kill switch, each earned-trust kind and the locked rows
@@ -10570,6 +10589,8 @@ class MekaCore(
                 voiceNotes = obiSeesLines(os.meka.core.domain.ObiArea.VOICE_NOTES, q, cal, full = os.meka.core.domain.ObiRestRules.voiceNotesAsked(q)),
                 health = obiSeesLines(os.meka.core.domain.ObiArea.HEALTH, q, cal, full = os.meka.core.domain.ObiRestRules.healthAsked(q)),
                 vault = obiSeesLines(os.meka.core.domain.ObiArea.VAULT, q, cal, full = os.meka.core.domain.ObiRestRules.vaultAsked(q)),
+                // Ada plans with you, part 3 slice 1: what Obi is working on, all of it when asked, else one line.
+                workingOn = obiSeesLines(os.meka.core.domain.ObiArea.WORKING_ON, q, cal, full = os.meka.core.domain.WorkingOnRules.asked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -12214,6 +12235,7 @@ class MekaCore(
                 _heldVoiceNotes.value?.let { voiceNoteRows(it, onMac = false) }.orEmpty(), full)
             os.meka.core.domain.ObiArea.HEALTH -> os.meka.core.domain.ObiRestRules.healthLines(_health.value, full)
             os.meka.core.domain.ObiArea.VAULT -> os.meka.core.domain.ObiRestRules.vaultLines(_documents.value, full)
+            os.meka.core.domain.ObiArea.WORKING_ON -> os.meka.core.domain.WorkingOnRules.askLines(workingOnNow(), full)
         }
         return lines.take(area.max)
     }
@@ -13822,6 +13844,7 @@ class MekaCore(
             lifeAdminMinute = dailyAdmin?.let { cal.minuteOfDay(it.startMs) },
             lifeAdminJobs = _lifeAdmin.value.jobCount,
             todayDay = todayDay,
+            workingOn = os.meka.core.domain.WorkingOnRules.dailyLine(workingOnNow()),
         ))
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()

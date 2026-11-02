@@ -46,6 +46,7 @@ enum class HelpPlace(val key: String) {
     BEDSIDE("bedside"),
     VOICE_NOTES("voiceNotes"),
     REVIEW("review"),
+    WORKING_ON("workingOn"),
     ABOUT_YOU("aboutYou"),
     WORK("work"),
     PROTECTED("protectedTime"),

@@ -59,6 +59,8 @@ final class CoreModel {
     private(set) var lifeAdmin: LifeAdminView?
     /// Ask → More → Life admin hour.
     var showLifeAdmin = false
+    /// Ask → Daily → Obi is working on (Ada plans with you, part 3 slice 1).
+    var showWorkingOn = false
     /// The line after Skip this week / Keep it, until the sheet closes.
     private(set) var lifeAdminSaid: String?
     /// Protected time (V1, slice 1): the evenings and weekends Plan my day and Move to later keep tasks out of
@@ -1733,6 +1735,28 @@ final class CoreModel {
     func speakUpAction(_ label: String) async -> SpeakUpView? {
         guard let core else { return nil }
         return try? await core.speakUpAction(label: label)
+    }
+
+    /// Obi is working on (Ada plans with you, part 3 slice 1): the standing errands' cards and switches, as the Fold's.
+    func workingOnView() async -> WorkingOnView? {
+        guard let core else { return nil }
+        return try? await core.workingOnView()
+    }
+
+    /// Turns a standing errand on or off by its code (synced with the Fold); the sheet as it now reads.
+    func setStandingErrand(_ code: String, on: Bool) async -> WorkingOnView? {
+        guard let core else { return nil }
+        return try? await core.setStandingErrand(code: code, on: on)
+    }
+
+    /// A card's button in Obi is working on: the sheet closes, then Ask opens the place as Take me there does.
+    func openFromWorkingOn(_ place: HelpPlace, reduced: Bool) {
+        showWorkingOn = false
+        go(to: .ask, reduced: reduced)
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
+            self?.openHelpPlace = place
+        }
     }
 
     /// Whether macOS lets MEKA notify, as last checked (Health, the Notifications sheet); true until checked.

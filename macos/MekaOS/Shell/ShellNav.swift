@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, reading, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, speakUp, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, workingOn, brief, weekAhead, news, shutdown, trainQueue, reading, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, speakUp, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -85,6 +85,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .money: MoneyRules.shared.TITLE
         case .emergency: "Emergency card"
         case .facts: "What Navilife knows"
+        case .workingOn: WorkingOnRules.shared.TITLE
         case .brief: "Morning brief"
         case .weekAhead: "Week ahead"
         case .news: "News"
@@ -138,6 +139,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .money: MoneyRules.shared.ROW_LINE
         case .emergency: "Who to call and where things are"
         case .facts: "Car reg, GP, sizes · the facts Navilife answers from"
+        case .workingOn: WorkingOnRules.shared.ROW_LINE
         case .brief: "Your day, who you're waiting on and headlines"
         case .weekAhead: "The coming week day by day · Sunday at 18:00"
         case .news: "Barça, AI and the headlines · topics and sources"
@@ -174,7 +176,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
     var group: MoreGroup {
         switch self {
         case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .kids, .appointments, .leave, .gifts, .trips, .errands, .car, .money, .emergency, .facts: .life
-        case .brief, .weekAhead, .news, .shutdown, .trainQueue, .reading, .voiceNotes, .lifeAdmin, .review: .daily
+        case .workingOn, .brief, .weekAhead, .news, .shutdown, .trainQueue, .reading, .voiceNotes, .lifeAdmin, .review: .daily
         case .aboutYou, .work, .protectedTime, .notifications, .speakUp, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
@@ -315,6 +317,7 @@ enum ShellNav {
         case .trainQueue: .trainQueue
         case .reading: .reading
         case .lifeAdmin: .lifeAdmin
+        case .workingOn: .workingOn
         default: nil
         }
     }

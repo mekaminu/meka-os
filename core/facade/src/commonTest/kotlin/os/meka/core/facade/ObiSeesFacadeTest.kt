@@ -89,7 +89,7 @@ class ObiSeesFacadeTest {
         // An area that sends one counts line unless asked about is compared on a question about it.
         val about = mapOf(ObiArea.BOARD to "What's on Someday?", ObiArea.DECISIONS to "What did I decide?", ObiArea.READING to "Which book should I take on holiday?", ObiArea.KIDS to "What do the kids need?",
             ObiArea.EMERGENCY to "Who do I call in an emergency?", ObiArea.NEWS to "Anything in the news?", ObiArea.VOICE_NOTES to "What did I say in my voice notes?",
-            ObiArea.HEALTH to "Is the app connected properly?", ObiArea.VAULT to "Is anything expiring soon?")
+            ObiArea.HEALTH to "Is the app connected properly?", ObiArea.VAULT to "Is anything expiring soon?", ObiArea.WORKING_ON to "What are you working on?")
         c.askMeka(q)
         val context = server.asked.last().second
         ObiArea.entries.forEach { area ->

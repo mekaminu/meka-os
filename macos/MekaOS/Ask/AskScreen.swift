@@ -177,6 +177,7 @@ struct AskScreen: View {
         case .dinners: model.showMeals = true
         case .dateNight: model.showDateNight = true
         case .lifeAdmin: model.showLifeAdmin = true
+        case .workingOn: model.showWorkingOn = true
         case .emergency: model.showEmergency = true
         case .trainQueue: model.showTrainQueue = true
         case .reading: model.showReading = true
