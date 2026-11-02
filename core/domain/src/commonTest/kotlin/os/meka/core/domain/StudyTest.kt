@@ -92,7 +92,7 @@ class StudyTest {
         var v = sFold.view(0L).course(id)!!
         assertEquals(listOf("1 · Foundations", "2 · Core skills", "Week 3"), v.modules.map { it.name })
         assertEquals("0 of 6 lessons · about 4 h in all", v.line)
-        assertEquals("Next: Welcome · 1 · Foundations", v.next)
+        assertEquals("Next: Welcome · Module 1: Foundations", v.next)
 
         v.modules[0].lessons.forEach { assertTrue(sFold.tick(it.id, true)) }
         assertFalse(sFold.tick(v.modules[0].lessons[0].id, true))
@@ -102,7 +102,7 @@ class StudyTest {
         assertEquals("0 of 2", v.modules[1].count)
         assertEquals(50, v.pct)
         assertEquals("3 of 6 lessons · about 2 h left", v.line)
-        assertEquals("Next: Pivot tables · 2 · Core skills", v.next)
+        assertEquals("Next: Pivot tables · Module 2: Core skills", v.next)
 
         // A lesson typed under a module the course has goes at that module's end, before the next module.
         sFold.addLessons(id, "Module 1: Foundations\nShortcuts 15 min")
@@ -288,7 +288,7 @@ class StudyTest {
         p = sFold.view(today).course(id)!!.plan
         // 860 min left over six weeks: 144 a week, four 45-minute sessions.
         assertEquals("4 sessions a week", p.perWeek)
-        assertEquals("about 2½ h · 19 lessons left", p.perWeekSub)
+        assertEquals("about 2½ h a week · 19 lessons left", p.perWeekSub)
         assertEquals(StudyRules.PICK_SLOTS, p.fit)
         assertEquals("On track for Mon 7 Dec", p.status)
         assertEquals(listOf(false, true, false), p.ends.map { it.on })
@@ -298,7 +298,7 @@ class StudyTest {
         assertFalse(sFold.setSlot(id, "moon", true))
         p = sFold.view(today).course(id)!!.plan
         assertTrue(p.fits)
-        assertEquals("Fits: the 3 times you picked hold 5 sessions a week.", p.fit)
+        assertEquals("Fits: you need 4 of the 5 sessions a week the 3 times you picked hold.", p.fit)
         assertEquals("That leaves 1 spare session a week to catch up if one slips.", p.obi)
 
         // Only Saturday mornings: longer sessions aren't enough, a later date is.

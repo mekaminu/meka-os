@@ -117,7 +117,7 @@ data class StudyPlanInput(
 
 /**
  * The course's "Your plan" card (slice 2a, mockup): FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips, then "3
- * sessions a week" · "about 2 h 15 · 19 lessons left", whether it fits the slots picked, and Obi's line; [status] ("On
+ * sessions a week" · "about 2 h 15 a week · 19 lessons left", whether it fits the slots picked, and Obi's line; [status] ("On
  * track for Mon 7 Dec", "1 lesson behind · catch up Saturday") goes under the course's line.
  */
 data class StudyPlanView(
@@ -192,7 +192,7 @@ data class StudyCourseView(
     val total: Int,
     /** "5 of 24 lessons · about 18 h in all", or [StudyRules.NO_LESSONS]. */
     val line: String,
-    /** "Next: Lesson 6 · 2 · Core skills", "All 24 lessons done", or null with no lessons. */
+    /** "Next: Lesson 6 · Module 2: Core skills", "All 24 lessons done", or null with no lessons. */
     val next: String?,
     val allDone: Boolean,
     val modules: List<StudyModule>,
@@ -516,6 +516,15 @@ object StudyRules {
         return StudyLessonRow(l.id, l.title, mins, l.done, spoken, planned, l.plannedDay, late = !l.done && (l.plannedDay ?: today) < today)
     }
 
+    private val NUMBERED_MODULE = Regex("""^(\d+)\s*·\s*(.+)$""")
+
+    /**
+     * Walk-through 2026-11-02 A3: "Next: Pivot tables · 2 · Core skills" read as a bare "2"; in a line a numbered
+     * module is said the way he wrote it in the outline ("Module 2: Core skills"); other names stay as they are.
+     */
+    fun moduleWords(module: String): String =
+        NUMBERED_MODULE.matchEntire(module.trim())?.let { "Module ${it.groupValues[1]}: ${it.groupValues[2]}" } ?: module
+
     /** "2 of 6", or "Done" once every lesson is ticked. */
     fun moduleCount(done: Int, total: Int): String = if (total > 0 && done == total) "Done" else "$done of $total"
 
@@ -548,7 +557,7 @@ object StudyRules {
         val next = when {
             total == 0 -> null
             nextLesson == null -> if (total == 1) "The lesson is done" else "All $total lessons done"
-            modules.size > 1 || nextLesson.module != DEFAULT_MODULE -> "Next: ${nextLesson.title} · ${nextLesson.module}"
+            modules.size > 1 || nextLesson.module != DEFAULT_MODULE -> "Next: ${nextLesson.title} · ${moduleWords(nextLesson.module)}"
             else -> "Next: ${nextLesson.title}"
         }
         val lastModule = lessons.maxByOrNull { it.pos }?.module
@@ -864,11 +873,16 @@ object StudyRules {
                 val sessions = sessionsPerWeek(i, finish)
                 perWeek = "${plural(sessions, "session")} a week"
                 // Walk-through A9: "about 1 h 4" read as cut off; the week's time is rounded like every other "about".
-                perWeekSub = "${aboutLabel(minsPerWeek(i, finish).coerceAtLeast(1))} · ${plural(i.leftLessons, "lesson")} left"
+                // Walk-through 2026-11-02 A3: "about 1 h · 5 lessons left" under "about 4½ h left" read as the time
+                // left; it's the week's time, so it says so.
+                perWeekSub = "${aboutLabel(minsPerWeek(i, finish).coerceAtLeast(1))} a week · ${plural(i.leftLessons, "lesson")} left"
                 fits = avail > 0 && sessions <= avail
                 fit = when {
                     avail == 0 -> PICK_SLOTS
-                    fits -> "Fits: ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"} ${plural(avail, "session")} a week."
+                    // Walk-through 2026-11-02 A3: "Fits: … hold 4 sessions a week" beside "2 sessions a week" read as
+                    // two answers; the line says how many of the times' sessions he needs.
+                    fits -> "Fits: you need " + (if (avail == 1) "the one session" else if (sessions == avail) "all ${plural(avail, "session")}" else "$sessions of the ${plural(avail, "session")}") +
+                        " a week ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"}."
                     else -> "Doesn’t fit: you need ${plural(sessions, "session")} a week but ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"} $avail. Add a time, make sessions longer or move the date."
                 }
                 val by = behindBy(i)

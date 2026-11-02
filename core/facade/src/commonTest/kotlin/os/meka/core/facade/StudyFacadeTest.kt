@@ -46,7 +46,7 @@ class StudyFacadeTest {
         val onMac = mac.studyView.value.course(id)!!
         assertEquals(33, onMac.pct)
         assertEquals("1 of 2", onMac.modules.first().count)
-        assertEquals("Next: Spreadsheets · 1 · Foundations", onMac.next)
+        assertEquals("Next: Spreadsheets · Module 1: Foundations", onMac.next)
 
         // Removed on the Mac, Undo puts it back (ticked), and the Fold sees it.
         val removed = assertNotNull(mac.removeStudyLesson(welcome))

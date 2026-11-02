@@ -5223,3 +5223,12 @@ shown (each halved category's rounded line, trading's rounded pace), so £2,220 
 +£100 trading chip +£600 / +£1,200. MoneyForecastTest (+1, trading figures updated), MoneySaveTest (+1), a guard in
 MoneyPlanLayoutScreensTest. Both apps through the core; no server change, no migration.
 
+
+Slice 2 (2026-11-02): **A3** Study plan's figures (`study/cover-dark-plan.png`). The plan card's sub-line said "about 1 h ·
+5 lessons left" under the course's "3 of 8 lessons · about 4½ h left", so the week's time read as the time left; it now
+reads "about 1 h a week · 5 lessons left". "Fits: the 2 times you picked hold 4 sessions a week" beside "2 sessions a
+week" read as two answers; it now says "Fits: you need 2 of the 4 sessions a week the 2 times you picked hold." ("all 3
+sessions" when every one is needed, "the one session … the time you picked holds" with a single one). The next lesson's
+line named its module as "2 · Core skills", a bare "2"; `StudyRules.moduleWords` says a numbered module the way the outline
+wrote it ("Next: Pivot tables · Module 2: Core skills"); unnumbered names unchanged. StudyTest and StudyFacadeTest updated,
+StudyScreensTest's plan shots check all three. Core only, so the Mac follows; no server change, no migration.
