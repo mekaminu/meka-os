@@ -317,7 +317,7 @@ object StudyRules {
     private val HOURS = Regex("(?i)[\\s(\\[·,|\\-–—]*(\\d{1,2}(?:[.,]\\d)?)\\s*(?:h|hr|hrs|hour|hours)\\b\\s*(?:(\\d{1,2})\\s*(?:m|min|mins|minute|minutes)?)?\\s*[)\\]]?$")
     private val MINUTES = Regex("(?i)[\\s(\\[·,|\\-–—]*(\\d{1,3})\\s*(?:m|min|mins|minute|minutes)\\b\\.?\\s*[)\\]]?$")
 
-    private fun clean(s: String, max: Int): String =
+    internal fun clean(s: String, max: Int): String =
         s.trim().trim(' ', ',', ';', '-', '–', '—', '·', '|', ':').replace(Regex("\\s+"), " ").take(max).trim()
             .replaceFirstChar { it.uppercaseChar() }
 
@@ -931,6 +931,25 @@ class Study(
         val rest = lines.drop(1).joinToString("\n")
         val added = if (rest.isBlank()) 0 else addLessons(id, rest).let { if (it.refused) 0 else it.count }
         return StudyAdded(if (added > 0) "Added $title with $added lessons" else "Added $title", added, refused = false, courseId = id)
+    }
+
+    /**
+     * One-tap course import: a new course named [course]'s title with its modules and lessons in order, written as one
+     * course and one lesson per entry (the same fields as a pasted outline). Only after his Add.
+     */
+    fun importCourse(course: StudyImportCourse): StudyAdded {
+        if (course.entries.isEmpty()) return StudyAdded(StudyImportRules.NO_LESSONS, 0, refused = true)
+        val id = newId()
+        val now = nowMs()
+        replica.commitLocal(EntityTypes.STUDY_COURSE, id, mapOf(
+            StudyCourseFields.TITLE to course.title.fv(),
+            StudyCourseFields.ADDED_AT to now.fv(),
+            StudyCourseFields.REMOVED to false.fv(),
+        ))
+        course.entries.forEachIndexed { i, e ->
+            replica.commitLocal(EntityTypes.STUDY_LESSON, newId(), StudyRules.lessonFields(id, e, (i + 1) * GAP, now))
+        }
+        return StudyAdded("Added ${course.title} with ${course.entries.size} lessons", course.entries.size, refused = false, courseId = id)
     }
 
     /**

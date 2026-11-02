@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
     /** The after-work nudge opens Needs you with the summary; other MEKA notifications open where they belong. */
     private fun handleOpen(intent: Intent?) {
         if (intent == null) return
+        studyImport(intent)
         val open = intent.getStringExtra(EXTRA_OPEN) ?: return
         intent.removeExtra(EXTRA_OPEN) // not again on rotation
         val app = application as MekaApplication
@@ -154,6 +155,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * One-tap course import: `navilife://study/import?v=1&d=…` (a link tapped anywhere) or the course's text shared to
+     * Navilife opens Goals with "Add <course> · … lessons?"; nothing is written until Add.
+     */
+    private fun studyImport(intent: Intent) {
+        val text = intent.getStringExtra(EXTRA_STUDY_IMPORT)
+            ?: intent.data?.toString()?.takeIf { intent.action == Intent.ACTION_VIEW && os.meka.core.domain.StudyImportRules.isImport(it) }
+            ?: return
+        intent.removeExtra(EXTRA_STUDY_IMPORT)
+        intent.data = null // not again on rotation
+        val app = application as MekaApplication
+        app.studyImport.value = text
+        app.openDestination.value = ShellDestination.GOALS
+    }
+
     override fun onStart() {
         super.onStart()
         val app = application as MekaApplication
@@ -177,6 +193,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN = "os.meka.open"
+        /** A course link's or shared course's text (one-tap course import), from the share sheet. */
+        const val EXTRA_STUDY_IMPORT = "os.meka.studyImport"
         const val OPEN_AFTER_WORK = "after_work"
         const val OPEN_BRIEF = "brief"
         /** Ask → More → Annual leave, its pane up (the leave heads-up). */

@@ -100,6 +100,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- One-tap course import: navilife://study/import?v=1&d=… opens Goals with "Add <course> …?" (asks first). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="navilife" android:host="study" android:pathPrefix="/import" />
+            </intent-filter>
         </activity>
 
         <!-- Health Connect asks every app reading health data to say how it uses it: shown from Health Connect's

@@ -27,6 +27,12 @@ struct GoalsScreen: View {
                     .contentTransition(.opacity)
                     .padding(.bottom, MekaSpace.m)
                     .staggeredAppear(1)
+                // One-tap course import: "Add <course> · … lessons?" after a course link was opened (asks first).
+                if model.studyImportText != nil, let offer = model.studyImport {
+                    StudyImportCard(offer: offer, palette: palette)
+                        .padding(.bottom, MekaSpace.m)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                }
 
                 SectionLabel("Fasting", palette).staggeredAppear(2)
                 FastingSection(palette: palette).padding(.bottom, MekaSpace.l).staggeredAppear(2)
@@ -107,6 +113,7 @@ struct GoalsScreen: View {
             .padding(.vertical, MekaSpace.xl)
             .animation(MekaMotion.replan(reduced: reduceMotion), value: rowIDs)
             .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: model.studyImport == nil)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)

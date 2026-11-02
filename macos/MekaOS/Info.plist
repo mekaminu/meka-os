@@ -30,6 +30,7 @@
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>mekaos</string>
+                <string>navilife</string>
             </array>
         </dict>
     </array>

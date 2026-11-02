@@ -897,6 +897,11 @@ final class CoreModel {
 
     /// mekaos://publish-fold-update?apk=/path/to/app-debug.apk
     func handle(url: URL) {
+        // One-tap course import: navilife://study/import?v=1&d=… opens Goals with "Add <course> …?" (asks first).
+        if url.host == "study", url.scheme == "navilife" || url.scheme == "mekaos" {
+            offerStudyImport(url.absoluteString)
+            return
+        }
         guard url.scheme == "mekaos" else { return }
         // The desktop News widget (news ticker slice 3b): mekaos://news?story=<id> opens News on that story.
         if url.host == "news" {
@@ -6420,6 +6425,48 @@ final class CoreModel {
     }
 
     /// Adds a course named by the typed line; only a String crosses. The sheet opens it once it's there.
+    // MARK: One-tap course import
+
+    /** The link or shared course waiting for Add on Goals, and the question for it (nil while it's read). */
+    var studyImportText: String?
+    var studyImport: StudyImportOffer?
+    /** The course Add made, for Goals' STUDY section to open. */
+    var studyOpenRequest: String?
+
+    func offerStudyImport(_ text: String) {
+        studyImportText = text
+        studyImport = nil
+        go(to: .goals, reduced: false)
+        guard let core else { return }
+        Task {
+            do {
+                let offer = try await core.studyImportOffer(text: text)
+                if studyImportText == text { studyImport = offer }
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func cancelStudyImport() {
+        MekaHaptics.tick()
+        studyImportText = nil
+        studyImport = nil
+    }
+
+    func addStudyImport() async {
+        guard let core, let text = studyImportText else { return }
+        studyImportText = nil
+        studyImport = nil
+        do {
+            let r = try await core.addStudyImport(text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            studyOpenRequest = r.courseId
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func addStudyCourse(_ text: String) async -> StudySaid? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let core, !t.isEmpty else { return nil }

@@ -109,6 +109,8 @@ open class MekaApplication : Application() {
     val openMoney = MutableStateFlow(false)
     /** The Week board's study line (plan a lesson for a day) → Goals with that course open. */
     val openStudy = MutableStateFlow<String?>(null)
+    /** One-tap course import: a course link or shared course waiting for Add on Goals (its text; nothing written yet). */
+    val studyImport = MutableStateFlow<String?>(null)
     /** Goals' READING GOAL row (reading and learning, slice 4) → Ask's Reading pane. */
     val openReading = MutableStateFlow(false)
     /** Review on a Needs you clean-up card (inbox fixes, slice 2): Ask with the Mail pane up. */

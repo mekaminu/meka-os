@@ -139,6 +139,13 @@ fun GoalsRoute(core: MekaCore) {
         openStudy(id)
         app.openStudy.value = null
     }
+    // One-tap course import: a course link or shared course waits here as "Add <course> …?" until Add or Cancel.
+    val importText by app.studyImport.collectAsState()
+    var importOffer by remember { mutableStateOf<os.meka.core.domain.StudyImportOffer?>(null) }
+    LaunchedEffect(importText) {
+        val t = importText ?: return@LaunchedEffect
+        importOffer = runCatching { core.studyImportOffer(t) }.getOrNull()
+    }
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background),
@@ -148,6 +155,25 @@ fun GoalsRoute(core: MekaCore) {
         item(key = "title") {
             Text("Goals", style = MekaType.greeting, color = Meka.colors.textPrimary,
                 modifier = Modifier.sharedPlace(LocalPlaceTitleKey.current).appear(rememberAppearance(0)))
+        }
+        item(key = "study-import") {
+            AnimatedVisibility(importText != null && importOffer != null, enter = unfold(), exit = fold()) {
+                importOffer?.let { o ->
+                    StudyImportCard(
+                        o, Modifier.padding(bottom = MekaSpace.m),
+                        onAdd = {
+                            val t = importText ?: return@StudyImportCard
+                            app.studyImport.value = null
+                            haptics.light()
+                            scope.launch {
+                                val id = runCatching { core.addStudyImport(t) }.getOrNull()?.courseId
+                                if (id != null) openStudy(id) else haptics.reject()
+                            }
+                        },
+                        onCancel = { haptics.tick(); app.studyImport.value = null },
+                    )
+                }
+            }
         }
         item(key = "pace") {
             val line = view.paceLine

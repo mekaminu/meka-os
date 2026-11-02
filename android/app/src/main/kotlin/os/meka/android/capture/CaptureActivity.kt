@@ -118,6 +118,14 @@ class CaptureActivity : ComponentActivity() {
             hasPicture = sharedPicture() != null,
         )
         if (request == null) { finish(); return }
+        // One-tap course import: a course link or its JSON shared as text opens Goals with "Add <course> …?" instead.
+        val shared = intent?.getCharSequenceExtra(CaptureRequests.EXTRA_TEXT)?.toString()
+        if (shared != null && os.meka.core.domain.StudyImportRules.isImport(shared)) {
+            startActivity(android.content.Intent(this, os.meka.android.MainActivity::class.java)
+                .setAction(android.content.Intent.ACTION_VIEW).putExtra(os.meka.android.MainActivity.EXTRA_STUDY_IMPORT, shared)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish(); return
+        }
         // Screenshots and photos, slice 2: opened from a "Screenshot · looks like …" notification, which goes now.
         ScreenshotWatch.opened(this, intent)
         val picture = if (request.picture) sharedPicture() else null

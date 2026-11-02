@@ -3119,6 +3119,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.tripsView.value.rows.isEmpty)
     }
 
+    func testStudyImportReachesSwift() async throws {
+        // One-tap course import: a shared course (or a navilife://study/import link) asks first ("Add … ?"), then Add makes the course.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "study-import-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let link = #"{"title":"Data analytics","modules":[{"title":"Basics","lessons":["Welcome 15 min","Pivot tables 1 h"]}]}"#
+        XCTAssertTrue(StudyImportRules.shared.isImport(text: link))
+        let offer = try await core.studyImportOffer(text: link)
+        XCTAssertTrue(offer.ok)
+        XCTAssertEqual(offer.line, "Add Data analytics · 1 module · 2 lessons?")
+        XCTAssertTrue(core.studyView.value.courses.isEmpty)
+        let added = try await core.addStudyImport(text: link)
+        let id = try XCTUnwrap(added.courseId)
+        XCTAssertEqual(core.studyView.value.course(id: id)?.total, 2)
+        let bad = try await core.studyImportOffer(text: "navilife://study/import?v=1")
+        XCTAssertFalse(bad.ok)
+        XCTAssertEqual(bad.line, StudyImportRules.shared.NOT_READ)
+    }
+
     func testStudyReachesSwift() async throws {
         // Study plan, slice 1: a course and its pasted outline added on the Mac split into modules and lessons, a tick
         // reaches the view, and removing a lesson comes back with Undo.

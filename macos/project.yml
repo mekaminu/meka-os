@@ -47,7 +47,7 @@ targets:
         # Self-updating phone app: tools/publish-fold.sh opens mekaos://publish-fold-update?apk=… (FoldUpdateSheet).
         CFBundleURLTypes:
           - CFBundleURLName: os.meka.mac.publish
-            CFBundleURLSchemes: [mekaos]
+            CFBundleURLSchemes: [mekaos, navilife]  # navilife://study/import (one-tap course import)
         # Capture from anywhere: select text in any app → Services → "Add to MEKA" (CaptureService.swift).
         NSServices:
           - NSMenuItem:

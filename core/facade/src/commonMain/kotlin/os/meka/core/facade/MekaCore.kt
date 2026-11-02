@@ -5569,6 +5569,20 @@ class MekaCore(
     suspend fun addStudyCourse(text: String): os.meka.core.domain.StudyAdded = onCore { study.addCourse(text) }
 
     /**
+     * One-tap course import: reads a course link (`navilife://study/import?v=1&d=…`) or its JSON shared as text, and
+     * says what Add would do ("Add Data analytics · 10 modules · 38 lessons?", or why it can't). Nothing is written.
+     */
+    suspend fun studyImportOffer(text: String): os.meka.core.domain.StudyImportOffer = onCore {
+        os.meka.core.domain.StudyImportRules.offer(os.meka.core.domain.StudyImportRules.read(text), study.courses().map { it.title })
+    }
+
+    /** His Add on that question: the course and its lessons, as one new course (its id to open); refused with the line. */
+    suspend fun addStudyImport(text: String): os.meka.core.domain.StudyAdded = onCore {
+        val read = os.meka.core.domain.StudyImportRules.read(text)
+        read.course?.let { study.importCourse(it) } ?: os.meka.core.domain.StudyAdded(read.line, 0, refused = true)
+    }
+
+    /**
      * Adds the lessons a pasted or typed outline lists to the course [courseId], after its last lesson: one lesson a
      * line, "Module 2: Core skills" starts a module, "45 min" at the end is its length ([os.meka.core.domain.StudyRules.readOutline]).
      * Refused when there's no lesson in it or the course has gone.

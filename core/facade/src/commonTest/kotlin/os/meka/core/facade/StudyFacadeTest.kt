@@ -341,4 +341,24 @@ class StudyFacadeTest {
         assertEquals("Mon 2 Nov – Sun 8 Nov", fold.today.value.studyCheckin?.sub)
         assertEquals("This week · nothing ticked", fold.today.value.studyCheckin?.rows?.single()?.week)
     }
+
+    @Test
+    fun aCourseLinkAsksFirstThenAddsTheCourseTheMacSees() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val link = os.meka.core.domain.StudyImportRules.link(
+            "Data analytics", listOf("Module 1: Foundations" to listOf("Welcome 15 min", "Spreadsheets 45 min"), "Core skills" to listOf("Pivot tables 1 h")),
+        )
+        val offer = fold.studyImportOffer(link)
+        assertTrue(offer.ok)
+        assertEquals("Add Data analytics · 2 modules · 3 lessons?", offer.line)
+        assertTrue(fold.studyView.value.courses.isEmpty()) // asking writes nothing
+        val added = fold.addStudyImport(link)
+        val id = assertNotNull(added.courseId)
+        assertEquals("0 of 3 lessons · about 2 h in all", fold.studyView.value.course(id)!!.line)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Data analytics", mac.studyView.value.course(id)!!.title)
+        assertTrue(mac.studyImportOffer(link).again)
+        assertTrue(fold.addStudyImport("navilife://study/import?v=1&d=%%%").refused)
+    }
 }

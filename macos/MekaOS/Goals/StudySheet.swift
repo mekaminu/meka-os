@@ -89,6 +89,55 @@ struct StudySection: View {
                 StudySheet(courseId: id, palette: palette, onClose: { openId = nil }, onRemoved: { removed = $0 })
             }
         }
+        // One-tap course import: the course Add just made opens here.
+        .onChange(of: model.studyOpenRequest, initial: true) { _, id in
+            guard let id else { return }
+            openId = id
+            model.studyOpenRequest = nil
+        }
+    }
+}
+
+/// One-tap course import on the Mac: the card at the top of Goals after a navilife://study/import link was opened.
+/// "ADD A COURSE", the question ("Add Data analytics · 10 modules · 38 lessons?") and Add · Cancel; a link that can't
+/// be read shows its plain line and Close. Nothing is written before Add, which opens the new course's sheet.
+struct StudyImportCard: View {
+    @Environment(CoreModel.self) private var model
+    let offer: StudyImportOffer
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(StudyImportRules.shared.LABEL)
+                .font(MekaType.cardLabel).tracking(MekaType.cardLabelTracking)
+                .foregroundStyle(palette.textSecondary)
+            Text(offer.line)
+                .font(MekaType.body)
+                .foregroundStyle(offer.ok ? palette.textPrimary : palette.accent)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(offer.spoken)
+            if offer.ok {
+                Text(StudyImportRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                if offer.ok {
+                    Button(StudyImportRules.shared.ADD) { Task { await model.addStudyImport() } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .keyboardShortcut(.defaultAction)
+                        .accessibilityLabel("Add \(offer.title)")
+                }
+                Button(offer.ok ? StudyImportRules.shared.CANCEL : StudyImportRules.shared.CLOSE) { model.cancelStudyImport() }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .accessibilityElement(children: .contain)
     }
 }
 
