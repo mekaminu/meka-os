@@ -196,10 +196,10 @@ class FamilyRecoveryScreensTest {
         val partner = if (fill == Fill.EMPTY) null else "Morgan"
         when (fill) {
             Fill.EMPTY -> Unit
-            Fill.ONE -> server?.invites?.add(FamilyCodec.Invite("fam00000000000000000001", "sam", "waiting", now - 2 * hour))
+            Fill.ONE -> server?.invites?.add(FamilyCodec.Invite("fam00000000000000000001", "morgan", "waiting", now - 2 * hour))
             Fill.MANY -> server?.invites?.addAll(listOf(
                 FamilyCodec.Invite("fam00000000000000000003", "riley", "waiting", now - day),
-                FamilyCodec.Invite("fam00000000000000000002", "sam", "joined", now - 11 * day, now - 11 * day + hour, now - hour),
+                FamilyCodec.Invite("fam00000000000000000002", "morgan", "joined", now - 11 * day, now - 11 * day + hour, now - hour),
                 FamilyCodec.Invite("fam00000000000000000001", "mary jane", "revoked", now - 20 * day, now - 20 * day + hour, now - 15 * day),
             ))
         }
