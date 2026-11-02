@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today in the Navilife look</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{cursor:pointer;font-family:inherit}
+button:active{transform:scale(.97)}
+.row{transition:opacity .25s}
+@media (prefers-reduced-motion:reduce){button:active{transform:none}.row{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:980px;box-sizing:border-box;padding:32px 16px 48px;background:{{c.ground}};color:{{c.text}};font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:24px">
+
+<div style="display:flex;flex-direction:column;gap:4px">
+<div style="font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.15">Good afternoon, Meka</div>
+<div style="font-size:14px;color:{{c.text2}}">Monday 2 November · 11° cloudy, dry</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:{{c.card}};border:{{c.border}};border-radius:10px;padding:16px 8px;display:flex;flex-direction:column;gap:4px;align-items:center"><span style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums">{{left}}</span><span style="font-size:12px;color:{{c.text2}}">tasks left</span></div>
+<div style="background:{{c.card}};border:{{c.border}};border-radius:10px;padding:16px 8px;display:flex;flex-direction:column;gap:4px;align-items:center"><span style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums">2h 10</span><span style="font-size:12px;color:{{c.text2}}">free today</span></div>
+<div style="background:{{c.card}};border:{{c.border}};border-radius:10px;padding:16px 8px;display:flex;flex-direction:column;gap:4px;align-items:center"><span style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums">2</span><span style="font-size:12px;color:{{c.text2}}">need you</span></div>
+</div>
+
+<div style="background:{{c.card}};border:{{c.border}};border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:16px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Up next · 15:00</div>
+<div style="display:flex;flex-direction:column;gap:4px"><div style="font-size:20px;font-weight:600;letter-spacing:-.01em">School pick-up</div><div style="font-size:14px;color:{{c.text2}}">Leave by 14:40 · 18 min drive</div></div>
+<div style="display:flex;gap:8px"><button style="min-height:48px;padding:0 24px;border-radius:999px;border:0;background:{{c.brass}};color:{{c.onBrass}};font-size:16px;font-weight:600">Take me there</button><button style="min-height:48px;padding:0 16px;border-radius:999px;border:0;background:transparent;color:{{c.brass}};font-size:16px">Later</button></div>
+</div>
+
+<div style="background:{{c.card}};border:{{c.border}};border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Today</span><span style="font-size:13px;color:{{c.text3}}">{{doneLine}}</span></div>
+<sc-for list="{{tasks}}" as="t" hint-placeholder-count="4">
+<div class="row" style="display:flex;align-items:center;gap:16px;min-height:48px;border-bottom:{{t.line}};opacity:{{t.fade}}">
+<button aria-label="{{t.label}}" onClick="{{t.toggle}}" style="width:24px;height:24px;flex:none;border-radius:999px;border:{{t.ring}};background:{{t.fill}};color:{{c.onBrass}};font-size:14px;line-height:1;padding:0">{{t.mark}}</button>
+<span style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:16px">{{t.title}}</span><span style="font-size:14px;color:{{c.text2}}">{{t.meta}}</span></span>
+</div>
+</sc-for>
+<a href="#" style="font-size:14px;text-decoration:none;color:{{c.brass}};padding-top:8px">See all 9 ›</a>
+</div>
+
+<div style="background:{{c.card}};border:{{c.border}};border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Needs you</div>
+<div style="display:flex;align-items:center;gap:16px;min-height:56px;border-bottom:1px solid {{c.hair}}"><span style="width:8px;height:8px;border-radius:999px;background:{{c.approval}}"></span><span style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:16px">Reply to the school</span><span style="font-size:14px;color:{{c.text2}}">Draft ready · trip form</span></span><span style="color:{{c.text3}}">›</span></div>
+<div style="display:flex;align-items:center;gap:16px;min-height:56px"><span style="width:8px;height:8px;border-radius:999px;background:{{c.approval}}"></span><span style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:16px">Car insurance renews</span><span style="font-size:14px;color:{{c.text2}}">£412 · cancel by 20 Nov</span></span><span style="color:{{c.text3}}">›</span></div>
+</div>
+
+<div style="font-size:13px;color:{{c.text3}};text-align:center">Synced 2 min ago</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":390,"height":980}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={done:{}};}
+renderVals() {
+const light = (this.props.theme ?? 'Dark') === 'Light';
+const c = light
+? {ground:'#FAFAF7',card:'#FFFFFF',border:'1px solid #E4E2DA',hair:'#E4E2DA',text:'#111113',text2:'#5B5B63',text3:'#6E6E76',brass:'#8A6F2F',onBrass:'#FFFFFF',approval:'#2F5FA8'}
+: {ground:'#000000',card:'#0E0E10',border:'0',hair:'#26262B',text:'#F4F4F5',text2:'#A1A1AA',text3:'#85858D',brass:'#C9B37E',onBrass:'#14120C',approval:'#8FB8F2'};
+const list = [
+{id:'a',title:'Book the MOT',meta:'about 15m'},
+{id:'b',title:'Pay the trip form',meta:'Due today · £12'},
+{id:'c',title:'Study · Pivot tables',meta:'19:30 · 2 lessons'},
+{id:'d',title:'Bins out',meta:'Black bin and food caddy'}
+];
+const done = this.state.done;
+const tasks = list.map((t,i) => {
+const d = !!done[t.id];
+return {...t,
+mark: d ? '✓' : '',
+label: d ? 'Mark not done: ' + t.title : 'Done: ' + t.title,
+ring: d ? '2px solid ' + c.brass : '2px solid ' + c.text3,
+fill: d ? c.brass : 'transparent',
+fade: d ? 0.45 : 1,
+line: i < list.length - 1 ? '1px solid ' + c.hair : '0',
+toggle: () => this.setState({done:{...done,[t.id]:!d}})};
+});
+const n = Object.values(done).filter(Boolean).length;
+return {c, tasks, left: 9 - n, doneLine: n ? n + ' done today' : ''};
+}
+}
+</script>
+</body>
+</html>
