@@ -94,7 +94,7 @@ class WorkingOnFacadeTest {
         c.tick()
         c.askMeka("What are you working on for me?")
         val full = server.asked.last().second.items.filter { it.kind == AskItemKind.WORKING_ON }.map { it.line }
-        assertEquals("Obi is working on · 3 standing errands on · nothing needs you", full.first())
+        assertEquals("Obi is working on · 5 standing errands on · nothing needs you", full.first())
         assertTrue(full.any { it.startsWith("Renewals watcher · Watching 1 renewal · next: MOT due ") }, full.joinToString("\n"))
         assertTrue(full.any { it.startsWith("Follow-up chaser · Waiting on 1 thing for you · next chase ") }, full.joinToString("\n"))
         assertEquals(full.joinToString("\n") { "working_on: $it" }, c.liveNavilife("working_on", "what are you working on?"))
@@ -106,5 +106,24 @@ class WorkingOnFacadeTest {
         val lines = c.liveNavilife("working_on", "")
         assertTrue("working_on: Follow-up chaser · off" in lines, lines)
         assertNull(lines.lines().firstOrNull { it.contains("Waiting on") })
+    }
+
+    @Test
+    fun schoolAndClubsFollowsTheChildrensWeekAndNamesWhatToPay() = runTest {
+        val fold = core("android")
+        fold.tick()
+        assertTrue(fold.workingOnView().cards.none { it.errand == StandingErrand.SCHOOL })
+        fold.addAboutYouChild("Alex, U7, Oakfield School")
+        fold.addSchool("PE Fridays")
+        fold.addSchool("Trip payment 30 Oct")
+        fold.tick()
+        val v = fold.workingOnView()
+        val all = v.cards.joinToString("\n") { "${it.title} | ${it.did} | ${it.need}" } + "\n" + v.summary
+        val card = v.cards.single { it.errand == StandingErrand.SCHOOL }
+        assertTrue(card.did.contains("in the next 7 days"), all)
+        assertTrue(card.need!!.startsWith("Trip payment "), all)
+        assertTrue(card.need!!.endsWith("pay, sign or send it back by then"), all)
+        fold.setStandingErrand("school", false)
+        assertTrue(fold.workingOnView().cards.none { it.errand == StandingErrand.SCHOOL })
     }
 }

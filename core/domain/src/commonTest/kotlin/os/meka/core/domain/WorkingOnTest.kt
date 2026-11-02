@@ -61,10 +61,10 @@ class WorkingOnTest {
         val allOff = WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()), RenewalsView.EMPTY, gifts, w, today)
         assertEquals(WorkingOnRules.ALL_OFF_LINE, allOff.summary)
         assertEquals(listOf("Obi is working on · 0 standing errands on · nothing to watch yet", "Renewals watcher · off",
-            "Birthday keeper · off", "Follow-up chaser · off"), WorkingOnRules.askLines(allOff, full = true))
+            "Birthday keeper · off", "Follow-up chaser · off", "Inbox keeper · off", "School & clubs · off"), WorkingOnRules.askLines(allOff, full = true))
         // Nothing to watch and nothing off: no lines at all.
         assertEquals(emptyList(), WorkingOnRules.askLines(WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today), full = true))
-        assertEquals(listOf("Obi is working on · 3 standing errands on · 1 needs you"), WorkingOnRules.askLines(v, full = false))
+        assertEquals(listOf("Obi is working on · 5 standing errands on · 1 needs you"), WorkingOnRules.askLines(v, full = false))
     }
 
     @Test

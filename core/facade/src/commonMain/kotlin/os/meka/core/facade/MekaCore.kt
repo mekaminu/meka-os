@@ -2060,12 +2060,26 @@ class MekaCore(
     private val workingOnSettings = os.meka.core.domain.WorkingOnSettings(replica)
 
     /**
-     * Ada plans with you, part 3 slice 1: what Obi is working on, the standing errands (Renewals watcher, Birthday
-     * keeper, Follow-up chaser) over the radar, Gifts and Waiting for as the last refresh has them. Rules, no AI. Core only.
+     * Ada plans with you, part 3 slices 1–2: what Obi is working on, the standing errands (Renewals watcher, Birthday
+     * keeper, Follow-up chaser, Inbox keeper, School & clubs) over the radar, Gifts, Waiting for, the mail tidies and
+     * Kids' week as the last refresh has them. Rules, no AI. Core only.
      */
-    private fun workingOnNow(): os.meka.core.domain.WorkingOnView = os.meka.core.domain.WorkingOnRules.view(
-        workingOnSettings.setting(), renewals.view(), gifts.view(), _lists.value.waiting, todayEpochDay(),
-    )
+    private fun workingOnNow(): os.meka.core.domain.WorkingOnView {
+        val today = todayEpochDay()
+        // Part 3 slice 2: the Inbox keeper (today's mail autopilot) and School & clubs (Kids → THIS WEEK, the cover
+        // questions and the school's pay-or-sign dates), as the last refresh and the last mail check have them.
+        val inbox = os.meka.core.domain.WorkingOnRules.inbox(
+            activity.mailTidyBatches(), activity.mailBacklogs(), lastHealthServer?.mail ?: lastMailFacts, _mailNeeds.value,
+            nowMs(), ZoneCalendar(timeZone),
+        )
+        val kids = _kids.value
+        val schoolCard = os.meka.core.domain.WorkingOnRules.school(
+            kids.week.takeIf { !kids.isEmpty }, _school.value.covers, school.items(), today,
+        )
+        return os.meka.core.domain.WorkingOnRules.view(
+            workingOnSettings.setting(), renewals.view(), gifts.view(), _lists.value.waiting, today, inbox, schoolCard,
+        )
+    }
 
     /** Ask → Daily → Obi is working on: the cards and the switches. */
     suspend fun workingOnView(): os.meka.core.domain.WorkingOnView = onCore { workingOnNow() }

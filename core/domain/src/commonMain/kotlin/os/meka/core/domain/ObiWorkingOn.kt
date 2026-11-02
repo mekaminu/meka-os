@@ -18,6 +18,10 @@ enum class StandingErrand(val code: String, val title: String, val about: String
     RENEWALS("renewals", "Renewals watcher", "Your renewals, MOT and subscriptions: a word four weeks ahead", HelpPlace.LISTS, "Open Renewals"),
     BIRTHDAYS("birthdays", "Birthday keeper", "Birthdays and anniversaries: a heads-up ten days ahead with your gift ideas", HelpPlace.GIFTS, "Open Gifts"),
     FOLLOW_UPS("follow_ups", "Follow-up chaser", "Things you're waiting on: a word when it's time to chase", HelpPlace.LISTS, "Open Waiting for"),
+    /** Part 3 slice 2: today's mail autopilot, reported here (what was tidied, what waits for his Approve or reply). */
+    INBOX("inbox", "Inbox keeper", "Your mail: what Obi tidied today and what needs you", HelpPlace.MAIL, "Open Mail"),
+    /** Part 3 slice 2: the children's next seven days from School, their club sessions and fees (Kids → THIS WEEK). */
+    SCHOOL("school", "School & clubs", "School dates, kit, club sessions and fees in the next 7 days", HelpPlace.KIDS, "Open Kids"),
     ;
 
     companion object {
@@ -65,9 +69,9 @@ data class WorkingOnSetting(val off: Set<StandingErrand> = emptySet()) {
 object WorkingOnRules {
     const val ENTITY_ID = "standing_errands"
     const val TITLE = "Obi is working on"
-    const val ROW_LINE = "Renewals, birthdays and follow-ups he keeps an eye on"
+    const val ROW_LINE = "Renewals, birthdays, follow-ups, mail and school he keeps an eye on"
     const val INTRO = "Obi keeps an eye on these for you and says when he needs you. He never sends, books or buys anything without your tap."
-    const val EMPTY_LINE = "Nothing to keep an eye on yet · add a renewal, a birthday or something you're waiting on and Obi watches it here"
+    const val EMPTY_LINE = "Nothing to keep an eye on yet · add a renewal, a birthday, something you're waiting on, your mail or the children and Obi watches it here"
     const val ALL_OFF_LINE = "Every standing errand is off · turn one on below"
     const val SWITCHES = "Standing errands"
     const val DID = "What I did"
@@ -79,14 +83,14 @@ object WorkingOnRules {
     /** A birthday comes up this many days ahead (the board: "a heads-up 10 days ahead"). */
     const val BIRTHDAY_AHEAD = 10L
     /** Ask's lines: a head and up to two per errand. */
-    const val ASK_MAX = 1 + 3 * 2
+    const val ASK_MAX = 1 + 5 * 2
 
     private const val OFF = "off"
 
     fun read(fields: Map<String, FieldValue>?): WorkingOnSetting =
         WorkingOnSetting(StandingErrand.entries.filter { fields?.get(it.code)?.textOrNull == OFF }.toSet())
 
-    private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
+    private fun plural(n: Int, one: String, many: String = one + "s") = "${SpeechRules.grouped(n.toLong())} ${if (n == 1) one else many}"
     private fun tidy(s: String) = s.replace(Regex("""\s+"""), " ").trim()
 
     /** The Renewals watcher's card: null when the radar is empty. */
@@ -149,16 +153,89 @@ object WorkingOnRules {
         return card(StandingErrand.FOLLOW_UPS, did, need)
     }
 
+    /**
+     * Part 3 slice 2, the **Inbox keeper**: today's mail autopilot, reported here. What he did: the new mail tidied
+     * today and this week (not the clean-up, not Junk, not undone) and how many accounts Navilife reads. What it needs:
+     * a clean-up, Mark read or Empty Junk waiting for his Approve, else the emails the server sorted as needing him
+     * (counts only: senders and subjects are untrusted and stay on their card), else the accounts Navilife can't read.
+     * Null while no mail is connected and nothing was ever tidied.
+     */
+    fun inbox(
+        tidies: List<MailTidyBatch>,
+        backlogs: List<MailBacklog>,
+        accounts: List<MailAccountFacts>?,
+        needs: MailNeedsCard?,
+        nowMs: Long,
+        cal: LocalCalendar,
+    ): WorkingOnCard? {
+        val mail = accounts.orEmpty().filter { MailProviders.isMail(it.provider) }
+        val fresh = tidies.filter { !it.backlog && !it.junk && it.undoneAtMs == null }
+        if (mail.isEmpty() && fresh.isEmpty() && backlogs.isEmpty() && needs == null) return null
+        val today = cal.epochDayOf(nowMs)
+        val todayN = fresh.filter { cal.epochDayOf(it.atMs) == today }.sumOf { it.count }
+        val weekN = fresh.filter { today - cal.epochDayOf(it.atMs) in 0L..6L }.sumOf { it.count }
+        val tidied = when {
+            todayN > 0 -> "Tidied ${plural(todayN, "email")} today" + if (weekN > todayN) " · ${SpeechRules.grouped(weekN.toLong())} this week" else ""
+            weekN > 0 -> "Nothing to tidy yet today · ${plural(weekN, "email")} this week"
+            else -> "Nothing tidied yet"
+        }
+        val read = mail.count { !MailHealthRules.unreadable(it, nowMs) }
+        val reading = if (mail.isEmpty()) "" else " · reading $read of ${plural(mail.size, "account")}"
+        val approve = MailBacklogRules.cards(backlogs, false, nowMs).size
+        val unreadable = MailHealthRules.unreadableNames(mail, nowMs)
+        val need = when {
+            approve > 0 -> "${plural(approve, "mail clean-up")} ${if (approve == 1) "waits" else "wait"} for your Approve in Needs you"
+            needs != null && needs.rows.isNotEmpty() -> "${needs.headline} · in Needs you"
+            unreadable != null -> "I can't read $unreadable yet · Mail says why"
+            else -> null
+        }
+        return card(StandingErrand.INBOX, tidied + reading, need)
+    }
+
+    /** Within this many days a school date to pay, sign or send back needs him (Kids' THIS WEEK is 7 days). */
+    const val SCHOOL_AHEAD = 7L
+
+    /**
+     * Part 3 slice 2, **School & clubs**: the children's next seven days as Kids → THIS WEEK has them (School's days
+     * off, dates and weekly kit, their club sessions, their fees), with the first thing named. What it needs: a
+     * week-ahead cover question ("off Mon 27 Oct · who's covering?") first, else a school date to pay, sign or send
+     * back within the week. All his own typed lines or his calendar's; a club session's title is the calendar's words,
+     * so it is never quoted here. Null with no children in About you.
+     */
+    fun school(week: KidWeek?, covers: List<SchoolCover>, items: List<SchoolItem>, today: Long): WorkingOnCard? {
+        if (week == null && covers.isEmpty()) return null
+        val first = week?.days?.firstOrNull()?.let { d -> d.items.firstOrNull { !it.fromCalendar }?.let { "${d.label}, ${tidy(it.text)}" } }
+        val did = when {
+            week == null || week.isEmpty -> "Nothing for the children in the next 7 days"
+            first != null -> "${week.line} · next: $first"
+            else -> week.line
+        }
+        val cover = covers.firstOrNull()
+        val due = items.filter { it.kind == SchoolKind.DAY && it.startDay in today..today + SCHOOL_AHEAD && SchoolRules.isDue(it.title) }
+            .minWithOrNull(compareBy<SchoolItem> { it.startDay }.thenBy { it.addedAtMs })
+        val need = when {
+            cover != null -> "${tidy(cover.title)} · ${tidy(cover.question)}"
+            due != null -> (if (due.who.isEmpty()) "" else "${due.who}: ") + "${tidy(due.title)} ${RenewalRules.dayWord(due.startDay, today)} · pay, sign or send it back by then"
+            else -> null
+        }
+        return card(StandingErrand.SCHOOL, did, need)
+    }
+
     private fun card(e: StandingErrand, did: String, need: String?) =
         WorkingOnCard(e, did, need, listOfNotNull(e.title, did, need?.let { "Needs you: $it" }).joinToString(". "))
 
     /** The pane: the errands that are on and have something, those needing him first; every switch underneath. */
-    fun view(setting: WorkingOnSetting, renewals: RenewalsView, gifts: GiftsView, waiting: List<WaitingItem>, today: Long): WorkingOnView {
+    fun view(
+        setting: WorkingOnSetting, renewals: RenewalsView, gifts: GiftsView, waiting: List<WaitingItem>, today: Long,
+        inbox: WorkingOnCard? = null, school: WorkingOnCard? = null,
+    ): WorkingOnView {
         val cards = StandingErrand.entries.filter { setting.isOn(it) }.mapNotNull { e ->
             when (e) {
                 StandingErrand.RENEWALS -> renewals(renewals, today)
                 StandingErrand.BIRTHDAYS -> birthdays(gifts, today)
                 StandingErrand.FOLLOW_UPS -> followUps(waiting, today)
+                StandingErrand.INBOX -> inbox
+                StandingErrand.SCHOOL -> school
             }
         }.sortedBy { if (it.needsYou) 0 else 1 }
         val switches = StandingErrand.entries.map { WorkingOnSwitch(it, setting.isOn(it)) }
