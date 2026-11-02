@@ -31,15 +31,13 @@ class ObiErrandsFacadeTest {
         assertEquals(ObiJobRules.BLANK, fold.askObiErrand("  ").line)
         val asked = fold.askObiErrand("find someone to service the boiler")
         val id = assertNotNull(asked.id)
-        fold.tick()
-        mac.tick()
+        fold.syncNow(); mac.syncNow()
         val row = mac.obiJobRows().single()
         assertEquals("Find someone to service the boiler", row.title)
         assertEquals("Starting · Obi is planning it", row.status)
         assertTrue(mac.stopObiErrand(id))
         assertFalse(mac.stopObiErrand(id))
-        mac.tick()
-        fold.tick()
+        mac.syncNow(); fold.syncNow()
         assertEquals("Stopped", fold.obiJobRows().single().status)
     }
 }
