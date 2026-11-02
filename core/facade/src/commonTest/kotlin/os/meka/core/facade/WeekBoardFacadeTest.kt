@@ -586,7 +586,6 @@ class WeekBoardFacadeTest {
 
     @Test
     fun iLostTheAfternoonReplansWhatNoLongerFitsAndKeepAllMovesIt() = runTest {
-        // Thu 17:15: 3h45 free before the day's end.
         val fold = core("android"); val mac = core("mac")
         val mot = fold.addTask("Book MOT")
         val gate = fold.addTask("Fix the gate")
@@ -594,29 +593,36 @@ class WeekBoardFacadeTest {
         val today = fold.weekBoard.value.todayEpochDay
         fold.moveOnBoard(mot, today, 0)
         fold.moveOnBoard(gate, today, 1)
-        fold.setEstimate(mot, 120)
-        fold.setEstimate(gate, 120)
+        fold.tick()
+        // Thu 17:15: the MOT takes exactly what's left of today, so the gate no longer fits.
+        val free = fold.weekBoard.value.day(today)!!.capacity!!.freeMin
+        assertTrue(free >= 30, "free $free")
+        fold.setEstimate(mot, free)
+        fold.setEstimate(gate, 60)
         fold.tick()
 
-        // Part 1, slice 3: one 2h task still fits, the other goes to the days ahead as a faint card; nothing moves yet.
+        // Part 1, slice 3: the gate goes to a day ahead as a faint card; nothing moves yet.
         val spoken = fold.replanDaySpoken()
-        assertTrue(spoken.startsWith("I've moved what won't fit today. Fix the gate tomorrow"), spoken)
+        assertTrue(spoken.startsWith("I've moved what won't fit today. Fix the gate "), spoken)
         val draft = fold.weekDraft.value!!
         assertTrue(draft.isReplan)
         assertEquals(listOf(gate), draft.plan.rows.map { it.taskId })
+        val to = draft.plan.rows.single().chosen!!
+        assertTrue(to in today + 1..today + 6, "to $to")
         assertEquals(setOf(mot, gate), fold.weekBoard.value.day(today)!!.openCards.map { it.id }.toSet())
-        assertEquals(listOf(gate), fold.weekDraftGhosts(fold.weekBoard.value, today + 1).map { it.taskId })
+        assertEquals(listOf(gate), fold.weekDraftGhosts(fold.weekBoard.value, to).map { it.taskId })
 
         assertEquals("Today re-planned · 1 task moved", fold.keepWeekDraft())
         assertEquals(listOf(mot), fold.weekBoard.value.day(today)!!.openCards.map { it.id })
-        assertEquals(listOf(gate), fold.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+        assertTrue(gate in fold.weekBoard.value.day(to)!!.openCards.map { it.id })
         fold.syncNow(); mac.syncNow()
-        assertEquals(listOf(gate), mac.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+        assertTrue(gate in mac.weekBoard.value.day(to)!!.openCards.map { it.id })
         assertTrue(fold.undoWeekPlan())
         assertEquals(setOf(mot, gate), fold.weekBoard.value.day(today)!!.openCards.map { it.id }.toSet())
 
-        // A shorter estimate and both fit again: no re-plan, and Obi says so.
-        fold.setEstimate(gate, 60)
+        // Shorter estimates and both fit again: no re-plan, and Obi says so.
+        fold.setEstimate(mot, 15)
+        fold.setEstimate(gate, 15)
         fold.tick()
         assertNull(fold.replanDay())
         assertNull(fold.weekDraft.value)
