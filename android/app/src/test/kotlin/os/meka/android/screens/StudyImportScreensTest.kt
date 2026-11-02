@@ -97,7 +97,8 @@ class StudyImportScreensTest {
         assertTrue(core.studyView.value.courses.isEmpty())
         compose.mainClock.autoAdvance = true
         compose.onNodeWithTag("$STUDY_IMPORT_TAG-add").performClick()
-        compose.waitUntil(10_000L) { core.studyView.value.courses.isNotEmpty() }
+        // The view catches up after the course and each lesson are written, so wait for the whole course.
+        compose.waitUntil(10_000L) { runBlocking { core.tick() }; core.studyView.value.courses.singleOrNull()?.total == 5 }
         assertNull(app.studyImport.value)
         val c = core.studyView.value.courses.single()
         assertEquals("Data analytics", c.title)
