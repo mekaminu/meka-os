@@ -165,6 +165,8 @@ object EntityTypes {
     const val STUDY_LESSON = "study_lesson"
     /** Money, his own categories (2026-10-27): one category he made ("Vape"), id `k<hash of the name>` (see [MoneyOwnCategories]). */
     const val MONEY_CATEGORY = "money_category"
+    /** Ada plans with you, part 3 slice 3 (2026-11-02): one errand Meka asked Obi for, worked on by the server (see [ObiJobs]). */
+    const val OBI_JOB = "obi_job"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -177,7 +179,7 @@ object EntityTypes {
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
         TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM, TRIP_TEMPLATE,
-        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY,
+        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB,
     )
 }
 
@@ -617,6 +619,9 @@ object MekaSchema : SchemaRegistry {
         // His own categories: a removal and a re-make (or an Undo), the latest wins.
         entityType == EntityTypes.MONEY_CATEGORY -> MergePolicy.Lww
         entityType == EntityTypes.TRADING_WALLET -> MergePolicy.Lww
+        // Errands he asked Obi for: his Stop on any device stands; the rest (his words, the server's steps), the latest wins.
+        entityType == EntityTypes.OBI_JOB && field == ObiJobFields.STOPPED -> MergePolicy.TrueWins
+        entityType == EntityTypes.OBI_JOB -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

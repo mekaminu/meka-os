@@ -2090,6 +2090,22 @@ class MekaCore(
         workingOnNow()
     }
 
+    private val obiJobs = os.meka.core.domain.ObiJobs(replica, ids::next, nowMs)
+
+    /**
+     * Ada plans with you, part 3 slice 3: the errands he asked Obi for, needing him first, as the server has worked them
+     * so far (it writes each step into the job; nothing is ever sent). Core only.
+     */
+    suspend fun obiJobRows(): List<os.meka.core.domain.ObiJobRow> = onCore {
+        os.meka.core.domain.ObiJobRules.rows(obiJobs.all(), nowMs(), ZoneCalendar(timeZone))
+    }
+
+    /** Asks Obi to look into something ("find someone to service the boiler"), synced to the server, which works on it. */
+    suspend fun askObiErrand(text: String): os.meka.core.domain.ObiJobAsked = onCore { obiJobs.ask(text) }
+
+    /** Stops one; false when it is unknown or already finished. */
+    suspend fun stopObiErrand(id: String): Boolean = onCore { obiJobs.stop(id) }
+
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
      * What MEKA may do (V1, policy engine UI, slice 1): the kill switch, each earned-trust kind and the locked rows

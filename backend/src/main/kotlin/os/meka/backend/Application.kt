@@ -1353,6 +1353,15 @@ fun main(args: Array<String>) {
             val numberLookup = brave?.let { NumberLookup(it, PostgresNumberLookupStore(ds)) }
             // The companion, slice 2: live world facts for Ask and Talk, through the same Brave key.
             val liveFacts = brave?.let { LiveFacts(it) }
+            // Ada plans with you, part 3 slice 3: errands he asks Obi for, worked a step at a time (plan, Brave search,
+            // report). Writes only obi_job; nothing is ever sent, booked or bought. "off" stops the loop.
+            if (System.getenv("MEKA_OBI_ERRANDS") != "off") {
+                val devices = PostgresDeviceRegistry(ds)
+                startErrandRunner(ErrandRunner(
+                    opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
+                    brain = ai?.provider?.let { ModelErrandBrain(it) }, search = brave, onWritten = { hh -> push?.serverChanged(hh) },
+                ))
+            }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup)
             voice?.let { startRecordingSweep(it.assistant) }
             voice?.let { startCallClipsWarm(it) }
