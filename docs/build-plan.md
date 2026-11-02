@@ -651,7 +651,7 @@ Acceptance: re-shoot the open Fold at its real size with Meka-like data (a mostl
 - [!] Mac review: ask Meka for Mac screenshots and give the Mac app the same polish pass the Fold has had. *2026-10-10:* asked under Needs Meka #21; the pass starts from his screenshots (nothing to judge the Mac's look by from here: no Mac in the container), so skip to the next item until they arrive.
   - *Completeness (2026-10-12):* The pass also covers Light, reduced motion (macOS accessibility setting), VoiceOver labels, keyboard navigation and focus rings, narrow window widths, the menu-bar extra and the look of notifications; list any Fold/Mac feature gaps found.
 
-- [x] **Screen tests that flaked on CI** (Claude 2026-10-26–30: Shutdown, Watch, Work, Talk over, Life admin by hand). Done 2026-11-02: each now waits by turns (`ScreenShots.awaitShows`: main looper, a little real time, the frame clock) until its text is on screen, failing after a bound, never skipped; Work's wait loop now stops early. Details in the archive.
+- [x] **Screen tests that flaked on CI** (Claude 2026-10-26–30: Shutdown, Watch, Work, Talk over, Life admin by hand). Done 2026-11-02: each now waits by turns (`ScreenShots.awaitShows`: main looper, a little real time, the frame clock) until its text is on screen, failing after a bound, never skipped; Work's wait loop now stops early; bfb66d1, CI run 1516 green. Details in the archive.
 
 ## Milestones
 
