@@ -810,7 +810,7 @@ private struct WeekDraftBar: View {
         }
         .font(MekaType.itemMeta)
         .buttonStyle(.borderless)
-        .padding(.horizontal, MekaSpace.s)
+        .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
         .accessibilityElement(children: .contain)

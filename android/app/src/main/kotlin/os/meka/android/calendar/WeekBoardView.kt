@@ -1035,7 +1035,7 @@ private fun WeekDraftBar(draft: os.meka.core.domain.WeekDraft, modifier: Modifie
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .testTag(WEEK_DRAFT_TAG)
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     ) {
         Text(draft.line, style = MekaType.itemMeta, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(draft.said, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
