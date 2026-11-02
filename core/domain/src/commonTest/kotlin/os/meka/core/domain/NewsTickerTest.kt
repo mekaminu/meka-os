@@ -56,6 +56,17 @@ class NewsTickerTest {
     }
 
     @Test
+    fun aSetNarrowerThanTheStripIsLaidOutOnceAndStandsStill() {
+        // Two stories (~620 dp) on the bedside clock's ~900 dp strip: once, so no headline shows twice (A10).
+        assertFalse(TickerRules.loops(loopDp = 620f, viewportDp = 900f))
+        assertTrue(TickerRules.loops(loopDp = 1900f, viewportDp = 900f))
+        assertTrue(TickerRules.loops(loopDp = 900f, viewportDp = 900f))
+        // Not measured yet: once, never three copies on the first frame.
+        assertFalse(TickerRules.loops(loopDp = 0f, viewportDp = 900f))
+        assertFalse(TickerRules.loops(loopDp = 620f, viewportDp = 0f))
+    }
+
+    @Test
     fun theChoiceDefaultsToCalm() {
         assertEquals(TickerMode.CALM, TickerRules.mode(null))
         assertEquals(TickerMode.CALM, TickerRules.mode("sideways"))

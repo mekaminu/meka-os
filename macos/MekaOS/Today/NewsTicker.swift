@@ -91,10 +91,11 @@ struct DriftingTicker: View {
     private static let gap: CGFloat = 12
 
     var body: some View {
-        // A set narrower than the strip can't loop without a gap: it stands still.
-        let fits = loopWidth > 0 && loopWidth >= viewport
-        // Words fade over 48 pt at each end rather than being cut mid-word (TickerRules.EDGE_FADE_DP).
-        let edge = CGFloat(TickerRules.shared.edgeFadeFraction(widthDp: Float(viewport)))
+        // A set narrower than the strip can't loop without a gap: it stands still, laid out once with no faded edges, so
+        // a headline never shows twice and no card fades off an end (walk-through 2026-10-30, A10).
+        let fits = TickerRules.shared.loops(loopDp: Float(loopWidth), viewportDp: Float(viewport))
+        // Words fade over 48 pt at each end rather than being cut mid-word (TickerRules.EDGE_FADE_DP), only while it loops.
+        let edge = fits ? CGFloat(TickerRules.shared.edgeFadeFraction(widthDp: Float(viewport))) : 0
         let moving = TickerRules.shared.moving(mode: mode, reducedMotion: false, onScreen: true, held: hovering,
                                                loopsDone: drift.loops, hasItems: fits)
         ZStack(alignment: .trailing) {
@@ -103,10 +104,12 @@ struct DriftingTicker: View {
                     ForEach(cards) { c in TickerCardView(card: c, palette: palette, open: open) }
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { loopWidth = $0 + Self.gap }
-                HStack(spacing: Self.gap) {
-                    ForEach(cards) { c in TickerCardView(card: c, palette: palette, open: open) }
+                if fits {
+                    HStack(spacing: Self.gap) {
+                        ForEach(cards) { c in TickerCardView(card: c, palette: palette, open: open) }
+                    }
+                    .accessibilityHidden(true)
                 }
-                .accessibilityHidden(true)
             }
             .fixedSize(horizontal: true, vertical: false)
             .offset(x: fits ? -CGFloat(drift.offsetDp) : 0)

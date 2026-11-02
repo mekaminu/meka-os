@@ -169,34 +169,37 @@ private fun AppointmentRowView(row: AppointmentRow, modifier: Modifier, onWent: 
     val statusColor by animateColorAsState(
         if (row.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "appt-status",
     )
-    Row(
+    // The title has the card's whole width (walk-through 2026-10-30, A10: beside Went and Remove it was cut short on
+    // the closed Fold); Went · Remove sit under the lines at the card's end.
+    Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            .minTouch().padding(start = MekaSpace.m, end = MekaSpace.xs, top = MekaSpace.xs),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Column(Modifier.fillMaxWidth().padding(end = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(row.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Crossfade(row.status, animationSpec = MekaMotion.appear(reduced), label = "appt-status-line") { s ->
                 Text(s, style = MekaType.caption, color = statusColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
-        Text(
-            AppointmentRules.WENT_LABEL, style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onWent)
-                .semantics { contentDescription = "Went to ${row.title} today" }
-                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
-                .minTouch().padding(horizontal = MekaSpace.xs),
-        )
-        Text(
-            "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = "Remove ${row.title}" }
-                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
-                .minTouch().padding(horizontal = MekaSpace.xs),
-        )
+        Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                AppointmentRules.WENT_LABEL, style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClick = onWent)
+                    .semantics { contentDescription = "Went to ${row.title} today" }
+                    // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                    .minTouch().padding(horizontal = MekaSpace.xs),
+            )
+            Text(
+                "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClick = onRemove)
+                    .semantics { contentDescription = "Remove ${row.title}" }
+                    // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                    .minTouch().padding(horizontal = MekaSpace.xs),
+            )
+        }
     }
 }

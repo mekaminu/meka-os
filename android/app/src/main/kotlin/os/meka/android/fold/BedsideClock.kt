@@ -372,8 +372,10 @@ private fun DayHalf(
         // Slice 3: while it listens for the phrase, a brass dot and the line say so (the visible indicator).
         os.meka.android.ask.HelloWakeLine(wakeListening, Modifier.align(Alignment.End))
         val opens = v.opens
+        // No rounded clip (walk-through 2026-10-30, A10): the heading sits flush with this area's left edge, so a 16 dp
+        // corner cut the "U" of "UP NEXT"; the press's ripple stays inside the rectangle anyway.
         Column(
-            Modifier.fillMaxWidth().appear(rememberAppearance(3)).clip(RoundedCornerShape(MekaRadius.m))
+            Modifier.fillMaxWidth().appear(rememberAppearance(3))
                 .then(if (opens != null) Modifier.clickable(role = Role.Button) { haptics.tick(); onOpen(opens) } else Modifier)
                 .padding(vertical = MekaSpace.xxs),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),

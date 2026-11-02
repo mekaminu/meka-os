@@ -80,6 +80,14 @@ object TickerRules {
         return NewsTicker(place.matchday, out)
     }
 
+    /**
+     * Whether a set of cards [loopDp] wide (its width plus the gap after it) loops on a strip [viewportDp] wide. Only a
+     * set at least as wide as the strip can loop without a seam; a narrower one (two stories on the open Fold or the
+     * bedside clock) is laid out ONCE, standing still from the strip's start with no faded edges, so the same headline
+     * never shows twice and no card bleeds off either end (walk-through 2026-10-30, A10). Not measured yet = once.
+     */
+    fun loops(loopDp: Float, viewportDp: Float): Boolean = loopDp > 0f && viewportDp > 0f && loopDp >= viewportDp
+
     /** Whether the strip is shown on Today at all. */
     fun shown(mode: TickerMode, ticker: NewsTicker): Boolean = mode != TickerMode.OFF && !ticker.isEmpty
 

@@ -141,15 +141,16 @@ private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerM
     var drift by remember { mutableStateOf(TickerDrift.START) }
     BoxWithConstraints(modifier.fillMaxWidth().height(STRIP_HEIGHT)) {
         val viewportPx = constraints.maxWidth
-        // A set narrower than the strip can't loop without a gap: it stands still.
-        val fits = loopPx > 0 && loopPx >= viewportPx
+        // A set narrower than the strip can't loop without a gap: it stands still, laid out once with no faded edges, so
+        // a headline never shows twice and no card bleeds off an end (walk-through 2026-10-30, A10: the bedside clock).
+        val fits = TickerRules.loops(loopPx / density, viewportPx / density)
         val moving = TickerRules.moving(mode, reducedMotion = false, onScreen = true, held = held || dragged, loopsDone = drift.loops, hasItems = fits)
-        LaunchedEffect(loopPx) {
-            if (loopPx > 0) scroll.scrollTo(loopPx + (drift.offsetDp * density).roundToInt())
+        LaunchedEffect(loopPx, fits) {
+            if (fits) scroll.scrollTo(loopPx + (drift.offsetDp * density).roundToInt()) else scroll.scrollTo(0)
         }
         // After a scrub, land on the same picture in the middle set (identical, so the jump can't be seen).
         LaunchedEffect(dragged, held) {
-            if (!dragged && !held && loopPx > 0) {
+            if (!dragged && !held && fits) {
                 drift = TickerRules.scrubbed(drift, (scroll.value - loopPx) / density, loopPx / density)
                 scroll.scrollTo(loopPx + (drift.offsetDp * density).roundToInt())
             }
@@ -167,7 +168,7 @@ private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerM
         }
         Row(
             Modifier.fillMaxWidth().height(STRIP_HEIGHT)
-                .fadedEdges()
+                .then(if (fits) Modifier.fadedEdges() else Modifier)
                 .pointerInput(Unit) {
                     // Watch the finger without taking it, so taps and drags still reach the cards and the scroll.
                     awaitEachGesture {
@@ -183,13 +184,13 @@ private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerM
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            repeat(3) { copy ->
+            repeat(if (fits) 3 else 1) { copy ->
                 Row(
                     if (copy == 0) Modifier.onSizeChanged { loopPx = it.width + (CARD_GAP.value * density).roundToInt() } else Modifier,
                     horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    list.forEach { c -> Card(core, c, Modifier, open, hidden = copy != 1) }
+                    list.forEach { c -> Card(core, c, Modifier, open, hidden = fits && copy != 1) }
                 }
             }
         }
