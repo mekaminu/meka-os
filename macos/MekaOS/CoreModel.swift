@@ -1120,6 +1120,17 @@ final class CoreModel {
         return DayReplanRules.shared.spoken(draft: draft)
     }
 
+    /// Re-plan today in the Board's ⋯ (part 1): what no longer fits today goes ahead as faint cards; when it all still
+    /// fits, the bar says so and nothing moves. Only the draft comes back to the main actor; nothing is sent to the core.
+    func replanDay() {
+        guard let core else { return }
+        Task {
+            let draft = try? await core.replanDay()
+            withAnimation(MekaMotion.appear(reduced: MotionSetting.reduced)) { weekDraft = draft }
+            if draft == nil { offerEventUndo(DayReplanRules.shared.FITS_LINE, nil) }
+        }
+    }
+
     /// After a re-plan by voice (part 1, slice 3): Calendar opens on the Board as it is, the re-plan drawn on it.
     func openBoardFromTalk() {
         go(to: .calendar, reduced: MotionSetting.reduced)

@@ -1720,6 +1720,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         )
         XCTAssertEqual(openMenu.map { $0.label }, ["Agenda view", "Hide timeline", "New event", "Plan your week"])
         XCTAssertEqual(openMenu.first?.kind, FoldedMenuKind.agenda)
+        // Ada plans with you, part 1: Re-plan today is only offered on this week with an open task today.
+        XCTAssertNil(DayReplanRules.shared.menuItem(board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []), weekIndex: 0, canPlan: true))
+        XCTAssertEqual(DayReplanRules.shared.FITS_LINE, "Today still fits · nothing to move")
+        XCTAssertNotEqual(FoldedMenuKind.replanDay, FoldedMenuKind.planWeek)
         XCTAssertEqual(match.pillLabel(b: budget), "planned")
         XCTAssertEqual(match.BUTTON, 40)
         XCTAssertEqual(match.NOTHING_PLANNED, "Nothing planned")

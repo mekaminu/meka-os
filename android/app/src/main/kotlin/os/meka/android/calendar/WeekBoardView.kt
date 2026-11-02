@@ -245,6 +245,14 @@ fun WeekBoardView(
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    // Ada plans with you, part 1: Re-plan today in ⋯ — what no longer fits today goes ahead as Obi's faint cards (the
+    // draft's bar: Keep all · Change · Start over); when it all still fits, the bar says so and nothing moves.
+    val replanDay: () -> Unit = {
+        haptics.tick()
+        scope.launch {
+            if (runCatching { core.replanDay() }.getOrNull() == null) undo.show(os.meka.core.domain.DayReplanRules.FITS_LINE, null)
+        }
+    }
 
     // Drag state, in root coordinates: the card picked up, where the finger is, and where on the card it was held.
     var drag by remember { mutableStateOf<BoardDrag?>(null) }
@@ -640,6 +648,7 @@ fun WeekBoardView(
                             FoldedMenuKind.TIMELINE -> foldTimeline = !foldTimeline
                             FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
                             FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
+                            FoldedMenuKind.REPLAN_DAY -> replanDay()
                             FoldedMenuKind.REVIEW -> onReview()
                             FoldedMenuKind.GOALS -> { openTray = null; goalsOpen = true }
                             FoldedMenuKind.NO_DAY, FoldedMenuKind.SOMEDAY -> {
@@ -671,6 +680,7 @@ fun WeekBoardView(
                         FoldedMenuKind.TIMELINE -> timelineOpen = !showTimeline
                         FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
                         FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
+                        FoldedMenuKind.REPLAN_DAY -> replanDay()
                         FoldedMenuKind.REVIEW -> onReview()
                         FoldedMenuKind.GOALS -> { openTray = null; goalsOpen = true }
                         else -> Unit

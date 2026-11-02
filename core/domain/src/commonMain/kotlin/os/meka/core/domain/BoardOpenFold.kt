@@ -90,7 +90,8 @@ object BoardOpenFoldRules {
     /**
      * The open Fold's (and the Mac's) ⋯ menu for the week at [weekIndex] (0 is this week): Agenda view, the timeline's
      * toggle when the window has room for it ([timelineOpen] null when it hasn't), New event when a calendar can take
-     * one, Plan your week, Review the week (from Friday, this week). Goals, No day yet and Someday stay on the page.
+     * one, Plan your week, Re-plan today (this week, while today has open tasks), Review the week (from Friday, this
+     * week). Goals, No day yet and Someday stay on the page.
      */
     fun menu(board: WeekBoard, weekIndex: Int, timelineOpen: Boolean?, canAddEvent: Boolean, canPlan: Boolean): List<FoldedMenuItem> =
         buildList {
@@ -103,6 +104,7 @@ object BoardOpenFoldRules {
             }
             if (canAddEvent) add(FoldedMenuItem(FoldedMenuKind.NEW_EVENT, NEW_EVENT, ""))
             if (canPlan) add(FoldedMenuItem(FoldedMenuKind.PLAN_WEEK, PlanWeekRules.OPEN, "Obi helps"))
+            DayReplanRules.menuItem(board, weekIndex, canPlan)?.let(::add)
             if (board.offersReview && weekIndex == 0) add(FoldedMenuItem(FoldedMenuKind.REVIEW, BoardReviewRules.REVIEW, ""))
         }
 

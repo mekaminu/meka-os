@@ -102,4 +102,23 @@ class DayReplanTest {
         assertTrue(TalkFlow.replanned(TalkFlow.stop(asked.session).session, "late").effects.isEmpty())
         assertEquals(DayReplanRules.OPENED, TalkOpenRules.remembered(TalkPlace.REPLAN_DAY))
     }
+
+    @Test
+    fun replanTodaySitsInTheBoardsMenuWhileTodayHasOpenTasks() {
+        val board = WeekBoardRules.build(tasks, emptyList(), evening, cal)
+        val item = DayReplanRules.menuItem(board, 0, canPlan = true)!!
+        assertEquals(FoldedMenuItem(FoldedMenuKind.REPLAN_DAY, "Re-plan today", "what's left"), item)
+        // Right after Plan your week in both menus (folded and open/Mac).
+        val folded = BoardFoldedRules.menu(board, board.weeks[0], 0, timelineOpen = false, canAddEvent = false, canPlan = true).map { it.kind }
+        assertEquals(folded.indexOf(FoldedMenuKind.PLAN_WEEK) + 1, folded.indexOf(FoldedMenuKind.REPLAN_DAY))
+        val open = BoardOpenFoldRules.menu(board, 0, null, canAddEvent = false, canPlan = true).map { it.kind }
+        assertEquals(listOf(FoldedMenuKind.AGENDA, FoldedMenuKind.PLAN_WEEK, FoldedMenuKind.REPLAN_DAY), open.filter { it != FoldedMenuKind.REVIEW })
+        // Not on next week, not without the planner, not when today has nothing open.
+        assertNull(DayReplanRules.menuItem(board, 1, canPlan = true))
+        assertNull(DayReplanRules.menuItem(board, 0, canPlan = false))
+        val empty = WeekBoardRules.build(emptyList(), emptyList(), evening, cal)
+        assertNull(DayReplanRules.menuItem(empty, 0, canPlan = true))
+        assertTrue(BoardOpenFoldRules.menu(empty, 0, null, false, true).none { it.kind == FoldedMenuKind.REPLAN_DAY })
+        assertEquals("Today still fits · nothing to move", DayReplanRules.FITS_LINE)
+    }
 }

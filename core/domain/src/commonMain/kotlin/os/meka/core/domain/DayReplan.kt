@@ -34,6 +34,23 @@ object DayReplanRules {
     /** Said when today has no Board column (shouldn't happen) or the re-plan failed. */
     const val SPOKEN_NONE = "I couldn't re-plan today just now. I've opened the Board."
 
+    /** The Board's ⋯ menu item's quiet detail. */
+    const val MENU_DETAIL = "what's left"
+
+    /** The bar when Re-plan today in ⋯ finds nothing to move. */
+    const val FITS_LINE = "Today still fits · nothing to move"
+
+    /**
+     * Re-plan today in the Board's ⋯ menu (folded, open Fold and Mac): offered on this week ([weekIndex] 0) when Obi can
+     * plan ([canPlan]) and today still has an open task; null otherwise.
+     */
+    fun menuItem(board: WeekBoard, weekIndex: Int, canPlan: Boolean): FoldedMenuItem? {
+        if (!canPlan || weekIndex != 0) return null
+        val today = board.day(board.todayEpochDay) ?: return null
+        if (today.openCards.isEmpty()) return null
+        return FoldedMenuItem(FoldedMenuKind.REPLAN_DAY, TITLE, MENU_DETAIL)
+    }
+
     /**
      * The re-plan for [today] on [board] ([events] are the Board's, for each day's fixed line), or null when nothing
      * needs to move. The plan's rows are only the tasks that move, each with its suggested day chosen.

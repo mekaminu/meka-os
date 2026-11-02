@@ -139,6 +139,9 @@ struct WeekBoardScreen: View {
         case FoldedMenuKind.planWeek:
             // Ada plans with you, part 1: Obi drafts the week as faint cards (the steps when nothing is left to place).
             model.draftWeek()
+        case FoldedMenuKind.replanDay:
+            // Re-plan today: what no longer fits today goes ahead as Obi's faint cards (or the bar says it all fits).
+            model.replanDay()
         case FoldedMenuKind.review:
             if board.offersReview && week == 0 { model.openReflectionFromTalk() }
         default:
