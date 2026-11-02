@@ -93,9 +93,9 @@ class SettingsScreensTest {
     /** Every About you line, as Meka might type it (invented). */
     private val typed = mapOf(
         AboutField.SHOWN_NAME to "Jordan",
-        AboutField.PARTNER_NAME to "Sam",
+        AboutField.PARTNER_NAME to "Morgan",
         AboutField.PARTNER_PHONE to "07700 900123",
-        AboutField.PARTNER_EMAIL to "sam@example.com",
+        AboutField.PARTNER_EMAIL to "morgan@example.com",
         AboutField.HOME to "Oakfield",
         AboutField.WORK to "Riverside",
         AboutField.ROUTE to "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside",

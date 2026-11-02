@@ -115,7 +115,7 @@ class KeptPlacesScreensTest {
                 check(!core.addEmergency(EmergencySection.CALL.key, "GP: Dr Patel, 01632 960123").refused)
                 if (fill == Fill.MANY) {
                     check(!core.addEmergency(EmergencySection.CALL.key, "Alex's school office: 01632 960456").refused)
-                    check(!core.addEmergency(EmergencySection.CALL.key, "Neighbour with the spare key: Sam two doors down, 07700 900123").refused)
+                    check(!core.addEmergency(EmergencySection.CALL.key, "Neighbour with the spare key: Pat two doors down, 07700 900123").refused)
                     check(!core.addEmergency(EmergencySection.DOCUMENTS.key, "Passports: study desk, top drawer").refused)
                     check(!core.addEmergency(EmergencySection.DOCUMENTS.key, "Wills and the deeds to the house: the grey box file in the loft above the landing").refused)
                     check(!core.addEmergency(EmergencySection.ACCOUNTS.key, "Home insurance: Oakfield Mutual").refused)
@@ -126,7 +126,7 @@ class KeptPlacesScreensTest {
                 check(!core.addFact("Car reg: AB12 CDE").refused)
                 if (fill == Fill.MANY) {
                     check(!core.addFact("GP: Oakfield Surgery, 01632 960789").refused)
-                    check(!core.addFact("Alex's shoe size: 12").refused)
+                    check(!core.addFact("Alex's shoe size: 13").refused)
                     check(!core.addFact("Energy supplier: Oakfield Energy").refused)
                     check(!core.addFact("Boiler: Oakfield Combi 30, serviced every autumn by the plumber on the high street").refused)
                     check(!core.addFact("Wi-Fi name: Oakfield-Home-5G").refused)

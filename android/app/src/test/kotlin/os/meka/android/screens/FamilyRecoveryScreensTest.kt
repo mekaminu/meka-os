@@ -193,7 +193,7 @@ class FamilyRecoveryScreensTest {
 
     private fun family(name: String, fill: Fill, connected: Boolean = true, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val server = if (connected) Server() else null
-        val partner = if (fill == Fill.EMPTY) null else "Sam"
+        val partner = if (fill == Fill.EMPTY) null else "Morgan"
         when (fill) {
             Fill.EMPTY -> Unit
             Fill.ONE -> server?.invites?.add(FamilyCodec.Invite("fam00000000000000000001", "sam", "waiting", now - 2 * hour))
@@ -266,17 +266,17 @@ class FamilyRecoveryScreensTest {
     /** The most air between a link's line and its Turn off's words: the touch room above the pill plus its padding. */
     private val TURN_OFF_GAP_DP = 18f
 
-    /** Works by hand: with Sam named and no link yet, Make a link shows "Link made for Sam"; Turn off turns it off. */
+    /** Works by hand: with Morgan named and no link yet, Make a link shows "Link made for Morgan"; Turn off turns it off. */
     private fun familyByHand() {
         val server = Server()
-        val core = setUp(ThemeChoice.DARK, server, "Sam")
+        val core = setUp(ThemeChoice.DARK, server, "Morgan")
         show { FamilyPane(core, onClose = {}) }
         until("Family by hand: the screen never read the server") { core.familyView.value != null }
-        val make = compose.onAllNodes(hasText("Make a link for Sam") and hasClickAction())
-        if (make.fetchSemanticsNodes().isEmpty()) fail("Family: no Make a link for Sam with Sam named")
+        val make = compose.onAllNodes(hasText("Make a link for Morgan") and hasClickAction())
+        if (make.fetchSemanticsNodes().isEmpty()) fail("Family: no Make a link for Morgan with Morgan named")
         make[0].performSemanticsAction(SemanticsActions.OnClick)
         until("Family: Make a link made no link (${server.invites})") { server.invites.isNotEmpty() }
-        untilShows("family-by-hand", "Link made for Sam")
+        untilShows("family-by-hand", "Link made for Morgan")
         ScreenShots.assertShows(compose, "family-by-hand", LoneWordGlue.kept("Waiting · link made today"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("family", "inner-dark-made"))
         val off = compose.onAllNodes(hasText("Turn off") and hasClickAction())

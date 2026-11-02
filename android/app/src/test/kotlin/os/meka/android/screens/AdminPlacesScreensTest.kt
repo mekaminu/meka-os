@@ -116,11 +116,14 @@ class AdminPlacesScreensTest {
                     check(!core.addKidFee("Sam", "Swimming £60 on the 14th every month").refused)
                     check(!core.setKidPocketMoney("Sam", "£5").refused)
                     check(!core.addKidChore("Sam", "Tidy room £1").refused)
+                    // A12: the same half term School has, so Kids' next 7 days isn't "Nothing" the week before it.
+                    check(core.addSchool("Half term 26–30 Oct") != null)
                 }
             }
             Place.SCHOOL -> {
                 children(core, fill)
-                check(core.addSchool("INSET 27 Oct") != null)
+                // A12: the INSET day is the Monday back, not inside half term.
+                check(core.addSchool("INSET 2 Nov") != null)
                 if (fill == Fill.MANY) {
                     check(core.addSchool("Half term 26–30 Oct") != null)
                     check(core.addSchool("Alex PE Tue") != null)
@@ -181,6 +184,7 @@ class AdminPlacesScreensTest {
                     ScreenShots.assertShows(compose, name, "About you")
                 }
                 if (fill == Fill.MANY && v.kids.size != 2) fail("$name: ${v.kids.size} cards for two children")
+                if (fill == Fill.MANY && v.week?.isEmpty != false) fail("$name: Kids' week is empty with half term in it (${v.week?.line})")
                 // Slice 16's findings: each size field's hint fits its pill on one line ("Boot size… (12)" wrapped).
                 ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { it.hint }.toSet())
             }

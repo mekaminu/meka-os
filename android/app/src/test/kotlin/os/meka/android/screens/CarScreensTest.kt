@@ -68,11 +68,16 @@ class CarScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
+    /**
+     * The pane reads the parked time against the phone's own clock and zone, so the core runs on the same ones
+     * (walk-through A12: a fixed core clock showed "Parked 14:44 · 1 h 35 ago" beside "Paid until 19:15 · 2 h left").
+     * [clock] moves back to the parking moment while the timer is set, so the ticket starts when he parked.
+     */
+    private var clock = System.currentTimeMillis()
 
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
-        secureRandom = Random(41), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        secureRandom = Random(41), timeZone = { TimeZone.of(java.util.TimeZone.getDefault().id) }, nowMs = { clock },
     )
 
     private companion object { const val SETTLE_MS = 3_000L }
@@ -86,10 +91,13 @@ class CarScreensTest {
         check(core.setCarName(first, "the Golf"))
         check(core.setCarRegistration(first, "AB12 CDE"))
         val mot = core.addCarDate(first, "mot") ?: fail("no MOT date")
-        core.setRenewalDue(mot, now / 86_400_000L + 22)
+        core.setRenewalDue(mot, clock / 86_400_000L + 22)
+        // Parked 25 minutes ago with a 2-hour ticket bought then: "1 h 35 left" on the pane, against the phone's clock.
+        val at = System.currentTimeMillis() - 25 * 60_000L
+        val realNow = clock
+        clock = at
         check(core.setParkingTimer(first, "2 h") != null)
-        // The pane reads the parked time against the phone's own clock.
-        val at = System.currentTimeMillis() - 95 * 60_000L
+        clock = realNow
         val spots = mutableMapOf(first to ParkedSpot(first, 51.5007, -0.1246, 6.0, at, label = "Level 3 · Row F"))
         if (fill == Fill.MANY) {
             val second = core.addCar("the van") ?: fail("no second car")

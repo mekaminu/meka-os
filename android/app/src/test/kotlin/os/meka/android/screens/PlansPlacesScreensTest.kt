@@ -98,7 +98,7 @@ class PlansPlacesScreensTest {
                     check(!core.addTrip("Hotel Arts on the seafront with breakfast 14–18 Nov ref HX7781").refused)
                     check(!core.addTrip("Dinner at the tapas bar by the harbour Sun 15 Nov 20:30").refused)
                     check(!core.addTrip("Flight BA479 Wed 18 Nov 18:20 ref ABC123").refused)
-                    check(!core.addTrip("Lisbon 4–7 Dec").refused)
+                    check(!core.addTrip("Porto 4–7 Dec").refused)
                 }
             }
             Place.GIFTS -> {

@@ -155,7 +155,8 @@ object ReadingRules {
     const val STILL_GOING = "still going"
     const val ROW_LINE = "Books, podcasts and courses you want to get to"
     const val HINT = "Add a book, podcast or course…"
-    const val PROGRESS_HINT = "How far? 120 · 45% · episode 4"
+    // No figures in the hint (walk-through A12: "45%" in the field read as a second answer over a 37% bar).
+    const val PROGRESS_HINT = "How far? A page, % or episode"
     const val EMPTY_SUMMARY = "Nothing yet. Type a book (\"Atomic Habits by James Clear, 320 pages\"), a podcast or a course."
     const val NO_TITLE = "Type its name, e.g. \"Atomic Habits by James Clear\" or \"podcast The Rest Is History\"."
     const val NOT_PROGRESS = "Type how far you've got: a page (120), a percent (45%), \"episode 4\" or \"lesson 3\"."

@@ -70,7 +70,7 @@ class TripListsScreensTest {
         context.useCoreForScreens(core)
         val tripId = runBlocking {
             core.tick()
-            check(!core.addTrip("Lisbon 28–31 Oct").refused)
+            check(!core.addTrip("Seville 28–31 Oct").refused)
             val id = core.tripsView.value.rows.single().id
             listOf(
                 "passports × 4", "GHIC cards × 4", "boarding passes", "t-shirts × 5 for me", "kids outfits × 10",
@@ -113,7 +113,7 @@ class TripListsScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
-        ScreenShots.assertShows(compose, name, "Lisbon trip")
+        ScreenShots.assertShows(compose, name, "Seville trip")
         ScreenShots.assertShows(compose, name, "2 days to go")
     }
 
@@ -148,7 +148,7 @@ class TripListsScreensTest {
         context.useCoreForScreens(core)
         val tripId = runBlocking {
             core.tick()
-            check(!core.addTrip("Lisbon 28–31 Oct").refused)
+            check(!core.addTrip("Seville 28–31 Oct").refused)
             val id = core.tripsView.value.rows.single().id
             listOf("passports", "boarding passes", "t-shirts").forEach { check(!core.addTripItem(id, it, TripList.PACK).refused) }
             core.tick()
@@ -239,42 +239,42 @@ class TripListsScreensTest {
     @Test
     @Config(qualifiers = ScreenShots.COVER)
     fun anEmptyTripStartsFromTheLastTripsLists() {
-        val (core, lisbonId) = filled(ThemeChoice.DARK)
+        val (core, sevilleId) = filled(ThemeChoice.DARK)
         val rome = runBlocking {
             check(!core.addTrip("Rome 20–23 Dec").refused)
             core.tick()
-            core.tripsView.value.rows.first { it.id != lisbonId }.id
+            core.tripsView.value.rows.first { it.id != sevilleId }.id
         }
         show(core, rome)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", "cover-dark-start-from"))
         ScreenShots.assertSensible(compose, "cover-dark-start-from")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-start-from")
-        ScreenShots.assertShows(compose, "cover-dark-start-from", "Start from Lisbon trip")
+        ScreenShots.assertShows(compose, "cover-dark-start-from", "Start from Seville trip")
         compose.onNodeWithTag("trip-start-from").performClick()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.tripListsView.value.single { it.tripId == rome }.packed.total == 9 }
-        // Copied unticked (Lisbon's passports were ticked), and the offer has gone.
+        // Copied unticked (Seville's passports were ticked), and the offer has gone.
         assertEquals(null, core.tripListsView.value.single { it.tripId == rome }.startFrom)
         assertEquals(0, core.tripListsView.value.single { it.tripId == rome }.packed.done)
-        assertEquals("1 of 9", core.tripListsView.value.single { it.tripId == lisbonId }.packed.line)
+        assertEquals("1 of 9", core.tripListsView.value.single { it.tripId == sevilleId }.packed.line)
     }
 
     @Test
     @Config(qualifiers = ScreenShots.COVER)
     fun anEmptyTripStartsFromASavedTemplate() {
-        val (core, lisbonId) = filled(ThemeChoice.DARK)
+        val (core, sevilleId) = filled(ThemeChoice.DARK)
         assertEquals("Save as a template for next time", core.tripListsView.value.single().saveTemplate)
         val rome = runBlocking {
-            check(!core.saveTripTemplate(lisbonId).refused)
+            check(!core.saveTripTemplate(sevilleId).refused)
             check(!core.addTrip("Rome 20–23 Dec").refused)
             core.tick()
-            core.tripsView.value.rows.first { it.id != lisbonId }.id
+            core.tripsView.value.rows.first { it.id != sevilleId }.id
         }
         show(core, rome)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", "cover-dark-start-template"))
         ScreenShots.assertSensible(compose, "cover-dark-start-template")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-start-template")
-        ScreenShots.assertShows(compose, "cover-dark-start-template", "Start from your Lisbon template")
+        ScreenShots.assertShows(compose, "cover-dark-start-template", "Start from your Seville template")
         compose.onNodeWithTag("trip-start-template").performClick()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.tripListsView.value.single { it.tripId == rome }.packed.total == 9 }

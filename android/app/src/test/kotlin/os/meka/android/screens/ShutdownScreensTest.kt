@@ -81,6 +81,9 @@ class ShutdownScreensTest {
     private val london = TimeZone.of("Europe/London")
     private val now = 1_792_606_200_000L // Wed 21 Oct 2026, 19:10 in London
 
+    /** The core's clock: [now], except while the day's tasks are ticked off through the day (walk-through A12). */
+    private var clock = now
+
     private fun at(day: Int, h: Int, m: Int = 0) = LocalDateTime(2026, 10, day, h, m).toInstant(london).toEpochMilliseconds()
 
     private companion object { const val SETTLE_MS = 3_000L }
@@ -110,9 +113,10 @@ class ShutdownScreensTest {
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
         seed(store, fill)
+        clock = now
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = store, transport = null,
-            secureRandom = Random(47), timeZone = { london }, nowMs = { now },
+            secureRandom = Random(47), timeZone = { london }, nowMs = { clock },
         )
         context.useCoreForScreens(core)
         runBlocking {
@@ -128,7 +132,12 @@ class ShutdownScreensTest {
                     listOf(
                         "Order new bins", "Reply to the school about the trip", "Book the MOT", "Pay the window cleaner",
                         "Renew the parking permit", "Call the garage about the clutch", "Water the tomatoes",
-                    ).forEach { core.complete(core.addTask(it)) }
+                    ).forEachIndexed { i, t ->
+                        // Ticked off through the day (10:39 to 17:57), not all at 19:10 (walk-through A12).
+                        clock = now - (7 - i) * 73 * 60_000L
+                        core.complete(core.addTask(t))
+                    }
+                    clock = now
                     core.schedule(core.addTask("Fix the gate latch"), at(21, 14, 0))
                     core.setDue(core.addTask("Renew the car insurance"), at(21, 12, 0))
                     val bins = core.addTask("Take the recycling out")
