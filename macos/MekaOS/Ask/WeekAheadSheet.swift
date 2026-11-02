@@ -56,6 +56,14 @@ struct WeekAheadSheet: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: mail)
                     .staggeredAppear(1)
             }
+            // Call assistant completeness: "Calls · your call assistant took 4 in the last 7 days · 1 urgent".
+            if let calls = v.calls {
+                Text(LoneWordGlue.shared.kept(line: calls)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: calls)
+                    .staggeredAppear(1)
+            }
             // Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00".
             if let line = v.protectedLine {
                 Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)

@@ -13356,6 +13356,8 @@ class MekaCore(
             parcels = activity.parcels(),
             // Protected time, slice 5: each day's protected time and the week's line.
             protectedSetting = protectedTime.setting(),
+            // Call assistant completeness: the week's "calls taken" line (counts only).
+            calls = held.calls(),
         )
         // Taps feel instant, slice 7: the week ahead is kept while everything it reads and the minute are unchanged.
         val weekAheadNow = viewMemo.keep("Week ahead", listOf(weekAheadInputs, minuteNow(), timeZone())) {

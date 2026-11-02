@@ -86,6 +86,8 @@ data class WeekAheadView(
     val protectedLine: String? = null,
     /** Balance view, slice 3: "Balance as planned · family 6 h of 8 h · work 2 h over" ([BalanceRules.weekAheadLine]); null with nothing planned. */
     val balance: String? = null,
+    /** Call assistant completeness: "Calls · your call assistant took 4 in the last 7 days · 1 urgent" ([CallWeekRules.line]); null with none. */
+    val calls: String? = null,
 ) {
     /**
      * This view with its balance line, read out straight after the summary ("Your week ahead. … Balance as planned,
@@ -163,6 +165,8 @@ data class WeekAheadInputs(
     val parcels: List<Parcel> = emptyList(),
     /** Protected time, slice 5: the setting, so each day shows its protected time and the week a line. */
     val protectedSetting: ProtectedSetting? = null,
+    /** Call assistant completeness: the held calls (synced), for the week's "calls taken" line ([CallWeekRules]). */
+    val calls: List<HeldCall> = emptyList(),
 )
 
 /**
@@ -463,16 +467,18 @@ object WeekAheadRules {
         val sync = sync(inputs, dayList, window, cal)
         val goals = goalPick(inputs.goals, ws)
         val mail = MailWeekRules.line(inputs.mail, inputs.waiting, dayList, nowMs, title(today))
+        val calls = CallWeekRules.line(inputs.calls, nowMs, cal)
         val spoken = buildList {
             add("Your week ahead. ${summary.replace(" · ", ", ")}.")
             mail?.let { add(MailWeekRules.spokenLine(it)) }
+            calls?.let { add(CallWeekRules.spoken(it)) }
             ProtectedRules.weekSpoken(protectedLine, inputs.protectedSetting)?.let { add(it) }
             days.filter { it.dayLine != null || it.lines.isNotEmpty() }.forEach { add(it.spoken) }
             if (sync.isNotEmpty()) add(syncTitle() + ": " + sync.joinToString("; ") { it.replace(" · ", ", ") } + ".")
             spokenGoals(goals).takeIf { it.isNotEmpty() }?.let { add(it) }
         }.joinToString(" ")
         return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals, mail,
-            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs), protectedLine)
+            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs), protectedLine, calls = calls)
     }
 
     // ---- Slice 2: the time setting ----

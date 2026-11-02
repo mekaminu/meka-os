@@ -400,6 +400,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(v.title == "This week" || v.title == "Next week")
         XCTAssertFalse(v.days.isEmpty)
         for d in v.days { for l in d.lines { XCTAssertFalse(l.text.isEmpty) } }
+        // Call assistant completeness: no calls taken yet, so no Calls line.
+        XCTAssertNil(v.calls)
         XCTAssertEqual(NoticeSource.weekAhead.defaultTier, NoticeTier.headsUp)
         XCTAssertEqual(NotifyRules.shared.targetName(t: NoticeTarget.weekAhead), "WEEK_AHEAD")
         // Sunday 11 Oct 2026 looks at the week from Monday 12 Oct.

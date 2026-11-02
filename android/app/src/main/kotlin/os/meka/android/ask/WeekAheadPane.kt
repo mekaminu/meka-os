@@ -146,6 +146,14 @@ fun WeekAheadPane(
                 }
             }
         }
+        // Call assistant completeness: "Calls · your call assistant took 4 in the last 7 days · 1 urgent" (cross-fades as it changes).
+        v.calls?.let { calls ->
+            item(key = "calls") {
+                Crossfade(calls, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-calls", modifier = Modifier.animateItem()) { c ->
+                    Text(LoneWordGlue.measured(c), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                }
+            }
+        }
         // Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00" (cross-fades as it changes).
         v.protectedLine?.let { line ->
             item(key = "protected") {
