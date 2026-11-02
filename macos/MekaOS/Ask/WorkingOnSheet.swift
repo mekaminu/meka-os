@@ -30,7 +30,7 @@ struct WorkingOnSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .staggeredAppear(0)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         ForEach(Array(v.cards.enumerated()), id: \.element.errand.code) { i, c in
                             card(c).staggeredAppear(i + 1)
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))

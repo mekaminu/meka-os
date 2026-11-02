@@ -101,7 +101,7 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
 @Composable
 private fun ErrandCard(c: WorkingOnCard, modifier: Modifier, onOpen: () -> Unit) {
     Column(
-        modifier.fillMaxWidth().padding(top = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
             .semantics(mergeDescendants = false) { contentDescription = c.spoken }
             .testTag("working-on-card"),
