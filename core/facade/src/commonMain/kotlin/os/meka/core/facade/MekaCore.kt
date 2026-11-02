@@ -2696,6 +2696,65 @@ class MekaCore(
     }
 
     /**
+     * Ada plans with you, part 2: Obi's ✦ thoughts on the cards of the week starting [weekStart] on [board] (the board
+     * the screen is drawing), at most three ([os.meka.core.domain.BoardHintRules]). A tap on one's pill is
+     * [applyBoardHint]; a swipe or Not now is [dismissBoardHint].
+     */
+    fun boardHints(board: os.meka.core.domain.WeekBoard, weekStart: Long): List<os.meka.core.domain.BoardHint> =
+        os.meka.core.domain.BoardHintRules.of(board, weekStart, ZoneCalendar(timeZone))
+
+    /**
+     * The pill on one of Obi's thoughts: OVER moves the card to its lighter day (last there), SLIPPED puts it on Someday,
+     * LONGER and REPLY set its estimate. Returns the undo bar's line, or null when nothing changed; Undo is
+     * [undoBoardHint].
+     */
+    suspend fun applyBoardHint(hint: os.meka.core.domain.BoardHint): String? {
+        val R = os.meka.core.domain.BoardHintRules
+        val title = onCore { tasks.get(hint.taskId)?.title } ?: return null
+        val line = when (hint.kind) {
+            os.meka.core.domain.BoardHintKind.OVER -> moveOnBoard(hint.taskId, hint.toDay, Int.MAX_VALUE)
+            os.meka.core.domain.BoardHintKind.SLIPPED -> somedayOnBoard(hint.taskId)
+            os.meka.core.domain.BoardHintKind.LONGER, os.meka.core.domain.BoardHintKind.REPLY ->
+                if (hint.minutes > 0) setEstimate(hint.taskId, hint.minutes) else null
+        }
+        if (line == null) return null
+        hintUndo = hint.kind
+        return R.appliedLine(hint, title)
+    }
+
+    /** Undo after [applyBoardHint] (or [dismissBoardHint]). False when nothing to undo. */
+    suspend fun undoBoardHint(): Boolean {
+        val kind = hintUndo ?: return false
+        hintUndo = null
+        return when (kind) {
+            os.meka.core.domain.BoardHintKind.OVER, os.meka.core.domain.BoardHintKind.SLIPPED -> undoBoardMove()
+            os.meka.core.domain.BoardHintKind.LONGER, os.meka.core.domain.BoardHintKind.REPLY -> undoEstimate()
+        }
+    }
+
+    /**
+     * Not now (or a swipe) on one of Obi's thoughts: put away on both devices, kept on the task. Returns the bar's line;
+     * [undoHintDismiss] brings it back.
+     */
+    suspend fun dismissBoardHint(taskId: String, key: String): String? = onCore {
+        val t = tasks.get(taskId) ?: return@onCore null
+        val before = tasks.setBoardHintNo(taskId, os.meka.core.domain.BoardHintRules.withDismissed(t.boardHintNo, key))
+        hintNoUndo = taskId to before
+        os.meka.core.domain.BoardHintRules.PUT_AWAY
+    }
+
+    /** Undo after [dismissBoardHint]. False when nothing to undo. */
+    suspend fun undoHintDismiss(): Boolean = onCore {
+        val (id, before) = hintNoUndo ?: return@onCore false
+        hintNoUndo = null
+        if (tasks.get(id) == null) return@onCore false
+        tasks.setBoardHintNo(id, before)
+        true
+    }
+    private var hintUndo: os.meka.core.domain.BoardHintKind? = null
+    private var hintNoUndo: Pair<String, String?>? = null
+
+    /**
      * Option B slice 5: the day timeline for local [epochDay] on [board] (the board the screen is drawing): its timed
      * events, the tasks planned at a time and the commute as blocks ([os.meka.core.domain.BoardTimelineRules]), or null
      * for a day not on the board. Unfolded and on the Mac the panel beside the week shows today; folded it is the

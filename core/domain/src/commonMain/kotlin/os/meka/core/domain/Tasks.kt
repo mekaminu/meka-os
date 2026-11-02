@@ -52,6 +52,8 @@ data class Task(
     val source: String? = null,
     /** The part of his life it belongs to, as stored ([TaskFields.AREA]: a [BoardArea] name or [BoardAreaRules.NONE]); read through [BoardAreaRules.of]. */
     val area: String? = null,
+    /** Obi's ✦ thoughts he put away on this card ([TaskFields.BOARD_HINT_NO], [BoardHintRules.dismissed]); null for none. */
+    val boardHintNo: String? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -107,6 +109,7 @@ data class Task(
                 boardWeek = s[TaskFields.BOARD_WEEK].longOrNull,
                 source = s[ActionableFields.PROVENANCE_SOURCE].textOrNull,
                 area = s[TaskFields.AREA].textOrNull,
+                boardHintNo = s[TaskFields.BOARD_HINT_NO].textOrNull,
             )
         }
     }
@@ -239,6 +242,16 @@ class Tasks(
         val before = (get(id) ?: throw ValidationException("Task not found")).area
         if (raw != null && raw != BoardAreaRules.NONE && BoardAreaRules.stored(raw) == null) throw ValidationException("Unknown area")
         if (before != raw) replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.AREA to (raw?.fv() ?: FieldValue.Null)))
+        return before
+    }
+
+    /**
+     * Ada plans with you, part 2: the keys of Obi's ✦ thoughts put away on [id] ([TaskFields.BOARD_HINT_NO]), or null to
+     * clear them. Returns what it stored before, for Undo.
+     */
+    fun setBoardHintNo(id: String, raw: String?): String? {
+        val before = (get(id) ?: throw ValidationException("Task not found")).boardHintNo
+        if (before != raw) replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.BOARD_HINT_NO to (raw?.fv() ?: FieldValue.Null)))
         return before
     }
 

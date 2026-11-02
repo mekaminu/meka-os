@@ -3774,6 +3774,35 @@ final class CoreModel {
         core?.boardNudge(board: board, weekStart: weekStart)
     }
 
+    /// Ada plans with you, part 2: Obi's ✦ thoughts on the cards of the week starting `weekStart` on `board` (at most
+    /// three), by card.
+    func boardHints(_ board: WeekBoard, weekStart: Int64) -> [String: BoardHint] {
+        guard let core else { return [:] }
+        var out: [String: BoardHint] = [:]
+        for h in core.boardHints(board: board, weekStart: weekStart) { out[h.taskId] = h }
+        return out
+    }
+
+    /// The pill on one of Obi's thoughts: the move, Someday or the estimate, with Undo on the bar.
+    func applyBoardHint(_ hint: BoardHint) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.applyBoardHint(hint: hint) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardHint)
+        }
+    }
+
+    /// Not now on one of Obi's thoughts: put away on both devices, Undo brings it back.
+    func dismissBoardHint(_ hint: BoardHint) {
+        guard let core else { return }
+        let id = hint.taskId, key = hint.key
+        Task {
+            guard let line = try? await core.dismissBoardHint(taskId: id, key: key) else { return }
+            offerEventUndo(line, .boardHintAway)
+        }
+    }
+
     /// Option B slice 5: the day timeline for local `epochDay` on `board` (the board being drawn), or nil off the board.
     func boardTimeline(_ board: WeekBoard, epochDay: Int64) -> BoardTimeline? {
         core?.boardTimeline(board: board, epochDay: epochDay)
@@ -4474,6 +4503,8 @@ final class CoreModel {
         case .carried(let id): run { _ = try await $0.undoCarried(taskId: id) }
         case .boardMove: run { _ = try await $0.undoBoardMove() }
         case .estimate: run { _ = try await $0.undoEstimate() }
+        case .boardHint: run { _ = try await $0.undoBoardHint() }
+        case .boardHintAway: run { _ = try await $0.undoHintDismiss() }
         case .block: run { _ = try await $0.undoBlock() }
         case .goalTag: run { _ = try await $0.undoTagOnBoard() }
         case .boardArea: run { _ = try await $0.undoBoardArea() }
@@ -8127,6 +8158,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case boardMove
         /// "How long?" on a Board card: the estimate it had comes back.
         case estimate
+        /// The pill on one of Obi's ✦ thoughts on a Board card: the move or the estimate goes back.
+        case boardHint
+        /// Not now on one of Obi's ✦ thoughts: it shows again.
+        case boardHintAway
         /// Block time on a Board card (slice 6): the block is taken back (or follows the task back) and the task's time returns.
         case block
         /// For a goal on a Board card (slice 7): the goal it had comes back.

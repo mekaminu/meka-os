@@ -160,6 +160,36 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun obisThoughtOnACardAppliesWithUndoAndPutAwayStaysAwayOnTheMac() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val van = fold.addOnBoard("Book the MOT for the van", today + 3)!!
+        fold.setEstimate(van, 60)
+        val car = fold.addOnBoard("Book the MOT", today + 2)!!
+        fold.setEstimate(car, 15)
+        val board = fold.weekBoard.value
+        val week = board.weeks.first { w -> w.days.any { it.epochDay == today + 2 } }.startEpochDay
+        val hint = fold.boardHints(board, week).single { it.taskId == car }
+        assertEquals(os.meka.core.domain.BoardHintKind.LONGER, hint.kind)
+        assertEquals("Usually about 1h for you, not 15m", hint.line)
+
+        assertEquals("“Book the MOT” · about 1h", fold.applyBoardHint(hint))
+        assertEquals("1h", fold.weekBoard.value.day(today + 2)!!.cards.single().estimate)
+        assertTrue(fold.boardHints(fold.weekBoard.value, week).none { it.taskId == car })
+        assertTrue(fold.undoBoardHint())
+        assertEquals("15m", fold.weekBoard.value.day(today + 2)!!.cards.single().estimate)
+        assertFalse(fold.undoBoardHint())
+
+        assertEquals(os.meka.core.domain.BoardHintRules.PUT_AWAY, fold.dismissBoardHint(car, hint.key))
+        assertTrue(fold.boardHints(fold.weekBoard.value, week).none { it.taskId == car })
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.boardHints(mac.weekBoard.value, week).none { it.taskId == car })
+        assertTrue(fold.undoHintDismiss())
+        assertTrue(fold.boardHints(fold.weekBoard.value, week).any { it.taskId == car })
+    }
+
+    @Test
     fun theKeyboardNudgesAndQuickAddLandOnTheirDay() = runTest {
         val c = core("mac")
         c.tick()

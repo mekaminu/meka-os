@@ -133,6 +133,8 @@ import os.meka.android.designsystem.mekaMenuBorder
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.TouchPill
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.headFade
@@ -396,7 +398,27 @@ fun WeekBoardView(
         }
     }
 
-    CompositionLocalProvider(LocalBoardArea provides onArea) {
+    // Ada plans with you, part 2: Obi's ✦ thoughts on the cards (at most three a week); a tap on the pill applies one
+    // with Undo, a swipe or Not now puts it away on both devices.
+    val hintMap = remember(board) { board.weeks.flatMap { core.boardHints(board, it.startEpochDay) }.associateBy { it.taskId } }
+    val hints = remember(hintMap) {
+        BoardHints(
+            hintMap,
+            onApply = { h ->
+                scope.launch {
+                    val r = runCatching { core.applyBoardHint(h) }
+                    r.exceptionOrNull()?.let { e -> undo.show(os.meka.core.domain.InstantTapRules.failedLine(h.action, e.message), null) }
+                    r.getOrNull()?.let { line -> haptics.light(); undo.show(line) { core.undoBoardHint() } }
+                }
+            },
+            onDismiss = { h ->
+                scope.launch {
+                    runCatching { core.dismissBoardHint(h.taskId, h.key) }.getOrNull()?.let { line -> undo.show(line) { core.undoHintDismiss() } }
+                }
+            },
+        )
+    }
+    CompositionLocalProvider(LocalBoardArea provides onArea, LocalBoardHints provides hints) {
     BoxWithConstraints(
         modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }
             .graphicsLayer {
@@ -913,6 +935,62 @@ fun WeekBoardView(
             }
         }
     }
+    }
+}
+
+/** Ada plans with you, part 2: Obi's ✦ thoughts by card, and what a tap or a swipe on one does. */
+private class BoardHints(
+    val byTask: Map<String, os.meka.core.domain.BoardHint>,
+    val onApply: (os.meka.core.domain.BoardHint) -> Unit,
+    val onDismiss: (os.meka.core.domain.BoardHint) -> Unit,
+)
+
+private val LocalBoardHints = androidx.compose.runtime.staticCompositionLocalOf<BoardHints?> { null }
+
+/** The thought under its card, for the UI tests. */
+internal const val BOARD_HINT_TAG = "board-hint"
+
+/**
+ * One of Obi's ✦ thoughts under its card: the line in gold, then its one-tap pill and Not now. Swiped either way past
+ * a third of its width it is put away; short of that it springs back (Reduced motion: no glide, Not now does it).
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun BoardHintRow(hint: os.meka.core.domain.BoardHint, onApply: () -> Unit, onDismiss: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val dx = remember(hint.key) { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableStateOf(1) }
+    Column(
+        Modifier.fillMaxWidth()
+            .onGloballyPositioned { width = it.size.width.coerceAtLeast(1) }
+            .graphicsLayer { translationX = dx.value; alpha = 1f - (kotlin.math.abs(dx.value) / width).coerceIn(0f, 0.8f) }
+            .then(
+                if (reduced) Modifier else Modifier.pointerInput(hint.key) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (kotlin.math.abs(dx.value) > width / 3f) onDismiss()
+                            scope.launch { dx.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 600f)) }
+                        },
+                        onDragCancel = { scope.launch { dx.animateTo(0f) } },
+                    ) { change, amount -> change.consume(); scope.launch { dx.snapTo(dx.value + amount) } }
+                },
+            )
+            .testTag(BOARD_HINT_TAG)
+            .semantics(mergeDescendants = false) {
+                contentDescription = hint.spoken
+                customActions = listOf(
+                    androidx.compose.ui.semantics.CustomAccessibilityAction(hint.action) { onApply(); true },
+                    androidx.compose.ui.semantics.CustomAccessibilityAction(os.meka.core.domain.BoardHintRules.NOT_NOW) { onDismiss(); true },
+                )
+            }
+            .padding(top = MekaSpace.xxs),
+    ) {
+        Text(hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            TouchPill(hint.action, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
+            TouchPill(os.meka.core.domain.BoardHintRules.NOT_NOW, fill = Meka.colors.surfaceRaised, ink = Meka.colors.textSecondary, onClick = onDismiss)
+        }
     }
 }
 
@@ -1565,8 +1643,11 @@ private fun BoardCardRow(
         if (dx >= swipeAt) folded?.swipe(card)
         rowScope.launch { if (reduced) swipeX.snapTo(0f) else swipeX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 600f)) }
     }
+    val hints = LocalBoardHints.current
+    val hint = hints?.byTask?.get(card.id)?.takeIf { !card.done && source != BoardSource.SOMEDAY }
+    Column(modifier) {
     Box(
-        modifier.alpha(ghost)
+        Modifier.fillMaxWidth().alpha(ghost)
             .onGloballyPositioned { bounds = it.boundsInRoot(); onCardBounds(card.id, bounds) }
             .graphicsLayer { scaleX = land.value; scaleY = land.value }
             .then(
@@ -1668,6 +1749,8 @@ private fun BoardCardRow(
                 }
             }
         }
+    }
+    if (hint != null && hints != null && !beingDragged) BoardHintRow(hint, onApply = { hints.onApply(hint) }, onDismiss = { hints.onDismiss(hint) })
     }
 }
 

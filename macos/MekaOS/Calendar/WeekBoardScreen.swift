@@ -216,6 +216,8 @@ struct WeekBoardScreen: View {
                 }
             }
         }
+        // Ada plans with you, part 2: Obi's ✦ thoughts on the week's cards (at most three).
+        .environment(\.boardHints, model.boardHints(board, weekStart: w.startEpochDay))
         .background(keyboard)
         .onAppear {
             guard !opened else { return }
@@ -773,7 +775,48 @@ private enum CardSpot {
     }
 }
 
+/// Ada plans with you, part 2: Obi's ✦ thoughts by card for the week on screen.
+private struct BoardHintsKey: EnvironmentKey {
+    static let defaultValue: [String: BoardHint] = [:]
+}
+
+extension EnvironmentValues {
+    fileprivate var boardHints: [String: BoardHint] {
+        get { self[BoardHintsKey.self] }
+        set { self[BoardHintsKey.self] = newValue }
+    }
+}
+
+/// One of Obi's ✦ thoughts under its card: the line in gold, its button and Not now (also on a right-click).
+private struct BoardHintView: View {
+    @Environment(CoreModel.self) private var model
+    let hint: BoardHint
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(hint.shown).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: MekaSpace.xs) {
+                Button(hint.action) { model.applyBoardHint(hint) }
+                    .font(MekaType.caption).foregroundStyle(palette.accent)
+                Button(BoardHintRules.shared.NOT_NOW) { model.dismissBoardHint(hint) }
+                    .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            .buttonStyle(.borderless)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(hint.spoken)
+        .contextMenu {
+            Button(hint.action) { model.applyBoardHint(hint) }
+            Button(BoardHintRules.shared.NOT_NOW) { model.dismissBoardHint(hint) }
+        }
+    }
+}
+
 private struct BoardCardView: View {
+    @Environment(\.boardHints) private var hints
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let card: BoardCard
@@ -789,6 +832,17 @@ private struct BoardCardView: View {
     @State private var offer: BlockOffer?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            tile
+            if !card.done, !isSomeday, let hint = hints[card.id] {
+                BoardHintView(hint: hint, palette: palette)
+                    .transition(.opacity)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: hints[card.id]?.key)
+    }
+
+    @ViewBuilder private var tile: some View {
         let selected = model.boardSelectedID == card.id
         // Option B, slice 1 (the planner cards, BoardPlannerRules): a borderless tile on the lighter surface; the time
         // chip and the duration on top, the title across the whole card, the tick and the card's chips and source in the

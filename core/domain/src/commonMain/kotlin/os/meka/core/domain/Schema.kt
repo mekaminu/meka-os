@@ -256,6 +256,11 @@ object TaskFields {
      * or [BoardAreaRules.NONE] once he takes it off; absent until he picks one (Navilife guesses meanwhile).
      */
     const val AREA = "boardArea"
+    /**
+     * Ada plans with you, part 2 (additive, Lww): the keys of Obi's ✦ thoughts on this card he put away, ";"-joined
+     * ([BoardHintRules.withDismissed]); absent until he puts one away.
+     */
+    const val BOARD_HINT_NO = "boardHintNo"
 }
 
 object ChecklistFields {
