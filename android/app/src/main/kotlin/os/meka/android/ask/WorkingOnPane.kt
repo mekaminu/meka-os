@@ -224,7 +224,7 @@ private fun JobCard(j: ObiJobRow, modifier: Modifier, onCopy: (String) -> Unit, 
                 modifier = Modifier.padding(top = MekaSpace.xs))
             Text(draft, style = MekaType.body, color = Meka.colors.textPrimary,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
-                    .padding(MekaSpace.s).testTag("errand-draft"))
+                    .padding(MekaSpace.xs).testTag("errand-draft"))
             Text(LoneWordGlue.kept(ObiJobRules.DRAFT_FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End),

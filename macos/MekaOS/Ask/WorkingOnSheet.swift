@@ -81,7 +81,7 @@ struct WorkingOnSheet: View {
 
     @ViewBuilder
     private func jobsSection(_ v: WorkingOnView) -> some View {
-        label(ObiJobRules.shared.TITLE).padding(.top, MekaSpace.s)
+        label(ObiJobRules.shared.TITLE).padding(.top, MekaSpace.xs)
             .accessibilityAddTraits(.isHeader)
         Text(LoneWordGlue.shared.kept(line: ObiJobRules.shared.INTRO)).font(MekaType.caption)
             .foregroundStyle(palette.textSecondary)
@@ -132,7 +132,7 @@ struct WorkingOnSheet: View {
                 Text(draft).font(MekaType.body).foregroundStyle(palette.textPrimary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(MekaSpace.s)
+                    .padding(MekaSpace.xs)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                 Text(LoneWordGlue.shared.kept(line: ObiJobRules.shared.DRAFT_FOOT)).font(MekaType.caption)
