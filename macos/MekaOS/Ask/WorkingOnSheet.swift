@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Ask → Daily → Obi is working on, on the Mac (Ada plans with you, part 3 slices 1 and 4), like the Fold's
 /// WorkingOnPane: first ERRANDS YOU ASKED FOR (Ask Obi for an errand in a popover, each errand a card with its status,
-/// what he did and needs, the draft with Copy, and Stop), then the standing errands: what needs him first, each card with WHAT I DID and, when there is one, WHAT I NEED FROM YOU (in the accent) and the
+/// what he did and needs, what he said, the draft with Copy, Answer (a popover) or Carry on after the cap, and Stop), then the standing errands: what needs him first, each card with WHAT I DID and, when there is one, WHAT I NEED FROM YOU (in the accent) and the
 /// button to the screen that holds it; then STANDING ERRANDS with Turn off / Turn on (synced with the Fold). The words
 /// are the core's `WorkingOnRules.view`. Only Strings and Bools cross to the core.
 ///
@@ -19,6 +19,9 @@ struct WorkingOnSheet: View {
     @State private var asking = false
     @State private var askText = ""
     @State private var said: String?
+    /// Part 3 slice 5: the errand whose question he is answering (its popover is open), and the answer field.
+    @State private var answering: String?
+    @State private var answerText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -113,6 +116,9 @@ struct WorkingOnSheet: View {
     private func jobCard(_ j: ObiJobRow) -> some View {
         let id = j.id
         let draft = j.draft
+        let need = j.need ?? ""
+        let canAnswer = j.canAnswer
+        let canCarryOn = j.canCarryOn
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(LoneWordGlue.shared.kept(line: j.title)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -125,6 +131,11 @@ struct WorkingOnSheet: View {
             if let need = j.need {
                 label(WorkingOnRules.shared.NEED).padding(.top, MekaSpace.xs)
                 Text(LoneWordGlue.shared.kept(line: need)).font(MekaType.body).foregroundStyle(palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let youSaid = j.youSaid {
+                label(ObiJobRules.shared.YOU_SAID).padding(.top, MekaSpace.xs)
+                Text(LoneWordGlue.shared.kept(line: youSaid)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let draft {
@@ -141,6 +152,20 @@ struct WorkingOnSheet: View {
             }
             HStack(spacing: MekaSpace.xs) {
                 Spacer()
+                if canCarryOn {
+                    pill(ObiJobRules.shared.CARRY_ON, ink: palette.onAccent, fill: palette.accent) { carryOn(id) }
+                        .accessibilityLabel("\(ObiJobRules.shared.CARRY_ON): \(j.title)")
+                } else if canAnswer {
+                    pill(ObiJobRules.shared.ANSWER, ink: palette.onAccent, fill: palette.accent) {
+                        said = nil
+                        answerText = ""
+                        answering = id
+                    }
+                    .accessibilityLabel("\(ObiJobRules.shared.ANSWER): \(j.title)")
+                    .popover(isPresented: Binding(get: { answering == id }, set: { if !$0 { answering = nil } }), arrowEdge: .bottom) {
+                        answerPanel(id, need: need)
+                    }
+                }
                 if let draft {
                     pill(ObiJobRules.shared.COPY, ink: palette.accent, fill: palette.surface) { copy(draft) }
                         .accessibilityLabel("\(ObiJobRules.shared.COPY) the draft: \(j.title)")
@@ -178,6 +203,57 @@ struct WorkingOnSheet: View {
         }
         .padding(MekaSpace.m)
         .frame(width: 360)
+    }
+
+    /// The answer popover: "Answer Obi", what he needs, one field, Tell Obi and Cancel.
+    private func answerPanel(_ id: String, need: String) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(ObiJobRules.shared.ANSWER_TITLE).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            if !need.isEmpty {
+                Text(LoneWordGlue.shared.kept(line: need)).font(MekaType.caption)
+                    .foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            TextField(ObiJobRules.shared.ANSWER_HINT, text: $answerText, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
+                .onSubmit { answer(id) }
+            HStack {
+                Spacer()
+                Button(ObiJobRules.shared.SHEET_CANCEL) { answering = nil }
+                Button(ObiJobRules.shared.ANSWER_GO) { answer(id) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(answerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 360)
+    }
+
+    private func answer(_ id: String) {
+        let text = String(answerText.prefix(Int(ObiJobRules.shared.MAX_ANSWER)))
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        Task {
+            let ok = await model.answerObiErrand(id, text: text)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                said = ok ? ObiJobRules.shared.ANSWERED_LINE : ObiJobRules.shared.ANSWER_GONE
+                answering = nil
+                answerText = ""
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func carryOn(_ id: String) {
+        Task {
+            let ok = await model.carryOnObiErrand(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                said = ok ? ObiJobRules.shared.CARRY_ON_LINE : ObiJobRules.shared.ANSWER_GONE
+                if let next { view = next }
+            }
+        }
     }
 
     private func pill(_ title: String, ink: Color, fill: Color, action: @escaping () -> Void) -> some View {

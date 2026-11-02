@@ -43,13 +43,27 @@ object ObiJobFields {
     const val TOTAL_STEPS = "totalSteps"
     /** Why the last try didn't run, a few plain words ("Navilife's AI is off"), or absent (server). */
     const val WAITING = "waiting"
+
+    // Part 3 slice 5: answering what Obi needs, so the job carries on.
+    /** His answer to [NEED] (or "Carry on" after the step cap), at most [ObiJobRules.MAX_ANSWER] characters (device). */
+    const val ANSWER = "answer"
+    /** When he answered (device). An answer is new while this is later than [ANSWER_TAKEN]. */
+    const val ANSWERED_AT = "answeredAtMs"
+    /** The [ANSWERED_AT] the server has read (server). */
+    const val ANSWER_TAKEN = "answerTakenMs"
+    /** What he has told Obi so far, one "question\tanswer" a line, at most [ObiJobRules.MAX_HEARD] (server). */
+    const val HEARD = "heard"
+    /** The total step cap, raised by "carry on"; absent = [ObiJobRules.TOTAL_STEP_CAP] (server). */
+    const val STEP_CAP = "stepCap"
+    /** His answer came after the plan ran out: the next step plans what comes next from it (server). */
+    const val REPLAN = "replan"
 }
 
 enum class ObiJobState(val code: String) {
     /** Written by the device with his words; the server hasn't planned it yet. */
     ASKED("asked"),
     WORKING("working"),
-    /** Waits for him: [ObiJobFields.NEED] says what. No further step runs until he answers (a later slice). */
+    /** Waits for him: [ObiJobFields.NEED] says what. No further step runs until he answers ([ObiJobFields.ANSWER]). */
     NEEDS_YOU("needs_you"),
     DONE("done"),
     STOPPED("stopped"),
@@ -78,6 +92,9 @@ enum class ObiStepKind(val code: String) {
 
 data class ObiStep(val kind: ObiStepKind, val title: String, val query: String = "", val done: Boolean = false)
 
+/** Something he told Obi on an errand: what Obi asked ([question], may be blank) and what he said. */
+data class ObiHeard(val question: String, val answer: String)
+
 data class ObiJob(
     val id: String,
     val ask: String,
@@ -95,10 +112,20 @@ data class ObiJob(
     val daySteps: Int,
     val totalSteps: Int,
     val waiting: String?,
+    val answer: String? = null,
+    val answeredAtMs: Long? = null,
+    val answerTakenMs: Long? = null,
+    val heard: List<ObiHeard> = emptyList(),
+    val stepCap: Int = ObiJobRules.TOTAL_STEP_CAP,
+    val replan: Boolean = false,
 ) {
     /** Stopped by him, or finished: no step will ever run again. */
     val finished: Boolean get() = stopped || state == ObiJobState.DONE || state == ObiJobState.STOPPED
     val nextStep: ObiStep? get() = steps.firstOrNull { !it.done }
+    /** He has answered and the server hasn't read it yet. */
+    val answerWaiting: Boolean get() = answer != null && (answeredAtMs ?: 0L) > (answerTakenMs ?: 0L)
+    /** It has used every step it may take until he says carry on. */
+    val atCap: Boolean get() = totalSteps >= stepCap
 }
 
 /** One job as Obi is working on lists it. */
@@ -116,6 +143,12 @@ data class ObiJobRow(
     val spoken: String,
     /** [did] is what Obi found (from web results, other people's words), not just the steps he took. */
     val found: Boolean = false,
+    /** Part 3 slice 5: Answer opens the answer sheet (it waits for him and he hasn't answered yet). */
+    val canAnswer: Boolean = false,
+    /** Carry on: it stopped at its step cap. */
+    val canCarryOn: Boolean = false,
+    /** What he last told Obi on it ("Somewhere in Leeds, under £100"), while it is open. */
+    val youSaid: String? = null,
 ) {
     val needsYou: Boolean get() = need != null
 }
@@ -150,7 +183,23 @@ object ObiJobRules {
     const val EMPTY = "Nothing asked yet · try “find someone to service the boiler”"
     const val TOO_MANY = "Obi is already on $MAX_OPEN errands · stop one or wait for one to finish"
     const val BLANK = "Say what you'd like Obi to look into"
-    const val CAP_NEED = "I've taken $TOTAL_STEP_CAP steps on this and stopped · tell me to carry on, or stop it here"
+    const val CAP_NEED = "I've taken all the steps I may on this and stopped · tell me to carry on, or stop it here"
+
+    // Part 3 slice 5: answering what he needs, the same words on the Fold and the Mac.
+    const val MAX_ANSWER = 300
+    const val MAX_HEARD = 6
+    /** "Carry on" after the cap gives it this many more steps. */
+    const val CARRY_ON_STEPS = 12
+    const val ANSWER = "Answer"
+    const val CARRY_ON = "Carry on"
+    const val ANSWER_TITLE = "Answer Obi"
+    const val ANSWER_HINT = "Your answer, or what to change"
+    const val ANSWER_GO = "Tell Obi"
+    const val YOU_SAID = "You said"
+    const val ANSWERED_LINE = "Obi has your answer · he'll carry on in a minute or so"
+    const val CARRY_ON_LINE = "Obi will carry on in a minute or so"
+    const val ANSWER_GONE = "That errand isn't waiting for you any more"
+    const val ANSWER_STATUS = "Working · Obi has your answer"
 
     // Part 3 slice 4: the apps' words (Obi is working on on the Fold and the Mac), the same on both.
     /** The row that opens the ask sheet (no open field on the pane, the layout rules). */
@@ -232,7 +281,41 @@ object ObiJobRules {
             daySteps = (s.f(ObiJobFields.DAY_STEPS).longOrNull ?: 0L).toInt(),
             totalSteps = (s.f(ObiJobFields.TOTAL_STEPS).longOrNull ?: 0L).toInt(),
             waiting = s.f(ObiJobFields.WAITING).textOrNull?.takeIf { it.isNotBlank() },
+            answer = s.f(ObiJobFields.ANSWER).textOrNull?.takeIf { it.isNotBlank() },
+            answeredAtMs = s.f(ObiJobFields.ANSWERED_AT).longOrNull,
+            answerTakenMs = s.f(ObiJobFields.ANSWER_TAKEN).longOrNull,
+            heard = decodeHeard(s.f(ObiJobFields.HEARD).textOrNull),
+            stepCap = (s.f(ObiJobFields.STEP_CAP).longOrNull ?: TOTAL_STEP_CAP.toLong()).toInt(),
+            replan = s.f(ObiJobFields.REPLAN).boolOrNull == true,
         )
+    }
+
+    /** One "question\tanswer" a line, the newest [MAX_HEARD] kept. */
+    fun encodeHeard(heard: List<ObiHeard>): String =
+        heard.takeLast(MAX_HEARD).joinToString("\n") { "${flat(it.question)}\t${flat(it.answer)}" }
+
+    fun decodeHeard(text: String?): List<ObiHeard> = text.orEmpty().lines().mapNotNull { l ->
+        val i = l.indexOf('\t')
+        val q = if (i < 0) "" else l.substring(0, i).trim()
+        val a = (if (i < 0) l else l.substring(i + 1)).trim()
+        a.takeIf { it.isNotEmpty() }?.let { ObiHeard(q, it) }
+    }
+
+    /** "  somewhere in   Leeds " → "Somewhere in Leeds"; null when blank. */
+    fun tidyAnswer(text: String): String? =
+        clean(text).take(MAX_ANSWER).trim().takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercase() }
+
+    /** "carry on", "keep going", "yes", "go on": only telling it to carry on, nothing new to work from. */
+    fun isCarryOn(text: String): Boolean =
+        clean(text).lowercase().trimEnd('.', '!', ' ') in setOf("carry on", "keep going", "go on", "continue", "yes", "yes please", "ok", "okay")
+
+    /** He can answer it: it waits for him and he hasn't already answered. */
+    fun canAnswer(j: ObiJob): Boolean = !j.finished && j.state == ObiJobState.NEEDS_YOU && !j.answerWaiting
+
+    /** The fields his answer writes; null (nothing written) for a blank one. */
+    fun answerFields(text: String, nowMs: Long): Map<String, FieldValue>? {
+        val a = tidyAnswer(text) ?: return null
+        return mapOf(ObiJobFields.ANSWER to a.fv(), ObiJobFields.ANSWERED_AT to nowMs.fv())
     }
 
     fun jobs(raw: Map<String, Map<String, FieldValue>>): List<ObiJob> = raw.mapNotNull { (id, s) -> parse(id, s) }
@@ -249,6 +332,7 @@ object ObiJobRules {
         return when {
             j.stopped || j.state == ObiJobState.STOPPED -> "Stopped"
             j.state == ObiJobState.DONE -> "Done ${day(j.didAtMs, nowMs, cal)}".trim()
+            j.answerWaiting -> ANSWER_STATUS
             j.state == ObiJobState.NEEDS_YOU -> "Needs you"
             j.waiting != null -> "Waiting · ${j.waiting}"
             j.steps.isEmpty() -> "Starting · Obi is planning it"
@@ -269,11 +353,14 @@ object ObiJobRules {
         val title = tidyAsk(j.ask) ?: j.ask
         val status = status(j, nowMs, cal)
         val did = did(j)
-        val need = if (j.finished) null else j.need
+        val need = if (j.finished || j.answerWaiting) null else j.need
+        val youSaid = if (j.finished) null else if (j.answerWaiting) j.answer else j.heard.lastOrNull()?.answer
+        val canAnswer = canAnswer(j)
         return ObiJobRow(
             j.id, title, status, did, need, j.draft, canStop = !j.finished,
-            spoken = listOfNotNull(title, status, did, need?.let { "Needs you: $it" }).joinToString(". "),
+            spoken = listOfNotNull(title, status, did, need?.let { "Needs you: $it" }, youSaid?.let { "$YOU_SAID: $it" }).joinToString(". "),
             found = j.found != null,
+            canAnswer = canAnswer, canCarryOn = canAnswer && j.atCap, youSaid = youSaid,
         )
     }
 
@@ -294,7 +381,7 @@ object ObiJobRules {
      * only that there is one.
      */
     fun askLines(rows: List<ObiJobRow>, max: Int): List<String> = rows.take(max).map { r ->
-        listOfNotNull("Errand", r.title, r.status, r.did.take(200), r.need?.let { "needs you: $it" },
+        listOfNotNull("Errand", r.title, r.status, r.did.take(200), r.need?.let { "needs you: $it" }, r.youSaid?.let { "he said: ${it.take(120)}" },
             r.draft?.let { "a draft is waiting for him to copy and send himself" }).joinToString(" · ")
     }
 
@@ -331,4 +418,19 @@ class ObiJobs(private val replica: Replica, private val newId: () -> String, pri
         replica.commitLocal(EntityTypes.OBI_JOB, id, mapOf(ObiJobFields.STOPPED to true.fv()))
         return true
     }
+
+    /**
+     * Part 3 slice 5: his answer to what Obi needs ("somewhere in Leeds", "make it shorter", or [ObiJobRules.CARRY_ON]
+     * after the step cap); the server reads it on its next look and carries on. False (nothing written) for an unknown
+     * job, one not waiting for him, one already answered, or a blank answer.
+     */
+    fun answer(id: String, text: String): Boolean {
+        val j = all().firstOrNull { it.id == id } ?: return false
+        if (!ObiJobRules.canAnswer(j)) return false
+        val fields = ObiJobRules.answerFields(text, nowMs()) ?: return false
+        replica.commitLocal(EntityTypes.OBI_JOB, id, fields)
+        return true
+    }
+
+    fun carryOn(id: String): Boolean = answer(id, ObiJobRules.CARRY_ON)
 }

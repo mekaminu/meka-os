@@ -4425,5 +4425,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         let card = AskRules.shared.cardOf(p: AskProposalStartErrand(text: "Plan half term"), today: 0)
         XCTAssertEqual(card.line, "Ask Obi to work on: Plan half term")
         XCTAssertEqual(card.button, ObiJobRules.shared.CARD_BUTTON)
+        // Part 3 slice 5: a stopped errand can't be answered or carried on; the words the sheet uses are the core's.
+        let answered = try await core.answerObiErrand(id: id, text: "Somewhere in Leeds")
+        XCTAssertFalse(answered.boolValue)
+        let carried = try await core.carryOnObiErrand(id: id)
+        XCTAssertFalse(carried.boolValue)
+        XCTAssertFalse(after.jobs.first?.canAnswer ?? true)
+        XCTAssertNil(after.jobs.first?.youSaid)
+        XCTAssertEqual(ObiJobRules.shared.ANSWER_GO, "Tell Obi")
     }
 }

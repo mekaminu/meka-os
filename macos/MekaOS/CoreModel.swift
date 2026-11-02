@@ -1762,6 +1762,19 @@ final class CoreModel {
         return (try? await core.stopObiErrand(id: id))?.boolValue ?? false
     }
 
+    /// Ada plans with you, part 3 slice 5: his answer to what Obi needs on an errand (synced; the server reads it and
+    /// carries on); false when it isn't waiting for him or the answer is blank. Only Strings cross to the core.
+    func answerObiErrand(_ id: String, text: String) async -> Bool {
+        guard let core else { return false }
+        return (try? await core.answerObiErrand(id: id, text: text))?.boolValue ?? false
+    }
+
+    /// "Carry on" after an errand stopped at its step cap; false when it isn't waiting for him.
+    func carryOnObiErrand(_ id: String) async -> Bool {
+        guard let core else { return false }
+        return (try? await core.carryOnObiErrand(id: id))?.boolValue ?? false
+    }
+
     /// A card's button in Obi is working on: the sheet closes, then Ask opens the place as Take me there does.
     func openFromWorkingOn(_ place: HelpPlace, reduced: Bool) {
         showWorkingOn = false

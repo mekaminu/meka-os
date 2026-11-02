@@ -78,9 +78,9 @@ import os.meka.core.domain.WorkingOnView
 import os.meka.core.facade.MekaCore
 
 /**
- * Ask → Daily → Obi is working on (Ada plans with you, part 3 slices 1 and 4): first ERRANDS YOU ASKED FOR, with Ask
- * Obi for an errand (a sheet with one field) and a card per errand (status, WHAT I DID, WHAT I NEED FROM YOU, the draft
- * with Copy, Stop); then what the standing errands watch, each a card with WHAT I DID, WHAT I NEED FROM YOU (in the
+ * Ask → Daily → Obi is working on (Ada plans with you, part 3 slices 1, 4 and 5): first ERRANDS YOU ASKED FOR, with Ask
+ * Obi for an errand (a sheet with one field) and a card per errand (status, WHAT I DID, WHAT I NEED FROM YOU, YOU SAID,
+ * the draft with Copy, Answer (a sheet with one field) or Carry on after the step cap, Stop); then what the standing errands watch, each a card with WHAT I DID, WHAT I NEED FROM YOU (in the
  * accent) and the button to the screen that holds it; then STANDING ERRANDS with Turn off / Turn on for each (synced).
  * The words are the core's [WorkingOnRules.view] and [ObiJobRules], the same as the Mac's sheet. Nothing is sent from
  * here: a draft is copied for him to send himself.
@@ -97,6 +97,8 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
     val context = LocalContext.current
     var view by remember { mutableStateOf<WorkingOnView?>(null) }
     var asking by remember { mutableStateOf(false) }
+    // Part 3 slice 5: the errand whose question he is answering (the answer sheet is open while set).
+    var answering by remember { mutableStateOf<ObiJobRow?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
     // The server works an errand a step a minute and sync brings each step in: read again while the pane is open.
     LaunchedEffect(Unit) {
@@ -149,6 +151,15 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                             ?.setPrimaryClip(android.content.ClipData.newPlainText(ObiJobRules.DRAFT_LABEL, draft))
                         said = ObiJobRules.COPIED
                     },
+                    onAnswer = { haptics.tick(); said = null; answering = j },
+                    onCarryOn = {
+                        haptics.tick()
+                        scope.launch {
+                            val ok = runCatching { core.carryOnObiErrand(j.id) }.getOrDefault(false)
+                            said = if (ok) ObiJobRules.CARRY_ON_LINE else ObiJobRules.ANSWER_GONE
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
                     onStop = {
                         haptics.tick()
                         scope.launch {
@@ -176,10 +187,36 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                 }
             }
         }
-        AskErrandSheet(
+        ErrandTextSheet(
+            open = answering != null,
+            title = ObiJobRules.ANSWER_TITLE,
+            intro = answering?.need.orEmpty(),
+            hint = ObiJobRules.ANSWER_HINT,
+            go = ObiJobRules.ANSWER_GO,
+            max = ObiJobRules.MAX_ANSWER,
+            tag = "answer",
+            onClose = { answering = null },
+            onSubmit = { text ->
+                val j = answering ?: return@ErrandTextSheet
+                haptics.tick()
+                scope.launch {
+                    val ok = runCatching { core.answerObiErrand(j.id, text) }.getOrDefault(false)
+                    said = if (ok) ObiJobRules.ANSWERED_LINE else ObiJobRules.ANSWER_GONE
+                    answering = null
+                    view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                }
+            },
+        )
+        ErrandTextSheet(
             open = asking,
+            title = ObiJobRules.SHEET_TITLE,
+            intro = ObiJobRules.INTRO,
+            hint = ObiJobRules.HINT,
+            go = ObiJobRules.SHEET_GO,
+            max = ObiJobRules.MAX_ASK,
+            tag = "errand",
             onClose = { asking = false },
-            onAsk = { text ->
+            onSubmit = { text ->
                 haptics.tick()
                 scope.launch {
                     val asked = runCatching { core.askObiErrand(text) }.getOrNull()
@@ -200,7 +237,9 @@ private const val REFRESH_MS = 15_000L
  * YOU, the draft in its own box with Copy (and that Navilife never sends it), and Stop while it is open.
  */
 @Composable
-private fun JobCard(j: ObiJobRow, modifier: Modifier, onCopy: (String) -> Unit, onStop: () -> Unit) {
+private fun JobCard(
+    j: ObiJobRow, modifier: Modifier, onCopy: (String) -> Unit, onAnswer: () -> Unit, onCarryOn: () -> Unit, onStop: () -> Unit,
+) {
     Column(
         modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
@@ -219,6 +258,12 @@ private fun JobCard(j: ObiJobRow, modifier: Modifier, onCopy: (String) -> Unit, 
                 modifier = Modifier.padding(top = MekaSpace.xs))
             Text(LoneWordGlue.kept(need), style = MekaType.body, color = Meka.colors.accent)
         }
+        // Part 3 slice 5: what he last told Obi on it.
+        j.youSaid?.let { said ->
+            Text(ObiJobRules.YOU_SAID.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(top = MekaSpace.xs))
+            Text(LoneWordGlue.kept(said), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.testTag("errand-you-said"))
+        }
         j.draft?.let { draft ->
             Text(ObiJobRules.DRAFT_LABEL.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.xs))
@@ -229,6 +274,13 @@ private fun JobCard(j: ObiJobRow, modifier: Modifier, onCopy: (String) -> Unit, 
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End),
             verticalAlignment = Alignment.CenterVertically) {
+            if (j.canCarryOn) {
+                TouchPill(ObiJobRules.CARRY_ON, Meka.colors.accent, Meka.colors.onAccent, spoken = "${ObiJobRules.CARRY_ON}: ${j.title}",
+                    modifier = Modifier.testTag("errand-carry-on"), onClick = onCarryOn)
+            } else if (j.canAnswer) {
+                TouchPill(ObiJobRules.ANSWER, Meka.colors.accent, Meka.colors.onAccent, spoken = "${ObiJobRules.ANSWER}: ${j.title}",
+                    modifier = Modifier.testTag("errand-answer"), onClick = onAnswer)
+            }
             j.draft?.let { draft ->
                 TouchPill(ObiJobRules.COPY, Meka.colors.surface, Meka.colors.accent, spoken = "${ObiJobRules.COPY} the draft: ${j.title}") { onCopy(draft) }
             }
@@ -240,12 +292,16 @@ private fun JobCard(j: ObiJobRow, modifier: Modifier, onCopy: (String) -> Unit, 
 }
 
 /**
- * The ask sheet (no open field on the pane, the layout rules): "What should Obi look into?", one field with the hint,
- * Ask Obi and Cancel. Motion: the scrim fades and the sheet rises on the expand spring; reduced motion cross-fades.
+ * The ask sheet and the answer sheet (no open field on the pane, the layout rules): a title ("What should Obi look
+ * into?" / "Answer Obi"), a line under it (the intro / what Obi needs), one field with the hint, the go button and Cancel.
+ * Motion: the scrim fades and the sheet rises on the expand spring; reduced motion cross-fades.
  */
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-private fun AskErrandSheet(open: Boolean, onClose: () -> Unit, onAsk: (String) -> Unit) {
+private fun ErrandTextSheet(
+    open: Boolean, title: String, intro: String, hint: String, go: String, max: Int, tag: String,
+    onClose: () -> Unit, onSubmit: (String) -> Unit,
+) {
     val reduced = Meka.reducedMotion
     BackHandler(enabled = open, onBack = onClose)
     AnimatedVisibility(visible = open, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
@@ -254,7 +310,7 @@ private fun AskErrandSheet(open: Boolean, onClose: () -> Unit, onAsk: (String) -
             Box(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
                     .pointerInput(Unit) { detectTapGestures { onClose() } }
-                    .semantics { contentDescription = "Close ${ObiJobRules.SHEET_TITLE}" },
+                    .semantics { contentDescription = "Close $title" },
             )
             Column(
                 Modifier.widthIn(max = 560.dp).fillMaxWidth()
@@ -268,31 +324,31 @@ private fun AskErrandSheet(open: Boolean, onClose: () -> Unit, onAsk: (String) -
                     .heightIn(max = 520.dp)
                     .navigationBarsPadding().imePadding()
                     .padding(MekaSpace.m)
-                    .testTag("errand-sheet"),
+                    .testTag("$tag-sheet"),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                Text(ObiJobRules.SHEET_TITLE, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
-                Text(LoneWordGlue.kept(ObiJobRules.INTRO), style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(title, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
+                if (intro.isNotEmpty()) Text(LoneWordGlue.kept(intro), style = MekaType.caption, color = Meka.colors.textSecondary)
                 Box(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
                         .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
                 ) {
-                    if (text.isEmpty()) Text(ObiJobRules.HINT, style = MekaType.body, color = Meka.colors.textTertiary)
+                    if (text.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
                     BasicTextField(
                         value = text,
-                        onValueChange = { text = it.take(ObiJobRules.MAX_ASK) },
+                        onValueChange = { text = it.take(max) },
                         textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
                         cursorBrush = SolidColor(Meka.colors.accent),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { if (text.isNotBlank()) onAsk(text) }),
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = ObiJobRules.SHEET_TITLE }.testTag("errand-field"),
+                        keyboardActions = KeyboardActions(onSend = { if (text.isNotBlank()) onSubmit(text) }),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = title }.testTag("$tag-field"),
                     )
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically) {
                     TouchPill(ObiJobRules.SHEET_CANCEL, Meka.colors.surfaceRaised, Meka.colors.textSecondary, onClick = onClose)
-                    TouchPill(ObiJobRules.SHEET_GO, Meka.colors.accent, Meka.colors.onAccent, modifier = Modifier.testTag("errand-go")) {
-                        if (text.isNotBlank()) onAsk(text)
+                    TouchPill(go, Meka.colors.accent, Meka.colors.onAccent, modifier = Modifier.testTag("$tag-go")) {
+                        if (text.isNotBlank()) onSubmit(text)
                     }
                 }
             }

@@ -63,6 +63,61 @@ class ObiJobsTest {
     }
 
     @Test
+    fun heAnswersOnEitherDeviceOnlyWhenObiNeedsHim() {
+        // Part 3 slice 5: Answer and Carry on.
+        val id = jFold.ask("Find someone to service the boiler").id!!
+        assertFalse(jFold.answer(id, "Leeds")) // not waiting for him yet
+        // The server asks him something.
+        fold.replica.commitLocal(EntityTypes.OBI_JOB, id, mapOf(
+            ObiJobFields.STATE to FieldValue.Text(ObiJobState.NEEDS_YOU.code), ObiJobFields.NEED to FieldValue.Text("Which area?"),
+        ))
+        sync()
+        var row = ObiJobRules.rows(jMac.all(), world.clock.nowMs, LocalCalendar.UTC).single()
+        assertTrue(row.canAnswer)
+        assertFalse(row.canCarryOn)
+        assertFalse(jMac.answer(id, "   "))
+        assertTrue(jMac.answer(id, "  somewhere   in Leeds "))
+        assertFalse(jMac.answer(id, "or York")) // once until the server reads it
+        sync()
+        val j = jFold.all().single()
+        assertEquals("Somewhere in Leeds", j.answer)
+        assertTrue(j.answerWaiting)
+        row = ObiJobRules.rows(jFold.all(), world.clock.nowMs, LocalCalendar.UTC).single()
+        assertEquals(ObiJobRules.ANSWER_STATUS, row.status)
+        assertNull(row.need)
+        assertFalse(row.canAnswer)
+        assertEquals("Somewhere in Leeds", row.youSaid)
+        assertTrue(ObiJobRules.askLines(listOf(row), 3).single().contains("he said: Somewhere in Leeds"))
+        // Read by the server: the row shows the answer from what he's heard.
+        fold.replica.commitLocal(EntityTypes.OBI_JOB, id, mapOf(
+            ObiJobFields.ANSWER_TAKEN to FieldValue.Int64(j.answeredAtMs!!), ObiJobFields.STATE to FieldValue.Text(ObiJobState.WORKING.code),
+            ObiJobFields.NEED to FieldValue.Null, ObiJobFields.HEARD to FieldValue.Text(ObiJobRules.encodeHeard(listOf(ObiHeard("Which area?", "Somewhere in Leeds")))),
+        ))
+        row = ObiJobRules.rows(jFold.all(), world.clock.nowMs, LocalCalendar.UTC).single()
+        assertFalse(row.status == ObiJobRules.ANSWER_STATUS)
+        assertEquals("Somewhere in Leeds", row.youSaid)
+        // At the cap, Carry on.
+        fold.replica.commitLocal(EntityTypes.OBI_JOB, id, mapOf(
+            ObiJobFields.STATE to FieldValue.Text(ObiJobState.NEEDS_YOU.code), ObiJobFields.NEED to FieldValue.Text(ObiJobRules.CAP_NEED),
+            ObiJobFields.TOTAL_STEPS to FieldValue.Int64(ObiJobRules.TOTAL_STEP_CAP.toLong()),
+        ))
+        assertTrue(ObiJobRules.rows(jFold.all(), world.clock.nowMs, LocalCalendar.UTC).single().canCarryOn)
+        world.clock.nowMs += 1_000
+        assertTrue(jFold.carryOn(id))
+        assertEquals(ObiJobRules.CARRY_ON, jFold.all().single().answer)
+        assertTrue(ObiJobRules.isCarryOn(ObiJobRules.CARRY_ON))
+        assertFalse(ObiJobRules.isCarryOn("Carry on but look in York"))
+    }
+
+    @Test
+    fun heardRoundTrips() {
+        val h = listOf(ObiHeard("Which area?", "Leeds\tor York"), ObiHeard("", "Shorter"))
+        assertEquals(listOf(ObiHeard("Which area?", "Leeds or York"), ObiHeard("", "Shorter")), ObiJobRules.decodeHeard(ObiJobRules.encodeHeard(h)))
+        val many = (1..10).map { ObiHeard("q$it", "a$it") }
+        assertEquals(ObiJobRules.MAX_HEARD, ObiJobRules.decodeHeard(ObiJobRules.encodeHeard(many)).size)
+    }
+
+    @Test
     fun stepsRoundTripAndPlansAreChecked() {
         val steps = listOf(
             ObiStep(ObiStepKind.SEARCH, "Find engineers\tnear home", "Gas Safe boiler service", done = true),

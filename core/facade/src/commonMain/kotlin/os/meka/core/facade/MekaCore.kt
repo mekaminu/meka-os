@@ -2107,6 +2107,15 @@ class MekaCore(
     /** Stops one; false when it is unknown or already finished. */
     suspend fun stopObiErrand(id: String): Boolean = onCore { obiJobs.stop(id) }
 
+    /**
+     * Part 3 slice 5: his answer to what Obi needs on an errand ("somewhere in Leeds", "make it shorter"), synced to the
+     * server, which reads it on its next look and carries on. False when it isn't waiting for him or the answer is blank.
+     */
+    suspend fun answerObiErrand(id: String, text: String): Boolean = onCore { obiJobs.answer(id, text) }
+
+    /** "Carry on" after an errand stopped at its step cap; false when it isn't waiting for him. */
+    suspend fun carryOnObiErrand(id: String): Boolean = onCore { obiJobs.carryOn(id) }
+
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
      * What MEKA may do (V1, policy engine UI, slice 1): the kill switch, each earned-trust kind and the locked rows

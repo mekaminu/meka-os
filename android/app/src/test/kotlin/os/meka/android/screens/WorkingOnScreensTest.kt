@@ -283,6 +283,21 @@ class WorkingOnScreensTest {
         if (runBlocking { core.workingOnView() }.jobs.first { it.title == "Plan half term" }.status != "Stopped") fail("$name: Stop didn't stop it")
         until { onScreen("Stopped") }
         if (!onScreen(ObiJobRules.STOPPED_LINE.substringBefore(" ·"))) fail("$name: no stopped line")
+        // Part 3 slice 5: Answer opens a sheet with Obi's question; Tell Obi records it and the card says Obi has it.
+        tap("${ObiJobRules.ANSWER}: Find someone to service the boiler")
+        until { onScreen(ObiJobRules.ANSWER_TITLE) }
+        if (!onScreen("Which morning next week suits you")) fail("$name: the answer sheet doesn't show Obi's question")
+        compose.onNodeWithTag("answer-field", useUnmergedTree = true).performTextInput("tuesday morning")
+        turns(500)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-answer-sheet"))
+        tapTag("answer-go")
+        fun boiler() = runBlocking { core.workingOnView() }.jobs.first { it.title == "Find someone to service the boiler" }
+        until { boiler().status == ObiJobRules.ANSWER_STATUS && onScreen("Obi has your answer") }
+        if (boiler().youSaid != "Tuesday morning") fail("$name: the answer wasn't kept")
+        if (boiler().canAnswer) fail("$name: it can be answered twice")
+        until { compose.onAllNodes(hasTestTag("errand-you-said"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasTestTag("errand-you-said"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no YOU SAID")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-answered"))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverErrands() { pane("cover-dark-errands", Fill.ERRANDS) }
