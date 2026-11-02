@@ -117,5 +117,8 @@ object AskPolicy {
         is AskProposal.SetName -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         // Ticks or plans lessons in Meka's own Study plan, like its buttons (nothing is sent to anyone).
         is AskProposal.StudyTick, is AskProposal.StudyPlan -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
+        // Starts one of Obi's errands, like Ask Obi for an errand in Obi is working on: the server only searches the web
+        // and drafts for him; nothing is sent, booked or bought.
+        is AskProposal.StartErrand -> ActionType.CREATE_TASK to PolicyDomain.TASKS
     }
 }

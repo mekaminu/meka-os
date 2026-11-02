@@ -114,6 +114,8 @@ data class ObiJobRow(
     val draft: String?,
     val canStop: Boolean,
     val spoken: String,
+    /** [did] is what Obi found (from web results, other people's words), not just the steps he took. */
+    val found: Boolean = false,
 ) {
     val needsYou: Boolean get() = need != null
 }
@@ -149,6 +151,26 @@ object ObiJobRules {
     const val TOO_MANY = "Obi is already on $MAX_OPEN errands · stop one or wait for one to finish"
     const val BLANK = "Say what you'd like Obi to look into"
     const val CAP_NEED = "I've taken $TOTAL_STEP_CAP steps on this and stopped · tell me to carry on, or stop it here"
+
+    // Part 3 slice 4: the apps' words (Obi is working on on the Fold and the Mac), the same on both.
+    /** The row that opens the ask sheet (no open field on the pane, the layout rules). */
+    const val ASK_ROW = "Ask Obi for an errand"
+    const val SHEET_TITLE = "What should Obi look into?"
+    const val SHEET_GO = "Ask Obi"
+    const val SHEET_CANCEL = "Cancel"
+    const val DRAFT_LABEL = "A draft for you to send"
+    const val COPY = "Copy"
+    const val COPIED = "Copied · send it yourself when you're ready"
+    const val STOP = "Stop"
+    const val STOPPED_LINE = "Stopped · Obi won't take another step on it"
+    const val STOP_GONE = "That errand has already finished"
+    /** Ask's card (Ask, Talk, Live): "Ask Obi to work on: Find someone to service the boiler" with Start. */
+    const val CARD_BUTTON = "Start"
+    fun cardLine(text: String): String = "Ask Obi to work on: $text"
+    fun startedLine(text: String): String = "Obi is on it · $text · see Obi is working on"
+
+    /** Under every draft: Navilife never sends it. */
+    const val DRAFT_FOOT = "Navilife never sends this; copy it and send it yourself"
 
     private fun clean(s: String) = s.replace(Regex("""\s+"""), " ").trim()
 
@@ -251,6 +273,7 @@ object ObiJobRules {
         return ObiJobRow(
             j.id, title, status, did, need, j.draft, canStop = !j.finished,
             spoken = listOfNotNull(title, status, did, need?.let { "Needs you: $it" }).joinToString(". "),
+            found = j.found != null,
         )
     }
 
@@ -263,6 +286,16 @@ object ObiJobRules {
                     .thenByDescending { it.askedAtMs }.thenBy { it.id },
             )
             .map { row(it, nowMs, cal) }
+    }
+
+    /**
+     * Ask's lines for the errands he asked for (inside `working_on`): "Errand · Find someone to service the boiler ·
+     * Working · step 2 of 4 · Done so far: … · needs you: …", needing him first, at most [max]. A draft is never quoted,
+     * only that there is one.
+     */
+    fun askLines(rows: List<ObiJobRow>, max: Int): List<String> = rows.take(max).map { r ->
+        listOfNotNull("Errand", r.title, r.status, r.did.take(200), r.need?.let { "needs you: $it" },
+            r.draft?.let { "a draft is waiting for him to copy and send himself" }).joinToString(" · ")
     }
 
     /** The fields a new ask writes; null (nothing written) for a blank one. */

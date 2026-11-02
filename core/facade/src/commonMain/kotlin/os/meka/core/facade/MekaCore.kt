@@ -2058,6 +2058,7 @@ class MekaCore(
     }
 
     private val workingOnSettings = os.meka.core.domain.WorkingOnSettings(replica)
+    private val obiJobs = os.meka.core.domain.ObiJobs(replica, ids::next, nowMs)
 
     /**
      * Ada plans with you, part 3 slices 1–2: what Obi is working on, the standing errands (Renewals watcher, Birthday
@@ -2078,6 +2079,8 @@ class MekaCore(
         )
         return os.meka.core.domain.WorkingOnRules.view(
             workingOnSettings.setting(), renewals.view(), gifts.view(), _lists.value.waiting, today, inbox, schoolCard,
+            // Part 3 slice 4: the errands he asked Obi for, as the server has worked them so far.
+            jobs = os.meka.core.domain.ObiJobRules.rows(obiJobs.all(), nowMs(), ZoneCalendar(timeZone)),
         )
     }
 
@@ -2089,8 +2092,6 @@ class MekaCore(
         os.meka.core.domain.StandingErrand.of(code)?.let { workingOnSettings.set(it, on) }
         workingOnNow()
     }
-
-    private val obiJobs = os.meka.core.domain.ObiJobs(replica, ids::next, nowMs)
 
     /**
      * Ada plans with you, part 3 slice 3: the errands he asked Obi for, needing him first, as the server has worked them
@@ -10621,6 +10622,8 @@ class MekaCore(
                 vault = obiSeesLines(os.meka.core.domain.ObiArea.VAULT, q, cal, full = os.meka.core.domain.ObiRestRules.vaultAsked(q)),
                 // Ada plans with you, part 3 slice 1: what Obi is working on, all of it when asked, else one line.
                 workingOn = obiSeesLines(os.meka.core.domain.ObiArea.WORKING_ON, q, cal, full = os.meka.core.domain.WorkingOnRules.asked(q)),
+                // Part 3 slice 4: what Obi found on the web for an errand is other people's words (ADR-006).
+                workingOnFromWeb = os.meka.core.domain.WorkingOnRules.fromWeb(workingOnNow(), os.meka.core.domain.WorkingOnRules.asked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -10925,6 +10928,11 @@ class MekaCore(
                 if (before.isEmpty() || study.planLessons(before.keys.toList(), p.day) == 0) throw os.meka.core.domain.ValidationException(os.meka.core.domain.StudyAskCards.ALREADY_PLANNED)
                 os.meka.core.domain.AskUndo.PutBackLessonPlan(before, p.day)
             }
+            // Part 3 slice 4: Obi is working on's own ask (blank or five already open is refused); Undo stops it.
+            is os.meka.core.domain.AskProposal.StartErrand -> {
+                val asked = obiJobs.ask(p.text)
+                os.meka.core.domain.AskUndo.StopErrand(asked.id ?: throw os.meka.core.domain.ValidationException(asked.line))
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -11012,6 +11020,8 @@ class MekaCore(
                 val now = study.lessons().associateBy { it.id }
                 undo.before.entries.count { (id, day) -> now[id]?.plannedDay == undo.day && study.planLesson(id, day) } > 0
             }
+            // Stopped only while it is still open (finished or stopped since, it stays as it is).
+            is os.meka.core.domain.AskUndo.StopErrand -> obiJobs.stop(undo.jobId)
         }
     }
 
@@ -12284,6 +12294,10 @@ class MekaCore(
             val area = os.meka.core.domain.ObiArea.of(areaKey) ?: return@onCore os.meka.core.domain.ObiSees.NO_AREA
             val lines = obiSeesLines(area, os.meka.core.domain.LiveToolRules.arg(question), ZoneCalendar(timeZone), full = true)
             if (area.untrusted && lines.isNotEmpty()) liveAsk = liveAsk.copy(untrusted = true)
+            // Part 3 slice 4: an errand's findings come from the web, so they turn the session untrusted too.
+            if (area == os.meka.core.domain.ObiArea.WORKING_ON && os.meka.core.domain.WorkingOnRules.fromWeb(workingOnNow(), true)) {
+                liveAsk = liveAsk.copy(untrusted = true)
+            }
             os.meka.core.domain.ObiSees.answer(area, lines)
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.ObiSees.FAILED }

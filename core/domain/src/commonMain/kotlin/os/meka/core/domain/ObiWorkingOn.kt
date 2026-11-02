@@ -52,9 +52,13 @@ data class WorkingOnView(
     val switches: List<WorkingOnSwitch>,
     /** "Keeping an eye on 3 things · 2 need you". */
     val summary: String,
+    /** Part 3 slice 4: the errands he asked Obi for ([ObiJobRules.rows]), needing him first. */
+    val jobs: List<ObiJobRow> = emptyList(),
 ) {
-    val needCount: Int get() = cards.count { it.needsYou }
-    val isEmpty: Boolean get() = cards.isEmpty()
+    val needCount: Int get() = cards.count { it.needsYou } + jobs.count { it.needsYou }
+    val isEmpty: Boolean get() = cards.isEmpty() && jobs.isEmpty()
+    /** Errands he asked for that are still open (Stop shows). */
+    val openJobs: Int get() = jobs.count { it.canStop }
 
     companion object {
         val EMPTY = WorkingOnView(emptyList(), StandingErrand.entries.map { WorkingOnSwitch(it, true) }, WorkingOnRules.EMPTY_LINE)
@@ -74,16 +78,19 @@ object WorkingOnRules {
     const val EMPTY_LINE = "Nothing to keep an eye on yet · add a renewal, a birthday, something you're waiting on, your mail or the children and Obi watches it here"
     const val ALL_OFF_LINE = "Every standing errand is off · turn one on below"
     const val SWITCHES = "Standing errands"
+    /** The heading over the standing errands' cards, under the errands he asked for (part 3 slice 4). */
+    const val WATCHING = "What Obi keeps an eye on"
     const val DID = "What I did"
     const val NEED = "What I need from you"
-    const val NEXT = "Coming next: errands you ask Obi for, like finding someone to service the boiler."
 
     /** A renewal comes up this many days ahead (the board: "reminds 4 weeks ahead"). */
     const val RENEWAL_AHEAD = 28L
     /** A birthday comes up this many days ahead (the board: "a heads-up 10 days ahead"). */
     const val BIRTHDAY_AHEAD = 10L
     /** Ask's lines: a head and up to two per errand. */
-    const val ASK_MAX = 1 + 5 * 2
+    /** At most this many errands he asked for go in Ask's lines (part 3 slice 4). */
+    const val ASK_JOBS = 5
+    const val ASK_MAX = 1 + 5 * 2 + ASK_JOBS
 
     private const val OFF = "off"
 
@@ -227,7 +234,7 @@ object WorkingOnRules {
     /** The pane: the errands that are on and have something, those needing him first; every switch underneath. */
     fun view(
         setting: WorkingOnSetting, renewals: RenewalsView, gifts: GiftsView, waiting: List<WaitingItem>, today: Long,
-        inbox: WorkingOnCard? = null, school: WorkingOnCard? = null,
+        inbox: WorkingOnCard? = null, school: WorkingOnCard? = null, jobs: List<ObiJobRow> = emptyList(),
     ): WorkingOnView {
         val cards = StandingErrand.entries.filter { setting.isOn(it) }.mapNotNull { e ->
             when (e) {
@@ -239,26 +246,31 @@ object WorkingOnRules {
             }
         }.sortedBy { if (it.needsYou) 0 else 1 }
         val switches = StandingErrand.entries.map { WorkingOnSwitch(it, setting.isOn(it)) }
-        val need = cards.count { it.needsYou }
+        val need = cards.count { it.needsYou } + jobs.count { it.needsYou }
+        val open = jobs.count { it.canStop }
+        val needs = if (need > 0) " · $need need${if (need == 1) "s" else ""} you" else " · nothing needs you"
         val summary = when {
-            switches.none { it.on } -> ALL_OFF_LINE
-            cards.isEmpty() -> EMPTY_LINE
-            else -> "Keeping an eye on ${plural(cards.size, "thing")}" + if (need > 0) " · $need need${if (need == 1) "s" else ""} you" else " · nothing needs you"
+            switches.none { it.on } && open == 0 -> ALL_OFF_LINE
+            cards.isEmpty() && open == 0 -> EMPTY_LINE
+            cards.isEmpty() -> "On ${plural(open, "errand")} for you$needs"
+            open == 0 -> "Keeping an eye on ${plural(cards.size, "thing")}$needs"
+            else -> "Keeping an eye on ${plural(cards.size, "thing")} · on ${plural(open, "errand")}$needs"
         }
-        return WorkingOnView(cards, switches, summary)
+        return WorkingOnView(cards, switches, summary, jobs)
     }
 
     /** Ask → Daily's row: "2 need you" (lit), "Watching 3 things", "All off"; null (the fixed words) with nothing to watch. */
     fun dailyLine(v: WorkingOnView): DailyLine? = when {
-        v.switches.none { it.on } -> DailyLine("All off", false)
+        v.switches.none { it.on } && v.openJobs == 0 && v.needCount == 0 -> DailyLine("All off", false)
         v.needCount > 0 -> DailyLine("${v.needCount} need${if (v.needCount == 1) "s" else ""} you", true)
         v.cards.isNotEmpty() -> DailyLine("Watching ${plural(v.cards.size, "thing")}", false)
+        v.openJobs > 0 -> DailyLine("On ${plural(v.openJobs, "errand")}", false)
         else -> null
     }
 
     private val ASKED = Regex(
         """\b(what are you (working on|doing|up to|keeping an eye on)|what('re| are) you (working on|watching)|working on for me|""" +
-            """standing errands?|keeping an eye on|renewals watcher|birthday keeper|follow-?up chaser|what's obi (doing|working on))\b""",
+            """standing errands?|keeping an eye on|what (did|have) you (find|found)|errands? (i|you) asked( you)? for|renewals watcher|birthday keeper|follow-?up chaser|what's obi (doing|working on))\b""",
     )
 
     /** Whether [q] asks what Obi is working on (then every line goes, else the head alone). */
@@ -271,15 +283,24 @@ object WorkingOnRules {
      */
     fun askLines(v: WorkingOnView, full: Boolean): List<String> {
         val off = v.switches.filter { !it.on }
-        if (v.cards.isEmpty() && off.isEmpty()) return emptyList()
+        if (v.cards.isEmpty() && off.isEmpty() && v.jobs.isEmpty()) return emptyList()
         val on = v.switches.count { it.on }
         val head = "$TITLE · ${plural(on, "standing errand")} on" +
-            if (v.cards.isEmpty()) " · nothing to watch yet" else if (v.needCount > 0) " · ${v.needCount} need${if (v.needCount == 1) "s" else ""} you" else " · nothing needs you"
+            (if (v.jobs.isNotEmpty()) " · ${plural(v.openJobs, "errand")} he asked for open" else "") +
+            if (v.cards.isEmpty() && v.jobs.isEmpty()) " · nothing to watch yet" else if (v.needCount > 0) " · ${v.needCount} need${if (v.needCount == 1) "s" else ""} you" else " · nothing needs you"
         if (!full) return listOf(head)
-        val lines = v.cards.map { c -> listOfNotNull(c.title, c.did, c.need?.let { "needs you: $it" }).joinToString(" · ") } +
+        val lines = ObiJobRules.askLines(v.jobs, ASK_JOBS) +
+            v.cards.map { c -> listOfNotNull(c.title, c.did, c.need?.let { "needs you: $it" }).joinToString(" · ") } +
             off.map { "${it.errand.title} · off" }
         return (listOf(head) + lines).take(ASK_MAX)
     }
+
+    /**
+     * Whether [askLines] (full) carry what Obi found on the web for an errand (what he found, the question, a draft):
+     * other people's words, so the question's cards pass the gate as untrusted ones do (ADR-006).
+     */
+    fun fromWeb(v: WorkingOnView, full: Boolean): Boolean =
+        full && v.jobs.take(ASK_JOBS).any { it.found || it.need != null || it.draft != null }
 }
 
 /** The switches, synced (one entity, id [WorkingOnRules.ENTITY_ID]). */

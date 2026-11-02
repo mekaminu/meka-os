@@ -320,6 +320,8 @@ object TalkRules {
         // "tick off Pivot tables in your study plan" / "ticked off …".
         is AskProposal.StudyTick -> (if (past) "ticked off " else "tick off ") + clean(p.title) + " in your study plan"
         // "plan Module 4, 5 lessons for tomorrow" / "planned Pivot tables for Thursday 29 October".
+        // "start working on find someone to service the boiler as an errand" reads badly, so: "start an errand: …".
+        is AskProposal.StartErrand -> (if (past) "started an errand: " else "start an errand: ") + clean(p.text)
         is AskProposal.StudyPlan -> (if (past) "planned " else "plan ") + clean(p.what.replace(" · ", ", ")) + " for " + spokenWhen(p.day, null, today)
         is AskProposal.AddGoal -> (if (past) "added " else "add ") + "the goal " + clean(p.title) +
             (p.dueDay?.let { ", done by " + spokenWhen(it, null, today) } ?: " for " + GoalRules.horizonLabel(p.horizon).lowercase())

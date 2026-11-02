@@ -4398,4 +4398,32 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(TodayBesideRules.shared.dividerAfter(index: 0, count: 2))
         XCTAssertFalse(TodayBesideRules.shared.dividerAfter(index: 1, count: 2))
     }
+
+    func testObiErrandsReachTheMac() async throws {
+        // Ada plans with you, part 3 slice 4: an errand asked on the Mac shows in Obi is working on's view with Stop,
+        // Stop finishes it, and the orb's Start card starts one. Only Strings cross to the core.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "errands-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let blank = try await core.askObiErrand(text: "   ")
+        XCTAssertNil(blank.id)
+        XCTAssertEqual(blank.line, ObiJobRules.shared.BLANK)
+        let asked = try await core.askObiErrand(text: "get three quotes for the fence")
+        let id = try XCTUnwrap(asked.id)
+        XCTAssertEqual(asked.line, "Obi is on it · Get three quotes for the fence")
+        let v = try await core.workingOnView()
+        XCTAssertEqual(v.jobs.map(\.title), ["Get three quotes for the fence"])
+        XCTAssertTrue(v.jobs.first?.canStop ?? false)
+        XCTAssertEqual(v.summary, "On 1 errand for you · nothing needs you")
+        let stopped = try await core.stopObiErrand(id: id)
+        XCTAssertTrue(stopped.boolValue)
+        let after = try await core.workingOnView()
+        XCTAssertEqual(after.jobs.first?.status, "Stopped")
+        XCTAssertFalse(after.jobs.first?.canStop ?? true)
+        let card = AskRules.shared.cardOf(p: AskProposalStartErrand(text: "Plan half term"), today: 0)
+        XCTAssertEqual(card.line, "Ask Obi to work on: Plan half term")
+        XCTAssertEqual(card.button, ObiJobRules.shared.CARD_BUTTON)
+    }
 }

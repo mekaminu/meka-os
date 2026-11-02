@@ -1749,6 +1749,19 @@ final class CoreModel {
         return try? await core.setStandingErrand(code: code, on: on)
     }
 
+    /// Ada plans with you, part 3 slice 4: asks Obi to look into something ("find someone to service the boiler"),
+    /// synced to the server, which works on it; the line to show (on it, blank, or five already open).
+    func askObiErrand(_ text: String) async -> ObiJobAsked? {
+        guard let core else { return nil }
+        return try? await core.askObiErrand(text: text)
+    }
+
+    /// Stops one of his errands by id (synced with the Fold); false when it had already finished.
+    func stopObiErrand(_ id: String) async -> Bool {
+        guard let core else { return false }
+        return (try? await core.stopObiErrand(id: id))?.boolValue ?? false
+    }
+
     /// A card's button in Obi is working on: the sheet closes, then Ask opens the place as Take me there does.
     func openFromWorkingOn(_ place: HelpPlace, reduced: Bool) {
         showWorkingOn = false

@@ -79,6 +79,8 @@ object TrustRules {
         is AskProposal.SetName -> null
         // Study cards (Obi sees everything, slice 2): a misheard lesson would tick or move the wrong one, so he sees it first.
         is AskProposal.StudyTick, is AskProposal.StudyPlan -> null
+        // An errand (part 3 slice 4) spends AI steps and web searches on his behalf, so he always starts it himself.
+        is AskProposal.StartErrand -> null
         // Skipping the life admin hour (slice 3) frees an hour Meka chose to keep, so he always sees it first.
         is AskProposal.SkipLifeAdmin -> null
         // A gift idea (Gift planner slice 2) is Meka's own note about someone, so he always sees it before it's kept.

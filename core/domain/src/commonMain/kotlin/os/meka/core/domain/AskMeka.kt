@@ -139,6 +139,11 @@ sealed interface AskProposal {
      * tables”" for one lesson or "Module 4 · 5 lessons" for a module's lessons not done, [course] their course.
      */
     data class StudyPlan(val lessonIds: List<String>, val what: String, val course: String, val day: Long) : AskProposal
+    /**
+     * Ada plans with you, part 3 slice 4: an errand for Obi to work on in the background ("find someone to service the
+     * boiler"), his words tidied ([ObiJobRules.tidyAsk]). The server only searches the web and drafts; nothing is sent.
+     */
+    data class StartErrand(val text: String) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -207,6 +212,8 @@ sealed interface AskUndo {
     data class RemovePromise(val promiseId: String) : AskUndo
     /** The Study tick card: the lesson is unticked again (only while it is still ticked). */
     data class UntickLesson(val lessonId: String) : AskUndo
+    /** The errand card: the errand it started is stopped (only while it is still open). */
+    data class StopErrand(val jobId: String) : AskUndo
     /** The Study plan card: each lesson gets the day it had ([before], null for none) while it is still on [day]. */
     data class PutBackLessonPlan(val before: Map<String, Long?>, val day: Long) : AskUndo
     /** The booking card: the booking it added leaves the trip (only while it is still there). */
@@ -286,7 +293,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event", "add_trip_item", "study_done", "plan_lesson")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event", "add_trip_item", "study_done", "plan_lesson", "start_errand")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -311,7 +318,7 @@ object AskRules {
                 barca: List<String> = emptyList(), study: List<String> = emptyList(),
                 board: List<String> = emptyList(), decisions: List<String> = emptyList(), reading: List<String> = emptyList(),
                 emergency: List<String> = emptyList(), news: List<String> = emptyList(), voiceNotes: List<String> = emptyList(),
-                health: List<String> = emptyList(), vault: List<String> = emptyList(), workingOn: List<String> = emptyList(),
+                health: List<String> = emptyList(), vault: List<String> = emptyList(), workingOn: List<String> = emptyList(), workingOnFromWeb: Boolean = false,
                 days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
                 movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
@@ -464,7 +471,7 @@ object AskRules {
         val keptRefs = kept.map { it.ref }.toSet()
         // Things his wife added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || news.size > 1 || dayItems.any { it.kind == AskItemKind.EVENT })
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || news.size > 1 || (workingOnFromWeb && workingOn.size > 1) || dayItems.any { it.kind == AskItemKind.EVENT })
     }
 
     /** Needs you's rows Ask sends (all of them, up to the cap); Live's look-up reads the same lines ([ObiArea.NEEDS_YOU]). */
@@ -581,6 +588,7 @@ object AskRules {
             "add_trip_item" -> TripListAskRules.proposal(trips, tripItems, a.title, today) ?: return null
             "study_done" -> StudyAskCards.tick(studyCourses, studyLessons, a.title) ?: return null
             "plan_lesson" -> StudyAskCards.plan(studyCourses, studyLessons, a.title, day(), today) ?: return null
+            "start_errand" -> AskProposal.StartErrand(ObiJobRules.tidyAsk(a.title ?: return null) ?: return null)
             "add_booking" -> TripAskRules.proposal(trips, a.title, day(), minute, today, cal.minuteOfDay(nowMs)) ?: return null
             // Edit your calendars, completeness slice 4: only an event MEKA sent a handle for; a bad day or time isn't guessed at.
             "move_event" -> {
@@ -708,6 +716,7 @@ object AskRules {
         is AskProposal.SetName -> CallNameRules.doneLine(p.name)
         is AskProposal.StudyTick -> StudyAskCards.tickDone(p)
         is AskProposal.StudyPlan -> StudyAskCards.planDone(p, today)
+        is AskProposal.StartErrand -> ObiJobRules.startedLine(p.text)
     }
 
     /** The card's words for [p]. */
@@ -741,6 +750,7 @@ object AskRules {
         is AskProposal.SetName -> CallNameRules.card(p.name)
         is AskProposal.StudyTick -> StudyAskCards.tickCard(p)
         is AskProposal.StudyPlan -> StudyAskCards.planCard(p, today)
+        is AskProposal.StartErrand -> AskCard(p, ObiJobRules.cardLine(p.text), ObiJobRules.CARD_BUTTON)
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */
