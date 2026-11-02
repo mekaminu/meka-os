@@ -5232,3 +5232,9 @@ sessions" when every one is needed, "the one session … the time you picked hol
 line named its module as "2 · Core skills", a bare "2"; `StudyRules.moduleWords` says a numbered module the way the outline
 wrote it ("Next: Pivot tables · Module 2: Core skills"); unnumbered names unchanged. StudyTest and StudyFacadeTest updated,
 StudyScreensTest's plan shots check all three. Core only, so the Mac follows; no server change, no migration.
+
+Nightly Mac 2026-11-02: dispatched ci 1525 (Kotlin/Native tests green) failed at `linkReleaseFrameworkMacosArm64`: SKIE's
+swiftc couldn't parse MekaKit.h at `@property (readonly) int32_t MAX_INPUT`, because `MAX_INPUT` is a macro in macOS's
+`<sys/syslimits.h>` (added with one-tap course import, `StudyImportRules`). Renamed `MAX_INPUT_CHARS`; no behaviour change.
+Lesson for later runs: a public `const val` must not share a name with a C macro in the macOS SDK (MAX_INPUT, MAX_CANON,
+PATH_MAX, ARG_MAX, LINE_MAX, PIPE_BUF, BUFSIZ, EOF…).

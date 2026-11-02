@@ -26,7 +26,7 @@ data class StudyImportOffer(
 
 object StudyImportRules {
     /** Links and shared text over this are refused before anything is decoded. */
-    const val MAX_INPUT = 32 * 1024
+    const val MAX_INPUT_CHARS = 32 * 1024
     /** The unpacked JSON is never allowed past this (a small link can't unpack into something huge). */
     const val MAX_JSON = 64 * 1024
     const val MAX_MODULES = 60
@@ -54,7 +54,7 @@ object StudyImportRules {
     /** Reads a link or the JSON itself; nothing is written. */
     fun read(text: String): StudyImportRead {
         val t = text.trim()
-        if (t.length > MAX_INPUT) return refused(TOO_BIG)
+        if (t.length > MAX_INPUT_CHARS) return refused(TOO_BIG)
         val json = if (t.startsWith("{")) t else {
             val prefix = PREFIXES.firstOrNull { t.startsWith(it, ignoreCase = true) } ?: return refused(NOT_READ)
             val query = t.substring(prefix.length).substringAfter('?', "").substringBefore('#')
