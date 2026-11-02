@@ -155,7 +155,7 @@ class StudyScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "On track for Mon 23 Nov")
         ScreenShots.assertShows(compose, name, "2 sessions a week")
-        ScreenShots.assertShows(compose, name, "Fits: you picked 4 slots a week.")
+        ScreenShots.assertShows(compose, name, "Fits: the 2 times you picked hold 4 sessions a week.")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun planCoverDark() = shootPlan("cover-dark-plan", ThemeChoice.DARK)
@@ -201,7 +201,7 @@ class StudyScreensTest {
         // The core's writes land after: the view then says the same.
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.plan.obi != null }
-        assertEquals("Move the date to Mon 7 Dec and it fits the slots you picked.", core.studyView.value.course(id)!!.plan.obi)
+        assertEquals("Move the date to Mon 7 Dec and it fits the times you picked.", core.studyView.value.course(id)!!.plan.obi)
     }
 
     @Test

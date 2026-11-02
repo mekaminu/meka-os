@@ -800,6 +800,14 @@ object StudyRules {
     /** Sessions a week the picked slots give. */
     fun available(slots: Set<String>): Int = SLOTS.filter { it.key in slots }.sumOf { it.perWeek }
 
+    /**
+     * Walk-through A9: "you picked 4 slots a week" over 2 lit chips; a chip is a time of the week that holds one or more
+     * sessions (Train mornings hold three), so the line counts the chips as times and the sessions as sessions.
+     */
+    private fun pickedCount(slots: Set<String>): Int = SLOTS.count { it.key in slots }
+
+    private fun picked(slots: Set<String>): String = pickedCount(slots).let { if (it == 1) "the time you picked" else "the $it times you picked" }
+
     /** "Mon 7 Dec · 6 wks" */
     fun endLabel(day: Long, today: Long): String {
         val days = day - today
@@ -855,12 +863,13 @@ object StudyRules {
             else -> {
                 val sessions = sessionsPerWeek(i, finish)
                 perWeek = "${plural(sessions, "session")} a week"
-                perWeekSub = "about ${minsLabel(minsPerWeek(i, finish).coerceAtLeast(1))} · ${plural(i.leftLessons, "lesson")} left"
+                // Walk-through A9: "about 1 h 4" read as cut off; the week's time is rounded like every other "about".
+                perWeekSub = "${aboutLabel(minsPerWeek(i, finish).coerceAtLeast(1))} · ${plural(i.leftLessons, "lesson")} left"
                 fits = avail > 0 && sessions <= avail
                 fit = when {
                     avail == 0 -> PICK_SLOTS
-                    fits -> "Fits: you picked ${plural(avail, "slot")} a week."
-                    else -> "Doesn’t fit: you need ${plural(sessions, "slot")} a week but picked $avail. Add a slot, make sessions longer or move the date."
+                    fits -> "Fits: ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"} ${plural(avail, "session")} a week."
+                    else -> "Doesn’t fit: you need ${plural(sessions, "session")} a week but ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"} $avail. Add a time, make sessions longer or move the date."
                 }
                 val by = behindBy(i)
                 behind = by > 0
@@ -870,15 +879,15 @@ object StudyRules {
                 obi = when {
                     avail == 0 -> null
                     fits -> (avail - sessions).let { spare ->
-                        if (spare > 0) "That leaves ${plural(spare, "spare slot")} a week to catch up if one slips."
-                        else "Every slot you picked is needed: one more gives you room to catch up."
+                        if (spare > 0) "That leaves ${plural(spare, "spare session")} a week to catch up if one slips."
+                        else "Every session the times you picked hold is needed: one more gives you room to catch up."
                     }
                     else -> {
                         val longer = SESSION_CHOICES.firstOrNull { it > i.sessionMins && sessionsPerWeek(i, finish, it) <= avail }
                         val later = (1..52).map { i.today + it * 7L }.firstOrNull { it > finish && sessionsPerWeek(i, it) <= avail }
                         when {
-                            longer != null -> "With $longer-minute sessions it fits the slots you picked."
-                            later != null -> "Move the date to ${CivilDate.shortLabel(later)} and it fits the slots you picked."
+                            longer != null -> "With $longer-minute sessions it fits the times you picked."
+                            later != null -> "Move the date to ${CivilDate.shortLabel(later)} and it fits the times you picked."
                             else -> null
                         }
                     }

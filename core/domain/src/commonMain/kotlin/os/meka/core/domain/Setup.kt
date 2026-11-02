@@ -8,7 +8,7 @@ package os.meka.core.domain
  * A step is [SetupState.DONE] or [SetupState.TODO] (with the next step and, where it can be done from MEKA, a button);
  * a step only the other device can do or see is [SetupState.ELSEWHERE] ("On the Fold"); one that waits on something
  * not built yet or on Meka's own account work is [SetupState.LATER]; one that couldn't be read is
- * [SetupState.UNKNOWN] ("Couldn't check"), never a tick. Only DONE and TODO count towards "12 of 15 done".
+ * [SetupState.UNKNOWN] ("Couldn't check"), never a tick. The head counts every row in one part ([SetupRules.summaryLine]).
  */
 enum class SetupState { DONE, TODO, ELSEWHERE, LATER, UNKNOWN }
 
@@ -35,7 +35,7 @@ data class SetupView(
     /** Steps this device can answer for (done + to do). */
     val total: Int,
     val toDo: Int,
-    /** "All set · 15 of 15 done" · "3 steps left · 12 of 15 done". */
+    /** "All set · 15 done" · "3 steps left · 12 done · 2 come later" ([SetupRules.summaryLine]: its parts add up to the rows). */
     val summary: String,
     /** Today's card while something is left: "3 steps left · Calendar editing, Family, Pick a voice"; null when all set. */
     val todayLine: String?,
@@ -139,16 +139,34 @@ object SetupRules {
         val done = all.count { it.state == SetupState.DONE }
         val left = all.filter { it.toDo }
         val total = done + left.size
-        val later = all.count { it.state == SetupState.LATER }
-        val summary = when {
-            left.isEmpty() && later > 0 -> "All set for now · $done of $total done · $later come later"
-            left.isEmpty() -> "All set · $done of $total done"
-            else -> "${steps(left.size)} left · $done of $total done"
-        }
+        val summary = summaryLine(done, left.size, all.count { it.state == SetupState.LATER },
+            all.count { it.state == SetupState.ELSEWHERE }, all.count { it.state == SetupState.UNKNOWN })
         return SetupView(sections, done, total, left.size, summary, todayLine(left), nowMs)
     }
 
     private fun steps(n: Int) = if (n == 1) "1 step" else "$n steps"
+
+    /**
+     * The page's head (walk-through A8, 2026-10-30: "4 steps left · 0 of 4 done" sat over nine rows, and "21 of 21 done"
+     * said the same number twice). Every row on the page is in one of its parts, so the parts add up to the rows:
+     * "4 steps left · 2 done · 3 come later · 1 on the Fold"; "All set · 21 done · 3 come later". A part that is 0
+     * is left out (no "0 done"); "couldn't check" rows are counted too, never as done.
+     */
+    fun summaryLine(done: Int, left: Int, later: Int, elsewhere: Int = 0, unknown: Int = 0): String {
+        val head = when {
+            left > 0 -> "${steps(left)} left"
+            later > 0 || elsewhere > 0 || unknown > 0 -> "All set for now"
+            else -> "All set"
+        }
+        val parts = listOfNotNull(
+            head,
+            "$done done".takeIf { done > 0 },
+            "$later come later".takeIf { later > 0 },
+            "$elsewhere ${ON_THE_FOLD.replaceFirstChar { it.lowercase() }}".takeIf { elsewhere > 0 },
+            "$unknown couldn't be checked".takeIf { unknown > 0 },
+        )
+        return parts.joinToString(" · ")
+    }
 
     /** "1 step left · Pick a voice" · "3 steps left · Calendar editing, Family, Pick a voice" (at most three named). */
     fun todayLine(left: List<SetupStep>): String? {

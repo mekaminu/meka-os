@@ -111,7 +111,7 @@ class StudyFacadeTest {
         assertEquals("2 sessions a week", c.plan.perWeek)
         assertEquals("On track for Mon 23 Nov", c.plan.status)
         assertTrue(!c.plan.fits, c.plan.fit)
-        assertEquals("With 45-minute sessions it fits the slots you picked.", c.plan.obi)
+        assertEquals("With 45-minute sessions it fits the times you picked.", c.plan.obi)
         fold.syncNow(); mac.syncNow()
         assertEquals(c.plan, mac.studyView.value.course(id)!!.plan)
     }

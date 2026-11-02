@@ -67,7 +67,7 @@ class SetupTest {
         val v = SetupRules.view(facts())
         assertEquals(0, v.toDo, v.steps.filter { it.toDo }.toString())
         // Mail and live departures come later; they aren't counted.
-        assertEquals("All set for now · ${v.done} of ${v.done} done · 2 come later", v.summary)
+        assertEquals("All set for now · ${v.done} done · 2 come later", v.summary)
         assertEquals(SetupState.LATER, v.step("mail").state)
         assertEquals(SetupState.LATER, v.step("trains.live").state)
         assertNull(v.todayLine)
@@ -83,6 +83,26 @@ class SetupTest {
             listOf("Calendars", "Call assistant", "Messages", "Obi's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
             v.sections.map { it.title },
         )
+    }
+
+    @Test
+    fun theHeadsPartsAddUpToTheRows() {
+        // Walk-through A8: "4 steps left · 0 of 4 done" over nine rows; "21 of 21 done" said one number twice.
+        assertEquals("4 steps left · 3 come later · 2 on the Fold", SetupRules.summaryLine(done = 0, left = 4, later = 3, elsewhere = 2))
+        assertEquals("All set for now · 21 done · 3 come later", SetupRules.summaryLine(done = 21, left = 0, later = 3))
+        assertEquals("All set · 15 done", SetupRules.summaryLine(done = 15, left = 0, later = 0))
+        assertEquals("1 step left · 4 done · 2 couldn't be checked", SetupRules.summaryLine(done = 4, left = 1, later = 0, unknown = 2))
+        // Every row of a real page is in exactly one part.
+        listOf(
+            facts(),
+            facts(accounts = null, server = null, ai = null, connected = false, callAssistantOn = false, voiceChosen = null),
+            facts(device = SetupDevice(mac = true, notificationsAllowed = true), accounts = accounts.filter { it.provider != "google" }),
+        ).forEach { f ->
+            val v = SetupRules.view(f)
+            val sum = Regex("(\\d+) (steps? left|done|come later|on the Fold|couldn't be checked)").findAll(v.summary).sumOf { it.groupValues[1].toInt() }
+            assertEquals(v.steps.size, sum, v.summary)
+            assertFalse(v.summary.contains(" 0 "), v.summary)
+        }
     }
 
     @Test
@@ -118,7 +138,7 @@ class SetupTest {
                 SetupRules.view(facts(voiceMessageSeen = false)).step("calls.forwarding").line)
         } finally { Household.set(HouseholdNames.EMPTY) }
         assertEquals(11, v.toDo)
-        assertEquals("11 steps left · ${v.done} of ${v.total} done", v.summary)
+        assertEquals("11 steps left · ${v.done} done · 2 come later", v.summary)
         assertEquals("11 steps left · Outlook calendar, Calendar editing, Call assistant…", v.todayLine)
         assertTrue(SetupRules.cardShown(v, hiddenOnDay = null, today = day))
         // "Not today" hides the card for the rest of the day only.
