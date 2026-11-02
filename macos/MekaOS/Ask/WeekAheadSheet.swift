@@ -66,7 +66,7 @@ struct WeekAheadSheet: View {
             }
             // Balance view, slice 3: "Balance as planned · family 6 h of 8 h · work 2 h over".
             if let line = v.balance {
-                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.measured(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: line)

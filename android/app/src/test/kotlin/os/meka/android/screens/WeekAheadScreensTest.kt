@@ -180,6 +180,8 @@ class WeekAheadScreensTest {
         ScreenShots.assertDatesWhole(compose, name)
         ScreenShots.assertClocksWhole(compose, name)
         ScreenShots.assertNumbersWhole(compose, name)
+        // Found and fixing A10: "6 h of 8 h" never leaves an "h" alone on a line.
+        ScreenShots.assertDurationsWhole(compose, name)
         // The title is at the top; a shot scrolled to the foot has left it behind.
         if (atTop) ScreenShots.assertShows(compose, name, "Week ahead")
         val v = core.weekAheadView.value
@@ -204,9 +206,9 @@ class WeekAheadScreensTest {
             Fill.EMPTY -> {
                 // Nothing on but the default work hours: the summary says the office days and that it's otherwise quiet.
                 if (v.summary != WeekAheadRules.QUIET && !v.summary.endsWith("otherwise quiet")) fail("$name: nothing on, but \"${v.summary}\"")
-                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
+                ScreenShots.assertShows(compose, name, LoneWordGlue.measured(v.summary))
                 // The balance still says what the plan leaves short ("family 0 h of 8 h …"), kept whole at its dots.
-                v.balance?.let { ScreenShots.assertShows(compose, name, LoneWordGlue.kept(it)) }
+                v.balance?.let { ScreenShots.assertShows(compose, name, LoneWordGlue.measured(it)) }
                 if (v.sync.isNotEmpty() || v.goals.goals.isNotEmpty()) fail("$name: nothing on, but a family sync or goals")
             }
             Fill.ONE -> {
@@ -254,7 +256,7 @@ class WeekAheadScreensTest {
         tap(name, "the heads-up's On", hasContentDescription("Sunday heads-up, on"))
         until { !core.weekAheadSettingView.value.on }
         if (core.weekAheadSettingView.value.on) fail("$name: tapping On left the heads-up on")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(core.weekAheadSettingView.value.summary))
+        ScreenShots.assertShows(compose, name, LoneWordGlue.measured(core.weekAheadSettingView.value.summary))
         if (compose.onAllNodes(hasContentDescription("Sundays at 18:00")).fetchSemanticsNodes().isNotEmpty()) fail("$name: off, but the times still show")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
         tap(name, "the heads-up's Off", hasContentDescription("Sunday heads-up, off"))
@@ -275,7 +277,7 @@ class WeekAheadScreensTest {
         until { core.weekAheadView.value.goals.picked == 2 }
         if (core.weekAheadView.value.goals.line != "2 picked · up to 3") fail("$name: after a pick \"${core.weekAheadView.value.goals.line}\"")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept("2 picked · up to 3"))
+        ScreenShots.assertShows(compose, name, LoneWordGlue.measured("2 picked · up to 3"))
         val picked = core.weekAheadView.value.goals.goals.first { it.title == "Learn Spanish" }
         tap(name, "Learn Spanish again", hasContentDescription(picked.spoken))
         until { core.weekAheadView.value.goals.picked == 1 }

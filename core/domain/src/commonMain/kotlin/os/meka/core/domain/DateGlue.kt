@@ -140,6 +140,12 @@ object LoneWordGlue {
         return if (held.length - held.lastIndexOf(' ') - 1 > RUN_MAX) s else held
     }
 
+    /**
+     * [kept] after [DurationGlue.kept], for a screen whose lines carry durations (found and fixing A10, the Week
+     * ahead's balance line "family 6 h of 8 h" leaving "h" alone on a line). A line with no duration reads as [kept].
+     */
+    fun measured(line: String): String = kept(DurationGlue.kept(line))
+
     /** The longest run a held dot may make with the word after it (beyond it, a line may end on the dot instead). */
     const val DOT_RUN_MAX = 20
 

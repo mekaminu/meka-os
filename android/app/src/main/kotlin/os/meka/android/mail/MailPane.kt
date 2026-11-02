@@ -27,6 +27,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.footFade
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -276,7 +278,10 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     }
 
     Column(
-        Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()),
+        // Found and fixing A10: the gutter's foot was outside the scroll, so the last card was cut flat; now the rows fade
+        // out at the foot and the end scrolls clear of it.
+        Modifier.fillMaxSize().padding(start = MekaSpace.gutter, top = MekaSpace.gutter, end = MekaSpace.gutter).footFade()
+            .verticalScroll(rememberScrollState()).padding(bottom = MekaSpace.gutter + MotionMath.FOOT_FADE_DP.dp),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,

@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DurationGlueTest {
     private val nb = LifeTileRules.GLUE
@@ -48,5 +49,17 @@ class DurationGlueTest {
         assertEquals(listOf("1 h 20 commute", "1 h"), r)
         assertEquals(DurationGlue.ranges(line), DurationGlue.ranges(DurationGlue.kept(line)))
         assertEquals(listOf("1 h 20"), DurationGlue.ranges("1 h 20 from Work").map { "1 h 20 from Work".substring(it) })
+    }
+
+    /** Found and fixing A10: the Week ahead's balance line keeps every "6 h" whole; a line with no duration is as kept. */
+    @Test
+    fun measuredKeepsTheBalanceLinesHoursWhole() {
+        val line = "Balance as planned · family 6 h of 8 h · health 0 h of 3 h · work 2 h over"
+        val shown = LoneWordGlue.measured(line)
+        assertEquals(line, DateGlue.plain(shown))
+        val p = DateGlue.plain(shown)
+        DurationGlue.ranges(p).forEach { r -> assertTrue(' ' !in shown.substring(r.first, r.last + 1), "split: ${p.substring(r.first, r.last + 1)}") }
+        val plain = "Office Mon, Tue · school run Wed"
+        assertEquals(LoneWordGlue.kept(plain), LoneWordGlue.measured(plain))
     }
 }
