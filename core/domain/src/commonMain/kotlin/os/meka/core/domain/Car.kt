@@ -106,8 +106,20 @@ data class CarView(
      * week), else its registration ("AB12 CDE · add its dates"), else null.
      */
     val next: LifeTileLine? = null,
+    /**
+     * What has run out and makes driving it illegal (completeness 2026-11-02): "MOT ran out Sat 31 Oct · book one before
+     * you drive", "Untaxed · tax it before you drive" ([CarRules.lapses]); empty while all is well.
+     */
+    val lapses: List<String> = emptyList(),
 ) {
     val trackedCount: Int get() = rows.count { it.tracked }
+
+    /** Something has run out: the row is lit like a date that's due and its line leads with it. */
+    val isLapsed: Boolean get() = lapses.isNotEmpty()
+    val due: DueState get() = if (isLapsed) DueState.DUE else DueState.NONE
+    /** Index access for Swift. */
+    val lapseCount: Int get() = lapses.size
+    fun lapseAt(index: Int): String = lapses[index]
 
     /** Index access for Swift. */
     val rowCount: Int get() = rows.size
@@ -236,6 +248,7 @@ object CarRules {
             val offer = if (differs) "Use the DVLA's date · ${CarCheckRules.dayLabel(dvla!!, today)}" else null
             CarRow(p.id, p.title, p.note, line, item?.id, dvla, offer)
         }
+        val lapsed = lapses(items, k, today)
         val n = rows.count { it.tracked }
         val count = when (n) {
             0 -> "add the dates that apply"
@@ -243,6 +256,7 @@ object CarRules {
             else -> "$n of ${rows.size} on the radar"
         }
         val summary = when {
+            lapsed.isNotEmpty() -> lapsedSummary(lapsed)
             reg == null && n == 0 -> "MOT, tax, insurance and service · type the registration once"
             else -> "${reg ?: "Your car"} · $count"
         }
@@ -250,8 +264,60 @@ object CarRules {
             reg, rows, summary,
             dvlaLine = CarCheckRules.line(k, registration, today, cal),
             historyLine = k?.takeIf { it.found }?.let(CarCheckRules::historyLine),
+            lapses = lapsed,
         )
     }
+
+    /** The car's dates that make driving it illegal once they pass (a late service doesn't). */
+    val LAPSES = listOf("mot", "tax", "insurance")
+    /** A date that ran out is said again the day after and a week after, at 09:00 ([notices]). */
+    val LAPSE_NOTICE_DAYS = listOf(1L, 7L)
+
+    /** "MOT ran out Sat 31 Oct · book one before you drive" for one of [LAPSES] that ran out on [day]. */
+    fun lapseLine(presetId: String, day: Long, today: Long): String {
+        val whenWord = if (day == today - 1) "yesterday" else RenewalRules.dayWord(day, today)
+        return when (presetId) {
+            "mot" -> "MOT ran out $whenWord · book one before you drive"
+            "tax" -> "Car tax ran out $whenWord · tax it before you drive"
+            else -> "Car insurance ran out $whenWord · don't drive it until it's insured"
+        }
+    }
+
+    /**
+     * What has run out for one car ([items]: its own dates on the radar; [check]: the DVLA's answer for its registration,
+     * or null). A date of [LAPSES] before [today] with none of the same kind still to come; the DVLA's own MOT day passed;
+     * "Untaxed" or "SORN". The DVLA saying the MOT or tax is good until today or later wins over an old radar date he
+     * hasn't ticked Done on. MOT, then tax, then insurance.
+     */
+    fun lapses(items: List<RenewalItem>, check: CarCheck?, today: Long): List<String> {
+        val k = check?.takeIf { it.found }
+        val out = mutableListOf<String>()
+        for (id in LAPSES) {
+            val p = preset(id) ?: continue
+            val mine = items.filter { matches(p, it) }
+            val ahead = mine.any { it.dueDay >= today }
+            val ran = mine.filter { it.dueDay < today }.maxByOrNull { it.dueDay }
+            val dvlaGood = when (id) {
+                "mot" -> k?.motDueDay?.let { it >= today } == true
+                "tax" -> k != null && k.taxStatus.equals("Taxed", ignoreCase = true) && (k.taxDueDay?.let { it >= today } ?: true)
+                else -> false
+            }
+            val line = when {
+                dvlaGood -> null
+                id == "tax" && k?.taxStatus.equals("Untaxed", ignoreCase = true) && !ahead -> "Untaxed · tax it before you drive"
+                id == "tax" && k?.taxStatus.equals("SORN", ignoreCase = true) && !ahead -> "SORN · tax it before it goes back on the road"
+                ran != null && !ahead -> lapseLine(id, ran.dueDay, today)
+                id == "mot" && !ahead && k?.motDueDay != null && k.motDueDay < today -> lapseLine(id, k.motDueDay, today)
+                else -> null
+            }
+            line?.let { out += it }
+        }
+        return out
+    }
+
+    /** The collapsed row's line: the first thing that ran out, and how many more. */
+    fun lapsedSummary(lapses: List<String>): String =
+        lapses.first() + if (lapses.size > 1) " · ${lapses.size - 1} more" else ""
 
     /**
      * The reminders: for each of the car's dates on the radar, a heads-up at 09:00 [MONTH_DAYS] and [WEEK_DAYS] before
@@ -264,10 +330,24 @@ object CarRules {
         return items.mapNotNull { item ->
             val p = PRESETS.firstOrNull { matches(it, item) } ?: return@mapNotNull null
             val left = item.dueDay - today
-            val stage = when (left) {
-                MONTH_DAYS.toLong() -> "month"
-                WEEK_DAYS.toLong() -> "week"
+            val stage = when {
+                left == MONTH_DAYS.toLong() -> "month"
+                left == WEEK_DAYS.toLong() -> "week"
+                -left in LAPSE_NOTICE_DAYS && p.id in LAPSES -> "lapsed${-left}"
                 else -> return@mapNotNull null
+            }
+            if (stage.startsWith("lapsed")) {
+                // Still on the radar past its day: he hasn't ticked it Done, so it ran out (or he forgot to tick it).
+                val subject = (item.subject?.trim()?.takeIf { it.isNotEmpty() } ?: reg)?.let { " · $it" } ?: ""
+                val ago = if (left == -1L) "yesterday" else "a week ago"
+                return@mapNotNull Notice(
+                    key = "car:${item.id}:${item.dueDay}:$stage", source = NoticeSource.CAR, tier = NoticeTier.HEADS_UP,
+                    title = "${p.title} ran out $ago$subject",
+                    text = lapseLine(p.id, item.dueDay, today).substringAfter(" · ").replaceFirstChar { it.uppercase() } +
+                        " · tick Done on the radar once it's sorted",
+                    atMs = cal.toEpochMs(today, NOTICE_MIN), target = NoticeTarget.LISTS,
+                    expiresAtMs = cal.toEpochMs(today + 1, 0),
+                )
             }
             val inWords = if (stage == "month") "In 4 weeks" else "In a week"
             Notice(
@@ -326,7 +406,7 @@ object CarRules {
                 carId = c.id, title = title(c, live.size), name = c.name, removable = c.id != ENTITY_ID,
                 fuel = c.fuel ?: FuelKind.DEFAULT,
                 next = nextOf(c, itemsOf(c.id, items, cars), today),
-            ).let { v ->
+            ).let { v -> v.lapses.firstOrNull()?.let { v.copy(next = LifeTileLine(it, true)) } ?: v }.let { v ->
                 // A later car with no registration yet: its summary names it rather than "Your car".
                 if (c.registration == null && c.id != ENTITY_ID && v.trackedCount > 0) v.copy(summary = v.summary.replaceFirst("Your car", title(c, live.size))) else v
             }
@@ -473,8 +553,8 @@ fun Renewals.addCarDate(presetId: String, today: Long, registration: String?, ch
  * untrusted. Nothing before a registration is typed or a date is tracked.
  */
 object CarAskRules {
-    /** Head, DVLA, history and the four dates. */
-    const val ASK_LINES = 3 + 4
+    /** Head, up to three things that ran out, DVLA, history and the four dates. */
+    const val ASK_LINES = 3 + 3 + 4
 
     const val NO_ANSWER = "DVLA · no answer yet (the lookup waits for the DVLA keys) · the dates below are as Meka set them"
 
@@ -504,6 +584,7 @@ object CarAskRules {
             if (row.tracked) "${row.title} · ${row.line}"
             else "${row.title} · not on the radar" + (row.dvlaDay?.let { " · the DVLA says due ${CarCheckRules.dayLabel(it, today)}" } ?: "")
         }
-        return (listOfNotNull(head, dvla, view.historyLine) + rows).take(ASK_LINES)
+        // Something that ran out comes straight after the head, so Obi says it first.
+        return (listOf(head) + view.lapses + listOfNotNull(dvla, view.historyLine) + rows).take(ASK_LINES)
     }
 }

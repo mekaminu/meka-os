@@ -206,7 +206,8 @@ class ParkingTest {
         val items = listOf(
             item("r1", "MOT", ObligationKind.MOT, day + 26),
             item("r2", "Car tax", ObligationKind.CAR_TAX, day + 3, subject = "the van"),
-            item("r3", "Car insurance", ObligationKind.INSURANCE, day - 2),
+            // A late service isn't shown (a run-out MOT, tax or insurance would lead: CarTest).
+            item("r3", "Car service", ObligationKind.CAR_SERVICE, day - 2),
         )
         val two = CarRules.views(entries, items, null, day, cal)
         assertEquals(LifeTileLine("MOT due ${CivilDate.shortLabel(day + 26)}", false), two.first.next)

@@ -155,7 +155,11 @@ private fun LazyListScope.car(
 ) {
     val key = carKey(v.carId)
     item(key = "r-$key") {
-        ListRow(v.title, v.summary, DueState.NONE, open == key, { toggle(key) }, Modifier.animateItem()) {
+        // Completeness 2026-11-02: an MOT, tax or insurance that ran out lights the row and leads it, in red.
+        ListRow(v.title, v.summary, v.due, open == key, { toggle(key) }, Modifier.animateItem()) {
+            AnimatedContent(v.lapses, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "car-lapsed") { lapses ->
+                Column { lapses.forEach { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) } }
+            }
             var regError by rememberSaveable(v.carId) { mutableStateOf<String?>(null) }
             Field(v.registration?.let { "Registration (now $it), blank to clear" } ?: "Registration, e.g. AB12 CDE") { text ->
                 regError = CarRules.registrationError(text)

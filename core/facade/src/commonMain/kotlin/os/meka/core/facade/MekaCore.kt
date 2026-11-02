@@ -13892,7 +13892,10 @@ class MekaCore(
                 // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
                 // Two cars (2026-10-14): each car on its own line, its timer or next date.
                 carLine = os.meka.core.domain.ParkingRules.carsLine(_cars.value, _parkingTimers.value, emptyList(), nowMs())
-                    ?: _parkingTimers.value.tile ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
+                    ?: _parkingTimers.value.tile
+                    // Completeness 2026-11-02: an MOT, tax or insurance that ran out leads the one car's tile, lit.
+                    ?: _cars.value.first.lapses.firstOrNull()?.let { os.meka.core.domain.LifeTileLine(it, true) }
+                    ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
             ))
         } }
         // Ask polish, item 3: Daily's rows say what they hold now ("Tomorrow 06:40 · 5 things", "2 left", "2 saved").

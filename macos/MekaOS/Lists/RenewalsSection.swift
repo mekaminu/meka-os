@@ -31,7 +31,8 @@ struct RenewalsSection: View {
         if let cars = model.cars {
             ForEach(Array(cars.cars.enumerated()), id: \.element.carId) { index, car in
                 let key = Self.carKey(car.carId)
-                ListRowView(title: car.title, meta: car.summary, due: false, expanded: open == key, palette: palette,
+                // An MOT, tax or insurance that ran out lights the row (completeness 2026-11-02).
+                ListRowView(title: car.title, meta: car.summary, due: car.isLapsed, expanded: open == key, palette: palette,
                             toggle: { open = open == key ? nil : key }) {
                     CarDetails(car: car, last: index == cars.cars.count - 1, addLine: cars.addLine, palette: palette,
                                open: $open, removed: $removedCar)
@@ -152,6 +153,10 @@ private struct CarDetails: View {
 
     var body: some View {
         let carId = car.carId
+        // What ran out, in red, before anything else.
+        ForEach(0..<Int(car.lapseCount), id: \.self) { i in
+            Text(car.lapseAt(index: Int32(i))).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+        }
         TextField(car.registration.map { "Registration (now \($0)), blank to clear" } ?? "Registration, e.g. AB12 CDE", text: $reg)
             .textFieldStyle(.roundedBorder)
             .frame(maxWidth: 260)

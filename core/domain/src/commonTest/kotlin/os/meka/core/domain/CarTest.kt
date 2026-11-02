@@ -177,7 +177,8 @@ class CarTest {
         assertEquals("MOT history · passed 3 Nov 2025 · 2 advisories", lines[2])
         assertTrue(lines[3].startsWith("MOT · On the radar") && lines[3].endsWith("· the DVLA says Mon 2 Nov"))
         assertEquals("Car tax · not on the radar · the DVLA says due Tue 1 Dec", lines[4])
-        assertEquals(CarAskRules.ASK_LINES, lines.size)
+        // Head, DVLA, history and the four dates (nothing ran out: no lapse lines).
+        assertEquals(7, lines.size)
         // A date tracked but no registration: still told, without a DVLA line.
         r.setDue(mot, CivilDate.toEpochDay(2026, 11, 2))
         val noReg = CarAskRules.askLines(CarRules.view(null, r.items(), check, today(), cal), today())
@@ -261,5 +262,88 @@ class CarTest {
         // The DVLA isn't asked about the second car: no "waiting for the keys" line for it.
         assertEquals(1, lines.count { it == CarAskRules.NO_ANSWER })
         assertTrue(lines.size <= CarAskRules.ASK_LINES_ALL)
+    }
+
+    @Test
+    fun anMotTaxOrInsuranceThatRanOutIsUrgentEverywhereTheCarShows() {
+        at(2026, 11, 2)
+        val cal = LocalCalendar.UTC
+        val mot = r.addCarDate("mot", today(), "AB12CDE")
+        r.setDue(mot, CivilDate.toEpochDay(2026, 10, 31))
+        val ins = r.addCarDate("insurance", today(), "AB12CDE")
+        r.setDue(ins, CivilDate.toEpochDay(2026, 11, 20))
+        val service = r.addCarDate("service", today(), "AB12CDE")
+        r.setDue(service, CivilDate.toEpochDay(2026, 10, 1))
+
+        // A late service isn't illegal; a run-out MOT is.
+        var v = CarRules.view("AB12CDE", r.items(), null, today(), cal)
+        assertEquals(listOf("MOT ran out Sat 31 Oct · book one before you drive"), v.lapses)
+        assertTrue(v.isLapsed)
+        assertEquals(DueState.DUE, v.due)
+        assertEquals("MOT ran out Sat 31 Oct · book one before you drive", v.summary)
+
+        // Insurance runs out too: the row says the first and how many more.
+        r.setDue(ins, CivilDate.toEpochDay(2026, 11, 1))
+        v = CarRules.view("AB12CDE", r.items(), null, today(), cal)
+        assertEquals(2, v.lapseCount)
+        assertEquals("Car insurance ran out yesterday · don't drive it until it's insured", v.lapseAt(1))
+        assertEquals("MOT ran out Sat 31 Oct · book one before you drive · 1 more", v.summary)
+
+        // The DVLA saying the MOT is good wins over a date he didn't tick Done on; Untaxed and SORN are urgent.
+        val check = CarCheck("AB12CDE", found = true, motDueDay = CivilDate.toEpochDay(2027, 10, 30), taxStatus = "Untaxed", checkedMs = world.clock.nowMs)
+        v = CarRules.view("AB12CDE", r.items(), check, today(), cal)
+        assertEquals(listOf("Untaxed · tax it before you drive", "Car insurance ran out yesterday · don't drive it until it's insured"), v.lapses)
+        assertEquals(listOf("SORN · tax it before it goes back on the road"),
+            CarRules.lapses(emptyList(), check.copy(taxStatus = "SORN"), today()))
+        // The DVLA's own MOT day passed, with nothing of his on the radar.
+        assertEquals(listOf("MOT ran out yesterday · book one before you drive"),
+            CarRules.lapses(emptyList(), check.copy(motDueDay = today() - 1, taxStatus = "Taxed", taxDueDay = today() + 90), today()))
+        // A plate the DVLA doesn't know says nothing of its own.
+        assertTrue(CarRules.lapses(emptyList(), check.copy(found = false), today()).isEmpty())
+
+        // Renewed (Done moves it on a year): all well again.
+        r.done(mot)
+        r.done(ins)
+        v = CarRules.view("AB12CDE", r.items(), null, today(), cal)
+        assertFalse(v.isLapsed)
+        assertEquals(DueState.NONE, v.due)
+        assertTrue(v.summary.startsWith("AB12 CDE · "))
+        // No today (the plain view) never says anything ran out.
+        assertFalse(CarRules.view("AB12CDE", r.items()).isLapsed)
+    }
+
+    @Test
+    fun aRunOutDateIsSaidTheDayAfterAndAWeekAfterAndLeadsTheTileAndAsk() {
+        at(2026, 11, 2)
+        val cal = LocalCalendar.UTC
+        val tax = r.addCarDate("tax", today(), "AB12CDE")
+        val due = CivilDate.toEpochDay(2026, 11, 10)
+        r.setDue(tax, due)
+        fun on(day: Long) = CarRules.notices(r.items(), "AB12CDE", day * dayMs + 8 * 3_600_000L, cal)
+
+        assertTrue(on(due).isEmpty())
+        val after = on(due + 1).single()
+        assertEquals("Car tax ran out yesterday · AB12 CDE", after.title)
+        assertEquals("Tax it before you drive · tick Done on the radar once it's sorted", after.text)
+        assertEquals((due + 1) * dayMs + 9 * 3_600_000L, after.atMs)
+        assertEquals(NoticeTarget.LISTS, after.target)
+        assertTrue(on(due + 2).isEmpty())
+        val week = on(due + 7).single()
+        assertEquals("Car tax ran out a week ago · AB12 CDE", week.title)
+        assertTrue(week.key != after.key)
+        assertTrue(on(due + 8).isEmpty())
+        // A late service is only the radar's.
+        val service = r.addCarDate("service", today(), "AB12CDE")
+        r.setDue(service, due)
+        assertEquals(1, on(due + 1).size)
+
+        // The tile and Ask lead with it.
+        at(2026, 11, 12)
+        car.setRegistration("AB12CDE")
+        val views = CarRules.views(car.cars(), r.items(), null, today(), cal)
+        assertEquals(LifeTileLine("Car tax ran out Tue 10 Nov · tax it before you drive", true), views.first.next)
+        val lines = CarAskRules.askLines(views, today())
+        assertEquals("Car tax ran out Tue 10 Nov · tax it before you drive", lines[1])
+        assertTrue(lines.size <= CarAskRules.ASK_LINES)
     }
 }
