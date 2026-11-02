@@ -4,8 +4,9 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +70,7 @@ const val APPOINTMENTS_LIST_TAG = "appointments-list"
  * Quality gate slice 16: a row's name and its "Every 6 months · last went Sat 12 Apr" take up to two lines each, so on
  * the cover screen (beside Went and Remove) they read whole instead of ending in "…".
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -137,7 +138,7 @@ fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
                 Column(Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(4 + v.rows.size)),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     SectionLabel("Common ones")
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         v.suggestions.forEach { s ->
                             Column(
                                 Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)

@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -233,11 +235,13 @@ private const val NOTES_SAVE_MS = 800L
  * The detail's actions as pills, like Up next's: Done (filled) · Skip (repeating) · Tomorrow · Someday (one-off);
  * Delete is a quiet red line under them, with an undo bar rather than a dialog.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DetailActions(task: Task, actions: TodayActions) {
     val haptics = rememberMekaHaptics()
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // The pills wrap rather than running off the edge, so Someday is never cut (walk-through A10).
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             DetailPill("Done", filled = true) { haptics.light(); actions.complete(task.id) }
             if (task.isRepeating) DetailPill("Skip", filled = false) { haptics.tick(); actions.skip(task.id) }
             DetailPill("Tomorrow", filled = false) { haptics.tick(); actions.snooze(task.id) }

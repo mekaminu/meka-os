@@ -6,8 +6,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -69,6 +70,7 @@ import os.meka.android.designsystem.sharedTitleInPane
  * calls (call notifications, slice 4) follows it, a tap unfolding a call's detail on the expand spring; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
  * month's characters) fade in once known. Reduced motion: cross-fades.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Close") {
     val view by core.activityView.collectAsState()
@@ -177,10 +179,11 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         }
         val filter = ActivityRules.chosen(view, ActivityRules.filterNamed(filterName))
         if (chips.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs)
-                    .appear(rememberAppearance(1)),
+            // The filters wrap onto a second line on the closed Fold rather than cutting the last chip (walk-through A10).
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1)),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 chips.forEach { c ->
                     Chip(c.label, c.filter == filter) {

@@ -162,6 +162,11 @@ class TomorrowScreensTest {
         until { shows("Gym, legs day") }
         assertTrue(shows("Gym, legs day"), "$name: the edit isn't shown")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-edit"))
+        // Walk-through A10: the detail's pills wrap rather than running off the right edge (Someday was cut).
+        val screenRight = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot.right
+        val someday = compose.onAllNodes(hasText("Someday") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue(someday.isNotEmpty(), "$name: no Someday on the detail")
+        someday.forEach { assertTrue(it.boundsInRoot.right <= screenRight + 0.5f, "$name: Someday is cut at the right edge") }
         runBlocking { core.complete(gym) }
         until { !shows("Close") }
         assertTrue(!shows("Close"), "$name: the detail stayed open after the task left tomorrow")

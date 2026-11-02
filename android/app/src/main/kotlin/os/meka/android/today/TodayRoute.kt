@@ -1837,7 +1837,9 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
         modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id)))
     meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
 
-    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+    // The rows fade out above the action pills instead of being sliced under them (walk-through A10, the Tomorrow
+    // sheet's edit); the foot's padding lets the last row scroll clear of the fade.
+    Column(Modifier.weight(1f).fillMaxWidth().footFade().verticalScroll(rememberScrollState())) {
         conflicts.forEach { c ->
             Spacer(Modifier.height(MekaSpace.l))
             SectionLabel("Edited on two devices")
@@ -1861,6 +1863,7 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
             Column(Modifier.appear(rememberAppearance(4))) { ChecklistSection(task, actions) }
             Column(Modifier.appear(rememberAppearance(5))) { GoalSection(task, actions) }
         }
+        Spacer(Modifier.height(MotionMath.FOOT_FADE_DP.dp))
     }
 
     Spacer(Modifier.height(MekaSpace.m))
