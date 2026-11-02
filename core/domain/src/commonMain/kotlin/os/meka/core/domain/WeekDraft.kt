@@ -89,9 +89,44 @@ object WeekDraftRules {
         val placing = p.placing
         val firsts = placing.take(2).joinToString(", ") { r -> "${r.title} on ${p.dayLabel(r.chosen!!)}" }
         val more = (placing.size - 2).takeIf { it > 0 }?.let { " and $it more" } ?: ""
-        val used = placing.mapNotNull { it.chosen }.toSet()
-        val light = p.days.drop(1).firstOrNull { it.day !in used && it.freeLine != null && !it.stacking }
-        val tail = light?.let { " · ${it.label} kept light" } ?: ""
+        val tail = lightDay(draft)?.let { " · ${it.label} kept light" } ?: ""
         return firsts + more + tail
+    }
+
+    /** The first day after the first with free time, nothing new from the draft and not stacking up; null if none. */
+    private fun lightDay(draft: WeekDraft): PlanDay? {
+        val used = draft.plan.placing.mapNotNull { it.chosen }.toSet()
+        return draft.plan.days.drop(1).firstOrNull { it.day !in used && it.freeLine != null && !it.stacking }
+    }
+
+    // ---- Part 1, slice 2: Obi talks the draft through when asked by voice ----
+
+    /** Said when "plan my week" finds nothing to place: the four steps open as before. */
+    const val NOTHING_SPOKEN = "There's nothing waiting to be placed this week, so I've opened Plan your week."
+    /** The question part every spoken draft ends with. */
+    const val SPOKEN_CLOSE = "Keep all, change any of it, or start over."
+
+    /**
+     * What Obi says aloud after "plan my week" said to him (Ada plans with you, part 1, slice 2; Meka 2026-10-21: "talked
+     * through out loud if he asked by voice"): "I've drafted your week on the Board. Council tax on Thursday, and Book
+     * MOT on Saturday, plus 3 more. I've kept Friday light. Keep all, change any of it, or start over." Days are said
+     * whole ("today", "tomorrow", "on Thursday"); [NOTHING_SPOKEN] when there's no draft.
+     */
+    fun spoken(draft: WeekDraft?): String {
+        if (draft == null) return NOTHING_SPOKEN
+        val p = draft.plan
+        val placing = p.placing
+        val firsts = placing.take(2).map { r -> "${r.title.trim().trimEnd('.', '!', '?')} ${spokenDay(p, r.chosen!!)}" }
+        val list = if (firsts.size == 2) "${firsts[0]}, and ${firsts[1]}" else firsts.single()
+        val more = (placing.size - 2).takeIf { it > 0 }?.let { ", plus $it more" } ?: ""
+        val light = lightDay(draft)?.let { " I've kept ${spokenDay(p, it.day).removePrefix("on ")} light." } ?: ""
+        return "I've drafted your week on the Board. $list$more.$light $SPOKEN_CLOSE"
+    }
+
+    /** "today", "tomorrow" or "on Thursday" for [day] of [plan]. */
+    fun spokenDay(plan: WeekPlan, day: Long): String = when (plan.day(day)?.label) {
+        "Today" -> "today"
+        "Tomorrow" -> "tomorrow"
+        else -> "on ${CivilDate.DAY_LONG[CivilDate.isoDayOfWeek(day) - 1]}"
     }
 }

@@ -3026,6 +3026,13 @@ class MekaCore(
         os.meka.core.domain.WeekDraftRules.draft(planWeekFrom(boardNow())).also { _weekDraft.value = it }
     }
 
+    /**
+     * "Plan my week" said to Obi (part 1, slice 2): drafts the week as [draftWeek] does and returns what he says about it
+     * ([os.meka.core.domain.WeekDraftRules.spoken]); a String, so the Mac hands nothing else across. Never throws.
+     */
+    suspend fun draftWeekSpoken(): String =
+        os.meka.core.domain.WeekDraftRules.spoken(runCatching { draftWeek() }.getOrNull())
+
     /** Keep all: every move in the draft at once (as Accept plan), the draft goes; [undoWeekPlan] puts them back. */
     suspend fun keepWeekDraft(): String? {
         val draft = _weekDraft.value ?: return null

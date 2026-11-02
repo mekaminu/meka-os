@@ -1102,6 +1102,12 @@ final class CoreModel {
         }
     }
 
+    /// "Plan my week" said to Obi (part 1, slice 2): drafts the week and returns what he says about it (only a String).
+    func draftWeekSpoken() async -> String {
+        guard let core else { return WeekDraftRules.shared.NOTHING_SPOKEN }
+        return (try? await core.draftWeekSpoken()) ?? WeekDraftRules.shared.NOTHING_SPOKEN
+    }
+
     /// Keep all: every move in the draft at once; the bar says "Week planned · …" with one Undo for all.
     func keepWeekDraft() {
         guard let core else { return }

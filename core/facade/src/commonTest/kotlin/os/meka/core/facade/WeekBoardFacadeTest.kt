@@ -575,6 +575,13 @@ class WeekBoardFacadeTest {
         assertNull(fold.weekDraft.value)
         assertNull(fold.keepWeekDraft())
         assertEquals(2, fold.weekBoard.value.weeks[0].lane.size)
+
+        // Part 1, slice 2: "plan my week" said to Obi drafts the week and gives the line he says; nothing moves.
+        val spoken = fold.draftWeekSpoken()
+        assertTrue(spoken.startsWith("I've drafted your week on the Board. "), spoken)
+        assertTrue(spoken.contains("Book MOT") && spoken.contains("Fix the gate"), spoken)
+        assertTrue(fold.weekDraft.value != null)
+        assertEquals(2, fold.weekBoard.value.weeks[0].lane.size)
     }
 
     @Test

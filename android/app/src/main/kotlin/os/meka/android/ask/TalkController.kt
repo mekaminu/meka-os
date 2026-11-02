@@ -521,6 +521,16 @@ class TalkController(
                 (context.applicationContext as? os.meka.android.MekaApplication)?.openItem?.value =
                     os.meka.android.shell.OpenItem(os.meka.core.domain.SearchTarget.HELP, "help:" + effect.link.entryId)
             }
+            // Ada plans with you, part 1, slice 2: "plan my week" drafts the week, then Obi says what he drafted.
+            TalkEffect.DraftWeek -> {
+                level = 0f
+                val gen = generation
+                scope.launch {
+                    val line = core.draftWeekSpoken()
+                    if (gen != generation) return@launch
+                    apply(TalkFlow.drafted(session, line))
+                }
+            }
             TalkEffect.StopSpeaking -> stopSaying()
             // Speaking up, slice 2: "shh" to Obi mutes his speaking up for 2 hours on every device.
             TalkEffect.MuteSpeakingUp -> {

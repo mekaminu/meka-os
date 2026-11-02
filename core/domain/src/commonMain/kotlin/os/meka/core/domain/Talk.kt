@@ -438,6 +438,11 @@ sealed interface TalkEffect {
      * more), then report with [TalkFlow.spoke]. Never cuts the early piece short.
      */
     data class SpeakRest(val text: String) : TalkEffect
+    /**
+     * Ada plans with you, part 1, slice 2: "plan my week" said to Obi. Draft the week on this device
+     * (`MekaCore.draftWeekSpoken`), then report what to say with [TalkFlow.drafted]; nothing moves until Keep all.
+     */
+    data object DraftWeek : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
     data object StopSpeaking : TalkEffect
     /**
@@ -537,7 +542,11 @@ object TalkFlow {
                 t.copy(pending = emptyList(), endAfterSpeaking = true, openHelpAfter = link, conversation = t.conversation.answered(r.question, TalkHelpRules.remembered(link!!))),
                 TalkHelpRules.OPENING,
             )
-            is TalkReply.Open -> say(
+            // Ada plans with you, part 1, slice 2: "plan my week" drafts the week first, so Obi can say what he drafted.
+            is TalkReply.Open -> if (r.place == TalkPlace.PLAN_WEEK) TalkStep(
+                t.copy(phase = TalkPhase.THINKING, pending = emptyList(), conversation = t.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
+                listOf(TalkEffect.DraftWeek),
+            ) else say(
                 t.copy(pending = emptyList(), endAfterSpeaking = true, openAfter = r.place, conversation = t.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
                 TalkOpenRules.opening(r.place),
             )
@@ -608,6 +617,16 @@ object TalkFlow {
             )
             is AskOutcome.Unavailable -> say(s.copy(endAfterSpeaking = true), TalkRules.speakable(outcome.line))
         }
+    }
+
+    /**
+     * Ada plans with you, part 1, slice 2: the week is drafted ([TalkEffect.DraftWeek]); Obi says [line]
+     * ([WeekDraftRules.spoken]), then the conversation ends and the Board opens with the draft on it. Only while
+     * thinking: a stop meanwhile leaves it.
+     */
+    fun drafted(s: TalkSession, line: String): TalkStep {
+        if (s.phase != TalkPhase.THINKING) return TalkStep(s, emptyList())
+        return say(s.copy(endAfterSpeaking = true, openAfter = TalkPlace.PLAN_WEEK), line.ifBlank { WeekDraftRules.NOTHING_SPOKEN })
     }
 
     /**

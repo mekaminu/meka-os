@@ -1623,6 +1623,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         let ghost = GhostCard(taskId: "t1", title: "Book MOT", day: 20_000, minutes: 30, why: "No day yet")
         XCTAssertEqual(ghost.duration, "0:30")
         XCTAssertEqual(ghost.spoken, "Obi's draft: Book MOT, about 30m, no day yet")
+        // Part 1, slice 2: "plan my week" said to Obi drafts first, then he says it (only a String crosses).
+        XCTAssertEqual(rules.spoken(draft: nil), rules.NOTHING_SPOKEN)
+        let asked = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my week", places: TalkOpenRules.shared.MAC)
+        XCTAssertTrue(asked.effects.first is TalkEffectDraftWeek)
+        XCTAssertTrue(TalkFlow.shared.drafted(s: asked.session, line: "Hi").effects.first is TalkEffectSpeak)
     }
 
     /// Ada plans with you, part 2: Obi's ✦ thoughts on the Board reach Swift.

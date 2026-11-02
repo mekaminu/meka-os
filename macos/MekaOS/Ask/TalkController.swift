@@ -536,6 +536,17 @@ final class TalkController {
             // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens its sheet, as the
             // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.
             model?.openHelpFromTalk(openHelp.link.place)
+        } else if effect is TalkEffectDraftWeek {
+            // Ada plans with you, part 1, slice 2: "plan my week" drafts the week, then Obi says what he drafted.
+            // Only a String comes back from the core.
+            level = 0
+            let gen = generation
+            Task {
+                guard let model else { return }
+                let line = await model.draftWeekSpoken()
+                guard gen == generation else { return }
+                apply(TalkFlow.shared.drafted(s: session, line: line))
+            }
         } else if effect is TalkEffectMuteSpeakingUp {
             // Speaking up, slice 2: "shh" to Obi mutes his speaking up for 2 hours on every device.
             Task { await model?.muteSpeakUp() }

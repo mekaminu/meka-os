@@ -71,4 +71,56 @@ class WeekDraftTest {
         assertTrue(WeekDraftRules.ghostsOn(null, board, today).isEmpty())
         assertEquals(WeekDraftRules.OPENING, TalkOpenRules.opening(TalkPlace.PLAN_WEEK))
     }
+
+    // ---- Part 1, slice 2: Obi talks the draft through when asked by voice ----
+
+    @Test
+    fun obiSaysTheDraftWithWholeDayNames() {
+        val board = WeekBoardRules.build(tasks, emptyList(), now, cal)
+        val draft = WeekDraftRules.draft(PlanWeekRules.plan(board, emptyList(), today, cal))!!
+        val placed = draft.plan.placing.associate { it.taskId to it.chosen!! }
+        val line = WeekDraftRules.spoken(draft)
+        val form = WeekDraftRules.spokenDay(draft.plan, placed.getValue("form"))
+        val mot = WeekDraftRules.spokenDay(draft.plan, placed.getValue("old"))
+        assertTrue(line.startsWith("I've drafted your week on the Board. Trip form $form, and Book MOT $mot, plus 1 more."), line)
+        assertTrue(line.endsWith(" light. ${WeekDraftRules.SPOKEN_CLOSE}"), line)
+        // No short day names or symbols in what's said.
+        assertFalse(line.contains("✦") || line.contains("·") || Regex("\\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\b").containsMatchIn(line), line)
+        assertEquals("today", WeekDraftRules.spokenDay(draft.plan, today))
+        assertEquals("tomorrow", WeekDraftRules.spokenDay(draft.plan, today + 1))
+        assertEquals("on Friday", WeekDraftRules.spokenDay(draft.plan, fri))
+    }
+
+    @Test
+    fun oneTaskIsSaidAloneAndNoDraftSaysSo() {
+        val one = listOf(task("form", "Trip form.", due = at(fri, 17)))
+        val board = WeekBoardRules.build(one, emptyList(), now, cal)
+        val draft = WeekDraftRules.draft(PlanWeekRules.plan(board, emptyList(), today, cal))!!
+        val line = WeekDraftRules.spoken(draft)
+        assertTrue(line.startsWith("I've drafted your week on the Board. Trip form ${WeekDraftRules.spokenDay(draft.plan, draft.plan.placing.single().chosen!!)}."), line)
+        assertFalse(line.contains("plus"), line)
+        assertEquals(WeekDraftRules.NOTHING_SPOKEN, WeekDraftRules.spoken(null))
+    }
+
+    @Test
+    fun planMyWeekSaidToObiDraftsThenSaysItThenOpensTheBoard() {
+        val listening = TalkFlow.start().session
+        val asked = TalkFlow.heard(listening, "plan my week", TalkOpenRules.FOLD)
+        assertEquals(listOf<TalkEffect>(TalkEffect.DraftWeek), asked.effects)
+        assertEquals(TalkPhase.THINKING, asked.session.phase)
+        assertNull(asked.session.openAfter)
+
+        val said = TalkFlow.drafted(asked.session, "I've drafted your week on the Board. Trip form on Friday.")
+        assertEquals(listOf<TalkEffect>(TalkEffect.Speak("I've drafted your week on the Board. Trip form on Friday.")), said.effects)
+        val done = TalkFlow.spoke(said.session)
+        assertEquals(listOf(TalkEffect.End, TalkEffect.Open(TalkPlace.PLAN_WEEK)), done.effects)
+
+        // A blank line says the nothing-to-place line; a stop while drafting leaves it (no voice, nothing opens).
+        assertEquals(listOf<TalkEffect>(TalkEffect.Speak(WeekDraftRules.NOTHING_SPOKEN)), TalkFlow.drafted(asked.session, " ").effects)
+        val stopped = TalkFlow.stop(asked.session)
+        assertTrue(TalkFlow.drafted(stopped.session, "late").effects.isEmpty())
+        assertTrue(stopped.effects.none { it is TalkEffect.Open })
+        // "Plan my day" still opens at once with its own line.
+        assertEquals(listOf<TalkEffect>(TalkEffect.Speak(TalkOpenRules.opening(TalkPlace.PLAN))), TalkFlow.heard(listening, "plan my day", TalkOpenRules.FOLD).effects)
+    }
 }
