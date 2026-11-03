@@ -61,15 +61,16 @@ object BoardFoldRules {
     }
 
     /**
-     * The walk-through 2026-11-02, A6: the room (dp) to add under the week so a reveal can scroll to [toDp] when the
-     * week, with [currentRoomDp] of room already there, scrolls at most [maxScrollDp]: 0 when it already can (the
-     * weekend's row then rises to the top instead of stopping part way, under the tail of a weekday column).
+     * The walk-through 2026-11-02, A6: unfolded on Saturday the week could scroll only so far, so the weekend's row
+     * stopped part way down under the tail of a weekday column (a lone "Not now", "+ add"). The room (dp) to keep under
+     * a week whose weekday row is [weekdaysDp] tall and whose weekend row, lists and foot below it are [restDp], in a
+     * view [viewDp] tall, so the weekend's row can rise to the top: none when the week fits the view (a quiet week
+     * never scrolls) or when what's below the weekend's top already fills the view.
      */
-    fun revealRoom(toDp: Float, maxScrollDp: Float, currentRoomDp: Float): Float {
-        if (!(toDp.isFinite() && maxScrollDp.isFinite() && currentRoomDp.isFinite())) return 0f
-        val without = (maxScrollDp - currentRoomDp).coerceAtLeast(0f)
-        val need = toDp - without
-        return if (need <= 0f) 0f else kotlin.math.ceil(need)
+    fun weekendRoom(weekdaysDp: Float, restDp: Float, viewDp: Float): Float {
+        if (!(weekdaysDp.isFinite() && restDp.isFinite() && viewDp.isFinite()) || viewDp <= 0f) return 0f
+        if (weekdaysDp + restDp <= viewDp) return 0f
+        return kotlin.math.ceil((viewDp - restDp).coerceAtLeast(0f))
     }
 
     /** A swipe faster than this (dp/s) turns a page whichever way it was going; slower settles on the nearest day. */

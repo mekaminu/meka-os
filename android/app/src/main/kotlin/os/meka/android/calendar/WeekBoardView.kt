@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import os.meka.core.domain.BoardHandRules
 import os.meka.core.domain.BoardFoldRules
 import os.meka.core.domain.BoardBesideRules
@@ -2766,10 +2767,6 @@ private fun WideWeek(
     val scrolledWeek by remember(scroll, density) { derivedStateOf { BoardOpenFoldRules.headFade(scroll.value / density) } }
     // (10a) Each fold or unfold's reveal is used once (stepping back to its week later doesn't scroll again).
     val revealed = remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    // The walk-through 2026-11-02, A6: unfolded on Saturday the week could scroll only so far, so the weekend's row
-    // stopped part way down with the tail of a weekday column (a lone "Not now", "+ add") above it. While a reveal of
-    // the weekend holds, this much room (dp) under the lists lets the row rise to the top of the week's view.
-    var revealRoom by remember { mutableStateOf(0f) }
     BoxWithConstraints(modifier) {
         val tiers = BoardWeekLayoutRules.heights(maxHeight.value)
         // (10a) The week's view height, for bringing a day's row into view (read here, outside the week's content).
@@ -2817,6 +2814,7 @@ private fun WideWeek(
                     }
                 }
                 val weekend = BoardWeekLayoutRules.weekend(w)
+                var weekendShownDp = 0f
                 if (weekend.isNotEmpty()) {
                     // The alignment pass (5): Saturday and Sunday under Monday and Tuesday at a weekday's width.
                     val weekendWidths = BoardOpenFoldRules.gridWidths(weekend.size, rowWidth.value)
@@ -2824,6 +2822,7 @@ private fun WideWeek(
                         BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP).dp,
                         MekaMotion.appear(reduced), label = "board-weekend-height",
                     )
+                    weekendShownDp = weekendTall.value
                     val weekendLeast = BoardOpenFoldRules.headHeight(weekend.map { heads[it.epochDay] ?: 0f })
                     val weekendHead = remember(shown, weekendLeast) { RowHead(weekendLeast) { d, h -> heads[d] = h } }
                     Row(Modifier.fillMaxWidth().height(weekendTall).testTag(WEEKEND_ROW_TAG)) {
@@ -2834,25 +2833,25 @@ private fun WideWeek(
                 }
                 // (10a) Unfolded on a day (Saturday, say): once the rows have their heights, its row is brought into
                 // view (the weekend's sits under the weekdays'), or back to the top for a weekday while scrolled down.
-                val weekdaysNow by rememberUpdatedState(weekdaysTall.value)
+                // The walk-through 2026-11-02, A6: the row's settled height, not the one still growing in, so the
+                // weekend's row lands at the top (the growing height left it part way down).
+                val weekdaysSettled = BoardOpenFoldRules.rowHeight(weekdays.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKDAYS_DP)
+                val weekdaysNow by rememberUpdatedState(weekdaysSettled)
+                val weekdaysGrown by rememberUpdatedState(kotlin.math.abs(weekdaysTall.value - weekdaysSettled) < 0.5f)
                 LaunchedEffect(reveal, shown) {
                     val (target, count) = reveal ?: return@LaunchedEffect
                     if (count == revealed.intValue) return@LaunchedEffect
                     val inWeekend = weekend.any { it.epochDay == target }
                     if (!inWeekend && weekdays.none { it.epochDay == target }) return@LaunchedEffect
-                    // Room under the week first (the whole view's height), so the scroll below can reach the weekend's
-                    // row; trimmed to what it needs once there. Kept as it was when nothing scrolls.
-                    val roomBefore = revealRoom
-                    if (inWeekend) revealRoom = maxOf(revealRoom, viewDp)
                     delay(BoardFoldRules.relayoutMs(reduced).toLong() + 80L)
+                    // The rows finish growing in first, so the week can scroll as far as the weekend's row.
+                    kotlinx.coroutines.withTimeoutOrNull(1_000L) { snapshotFlow { weekdaysGrown }.first { it } }
                     revealed.intValue = count
                     val top = if (inWeekend) weekdaysNow + MekaSpace.m.value else 0f
                     val tall = if (inWeekend) BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP) else weekdaysNow
-                    val to = BoardFoldRules.revealScroll(top, tall, viewDp, scroll.value / density)
-                    if (to == null) { revealRoom = if (inWeekend) roomBefore else 0f; return@LaunchedEffect }
+                    val to = BoardFoldRules.revealScroll(top, tall, viewDp, scroll.value / density) ?: return@LaunchedEffect
                     val px = (to * density).toInt()
                     if (reduced) scroll.scrollTo(px) else scroll.animateScrollTo(px, MekaMotion.replan(false))
-                    revealRoom = if (inWeekend) BoardFoldRules.revealRoom(to, scroll.maxValue / density, revealRoom) else 0f
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,
                 // Side hustle, House, then No day yet).
@@ -2868,7 +2867,14 @@ private fun WideWeek(
                         }
                     }
                 }
-                if (revealRoom > 0f) Spacer(Modifier.height(revealRoom.dp))
+                // The walk-through 2026-11-02, A6: room under a full week so the weekend's row can rise to the top
+                // when he unfolds on Saturday (it stopped part way, under a weekday column's tail).
+                if (weekend.isNotEmpty()) {
+                    val m = MekaSpace.m.value
+                    val restDp = weekendShownDp + m + 1f + m + tiers.lists + m
+                    val room = BoardFoldRules.weekendRoom(weekdaysTall.value + m, restDp, viewDp)
+                    if (room > 0f) Spacer(Modifier.height(room.dp))
+                }
             }
             }
         }

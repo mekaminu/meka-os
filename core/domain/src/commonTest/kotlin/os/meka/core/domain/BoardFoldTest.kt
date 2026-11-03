@@ -131,16 +131,15 @@ class BoardFoldTest {
 
     @Test
     fun theWeekGetsRoomUnderItSoTheWeekendCanRiseToTheTop() {
-        // The walk-through 2026-11-02, A6: the week scrolls at most 300 but the weekend's row wants 420: 120 more room.
-        assertEquals(120f, BoardFoldRules.revealRoom(420f, 300f, 0f))
-        // That room is already there (the week now scrolls 420): keep it, no more.
-        assertEquals(120f, BoardFoldRules.revealRoom(420f, 420f, 120f))
-        // A long week that already scrolls far enough: none.
-        assertEquals(0f, BoardFoldRules.revealRoom(420f, 900f, 0f))
-        // Back to the top for a weekday: none.
-        assertEquals(0f, BoardFoldRules.revealRoom(0f, 420f, 120f))
-        // Part of a dp rounds up, so the scroll can reach it.
-        assertEquals(121f, BoardFoldRules.revealRoom(420.4f, 300f, 0f))
-        assertEquals(0f, BoardFoldRules.revealRoom(Float.NaN, 300f, 0f))
+        // The walk-through 2026-11-02, A6: a full Wednesday makes the weekdays 600 tall; the weekend, lists and foot
+        // are 400 in a 560 view: 160 more room lets the weekend's row reach the top.
+        assertEquals(160f, BoardFoldRules.weekendRoom(600f, 400f, 560f))
+        // A quiet week that fits the view never scrolls: no room.
+        assertEquals(0f, BoardFoldRules.weekendRoom(120f, 400f, 560f))
+        // What's under the weekend's top already fills the view: none.
+        assertEquals(0f, BoardFoldRules.weekendRoom(600f, 700f, 560f))
+        // Part of a dp rounds up; nothing measured, nothing.
+        assertEquals(161f, BoardFoldRules.weekendRoom(600f, 399.5f, 560f))
+        assertEquals(0f, BoardFoldRules.weekendRoom(Float.NaN, 400f, 560f))
     }
 }
