@@ -17,6 +17,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.MekaSpace
+import kotlin.math.abs
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -145,6 +149,14 @@ class MoneyChatScreensTest {
         repeat(40) { if (!done()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
     }
 
+    /** Walk-through 2026-11-02 A8: a mic is a whole 48 dp round target, never a sliver squeezed by the field. */
+    private fun assertFullSizeMic(tag: String) {
+        val b = compose.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(b.width >= MekaSpace.touch - 0.5.dp && b.height >= MekaSpace.touch - 0.5.dp,
+            "$tag is ${b.width} × ${b.height}, under a ${MekaSpace.touch} target")
+        assertTrue(abs((b.width - b.height).value) < 1f, "$tag isn't round: ${b.width} × ${b.height}")
+    }
+
     private fun pick(tab: MoneyTab) {
         compose.onNodeWithContentDescription(MoneyTabs.spoken(tab, chosen = false), useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         settle()
@@ -161,6 +173,7 @@ class MoneyChatScreensTest {
         assertTrue(shows("money-chat-sheet"), "the chat's sheet didn't open")
         assertTrue(showsText(MoneyChat.HELLO), "Obi's hello isn't in the chat")
         assertTrue(shows("money-chat-try-0"), "no Try questions")
+        assertFullSizeMic("money-chat-mic")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi")
 
@@ -185,6 +198,7 @@ class MoneyChatScreensTest {
         tap("money-chat-try-1")
         until(core) { shows("money-chat-answer-0") }
         assertTrue(shows("money-chat-answer-0"), "Can I afford wasn't answered")
+        assertFullSizeMic("money-chat-mic")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-ask-obi"))
         ScreenShots.assertNoBrokenWords(compose, "inner-dark-ask-obi")
     }
@@ -216,11 +230,13 @@ class MoneyChatScreensTest {
         Shadows.shadowOf(ApplicationProvider.getApplicationContext<ShotApplication>()).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         val core = open()
         assertTrue(shows("money-ask-mic"), "no mic on the Ask Obi bar")
+        assertFullSizeMic("money-ask-mic")
         tap("money-ask-mic")
         val started = { shows("money-chat-listening") || shows("money-chat-heard") }
         until(core) { started() }
         assertTrue(shows("money-chat-sheet"), "the mic didn't open the chat")
         assertTrue(shows("money-chat-mic"), "no mic beside the chat's field")
+        assertFullSizeMic("money-chat-mic")
         assertTrue(started(), "the mic neither listened nor said why it couldn't")
         assertTrue(compose.onAllNodes(hasContentDescription(MoneyChatSpoken.MIC_SPOKEN), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
             "the mic has no spoken name")

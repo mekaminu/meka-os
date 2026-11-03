@@ -102,7 +102,8 @@ internal fun MoneyAskBar(modifier: Modifier = Modifier, onMic: () -> Unit = {}, 
             Modifier.testTag("money-ask-mic").clip(CircleShape)
                 .clickable(role = Role.Button, onClick = onMic)
                 .clearAndSetSemantics { contentDescription = MoneyChatSpoken.MIC_SPOKEN; role = Role.Button }
-                .minTouch().padding(horizontal = MekaSpace.xs),
+                // Walk-through 2026-11-02 A8: a full finger-sized round target, not the glyph's width.
+                .size(MekaSpace.touch),
             contentAlignment = Alignment.Center,
         ) { MicGlyph(Meka.colors.accent) }
     }
@@ -206,11 +207,12 @@ internal fun MoneyChatContent(
             }
             val on = listener.listening
             Box(
-                Modifier.testTag("money-chat-mic").clip(CircleShape)
+                // Walk-through 2026-11-02 A8: the mic was only minTouch's height, so its width was the 18 dp glyph and the
+                // circle a ~17 dp sliver against the field. Now a 48 dp circle that never gives way to the field.
+                Modifier.testTag("money-chat-mic").size(MekaSpace.touch).clip(CircleShape)
                     .background(if (on) Meka.colors.accent else Meka.colors.surfaceRaised)
                     .clickable(role = Role.Button, onClick = listen)
-                    .clearAndSetSemantics { contentDescription = if (on) MoneyChatSpoken.MIC_DONE else MoneyChatSpoken.MIC_SPOKEN; role = Role.Button }
-                    .minTouch(),
+                    .clearAndSetSemantics { contentDescription = if (on) MoneyChatSpoken.MIC_DONE else MoneyChatSpoken.MIC_SPOKEN; role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) { MicGlyph(if (on) Meka.colors.onAccent else Meka.colors.accent) }
         }
