@@ -391,7 +391,7 @@ class EventActionsTest {
         assertEquals("All day · Personal", today.timeline.allDayLabel)
         // Calendars lists it, switched off (two "Personal" calendars: one from the account, one with none, told apart by detail).
         assertEquals(
-            listOf(Triple("Personal", "Google · meka@gmail.com", true), Triple("Personal", "Google", true), Triple("Timestripe", "Google · meka@gmail.com", false)),
+            listOf(Triple("Personal", "Google · Personal", true), Triple("Personal", "Google", true), Triple("Timestripe", "Google · Personal", false)),
             CalendarRules.choices(events, marks.hiddenCalendars).map { Triple(it.label, it.detail, it.onToday) },
         )
         ea.showCalendar(key)
@@ -451,7 +451,7 @@ class EventActionsTest {
         // Calendars lists it switched off and says why.
         val row = CalendarRules.choices(events, marks.hiddenCalendars, marks.shownCalendars).single { it.key == key }
         assertEquals("Holidays in United States", row.label)
-        assertEquals("Google · meka@gmail.com · " + HolidayCalendars.DETAIL, row.detail)
+        assertEquals("Google · Personal · " + HolidayCalendars.DETAIL, row.detail)
         assertFalse(row.onToday)
         // Turned on in Calendars: a mark with hiddenFromToday = false is written, synced, and it shows on both devices.
         ea.showCalendar(key)
@@ -508,9 +508,35 @@ class EventActionsTest {
         assertEquals("Personal", today.timeline.allDayItems.single().calendarLabel)
         val choice = CalendarRules.choices(listOf(primary()), emptyMap()).single()
         assertEquals("Personal", choice.label)
-        assertEquals("Google · meka@gmail.com", choice.detail)
+        assertEquals("Google · main calendar", choice.detail)
         assertTrue(choice.canRename)
         assertFalse(choice.renamed)
+    }
+
+    @Test
+    fun onTodayNamesEachCalendarsAccountByTitleNeverItsAddress() {
+        // Weekly walk-through 2026-11-02, A7: every ON TODAY row read "Google · alex@example.com".
+        val events = listOf(
+            primary("p1"),
+            primary("k1", name = "Kids"),
+            primary("p2", account = "second@gmail.com"),
+            primary("w1", account = "second@gmail.com", name = "Work"),
+            primary("o1", provider = "microsoft", account = "meka@hotmail.co.uk", name = "Calendar"),
+            primary("o2", provider = "microsoft", account = "meka@hotmail.co.uk", name = "Football"),
+            CalendarEvent("ph", "Dentist", at(tue6, 9), at(tue6, 10), false, null, PhoneCalendarRules.PROVIDER, "someone@samsung.com", "My calendar"),
+        )
+        val rows = CalendarRules.choices(events, emptyMap()).associate { (it.label + "/" + it.key) to it.detail }
+        rows.values.forEach { d -> assertFalse('@' in d.orEmpty(), "an address in \"$d\"") }
+        assertEquals("Google · main calendar", rows.entries.single { it.key.startsWith("Personal/google|meka@") }.value)
+        assertEquals("Google · Personal", rows.entries.single { it.key.startsWith("Kids/") }.value)
+        assertEquals("Google · main calendar", rows.entries.single { it.key.startsWith("Personal 2/") || it.key.startsWith("Personal/google|second@") }.value)
+        assertEquals("Google · Personal 2", rows.entries.single { it.key.startsWith("Work/") }.value)
+        assertEquals("Outlook · main calendar", rows.entries.single { it.key.startsWith("Hotmail/") }.value)
+        assertEquals("Outlook · Hotmail", rows.entries.single { it.key.startsWith("Football/") }.value)
+        assertEquals("On this phone", rows.entries.single { it.key.startsWith("My calendar/") }.value)
+        // A renamed main calendar names its account's other calendars too.
+        val renamed = events.map { if (it.id == "p1") it.copy(calendarTitle = "Home") else it }
+        assertEquals("Google · Home", CalendarRules.choices(renamed, emptyMap()).single { it.label == "Kids" }.detail)
     }
 
     @Test

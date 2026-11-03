@@ -252,6 +252,8 @@ class CalendarsScreensTest {
      */
     private fun providerNeverAlone(name: String, core: MekaCore) {
         val choices = core.calendarsOnToday.value.filter { it.detail != null }
+        // Weekly walk-through 2026-11-02, A7: a row names its account by title, never by address.
+        choices.firstOrNull { '@' in it.detail.orEmpty() }?.let { fail("$name: ON TODAY shows an address: \"${it.detail}\"") }
         val wanted = choices.flatMap { listOfNotNull(it.detail, it.detailShort) }.map { DateGlue.plain(it) }.toSet()
         val bad = mutableListOf<String>()
         var seen = 0

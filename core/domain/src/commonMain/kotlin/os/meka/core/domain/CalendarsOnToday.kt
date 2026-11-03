@@ -144,22 +144,52 @@ object CalendarRules {
         ).joinToString(" · ").ifEmpty { null }
     }
 
+    /** Said under an account's own main calendar in Calendars' ON TODAY, in place of the account. */
+    const val MAIN_CALENDAR = "main calendar"
+
+    /**
+     * The line under a calendar in Calendars' ON TODAY: its provider and which account it belongs to, by the account's
+     * title (the one Calendars' account rows use, [CalendarAccountRules.distinctTitles]), never the address (weekly
+     * walk-through 2026-11-02, A7: every row read "Google · alex@example.com"). "Google · Personal" under Kids; the
+     * account's own main calendar "Google · main calendar"; a phone calendar whose account is an address just
+     * "On this phone". [accountTitles] is keyed by [CalendarAccountRules.key].
+     */
+    fun choiceDetail(e: CalendarEvent, accountTitles: Map<String, String>): String? {
+        if (e.isFixture) return "FC Barcelona"
+        val provider = when (e.provider) { "google" -> "Google"; "microsoft" -> "Outlook"; PhoneCalendarRules.PROVIDER -> "On this phone"; else -> null }
+        val acct = e.account?.trim().orEmpty()
+        val whose = when {
+            acct.isEmpty() -> null
+            CalendarAccountRules.isMailAccount(e.provider, acct) ->
+                if (CalendarAccountRules.isMainCalendar(e.provider, acct, e.calendarName)) MAIN_CALENDAR
+                else accountTitles[CalendarAccountRules.key(e.provider, acct)] ?: CalendarAccountRules.title(e.provider, acct)
+            '@' in acct -> null
+            else -> acct
+        }
+        return listOfNotNull(provider, whose).joinToString(" · ").ifEmpty { null }
+    }
+
     /**
      * Every calendar in [events] plus hidden ones with no events now, by name; each says whether it's on Today. A
-     * holiday calendar ([HolidayCalendars]) is off unless Meka turned it on ([shownCalendars]), and says so.
+     * holiday calendar ([HolidayCalendars]) is off unless Meka turned it on ([shownCalendars]), and says so. Each row's
+     * line names its account by title ([choiceDetail]), never by address.
      */
     fun choices(
         events: List<CalendarEvent>,
         hiddenCalendars: Map<String, String>,
         shownCalendars: Set<String> = emptySet(),
     ): List<CalendarChoice> {
+        val names = events.filter { !it.isFixture && !it.calendarTitle.isNullOrBlank() }.associate { key(it) to it.calendarTitle!! }
+        val accounts = events.mapNotNull { e -> e.account?.trim()?.takeIf { CalendarAccountRules.isMailAccount(e.provider, it) }?.let { e.provider to it } }
+        val titles = CalendarAccountRules.distinctTitles(accounts, names)
         val seen = LinkedHashMap<String, CalendarChoice>()
         for (e in events) {
             val k = key(e)
             if (k in seen) continue
             val holiday = HolidayCalendars.isHolidayKey(k)
             val off = k in hiddenCalendars || (holiday && k !in shownCalendars)
-            val detail = if (holiday) listOfNotNull(detail(e), HolidayCalendars.DETAIL).joinToString(" · ") else detail(e)
+            val line = choiceDetail(e, titles)
+            val detail = if (holiday) listOfNotNull(line, HolidayCalendars.DETAIL).joinToString(" · ") else line
             seen[k] = CalendarChoice(k, label(e), detail, !off, label(e.copy(calendarTitle = null)), canRename = !e.isFixture)
         }
         for ((k, label) in hiddenCalendars) {
