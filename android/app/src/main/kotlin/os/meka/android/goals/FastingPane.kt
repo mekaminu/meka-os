@@ -548,10 +548,13 @@ private fun WeekRing(d: FastingWeekRing, modifier: Modifier) {
     val fill = remember(d.day) { Animatable(if (reduced) d.fill else 0f) }
     LaunchedEffect(d.fill) { fill.animateTo(d.fill, MekaMotion.replan(reduced)) }
     val accent = Meka.colors.accent
+    // Walk-through A14 (2026-11-02): in Light, a short day at half alpha and today lifted toward white were near invisible
+    // on the pale track; Light deepens today toward black and draws a short day at 0.8, so every day reads in both themes.
+    val dark = Meka.theme.isDark
     val color = when {
         d.onGoal -> accent
-        d.isToday -> lerp(accent, Color.White, 0.3f)
-        else -> accent.copy(alpha = 0.5f)
+        d.isToday -> if (dark) lerp(accent, Color.White, 0.3f) else lerp(accent, Color.Black, 0.25f)
+        else -> accent.copy(alpha = if (dark) 0.5f else 0.8f)
     }
     val track = Meka.colors.surfaceRaised
     Column(modifier.semantics { contentDescription = d.spoken }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {

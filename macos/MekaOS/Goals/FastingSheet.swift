@@ -460,11 +460,15 @@ private struct FastWeekRing: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let ring: FastingWeekRing
     let palette: MekaPalette
+    @Environment(\.colorScheme) private var scheme
     @State private var shown: Double = 0
 
     var body: some View {
+        // Walk-through A14: in Light, today deepens toward black and a short day draws at 0.8, as on the Fold.
+        let dark = scheme == .dark
         let color: Color = ring.onGoal ? palette.accent
-            : (ring.isToday ? palette.accent.mix(with: .white, by: 0.3) : palette.accent.opacity(0.5))
+            : (ring.isToday ? (dark ? palette.accent.mix(with: .white, by: 0.3) : palette.accent.mix(with: .black, by: 0.25))
+                : palette.accent.opacity(dark ? 0.5 : 0.8))
         VStack(spacing: MekaSpace.xxs) {
             ZStack {
                 Circle().stroke(palette.surfaceRaised, lineWidth: 5)

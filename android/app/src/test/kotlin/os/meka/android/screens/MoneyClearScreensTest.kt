@@ -169,7 +169,7 @@ class MoneyClearScreensTest {
     fun clearMyCardsOnTheOpenFold() {
         val core = open()
         plan(core)
-        assertTrue(showsText("Rewards Card") && showsText("Platinum Card"))
+        assertTrue(showsText("Rewards card") && showsText("Platinum card"))
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-plan-clear-unfolded.png")
     }
 }

@@ -63,6 +63,18 @@ class MoneyMoreTest {
     }
 
     @Test
+    fun aCardReadsByTheShortNameAccountsGivesIt() {
+        // Walk-through A14: "Platinum Card" on Bills beside "Platinum card" on Accounts; both now say the short name.
+        val m = money()
+        m.import("Platinum Card", csv)
+        val id = m.accounts().single().id
+        m.setCardKind(id, card = true, charge = false)
+        assertEquals(MoneyAccountNames.shortName("Platinum Card"), m.cards().single().name)
+        assertEquals("Platinum card", m.cards().single().name)
+        assertEquals("Platinum Card", m.accounts().single().name)
+    }
+
+    @Test
     fun theMoreCardHasTheSideHustleSharedAndDataRows() {
         val today = 20_000L
         val accounts = listOf(MoneyAccount("a", "Oakbank Current", "csv", 0L))

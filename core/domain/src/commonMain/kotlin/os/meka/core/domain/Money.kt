@@ -968,7 +968,9 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     /** Slice 7: the accounts marked as cards, with what he typed off their statements. */
     fun cards(): List<MoneyCard> = replica.entities(EntityTypes.MONEY_ACCOUNT).mapNotNull { e ->
         val kind = e[MoneyCardFields.KIND].textOrNull?.takeIf { it == MoneyCards.CREDIT || it == MoneyCards.CHARGE } ?: return@mapNotNull null
-        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let(MoneyAccountNames::shown) ?: return@mapNotNull null
+        // Walk-through A14: a card reads by the same short name Accounts gives it ("Platinum card" on both, not "Platinum Card"
+        // on Bills and Plan); the stored name is untouched.
+        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let(MoneyAccountNames::shortName) ?: return@mapNotNull null
         val nick = e[MoneyAccountFields.NICK].textOrNull?.let(MoneyAccountNames::cleanNick)
         MoneyCard(
             e.ref.entityId, nick ?: name, kind,

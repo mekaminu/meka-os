@@ -93,7 +93,10 @@ class CarScreensTest {
         val mot = core.addCarDate(first, "mot") ?: fail("no MOT date")
         core.setRenewalDue(mot, clock / 86_400_000L + 22)
         // Parked 25 minutes ago with a 2-hour ticket bought then: "1 h 35 left" on the pane, against the phone's clock.
-        val at = System.currentTimeMillis() - 25 * 60_000L
+        // Walk-through A14: the core clock is re-read here, so the seconds since it was set don't round the ticket up
+        // to "1 h 36 left" beside "25 min ago".
+        clock = System.currentTimeMillis()
+        val at = clock - 25 * 60_000L
         val realNow = clock
         clock = at
         check(core.setParkingTimer(first, "2 h") != null)
@@ -281,7 +284,12 @@ class CarScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverEmpty() { shoot("cover-dark-empty", Fill.EMPTY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverOne() { shoot("cover-dark-one", Fill.ONE) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverOne() {
+        val core = shoot("cover-dark-one", Fill.ONE)
+        // Walk-through A14: 25 min ago and the 2-hour ticket's time left agree to the minute.
+        val line = core.parkingTimersView.value.rows.firstOrNull()?.line ?: fail("no timer row")
+        if (!line.endsWith("1 h 35 left")) fail("ticket line reads \"$line\", not 1 h 35 left")
+    }
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverMany() { shoot("cover-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     // carByHand hung once (CI run 1465's re-run logged "CarScreensTest > carByHand STARTED" and nothing more until the
