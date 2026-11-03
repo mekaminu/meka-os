@@ -371,6 +371,9 @@ class TalkController(
         session = session.copy(pending = session.pending - card)
     }
 
+    /** The phone rotated, folded or unfolded while this talk ran, and it kept going (Health's talk log notes it). */
+    fun layoutChanged() = liveTalk.layoutChanged()
+
     /** Ask left the screen for good: free the recogniser and the speech engine. */
     fun release() {
         stop()

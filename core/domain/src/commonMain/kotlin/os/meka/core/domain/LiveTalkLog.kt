@@ -14,7 +14,7 @@ package os.meka.core.domain
  * Pure state, one per talk, used from one thread at a time (the Fold guards it with its lock).
  */
 class LiveTalkLog(private val startMs: Long) {
-    enum class Kind { TURN, STOPPED_FOR_VOICE, STOPPED_ON_SILENCE, GOING_AWAY, NEW_WINDOW, CARRIED_ON, REPEATED, HEARD_OTHER_LANGUAGE, SAID_OTHER_LANGUAGE }
+    enum class Kind { TURN, STOPPED_FOR_VOICE, STOPPED_ON_SILENCE, GOING_AWAY, NEW_WINDOW, CARRIED_ON, REPEATED, HEARD_OTHER_LANGUAGE, SAID_OTHER_LANGUAGE, LAYOUT_KEPT }
 
     data class Entry(val atMs: Long, val kind: Kind, val words: String? = null)
 
@@ -99,6 +99,8 @@ class LiveTalkLog(private val startMs: Long) {
     fun goingAway(nowMs: Long) = add(Entry(nowMs, Kind.GOING_AWAY))
     fun newWindow(nowMs: Long) = add(Entry(nowMs, Kind.NEW_WINDOW))
     fun carriedOn(nowMs: Long) = add(Entry(nowMs, Kind.CARRIED_ON))
+    /** The screen changed shape (rotated, folded, unfolded) and the talk kept going ([TalkLayoutRules]). */
+    fun layoutKept(nowMs: Long) = add(Entry(nowMs, Kind.LAYOUT_KEPT))
 
     private fun note(words: List<String>, atMs: Long): Boolean {
         noted = true
@@ -172,6 +174,7 @@ object LiveTalkLogRules {
             LiveTalkLog.Kind.CARRIED_ON -> "the talk carried on in it"
             LiveTalkLog.Kind.HEARD_OTHER_LANGUAGE -> "you were heard as another language"
             LiveTalkLog.Kind.SAID_OTHER_LANGUAGE -> "Obi answered in another language"
+            LiveTalkLog.Kind.LAYOUT_KEPT -> "layout changed, kept talking"
         }
         return "$at $what"
     }

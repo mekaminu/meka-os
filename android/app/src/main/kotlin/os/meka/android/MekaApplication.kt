@@ -158,6 +158,8 @@ open class MekaApplication : Application() {
     val talkCardTap = MutableStateFlow<os.meka.core.domain.AskCard?>(null)
     /** Slice 8: the greeting just said (its cards rise round the stage's orb as each sentence starts); null once answered. */
     val helloGreeting = MutableStateFlow<os.meka.core.domain.HelloGreeting?>(null)
+    /** Bumped when the screen changes shape during a talk (rotate, fold, unfold): Ask notes that the talk kept going. */
+    val talkLayoutChanged = MutableStateFlow(0)
     /** The stage was swiped down: Ask ends the conversation, then clears it. */
     val talkStopNow = MutableStateFlow(false)
     /**

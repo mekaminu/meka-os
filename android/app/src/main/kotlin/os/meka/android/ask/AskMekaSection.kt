@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -195,6 +196,8 @@ fun AskMekaSection(
     // "Hello, Navilife" slice 7: the stage over the shell shows these words under its orb and moves with this voice.
     LaunchedEffect(talk.said, talk.heard) { phaseApp?.talkSaid?.value = talk.said; phaseApp?.talkHeard?.value = talk.heard }
     LaunchedEffect(talk) { androidx.compose.runtime.snapshotFlow { talk.level }.collect { phaseApp?.talkLevel?.value = it } }
+    // Meka 2026-11-03 13:17: the shell keeps this screen through rotation and folding; the talk's log says it carried on.
+    LaunchedEffect(talk) { phaseApp?.talkLayoutChanged?.let { f -> f.drop(1).collect { talk.layoutChanged() } } }
     val stopNow = phaseApp?.talkStopNow?.collectAsState()?.value == true
     LaunchedEffect(stopNow) { if (stopNow) { talk.stop(); phaseApp?.talkStopNow?.value = false } }
     val lifecycle = LocalLifecycleOwner.current.lifecycle

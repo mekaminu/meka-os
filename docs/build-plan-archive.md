@@ -5271,3 +5271,13 @@ under the capture field; the layout already puts the bar below the list (30 Oct)
 scroll it to its end and fail unless the last task shows and every task row and Up next button in Today's column ends
 above the capture bar and clear of its 24 dp foot fade; `theNowLineCountsWhatAnytimeTodayLists` checks the two numbers on
 screen. Core and Fold; the Mac's now line follows through the core (Mac checked nightly). No server change, no migration.
+
+
+## The orb's talk survives rotation and folding (done 2026-11-03)
+
+Meka 2026-11-03 13:17: rotating the phone mid-talk "goes to a different tab and cuts my discussion". Cause: `AppShell` drew the screens inside a `Row` (rail, ≥600 dp) or a `Column` (bottom bar) by width, so crossing the line rebuilt Ask and disposed its `TalkController` (Live's socket closed); a tilt reading as tabletop swapped the whole shell for the bedside clock.
+- `ShellFrame` (android shell/AppShell.kt): the screens are one `movableContentOf` piece (with `rememberUpdatedState` for the latest content), moved between the rail frame and the bar frame.
+- core `TalkLayoutRules` (TalkLayout.kt): `talking(phase)`, `bedside(shows, talking)` (no bedside clock mid-talk), `noteLayout(before, after, talking)`.
+- `LiveTalkLog.Kind.LAYOUT_KEPT` / `layoutKept` ("layout changed, kept talking"); `MekaApplication.talkLayoutChanged` bumped by the shell, Ask calls `TalkController.layoutChanged()` → `LiveTalk.layoutChanged()`.
+- Tests: core `TalkLayoutTest`; android `ShellFrameTest` (cover qualifier: bar → rail → bar → rail → bar keeps the same remembered talk, never disposed).
+- Not done, not needed: an app-owned TalkController / foreground service (Ask is no longer rebuilt by a layout change).

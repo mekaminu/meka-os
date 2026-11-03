@@ -305,6 +305,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         if (running) end(generation, fellBack = false)
     }
 
+    /** The screen changed shape mid-talk and the talk kept going: noted in this talk's log for Health. */
+    fun layoutChanged() {
+        if (running) synchronized(audioLock) { log.layoutKept(SystemClock.elapsedRealtime()) }
+    }
+
     /** Frees everything for good. */
     fun release() {
         stop()

@@ -250,8 +250,10 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         bedsideDismissed = BedsideEntryRules.dismissedAfterBack(autoBedside)
         app.openBedside.value = false
     }
+    // Meka 2026-11-03 13:17: a tilt that reads as standing on a table never ends a talk; the clock waits for it to end.
+    val talking = os.meka.core.domain.TalkLayoutRules.talking(talkPhase)
     AnimatedContent(
-        targetState = BedsideEntryRules.shows(autoBedside, manualBedside, bedsideDismissed),
+        targetState = os.meka.core.domain.TalkLayoutRules.bedside(BedsideEntryRules.shows(autoBedside, manualBedside, bedsideDismissed), talking),
         transitionSpec = { fadeIn(MekaMotion.appear(reducedMode)) togetherWith fadeOut(MekaMotion.appear(reducedMode)) },
         label = "fold-mode",
     ) { bedside ->
@@ -263,25 +265,18 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     MekaSharedLayout(Modifier.fillMaxSize()) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)
-        val content: @Composable (Modifier) -> Unit = { m ->
-            DestinationHost(current, arrival, m) { d -> states.SaveableStateProvider(d.name) { Destination(d, core, connect, go, openPlace) } }
+        // Meka 2026-11-03 13:17: rotating or folding mid-talk crosses the wide line; the talk's log notes it kept going.
+        val lastLayout = remember { arrayOfNulls<String>(1) }
+        LaunchedEffect(layout) {
+            if (os.meka.core.domain.TalkLayoutRules.noteLayout(lastLayout[0], layout.name, app.talkPhase.value != TalkPhase.ENDED)) app.talkLayoutChanged.value += 1
+            lastLayout[0] = layout.name
         }
-        when (layout) {
-            ShellLayout.RAIL -> Row(Modifier.fillMaxSize()) {
-                Rail(current, needsYou, go, dock)
-                Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
-                content(Modifier.weight(1f).fillMaxHeight())
-            }
-            ShellLayout.BOTTOM_BAR -> Column(Modifier.fillMaxSize()) {
-                content(Modifier.weight(1f).fillMaxWidth())
-                // The keyboard belongs to capture: the bar steps aside while it's up.
-                val reduced = Meka.reducedMotion
-                AnimatedVisibility(
-                    visible = !WindowInsets.isImeVisible,
-                    enter = if (reduced) fadeIn(MekaMotion.appear(true)) else slideInVertically(MekaMotion.expand(false)) { it } + fadeIn(MekaMotion.appear(false)),
-                    exit = if (reduced) fadeOut(MekaMotion.appear(true)) else slideOutVertically(MekaMotion.expand(false)) { it } + fadeOut(MekaMotion.appear(false)),
-                ) { BottomBar(current, needsYou, go, dock) }
-            }
+        ShellFrame(
+            layout,
+            rail = { Rail(current, needsYou, go, dock) },
+            bar = { BottomBar(current, needsYou, go, dock) },
+        ) { m ->
+            DestinationHost(current, arrival, m) { d -> states.SaveableStateProvider(d.name) { Destination(d, core, connect, go, openPlace) } }
         }
         entrance?.let { kind ->
             val said by app.talkSaid.collectAsState()
@@ -321,6 +316,41 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         }
     }
     }
+    }
+}
+
+/**
+ * The shell's frame for [layout]: the rail beside the screens, or the screens over the bottom bar. The screens are one
+ * movable piece ([movableContentOf]), so crossing the wide line (rotating the cover screen, folding, unfolding) moves
+ * them into the new frame instead of building them again: a talk on Ask, a half-typed field and a scroll all carry on
+ * (Meka 2026-11-03 13:17: "stay on the orb while I'm chatting").
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ShellFrame(
+    layout: ShellLayout,
+    rail: @Composable () -> Unit,
+    bar: @Composable () -> Unit,
+    content: @Composable (Modifier) -> Unit,
+) {
+    val latest by androidx.compose.runtime.rememberUpdatedState(content)
+    val screens = remember { androidx.compose.runtime.movableContentOf { m: Modifier -> latest(m) } }
+    when (layout) {
+        ShellLayout.RAIL -> Row(Modifier.fillMaxSize()) {
+            rail()
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
+            screens(Modifier.weight(1f).fillMaxHeight())
+        }
+        ShellLayout.BOTTOM_BAR -> Column(Modifier.fillMaxSize()) {
+            screens(Modifier.weight(1f).fillMaxWidth())
+            // The keyboard belongs to capture: the bar steps aside while it's up.
+            val reduced = Meka.reducedMotion
+            AnimatedVisibility(
+                visible = !WindowInsets.isImeVisible,
+                enter = if (reduced) fadeIn(MekaMotion.appear(true)) else slideInVertically(MekaMotion.expand(false)) { it } + fadeIn(MekaMotion.appear(false)),
+                exit = if (reduced) fadeOut(MekaMotion.appear(true)) else slideOutVertically(MekaMotion.expand(false)) { it } + fadeOut(MekaMotion.appear(false)),
+            ) { bar() }
+        }
     }
 }
 
