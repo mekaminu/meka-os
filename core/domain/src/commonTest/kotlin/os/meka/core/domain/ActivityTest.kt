@@ -124,7 +124,12 @@ class ActivityTest {
         assertEquals(ActivityKind.DIGEST, item.kind)
         assertEquals("Sent a digest: Evening digest · 3 things", item.summary)
         assertEquals("1 renewal due · 2 to chase", item.detail)
-        assertEquals("This week: 1 digest", la.view().weekLine)
+        assertEquals("This week: 1 reminder (1 digest)", la.view().weekLine)
+        // The week line uses the Reminders chip's word and agrees with its count (walk-through 2026-11-02, A14).
+        val chip = ActivityRules.filters(la.view()).firstOrNull { it.filter == ActivityFilter.REMINDERS }
+        if (chip != null) assertEquals("Reminders · 1", chip.label)
+        la.recordPosted(listOf(notice("one")))
+        assertEquals("This week: 2 reminders (1 digest)", la.view().weekLine)
     }
 
     @Test

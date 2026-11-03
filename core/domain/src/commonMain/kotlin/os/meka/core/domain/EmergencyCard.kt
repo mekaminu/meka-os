@@ -26,15 +26,20 @@ object EmergencyFields {
 
 /**
  * The card's three parts, in the order the card shows them. [hint] is one example on one line on the cover screen
- * (quality gate slice 23); TalkBack and the Mac's label read the fuller [spokenHint].
+ * (quality gate slice 23); TalkBack and the Mac's label read the fuller [spokenHint]. Once a part has lines its field shows
+ * [moreHint], a second example, so the hint never sits under a line it repeats (the GP example under his real GP;
+ * walk-through 2026-11-02, A14).
  */
-enum class EmergencySection(val key: String, val label: String, val hint: String, val spokenHint: String) {
+enum class EmergencySection(val key: String, val label: String, val hint: String, val spokenHint: String, val moreHint: String) {
     CALL("call", "Who to call", "GP: Dr Patel, 01632 123456",
-        "Add someone to call: a name, a colon, then the details, for example GP: Dr Patel, 01632 123456"),
+        "Add someone to call: a name, a colon, then the details, for example GP: Dr Patel, 01632 123456",
+        "Plumber: Sam, 07700 900123"),
     DOCUMENTS("documents", "Where things are", "Passports: study desk",
-        "Add where something is, for example Passports: study desk, top drawer"),
+        "Add where something is, for example Passports: study desk, top drawer",
+        "Spare keys: kitchen drawer"),
     ACCOUNTS("accounts", "Key accounts", "Home insurance: Aviva",
-        "Add an account by name, never its number, for example Home insurance: Aviva"),
+        "Add an account by name, never its number, for example Home insurance: Aviva",
+        "Mortgage: Oakfield Bank"),
     ;
 
     companion object {
@@ -206,7 +211,8 @@ object EmergencyRules {
     /** The card: the three parts in order, each in the order its lines were added. */
     fun view(entries: List<EmergencyEntry>, viewer: String = ShoppingRules.OWNER): EmergencyView {
         val groups = EmergencySection.entries.map { s ->
-            EmergencyGroup(s.key, s.label, s.hint, entries.filter { it.section == s }.sortedWith(compareBy({ it.addedAtMs }, { it.id })).map(::row), s.spokenHint)
+            val rows = entries.filter { it.section == s }.sortedWith(compareBy({ it.addedAtMs }, { it.id })).map(::row)
+            EmergencyGroup(s.key, s.label, if (rows.isEmpty()) s.hint else s.moreHint, rows, s.spokenHint)
         }
         val n = entries.size
         val summary = when {

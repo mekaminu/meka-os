@@ -174,7 +174,7 @@ class KeptPlacesScreensTest {
         // row's buttons keep their words whole.
         ScreenShots.assertEachOneLine(compose, name, listOf(LeaveRules.ADD_HINT, FactRules.HINT, FactRules.COPY_BUTTON,
             FactRules.KEEP_BUTTON, FactRules.USE_BUTTON, DateNightRules.SKIP_LABEL, DateNightRules.KEEP_LABEL, "Remove") +
-            EmergencySection.entries.map { it.hint })
+            EmergencySection.entries.flatMap { listOf(it.hint, it.moreHint) })
         when (place) {
             Place.DATE_NIGHT -> {
                 val v = core.dateNightView.value
@@ -199,6 +199,11 @@ class KeptPlacesScreensTest {
                 ScreenShots.assertReadable(compose, name, v.groups.flatMap { g -> g.rows.flatMap { listOfNotNull(it.title, it.detail) } }, mustShow = false)
                 if (fill == Fill.EMPTY && v.summary != EmergencyRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing on the card")
                 if (fill == Fill.MANY && v.count != 7) fail("$name: ${v.count} lines for seven")
+                // A part's example never names a line it already holds (walk-through 2026-11-02, A14).
+                v.groups.forEach { g ->
+                    val example = EmergencyRules.read(g.hint)?.title
+                    if (g.rows.any { it.title == example }) fail("$name: ${g.label}'s hint \"${g.hint}\" repeats a line")
+                }
             }
             Place.FACTS -> {
                 val v = core.factsView.value

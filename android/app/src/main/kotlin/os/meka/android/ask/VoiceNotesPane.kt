@@ -282,10 +282,12 @@ private fun NoteRow(
     }
 }
 
+/** One of a note's buttons: the accent for the lead ones, secondary ink (never the tertiary grey of a caption, which read
+ * as switched off) for Keep and Delete (walk-through 2026-11-02, A14). */
 @Composable
 private fun Action(label: String, accent: Boolean, spoken: String, onClick: () -> Unit) {
     Text(
-        label, style = MekaType.caption, color = if (accent) Meka.colors.accent else Meka.colors.textTertiary,
+        label, style = MekaType.caption, color = if (accent) Meka.colors.accent else Meka.colors.textSecondary,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = spoken }
             .minTouch().padding(horizontal = MekaSpace.xs),
