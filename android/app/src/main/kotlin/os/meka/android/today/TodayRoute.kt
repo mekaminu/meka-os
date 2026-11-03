@@ -905,7 +905,7 @@ private fun TodayPane(
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().footFade(),
+            modifier = Modifier.fillMaxSize().footFade().testTag(TODAY_LIST_TAG),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
@@ -1807,6 +1807,8 @@ internal fun QuickCapture(onAdd: (String) -> Unit, onTalk: (() -> Unit)? = null)
 
 /** The capture bar on Today (UI tests). */
 internal const val CAPTURE_BAR_TAG = "today-capture-bar"
+/** Today's scrolling list, above the capture bar (the screen tests scroll it to its end). */
+internal const val TODAY_LIST_TAG = "today-list"
 
 @Composable
 internal fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: TodayActions, modifier: Modifier, onClose: (() -> Unit)? = null) {

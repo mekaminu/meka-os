@@ -29,6 +29,11 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.fold.NOW_CHIP_TAG
 import os.meka.android.fold.NOW_CARD_TAG
 import os.meka.android.today.TASK_ROW_TAG
+import os.meka.android.today.CAPTURE_BAR_TAG
+import os.meka.android.today.TODAY_LIST_TAG
+import os.meka.android.designsystem.MotionMath
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import os.meka.core.domain.TodayBesideRules
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -125,6 +130,33 @@ class TodayScreensTest {
         check(core.fastingView.value.current != null == (fill == Fill.FASTING))
     }
 
+    /**
+     * Walk-through 2026-11-02, A5 (and 30 Oct's A3): the many and fasting shots stop mid-list, so the last Anytime row
+     * and Up next's buttons looked to sit under the capture field. Scrolled to its end, Today's list shows its last
+     * task row, every task row and Up next's buttons end above the capture bar and clear of the list's foot fade, and
+     * the shot shows it.
+     */
+    private fun shootEnd(name: String, fill: Fill, lastTitle: String) {
+        show(fill)
+        compose.onNodeWithTag(TODAY_LIST_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertShows(compose, name, lastTitle)
+        val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+        val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val clearBy = bar.top - MotionMath.FOOT_FADE_DP * density
+        val rows = compose.onAllNodesWithTag(TASK_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes() +
+            compose.onAllNodesWithTag(NOW_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        if (rows.isEmpty()) fail("$name: no task rows or Up next buttons at the list's end")
+        // Today's own column only (on the open Fold Needs you and Coming up sit beside it, with no capture bar under them).
+        rows.filter { it.boundsInRoot.bottom > 0f && it.boundsInRoot.center.x in bar.left..bar.right }.forEach { node ->
+            if (node.boundsInRoot.bottom > clearBy + 0.5f) {
+                fail("$name: a row ends at ${node.boundsInRoot.bottom / density} dp, under the capture bar's fade (${clearBy / density} dp)")
+            }
+        }
+    }
+
     /** Every task row whose title fits one line is at most [TodayBesideRules.ROW_WITH_LINE_MAX_DP] dp tall. */
     private fun assertRowsCompact(name: String) {
         val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
@@ -215,6 +247,27 @@ class TodayScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerFasting() = shoot("inner-dark-fasting", Fill.FASTING)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverManyEnd() = shootEnd("cover-dark-many-end", Fill.MANY, "Plan Saturday's football run with Alex")
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerManyEnd() = shootEnd("inner-dark-many-end", Fill.MANY, "Plan Saturday's football run with Alex")
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerFastingEnd() = shootEnd("inner-dark-fasting-end", Fill.FASTING, "Book the MOT")
+
+    /**
+     * Walk-through 2026-11-02, A5: the now line said "5 anytime tasks" over "ANYTIME TODAY · 4". Up next is one of
+     * them, so the line counts the others, the same number as the section over its rows.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theNowLineCountsWhatAnytimeTodayLists() {
+        val core = show(Fill.MANY)
+        val listed = core.today.value.timeline.anytime.size
+        ScreenShots.assertShows(compose, "many", TodayBesideRules.anytimeLabel(listed).uppercase())
+        ScreenShots.assertShows(compose, "many", "$listed more anytime task")
+    }
 
     /** Works by hand (quality gate 3): the card opens the Fasting screen and back leaves it; End ends the fast with Undo. */
     @Test @Config(qualifiers = ScreenShots.COVER)

@@ -189,6 +189,7 @@ object TodayProjection {
             sessions = sessions,
             work = workBlocks,
             anytimeLeft = unscheduled.size,
+            upNextAnytime = upNext != null && upNext.scheduledAtMs == null,
             children = children,
             commute = work?.let { CommuteRules.bands(it, today.epochDay, calendar) }.orEmpty(),
         )

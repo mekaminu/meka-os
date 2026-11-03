@@ -5255,3 +5255,17 @@ Re-dispatched ci 1530 built the Mac app; one XCTest failed: `testMailAccountsRea
 heard on the Mac to speak `PlanWeekNudgeRules.OPENING` and open Plan your week straight away, but since Ada plans with you
 part 1 slice 2 it answers with `TalkEffect.DraftWeek` first (`WeekDraftTest` covers it). The test now follows the
 draft → `drafted(line)` → speak → open flow. Tests only.
+
+
+**Found and fixing week 2, slice 4 (2026-11-03): A5, Today's anytime count and the rows under the capture field.**
+(1) The now line said "5 anytime tasks" (Up next's own task included) over "ANYTIME TODAY · 4" (the rows under it).
+Core `TimelineRules.build` takes `upNextAnytime` (set by `TodayProjection` when Up next has no time) and words the count
+with new `anytimeLeftLabel(left, upNextIsOne)`: "4 more anytime tasks" / "1 more anytime task", "1 anytime task" when Up
+next is the only one; `restLabel(until, work, anytime)` is unchanged for its callers (the Mac's bridge test). Tests:
+WorkHoursTest (the at-work counts now "3 more", `theNowLinesCountIsTheAnytimeSectionsCount` for 1–5 tasks, the label's
+cases). (2) The cover/open many and fasting shots stop mid-list, so the last Anytime row and Up next's buttons read as
+under the capture field; the layout already puts the bar below the list (30 Oct). Today's LazyColumn is tagged
+`TODAY_LIST_TAG`; new TodayScreensTest shots `cover-dark-many-end`, `inner-dark-many-end`, `inner-dark-fasting-end`
+scroll it to its end and fail unless the last task shows and every task row and Up next button in Today's column ends
+above the capture bar and clear of its 24 dp foot fade; `theNowLineCountsWhatAnytimeTodayLists` checks the two numbers on
+screen. Core and Fold; the Mac's now line follows through the core (Mac checked nightly). No server change, no migration.

@@ -180,20 +180,21 @@ class WorkHoursTest {
     fun atWorkTheNowLineCountsTheAnytimeTasksLeft() {
         val four = (1..4).map { anytime("a$it") }
         // 13:44 at work with four anytime tasks (one of them Up next): what's left to fit in, once (the work row above
-        // already says "Now · until 17:30"; Fold review 2026-10-12, polish 6).
-        assertEquals(listOf("w-540", "now:4 anytime tasks", "c-home"), rows(today(at(thu8, 13, 44), tasks = four)))
+        // already says "Now · until 17:30"; Fold review 2026-10-12, polish 6). Up next is one of them, so the line counts
+        // the other three, as "Anytime today · 3" does over their rows (walk-through 2026-11-02, A5).
+        assertEquals(listOf("w-540", "now:3 more anytime tasks", "c-home"), rows(today(at(thu8, 13, 44), tasks = four)))
         assertEquals(listOf("w-540", "now:1 anytime task", "c-home"), rows(today(at(thu8, 13, 44), tasks = four.take(1))))
         // A home day too: its row says "Work from home".
         val home = fromHome
-        assertEquals("now:4 anytime tasks", rows(today(at(thu8, 13, 44), work = home, tasks = four)).last())
+        assertEquals("now:3 more anytime tasks", rows(today(at(thu8, 13, 44), work = home, tasks = four)).last())
         // An event running past the end of work: free after it, with the tasks.
         val late = ev("Late call", at(thu8, 17), at(thu8, 18, 15))
-        assertEquals("now:Free after 18:15 · 4 anytime tasks", rows(today(at(thu8, 17, 10), listOf(late), work = home, tasks = four)).last())
+        assertEquals("now:Free after 18:15 · 3 more anytime tasks", rows(today(at(thu8, 17, 10), listOf(late), work = home, tasks = four)).last())
         // Nothing left at all: the old words.
         assertEquals("now:Nothing else planned after 18:15", rows(today(at(thu8, 17, 10), listOf(late), work = home)).last())
         // Running past midnight with tasks left.
         val night = ev("Night", at(thu8, 20), at(thu8 + 1, 1))
-        assertEquals("now:Nothing else timed · 2 anytime tasks", rows(today(at(thu8, 21), listOf(night), tasks = four.take(2))).last())
+        assertEquals("now:Nothing else timed · 1 more anytime task", rows(today(at(thu8, 21), listOf(night), tasks = four.take(2))).last())
     }
 
     @Test
@@ -204,6 +205,26 @@ class WorkHoursTest {
         assertEquals("Nothing else planned after 15:00", TimelineRules.restLabel("15:00", null, 0))
         assertEquals("Nothing else planned today", TimelineRules.restLabel(null, null, 0))
         assertEquals("Nothing else timed · 2 anytime tasks", TimelineRules.restLabel(null, "Work", 2))
+        // Walk-through 2026-11-02, A5: with Up next one of them, the others, as ANYTIME TODAY counts its rows.
+        assertEquals("4 anytime tasks", TimelineRules.anytimeLeftLabel(4, upNextIsOne = false))
+        assertEquals("4 more anytime tasks", TimelineRules.anytimeLeftLabel(5, upNextIsOne = true))
+        assertEquals("1 more anytime task", TimelineRules.anytimeLeftLabel(2, upNextIsOne = true))
+        assertEquals("1 anytime task", TimelineRules.anytimeLeftLabel(1, upNextIsOne = true))
+        assertEquals(null, TimelineRules.anytimeLeftLabel(0, upNextIsOne = true))
+    }
+
+    @Test
+    fun theNowLinesCountIsTheAnytimeSectionsCount() {
+        // Walk-through 2026-11-02, A5: "5 anytime tasks" over "ANYTIME TODAY · 4". Whatever the day, the number on the
+        // now line is the number of rows the Anytime section lists (Up next's own task sits in its card, not there).
+        val five = (1..5).map { anytime("a$it") }
+        for (n in 1..5) {
+            val t = today(at(thu8, 13, 44), tasks = five.take(n))
+            val listed = t.timeline.anytime.size
+            val line = t.timeline.rows.first { it.kind == TimelineKind.NOW }.detail.orEmpty()
+            val counted = Regex("(\\d+) (more )?anytime task").find(line)?.groupValues?.get(1)?.toInt()
+            if (listed == 0) assertEquals(1, counted, line) else assertEquals(listed, counted, line)
+        }
     }
 
     @Test

@@ -196,6 +196,11 @@ object TimelineRules {
         work: List<WorkBlock> = emptyList(),
         /** Anytime tasks still to do today, Up next's included (the now line counts them at work: "4 anytime tasks"). */
         anytimeLeft: Int = anytime.size,
+        /**
+         * Up next is one of the anytime tasks (walk-through 2026-11-02, A5): the now line counts the others as "3 more
+         * anytime tasks", the same number as "Anytime today · 3" over the rows under it, not "4" over 3 rows.
+         */
+        upNextAnytime: Boolean = false,
         /** Whom Meka set for each club series ([ClubChildRules]): the clash asks "who's taking Theo?", the row names him. */
         children: Map<String, String> = emptyMap(),
         /** Today's commute bands ([CommuteRules.bands]); none unless it's an office day. */
@@ -311,7 +316,7 @@ object TimelineRules {
                 val until = if (cursor > nowMs && cursor < today.endMs) hhmm(cursor) else null
                 val homeBy = ahead.lastOrNull()?.end
                 val atWork = started.firstOrNull { it.isWork && (it.end == cursor || it.end == ahead.firstOrNull()?.start && homeBy == cursor) }?.row?.title
-                this[nowAt] = this[nowAt].copy(detail = restLabel(until, atWork, anytimeLeft))
+                this[nowAt] = this[nowAt].copy(detail = restWords(until, atWork, anytimeLeftLabel(anytimeLeft, upNextAnytime)))
             }
         }
 
@@ -378,8 +383,21 @@ object TimelineRules {
      * when no anytime task is left either. [until] null when what's on runs past midnight; [work] the running work
      * block's title when work is what ends last.
      */
-    fun restLabel(until: String?, work: String?, anytime: Int): String {
-        val tasks = if (anytime > 0) anytimeLabel(anytime) else null
+    fun restLabel(until: String?, work: String?, anytime: Int): String =
+        restWords(until, work, if (anytime > 0) anytimeLabel(anytime) else null)
+
+    /**
+     * What's left to do anytime, in the now line's words: "4 anytime tasks"; with Up next one of them, the others,
+     * "3 more anytime tasks" ("1 anytime task" when Up next is the only one), so the count is the one ANYTIME TODAY
+     * shows over its rows (walk-through 2026-11-02, A5). Null when none is left.
+     */
+    fun anytimeLeftLabel(left: Int, upNextIsOne: Boolean): String? = when {
+        left <= 0 -> null
+        upNextIsOne && left > 1 -> if (left == 2) "1 more anytime task" else "${left - 1} more anytime tasks"
+        else -> anytimeLabel(left)
+    }
+
+    private fun restWords(until: String?, work: String?, tasks: String?): String {
         return when {
             work != null && until != null -> tasks ?: nothingAfterLabel(until)
             tasks == null -> nothingAfterLabel(until)
