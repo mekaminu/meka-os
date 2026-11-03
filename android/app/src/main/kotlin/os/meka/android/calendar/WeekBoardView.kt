@@ -41,7 +41,6 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import os.meka.core.domain.BoardHandRules
 import os.meka.core.domain.BoardFoldRules
 import os.meka.core.domain.BoardBesideRules
@@ -2841,16 +2840,19 @@ private fun WideWeek(
                     if (count == revealed.intValue) return@LaunchedEffect
                     val inWeekend = weekend.any { it.epochDay == target }
                     if (!inWeekend && weekdays.none { it.epochDay == target }) return@LaunchedEffect
+                    // Room under the week first (the whole view's height), so the scroll below can reach the weekend's
+                    // row; trimmed to what it needs once there. Kept as it was when nothing scrolls.
+                    val roomBefore = revealRoom
+                    if (inWeekend) revealRoom = maxOf(revealRoom, viewDp)
                     delay(BoardFoldRules.relayoutMs(reduced).toLong() + 80L)
                     revealed.intValue = count
                     val top = if (inWeekend) weekdaysNow + MekaSpace.m.value else 0f
                     val tall = if (inWeekend) BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP) else weekdaysNow
                     val to = BoardFoldRules.revealScroll(top, tall, viewDp, scroll.value / density)
-                    if (to == null) { if (!inWeekend) revealRoom = 0f; return@LaunchedEffect }
+                    if (to == null) { revealRoom = if (inWeekend) roomBefore else 0f; return@LaunchedEffect }
                     val px = (to * density).toInt()
-                    revealRoom = if (inWeekend) BoardFoldRules.revealRoom(to, scroll.maxValue / density, revealRoom) else 0f
-                    if (revealRoom > 0f) kotlinx.coroutines.withTimeoutOrNull(500L) { snapshotFlow { scroll.maxValue }.first { it >= px } }
                     if (reduced) scroll.scrollTo(px) else scroll.animateScrollTo(px, MekaMotion.replan(false))
+                    revealRoom = if (inWeekend) BoardFoldRules.revealRoom(to, scroll.maxValue / density, revealRoom) else 0f
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,
                 // Side hustle, House, then No day yet).
