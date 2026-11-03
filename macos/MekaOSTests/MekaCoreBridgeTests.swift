@@ -3854,10 +3854,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         let undidPlan = try await core.undoWeekPlan()
         XCTAssertFalse(undidPlan.boolValue)
         // Item (6) part 2: "plan my week" said to Obi on the Mac opens Plan your week; the card's words reach Swift.
-        let planSaid = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my week",
-                                             places: TalkOpenRules.shared.MAC)
-        XCTAssertEqual((planSaid.effects.first as? TalkEffectSpeak)?.text, PlanWeekNudgeRules.shared.OPENING)
+        // Since Ada plans with you part 1 slice 2 he drafts the week first, says what he drafted, then opens it.
+        let planAsked = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my week",
+                                              places: TalkOpenRules.shared.MAC)
+        XCTAssertTrue(planAsked.effects.first is TalkEffectDraftWeek)
+        let planSaid = TalkFlow.shared.drafted(s: planAsked.session, line: "I've drafted your week on the Board.")
+        XCTAssertEqual((planSaid.effects.first as? TalkEffectSpeak)?.text, "I've drafted your week on the Board.")
         XCTAssertEqual((TalkFlow.shared.spoke(s: planSaid.session).effects.last as? TalkEffectOpen)?.place, TalkPlace.planWeek)
+        XCTAssertFalse(PlanWeekNudgeRules.shared.OPENING.isEmpty)
         XCTAssertTrue(PlanWeekNudgeRules.shared.isRequest(q: "let's plan next week"))
         XCTAssertEqual(PlanWeekNudgeRules.shared.YES, "Plan now")
         // Slice 6b-2a: Reply, sent by the server only after Send.

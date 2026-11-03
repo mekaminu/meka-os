@@ -5241,3 +5241,7 @@ PATH_MAX, ARG_MAX, LINE_MAX, PIPE_BUF, BUFSIZ, EOF…).
 Re-dispatched ci 1528 got past the framework (native tests and XCFramework green) and failed compiling the Mac app:
 `BinsSheet.chooseCalendar` listed `.ics` in `allowedContentTypes`, but `UTType` has no `.ics`; it is now
 `UTType(filenameExtension: "ics") ?? .calendarEvent` beside `.calendarEvent`, as FoldUpdateSheet does for .apk.
+Re-dispatched ci 1530 built the Mac app; one XCTest failed: `testMailAccountsReachSwift` still expected "plan my week"
+heard on the Mac to speak `PlanWeekNudgeRules.OPENING` and open Plan your week straight away, but since Ada plans with you
+part 1 slice 2 it answers with `TalkEffect.DraftWeek` first (`WeekDraftTest` covers it). The test now follows the
+draft → `drafted(line)` → speak → open flow. Tests only.
