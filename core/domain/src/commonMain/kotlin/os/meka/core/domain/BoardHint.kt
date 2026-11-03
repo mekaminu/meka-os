@@ -25,9 +25,18 @@ data class BoardHint(
     val action: String,
     val toDay: Long = -1L,
     val minutes: Int = 0,
+    /**
+     * The line for a narrow day column (the walk-through 2026-11-02, A6: "Today is 1h over · move it to Sat?" took three
+     * lines in the open Fold's ~110 dp columns): OVER says only "Today is 1h over", as its pill already says where
+     * ("Move to Sat"); the others keep [line].
+     */
+    val brief: String = line,
 ) {
     /** "✦ Thu is 1h over · move it to Sat?" */
     val shown: String get() = "${BoardHintRules.MARK} $line"
+
+    /** "✦ Thu is 1h over" in a narrow column (see [brief]). */
+    val shownBrief: String get() = "${BoardHintRules.MARK} $brief"
 
     /** Screen readers: "Obi suggests: Thu is 1h over, move it to Sat?". */
     val spoken: String get() = "${BoardNudgeRules.SPEAKER} suggests: " + line.replace(" · ", ", ")
@@ -81,7 +90,8 @@ object BoardHintRules {
             val fix = BoardNudgeRules.overFix(board, d, over, today, calendar) ?: return@forEach
             val name = BoardNudgeRules.dayName(d.epochDay, today)
             val to = PressureRules.shortDay(fix.toDay, today)
-            add(BoardHint(fix.taskId, BoardHintKind.OVER, "over:${d.epochDay}", "$name is ${TaskEstimateRules.label(over)} over · move it to $to?", "Move to $to", toDay = fix.toDay))
+            val head = "$name is ${TaskEstimateRules.label(over)} over"
+            add(BoardHint(fix.taskId, BoardHintKind.OVER, "over:${d.epochDay}", "$head · move it to $to?", "Move to $to", toDay = fix.toDay, brief = head))
         }
         val cards = ahead.flatMap { it.openCards } + week.lane.filter { !it.done }
         cards.forEach { add(slipped(it, today, calendar)) }

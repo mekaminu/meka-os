@@ -128,4 +128,19 @@ class BoardFoldTest {
         assertEquals(null, BoardFoldRules.revealScroll(Float.NaN, 200f, 500f, 0f))
         assertEquals(null, BoardFoldRules.revealScroll(436f, 200f, 0f, 0f))
     }
+
+    @Test
+    fun theWeekGetsRoomUnderItSoTheWeekendCanRiseToTheTop() {
+        // The walk-through 2026-11-02, A6: the week scrolls at most 300 but the weekend's row wants 420: 120 more room.
+        assertEquals(120f, BoardFoldRules.revealRoom(420f, 300f, 0f))
+        // That room is already there (the week now scrolls 420): keep it, no more.
+        assertEquals(120f, BoardFoldRules.revealRoom(420f, 420f, 120f))
+        // A long week that already scrolls far enough: none.
+        assertEquals(0f, BoardFoldRules.revealRoom(420f, 900f, 0f))
+        // Back to the top for a weekday: none.
+        assertEquals(0f, BoardFoldRules.revealRoom(0f, 420f, 120f))
+        // Part of a dp rounds up, so the scroll can reach it.
+        assertEquals(121f, BoardFoldRules.revealRoom(420.4f, 300f, 0f))
+        assertEquals(0f, BoardFoldRules.revealRoom(Float.NaN, 300f, 0f))
+    }
 }

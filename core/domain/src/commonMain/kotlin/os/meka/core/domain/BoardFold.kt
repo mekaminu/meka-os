@@ -60,6 +60,18 @@ object BoardFoldRules {
         return (rowTopDp - marginDp).coerceAtLeast(0f)
     }
 
+    /**
+     * The walk-through 2026-11-02, A6: the room (dp) to add under the week so a reveal can scroll to [toDp] when the
+     * week, with [currentRoomDp] of room already there, scrolls at most [maxScrollDp]: 0 when it already can (the
+     * weekend's row then rises to the top instead of stopping part way, under the tail of a weekday column).
+     */
+    fun revealRoom(toDp: Float, maxScrollDp: Float, currentRoomDp: Float): Float {
+        if (!(toDp.isFinite() && maxScrollDp.isFinite() && currentRoomDp.isFinite())) return 0f
+        val without = (maxScrollDp - currentRoomDp).coerceAtLeast(0f)
+        val need = toDp - without
+        return if (need <= 0f) 0f else kotlin.math.ceil(need)
+    }
+
     /** A swipe faster than this (dp/s) turns a page whichever way it was going; slower settles on the nearest day. */
     const val FLING_DP_PER_S = 400f
 

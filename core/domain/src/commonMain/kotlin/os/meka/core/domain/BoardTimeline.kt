@@ -102,8 +102,28 @@ data class BoardTimeline(
     fun openingScrollHours(visibleHours: Float): Float {
         val focus = nowMinute ?: blocks.firstOrNull()?.startMinute ?: return 0f
         val focusHours = focus / 60f - firstHour
-        if (focusHours + 1f <= visibleHours) return 0f
-        return (focusHours - 1f).coerceIn(0f, ((endHour - firstHour) - visibleHours).coerceAtLeast(0f))
+        val most = ((endHour - firstHour) - visibleHours).coerceAtLeast(0f)
+        val base = if (focusHours + 1f <= visibleHours) 0f else (focusHours - 1f).coerceIn(0f, most)
+        return keepWhole(base, visibleHours, focusHours, most)
+    }
+
+    /**
+     * The walk-through 2026-11-02, A6: "Send the quote" at 19:00 was cut flat at the panel's foot when the timeline
+     * opened at 07. When the view's bottom edge cuts a block that starts in view, scroll on just enough to show it whole
+     * (and a quarter hour under it), as long as the focus (now, else the first block) and the first block shown at the
+     * top stay in view whole; otherwise as far as that allows.
+     */
+    private fun keepWhole(base: Float, visibleHours: Float, focusHours: Float, most: Float): Float {
+        val inset = BoardTimelineRules.TOP_INSET_DP / BoardTimelineRules.HOUR_DP
+        fun top(b: DayBlock) = b.startMinute / 60f - firstHour + inset
+        fun bottom(b: DayBlock) = top(b) + b.heightDp / BoardTimelineRules.HOUR_DP
+        val foot = base + visibleHours
+        val cut = blocks.sortedBy { it.startMinute }.firstOrNull { top(it) >= base && top(it) < foot && bottom(it) > foot } ?: return base
+        val want = bottom(cut) + 0.25f - visibleHours
+        val firstShown = blocks.filter { top(it) >= base }.minOfOrNull { top(it) } ?: base
+        val ceiling = minOf(firstShown, (focusHours - 0.25f).coerceAtLeast(0f), most)
+        val to = minOf(want, ceiling)
+        return if (to > base) to else base
     }
 
     /** "Nothing timed yet" when there are no blocks (the rows still show, so a day looks open, not broken). */

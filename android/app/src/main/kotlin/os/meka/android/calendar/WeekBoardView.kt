@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import os.meka.core.domain.BoardHandRules
 import os.meka.core.domain.BoardFoldRules
 import os.meka.core.domain.BoardBesideRules
@@ -988,6 +989,9 @@ private val LocalBoardHints = androidx.compose.runtime.staticCompositionLocalOf<
 /** The thought under its card, for the UI tests. */
 internal const val BOARD_HINT_TAG = "board-hint"
 
+/** A planner card's chips and area name beside (or under) its tick, for the UI tests. */
+internal const val CARD_FOOT_TAG = "board-card-foot"
+
 /**
  * One of Obi's ✦ thoughts under its card: the line in gold, then its one-tap pill and Not now. Swiped either way past
  * a third of its width it is put away; short of that it springs back (Reduced motion: no glide, Not now does it).
@@ -1024,7 +1028,9 @@ private fun BoardHintRow(hint: os.meka.core.domain.BoardHint, onApply: () -> Uni
             }
             .padding(top = MekaSpace.xxs),
     ) {
-        Text(hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        // The walk-through 2026-11-02, A6: in the open Fold's narrow columns the line says only how far over (the
+        // pill says where), so it no longer takes three lines.
+        Text(if (LocalBoardDense.current) hint.shownBrief else hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             TouchPill(hint.action, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
             TouchPill(os.meka.core.domain.BoardHintRules.NOT_NOW, fill = Meka.colors.surfaceRaised, ink = Meka.colors.textSecondary, onClick = onDismiss)
@@ -1897,13 +1903,16 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
             overflow = TextOverflow.Ellipsis, color = Meka.colors.textPrimary,
             textDecoration = if (card.done && BoardPlannerRules.STRIKE_DONE) TextDecoration.LineThrough else null,
         )
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // The walk-through 2026-11-02, A6 ("Side h…" on a narrow column): the foot is a flow, so when the chips and the
+        // area's name don't fit whole beside the tick they move under it, at the card's full width, and are cut short
+        // only if even that is too narrow.
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             // The tick keeps its own target (Compose widens a small one's touch area to 48 dp past its edges).
             TickTarget(
                 card.done, card.title, onTick, column = if (dense) DENSE_TICK_COLUMN else FOOT_TICK, height = if (dense) DENSE_TICK_COLUMN else FOOT_TICK,
                 circle = if (dense) BoardDenseRules.TICK.dp else 20.dp,
             )
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.align(Alignment.CenterVertically).testTag(CARD_FOOT_TAG), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 if (foot.isNotEmpty()) {
                     FlowRow(
                         Modifier.weight(1f, fill = false).padding(vertical = MekaSpace.xxs),
@@ -2758,6 +2767,10 @@ private fun WideWeek(
     val scrolledWeek by remember(scroll, density) { derivedStateOf { BoardOpenFoldRules.headFade(scroll.value / density) } }
     // (10a) Each fold or unfold's reveal is used once (stepping back to its week later doesn't scroll again).
     val revealed = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // The walk-through 2026-11-02, A6: unfolded on Saturday the week could scroll only so far, so the weekend's row
+    // stopped part way down with the tail of a weekday column (a lone "Not now", "+ add") above it. While a reveal of
+    // the weekend holds, this much room (dp) under the lists lets the row rise to the top of the week's view.
+    var revealRoom by remember { mutableStateOf(0f) }
     BoxWithConstraints(modifier) {
         val tiers = BoardWeekLayoutRules.heights(maxHeight.value)
         // (10a) The week's view height, for bringing a day's row into view (read here, outside the week's content).
@@ -2832,8 +2845,11 @@ private fun WideWeek(
                     revealed.intValue = count
                     val top = if (inWeekend) weekdaysNow + MekaSpace.m.value else 0f
                     val tall = if (inWeekend) BoardOpenFoldRules.rowHeight(weekend.map { contents[it.epochDay] ?: 0f }, BoardOpenFoldRules.LEAST_WEEKEND_DP) else weekdaysNow
-                    val to = BoardFoldRules.revealScroll(top, tall, viewDp, scroll.value / density) ?: return@LaunchedEffect
+                    val to = BoardFoldRules.revealScroll(top, tall, viewDp, scroll.value / density)
+                    if (to == null) { if (!inWeekend) revealRoom = 0f; return@LaunchedEffect }
                     val px = (to * density).toInt()
+                    revealRoom = if (inWeekend) BoardFoldRules.revealRoom(to, scroll.maxValue / density, revealRoom) else 0f
+                    if (revealRoom > 0f) kotlinx.coroutines.withTimeoutOrNull(500L) { snapshotFlow { scroll.maxValue }.first { it >= px } }
                     if (reduced) scroll.scrollTo(px) else scroll.animateScrollTo(px, MekaMotion.replan(false))
                 }
                 // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,
@@ -2850,6 +2866,7 @@ private fun WideWeek(
                         }
                     }
                 }
+                if (revealRoom > 0f) Spacer(Modifier.height(revealRoom.dp))
             }
             }
         }

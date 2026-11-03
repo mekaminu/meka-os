@@ -45,6 +45,8 @@ class BoardHintTest {
         assertEquals("Tomorrow is 1h over · move it to today?", h.line)
         assertEquals(mon, h.toDay)
         assertEquals("✦ Tomorrow is 1h over · move it to today?", h.shown)
+        // A narrow column says only how far over; the pill says where (the walk-through 2026-11-02, A6).
+        assertEquals("✦ Tomorrow is 1h over", h.shownBrief)
         assertEquals("Obi suggests: Tomorrow is 1h over, move it to today?", h.spoken)
         assertEquals("Moved “Title gym” to today", BoardHintRules.appliedLine(h, gym.title))
     }

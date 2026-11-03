@@ -56,6 +56,24 @@ class BoardNudgeTest {
     }
 
     @Test
+    fun aLongNameIsCutSoTheDayItMovesToAlwaysShows() {
+        // The walk-through 2026-11-02, A6: "move “Batch cook for the week” to …" lost where to in the header.
+        val cook = task("batch cook for the week", estimate = 60)
+        val days = quiet(mon).toMutableList()
+        days[0] = day(mon, mon, 255, 195, listOf(cook))
+        val (b, w) = board(mon, days)
+        val n = BoardNudgeRules.of(b, w, cal)!!
+        assertEquals("Today is 1h over · move “Title batch…” to tomorrow?", n.line)
+        // The screen reader still hears the whole name.
+        assertEquals("Obi says: Today is 1h over, move “Title batch cook for the week” to tomorrow?", n.spoken)
+        assertEquals("Gym", BoardNudgeRules.clipTitle("Gym"))
+        assertEquals("Send the quote", BoardNudgeRules.clipTitle("Send the quote"))
+        assertEquals("Batch cook for…", BoardNudgeRules.clipTitle("Batch cook for the week"))
+        assertEquals("Supercalifragil…", BoardNudgeRules.clipTitle("Supercalifragilistic"))
+        assertTrue(BoardNudgeRules.clipTitle("Renew the car insurance before Friday").length <= BoardNudgeRules.TITLE_MAX)
+    }
+
+    @Test
     fun aLaterOverDayUsesItsShortNameAndAsksPlainlyWhenNothingFits() {
         val days = (0..6).map { day(mon + it, mon, 0, 0) }.toMutableList()
         // Wednesday has 2h 30 planned and 2h free; nowhere else has room, and one card repeats, one is due that day.

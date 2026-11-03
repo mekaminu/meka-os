@@ -108,10 +108,26 @@ object BoardNudgeRules {
         return PressureFix(pick.id, pick.title, target.epochDay, "Move “${pick.title}” to ${PressureRules.shortDay(target.epochDay, today)}", earlier = false)
     }
 
+    /**
+     * The longest a task's name runs in the header's line before it is cut with "…" (the walk-through 2026-11-02, A6:
+     * "move “Batch cook for the week” to …" lost where to). The line's end, the day it moves to, always shows; the
+     * screen reader still hears the whole name.
+     */
+    const val TITLE_MAX = 16
+
+    /** [title] whole when it is at most [TITLE_MAX] characters, else cut at a word where it can, with "…". */
+    fun clipTitle(title: String): String {
+        if (title.length <= TITLE_MAX) return title
+        val cut = title.take(TITLE_MAX - 1)
+        val word = cut.lastIndexOf(' ')
+        return (if (word >= TITLE_MAX / 2) cut.take(word) else cut).trimEnd() + "…"
+    }
+
     private fun nudge(kind: BoardNudgeKind, head: String, fix: PressureFix?): BoardNudge {
         val ask = fix?.let { lowerFirst(it.label) } ?: "move something"
-        val line = "$head · $ask?"
-        return BoardNudge(kind, line, spoken(line), fix)
+        val shown = fix?.let { ask.replace("“${it.title}”", "“${clipTitle(it.title)}”") } ?: ask
+        val line = "$head · $shown?"
+        return BoardNudge(kind, line, spoken("$head · $ask?"), fix)
     }
 
     private fun plain(kind: BoardNudgeKind, line: String) = BoardNudge(kind, line, spoken(line))

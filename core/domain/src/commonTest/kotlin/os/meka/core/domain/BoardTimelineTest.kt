@@ -163,4 +163,23 @@ class BoardTimelineTest {
         assertEquals(0f, quiet.openingScrollHours(3f))
         assertTrue(quiet.nowUnder.isEmpty())
     }
+
+    @Test
+    fun aBlockTheFootWouldCutIsScrolledIntoViewWhole() {
+        // The walk-through 2026-11-02, A6: "Send the quote" at 19:00 was cut at the panel's foot when it opened at 07.
+        val tl = BoardTimelineRules.of(
+            day(fri - 1, emptyList()), listOf(ev("am", fri - 1, 7 * 60 + 40, 9 * 60), ev("quote", fri - 1, 19 * 60, 19 * 60 + 45)),
+            null, today = fri - 1, nowMs = ms(fri - 1, 17 * 60 + 15), calendar = cal,
+        )
+        val visible = 12.5f
+        val s = tl.openingScrollHours(visible)
+        fun top(key: String) = tl.blocks.first { it.key == key }.topDp(tl.firstHour) / BoardTimelineRules.HOUR_DP
+        fun bottom(key: String) = top(key) + tl.blocks.first { it.key == key }.heightDp / BoardTimelineRules.HOUR_DP
+        assertTrue(bottom("e:quote") <= s + visible && top("e:quote") >= s, "the quote whole ($s)")
+        assertTrue(top("e:am") >= s, "the morning block still whole at the top ($s)")
+        assertTrue(17.25f - tl.firstHour >= s, "now still in view")
+        // A short panel opens an hour before now, as before.
+        val short = tl.openingScrollHours(4f)
+        assertTrue(17.25f - tl.firstHour in short..(short + 4f), "now in view on a short panel ($short)")
+    }
 }

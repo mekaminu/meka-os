@@ -485,6 +485,13 @@ class BoardScreensTest {
         ScreenShots.assertSensible(compose, "inner-dark-timeline")
         assertTrue("no timeline beside the week by default", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())
         assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
+        // The walk-through 2026-11-02, A6: the timeline opens far enough down that the 19:00 block shows whole, not
+        // cut flat at the panel's foot.
+        val block = compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().first()
+        assertTrue(
+            "the timed task's block is cut (${block.boundsInRoot.height} of ${block.size.height})",
+            block.boundsInRoot.height >= block.size.height - 1f,
+        )
         // ⋯ → Hide timeline shuts it, ⋯ → Timeline opens it again.
         compose.onNodeWithTag(OPEN_MENU_TAG).performClick()
         settle()
@@ -765,6 +772,11 @@ class BoardScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-scrolled"))
         ScreenShots.assertSensible(compose, "inner-dark-scrolled")
         assertTrue("the week didn't scroll (dates $ruleBefore → ${ruleTop()})", ruleTop() < ruleBefore - 40f)
+        // The walk-through 2026-11-02, A6: in the narrow column Obi's thought says only how far over; its pill says where.
+        val hint = core.boardHints(core.weekBoard.value, core.weekBoard.value.weeks.first().startEpochDay).firstOrNull()
+            ?: throw AssertionError("no Obi thought on the full day")
+        if (compose.onAllNodesWithText(hint.shownBrief, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no \"${hint.shownBrief}\" under the card")
+        if (compose.onAllNodesWithText(hint.shown, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("the long \"${hint.shown}\" in a narrow column")
         assertEquals("the month's row moved with the week", monthBefore, monthTop(), 1f)
     }
 
@@ -959,6 +971,15 @@ class BoardScreensTest {
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val lawn = cardBounds("Mow the lawn")
         assertTrue("Saturday's task is in view unfolded ($lawn in $root)", lawn.top >= root.top && lawn.top < root.bottom && lawn.height > 0f)
+        // The walk-through 2026-11-02, A6: the weekend's row rises to the top of the week's view, so no weekday card, Obi
+        // thought or "+ add" from the tail of a weekday column is left above it ("a lone Not now and + add").
+        val weekendTop = compose.onAllNodesWithTag(os.meka.android.calendar.WEEKEND_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .single().boundsInRoot.top
+        listOf(PLANNER_CARD_TAG, os.meka.android.calendar.BOARD_HINT_TAG, ADD_TAG).forEach { tag ->
+            val above = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
+                .map { it.boundsInRoot }.filter { it.height > 1f && it.top < weekendTop - 1f }
+            assertTrue("$tag drawn above the weekend's row ($above, row at $weekendTop)", above.isEmpty())
+        }
 
         // Fold again: back on Saturday.
         resize { screenWidth = 344.dp }
