@@ -1622,7 +1622,7 @@ internal fun TaskRow(
                 NeedsYouReason.CONFLICT -> "Edited on two devices — choose a version"
                 NeedsYouReason.OVERDUE -> "Overdue"
                 NeedsYouReason.DUE_TODAY_UNSCHEDULED -> "Due today · not scheduled"
-                null -> carriedLine ?: if (time != null) timelineLine else meta(t)
+                null -> carriedLine ?: if (time != null) timelineLine else meta(t, actions.whenOf(t))
             }
             line?.let {
                 val color = when {
