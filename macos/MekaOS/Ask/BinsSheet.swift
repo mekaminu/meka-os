@@ -135,7 +135,7 @@ struct BinsSheet: View {
     /// An open panel for the council's bin calendar (.ics); its text is read here and handed to the core as a String.
     private func chooseCalendar() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.calendarEvent, .ics, .plainText, .text, .data]
+        panel.allowedContentTypes = [.calendarEvent, UTType(filenameExtension: "ics") ?? .calendarEvent, .plainText, .text, .data]
         panel.allowsMultipleSelection = false
         panel.message = "Pick the bin calendar (.ics) from your council's bin-day page · read on this Mac, nothing sent"
         panel.prompt = "Use it"

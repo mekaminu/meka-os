@@ -5238,3 +5238,6 @@ swiftc couldn't parse MekaKit.h at `@property (readonly) int32_t MAX_INPUT`, bec
 `<sys/syslimits.h>` (added with one-tap course import, `StudyImportRules`). Renamed `MAX_INPUT_CHARS`; no behaviour change.
 Lesson for later runs: a public `const val` must not share a name with a C macro in the macOS SDK (MAX_INPUT, MAX_CANON,
 PATH_MAX, ARG_MAX, LINE_MAX, PIPE_BUF, BUFSIZ, EOF…).
+Re-dispatched ci 1528 got past the framework (native tests and XCFramework green) and failed compiling the Mac app:
+`BinsSheet.chooseCalendar` listed `.ics` in `allowedContentTypes`, but `UTType` has no `.ics`; it is now
+`UTType(filenameExtension: "ics") ?? .calendarEvent` beside `.calendarEvent`, as FoldUpdateSheet does for .apk.
