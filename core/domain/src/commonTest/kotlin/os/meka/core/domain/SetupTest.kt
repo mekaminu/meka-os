@@ -171,6 +171,19 @@ class SetupTest {
     }
 
     @Test
+    fun theFoldNeverSaysOnTheFoldAndHasTheSameRowsInEveryState() {
+        // Walk-through 2026-11-02 A11: "On the Fold" on the Fold itself, and 23 rows when nothing could be read vs 25.
+        val unread = SetupRules.view(facts(device = SetupDevice(mac = false), server = null, accounts = null, ai = null, connected = false))
+        listOf("calls.role", "calls.family", "messages.access", "messages.watch", "device.battery").forEach { k ->
+            assertEquals(SetupState.UNKNOWN, unread.step(k).state, k)
+            assertEquals("Couldn't check", unread.step(k).line, k)
+        }
+        assertTrue(unread.steps.none { it.line == SetupRules.ON_THE_FOLD || it.state == SetupState.ELSEWHERE })
+        val read = SetupRules.view(facts(device = fold))
+        assertEquals(read.steps.map { it.key }, unread.steps.map { it.key })
+    }
+
+    @Test
     fun whatCouldntBeReadIsNeverTicked() {
         val v = SetupRules.view(facts(server = null, accounts = null, ai = null, connected = false, device = fold.copy(notificationsAllowed = null)))
         listOf("calendar.google", "calendar.outlook", "calendar.editing", "calls.number", "messages.ai", "voice.natural", "weather", "trains.status", "mac", "device.notifications")

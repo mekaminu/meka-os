@@ -235,7 +235,7 @@ object SetupRules {
         val on = if (f.callAssistantOn) SetupStep("calls.on", "Call assistant", "On · it answers calls you decline", SetupState.DONE)
         else SetupStep("calls.on", "Call assistant", "Switch it on in Work mode", SetupState.TODO, SetupFix.WORK, "Work mode")
         val role = when (f.device.callRoleHeld) {
-            null -> SetupStep("calls.role", "Call screening", ON_THE_FOLD, SetupState.ELSEWHERE)
+            null -> elsewhere(f, "calls.role", "Call screening")
             true -> SetupStep("calls.role", "Call screening", "Navilife screens calls on this phone", SetupState.DONE)
             false -> SetupStep("calls.role", "Call screening", "Let Navilife screen calls (Android allows one app)", SetupState.TODO, SetupFix.CALL_ROLE, "Allow")
         }
@@ -244,9 +244,16 @@ object SetupRules {
         return listOf(service, on, role, forwarding, family(f))
     }
 
+    /**
+     * A step only the phone can answer (walk-through 2026-11-02 A11): on the Mac it is "On the Fold"; on the Fold itself a
+     * fact it couldn't read is "Couldn't check", never "On the Fold" (that's where he is).
+     */
+    private fun elsewhere(f: SetupFacts, key: String, title: String): SetupStep =
+        if (f.device.mac) SetupStep(key, title, ON_THE_FOLD, SetupState.ELSEWHERE) else SetupStep(key, title, COULDNT, SetupState.UNKNOWN)
+
     private fun family(f: SetupFacts): SetupStep {
         val title = "Family"
-        val people = f.device.people ?: return SetupStep("calls.family", title, ON_THE_FOLD, SetupState.ELSEWHERE)
+        val people = f.device.people ?: return elsewhere(f, "calls.family", title)
         val names = people.family.sorted()
         if (names.isEmpty()) return SetupStep("calls.family", title, "Pick family so their calls always ring", SetupState.TODO, SetupFix.WORK, "Pick")
         val missing = names.filterNot(people::hasNumber)
@@ -259,7 +266,7 @@ object SetupRules {
 
     private fun messages(f: SetupFacts): List<SetupStep> {
         val access = when (f.device.notificationAccess) {
-            null -> SetupStep("messages.access", "WhatsApp and texts", ON_THE_FOLD, SetupState.ELSEWHERE)
+            null -> elsewhere(f, "messages.access", "WhatsApp and texts")
             true -> SetupStep("messages.access", "WhatsApp and texts", "Navilife reads them as they arrive", SetupState.DONE)
             false -> SetupStep("messages.access", "WhatsApp and texts", "Give Navilife notification access so it can read them", SetupState.TODO, SetupFix.NOTIFICATION_ACCESS, "Allow")
         }
@@ -270,7 +277,7 @@ object SetupRules {
         }
         val watch = f.device.watch
         val watched = when {
-            watch == null -> SetupStep("messages.watch", "Requests from", ON_THE_FOLD, SetupState.ELSEWHERE)
+            watch == null -> elsewhere(f, "messages.watch", "Requests from")
             watch.people.isEmpty() && watch.groups.isEmpty() ->
                 SetupStep("messages.watch", "Requests from", "Pick who Navilife reads for requests (Work mode → People)", SetupState.TODO, SetupFix.WORK, "Pick")
             else -> {
@@ -345,7 +352,8 @@ object SetupRules {
             false -> add(SetupStep("device.notifications", "Notifications", "Let Navilife tell you when something needs you", SetupState.TODO, SetupFix.NOTIFICATIONS, "Allow"))
         }
         if (!f.device.mac) when (f.device.batteryExempt) {
-            null -> Unit
+            // Walk-through 2026-11-02 A11: an unread fact is a row too, so the page has the same rows in every state.
+            null -> add(SetupStep("device.battery", "Battery", COULDNT, SetupState.UNKNOWN))
             true -> add(SetupStep("device.battery", "Battery", "Allowed to run in the background", SetupState.DONE))
             false -> add(SetupStep("device.battery", "Battery", "Samsung may put Navilife to sleep", SetupState.TODO, SetupFix.BATTERY, "Keep Navilife awake"))
         }

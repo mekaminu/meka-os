@@ -83,7 +83,8 @@ class SetupScreensTest {
                 device = SetupDevice(mac = false), connected = false, server = null, accounts = null, ai = null,
                 callAssistantOn = false, voiceMessageSeen = false, voiceChosen = null, nowMs = now,
             ),
-            SetupRecovery(null), SetupScreenSaver(null), null,
+            // The app always passes the commute (MEKA's guess until set), so the empty page has it too (walk-through A11).
+            SetupRecovery(null), SetupScreenSaver(null), CommuteSetting(80, 80),
         )
         Fill.ONE -> SetupRules.view(
             SetupFacts(
@@ -193,6 +194,10 @@ class SetupScreensTest {
         assertSlimPills(name)
         assertTouchTargets(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        // Walk-through 2026-11-02 A11: the same rows in every state, and the Fold never says "On the Fold" of itself.
+        val keys = view(Fill.MANY).steps.map { it.key }
+        if (v.steps.map { it.key } != keys) fail("$name: rows ${v.steps.map { it.key }} differ from a set-up Fold's $keys")
+        if (onScreen(SetupRules.ON_THE_FOLD)) fail("$name: says \"${SetupRules.ON_THE_FOLD}\" on the Fold")
         when (fill) {
             Fill.EMPTY -> {
                 // Of the steps that couldn't be checked only the screen saver's (Android's own setting) has a button;
