@@ -241,7 +241,7 @@ private struct VoiceNoteRowView: View {
         Button(label, action: perform)
             .buttonStyle(MekaPressStyle())
             .font(MekaType.caption)
-            .foregroundStyle(accent ? palette.accent : palette.textTertiary)
+            .foregroundStyle(accent ? palette.accent : palette.textSecondary) // never the tertiary grey: Keep and Delete read as off
             .accessibilityLabel(spoken)
     }
 }
