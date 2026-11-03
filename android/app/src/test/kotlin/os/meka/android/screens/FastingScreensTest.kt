@@ -249,6 +249,8 @@ class FastingScreensTest {
         settle()
     }
 
+    // CI runs 1551 and 1552 (2026-11-03 21:09, 21:17) failed here with Health Connect's service missing; this test
+    // reruns now on the code that passed at 20:34, to tell a clock-dependent failure from one the next slice brought.
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun goalsTileOpensTheScreenAndBackLeavesIt() {
         val core = prepared(Fill.EMPTY)
