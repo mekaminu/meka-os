@@ -246,7 +246,8 @@ class LifeAdminScreensTest {
         off[0].performSemanticsAction(SemanticsActions.OnClick)
         until { !core.lifeAdminView.value.on }
         if (core.lifeAdminView.value.on) fail("$name: Turn off left the hour on")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(LifeAdminRules.OFF_LINE))
+        // The Off line crossfades in after the write lands; wait for it (it raced once in CI run 1548).
+        ScreenShots.awaitShows(compose, name, LoneWordGlue.kept(LifeAdminRules.OFF_LINE))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
