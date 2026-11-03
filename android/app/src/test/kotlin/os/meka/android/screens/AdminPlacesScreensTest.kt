@@ -186,7 +186,14 @@ class AdminPlacesScreensTest {
                 if (fill == Fill.MANY && v.kids.size != 2) fail("$name: ${v.kids.size} cards for two children")
                 if (fill == Fill.MANY && v.week?.isEmpty != false) fail("$name: Kids' week is empty with half term in it (${v.week?.line})")
                 // Slice 16's findings: each size field's hint fits its pill on one line ("Boot size… (12)" wrapped).
-                ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { it.hint }.toSet())
+                ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { "e.g. ${it.hint}" }.toSet())
+                // Walk-through 2026-11-02 A12: an empty field's hint says "e.g.", and a child with only some sizes kept
+                // is never "Sizes checked" as though all were.
+                v.kids.forEach { k ->
+                    k.sizes.filter { it.value == null }.forEach { r -> if (!r.placeholder.startsWith("e.g. ")) fail("$name: ${r.label}'s hint \"${r.placeholder}\" reads as a size") }
+                    val kept = k.sizes.count { it.value != null }
+                    if (kept in 1 until k.sizes.size && k.checkedLine.startsWith("Sizes checked")) fail("$name: ${k.name} has $kept of ${k.sizes.size} sizes but says \"${k.checkedLine}\"")
+                }
             }
             Place.SCHOOL -> {
                 val v = core.schoolView.value

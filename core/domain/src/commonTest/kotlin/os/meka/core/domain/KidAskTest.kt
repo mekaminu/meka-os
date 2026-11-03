@@ -48,7 +48,7 @@ class KidAskTest {
         val lines = KidAskRules.askLines(view())
         assertEquals(listOf(
             "Kids · 2 children: Alex and Sam",
-            "Alex · ${AboutYouRules.childLine(alex)} · sizes: Shoes 13 · Tops 7–8 · Sizes checked Wed 14 Oct",
+            "Alex · ${AboutYouRules.childLine(alex)} · sizes: Shoes 13 · Tops 7–8 · 2 of 6 sizes kept · checked Wed 14 Oct",
             "Sam · ${AboutYouRules.childLine(sam)} · no sizes kept",
             "Sam's club fee · Football · £35 · every month · next Sun 1 Nov",
             "This week · 2 things in the next 7 days · 1 today or tomorrow",
@@ -62,7 +62,7 @@ class KidAskTest {
     @Test
     fun theDeviceAnswersSizesAndTheWeekItself() {
         val v = view()
-        assertEquals("Alex's shoes: 13 · sizes checked Wed 14 Oct.", KidAskRules.localAnswer("What size shoes is Alex?", v))
+        assertEquals("Alex's shoes: 13 · checked Wed 14 Oct.", KidAskRules.localAnswer("What size shoes is Alex?", v))
         assertEquals("Alex's football boots size isn't kept yet · add it in Ask → Life → Kids.", KidAskRules.localAnswer("what size football boots does Alex take", v))
         assertEquals(
             "2 things in the next 7 days · 1 today or tomorrow. Tomorrow: Alex: PE kit; Sun 18 Oct: Sam: Match U10s 10:00.",

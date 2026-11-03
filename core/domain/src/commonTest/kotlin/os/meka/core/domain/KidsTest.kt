@@ -50,7 +50,11 @@ class KidsTest {
         val a = v.kids[0]
         assertEquals("Under 7s · Oakfield School", a.line)
         assertEquals("Shoes 13 · Tops 7–8", a.sizesLine)
-        assertEquals("Sizes checked ${CivilDate.shortLabel(today - 10)}", a.checkedLine)
+        assertEquals("2 of 6 sizes kept · checked ${CivilDate.shortLabel(today - 10)}", a.checkedLine)
+        assertEquals("e.g. 12", a.sizes.single { it.size == "boots" }.placeholder)
+        // All six kept: "Sizes checked", no count.
+        val all = r.copy(sizes = KidSize.entries.associateWith { "8" })
+        assertEquals("Sizes checked ${CivilDate.shortLabel(today - 10)}", KidsRules.checkedLine(all, today, cal))
         assertFalse(a.due)
         assertEquals(KidSize.entries.map { it.label }, a.sizes.map { it.label })
         assertEquals(KidsRules.NO_SIZES, v.kids[1].checkedLine)
@@ -65,7 +69,7 @@ class KidsTest {
         val v = KidsRules.view(listOf(alex, sam), mapOf("c-alex" to old, "c-sam" to fresh), today, cal)
         assertTrue(v.kids[0].due)
         assertEquals("Last checked ${CivilDate.shortLabel(today - KidsRules.CHECK_DAYS)} · do they still fit?", v.kids[0].checkedLine)
-        assertEquals("Sizes checked today", v.kids[1].checkedLine)
+        assertEquals("1 of 6 sizes kept · checked today", v.kids[1].checkedLine)
         assertEquals(LifeTileLine("Check Alex's sizes", true), v.tile)
         assertTrue(v.summary.startsWith("Time to check Alex's sizes"))
         // A day short of three months isn't due; both due names both.

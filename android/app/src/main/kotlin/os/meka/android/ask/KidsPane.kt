@@ -313,7 +313,7 @@ private fun KidCardView(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(row.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.width(112.dp))
                 Field(
-                    row.hint, modifier = Modifier.weight(1f), value = texts[key] ?: row.value ?: "", onValue = { texts[key] = it },
+                    row.placeholder, modifier = Modifier.weight(1f), value = texts[key] ?: row.value ?: "", onValue = { texts[key] = it },
                     description = "${kid.name}'s ${row.label.lowercase()} size, for example ${row.hint}",
                 ) { typed ->
                     onSave(row.size, typed)

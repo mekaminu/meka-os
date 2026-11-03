@@ -45,7 +45,7 @@ class KidsFacadeTest {
         assertEquals("Alex · shoes 13", fold.lifeLines.value.of(LifeTile.KIDS)?.text)
         fold.syncNow(); mac.syncNow()
         assertEquals("Shoes 13", mac.kidsView.value.kids.first().sizesLine)
-        assertEquals("Sizes checked today", mac.kidsView.value.kids.first().checkedLine)
+        assertEquals("1 of 6 sizes kept · checked today", mac.kidsView.value.kids.first().checkedLine)
 
         // Cleared on the Mac with Undo's value; put back.
         val cleared = mac.setKidSize("Alex", "shoes", " ")
@@ -90,7 +90,7 @@ class KidsFacadeTest {
         // All still fit on the Mac's heads-up: the check is stamped, gone from the Fold's governor too.
         assertNull(mac.kidsStillFit("date-night:1:nudge"))
         assertEquals(KidsRules.fitLine("Alex"), mac.kidsStillFit(n.key))
-        assertEquals("Sizes checked today", mac.kidsView.value.kids.single().checkedLine)
+        assertEquals("1 of 6 sizes kept · checked today", mac.kidsView.value.kids.single().checkedLine)
         mac.syncNow(); fold.syncNow()
         fold.tick()
         assertTrue(kids(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())

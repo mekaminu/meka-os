@@ -56,7 +56,11 @@ data class KidRecord(
 )
 
 /** One size row of a child's card: the label, what's kept (null when empty) and the field's hint. */
-data class KidSizeRow(val size: String, val label: String, val value: String?, val hint: String)
+data class KidSizeRow(
+    val size: String, val label: String, val value: String?, val hint: String,
+    /** What an empty field shows: "e.g. 12", so a hint never reads as a size he typed (walk-through 2026-11-02 A12). */
+    val placeholder: String = "e.g. $hint",
+)
 
 /**
  * A child's card: [name] and [line] from About you ("Under 7s · Oakfield School"); [sizes] every size row; [sizesLine]
@@ -166,13 +170,18 @@ object KidsRules {
         return todayDay - cal.epochDayOf(checked) >= CHECK_DAYS
     }
 
-    /** "Sizes checked today" · "Sizes checked Wed 14 Oct" · "Last checked Tue 14 Jul · do they still fit?" · [NO_SIZES]. */
+    /**
+     * "Sizes checked today" · "Sizes checked Wed 14 Oct" · "Last checked Tue 14 Jul · do they still fit?" · [NO_SIZES];
+     * with only some sizes kept it says how many, "2 of 6 sizes kept · checked today", so a check never reads as all of them.
+     */
     fun checkedLine(r: KidRecord?, todayDay: Long, cal: LocalCalendar): String {
         if (r == null || r.sizes.isEmpty()) return NO_SIZES
         val checked = r.checkedAtMs ?: return "Not checked yet · do they still fit?"
         val day = cal.epochDayOf(checked)
         val label = if (day == todayDay) "today" else CivilDate.shortLabel(day)
-        return if (due(r, todayDay, cal)) "Last checked $label · do they still fit?" else "Sizes checked $label"
+        if (due(r, todayDay, cal)) return "Last checked $label · do they still fit?"
+        val total = KidSize.entries.size
+        return if (r.sizes.size < total) "${r.sizes.size} of $total sizes kept · checked $label" else "Sizes checked $label"
     }
 
     /** "Alex", "Alex and Sam", "Alex, Sam and Jo". */
@@ -472,7 +481,7 @@ object KidsWeekRules {
     const val HEAD = "THIS WEEK"
     const val DAYS = 7
     const val EMPTY = "Nothing in the next 7 days from School, club sessions or fees."
-    const val FOOT = "From School, the club sessions in your calendar and the fees above."
+    const val FOOT = "From School, the club sessions in your calendar and the club fees below."
 
     private fun dayLabel(day: Long, today: Long): String = when (day - today) {
         0L -> "Today"
@@ -642,7 +651,7 @@ object KidAskRules {
             val who = named.ifEmpty { v.kids }
             return who.joinToString(" ") { c ->
                 val value = c.sizes.firstOrNull { it.size == size.key }?.value
-                if (value != null) "${c.name}'s ${size.label.lowercase()}: $value · ${c.checkedLine.replaceFirstChar { it.lowercase() }}."
+                if (value != null) "${c.name}'s ${size.label.lowercase()}: $value · ${c.checkedLine.substringAfter(" sizes kept · ").replaceFirstChar { it.lowercase() }}."
                 else "${c.name}'s ${size.label.lowercase()} size isn't kept yet · add it in Ask → Life → Kids."
             }
         }
