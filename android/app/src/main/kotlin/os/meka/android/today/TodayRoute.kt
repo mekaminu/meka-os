@@ -182,7 +182,6 @@ import os.meka.core.domain.HabitDotRules
 import os.meka.core.domain.WeekGoals
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
-import java.time.Instant
 import os.meka.core.domain.DayArcKind
 import os.meka.core.domain.WatchFace
 import os.meka.core.domain.DayRingPlay
@@ -190,8 +189,6 @@ import os.meka.core.domain.DayArc
 import os.meka.core.domain.DayRing
 import os.meka.core.domain.DayRingHeader
 import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * TODAY (brief §4). Closed Fold: one calm column. Open Fold / wide windows (≥ 600dp): Today | selected item.
@@ -1835,7 +1832,7 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
     TaskTitleField(task.id, task.title, onSave = { id, t -> actions.rename(id, t) },
         // On the closed Fold the title arrives from the row that was tapped (a no-op outside a pane).
         modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id)))
-    meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+    meta(task, actions.whenOf(task))?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
 
     // The rows fade out above the action pills instead of being sliced under them (walk-through A10, the Tomorrow
     // sheet's edit); the foot's padding lets the last row scroll clear of the fade.
@@ -1872,11 +1869,14 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
 
 internal fun providerLabel(p: String) = os.meka.core.domain.CalendarAccountRules.providerLabel(p)
 
-private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
-private fun meta(t: Task): String? {
+/**
+ * The line under the title. Its time is When's own minute, on the core's clock (walk-through 2026-11-02 A4: the
+ * phone's zone drew "06:40" under the title while When said 07:40).
+ */
+private fun meta(t: Task, whenView: TaskWhenView): String? {
     val parts = buildList {
-        t.scheduledAtMs?.let { add(timeFmt.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))) }
+        if (t.scheduledAtMs != null) whenView.minute?.let { add(TaskWhenRules.timeLabel(it)) }
         t.estimateMinutes?.let { add("$it min") }
         t.checklist.takeIf { it.isNotEmpty() }?.let { cl -> add("${cl.count { it.checked }}/${cl.size}") }
         t.repeatMeta(LocalDate.now().toEpochDay())?.let { add("↻ $it") }

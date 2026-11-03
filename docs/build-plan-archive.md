@@ -5233,6 +5233,16 @@ line named its module as "2 · Core skills", a bare "2"; `StudyRules.moduleWords
 wrote it ("Next: Pivot tables · Module 2: Core skills"); unnumbered names unchanged. StudyTest and StudyFacadeTest updated,
 StudyScreensTest's plan shots check all three. Core only, so the Mac follows; no server change, no migration.
 
+
+Slice 3 (2026-11-03): **A4** Tomorrow's edit sheet (`tomorrow/fold-*-edit.png`). The detail's line under the title
+formatted `scheduledAtMs` in the phone's zone (`ZoneId.systemDefault()`), so the shot (Robolectric in UTC) read "06:40"
+under "Gym, legs day" while When said 07:40 from the core's clock; it now takes When's own minute (`TaskWhenView.minute`,
+the core's calendar) through `TaskWhenRules.timeLabel`, and an overdue plan from an earlier day shows no time there, as
+When does. The Repeat row "ghosted under the chips" because the shots were Robolectric's default 320 × 470 dp, where the
+rows scroll under the foot fade; TomorrowScreensTest now runs at `ScreenShots.COVER` and checks no 06:40, When's 07:40
+twice, and the Repeat row's bottom above the Done pill. Fold only (the Mac's task detail has no such line); no core,
+server or migration change.
+
 Nightly Mac 2026-11-02: dispatched ci 1525 (Kotlin/Native tests green) failed at `linkReleaseFrameworkMacosArm64`: SKIE's
 swiftc couldn't parse MekaKit.h at `@property (readonly) int32_t MAX_INPUT`, because `MAX_INPUT` is a macro in macOS's
 `<sys/syslimits.h>` (added with one-tap course import, `StudyImportRules`). Renamed `MAX_INPUT_CHARS`; no behaviour change.

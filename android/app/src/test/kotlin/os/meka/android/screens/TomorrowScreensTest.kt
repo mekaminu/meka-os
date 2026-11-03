@@ -162,6 +162,16 @@ class TomorrowScreensTest {
         until { shows("Gym, legs day") }
         assertTrue(shows("Gym, legs day"), "$name: the edit isn't shown")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-edit"))
+        // Walk-through 2026-11-02 A4: the line under the title is When's own time on the core's clock (it drew 06:40,
+        // the phone's zone, while When said 07:40), and on the cover screen the Repeat row stands whole above the pills.
+        assertTrue(!shows("06:40"), "$name: a time under the title disagrees with When")
+        assertTrue(compose.onAllNodes(hasText("07:40"), useUnmergedTree = true).fetchSemanticsNodes().size >= 2,
+            "$name: the title's line doesn't say When's 07:40")
+        val repeat = compose.onAllNodes(hasText("Repeat"), useUnmergedTree = true).fetchSemanticsNodes()
+        val done = compose.onAllNodes(hasText("Done") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue(repeat.isNotEmpty() && done.isNotEmpty(), "$name: no Repeat row or Done pill on the detail")
+        assertTrue(repeat.first().boundsInRoot.bottom <= done.minOf { it.boundsInRoot.top },
+            "$name: the Repeat row sits under the pills")
         // Walk-through A10: the detail's pills wrap rather than running off the right edge (Someday was cut).
         val screenRight = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot.right
         val someday = compose.onAllNodes(hasText("Someday") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
@@ -172,6 +182,7 @@ class TomorrowScreensTest {
         assertTrue(!shows("Close"), "$name: the detail stayed open after the task left tomorrow")
     }
 
-    @Test fun tomorrowDark() = run(ThemeChoice.DARK, "fold-dark")
-    @Test fun tomorrowLight() = run(ThemeChoice.LIGHT, "fold-light")
+    // On the Fold's cover screen (walk-through A4: the shots were Robolectric's default 320 × 470).
+    @Test @Config(qualifiers = ScreenShots.COVER) fun tomorrowDark() = run(ThemeChoice.DARK, "fold-dark")
+    @Test @Config(qualifiers = ScreenShots.COVER) fun tomorrowLight() = run(ThemeChoice.LIGHT, "fold-light")
 }
