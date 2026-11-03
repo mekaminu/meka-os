@@ -19,6 +19,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import os.meka.android.designsystem.MekaSpace
 import kotlin.math.abs
 import androidx.test.core.app.ApplicationProvider
