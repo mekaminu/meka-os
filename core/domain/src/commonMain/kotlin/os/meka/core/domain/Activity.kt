@@ -156,7 +156,7 @@ data class ActivityRow(
 data class ActivityDay(val day: Long, val label: String, val rows: List<ActivityRow>)
 
 data class ActivityView(
-    /** "This week: 7 reminders (2 digests) · 1 change": reminders counted as the Reminders chip counts them. */
+    /** "This week: 5 reminders · 2 digests" */
     val weekLine: String,
     val days: List<ActivityDay>,
     /** What the screen says while there is nothing yet. */
@@ -515,15 +515,9 @@ object ActivityRules {
         }
         val monday = today - (CivilDate.isoDayOfWeek(today) - 1)
         val week = shown.filter { cal.epochDayOf(it.atMs) >= monday }
-        // The Reminders chip counts digests and spoken heads-ups with reminders, so the week line uses its word and
-        // names the digests inside it: "1 reminder (1 digest)" beside "Reminders · 1", never "1 digest" alone
-        // (walk-through 2026-11-02, A14).
-        val digests = week.count { it.kind == ActivityKind.DIGEST }
-        val reminders = week.count { it.kind in ActivityFilter.REMINDERS.kinds }
         val parts = listOfNotNull(
-            reminders.takeIf { it > 0 }?.let {
-                plural(it, "reminder") + if (digests > 0) " (" + plural(digests, "digest") + ")" else ""
-            },
+            week.count { it.kind == ActivityKind.REMINDED }.takeIf { it > 0 }?.let { plural(it, "reminder") },
+            week.count { it.kind == ActivityKind.DIGEST }.takeIf { it > 0 }?.let { plural(it, "digest") },
             week.count { it.kind == ActivityKind.CHANGED }.takeIf { it > 0 }?.let { plural(it, "change") },
             week.count { it.kind == ActivityKind.PUBLISHED }.takeIf { it > 0 }?.let { plural(it, "phone build") },
             week.count { it.kind == ActivityKind.CALENDAR }.takeIf { it > 0 }?.let { plural(it, "calendar edit") },

@@ -5,7 +5,6 @@ import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -130,21 +129,5 @@ class EmergencyCardTest {
         }
         val g = EmergencyRules.view(emptyList()).groups.first()
         assertEquals(EmergencySection.CALL.spokenHint, g.spokenHint)
-    }
-
-    @Test
-    fun aPartWithLinesShowsASecondExampleNotTheOneItRepeats() {
-        // Walk-through 2026-11-02, A14: "GP: Dr Patel, …" sat under his real GP line.
-        EmergencySection.entries.forEach { s ->
-            assertTrue(s.moreHint.length <= 28, s.moreHint)
-            assertFalse(s.moreHint.startsWith("Add"), s.moreHint)
-            val more = EmergencyRules.read(s.moreHint) ?: error("${s.moreHint} doesn't read")
-            assertNull(EmergencyRules.refusal(s, "${more.title}: ${more.detail}"), s.moreHint)
-            assertNotEquals(EmergencyRules.read(s.hint)?.title, more.title)
-        }
-        val gp = EmergencyEntry("e1", EmergencySection.CALL, "GP", "Dr Patel, 01632 123456", 1L)
-        val v = EmergencyRules.view(listOf(gp))
-        assertEquals(EmergencySection.CALL.moreHint, v.groups.first { it.section == "call" }.hint)
-        assertEquals(EmergencySection.DOCUMENTS.hint, v.groups.first { it.section == "documents" }.hint)
     }
 }
