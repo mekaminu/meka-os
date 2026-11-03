@@ -149,7 +149,7 @@ private fun HereSwitch(core: MekaCore, modifier: Modifier = Modifier) {
                             if (permitted) scope.launch { HereLocation.refresh(context, core, null) }
                             else ask.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
                         }
-                    }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(view.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
