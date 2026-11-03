@@ -166,13 +166,15 @@ struct TripListsPanel: View {
             Text(TripListRules.shared.LEAVE_LABEL).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
                 .padding(.top, MekaSpace.xxs)
             HStack(spacing: MekaSpace.xs) {
-                TextField(v.leave.isEmpty ? TripListRules.shared.LEAVE_HINT : v.leave, text: $leaveText)
+                // The saved time is the field's own text, never the placeholder's grey (walk-through A13).
+                TextField(TripListRules.shared.LEAVE_HINT, text: $leaveText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 120)
                     .accessibilityLabel(TripListRules.shared.LEAVE_DESCRIPTION)
+                    .onAppear { leaveText = v.leave }
+                    .onChange(of: v.leave) { _, saved in leaveText = saved }
                     .onSubmit {
                         let typed = leaveText
-                        leaveText = ""
                         guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
                         Task { leaveSaid = await model.setTripLeave(tripId, typed) }
                     }
@@ -193,8 +195,8 @@ struct TripListsPanel: View {
                 .font(MekaType.itemMeta)
                 .foregroundStyle(palette.accent)
             }
-            Text(leaveSaid?.line ?? TripListRules.shared.LEAVE_DESCRIPTION).font(MekaType.caption)
-                .foregroundStyle(leaveSaid?.refused == true ? palette.accent : (leaveSaid == nil ? palette.textTertiary : palette.textSecondary))
+            Text(leaveSaid?.line ?? TripListRules.shared.leaveCaption(leave: v.leave)).font(MekaType.caption)
+                .foregroundStyle(leaveSaid?.refused == true ? palette.accent : (leaveSaid == nil && v.leave.isEmpty ? palette.textTertiary : palette.textSecondary))
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: leaveSaid)

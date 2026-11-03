@@ -142,4 +142,12 @@ class TripGoingTest {
         assertEquals(setOf(TripGoer.ME), again.going)
         assertEquals(6 * 60 + 30, again.leaveMinute)
     }
+
+    @Test
+    fun aSavedLeaveTimeIsNeverCaptionedWithTheExample() {
+        // Walk-through A13: the saved 06:30 showed in hint grey with "for example 06:30" under it.
+        assertEquals(TripListRules.LEAVE_DESCRIPTION, TripListRules.leaveCaption(""))
+        val saved = TripListRules.leaveCaption("06:30")
+        assertTrue("06:30" in saved && "for example" !in saved, saved)
+    }
 }

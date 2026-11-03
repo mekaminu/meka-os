@@ -422,11 +422,14 @@ internal fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
     )
 }
 
-/** A one-line field in a raised pill; Done submits and clears. [description] is what TalkBack reads (the hint unless given). */
+/**
+ * A one-line field in a raised pill; Done submits and clears ([keep]: submits and keeps what's typed, for a field
+ * that shows a saved value). [description] is what TalkBack reads (the hint unless given).
+ */
 @Composable
 internal fun Field(
     hint: String, modifier: Modifier = Modifier, value: String? = null, onValue: ((String) -> Unit)? = null,
-    description: String = hint, onDone: (String) -> Unit,
+    description: String = hint, keep: Boolean = false, onDone: (String) -> Unit,
 ) {
     var own by rememberSaveable(hint) { mutableStateOf("") }
     val text = value ?: own
@@ -443,7 +446,7 @@ internal fun Field(
             textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
             cursorBrush = SolidColor(Meka.colors.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onDone(text); set("") } }),
+            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onDone(text); if (!keep) set("") } }),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = description },
         )
     }

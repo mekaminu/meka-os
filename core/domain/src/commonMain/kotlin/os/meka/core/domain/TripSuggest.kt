@@ -111,6 +111,9 @@ object TripSuggestRules {
 
     private fun each(n: Int?): Int? = n?.takeIf { it > 1 }
 
+    /** A pair a day for each person going (up to 14 days each): 4 days with 2 people is 8, like Pyjamas × 2 counts both. */
+    internal fun underwearQty(days: Int, people: Int?): Int = days.coerceAtMost(14) * (people?.coerceAtLeast(1) ?: 1)
+
     /** Every idea that fits the trip, the most useful first on each list. */
     private fun ideas(f: Facts): List<Idea> = buildList {
         val nights = f.days >= 2
@@ -125,7 +128,7 @@ object TripSuggestRules {
         add(Idea("pack:chargers", TripList.PACK, "Phone chargers", "Tech", listOf("charger"), qty = each(f.adults)))
         add(Idea("pack:medicines", TripList.PACK, "Your medicines", "Medicines", listOf("medicine", "prescription", "inhaler", "pill", "tablets"), who = TripWho.ME))
         add(Idea("pack:teeth", TripList.PACK, "Toothbrushes and paste", "Toiletries", listOf("toothbrush", "toothpaste")))
-        if (nights) add(Idea("pack:underwear", TripList.PACK, "Underwear and socks", "Clothes", listOf("underwear", "pant", "sock", "boxer", "knicker"), qty = f.days.coerceAtMost(14)))
+        if (nights) add(Idea("pack:underwear", TripList.PACK, "Underwear and socks", "Clothes", listOf("underwear", "pant", "sock", "boxer", "knicker"), qty = underwearQty(f.days, f.people)))
         if (nights) add(Idea("pack:pyjamas", TripList.PACK, "Pyjamas", "Clothes", listOf("pyjama", "pj", "nightie", "nightwear"), qty = each(f.people)))
         if (f.warm) add(Idea("pack:sunglasses", TripList.PACK, "Sunglasses", "Clothes", listOf("sunglasse", "sunglass", "shades")))
         if (f.kids) add(Idea("pack:comfort", TripList.PACK, "Kids comfort toys", "Kids", listOf("toy", "teddy", "comfort"), who = TripWho.KIDS))

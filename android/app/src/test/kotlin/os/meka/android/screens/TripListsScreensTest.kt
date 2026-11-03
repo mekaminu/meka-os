@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
@@ -306,6 +308,10 @@ class TripListsScreensTest {
         ScreenShots.assertShows(compose, name, "leave home 06:30 Wednesday")
         ScreenShots.assertShows(compose, name, "WHO'S GOING")
         ScreenShots.assertNotCornerClipped(compose, name, "leave home 06:30 Wednesday")
+        // Walk-through A13: the saved time is the field's own text (not the hint's grey), and no example under it.
+        compose.onNode(hasSetTextAction() and hasContentDescription(TripListRules.LEAVE_DESCRIPTION)).assert(hasText("06:30"))
+        compose.onNodeWithTag("trip-leave-caption", useUnmergedTree = true).assert(hasText("You leave home at 06:30", substring = true))
+        compose.onAllNodes(hasText("for example", substring = true)).assertCountEquals(0)
         // A chip lights in the next frame; the core's write lands after.
         compose.onNodeWithTag("trip-going-kids").performClick()
         compose.mainClock.advanceTimeBy(16L)

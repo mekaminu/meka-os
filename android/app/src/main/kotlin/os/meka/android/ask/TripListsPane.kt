@@ -315,7 +315,12 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                         }
                     }
                     Text(TripListRules.LEAVE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
-                    Field(v.leave.ifEmpty { TripListRules.LEAVE_HINT }, description = TripListRules.LEAVE_DESCRIPTION) { text ->
+                    // The saved time is the field's own text, drawn like typing, never the hint's grey (walk-through A13).
+                    var leaveText by remember(tripId, v.leave) { mutableStateOf(v.leave) }
+                    Field(
+                        TripListRules.LEAVE_HINT, Modifier.testTag("trip-leave-field"), value = leaveText, onValue = { leaveText = it },
+                        description = TripListRules.LEAVE_DESCRIPTION, keep = true,
+                    ) { text ->
                         scope.launch {
                             val r = runCatching { core.setTripLeave(tripId, text) }.getOrNull()
                             if (r?.refused == false) haptics.light() else haptics.reject()
@@ -324,8 +329,9 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Crossfade(leaveSaid, animationSpec = MekaMotion.appear(reduced), label = "trip-leave-said", modifier = Modifier.weight(1f)) { r ->
-                            Text(r?.line ?: TripListRules.LEAVE_DESCRIPTION, style = MekaType.caption,
-                                color = if (r?.refused == true) Meka.colors.accent else if (r == null) Meka.colors.textTertiary else Meka.colors.textSecondary)
+                            Text(r?.line ?: TripListRules.leaveCaption(v.leave), style = MekaType.caption,
+                                color = if (r?.refused == true) Meka.colors.accent else if (r == null && v.leave.isEmpty()) Meka.colors.textTertiary else Meka.colors.textSecondary,
+                                modifier = Modifier.testTag("trip-leave-caption"))
                         }
                         if (v.leave.isNotEmpty()) {
                             Text("Clear", style = MekaType.itemMeta, color = Meka.colors.textSecondary,

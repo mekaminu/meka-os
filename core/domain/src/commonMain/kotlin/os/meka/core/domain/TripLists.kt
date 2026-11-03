@@ -227,6 +227,10 @@ object TripListRules {
     const val LEAVE_DESCRIPTION = "The time you leave home on the first day, for example 06:30"
     const val LEAVE_NOT_READ = "Type the time you leave home, for example 06:30 or 6.30am."
     const val LEAVE_CLEARED = "No leave time"
+
+    /** Under the leave field: the example while none is saved, else what the saved time does (walk-through A13: never the example under a saved time). */
+    fun leaveCaption(leave: String): String =
+        if (leave.isBlank()) LEAVE_DESCRIPTION else "You leave home at $leave on the first day. Type another time to change it."
     const val DONE = "Done"
     /** Slice 2e. */
     const val SAVE_TEMPLATE = "Save as a template for next time"

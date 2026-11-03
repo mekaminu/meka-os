@@ -169,4 +169,19 @@ class TripSuggestTest {
         assertNull(TripListRules.view(trip(), emptyList(), sun + 1).suggestion(TripList.PACK))
         assertNotNull(TripListRules.view(trip(), emptyList(), mon, about = family).suggestion(TripList.PACK))
     }
+
+    @Test
+    fun underwearCountsEveryoneGoingLikePyjamas() {
+        // Walk-through A13: "For 4 days with 2 people" gave Pyjamas × 2 but Underwear and socks × 4.
+        val two = trip(name = "Lake District", start = wed, end = d(10, 31), going = setOf(TripGoer.ME, TripGoer.PARTNER))
+        val s = TripSuggestRules.suggest(two, emptyList(), mon, about = family)
+        assertEquals("For 4 days with 2 people, worth packing:", s.first { it.list == TripList.PACK }.lead)
+        val pack = labels(s, TripList.PACK)
+        assertTrue("Underwear and socks × 8" in pack, pack.toString())
+        assertTrue("Pyjamas × 2" in pack, pack.toString())
+        // On your own it is a pair a day; who's going unknown counts one; 14 days a person at most.
+        assertEquals(4, TripSuggestRules.underwearQty(4, 1))
+        assertEquals(4, TripSuggestRules.underwearQty(4, null))
+        assertEquals(28, TripSuggestRules.underwearQty(20, 2))
+    }
 }
