@@ -165,7 +165,9 @@ class MoneyWorthTest {
             MoneyWorthItem("n-boat", "Boat", false, 100_000, today),
             MoneyWorthItem("n-dad", "Dad", true, 50_000, today),
         )
-        val w = MoneyWorth.view(emptyList(), emptyList(), items, emptyList(), today)
+        // With an account balance counted too (otherwise the typed things are the whole total: see the next test).
+        val current = listOf(MoneyAccount("a-current", "Current account", "csv", 1L, MoneyBalance(184_000, today, typed = false)))
+        val w = MoneyWorth.view(current, emptyList(), items, emptyList(), today)
         val r = MoneyWorthOther.row(w)!!
         assertTrue(!r.add)
         assertEquals("£47,800", r.amount)
@@ -173,10 +175,25 @@ class MoneyWorthTest {
         assertTrue(r.spoken.startsWith("Outside these accounts, £47,800"))
         assertEquals(listOf("Pension", "Car", "Boat", "Car loan", "Dad"), MoneyWorthOther.rows(w).map { it.name })
         assertTrue(MoneyWorthOther.rows(w).all { it.removable })
-        val owed = MoneyWorthOther.row(MoneyWorth.view(emptyList(), emptyList(), listOf(items[2]), emptyList(), today))!!
+        val owed = MoneyWorthOther.row(MoneyWorth.view(current, emptyList(), listOf(items[2]), emptyList(), today))!!
         assertEquals("−£3,200", owed.amount)
         assertTrue(owed.owes)
         assertEquals("Car loan", owed.line)
         assertTrue(owed.spoken.contains("owed £3,200"))
+    }
+
+    @Test
+    fun aTypedTotalIsShownOnceWhenItIsAllThereIs() {
+        // Walk-through A14: only a typed pension counted → the card's head says "Outside these accounts £42,000", so
+        // the row names what's in it and says Change instead of repeating £42,000.
+        val pension = listOf(MoneyWorthItem("n-pension", "Pension", false, 4_200_000, today))
+        val w = MoneyWorth.view(emptyList(), emptyList(), pension, emptyList(), today)
+        assertEquals("£42,000", w.total)
+        assertEquals(MoneyTotal.OUTSIDE_ONLY, MoneyTotal.card(w)!!.head)
+        val r = MoneyWorthOther.row(w)!!
+        assertEquals(MoneyWorthOther.CHANGE, r.amount)
+        assertTrue(r.add)
+        assertEquals("Pension", r.line)
+        assertTrue(!r.spoken.contains("£42,000"), r.spoken)
     }
 }

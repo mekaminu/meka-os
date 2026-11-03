@@ -295,7 +295,7 @@ class WatchHealthScreensTest {
     /** The line under the summary reads the core's time, checking or not. */
     @Test fun checkedLineReadsTheCoresZone() {
         val view = os.meka.core.domain.HealthView(emptyList(), "", 0, false, null, now, "Checked 17:15")
-        if (HealthRules.checkedShown(view, checking = true) != "Checking… · Checked 17:15") fail(HealthRules.checkedShown(view, true))
+        if (HealthRules.checkedShown(view, checking = true) != "Checking now · last checked 17:15") fail(HealthRules.checkedShown(view, true))
         if (HealthRules.checkedShown(view, checking = false) != "Checked 17:15") fail(HealthRules.checkedShown(view, false))
     }
 }

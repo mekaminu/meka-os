@@ -264,9 +264,15 @@ object HealthRules {
     /** "Checked 14:05" in [cal]'s zone. */
     fun checkedLine(atMs: Long, cal: LocalCalendar): String = "Checked " + LocalClock.formatMinute(cal.minuteOfDay(atMs))
 
-    /** The line under Health's summary: "Checked 14:05", or "Checking… · Checked 14:05" while a check runs. */
-    fun checkedShown(view: HealthView, checking: Boolean): String =
-        (if (checking) "Checking… · " else "") + view.checkedLine.ifEmpty { "Checked" }
+    /**
+     * The line under Health's summary: "Checked 14:05", or "Checking now · last checked 14:05" while a check runs
+     * (walk-through 2026-11-02 A14: "Checking… · Checked 14:05" said it was checking and had checked at once).
+     */
+    fun checkedShown(view: HealthView, checking: Boolean): String {
+        val last = view.checkedLine.ifEmpty { "Checked" }
+        if (!checking) return last
+        return if (view.checkedLine.isEmpty()) "Checking now" else "Checking now · last ${last.replaceFirstChar { it.lowercase() }}"
+    }
 
     private fun server(f: HealthFacts, cal: LocalCalendar): HealthRow {
         val title = "Navilife's server"

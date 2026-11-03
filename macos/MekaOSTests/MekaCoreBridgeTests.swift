@@ -4425,8 +4425,8 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     func testFastingBesideOnTheMac() {
-        // Fasting beside its mockup (2026-10-30): a History row's goal on one line in whole hours, spoken in full.
-        XCTAssertEqual(FastingBesideRules.shared.goalOnRow(goal: "6h 30m short"), "6h short")
+        // Fasting beside its mockup (2026-10-30): a History row's goal on one line to the nearest half hour, spoken in full.
+        XCTAssertEqual(FastingBesideRules.shared.goalOnRow(goal: "6h 30m short"), "6½h short")
         XCTAssertEqual(FastingBesideRules.shared.goalOnRow(goal: "on goal"), "on goal")
         let row = FastingHistoryRow(id: "f1", span: "Sat 17 → Sun 18", length: "9h 30m", goal: "6h 30m short", onGoal: false)
         XCTAssertEqual(FastingBesideRules.shared.spoken(row: row), "Sat 17 to Sun 18, 9h 30m, 6h 30m short")

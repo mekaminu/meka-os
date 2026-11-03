@@ -21,6 +21,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlin.random.Random
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import org.junit.Rule
@@ -230,7 +231,10 @@ class MoneyAccountsScreensTest {
         if (showsText(MoneyWorth.HINT) || showsText(MoneyWorthOther.HINT)) fail("net worth's add field sits open on the page")
         runBlocking { check(!core.moneyWorthAdd("Pension £42,000").refused); core.tick() }
         settle()
-        assertTrue(showsText("£42,000"), "the row doesn't show the typed total")
+        assertTrue(showsText("£42,000"), "the card doesn't show the typed total")
+        // Walk-through A14: the pension is all the total counts, so its row says Change, not £42,000 a second time.
+        assertTrue(showsText(MoneyWorthOther.CHANGE), "the row doesn't say Change")
+        assertEquals(1, compose.onAllNodesWithText("£42,000", substring = true).fetchSemanticsNodes().size, "£42,000 shows twice")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-worth-other-row"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-worth-other-row")
         if (shows("money-worth-remove-n-pension")) fail("a typed thing's Remove sits on the page")

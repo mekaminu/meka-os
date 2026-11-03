@@ -281,7 +281,8 @@ object MoneyWorth {
 
 /**
  * NET WORTH's one row for what he typed ("Outside these accounts" over "Pension · Car · Car loan", the total on the right,
- * or "Add…" with nothing typed yet). [add] when nothing is typed yet; [amount] null then.
+ * or "Add…" with nothing typed yet). [add] when the right side is an action word, not a figure: nothing typed yet
+ * ([amount] null, drawn as "Add…"), or [MoneyWorthOther.CHANGE] when the typed things are all the total counts.
  */
 data class MoneyWorthOtherRow(val title: String, val line: String, val amount: String?, val add: Boolean, val owes: Boolean, val spoken: String)
 
@@ -294,6 +295,8 @@ data class MoneyWorthOtherRow(val title: String, val line: String, val amount: S
 object MoneyWorthOther {
     const val TITLE = "Outside these accounts"
     const val ADD = "Add…"
+    /** The row's right side when what he typed is the whole total (walk-through 2026-11-02 A14). */
+    const val CHANGE = "Change"
     const val ADD_LINE = "A pension, savings elsewhere, the car or a loan"
     const val LINE = "Type one again with a new amount to update it · counted at today's figure on the line"
     const val HINT = "Pension £42,000 · Car £8,500 · Car loan £3,200"
@@ -320,6 +323,10 @@ object MoneyWorthOther {
         val sum = rows.sumOf { it.pence }
         val amount = MoneyWorth.signed(sum)
         val line = names(rows)
+        // Walk-through A14 (2026-10-30 and 2026-11-02): with no account balance yet, the total card already reads
+        // "Outside these accounts £42,000"; the row saying £42,000 again was the same figure twice. It says Change.
+        if (MoneyTotal.headFor(w) == MoneyTotal.OUTSIDE_ONLY) return MoneyWorthOtherRow(TITLE, line, CHANGE, add = true,
+            owes = false, spoken = "$TITLE: $line, the total above. Change opens its sheet")
         return MoneyWorthOtherRow(TITLE, line, amount, add = false, owes = sum < 0,
             spoken = "$TITLE, ${if (sum < 0) "owed ${MoneyRules.fmt(-sum)}" else amount}. $line. Opens its sheet")
     }

@@ -11,7 +11,8 @@ package os.meka.core.domain
  *   between rows, so the seven stages ran past two screens; in the mockup a row is about 44 dp with 8 dp between.
  *   A row is now the touch target and no taller ([ROW_DP]), [ROW_GAP_DP] apart, its label 8 dp above it.
  * - A History row stacked the length over the goal word; the mockup keeps one line: span · length · goal, with the
- *   goal as whole hours short ("6h short"; [goalOnRow]) so the line fits the closed Fold. The full words are spoken.
+ *   goal in hours to the nearest half ("6½h short"; [goalOnRow]) so the line fits the closed Fold. The full words are
+ *   spoken. Walk-through 2026-11-02 A14: it used to drop the minutes, so 9h 30m of a 16 h goal read "6h short".
  */
 object FastingBesideRules {
     /** The title's size in sp (the mockup's 28 px). */
@@ -29,13 +30,18 @@ object FastingBesideRules {
     /** Between stage rows, between History rows, and from a section's label to its first row, in dp. */
     const val ROW_GAP_DP = 8
 
-    private val SHORT = Regex("""^(\d+)h \d+m short$""")
+    private val SHORT = Regex("""^(\d+)h (\d+)m short$""")
 
     /**
-     * The goal word on a History row's one line: "on goal", "40m short", and "6h 30m short" as "6h short" (whole hours,
-     * as the mockup); anything else unchanged.
+     * The goal word on a History row's one line: "on goal", "40m short", and "6h 30m short" as "6½h short" (hours to the
+     * nearest half, so the row still adds up: 9h 30m of 16 h is 6½ h short); 6h 10m → "6h short", 6h 50m → "7h short";
+     * anything else unchanged.
      */
-    fun goalOnRow(goal: String): String = SHORT.matchEntire(goal)?.let { "${it.groupValues[1]}h short" } ?: goal
+    fun goalOnRow(goal: String): String = SHORT.matchEntire(goal)?.let {
+        val halves = (it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() + 15) / 30
+        val whole = halves / 2
+        if (halves % 2 == 0) "${whole}h short" else if (whole == 0) "½h short" else "${whole}½h short"
+    } ?: goal
 
     /** What a History row says to TalkBack / VoiceOver: "Tue 20 → Wed 21, 16h 40m, on goal" with the goal in full. */
     fun spoken(row: FastingHistoryRow): String = "${row.span.replace(" → ", " to ")}, ${row.length}, ${row.goal}"

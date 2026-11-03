@@ -263,8 +263,9 @@ class HealthTest {
         assertEquals("Checked 14:05", v.checkedLine)
         assertEquals("Checked 15:05", HealthRules.view(facts(), LocalCalendar.fixedOffset(60 * HealthRules.MIN)).checkedLine)
         assertEquals("Checked 14:05", HealthRules.checkedShown(v, checking = false))
-        assertEquals("Checking… · Checked 14:05", HealthRules.checkedShown(v, checking = true))
+        assertEquals("Checking now · last checked 14:05", HealthRules.checkedShown(v, checking = true))
         // A view made before the line existed still reads as a check.
         assertEquals("Checked", HealthRules.checkedShown(v.copy(checkedLine = ""), checking = false))
+        assertEquals("Checking now", HealthRules.checkedShown(v.copy(checkedLine = ""), checking = true))
     }
 }

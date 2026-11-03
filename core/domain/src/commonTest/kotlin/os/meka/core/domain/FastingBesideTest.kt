@@ -6,9 +6,12 @@ import kotlin.test.assertTrue
 
 class FastingBesideTest {
     @Test
-    fun goalOnRowKeepsWholeHoursShort() {
-        assertEquals("6h short", FastingBesideRules.goalOnRow("6h 30m short"))
+    fun goalOnRowRoundsToTheNearestHalfHour() {
+        assertEquals("6½h short", FastingBesideRules.goalOnRow("6h 30m short"))
         assertEquals("12h short", FastingBesideRules.goalOnRow("12h 05m short"))
+        assertEquals("6h short", FastingBesideRules.goalOnRow("6h 14m short"))
+        assertEquals("6½h short", FastingBesideRules.goalOnRow("6h 15m short"))
+        assertEquals("7h short", FastingBesideRules.goalOnRow("6h 45m short"))
         assertEquals("6h short", FastingBesideRules.goalOnRow("6h short"))
         assertEquals("40m short", FastingBesideRules.goalOnRow("40m short"))
         assertEquals("on goal", FastingBesideRules.goalOnRow("on goal"))
@@ -18,7 +21,8 @@ class FastingBesideTest {
     fun goalOnRowFromTheScreensOwnWords() {
         val goal = FastingScreenRules.goalWord(plannedMs = 16 * 3_600_000L, actualMs = (9 * 60 + 30) * 60_000L)
         assertEquals("6h 30m short", goal)
-        assertEquals("6h short", FastingBesideRules.goalOnRow(goal))
+        // The row adds up: 9h 30m of a 16 h goal is 6½ h short (walk-through 2026-11-02 A14).
+        assertEquals("6½h short", FastingBesideRules.goalOnRow(goal))
     }
 
     @Test
