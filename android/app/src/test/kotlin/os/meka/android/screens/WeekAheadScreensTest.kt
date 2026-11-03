@@ -202,6 +202,8 @@ class WeekAheadScreensTest {
         val v = core.weekAheadView.value
         if (v.days.map { it.label }.firstOrNull()?.startsWith("Wed") != true) fail("$name: the week starts ${v.days.firstOrNull()?.label}, not today (Wed)")
         check(core, name)
+        // Walk-through 2026-11-02 A9: the heads-up's On and its times are whole targets.
+        ScreenShots.assertWholeTargets(compose, name)
         when (fill) {
             Fill.EMPTY -> {
                 // Nothing on but the default work hours: the summary says the office days and that it's otherwise quiet.

@@ -57,3 +57,20 @@ fun TouchPill(
         }
     }
 }
+
+/**
+ * The On/Off pill at the end of a switch row (walk-through 2026-11-02 A9: About you's Watch for requests, Calendars'
+ * ON TODAY, Notifications and the call assistant's rows drew it about 20 dp tall). The row is the 48 dp switch; the
+ * pill is only its picture, drawn [DonePillSpec.HEIGHT_DP] (32 dp) high like every settings pill, its word centred,
+ * on [fill] (the accent when on, which blends in as it changes). Tagged `switch-pill` so the shots can measure it.
+ */
+@Composable
+fun SwitchPill(on: Boolean, fill: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier.testTag("switch-pill").height(DonePillSpec.HEIGHT_DP.dp).clip(RoundedCornerShape(MekaRadius.pill))
+            .background(fill).padding(horizontal = MekaSpace.m),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent, maxLines = 1)
+    }
+}

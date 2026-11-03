@@ -49,6 +49,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.launch
+import os.meka.android.designsystem.minTouch
+import androidx.compose.foundation.layout.sizeIn
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -128,12 +130,13 @@ private fun HereSwitch(core: MekaCore, modifier: Modifier = Modifier) {
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "here-line",
                 modifier = Modifier.weight(1f).then(
-                    if (view.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) } else Modifier,
+                    if (view.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) }.minTouch() else Modifier,
                 ),
             ) { l -> Text(l, style = MekaType.caption, color = statusColor) }
+            // Walk-through 2026-11-02 A9: the pill is drawn as before inside a whole 48 dp touch.
             Box(
-                Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
-                    .background(Meka.colors.surfaceRaised)
+                Modifier.padding(start = MekaSpace.m).sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
+                    .clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) {
                         haptics.tick()
                         if (on) {
@@ -147,8 +150,12 @@ private fun HereSwitch(core: MekaCore, modifier: Modifier = Modifier) {
                             else ask.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
                         }
                     }
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            ) { Text(view.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent) }
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(view.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+            }
         }
         Text(view.privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
@@ -237,7 +244,7 @@ private fun PlaceField(
                 Text(resetLabel, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) {
                         haptics.tick(); text = fallback; bad = false; store("")
-                    }.padding(start = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs))
+                    }.minTouch().padding(start = MekaSpace.m))
             }
         }
     }

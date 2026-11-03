@@ -222,7 +222,6 @@ private fun WatchRow(on: Boolean, line: String, onToggle: () -> Unit) {
             Text("Watch for requests", style = MekaType.itemMeta, color = Meka.colors.textPrimary)
             Text(os.meka.core.domain.LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
-        Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(dot).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
+        os.meka.android.designsystem.SwitchPill(on, dot)
     }
 }

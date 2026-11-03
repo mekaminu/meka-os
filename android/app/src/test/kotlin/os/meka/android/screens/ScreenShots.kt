@@ -438,4 +438,36 @@ object ScreenShots {
         if (field("clip") != true) return null
         return field("shape") as? androidx.compose.foundation.shape.CornerBasedShape
     }
+
+    /**
+     * Walk-through 2026-11-02 A9: every button, switch and checkbox on screen is at least 48 dp tall, a glyph's button
+     * ("⋯") 48 × 48 (not as wide as its glyph), and every drawn On/Off pill and setting chip is at least 30 dp tall.
+     * Only what is laid out inside the screen counts (a row scrolled half off isn't measured).
+     */
+    fun assertWholeTargets(compose: ComposeContentTestRule, name: String) {
+        val d = compose.density.density
+        val roles = setOf(androidx.compose.ui.semantics.Role.Button, androidx.compose.ui.semantics.Role.Switch,
+            androidx.compose.ui.semantics.Role.Checkbox)
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        fun inside(n: SemanticsNode) = n.boundsInRoot.let { it.top >= screen.top && it.bottom <= screen.bottom }
+        val small = compose.onAllNodes(androidx.compose.ui.test.hasClickAction()).fetchSemanticsNodes()
+            .filter { it.config.getOrNull(SemanticsProperties.Role) in roles && inside(it) }
+            .filter { n ->
+                // A glyph's button ("⋯", "‹", "+") must be 48 wide too; a worded one is as wide as its words.
+                val drawn = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty().trim()
+                n.size.height / d < 47.5f || (drawn.length <= 2 && n.size.width / d < 47.5f)
+            }
+            .map { n ->
+                val label = n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString()
+                    ?: n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } ?: "?"
+                "\"$label\" ${(n.size.width / d).toInt()} × ${(n.size.height / d).toInt()} dp"
+            }
+        if (small.isNotEmpty()) fail("$name: targets under 48 dp:\n" + small.joinToString("\n") { "- $it" })
+        val flat = listOf("switch-pill", "setting-chip").flatMap { tag ->
+            compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
+                .filter { inside(it) && it.size.height / d < 30f }
+                .map { "$tag ${(it.size.height / d).toInt()} dp tall" }
+        }
+        if (flat.isNotEmpty()) fail("$name: pills drawn too small:\n" + flat.joinToString("\n") { "- $it" })
+    }
 }

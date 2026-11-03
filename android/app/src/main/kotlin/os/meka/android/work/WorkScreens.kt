@@ -748,11 +748,7 @@ internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modif
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(ScreenUnknownRules.TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-            Text(
-                if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
-            )
+            os.meka.android.designsystem.SwitchPill(on, fill)
         }
         Crossfade(ScreenUnknownRules.line(on, assistantOn), animationSpec = MekaMotion.appear(reduced), label = "screen-unknown-line") { line ->
             Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)

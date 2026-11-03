@@ -170,7 +170,7 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     v.remindChoices.forEach { m ->
                         val label = LocalClock.formatMinute(m)
-                        SettingChip(label, m == v.remindMinute, "Bins reminder at $label", touch = true) {
+                        SettingChip(label, m == v.remindMinute, "Bins reminder at $label") {
                             haptics.tick()
                             scope.launch {
                                 runCatching { core.setBinReminder(m) }.getOrNull()?.let { said = BinAdded(it, refused = false) }
@@ -192,12 +192,12 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
                 v.councilLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     SettingChip(if (v.councilLine == null) "Use the council's dates" else "Pick a newer calendar", false,
-                        "Use the council's dates: pick the bin calendar file from your council", touch = true) {
+                        "Use the council's dates: pick the bin calendar file from your council") {
                         haptics.tick()
                         pickCalendar.launch(arrayOf("text/calendar", "text/x-vcalendar", "application/ics", "application/octet-stream", "text/plain"))
                     }
                     if (v.councilLine != null) {
-                        SettingChip("Use my own days", false, "Use the bin days you typed instead of the council's", touch = true) {
+                        SettingChip("Use my own days", false, "Use the bin days you typed instead of the council's") {
                             haptics.tick()
                             scope.launch {
                                 runCatching { core.useTypedBins() }.getOrNull()?.let { said = BinAdded(it.line, it.refused) }

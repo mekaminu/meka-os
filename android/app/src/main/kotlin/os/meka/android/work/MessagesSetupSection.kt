@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -200,38 +201,30 @@ private fun SetupRow(row: MessagesSetupRow, onPrivate: (Boolean) -> Unit, onMode
 
 /**
  * A pill whose colour blends to the accent when on, with the caller's tick haptic (motion catalogue: Messages setup).
- * [touch] (quality gate slice 59, Obi's voice): the pill drawn the same size inside a 48 dp touch, for panes whose
- * chips stand on their own row.
+ * Every chip is drawn 32 dp high inside a whole 48 × 48 touch (quality gate slice 59 for Obi's voice; walk-through
+ * 2026-11-02 A9 made it every chip: the Week ahead's On and 16:00–20:00, Commute's, Leaving now's, Messages' chips
+ * were about 21–23 dp to hit). Tagged `setting-chip` so the shots can measure the drawn pill.
  */
 @Composable
-internal fun SettingChip(label: String, on: Boolean, spoken: String, touch: Boolean = false, onClick: () -> Unit) {
+internal fun SettingChip(label: String, on: Boolean, spoken: String, onClick: () -> Unit) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "setup-chip-bg")
     val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "setup-chip-fg")
-    if (touch) {
-        androidx.compose.foundation.layout.Box(
-            Modifier.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
-                .clickable(role = Role.Switch) { onClick() }
-                .semantics { contentDescription = spoken; stateDescription = if (on) "On" else "Off" },
-            contentAlignment = androidx.compose.ui.Alignment.Center,
-        ) {
-            Text(
-                label, style = MekaType.caption, color = fg, maxLines = 1,
-                // Drawn at the Done pill's 32 dp (walk-through A11: these read 20–23 dp tall), the word centred.
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                    .heightIn(min = 32.dp).wrapContentHeight(Alignment.CenterVertically)
-                    .padding(horizontal = MekaSpace.m),
-            )
-        }
-        return
-    }
-    Text(
-        label, style = MekaType.caption, color = fg,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+    androidx.compose.foundation.layout.Box(
+        Modifier.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
+            .clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Switch) { onClick() }
-            .semantics { contentDescription = spoken; stateDescription = if (on) "On" else "Off" }
-            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
-    )
+            .semantics { contentDescription = spoken; stateDescription = if (on) "On" else "Off" },
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Text(
+            label, style = MekaType.caption, color = fg, maxLines = 1,
+            // Drawn at the Done pill's 32 dp (walk-through A11: these read 20–23 dp tall), the word centred.
+            modifier = Modifier.testTag("setting-chip").clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                .heightIn(min = 32.dp).wrapContentHeight(Alignment.CenterVertically)
+                .padding(horizontal = MekaSpace.m),
+        )
+    }
 }
 
 private fun openWhatsAppNotifications(context: android.content.Context) {

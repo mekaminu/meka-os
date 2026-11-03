@@ -66,6 +66,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquare
 import os.meka.android.designsystem.MekaType
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.ConnectedAccount
@@ -171,7 +172,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         note?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         message?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) }
         Text("Refresh", style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.padding(top = MekaSpace.m).clickable(role = Role.Button) { reload++ })
+            modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) { reload++ }.minTouch())
     }
 }
 
@@ -248,7 +249,7 @@ internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier,
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
                 .semantics { contentDescription = "${c.label} on Today"; selected = c.onToday }
-                .padding(vertical = MekaSpace.xs),
+                .minTouch().padding(vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -262,10 +263,9 @@ internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Button) { haptics.tick(); renaming = !renaming }
                         .semantics { contentDescription = if (renaming) "Cancel renaming ${c.label}" else "Rename ${c.label}" }
-                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
+                        .minTouchSquare().padding(horizontal = MekaSpace.xs))
             }
-            Text(if (c.onToday) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(pill).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
+            os.meka.android.designsystem.SwitchPill(c.onToday, pill)
         }
         AnimatedVisibility(renaming, enter = unfold(), exit = fold()) {
             CalendarNameField(c) { typed ->

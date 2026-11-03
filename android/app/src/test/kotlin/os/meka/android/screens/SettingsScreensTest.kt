@@ -188,6 +188,8 @@ class SettingsScreensTest {
         ScreenShots.assertNoLoneWords(compose, name, v.rows.map { it.line } + listOfNotNull(v.watchLine))
         // A field's line sits with its field, clear of the next label (slice 25's shots: they ran together).
         assertFieldsApart(name, v.rows.map { it.label })
+        // Walk-through 2026-11-02 A9: Watch for requests' On pill drawn 32 dp, every target whole.
+        ScreenShots.assertWholeTargets(compose, name)
         ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.label, it.line) } +
             v.children.flatMap { listOf(it.name, it.line) }, mustShow = false)
         when (fill) {

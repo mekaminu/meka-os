@@ -1,6 +1,8 @@
 package os.meka.android.designsystem
 
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,6 +16,13 @@ import androidx.compose.ui.unit.dp
  * `clickable` so the whole height takes the tap.
  */
 fun Modifier.minTouch(): Modifier = heightIn(min = MekaSpace.touch).wrapContentHeight(Alignment.CenterVertically)
+
+/**
+ * A glyph button ("⋯", "⌄") is a whole 48 × 48 target with the glyph centred, never only as wide as the glyph
+ * (walk-through 2026-11-02 A9: Trip lists' "⋯" had about 10 dp to hit). Put it after `clickable`, like [minTouch].
+ */
+fun Modifier.minTouchSquare(): Modifier =
+    sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch).wrapContentSize(Alignment.Center)
 
 /**
  * Calmer Today (Meka 2026-10-25 15:03: "the circle check box is too large"): a task row's tick is drawn [TickSize.DRAWN]

@@ -81,7 +81,7 @@ internal fun PhoneCalendarsSection(core: MekaCore, modifier: Modifier = Modifier
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     Text(LoneWordGlue.kept(if (refused) PhoneCalendarRules.DENIED_LINE else PhoneCalendarRules.ASK_LINE),
                         style = MekaType.caption, color = Meka.colors.textSecondary,
-                        modifier = if (refused) Modifier.clickable(role = Role.Button) { openAppSettings(context) } else Modifier)
+                        modifier = if (refused) Modifier.clickable(role = Role.Button) { openAppSettings(context) }.minTouch() else Modifier)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(PhoneCalendarRules.ALLOW, style = MekaType.itemMeta, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) {

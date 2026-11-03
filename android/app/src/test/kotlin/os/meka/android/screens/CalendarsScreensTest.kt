@@ -186,6 +186,8 @@ class CalendarsScreensTest {
         ScreenShots.assertEachOneLine(compose, name, list.map { it.title } + CalendarAccessAction.entries.map { it.label } + "Reconnect")
         ScreenShots.assertReadable(compose, name, list.map { it.title }, mustShow = false)
         providerNeverAlone(name, core)
+        // Walk-through 2026-11-02 A9: ON TODAY's rows, their On pills, Rename and Refresh are whole targets.
+        ScreenShots.assertWholeTargets(compose, name)
         // Every time on screen is the core's (17:15 in London), never the test machine's zone.
         list.filter { it.lastSyncAtMs != null && !it.needsReconnect }.forEach { a ->
             val synced = a.syncedAt ?: fail("$name: ${a.title} has no synced time")

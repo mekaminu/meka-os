@@ -90,6 +90,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquare
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
@@ -884,7 +885,7 @@ private fun GroupHead(
         if (onMenu != null) {
             Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMenu)
-                    .semantics { contentDescription = "Change the group ${g.name}" }.minTouch().testTag("trip-group-more-${g.name}"))
+                    .semantics { contentDescription = "Change the group ${g.name}" }.minTouchSquare().testTag("trip-group-more-${g.name}"))
         }
     }
 }
@@ -915,7 +916,7 @@ private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick:
         if (row.qty.isNotEmpty()) Text(row.qty, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade))
         Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpen)
-                .semantics { contentDescription = "Change ${row.text}" }.minTouch().testTag("trip-item-more-${row.id}"))
+                .semantics { contentDescription = "Change ${row.text}" }.minTouchSquare().testTag("trip-item-more-${row.id}"))
     }
 }
 

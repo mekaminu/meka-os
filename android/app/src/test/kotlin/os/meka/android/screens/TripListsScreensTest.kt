@@ -116,6 +116,8 @@ class TripListsScreensTest {
         ScreenShots.assertShows(compose, name, "Seville trip")
         ScreenShots.assertShows(compose, name, "2 days to go")
         ScreenShots.assertNotCornerClipped(compose, name, "2 days to go")
+        // Walk-through 2026-11-02 A9: each "⋯" is a whole 48 × 48 target, not as wide as its glyph.
+        ScreenShots.assertWholeTargets(compose, name)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun packCoverDark() = shoot("cover-dark-pack")

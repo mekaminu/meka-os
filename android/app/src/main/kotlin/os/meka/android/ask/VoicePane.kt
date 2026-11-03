@@ -348,8 +348,8 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionRules.CALL_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Obi calls you by name", touch = true) { a.callSir(false) }
-                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Obi calls you sir", touch = true) { a.callSir(true) }
+                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Obi calls you by name") { a.callSir(false) }
+                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Obi calls you sir") { a.callSir(true) }
                 }
                 Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
                     Text(LoneWordGlue.kept(CompanionRules.callLine(now)), style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -360,8 +360,8 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
         Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(os.meka.core.domain.FaceLook.SETTING_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                SettingChip(os.meka.core.domain.FaceLook.ON, on = s.faceOn, spoken = "Show the face when talking", touch = true) { a.setFace(true) }
-                SettingChip(os.meka.core.domain.FaceLook.OFF, on = !s.faceOn, spoken = "Show the orb when talking", touch = true) { a.setFace(false) }
+                SettingChip(os.meka.core.domain.FaceLook.ON, on = s.faceOn, spoken = "Show the face when talking") { a.setFace(true) }
+                SettingChip(os.meka.core.domain.FaceLook.OFF, on = !s.faceOn, spoken = "Show the orb when talking") { a.setFace(false) }
             }
             if (!s.faceReady) Text(LoneWordGlue.kept(os.meka.core.domain.FaceLook.WAITING_LINE), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
@@ -370,8 +370,8 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionMemoryRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionMemoryRules.ON_LABEL, on = on, spoken = "Obi remembers your chats", touch = true) { a.remember(true) }
-                    SettingChip(CompanionMemoryRules.OFF_LABEL, on = !on, spoken = "Obi doesn't remember your chats", touch = true) { a.remember(false) }
+                    SettingChip(CompanionMemoryRules.ON_LABEL, on = on, spoken = "Obi remembers your chats") { a.remember(true) }
+                    SettingChip(CompanionMemoryRules.OFF_LABEL, on = !on, spoken = "Obi doesn't remember your chats") { a.remember(false) }
                 }
                 Crossfade(on to s.memoryRows, animationSpec = MekaMotion.appear(reduced), label = "memory") { (now, rows) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -396,8 +396,8 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
                 Text(LoneWordGlue.kept(lv.intro), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     // On · Off, the same order as Face and Memory (walk-through A11).
-                    SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on", touch = true) { a.setLive(true) }
-                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off", touch = true) { a.setLive(false) }
+                    SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on") { a.setLive(true) }
+                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off") { a.setLive(false) }
                 }
                 Crossfade(lv.line to lv.meterLine, animationSpec = MekaMotion.appear(reduced), label = "live-line") { (line, meter) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {

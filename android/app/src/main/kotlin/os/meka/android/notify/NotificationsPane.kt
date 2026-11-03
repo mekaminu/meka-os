@@ -268,8 +268,7 @@ private fun ToggleRow(label: String, on: Boolean, modifier: Modifier = Modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(LoneWordGlue.kept(label), style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-        Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(dot).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
+        os.meka.android.designsystem.SwitchPill(on, dot)
     }
 }
 
