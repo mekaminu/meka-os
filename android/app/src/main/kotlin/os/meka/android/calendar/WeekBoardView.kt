@@ -1613,7 +1613,9 @@ private fun StudyNote(line: os.meka.core.domain.StudyDayLine) {
     androidx.compose.animation.Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "board-study") { l ->
         Text(
             os.meka.core.domain.LoneWordGlue.kept(l.text), style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            // Walk-through 2026-11-02 (A10): a narrow open-Fold column cut "Study · 1 lesson · about 1 h" before its length
+            // at two lines; it takes the third it needs instead (the length is the point of the line).
+            maxLines = os.meka.core.domain.StudyRules.BOARD_LINES, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = MekaSpace.xs).fillMaxWidth()
                 .clip(RoundedCornerShape(MekaRadius.s))
                 .clickable(enabled = l.courseId != null, onClickLabel = "Open the course") {

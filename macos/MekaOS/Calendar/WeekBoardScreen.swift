@@ -571,7 +571,7 @@ private struct BoardColumnView: View {
                 } label: {
                     Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption)
                         .foregroundStyle(study.lit ? palette.accent : palette.textSecondary)
-                        .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        .lineLimit(Int(StudyRules.shared.BOARD_LINES)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Open the course")

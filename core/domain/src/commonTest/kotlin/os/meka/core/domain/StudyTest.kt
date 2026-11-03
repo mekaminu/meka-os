@@ -452,7 +452,9 @@ class StudyTest {
         sync()
         fun day(d: Long) = BoardDay(
             d, "Day", "${d - today}", isToday = d == today, isPast = d < today, place = null, placeLabel = null,
-            chips = emptyList(), moreChips = 0, cards = emptyList(), countLine = "Nothing planned", accessibilityLabel = "Day $d",
+            chips = emptyList(), moreChips = 0, cards = emptyList(), countLine = "Nothing planned",
+            accessibilityLabel = if (d >= today) "Day $d, 2 hours free" else "Day $d",
+            capacity = if (d >= today) BoardCapacity(0, 120, 0) else null,
         )
         val board = WeekBoard(today, listOf(BoardWeek(today - 1, "This week", "26 Oct – 1 Nov", (today - 1..today + 5).map(::day))))
         val shown = StudyRules.onBoard(board, sMac.lessons(), sMac.courses(), doneDay)
@@ -468,6 +470,13 @@ class StudyTest {
         assertEquals("Study · 1 lesson · about 1 h", shown.day(today + 2)!!.study!!.text)
         assertFalse(shown.day(today + 2)!!.study!!.lit)
         assertNull(shown.day(today + 1)!!.study)
+        // Walk-through 2026-11-02 (A10): the budget pill counts the lessons still to do, never "nothing yet / 2h".
+        assertEquals(60, shown.day(today + 2)!!.capacity!!.plannedMin)
+        assertEquals("1h / 2h", BoardPlannerRules.budget(shown.day(today + 2)!!.capacity!!).value)
+        assertEquals(60, shown.day(today)!!.capacity!!.plannedMin) // Welcome 15 + Spreadsheets 45, the rolled-over one too
+        assertTrue(shown.day(today + 2)!!.accessibilityLabel.startsWith("Day ${today + 2}, 1 hour planned, 2 hours free"))
+        assertEquals(0, shown.day(today + 1)!!.capacity!!.plannedMin) // no lessons that day
+        assertNull(shown.day(today - 1)!!.capacity)
 
         // Ticked today: "1 of 2 done"; both: "all 2 done".
         val monMs = world.clock.nowMs
@@ -476,6 +485,7 @@ class StudyTest {
         assertTrue(sMac.tick(ls[0].id, true))
         val ticked = StudyRules.onBoard(board, sMac.lessons(), sMac.courses(), byTick)
         assertEquals("Study · 1 of 2 done · about 45 min", ticked.day(today)!!.study!!.text)
+        assertEquals(45, ticked.day(today)!!.capacity!!.plannedMin) // a ticked lesson no longer counts
         assertTrue(sMac.tick(ls[1].id, true))
         val all = StudyRules.onBoard(board, sMac.lessons(), sMac.courses(), byTick)
         assertEquals("Study · all 2 done", all.day(today)!!.study!!.text)

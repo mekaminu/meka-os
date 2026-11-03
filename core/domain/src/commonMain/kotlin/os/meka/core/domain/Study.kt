@@ -754,10 +754,30 @@ object StudyRules {
         val today = board.todayEpochDay
         return board.copy(weeks = board.weeks.map { w ->
             w.copy(days = w.days.map { d ->
-                val line = boardLine(onDay(lessons, courses, d.epochDay, rollOver = d.epochDay == today, doneDay = doneDay), d.epochDay, today)
-                if (line == null) d else d.copy(study = line, accessibilityLabel = d.accessibilityLabel + ", " + line.spoken)
+                val on = onDay(lessons, courses, d.epochDay, rollOver = d.epochDay == today, doneDay = doneDay)
+                val line = boardLine(on, d.epochDay, today)
+                if (line == null) d else {
+                    // Walk-through 2026-11-02 (A10): the day's budget pill counts its lessons still to do, so a day
+                    // with a session never reads "0m / 2h" (nothing before today: its pill isn't drawn from capacity).
+                    val was = d.capacity
+                    val capacity = was?.let { c -> studyCapacity(c, on) }
+                    val label = if (was != null && capacity != null && capacity != was) d.accessibilityLabel.replace(was.spoken, capacity.spoken) else d.accessibilityLabel
+                    d.copy(study = line, capacity = capacity, accessibilityLabel = label + ", " + line.spoken)
+                }
             })
         })
+    }
+
+    /** The most lines the Week board's study line takes: three, so a narrow column never cuts its length (A10). */
+    const val BOARD_LINES = 3
+
+    /**
+     * A day's capacity with its planned lessons still to do added to what is planned (their lengths; a lesson with no
+     * length adds nothing), the same way a task's estimate counts (walk-through 2026-11-02, A10).
+     */
+    fun studyCapacity(c: BoardCapacity, on: List<StudyLesson>): BoardCapacity {
+        val mins = on.filter { !it.done }.mapNotNull { it.mins }.sum()
+        return if (mins <= 0) c else c.copy(plannedMin = c.plannedMin + mins)
     }
 
     // ---- The plan (slice 2a) ----

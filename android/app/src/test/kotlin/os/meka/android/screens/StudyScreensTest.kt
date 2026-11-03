@@ -383,6 +383,17 @@ class StudyScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "inner-dark-board-study")
         ScreenShots.assertShows(compose, "inner-dark-board-study", os.meka.core.domain.LoneWordGlue.kept("Study · 1 lesson · about 1 h"))
         ScreenShots.assertShows(compose, "inner-dark-board-study", os.meka.core.domain.LoneWordGlue.kept("Study · 1 lesson · about 40 min"))
+        // Walk-through 2026-11-02 (A10): the study line keeps its length (never cut before "about 1 h") and each day's
+        // budget pill counts its session (never "0m / 2h" with a lesson planned).
+        val cut = ScreenShots.laidOut(compose).filter { it.text.startsWith("Study") && it.cut }
+        org.junit.Assert.assertTrue("study line cut: ${cut.map { it.text }}", cut.isEmpty())
+        listOf(20_752L to 60, 20_753L to 40).forEach { (d, mins) ->
+            val cap = core.weekBoard.value.day(d)!!.capacity!!
+            org.junit.Assert.assertTrue("day $d plans ${cap.plannedMin} min", cap.plannedMin >= mins)
+            val pill = os.meka.core.domain.BoardPlannerRules.budget(cap)
+            org.junit.Assert.assertFalse(pill.value, pill.value.startsWith(os.meka.core.domain.BoardPlannerRules.NOTHING_YET))
+            ScreenShots.assertShows(compose, "inner-dark-board-study", pill.spoken) // the pill reads out its figures
+        }
         // A tap opens the course on Goals.
         val app = ApplicationProvider.getApplicationContext<ShotApplication>()
         compose.mainClock.autoAdvance = true
