@@ -661,6 +661,7 @@ Acceptance: re-shoot the open Fold at its real size with Meka-like data (a mostl
   - *Completeness (2026-10-12):* The pass also covers Light, reduced motion (macOS accessibility setting), VoiceOver labels, keyboard navigation and focus rings, narrow window widths, the menu-bar extra and the look of notifications; list any Fold/Mac feature gaps found.
 
 - [x] **Screen tests that flaked on CI** (Claude 2026-10-26–30: Shutdown, Watch, Work, Talk over, Life admin by hand). Done 2026-11-02: each now waits by turns (`ScreenShots.awaitShows`: main looper, a little real time, the frame clock) until its text is on screen, failing after a bound, never skipped; Work's wait loop now stops early; bfb66d1, CI run 1516 green. Details in the archive.
+- [~] **The motion check red since 29 Oct** (Claude 2026-11-04): runs 76–80 failed on one emulator test, Keep callers' recordings, which still tapped the old "30 days" choice and hit "Failed to inject touch input"; the test now uses the real choices (7 days · Don't keep) and taps through the chip's click action. *What remains:* the motion run on this commit green.
 
 ## Milestones
 
