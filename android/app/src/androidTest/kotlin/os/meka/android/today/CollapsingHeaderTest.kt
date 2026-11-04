@@ -73,7 +73,7 @@ class CollapsingHeaderTest {
                         item {
                             Box(Modifier.onSizeChanged { headerPx = it.height }) {
                                 TodayHeaderRow(face, compact = true, play = DayRingPlay.STILL, played = {}, slotOnly = true) {
-                                    Text("Good morning, Alex")
+                                    Text("Good morning, Jordan")
                                     Text("Tue 13 Oct")
                                     Text("14° · light rain from 16:00")
                                 }
@@ -81,7 +81,7 @@ class CollapsingHeaderTest {
                         }
                         items(40) { Text("Row $it", Modifier.height(56.dp)) }
                     }
-                    CollapsingHeader(shown, face, WatchFaceRules.COVER_DP, "Good morning, Alex", "Tue 13 Oct · 14°",
+                    CollapsingHeader(shown, face, WatchFaceRules.COVER_DP, "Good morning, Jordan", "Tue 13 Oct · 14°",
                         DayRingPlay.STILL, played = {}, onOpenFace = {}, night = false, week = os.meka.core.domain.WeekGoals.EMPTY,
                         dots = emptyList(), onTick = null, onTop = {})
                 }

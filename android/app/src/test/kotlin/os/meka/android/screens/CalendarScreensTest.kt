@@ -84,7 +84,7 @@ class CalendarScreensTest {
     private fun titles(fill: Fill): List<String> = when (fill) {
         Fill.EMPTY -> emptyList()
         Fill.ONE -> listOf("Swimming lesson")
-        Fill.MANY -> listOf("Call with Sam", "Swimming lesson", longTitle)
+        Fill.MANY -> listOf("Call with Priya", "Swimming lesson", longTitle)
     }
 
     /** Writes the events into [store] as the server's calendar mirror does, before the core opens it. */
@@ -95,15 +95,15 @@ class CalendarScreensTest {
         fun event(id: String, title: String, start: Long, end: Long, calendar: String, place: String? = null, allDay: Boolean = false) =
             mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
                 put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
-                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "alex@example.com".fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
                 put(EventFields.CALENDAR, calendar.fv())
                 if (allDay) put(EventFields.ALL_DAY, true.fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
         event("ev1", "Swimming lesson", at(21, 18, 30), at(21, 19, 15), "Kids", place = "Oakfield Leisure Centre")
         if (fill != Fill.MANY) return
-        event("ev2", "Dentist", at(21, 9, 30), at(21, 10, 0), "Personal")
-        event("ev3", "Call with Sam", at(21, 17, 0), at(21, 17, 45), "Personal")
+        event("ev2", "Dentist", at(21, 13, 45), at(21, 14, 15), "Personal", place = "Oakfield Dental") // the bedside's dentist (walk-through A16)
+        event("ev3", "Call with Priya", at(21, 17, 0), at(21, 17, 45), "Personal")
         event("ev4", longTitle, at(22, 10, 0), at(22, 11, 30), "Personal")
         event("ev5", "Inset day", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
         event("ev6", "Football training", at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
@@ -162,7 +162,7 @@ class CalendarScreensTest {
             Fill.ONE -> ScreenShots.assertShows(compose, name, "Swimming lesson")
             Fill.MANY -> {
                 ScreenShots.assertShows(compose, name, "Swimming lesson")
-                ScreenShots.assertShows(compose, name, "Call with Sam")
+                ScreenShots.assertShows(compose, name, "Call with Priya")
                 if (name.startsWith("cover")) assertEventRowsTouch(name)
             }
         }
@@ -174,7 +174,7 @@ class CalendarScreensTest {
      * event row on screen, even a one-line one with no place, answers a 48 dp touch. Read only, no taps or scrolling.
      */
     private fun assertEventRowsTouch(name: String) {
-        val small = listOf("Dentist", "Call with Sam", "Swimming lesson").flatMap { title ->
+        val small = listOf("Dentist", "Call with Priya", "Swimming lesson").flatMap { title ->
             compose.onAllNodes(hasClickAction() and hasText(title, substring = true)).fetchSemanticsNodes()
                 .filter { it.size.height / compose.density.density < 47.5f }
                 .map { "\"$title\" ${(it.size.height / compose.density.density).toInt()} dp" }

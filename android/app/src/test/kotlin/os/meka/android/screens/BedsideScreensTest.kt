@@ -135,7 +135,7 @@ class BedsideScreensTest {
         fun event(id: String, title: String, start: Long, end: Long, place: String? = null) =
             mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
                 put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
-                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "alex@example.com".fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
                 put(EventFields.CALENDAR, "Personal".fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
@@ -173,11 +173,11 @@ class BedsideScreensTest {
             if (scene != Scene.EMPTY) {
                 core.syncNow()
                 core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
-                core.setAboutYou(AboutField.SHOWN_NAME, "Alex")
+                core.setAboutYou(AboutField.SHOWN_NAME, "Jordan")
                 val today = core.weekBoard.value.todayEpochDay
                 core.addOnBoardSized("Book the MOT", today, 30)
                 core.addOnBoardSized("Plan Saturday's football run with Sam", today, 60)
-                core.addWaiting("Quote for the new fence", "Jordan", 0)
+                core.addWaiting("Quote for the new fence", "Casey", 0)
             }
             core.tick()
         }

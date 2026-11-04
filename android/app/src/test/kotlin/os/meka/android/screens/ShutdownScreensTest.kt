@@ -100,7 +100,7 @@ class ShutdownScreensTest {
         fun event(id: String, title: String, start: Long, end: Long, place: String? = null) =
             mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
                 put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
-                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "alex@example.com".fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
                 put(EventFields.CALENDAR, "Personal".fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })

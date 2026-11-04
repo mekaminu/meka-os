@@ -114,7 +114,7 @@ class NeedsYouMailScreensTest {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         football = email("m1", "Sam Taylor", "Football on Saturday", "Can you drive the boys to the match?", hour, "Personal")
-        invoice = email("m2", "Alex Reed", "Invoice question", "Could you check the March invoice for me?", 2 * hour, "Business")
+        invoice = email("m2", "Chris Reed", "Invoice question", "Could you check the March invoice for me?", 2 * hour, "Business")
         streamly = renewal("m3", "Streamly", "Your membership renews soon", "It renews on 3 Nov for £10.99 a month")
         safeDrive = renewal("m4", "Safe Drive", "Your car insurance is due for renewal", "Renewal date: 28/11/2026")
         val core = MekaCore(

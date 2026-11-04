@@ -122,11 +122,11 @@ class WorkingOnScreensTest {
         val today = core.todayEpochDay()
         when (fill) {
             Fill.EMPTY, Fill.ERRANDS -> Unit
-            Fill.ONE -> core.addWaiting("The drill back", "Alex", 0)
+            Fill.ONE -> core.addWaiting("The drill back", "Casey", 0)
             Fill.MANY -> {
                 core.addRenewal("Home insurance", ObligationKind.INSURANCE, today + 15, RenewalRepeat.YEARLY, null, null)
                 core.addOccasion("Sam's birthday 25 Oct")
-                core.addWaiting("The drill back", "Alex", 0)
+                core.addWaiting("The drill back", "Casey", 0)
             }
         }
     }
@@ -148,7 +148,7 @@ class WorkingOnScreensTest {
             )).fv(),
             ObiJobFields.FOUND to "Two Gas Safe engineers nearby offer a yearly service from £85; Oakfield Heating has slots next week.".fv(),
             ObiJobFields.NEED to "Which morning next week suits you for the engineer?".fv(),
-            ObiJobFields.DRAFT to "Hello, I'd like to book a yearly boiler service next week, ideally a morning. Could you let me know what you have? Thanks, Alex".fv(),
+            ObiJobFields.DRAFT to "Hello, I'd like to book a yearly boiler service next week, ideally a morning. Could you let me know what you have? Thanks, Jordan".fv(),
             ObiJobFields.DID_AT to (now - 600_000L).fv(),
         ))
         server.commitLocal(EntityTypes.OBI_JOB, "job-fence", mapOf(
@@ -208,7 +208,7 @@ class WorkingOnScreensTest {
             }
             Fill.ONE -> {
                 if (cards != 1) fail("$name: $cards cards, not 1")
-                if (!onScreen("Time to chase: The drill back from Alex")) fail("$name: the chase isn't said")
+                if (!onScreen("Time to chase: The drill back from Casey")) fail("$name: the chase isn't said")
             }
             Fill.ERRANDS -> {
                 val jobs = compose.onAllNodes(hasTestTag("errand-card"), useUnmergedTree = true).fetchSemanticsNodes().size

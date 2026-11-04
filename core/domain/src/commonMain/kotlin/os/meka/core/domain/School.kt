@@ -172,10 +172,10 @@ object SchoolRules {
     const val COVERED_LABEL = "Covered"
     const val NO_SCHOOL = "No school"
 
-    const val ADD_HINT = "Add… (INSET 27 Oct, Half term 26–30 Oct, Alex PE Tue)"
+    const val ADD_HINT = "Add… (INSET 2 Nov, Half term 26–30 Oct, Alex PE Tue)"
     const val EMPTY_LINE = "Nothing entered yet. Type the school's days off once, one line each, and PE days with the weekday."
     const val NOTHING_OFF = "Nothing off coming up"
-    const val NOT_READ = "Navilife couldn't read a date in that. Try \"INSET 27 Oct\", \"Half term 26–30 Oct\" or \"Alex PE Tue\"."
+    const val NOT_READ = "Navilife couldn't read a date in that. Try \"INSET 2 Nov\", \"Half term 26–30 Oct\" or \"Alex PE Tue\"."
     const val SHARED = "Only you see this for now; your partner's family page will show it once the family calendar is settled."
 
     private val I = setOf(RegexOption.IGNORE_CASE)

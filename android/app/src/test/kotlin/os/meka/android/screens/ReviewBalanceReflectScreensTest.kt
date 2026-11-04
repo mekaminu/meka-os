@@ -101,7 +101,7 @@ class ReviewBalanceReflectScreensTest {
     private fun at(day: Long, h: Int, m: Int = 0) = cal.toEpochMs(day, h * 60 + m)
     private var n = 0
     private fun ev(title: String, day: Long, h: Int, m: Int, endH: Int, endM: Int = 0) =
-        CalendarEvent("e${n++}", title, at(day, h, m), at(day, endH, endM), false, null, "google", "alex@example.com", "Personal")
+        CalendarEvent("e${n++}", title, at(day, h, m), at(day, endH, endM), false, null, "google", "jordan@example.com", "Personal")
 
     private fun week(fill: Fill): WeeklyReviewView = when (fill) {
         Fill.EMPTY -> WeeklyReviewView.EMPTY.copy(

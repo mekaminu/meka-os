@@ -99,7 +99,7 @@ class VoiceNotesScreensTest {
             VoiceNote(
                 "vn-kept", now - DAY - 9 * HOUR, 125_000L, VoiceNoteWords.HEARD,
                 "Ideas for the garden: move the raised beds to the sunny side, find out what the shed base costs, and " +
-                    "plant the bulbs before it gets cold. Also think about a water butt by the back door and ask Alex " +
+                    "plant the bulbs before it gets cold. Also think about a water butt by the back door and ask Casey " +
                     "whether the old fence panels can go to the tip on Saturday morning.",
                 kept = true,
             ),

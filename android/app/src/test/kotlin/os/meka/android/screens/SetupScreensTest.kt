@@ -101,18 +101,18 @@ class SetupScreensTest {
             SetupFacts(
                 device = SetupDevice(
                     mac = false, notificationsAllowed = true, batteryExempt = true, notificationAccess = true, callRoleHeld = true,
-                    people = PeopleLists(family = setOf("Alex", "Sam", "Jo"), numbers = mapOf("Alex" to setOf("+447700900123"), "Sam" to setOf("+447700900124"), "Jo" to setOf("+447700900125"))),
-                    watch = RequestWatch(people = setOf("Alex")),
+                    people = PeopleLists(family = setOf("Morgan", "Alex", "Sam"), numbers = mapOf("Morgan" to setOf("+447700900123"), "Alex" to setOf("+447700900124"), "Sam" to setOf("+447700900125"))),
+                    watch = RequestWatch(people = setOf("Morgan")),
                 ),
                 connected = true,
                 server = ServerHealth(ServerHealth.PUSH_ON, calls = true, speech = true, atMs = now, macs = 1, speechGoogle = ServerHealth.GOOGLE_ON),
                 accounts = listOf(
-                    HealthAccount("google", "alex@example.com", "Personal", "ok", now),
-                    HealthAccount("microsoft", "alex@example.org", "Work", "ok", now),
+                    HealthAccount("google", "jordan@example.com", "Personal", "ok", now),
+                    HealthAccount("microsoft", "jordan@example.org", "Work", "ok", now),
                     HealthAccount("weather", "home", "Weather", "ok", now),
                     HealthAccount("travel", "Google Routes · drive times to football", "Travel times", "ok", now),
                 ),
-                signIns = listOf(SignIn("google", "alex@example.com", SignInState.OK, null, canEdit = true)),
+                signIns = listOf(SignIn("google", "jordan@example.com", SignInState.OK, null, canEdit = true)),
                 ai = ai, callAssistantOn = true, voiceMessageSeen = true, voiceChosen = "Kore",
                 homePlace = "Oakfield", workPlace = "Riverside", nowMs = now,
             ),

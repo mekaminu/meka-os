@@ -87,14 +87,14 @@ class WeekAheadScreensTest {
         fun event(id: String, title: String, start: Long, end: Long, calendar: String, place: String? = null) =
             mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
                 put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
-                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "alex@example.com".fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
                 put(EventFields.CALENDAR, calendar.fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
         event("ev1", "Swimming lesson", at(21, 18, 30), at(21, 19, 15), "Kids", place = "Oakfield Leisure Centre")
         if (fill != Fill.MANY) return
         event("ev2", longTitle, at(22, 10, 0), at(22, 11, 30), "Personal", place = "Harbour House, Dock Street")
-        event("ev3", "Dinner with Sam and Jo", at(23, 19, 30), at(23, 22, 0), "Personal")
+        event("ev3", "Dinner with Priya and Jo", at(23, 19, 30), at(23, 22, 0), "Personal")
         event("ev4", "Football training", at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
         event("ev5", "Car boot sale", at(25, 8, 0), at(25, 11, 0), "Personal")
     }
@@ -114,7 +114,7 @@ class WeekAheadScreensTest {
             if (fill != Fill.EMPTY) core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
             if (fill == Fill.MANY) {
                 core.setWorkDayHours(4, 9 * 60, 15 * 60 + 30)
-                core.setAboutYou(AboutField.PARTNER_NAME, "Jordan")
+                core.setAboutYou(AboutField.PARTNER_NAME, "Morgan")
                 core.addAboutYouChild("Alex, U7, Oakfield School")
                 core.addAboutYouChild("Sam, U10, Oakfield School")
                 check(core.addSchool("INSET 23 Oct") != null)

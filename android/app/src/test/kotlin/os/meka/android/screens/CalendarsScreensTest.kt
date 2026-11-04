@@ -93,7 +93,7 @@ class CalendarsScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private val personalEmail = "alex@example.com"
+    private val personalEmail = "jordan@example.com"
     private val workEmail = "alex.work@example.com"
 
     /** Navilife's server, as far as Calendars asks it: sync and the connected accounts (never a token). */

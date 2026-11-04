@@ -100,7 +100,7 @@ class AskScreensTest {
                 core.addOccasion("Sam's birthday 3 Nov")
                 core.addTrip("Lisbon 12 Nov to 15 Nov")
                 core.addRenewal("Home insurance", ObligationKind.INSURANCE, core.todayEpochDay() + 60, RenewalRepeat.YEARLY, null, null)
-                core.addWaiting("The quote for the fence", "Alex", 3)
+                core.addWaiting("The quote for the fence", "Casey", 3)
             }
             core.tick()
         }
@@ -234,7 +234,7 @@ class AskScreensTest {
             core.addOccasion("Sam's birthday 3 Nov")
             core.addTrip("Lisbon 12 Nov to 15 Nov")
             core.addRenewal("Home insurance", ObligationKind.INSURANCE, core.todayEpochDay() + 60, RenewalRepeat.YEARLY, null, null)
-            core.addWaiting("The quote for the fence", "Alex", 3)
+            core.addWaiting("The quote for the fence", "Casey", 3)
             core.tick()
         }
         compose.mainClock.autoAdvance = false

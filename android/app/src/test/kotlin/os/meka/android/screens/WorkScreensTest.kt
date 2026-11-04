@@ -79,17 +79,17 @@ class WorkScreensTest {
         if (fill == Fill.ONE) {
             core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
             core.setCommute(60, 60)
-            return PeopleLists(family = setOf("Jordan")).withNumbers("Jordan", listOf("07700 900123"))
+            return PeopleLists(family = setOf("Morgan")).withNumbers("Morgan", listOf("07700 900123"))
         }
         core.setWorkSchedule(listOf(1, 2, 3, 4), 9 * 60, 17 * 60 + 30, true)
         core.setWorkDayHours(4, 9 * 60, 15 * 60 + 30)
         core.setCallAssistant(true)
         core.setScreenUnknownAlways(true)
         core.setCommute(75, 80)
-        core.setLeavingNow(true, "Jordan", 45)
+        core.setLeavingNow(true, "Morgan", 45)
         check(core.blockCaller("01632 960691", "Scam call claiming to be the police"))
-        return PeopleLists(family = setOf("Jordan", "Sam Okonkwo-Lee"), alwaysNotify = setOf("Riley"))
-            .withNumbers("Jordan", listOf("07700 900123"))
+        return PeopleLists(family = setOf("Morgan", "Sam Okonkwo-Lee"), alwaysNotify = setOf("Riley"))
+            .withNumbers("Morgan", listOf("07700 900123"))
             .withNumbers("Riley", listOf("07700 900456"))
     }
 
@@ -169,7 +169,7 @@ class WorkScreensTest {
             Fill.ONE -> {
                 if (!w.atWork) fail("$name: not at work at 17:15 on a Wednesday inside 09:00–17:30 (${w.line})")
                 ScreenShots.assertShows(compose, name, "Stop work now")
-                ScreenShots.assertShows(compose, name, "Jordan")
+                ScreenShots.assertShows(compose, name, "Morgan")
             }
             Fill.MANY -> {
                 if (!w.callAssistant || !w.screenUnknownAlways) fail("$name: the call assistant isn't on and screening ($w)")

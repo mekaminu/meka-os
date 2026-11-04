@@ -88,11 +88,11 @@ class LifePlacesScreensTest {
         if (fill == Fill.EMPTY) return
         when (place) {
             Place.PEOPLE -> {
-                core.addPromise("Send the photos from the party", "Alex", 2)
+                core.addPromise("Send the photos from the party", "Casey", 2)
                 if (fill == Fill.MANY) {
-                    core.addPromise("Return the drill", "Alex", null)
-                    core.addWaiting("The quote for the fence", "Alex", 3)
-                    core.addWaiting("Their sign-off on the long weekend rota for the whole of November", "Jordan Whitfield", 0)
+                    core.addPromise("Return the drill", "Casey", null)
+                    core.addWaiting("The quote for the fence", "Casey", 3)
+                    core.addWaiting("Their sign-off on the long weekend rota for the whole of November", "Taylor Whitfield", 0)
                     core.addOccasion("Sam's birthday 3 Nov")
                     core.addOccasion("Priya's birthday 24 Oct")
                 }
@@ -273,25 +273,25 @@ class LifePlacesScreensTest {
         val name = "people-by-hand"
         val p = Place.PEOPLE
         assertTouchTargets(name)
-        val alex = core.peopleView.value.rows.firstOrNull { it.name == "Alex" } ?: fail("$name: Alex isn't on People")
-        val promise = alex.promised.firstOrNull() ?: fail("$name: nothing promised to Alex")
+        val casey = core.peopleView.value.rows.firstOrNull { it.name == "Casey" } ?: fail("$name: Casey isn't on People")
+        val promise = casey.promised.firstOrNull() ?: fail("$name: nothing promised to Casey")
         val kept = hasContentDescription("Kept: ${promise.title}")
-        tap(p, name, "Alex", hasContentDescription(alex.spoken))
+        tap(p, name, "Casey", hasContentDescription(casey.spoken))
         until { shows(kept) }
-        if (!shows(kept)) fail("$name: tapping Alex didn't open what's owed")
+        if (!shows(kept)) fail("$name: tapping Casey didn't open what's owed")
         ScreenShots.assertShows(compose, name, "WAITING FOR")
         assertTouchTargets(name)
         tap(p, name, "Kept", kept)
-        until { core.peopleView.value.rows.first { it.key == alex.key }.promised.none { it.id == promise.id } }
-        if (core.peopleView.value.rows.first { it.key == alex.key }.promised.any { it.id == promise.id }) {
-            fail("$name: Kept left \"${promise.title}\" on Alex")
+        until { core.peopleView.value.rows.first { it.key == casey.key }.promised.none { it.id == promise.id } }
+        if (core.peopleView.value.rows.first { it.key == casey.key }.promised.any { it.id == promise.id }) {
+            fail("$name: Kept left \"${promise.title}\" on Casey")
         }
         if (core.listsView.value.promised.any { it.id == promise.id }) fail("$name: Kept on People didn't keep it on Lists")
-        val now = core.peopleView.value.rows.first { it.key == alex.key }
-        val other = now.promised.firstOrNull() ?: fail("$name: Alex's other promise went too")
-        tap(p, name, "Alex", hasContentDescription(now.spoken))
+        val now = core.peopleView.value.rows.first { it.key == casey.key }
+        val other = now.promised.firstOrNull() ?: fail("$name: Casey's other promise went too")
+        tap(p, name, "Casey", hasContentDescription(now.spoken))
         until { !shows(hasContentDescription("Kept: ${other.title}")) }
-        if (shows(hasContentDescription("Kept: ${other.title}"))) fail("$name: a second tap on Alex didn't fold him")
+        if (shows(hasContentDescription("Kept: ${other.title}"))) fail("$name: a second tap on Casey didn't fold him")
     }
 
     /**

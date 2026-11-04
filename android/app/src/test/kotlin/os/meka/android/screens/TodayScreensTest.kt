@@ -196,6 +196,9 @@ class TodayScreensTest {
                     core.addOnBoardSized("Pay the window cleaner", today, 15)
                     core.addOnBoardSized("Plan Saturday's football run with Alex", today, 120)
                     core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
+                    // Walk-through A16: the same three habits Goals has (Stretch done this morning), not one.
+                    core.setHabitDone(core.addHabit("Stretch", 7, HabitTiming.MORNING, 10, null), true)
+                    core.addHabit("Run", 3, HabitTiming.EVENING, 40, null)
                     done?.let { core.complete(it) }
                 }
             }

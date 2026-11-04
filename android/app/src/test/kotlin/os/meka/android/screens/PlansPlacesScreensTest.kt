@@ -99,6 +99,8 @@ class PlansPlacesScreensTest {
                     check(!core.addTrip("Dinner at the tapas bar by the harbour Sun 15 Nov 20:30").refused)
                     check(!core.addTrip("Flight BA479 Wed 18 Nov 18:20 ref ABC123").refused)
                     check(!core.addTrip("Porto 4–7 Dec").refused)
+                    // Walk-through A16: the trip Trip lists packs for is on Trips too.
+                    check(!core.addTrip("Seville 28–31 Oct").refused)
                 }
             }
             Place.GIFTS -> {
@@ -174,7 +176,8 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.name, it.line) }, mustShow = false)
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != TripRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with no trips")
-                if (fill == Fill.MANY && v.rows.size != 2) fail("$name: ${v.rows.size} rows for two trips")
+                if (fill == Fill.MANY && v.rows.size != 3) fail("$name: ${v.rows.size} rows for three trips")
+                if (fill == Fill.MANY && v.rows.none { it.name == "Seville" }) fail("$name: Seville, the trip Trip lists packs for, isn't on Trips")
                 ScreenShots.assertShows(compose, name, TripRules.addHint(hasTrips = !v.isEmpty))
             }
             Place.GIFTS -> {

@@ -90,7 +90,7 @@ class ListsScreensTest {
         tab == ListTab.SHOPPING -> listOf("Milk", "Bread", "Washing-up liquid", "Bananas", "Coffee beans")
         tab == ListTab.RENEWALS -> listOf("Car insurance", "Streaming subscription", "Boiler service")
         fill == Fill.ONE -> listOf("Send Sam the photos")
-        else -> listOf("Send Sam the photos", "Fix the gate latch for Alex", "Parcel from the garden shop", "Quote for the fence", longWait)
+        else -> listOf("Send Sam the photos", "Fix the gate latch for Casey", "Parcel from the garden shop", "Quote for the fence", longWait)
     }
 
     private fun shoot(name: String, tab: ListTab, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
@@ -102,7 +102,7 @@ class ListsScreensTest {
             core.tick()
             if (fill != Fill.EMPTY) core.addPromise("Send Sam the photos", "Sam", 2)
             if (fill == Fill.MANY) {
-                core.addPromise("Fix the gate latch for Alex", "Alex", 0)
+                core.addPromise("Fix the gate latch for Casey", "Casey", 0)
                 core.addWaiting("Parcel from the garden shop", "Garden shop", 0)
                 core.addWaiting("Quote for the fence", "Oakfield Fencing", 3)
                 core.addWaiting(longWait, null, 7)

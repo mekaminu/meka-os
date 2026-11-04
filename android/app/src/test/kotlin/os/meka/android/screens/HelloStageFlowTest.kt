@@ -81,7 +81,7 @@ class HelloStageFlowTest {
         stage()
         at(300)
         assertEquals("the hello is asked for as the points re-form", 1, greets)
-        phase = TalkPhase.SPEAKING; said = "Afternoon, Alex. It's Obi."
+        phase = TalkPhase.SPEAKING; said = "Afternoon, Jordan. It's Obi."
         at(1_700)
         phase = TalkPhase.LISTENING // the hello ended: listening (where the 14:34 stage closed)
         at(6_000)
@@ -105,7 +105,7 @@ class HelloStageFlowTest {
     fun anEndBeforeHeSpeaksKeepsTheStageUpSayingSo() {
         stage()
         at(300)
-        phase = TalkPhase.SPEAKING; said = "Afternoon, Alex. It's Obi."
+        phase = TalkPhase.SPEAKING; said = "Afternoon, Jordan. It's Obi."
         at(1_700)
         phase = TalkPhase.ENDED // the 14:34 case: over two seconds in, nothing heard
         at(10_000)
