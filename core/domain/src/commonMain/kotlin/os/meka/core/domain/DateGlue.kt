@@ -136,18 +136,8 @@ object LoneWordGlue {
         if (s.substring(starts[from], starts[from + 1]).trim() in JOINERS && from > 0) from--
         val tail = s.substring(starts[from])
         if (tail.length > PAIR_MAX) return s
-        // Walk-through 2026-11-02, A14: the last words never reach back across a held dot to a word with more before
-        // it. "… design and engineering leads · Harbour House" held as one run "leads · Harbour House" took "leads" down
-        // alone and left "and engineering" short; now the line may end on "leads ·" and "Harbour House" goes down.
-        val whole = s.substring(0, starts[from]) + tail.replace(' ', NBSP)
-        if (whole.length - whole.lastIndexOf(' ') - 1 > RUN_MAX) return s
-        val head = s.substring(0, starts[from]).let { h ->
-            val dotHeld = h.length >= 3 && h[h.lastIndex] == NBSP && h[h.lastIndex - 1] == '·' && h[h.lastIndex - 2] == NBSP
-            val wordBefore = if (dotHeld) h.substring(0, h.length - 3) else ""
-            val sep = wordBefore.indexOfLast { it == ' ' || it == NBSP }
-            if (dotHeld && sep >= 0 && wordBefore[sep] == ' ') h.dropLast(1) + " " else h
-        }
-        return head + tail.replace(' ', NBSP)
+        val held = s.substring(0, starts[from]) + tail.replace(' ', NBSP)
+        return if (held.length - held.lastIndexOf(' ') - 1 > RUN_MAX) s else held
     }
 
     /**

@@ -375,7 +375,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(t.label, style = MekaType.captionStrong, color = if (on) Meka.colors.accent else Meka.colors.textSecondary,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = MekaSpace.s))
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = MekaSpace.xs))
                     }
                 }
             }

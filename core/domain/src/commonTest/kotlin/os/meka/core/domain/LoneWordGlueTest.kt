@@ -37,17 +37,6 @@ class LoneWordGlueTest {
     }
 
     @Test
-    fun theLastWordsDontReachBackAcrossADot() {
-        // Walk-through 2026-11-02, A14: Week ahead broke "… design / and engineering / leads · Harbour House".
-        assertEquals(
-            "Quarterly planning with the design and engineering leads${nb}· Harbour${nb}House",
-            LoneWordGlue.kept("Quarterly planning with the design and engineering leads · Harbour House"),
-        )
-        // A line that is only the dot and its words keeps them as one, as before.
-        assertEquals("Connected${nb}·${nb}synced${nb}17:10", LoneWordGlue.kept("Connected · synced 17:10"))
-    }
-
-    @Test
     fun aDotStartingALineIsSeen() {
         assertTrue(LoneWordGlue.dotStartsLine("· last push 16:55"))
         assertTrue(LoneWordGlue.dotStartsLine("${nb}· last push"))
