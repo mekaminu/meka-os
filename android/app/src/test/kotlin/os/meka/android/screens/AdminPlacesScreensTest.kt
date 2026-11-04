@@ -441,11 +441,20 @@ class AdminPlacesScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun appointmentsByHand() { appointmentsByHand(shoot(Place.APPOINTMENTS, "cover-dark-appointments-by-hand", Fill.MANY)) }
+    fun appointmentsByHand() {
+        appointmentsByHand(shoot(Place.APPOINTMENTS, "cover-dark-appointments-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.APPOINTMENTS.area, "cover-dark-appointments-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun kidsByHand() { kidsByHand(shoot(Place.KIDS, "cover-dark-kids-by-hand", Fill.MANY)) }
+    fun kidsByHand() {
+        kidsByHand(shoot(Place.KIDS, "cover-dark-kids-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.KIDS.area, "cover-dark-kids-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun schoolByHand() { schoolByHand(shoot(Place.SCHOOL, "cover-dark-school-by-hand", Fill.MANY)) }
+    fun schoolByHand() {
+        schoolByHand(shoot(Place.SCHOOL, "cover-dark-school-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.SCHOOL.area, "cover-dark-school-by-hand") // walk-through A15
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun appointmentsCoverEmpty() { shoot(Place.APPOINTMENTS, "cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun appointmentsCoverOne() { shoot(Place.APPOINTMENTS, "cover-dark-one", Fill.ONE) }

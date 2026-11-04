@@ -13,6 +13,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import android.os.Looper
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
+import com.github.takahirom.roborazzi.captureRoboImage
+import java.io.File
 import org.robolectric.Shadows
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
@@ -484,5 +488,57 @@ object ScreenShots {
                 .map { "$tag ${(it.size.height / d).toInt()} dp tall" }
         }
         if (flat.isNotEmpty()) fail("$name: pills drawn too small:\n" + flat.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * Walk-through A15 (2026-11-02): each by-hand state's shot was taken as the screen opened, so it was byte for byte
+     * another state's shot and nothing the hand did was ever looked at. Call this at the end of a by-hand walk: it lets
+     * the screen settle, shoots it again over the opening shot, and fails if the picture didn't change or matches
+     * another shot of the same area.
+     */
+    fun reshootAfterHand(compose: ComposeContentTestRule, area: String, name: String, settleMs: Long = 1_000) {
+        val file = File(path(area, name))
+        val opening = file.takeIf { it.exists() }?.readBytes()
+        repeat((settleMs / 100).toInt().coerceAtLeast(1)) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("screen").captureRoboImage(file.path)
+        assertNotACopy(name, file, opening, "the opening shot")
+    }
+
+    /**
+     * Walk-through A15: a screen longer than the Fold's showed only its top, so a state whose difference sits lower
+     * down (Mail's second and third accounts, AI's last rows) shot the same as another. Swipes [tag]'s node (default the
+     * whole screen) up until the node showing [lastText] is wholly on screen, then shoots `<name>-below`; [settle] runs
+     * the screen's own clock after each swipe. Fails if [lastText] never comes on screen, or the shot repeats another
+     * of the area. Nothing is shot when it was on screen from the start (the opening shot already shows it).
+     */
+    fun shootBelow(compose: ComposeContentTestRule, area: String, name: String, lastText: String, settle: () -> Unit,
+                   tag: String = "screen", maxSwipes: Int = 16) {
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        fun onScreen() = compose.onAllNodes(hasText(lastText, substring = true) or hasContentDescription(lastText, substring = true),
+            useUnmergedTree = true).fetchSemanticsNodes().any { it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom }
+        var swipes = 0
+        while (!onScreen() && swipes < maxSwipes) {
+            compose.onNodeWithTag(tag).performTouchInput { swipeUp(startY = bottom * 0.85f, endY = bottom * 0.25f, durationMillis = 400) }
+            settle()
+            swipes++
+        }
+        if (!onScreen()) fail("$name: \"$lastText\" never came on screen after $swipes swipes")
+        if (swipes == 0) return
+        val file = File(path(area, "$name-below"))
+        compose.onNodeWithTag("screen").captureRoboImage(file.path)
+        assertNotACopy("$name-below", file, null, null)
+    }
+
+    private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {
+        if (!file.exists()) return
+        val shot = file.readBytes()
+        if (opening != null && opening.contentEquals(shot)) fail("$name: the shot is byte for byte $openingName; nothing the hand did shows")
+        file.parentFile?.listFiles { f -> f.extension == "png" && f.name != file.name }
+            ?.firstOrNull { runCatching { it.readBytes() }.getOrNull()?.contentEquals(shot) == true }
+            ?.let { fail("$name: the shot is byte for byte ${it.name}, so this state goes unreviewed") }
     }
 }

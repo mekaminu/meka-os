@@ -437,13 +437,25 @@ class PlansPlacesScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun tripsByHand() { tripsByHand(shoot(Place.TRIPS, "cover-dark-trips-by-hand", Fill.MANY)) }
+    fun tripsByHand() {
+        tripsByHand(shoot(Place.TRIPS, "cover-dark-trips-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.TRIPS.area, "cover-dark-trips-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun giftsByHand() { giftsByHand(shoot(Place.GIFTS, "cover-dark-gifts-by-hand", Fill.MANY)) }
+    fun giftsByHand() {
+        giftsByHand(shoot(Place.GIFTS, "cover-dark-gifts-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.GIFTS.area, "cover-dark-gifts-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun binsByHand() { binsByHand(shoot(Place.BINS, "cover-dark-bins-by-hand", Fill.MANY)) }
+    fun binsByHand() {
+        binsByHand(shoot(Place.BINS, "cover-dark-bins-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.BINS.area, "cover-dark-bins-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun readingByHand() { readingByHand(shoot(Place.READING, "cover-dark-reading-by-hand", Fill.MANY)) }
+    fun readingByHand() {
+        readingByHand(shoot(Place.READING, "cover-dark-reading-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.READING.area, "cover-dark-reading-by-hand") // walk-through A15
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun tripsCoverEmpty() { shoot(Place.TRIPS, "cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun tripsCoverOne() { shoot(Place.TRIPS, "cover-dark-one", Fill.ONE) }

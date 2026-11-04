@@ -361,5 +361,7 @@ class TripListsScreensTest {
         compose.waitUntil(5_000L) {
             core.tripListsView.value.single().tab(TripList.PACK).groups.flatMap { it.rows }.any { it.text == "Travel insurance" }
         }
+        // Walk-through A15: the suggest shot was the pack shot again; it's the screen once the chip has landed.
+        ScreenShots.reshootAfterHand(compose, "trip-lists", name)
     }
 }

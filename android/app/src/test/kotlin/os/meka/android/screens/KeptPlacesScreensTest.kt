@@ -415,13 +415,25 @@ class KeptPlacesScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun dateNightByHand() { dateNightByHand(shoot(Place.DATE_NIGHT, "cover-dark-date-night-by-hand", Fill.MANY)) }
+    fun dateNightByHand() {
+        dateNightByHand(shoot(Place.DATE_NIGHT, "cover-dark-date-night-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.DATE_NIGHT.area, "cover-dark-date-night-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun leaveByHand() { leaveByHand(shoot(Place.LEAVE, "cover-dark-leave-by-hand", Fill.MANY)) }
+    fun leaveByHand() {
+        leaveByHand(shoot(Place.LEAVE, "cover-dark-leave-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.LEAVE.area, "cover-dark-leave-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun emergencyByHand() { emergencyByHand(shoot(Place.EMERGENCY, "cover-dark-emergency-by-hand", Fill.MANY)) }
+    fun emergencyByHand() {
+        emergencyByHand(shoot(Place.EMERGENCY, "cover-dark-emergency-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.EMERGENCY.area, "cover-dark-emergency-by-hand") // walk-through A15
+    }
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun factsByHand() { factsByHand(shoot(Place.FACTS, "cover-dark-facts-by-hand", Fill.MANY)) }
+    fun factsByHand() {
+        factsByHand(shoot(Place.FACTS, "cover-dark-facts-by-hand", Fill.MANY))
+        ScreenShots.reshootAfterHand(compose, Place.FACTS.area, "cover-dark-facts-by-hand") // walk-through A15
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun dateNightCoverEmpty() { shoot(Place.DATE_NIGHT, "cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun dateNightCoverOne() { shoot(Place.DATE_NIGHT, "cover-dark-one", Fill.ONE) }

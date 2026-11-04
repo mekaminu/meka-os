@@ -295,7 +295,11 @@ class CarScreensTest {
     // carByHand hung once (CI run 1465's re-run logged "CarScreensTest > carByHand STARTED" and nothing more until the
     // 40-minute limit). Back on 2026-10-30 under HangWatch, scrolling only the pane's list: a hang now fails within
     // minutes with every thread's stack in the log, so it can be found.
-    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverByHand() { carByHand(shoot("cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverByHand() {
+        carByHand(shoot("cover-dark-by-hand", Fill.ONE))
+        // Walk-through A15: the by-hand shot is the screen after the hand's work, not the One shot again.
+        ScreenShots.reshootAfterHand(compose, "car", "cover-dark-by-hand")
+    }
     @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerEmpty() { shoot("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun carInnerMany() { shoot("inner-dark-many", Fill.MANY) }
 }

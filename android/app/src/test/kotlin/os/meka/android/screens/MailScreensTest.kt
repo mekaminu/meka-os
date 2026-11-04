@@ -178,7 +178,7 @@ class MailScreensTest {
         }
     }
 
-    private fun mail(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun mail(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, below: Boolean = true): MekaCore {
         val core = setUp(theme, fill)
         show(core)
         turns()
@@ -239,6 +239,10 @@ class MailScreensTest {
             }
             Fill.OFFLINE -> Unit
         }
+        // Walk-through A15: One, Many and by-hand shot the same top of the screen (the switches; the accounts sit below
+        // them), so the end of the page gets its own shot, which must differ from every other.
+        val last = if (fill == Fill.ONE || fill == Fill.MANY) v.connects.lastOrNull()?.label ?: v.rows.last().title else null
+        if (below && last != null) ScreenShots.shootBelow(compose, "mail", name, last, settle = { turns(1_000) })
         return core
     }
 
@@ -281,5 +285,8 @@ class MailScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { mail("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { mail("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { mail("inner-dark-many", Fill.MANY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun autopilotByHand() { autopilotByHand(mail("cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun autopilotByHand() {
+        autopilotByHand(mail("cover-dark-by-hand", Fill.ONE, below = false))
+        ScreenShots.reshootAfterHand(compose, "mail", "cover-dark-by-hand") // walk-through A15
+    }
 }

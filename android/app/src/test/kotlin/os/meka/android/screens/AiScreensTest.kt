@@ -25,6 +25,8 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.AiSpendRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
@@ -96,7 +98,8 @@ class AiScreensTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    Column(Modifier.padding(MekaSpace.gutter)) { AiSpendRow(ai) }
+                    // Walk-through A15: the row scrolls as it does in Settings, so Many's last rows can be shot.
+                    Column(Modifier.verticalScroll(rememberScrollState()).padding(MekaSpace.gutter)) { AiSpendRow(ai) }
                 }
             }
         }
@@ -139,6 +142,9 @@ class AiScreensTest {
                 if (!onScreen("412 clips")) fail("$name: Voice isn't counted in clips")
                 // Walk-through A5: the rows add up to "$18.30 in all", the rest on its own row.
                 if (!onScreen(AiSpendRules.UNSPLIT) || !onScreen("\$15.48")) fail("$name: the spend not split by feature isn't its own row")
+                // Walk-through A15: Many's shot stopped above its last row; the end of the list gets its own shot.
+                val last = ai.spend.lastOrNull()?.label ?: ai.fallbacks.last().label
+                ScreenShots.shootBelow(compose, "ai", name, last, settle = { turns(1_000) })
             }
         }
     }
