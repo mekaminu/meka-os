@@ -265,7 +265,9 @@ class WatchHealthScreensTest {
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         // The core's clock and zone, like every other time on screen: 17:15 in London, whatever the test machine's zone.
         if (v.checkedLine != "Checked 17:15") fail("$name: the check reads \"${v.checkedLine}\" at 17:15 in London")
-        ScreenShots.assertShows(compose, name, v.checkedLine)
+        // CI run 1561: the screen can still be on "Checking…" (walk-through A14 keeps the two apart) when the core has
+        // checked; wait for it by turns rather than fail on a frame that hasn't caught up.
+        ScreenShots.awaitShows(compose, name, v.checkedLine)
         ScreenShots.assertEachOneLine(compose, name, v.rows.mapNotNull { it.fixLabel })
         ScreenShots.assertNoLoneWords(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertNoDotStartingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
