@@ -47,6 +47,16 @@ import kotlinx.coroutines.launch
 import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.toInstant
+import os.meka.core.domain.CommandCentreRules
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.EventFields
+import os.meka.core.domain.MekaSchema
+import os.meka.core.sync.HlcClock
+import os.meka.core.sync.Replica
+import os.meka.core.sync.ReplicaStore
+import os.meka.core.sync.fv
 import kotlin.random.Random
 
 /**
@@ -69,8 +79,35 @@ class TodayScreensTest {
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
 
-    private fun core(): MekaCore = MekaCore(
-        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+    private val london = TimeZone.of("Europe/London")
+
+    private fun at(day: Int, h: Int, m: Int = 0) = LocalDateTime(2026, 10, day, h, m).toInstant(london).toEpochMilliseconds()
+
+    private fun utcMidnight(day: Int) = LocalDateTime(2026, 10, day, 0, 0).toInstant(TimeZone.UTC).toEpochMilliseconds()
+
+    /**
+     * Walk-through 2026-11-02, A16's last piece: the open Fold's Coming up said "Nothing planned in the next 30 days" beside
+     * the Calendar's week of events. The full day's shots carry the Calendar screen's coming days (the same invented events,
+     * written as the server's calendar mirror does), and nothing on today, so Today's own timeline is unchanged.
+     */
+    private fun seedComingDays(store: ReplicaStore) {
+        var n = 0
+        val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${n++}" }
+        fun event(id: String, title: String, start: Long, end: Long, calendar: String, place: String? = null, allDay: Boolean = false) =
+            mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
+                put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
+                put(EventFields.CALENDAR, calendar.fv())
+                if (allDay) put(EventFields.ALL_DAY, true.fv())
+                place?.let { put(EventFields.LOCATION, it.fv()) }
+            })
+        event("ev4", COMING_TITLES[0], at(22, 10, 0), at(22, 11, 30), "Personal")
+        event("ev5", COMING_TITLES[1], utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
+        event("ev6", COMING_TITLES[2], at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
+    }
+
+    private fun core(store: ReplicaStore = InMemoryReplicaStore()): MekaCore = MekaCore(
+        householdId = "hh", deviceId = "android", store = store, transport = null,
         secureRandom = Random(11), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
@@ -80,6 +117,8 @@ class TodayScreensTest {
         const val UP_NEXT_MAX_DP = 150f
         /** Titles that may take two lines on the cover screen, so their rows are taller by right. */
         val LONG_TITLES = listOf("Plan Saturday's football run with Alex")
+        /** The Calendar screen's coming days (its ev4–ev6), seeded into the full day's shots. */
+        val COMING_TITLES = listOf("Quarterly planning with the design and engineering leads", "Inset day", "Football training")
     }
 
     /** The tallest Up next / now card on screen in dp, or null when there is none. */
@@ -128,6 +167,15 @@ class TodayScreensTest {
             fail("$name: a Fasting card with no fast running")
         }
         check(core.fastingView.value.current != null == (fill == Fill.FASTING))
+        if (fill == Fill.MANY) {
+            // A16: the full day has the Calendar's coming days, so Coming up never says there's nothing ahead.
+            val ahead = CommandCentreRules.comingUp(core.calendarView.value, CommandCentreRules.DAYS_SHARED, CommandCentreRules.LINES_SHARED)
+            if (ahead.days.isEmpty()) fail("$name: Coming up has no days though the Calendar has events this week")
+            if (name.startsWith("inner")) {
+                if (shownText(CommandCentreRules.NOTHING_AHEAD)) fail("$name: Coming up says \"${CommandCentreRules.NOTHING_AHEAD}\" beside a week of events")
+                ScreenShots.assertShows(compose, name, COMING_TITLES[1])
+            }
+        }
     }
 
     /**
@@ -175,7 +223,9 @@ class TodayScreensTest {
     private fun show(fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
-        val core = core()
+        val store = InMemoryReplicaStore()
+        if (fill == Fill.MANY) seedComingDays(store)
+        val core = core(store)
         context.useCoreForScreens(core)
         runBlocking {
             core.tick()
