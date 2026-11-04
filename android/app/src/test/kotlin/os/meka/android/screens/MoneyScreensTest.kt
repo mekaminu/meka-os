@@ -171,6 +171,18 @@ class MoneyScreensTest {
             if (compose.onAllNodesWithContentDescription(spoken, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
                 fail("$name: no \"$spoken\" pill")
         }
+        // Walk-through 2026-11-02, A14: a row that runs off the screen ends in a peek of a pill (part way along it), never
+        // with a pill's end right at the screen's edge.
+        val edge = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot.right
+        val pills = MoneyTabs.ALL.map { t ->
+            compose.onNodeWithContentDescription(MoneyTabs.spoken(t, chosen = t == tab), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        }
+        if (pills.last().right > edge) {
+            val cut = pills.firstOrNull { it.left < edge && it.right > edge }
+                ?: fail("$name: the tab row's edge falls between two pills")
+            val shown = (edge - cut.left) / cut.width
+            if (shown < 0.25f || shown > 0.75f) fail("$name: the pill at the screen's edge shows ${"%.0f".format(shown * 100)}% (want a peek)")
+        }
         val importShown = compose.onAllNodesWithText(os.meka.core.domain.MoneyMore.DATA).fetchSemanticsNodes().isNotEmpty()
         // (A lazy list only lays out what's on screen, so Import is only required on Accounts with nothing above it.)
         if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")

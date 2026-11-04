@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.isActive
 import os.meka.android.designsystem.Meka
@@ -120,15 +121,20 @@ fun NewsTickerStrip(
     core: MekaCore, ticker: NewsTicker, mode: TickerMode, modifier: Modifier = Modifier,
     openStory: (String) -> Unit, openMatch: (CalendarEvent) -> Unit,
     speedDpPerS: Float = TickerRules.SPEED_DP_PER_S,
+    /**
+     * Where a strip that stands still (its cards fit, or reduced motion) starts and ends: an edge-to-edge strip (the
+     * bedside) passes the page's gutter so its first card lines up with the words above it (walk-through 2026-11-02, A14).
+     */
+    stillInset: Dp = 0.dp,
 ) {
     val list = remember(ticker) { cards(ticker) }
     if (list.isEmpty() || mode == TickerMode.OFF) return
     val open: (TickerCard) -> Unit = { c -> when (c) { is TickerCard.Match -> openMatch(c.m.event); is TickerCard.Story -> openStory(c.item.id) } }
-    if (Meka.reducedMotion) StillTicker(core, list, modifier, open) else DriftingTicker(core, list, mode, modifier, open, speedDpPerS)
+    if (Meka.reducedMotion) StillTicker(core, list, modifier, open, stillInset) else DriftingTicker(core, list, mode, modifier, open, speedDpPerS, stillInset)
 }
 
 @Composable
-private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerMode, modifier: Modifier, open: (TickerCard) -> Unit, speedDpPerS: Float) {
+private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerMode, modifier: Modifier, open: (TickerCard) -> Unit, speedDpPerS: Float, stillInset: Dp) {
     val density = LocalDensity.current.density
     val haptics = rememberMekaHaptics()
     val scroll = rememberScrollState()
@@ -180,7 +186,8 @@ private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerM
                         held = false
                     }
                 }
-                .horizontalScroll(scroll),
+                .horizontalScroll(scroll)
+                .then(if (fits) Modifier else Modifier.padding(horizontal = stillInset)),
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -212,10 +219,10 @@ private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerM
 
 /** Reduced motion: one card at a time, ‹ 2 of 12 › to page (wrapping), cross-fading between cards. */
 @Composable
-private fun StillTicker(core: MekaCore, list: List<TickerCard>, modifier: Modifier, open: (TickerCard) -> Unit) {
+private fun StillTicker(core: MekaCore, list: List<TickerCard>, modifier: Modifier, open: (TickerCard) -> Unit, inset: Dp) {
     var index by remember { mutableIntStateOf(0) }
     val haptics = rememberMekaHaptics()
-    Row(modifier.fillMaxWidth().height(STRIP_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().height(STRIP_HEIGHT).padding(horizontal = inset), verticalAlignment = Alignment.CenterVertically) {
         AnimatedContent(
             targetState = index.coerceIn(0, list.size - 1),
             transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) },

@@ -123,6 +123,7 @@ import os.meka.core.domain.MoneySection
 import os.meka.core.domain.MoneySheetMark
 import os.meka.core.domain.MoneyNeeds
 import os.meka.core.domain.MoneyTab
+import os.meka.core.domain.TabPeekRules
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.domain.MoneyChat
 import os.meka.core.domain.MoneyChatTurn
@@ -1376,8 +1377,19 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
     val reduced = Meka.reducedMotion
     // As the mockup: the row runs to the screen's edges (past the page's gutter, which it keeps as its own padding), so a
     // pill that doesn't fit slides off the edge instead of being cut inside the margin.
+    // Walk-through 2026-11-02, A14: when the row overflows, the pills' padding is nudged so the screen's edge cuts a
+    // pill part way (a peek), never right at a pill's end where it read as touching the edge.
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val labelStyle = MekaType.metaStrong
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
+    val pad = remember(maxWidth, labelStyle, density) {
+        val widths = MoneyTabs.ALL.map { t -> with(density) { measurer.measure(t.label, labelStyle, maxLines = 1).size.width.toDp().value } }
+        TabPeekRules.padding(widths, start = MekaSpace.gutter.value, gap = MekaSpace.xs.value,
+            viewport = maxWidth.value + 2 * MekaSpace.gutter.value, base = MekaSpace.m.value).dp
+    }
     Row(
-        modifier.fillMaxWidth().bleed(MekaSpace.gutter).horizontalScroll(rememberScrollState()).selectableGroup()
+        Modifier.fillMaxWidth().bleed(MekaSpace.gutter).horizontalScroll(rememberScrollState()).selectableGroup()
             .padding(horizontal = MekaSpace.gutter),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -1398,10 +1410,11 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
                 Text(
                     t.label, style = MekaType.metaStrong, color = ink, maxLines = 1,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                        .padding(horizontal = pad, vertical = MekaSpace.xs),
                 )
             }
         }
+    }
     }
 }
 

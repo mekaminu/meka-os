@@ -365,15 +365,17 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 for (t in v.tabs) {
                     val on = t.list == tab
                     val bg by animateColorAsState(if (on) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "trip-tab")
+                    // Walk-through 2026-11-02, A14: "Before we leave" sat against its pill's edge in an equal third; each
+                    // tab now takes room by its label's length, so the long one has its margin.
                     Box(
-                        Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                        Modifier.weight(TripTabWidths.weight(t.label)).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
                             .clickable(role = Role.Tab) { if (!on) { haptics.tick(); tab = t.list; said = null } }
                             .semantics { contentDescription = t.label + if (t.left > 0) ", ${t.left} to go" else ""; if (on) stateDescription = "Selected" }
                             .minTouch().testTag("trip-tab-${t.list.wire}"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(t.label, style = MekaType.captionStrong, color = if (on) Meka.colors.accent else Meka.colors.textSecondary,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = MekaSpace.s))
                     }
                 }
             }
@@ -847,12 +849,14 @@ private fun ProgressBar(p: TripProgress, modifier: Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .semantics(mergeDescendants = true) { contentDescription = "${p.label} ${p.line}" },
+            .semantics(mergeDescendants = true) { contentDescription = "${p.label}: ${p.line}" },
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(p.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-            Text(p.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        // Walk-through 2026-11-02, A14: "Bought Nothing yet" ran together in a narrow card; a gap keeps the two apart,
+        // and the count is one line that never wraps under the label.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(p.label, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(p.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, softWrap = false)
         }
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(fill).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
@@ -995,4 +999,11 @@ private fun TripAddField(hint: String, description: String, onDone: (String) -> 
                 .testTag("trip-add").slimPill(Meka.colors.accent),
         )
     }
+}
+
+/** The trip's tab row: each tab's share of the row, its label's length plus a margin's worth (walk-through A14). */
+internal object TripTabWidths {
+    /** A margin's worth of characters either side, so short labels still get a fair pill. */
+    const val PAD = 6f
+    fun weight(label: String): Float = label.length + PAD
 }

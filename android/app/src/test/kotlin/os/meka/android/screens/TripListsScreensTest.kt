@@ -312,6 +312,8 @@ class TripListsScreensTest {
         compose.onNode(hasSetTextAction() and hasContentDescription(TripListRules.LEAVE_DESCRIPTION)).assert(hasText("06:30"))
         compose.onNodeWithTag("trip-leave-caption", useUnmergedTree = true).assert(hasText("You leave home at 06:30", substring = true))
         compose.onAllNodes(hasText("for example", substring = true)).assertCountEquals(0)
+        // Walk-through A14: "Before we leave" has its margin inside its tab, not against the pill's edge.
+        ScreenShots.assertInset(compose, name, TripList.LEAVE.label, "trip-tab-${TripList.LEAVE.wire}", minDp = 8f)
         // A chip lights in the next frame; the core's write lands after.
         compose.onNodeWithTag("trip-going-kids").performClick()
         compose.mainClock.advanceTimeBy(16L)

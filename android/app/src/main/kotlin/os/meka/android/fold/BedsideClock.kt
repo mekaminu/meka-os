@@ -297,7 +297,7 @@ private fun BedsideNews(
         NewsTickerStrip(
             core, ticker, BedsideTickerRules.mode(todayMode, charging), Modifier.alpha(BedsideTickerRules.ALPHA),
             openStory = { openNews(it) }, openMatch = { openNews("") },
-            speedDpPerS = BedsideTickerRules.SPEED_DP_PER_S,
+            speedDpPerS = BedsideTickerRules.SPEED_DP_PER_S, stillInset = MekaSpace.gutter,
         )
     }
 }

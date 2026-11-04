@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import android.os.Looper
@@ -397,6 +398,20 @@ object ScreenShots {
      * voice notes' "ιoday" and Money's year row before it): fails when the text containing [text] reaches into a rounded
      * corner of a clip on any of its ancestors, i.e. part of its box lies outside that corner's arc.
      */
+    /**
+     * Walk-through 2026-11-02, A14: the text [text] sits inside the node tagged [tag] with at least [minDp] either side
+     * ("Before we leave" against its tab pill's edge).
+     */
+    fun assertInset(compose: ComposeContentTestRule, name: String, text: String, tag: String, minDp: Float) {
+        val box = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val label = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.boundsInRoot }.firstOrNull { box.contains(it.center) } ?: fail("$name: \"$text\" isn't inside $tag")
+        val d = compose.density.density
+        val left = (label.left - box.left) / d
+        val right = (box.right - label.right) / d
+        if (left < minDp || right < minDp) fail("$name: \"$text\" sits ${"%.1f".format(minOf(left, right))} dp from its edge in $tag (want $minDp)")
+    }
+
     fun assertNotCornerClipped(compose: ComposeContentTestRule, name: String, text: String) {
         val nodes = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
         if (nodes.isEmpty()) fail("$name: \"$text\" isn't on screen")
