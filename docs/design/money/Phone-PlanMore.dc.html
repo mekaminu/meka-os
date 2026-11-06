@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plan, lower half</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.bar{transform-origin:bottom;animation:grow .6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes growx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.barx{transform-origin:left;animation:growx .6s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+input[type=range]{accent-color:#c9b37e;width:100%}
+@media (prefers-reduced-motion:reduce){.in,.bar,.barx{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1900px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:4px">GOALS</div>
+<div class="in" style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;gap:12px;align-items:center">
+<span style="width:44px;height:44px;border-radius:22px;border:2px dashed #6b5a36;display:flex;align-items:center;justify-content:center;color:#c9b37e;font-size:20px;flex-shrink:0">◎</span>
+<span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;font-weight:600">No money goals yet</span><span style="font-size:12.5px;color:#8f897f">Start one from a plan</span></span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{starts}}" as="g" hint-placeholder-count="3"><button type="button" onClick="{{g.go}}" style="border:0;background:#1a1a1d;color:#ededed;border-radius:14px;padding:12px 8px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center"><span style="font-size:18px;color:#c9b37e">{{g.icon}}</span><span style="font-size:12.5px;font-weight:500;line-height:1.25">{{g.name}}</span></button></sc-for>
+</div>
+</div>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:8px;display:flex;justify-content:space-between"><span>FORECAST AT YOUR PACE</span><span style="color:#8f897f;letter-spacing:0">ⓘ</span></div>
+<div class="in" style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:14px">
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">IN / MONTH</div><div style="font-size:17px;font-weight:600;margin-top:3px">£8,250</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">OUT / MONTH</div><div style="font-size:17px;font-weight:600;margin-top:3px">£7,200</div></div>
+<div style="background:#24231b;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#c9b37e">LEFT OVER</div><div style="font-size:17px;font-weight:600;margin-top:3px;color:#e3d3a6">{{leftLabel}}</div></div>
+</div>
+<div style="display:flex;gap:6px;background:#1a1a1d;border-radius:999px;padding:4px;align-self:flex-start">
+<sc-for list="{{spans}}" as="sp" hint-placeholder-count="2"><button type="button" onClick="{{sp.go}}" style="{{sp.style}}">{{sp.name}}</button></sc-for>
+</div>
+<div style="display:flex;align-items:flex-end;gap:5px;height:130px;padding-top:18px;position:relative">
+<sc-for list="{{bars}}" as="b" hint-placeholder-count="12">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end">
+<span style="font-size:10px;color:#e3d3a6;white-space:nowrap">{{b.tag}}</span>
+<div class="bar" style="{{b.style}}"></div>
+<span style="font-size:9.5px;color:#8f897f">{{b.m}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">BY APR 2027</div><div style="font-size:17px;font-weight:600;margin-top:3px">{{by6}}</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">BY OCT 2027</div><div style="font-size:17px;font-weight:600;margin-top:3px">{{by12}}</div></div>
+</div>
+<div style="border-top:1px solid #1d1d20;padding-top:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:14px;font-weight:600">What if I cut…</span><span style="font-size:14px;color:#c9b37e;font-weight:600">{{cutLabel}}</span></div>
+<input type="range" min="0" max="600" step="25" value="{{cut}}" onInput="{{setCut}}">
+<div style="font-size:12px;color:#8f897f">{{cutNote}}</div>
+</div>
+</div>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:8px">CHALLENGES</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div class="in" style="background:#121214;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:11px;letter-spacing:.12em;color:#a8a29a">NO-SPEND DAYS</div>
+<div style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{days}}" as="d" hint-placeholder-count="7"><span style="{{d.style}}">{{d.l}}</span></sc-for></div>
+<div style="font-size:20px;font-weight:600">{{nsCount}} <span style="font-size:12.5px;color:#8f897f;font-weight:400">this week</span></div>
+<button type="button" onClick="{{toggleNs}}" style="{{nsBtn}}">{{nsLabel}}</button>
+</div>
+<div class="in" style="background:#121214;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:11px;letter-spacing:.12em;color:#a8a29a">FUN MONEY</div>
+<div style="font-size:20px;font-weight:600">£{{funLeft}} <span style="font-size:12.5px;color:#8f897f;font-weight:400">of £{{fun}}</span></div>
+<div style="height:8px;border-radius:4px;background:#1d1d20;overflow:hidden"><div class="barx" style="{{funBar}}"></div></div>
+<div style="display:flex;gap:6px"><sc-for list="{{funOpts}}" as="f" hint-placeholder-count="3"><button type="button" onClick="{{f.go}}" style="{{f.style}}">£{{f.v}}</button></sc-for></div>
+</div>
+</div>
+<button type="button" class="in" style="border:0;background:#121214;color:#ededed;border-radius:14px;min-height:52px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px"><span>Cap a category for the month</span><span style="color:#c9b37e">Set ›</span></button>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:8px;display:flex;justify-content:space-between"><span>PAYING ABROAD · LAST 12 MONTHS</span><span style="color:#8f897f;letter-spacing:0">ⓘ</span></div>
+<div class="in" style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;gap:12px;align-items:center">
+<div style="background:#33281a;border-radius:14px;padding:12px 14px"><div style="font-size:10.5px;letter-spacing:.12em;color:#d9a35b">FOREIGN FEES</div><div style="font-size:24px;font-weight:700;color:#f0d2a3;margin-top:2px">£166.57</div></div>
+<div style="font-size:13px;color:#a8a29a;line-height:1.35">Could be <span style="color:#8fbf8f;font-weight:600">£0</span> with a no-fee card abroad</div>
+</div>
+<sc-for list="{{fees}}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;justify-content:space-between;font-size:13.5px"><span>{{f.name}}</span><span style="font-weight:600">{{f.amt}}</span></div>
+<div style="height:6px;border-radius:3px;background:#1d1d20;overflow:hidden"><div class="barx" style="{{f.bar}}"></div></div>
+<div style="font-size:11.5px;color:#8f897f">{{f.sub}}</div>
+</div>
+</sc-for>
+<button type="button" onClick="{{showPays}}" style="border:0;background:#1a1a1d;color:#ededed;border-radius:12px;height:42px;font-size:13.5px;font-weight:500">{{paysLabel}}</button>
+<sc-if value="{{pays}}" hint-placeholder-val="{{false}}"><div class="in" style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{pays}}" as="p" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;font-size:13px;background:#1a1a1d;border-radius:10px;padding:10px 12px"><span>{{p.t}}</span><span style="color:#d9a35b">{{p.f}}</span></div></sc-for></div></sc-if>
+</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;background:#2a2721;color:#f0e6cf;border-radius:14px;padding:12px 14px;font-size:13.5px">{{toast}}</div></sc-if>
+<div style="font-size:11.5px;color:#6f6a62;text-align:center;padding-top:6px">Worked out from your own payments · not financial advice</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1900}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={span:12,cut:0,ns:{0:1,2:1},nsOn:true,fun:60,spent:35,pays:false,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var left=1050+Number(s.cut);
+var fmt=function(n){return '£'+Math.round(n).toLocaleString('en-GB');};
+var months=['Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'].slice(0,s.span);
+var max=left*12;
+var bars=months.map(function(m,i){var v=left*(i+1);var key=(i===5||i===11);return {m:m,tag:key?'+'+fmt(v).replace('£','£'):'',style:'width:100%;border-radius:5px 5px 2px 2px;height:'+Math.max(4,Math.round(v/max*92))+'px;background:'+(key?'#c9b37e':'#3a342a')+';animation-delay:'+(i*40)+'ms'};});
+var chip=function(on){return 'border:0;border-radius:999px;height:30px;padding:0 14px;font-size:12.5px;font-weight:500;'+(on?'background:#2a2721;color:#f0e6cf':'background:transparent;color:#a8a29a');};
+var dl=['M','T','W','T','F','S','S'];
+var nsCount=Object.keys(s.ns).length;
+return {
+starts:[{icon:'↗',name:'Save £ a month',go:function(){self.setState({toast:'Opens What if I save…'});}},{icon:'▭',name:'Clear my cards',go:function(){self.setState({toast:'Opens Clear my cards'});}},{icon:'◎',name:'Add a £ goal',go:function(){self.setState({toast:'Opens a new money goal'});}}],
+leftLabel:fmt(left),
+spans:[6,12].map(function(n){return {name:n+' months',go:function(){self.setState({span:n});},style:chip(s.span===n)};}),
+bars:bars,by6:'+'+fmt(left*6),by12:'+'+fmt(left*12),
+cut:s.cut,cutLabel:Number(s.cut)?fmt(s.cut)+' a month':'—',
+cutNote:Number(s.cut)?'That adds '+fmt(s.cut*12)+' by Oct 2027':'Slide to see what a cut adds',
+setCut:function(e){self.setState({cut:e.target.value});},
+days:dl.map(function(l,i){var on=!!s.ns[i];return {l:l,style:'width:24px;height:24px;border-radius:12px;font-size:10.5px;display:flex;align-items:center;justify-content:center;'+(on?'background:#c9b37e;color:#111;font-weight:600':(i<4?'background:#1d1d20;color:#8f897f':'border:1px dashed #3a3a3e;color:#5a5650'))};}),
+nsCount:nsCount,nsLabel:s.nsOn?'Today was no-spend':'Start counting',
+nsBtn:'border:0;border-radius:10px;height:36px;font-size:12.5px;font-weight:600;'+(s.nsOn?'background:#1a1a1d;color:#c9b37e':'background:#c9b37e;color:#111'),
+toggleNs:function(){if(!s.nsOn){self.setState({nsOn:true});return;}var n=Object.assign({},s.ns);n[3]=1;self.setState({ns:n,toast:'Thursday counted · 3 no-spend days this week'});},
+fun:s.fun,funLeft:Math.max(0,s.fun-s.spent),
+funBar:'height:100%;border-radius:4px;background:#c9b37e;width:'+Math.min(100,Math.round((s.fun-s.spent)/s.fun*100))+'%',
+funOpts:[40,60,80].map(function(v){return {v:v,go:function(){self.setState({fun:v});},style:'flex:1;border:0;border-radius:999px;height:30px;font-size:12.5px;'+(s.fun===v?'background:#2a2721;color:#f0e6cf':'background:#1a1a1d;color:#a8a29a')};}),
+fees:[{name:'Your bank',amt:'£166.57',bar:'height:100%;background:#d9a35b;width:100%',sub:'2.99% on each card payment abroad'}],
+paysLabel:s.pays?'Hide payments':'See the payments behind it',
+pays:s.pays?[{t:'Restaurant · Sat 31 Oct',f:'£2.41 fee'},{t:'Supermarket · Fri 30 Oct',f:'£1.12 fee'},{t:'Taxi · Thu 29 Oct',f:'£0.87 fee'}]:null,
+showPays:function(){self.setState({pays:!s.pays});},
+toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>

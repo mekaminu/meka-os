@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routines</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes growx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.barx{transform-origin:left;animation:growx .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.barx,.pulse{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1300px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative">
+
+<sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="font-size:14px;color:#c9b37e">‹ Ask</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-end">
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:26px;font-weight:700">Routines</div><div style="font-size:13px;color:#8f897f">Jobs Obi repeats for you</div></div>
+<button type="button" onClick="{{goNew}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:38px;padding:0 16px;font-size:13.5px;font-weight:600">+ New</button>
+</div>
+
+<div class="in" style="background:#24231b;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;letter-spacing:.14em;color:#c9b37e">RUNNING NOW</span><span class="pulse" style="width:8px;height:8px;border-radius:4px;background:#c9b37e"></span></div>
+<div style="font-size:16px;font-weight:600">Sunday reset · step 2 of 4</div>
+<div style="height:6px;border-radius:3px;background:#3a3428;overflow:hidden"><div class="barx" style="height:100%;width:50%;background:#c9b37e"></div></div>
+<div style="font-size:13px;color:#d8d2c6">Waiting on you: plan next week</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<button type="button" onClick="{{openSunday}}" style="border:0;background:#c9b37e;color:#111;border-radius:12px;height:42px;font-size:13.5px;font-weight:600">Carry on</button>
+<button type="button" onClick="{{skip}}" style="border:0;background:#2a2721;color:#f0e6cf;border-radius:12px;height:42px;font-size:13.5px;font-weight:500">Skip this step</button>
+</div>
+</div>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:4px">YOUR ROUTINES</div>
+<sc-for list="{{routines}}" as="r" hint-placeholder-count="4">
+<div class="in" style="background:#121214;border-radius:16px;display:flex;align-items:center;gap:12px;padding:12px 14px">
+<button type="button" onClick="{{r.open}}" style="flex:1;border:0;background:transparent;color:#ededed;text-align:left;display:flex;gap:12px;align-items:center;padding:0;min-width:0">
+<span style="width:44px;height:44px;border-radius:12px;background:#1d1d20;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0"><span style="font-size:10px;letter-spacing:.1em;color:#a8a29a">{{r.day}}</span><span style="font-size:13px;font-weight:600">{{r.time}}</span></span>
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:15.5px;font-weight:600">{{r.name}}</span><span style="font-size:12.5px;color:#8f897f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.sub}}</span></span>
+</button>
+<button type="button" onClick="{{r.toggle}}" aria-label="Turn routine on or off" style="{{r.sw}}"><span style="{{r.knob}}"></span></button>
+</div>
+</sc-for>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:4px">IDEAS FROM YOUR WEEK</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<sc-for list="{{ideas}}" as="i" hint-placeholder-count="2">
+<button type="button" onClick="{{i.go}}" class="in" style="border:1px dashed #3a3428;background:transparent;color:#ededed;border-radius:14px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px"><span style="font-size:13.5px;font-weight:600">{{i.name}}</span><span style="font-size:12px;color:#8f897f;line-height:1.3">{{i.why}}</span></button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column;gap:14px">
+<button type="button" onClick="{{back}}" style="border:0;background:transparent;color:#c9b37e;font-size:14px;padding:0;text-align:left">‹ Routines</button>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:26px;font-weight:700">{{det.name}}</div><div style="font-size:13px;color:#8f897f">{{det.when}}</div></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#121214;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">NEXT</div><div style="font-size:14px;font-weight:600;margin-top:3px">{{det.next}}</div></div>
+<div style="background:#121214;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">STEPS</div><div style="font-size:14px;font-weight:600;margin-top:3px">{{det.count}}</div></div>
+<div style="background:#121214;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">LAST RUN</div><div style="font-size:14px;font-weight:600;margin-top:3px">{{det.last}}</div></div>
+</div>
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">STEPS</div>
+<sc-for list="{{det.steps}}" as="st" hint-placeholder-count="4">
+<div style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:center">
+<span style="{{st.dotStyle}}">{{st.n}}</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:500">{{st.t}}</span><span style="font-size:12px;color:#8f897f">{{st.where}}</span></span>
+<span style="{{st.badgeStyle}}">{{st.badge}}</span>
+</div>
+</sc-for>
+<div style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">LAST TIME</div>
+<div style="font-size:13.5px;color:#d8d2c6">{{det.history}}</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<button type="button" onClick="{{runNow}}" style="border:0;background:#c9b37e;color:#111;border-radius:12px;height:46px;font-size:14px;font-weight:600">Run now</button>
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:46px;font-size:14px;font-weight:500">Edit steps</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isNew}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column;gap:14px">
+<button type="button" onClick="{{back}}" style="border:0;background:transparent;color:#c9b37e;font-size:14px;padding:0;text-align:left">‹ Routines</button>
+<div style="font-size:26px;font-weight:700">New routine</div>
+<div style="background:#151517;border-radius:16px;padding:14px;display:flex;gap:10px;align-items:flex-start">
+<span style="flex:1;font-size:15px;line-height:1.4;color:#ededed">Every Sunday at 7pm, show my bills for the week, plan next week, tidy my inbox and remind me about bins</span>
+<span style="width:36px;height:36px;border-radius:18px;border:1.5px solid #c9b37e;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></span>
+</div>
+<div style="font-size:12.5px;color:#8f897f">Say it or type it. Obi turns it into steps you can check.</div>
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">OBI MADE THESE STEPS</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div style="background:#121214;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">WHEN</div><div style="font-size:14px;font-weight:600;margin-top:3px">Sundays 19:00</div></div>
+<div style="background:#121214;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">STARTS WITH</div><div style="font-size:14px;font-weight:600;margin-top:3px">A nudge</div></div>
+</div>
+<sc-for list="{{newSteps}}" as="st" hint-placeholder-count="4">
+<div style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:center">
+<span style="{{st.dotStyle}}">{{st.n}}</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:500">{{st.t}}</span><span style="font-size:12px;color:#8f897f">{{st.where}}</span></span>
+<button type="button" onClick="{{st.cycle}}" style="{{st.badgeStyle}};border:0">{{st.badge}}</button>
+</div>
+</sc-for>
+<div style="font-size:12px;color:#8f897f">Tap a step's label to change it: Just show · Asks you · Obi does it. Sending messages or paying is never offered.</div>
+<button type="button" onClick="{{save}}" style="border:0;background:#c9b37e;color:#111;border-radius:12px;height:46px;font-size:14px;font-weight:600">Save routine</button>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;background:#2a2721;color:#f0e6cf;border-radius:14px;padding:12px 14px;font-size:13.5px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1300}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={view:'list',open:'sun',off:{},modes:{},toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var label={show:'Just show',ask:'Asks you',does:'Obi does it'};
+var badge=function(k){var c=k==='ask'?'background:#33281a;color:#d9a35b':(k==='does'?'background:#1f2a22;color:#8fbf8f':'background:#1d1d20;color:#a8a29a');return 'font-size:11.5px;border-radius:999px;padding:5px 10px;white-space:nowrap;'+c;};
+var dot=function(state){return 'width:28px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;'+(state==='done'?'background:#c9b37e;color:#111':(state==='now'?'border:1.5px solid #c9b37e;color:#c9b37e':'background:#1d1d20;color:#8f897f'));};
+var data={
+sun:{name:'Sunday reset',day:'SUN',time:'19:00',when:'Every Sunday at 19:00',sub:'Bills · plan the week · inbox · bins',next:'Sun 8 Nov',last:'Sun 1 Nov',history:'Sun 1 Nov: 3 of 4 done. You skipped Plan next week.',
+ steps:[['Show the week ahead of bills','Money','show','done'],['Plan next week','Week board','ask','now'],['Tidy the inbox','Inbox autopilot','does',''],['Bins and car dates','Home','show','']]},
+mor:{name:'Morning brief',day:'MON–FRI',time:'07:00',when:'Weekdays at 07:00',sub:'Weather · trains · today · one money line',next:'Thu 5 Nov',last:'Today',history:'Today: done in 40 s, read out on the orb.',
+ steps:[['Weather and trains','Today','show','done'],['What today holds','Calendar','show','done'],['Anything due','Needs you','show','done']]},
+stu:{name:'Study night',day:'DAILY',time:'21:00',when:'Every day at 21:00',sub:'Tonight’s lessons · tick as you go',next:'Tonight',last:'Yesterday',history:'Yesterday: 3 lessons ticked, 1 moved to tonight.',
+ steps:[['Open tonight’s lessons','Study','show',''],['Tick what you finished','Study','ask',''],['Move the rest to tomorrow','Study','ask','']]},
+pay:{name:'Payday check',day:'PAYDAY',time:'09:00',when:'On payday at 09:00',sub:'What came in · bills to come · savings',next:'Fri 27 Nov',last:'Tue 27 Oct',history:'27 Oct: you moved £300 to savings yourself after the check.',
+ steps:[['What came in','Money','show',''],['Bills before next payday','Money','show',''],['Savings goal on track?','Plan','show','']]}
+};
+var keys=['sun','mor','stu','pay'];
+var routines=keys.map(function(k){var r=data[k];var on=!s.off[k];return {name:r.name,day:r.day,time:r.time,sub:(on?'':'Paused · ')+r.sub,
+ open:function(){self.setState({view:'detail',open:k,toast:''});},
+ toggle:function(){var o=Object.assign({},s.off);if(o[k])delete o[k];else o[k]=1;self.setState({off:o,toast:r.name+(o[k]?' paused':' on')});},
+ sw:'border:0;width:46px;height:28px;border-radius:14px;padding:3px;display:flex;flex-shrink:0;'+(on?'background:#c9b37e;justify-content:flex-end':'background:#2a2a2e;justify-content:flex-start'),
+ knob:'width:22px;height:22px;border-radius:11px;background:'+(on?'#111':'#8f897f')};});
+var d=data[s.open];
+var det={name:d.name,when:d.when,next:d.next,count:String(d.steps.length),last:d.last,history:d.history,
+ steps:d.steps.map(function(x,i){return {n:x[3]==='done'?'✓':String(i+1),t:x[0],where:x[1],badge:label[x[2]],badgeStyle:badge(x[2]),dotStyle:dot(x[3])};})};
+var ns=[['Show the week ahead of bills','Money','show'],['Plan next week','Week board','ask'],['Tidy the inbox','Inbox autopilot','does'],['Remind me about bins','Home','show']];
+var order=['show','ask','does'];
+var newSteps=ns.map(function(x,i){var k=s.modes[i]||x[2];return {n:String(i+1),t:x[0],where:x[1],badge:label[k],badgeStyle:badge(k),dotStyle:dot(''),
+ cycle:function(){var m=Object.assign({},s.modes);m[i]=order[(order.indexOf(k)+1)%3];self.setState({modes:m});}};});
+return {
+isList:s.view==='list',isDetail:s.view==='detail',isNew:s.view==='new',
+routines:routines,det:det,newSteps:newSteps,
+ideas:[{name:'Friday wind-down',why:'You tick work tasks late on Fridays',go:function(){self.setState({view:'new',toast:''});}},{name:'Bin night',why:'Bins go out Wednesday evenings',go:function(){self.setState({view:'new',toast:''});}}],
+goNew:function(){self.setState({view:'new',toast:''});},
+back:function(){self.setState({view:'list',toast:''});},
+openSunday:function(){self.setState({view:'detail',open:'sun',toast:''});},
+skip:function(){self.setState({toast:'Skipped · next: Tidy the inbox'});},
+runNow:function(){self.setState({toast:d.name+' started · Obi will say when he needs you'});},
+save:function(){self.setState({view:'list',toast:'Saved · first run Sun 8 Nov 19:00'});},
+toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>

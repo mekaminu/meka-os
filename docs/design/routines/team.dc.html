@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your team</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes sheet{from{transform:translateY(100%)}to{transform:none}}
+.sh{animation:sheet .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.sh,.pulse{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1300px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden">
+
+<div style="font-size:14px;color:#c9b37e">‹ Ask</div>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:26px;font-weight:700">Your team</div><div style="font-size:13px;color:#8f897f">What each one did today, and what waits on you</div></div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#121214;border-radius:14px;padding:10px 12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">WORKING</div><div style="font-size:22px;font-weight:600;margin-top:2px">{{working}}</div></div>
+<div style="background:#33281a;border-radius:14px;padding:10px 12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#d9a35b">NEED YOU</div><div style="font-size:22px;font-weight:600;margin-top:2px;color:#f0d2a3">{{needYou}}</div></div>
+<div style="background:#121214;border-radius:14px;padding:10px 12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">DONE TODAY</div><div style="font-size:22px;font-weight:600;margin-top:2px">{{doneToday}}</div></div>
+</div>
+
+<sc-for list="{{agents}}" as="a" hint-placeholder-count="5">
+<div class="in" style="background:#121214;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:12px;align-items:center">
+<span style="{{a.iconBox}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.icon}}"></path></svg></span>
+<button type="button" onClick="{{a.open}}" style="flex:1;border:0;background:transparent;color:#ededed;text-align:left;padding:0;display:flex;flex-direction:column;gap:2px;min-width:0">
+<span style="font-size:16px;font-weight:600">{{a.name}}</span>
+<span style="font-size:12.5px;color:#8f897f">{{a.role}}</span>
+</button>
+<span style="display:flex;align-items:center;gap:6px;font-size:12px;color:#a8a29a;white-space:nowrap"><span class="{{a.dotClass}}" style="{{a.dot}}"></span>{{a.status}}</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div style="background:#1a1a1d;border-radius:12px;padding:8px 10px"><div style="font-size:10px;letter-spacing:.12em;color:#a8a29a">TODAY</div><div style="font-size:13.5px;font-weight:600;margin-top:2px">{{a.today}}</div></div>
+<div style="{{a.waitBox}}"><div style="{{a.waitHead}}">WAITS ON YOU</div><div style="font-size:13.5px;font-weight:600;margin-top:2px">{{a.wait}}</div></div>
+</div>
+</div>
+</sc-for>
+
+<div style="font-size:12px;color:#6f6a62;text-align:center">Every agent asks before it acts. None sends messages, pays or trades by itself.</div>
+
+<div style="position:sticky;bottom:16px;display:flex;align-items:center;gap:8px;background:#151517;border-radius:999px;padding:6px 6px 6px 18px">
+<span style="flex:1;font-size:14.5px;color:#8f897f">Ask the team…</span>
+<span style="width:40px;height:40px;border-radius:20px;border:1.5px solid #c9b37e;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></span>
+</div>
+
+<sc-if value="{{sheet}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end">
+<div class="sh" style="width:100%;background:#151517;border-radius:22px 22px 0 0;padding:14px 16px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px">
+<div style="width:40px;height:4px;border-radius:2px;background:#3a3a3e;align-self:center"></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:20px;font-weight:700">{{sheet.name}}</span><span style="font-size:12px;color:#a8a29a">{{sheet.level}}</span></div>
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">TODAY</div>
+<sc-for list="{{sheet.log}}" as="l" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;align-items:baseline"><span style="width:44px;font-size:12px;color:#8f897f;flex-shrink:0">{{l.t}}</span><span style="font-size:14px">{{l.w}}</span></div>
+</sc-for>
+<sc-if value="{{sheet.hasWait}}" hint-placeholder-val="{{true}}">
+<div style="background:#33281a;border-radius:14px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-size:14px;color:#f0d2a3">{{sheet.wait}}</span><button type="button" onClick="{{sheet.review}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 14px;font-size:13px;font-weight:600">Review</button></div>
+</sc-if>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<button type="button" onClick="{{sheet.pause}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:44px;font-size:14px;font-weight:500">{{sheet.pauseLabel}}</button>
+<button type="button" onClick="{{sheet.close}}" style="border:0;background:transparent;color:#8f897f;border-radius:12px;height:44px;font-size:14px">Close</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:16px;right:16px;bottom:80px;background:#2a2721;color:#f0e6cf;border-radius:14px;padding:12px 14px;font-size:13.5px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1300}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={open:null,paused:{},toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var A=[
+{k:'obi',name:'Obi',role:'Your assistant · orb and Ask',icon:'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18',tint:'#c9b37e',status:'Ready',today:'14 answers · 3 cards',wait:'1 card to tap',level:'Asks before acting',
+ log:[['08:02','Read out the morning brief'],['12:40','Moved the dentist to Friday (you tapped)'],['19:15','Planned 2 lessons for tonight']],w:'Add milk to shopping?'},
+{k:'inbox',name:'Inbox',role:'Sorts and tidies three mailboxes',icon:'M3 6h18v12H3zM3 7l9 6 9-6',tint:'#8a9bd1',status:'Working',today:'46 sorted · 12 tidied',wait:'2 emails',level:'Tidies by itself · undo 72 h',
+ log:[['07:30','Sorted 31 new emails'],['11:05','Found a renewal: TeuxDeux, 25 Nov'],['16:20','Marked 12 newsletters read']],w:'2 emails need a reply'},
+{k:'calls',name:'Calls',role:'Screens calls, takes messages',icon:'M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',tint:'#7fb3a8',status:'Ready',today:'3 screened · 1 message',wait:'Nothing',level:'Screens by itself',
+ log:[['10:12','Blocked a known spam number'],['14:37','Took a message from an unknown caller']],w:''},
+{k:'money',name:'Money',role:'Weekly money check',icon:'M4 7h16v10H4zM8 12h.01M16 12h.01M12 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4',tint:'#d9a35b',status:'Idle',today:'Synced 6 accounts',wait:'1 idea',level:'Ideas only · never moves money',
+ log:[['01:19','Bank sync, 6 accounts'],['09:00','Spotted a price rise on a subscription']],w:'Review a price rise'},
+{k:'kestrel',name:'Kestrel',role:'Trading agent · Hyperliquid',icon:'M3 17l6-6 4 4 8-8M15 7h6v6',tint:'#b48ad1',status:'Watching',today:'No trades',wait:'1 trade',level:'Every trade needs your approval in Kestrel',
+ log:[['09:40','Set up a trade, waiting for you'],['13:00','Checked risk: within limits']],w:'1 trade to approve in Kestrel'}
+];
+var agents=A.map(function(a){var p=!!s.paused[a.k];var waits=!!a.w&&!p;var status=p?'Paused':a.status;var live=!p&&(a.status==='Working'||a.status==='Watching');
+ return {name:a.name,role:a.role,icon:a.icon,status:status,today:a.today,wait:p?'Paused':(a.w?a.wait:'Nothing'),
+ iconBox:'width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#1d1d20;color:'+(p?'#5a5650':a.tint),
+ dot:'width:8px;height:8px;border-radius:4px;background:'+(p?'#5a5650':(live?'#8fbf8f':'#a8a29a')),dotClass:live?'pulse':'',
+ waitBox:'border-radius:12px;padding:8px 10px;'+(waits?'background:#33281a':'background:#1a1a1d'),
+ waitHead:'font-size:10px;letter-spacing:.12em;color:'+(waits?'#d9a35b':'#a8a29a'),
+ open:function(){self.setState({open:a.k,toast:''});}};});
+var sheet=null;
+if(s.open){var a=A.filter(function(x){return x.k===s.open;})[0];var p=!!s.paused[a.k];
+ sheet={name:a.name,level:a.level,log:a.log.map(function(l){return {t:l[0],w:l[1]};}),hasWait:!!a.w&&!p,wait:a.w,
+ review:function(){self.setState({open:null,toast:a.k==='kestrel'?'Opens Kestrel to approve':'Opens it in Needs you'});},
+ pauseLabel:p?'Resume':'Pause for today',
+ pause:function(){var o=Object.assign({},s.paused);if(o[a.k])delete o[a.k];else o[a.k]=1;self.setState({paused:o,open:null,toast:a.name+(o[a.k]?' paused until tomorrow':' back on')});},
+ close:function(){self.setState({open:null});}};}
+var needYou=agents.filter(function(x,i){return A[i].w&&!s.paused[A[i].k];}).length;
+return {agents:agents,sheet:sheet,toast:s.toast,working:String(A.length-Object.keys(s.paused).length),needYou:String(needYou),doneToday:'64'};
+}
+}
+</script>
+</body>
+</html>
