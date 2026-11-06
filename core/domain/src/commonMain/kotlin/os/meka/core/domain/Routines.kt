@@ -117,13 +117,62 @@ data class RoutinesView(
     val summary: String,
     val rows: List<RoutineRow>,
     val starters: List<RoutineStarterRow>,
+    /** Slice 2: each routine's own page, by id ([RoutineRules.detail]). */
+    val details: List<RoutineDetail> = emptyList(),
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
+
+    fun detail(id: String): RoutineDetail? = details.firstOrNull { it.id == id }
 
     companion object {
         val EMPTY = RoutinesView(RoutineRules.EMPTY_LINE, emptyList(), emptyList())
     }
 }
+
+/** One step on a routine's page: "1" · "Show the week ahead of bills" · "Money" · "Just show". */
+data class RoutineStepRow(
+    val index: Int,
+    /** "1", "2". */
+    val number: String,
+    val title: String,
+    /** The Navilife place it uses ("Money", "Week board"). */
+    val place: String,
+    val mode: RoutineStepMode,
+    /** The badge's words ("Just show", "Asks you", "Obi does it"). */
+    val badge: String,
+    /** The label a tap on the badge moves to ("Asks you"); null when it has only one choice. */
+    val nextBadge: String?,
+    val spoken: String,
+) {
+    /** The label's code ("show", "ask", "does"), for the apps' colours. */
+    val modeCode: String get() = mode.code
+    /** The code a tap moves the label to ([RoutineStepMode.code]); null when it has only one choice. */
+    val nextCode: String? get() = RoutineStepMode.entries.firstOrNull { it.label == nextBadge }?.code
+}
+
+/**
+ * A routine's own page (slice 2, the mockup's detail view): its name and when it runs, the NEXT · STEPS · LAST RUN
+ * tiles, its steps each with its label (a tap moves it on: Just show → Asks you → Obi does it, the last only where
+ * Navilife already acts by itself), and LAST TIME.
+ */
+data class RoutineDetail(
+    val id: String,
+    val name: String,
+    /** "Every Sunday at 19:00". */
+    val whenLine: String,
+    /** The NEXT tile: "Sun 8 Nov", "Tonight", "Tomorrow", "On payday", or "Paused". */
+    val next: String,
+    /** The STEPS tile: "4". */
+    val stepCount: String,
+    /** The LAST RUN tile: "Not yet" until routines run (slice 3). */
+    val lastRun: String,
+    val steps: List<RoutineStepRow>,
+    /** LAST TIME: what happened the last time it ran. */
+    val history: String,
+    val on: Boolean,
+    /** The labels' note under the steps. */
+    val stepsNote: String,
+)
 
 /** What adding or changing a routine said, and whether nothing was written. */
 data class RoutineSaid(val line: String, val refused: Boolean, val id: String? = null)
@@ -334,6 +383,49 @@ object RoutineRules {
         }
     }
 
+    const val NEXT_TILE = "Next"
+    const val STEPS_TILE = "Steps"
+    const val LAST_TILE = "Last run"
+    const val STEPS_LABEL = "Steps"
+    const val LAST_TIME = "Last time"
+    const val NOT_YET = "Not yet"
+    const val NO_HISTORY = "It hasn't run yet. What it did will show here after each run."
+    const val STEPS_NOTE = "Tap a step's label to change it between Just show, Asks you and Obi does it. Obi does it is offered only where Navilife already acts by itself."
+    const val BACK = "Routines"
+
+    /** The labels a step at [place] may have, in the order a tap moves through them. */
+    fun modesFor(place: RoutinePlace): List<RoutineStepMode> =
+        if (place.obiMayDo) RoutineStepMode.entries else listOf(RoutineStepMode.SHOW, RoutineStepMode.ASK)
+
+    /** The label after [step]'s on a tap, or null when it has only one. */
+    fun nextMode(step: RoutineStep): RoutineStepMode? {
+        val modes = modesFor(step.place)
+        if (modes.size < 2) return null
+        return modes[(modes.indexOf(effectiveMode(step)).coerceAtLeast(0) + 1) % modes.size]
+    }
+
+    /** The NEXT tile: "Tonight", "Today", "Tomorrow", "Sun 8 Nov", "On payday", "Paused". */
+    fun nextTile(r: RoutineItem, today: Long, nowMinute: Int, payday: Long? = null): String {
+        if (!r.on) return "Paused"
+        val word = nextLine(r.schedule, today, nowMinute, payday).removePrefix("Next: ")
+        return word.replaceFirstChar { it.uppercase() }
+    }
+
+    fun detail(r: RoutineItem, today: Long, nowMinute: Int, payday: Long? = null): RoutineDetail {
+        val steps = r.steps.mapIndexed { i, st ->
+            val mode = effectiveMode(st)
+            val next = nextMode(st)
+            RoutineStepRow(
+                i, "${i + 1}", st.title, st.place.label, mode, mode.label, next?.label,
+                spoken = "Step ${i + 1}: ${st.title}, in ${st.place.label}. ${mode.label}" + (next?.let { ". Tap to change to ${it.label}" } ?: ""),
+            )
+        }
+        return RoutineDetail(
+            r.id, r.name, whenLine(r.schedule), nextTile(r, today, nowMinute, payday), "${steps.size}", NOT_YET, steps,
+            NO_HISTORY, r.on, STEPS_NOTE,
+        )
+    }
+
     /**
      * Ask's Daily row: the next routine to run, "Study night · tonight" (lit when it runs today), "All paused", or
      * null with none (the row keeps [ROW_LINE]).
@@ -360,7 +452,7 @@ object RoutineRules {
         val taken = items.mapNotNull { it.starter }.toSet()
         val names = items.map { it.name.lowercase() }.toSet()
         val starters = STARTERS.filter { it.key !in taken && it.name.lowercase() !in names }.map { starterRow(it) }
-        return RoutinesView(summary(items), rows, starters)
+        return RoutinesView(summary(items), rows, starters, items.map { detail(it, today, nowMinute, payday) })
     }
 }
 
@@ -394,6 +486,19 @@ class Routines(
         val r = items().firstOrNull { it.id == id } ?: return false
         if (r.on == on) return false
         replica.commitLocal(EntityTypes.ROUTINE, id, mapOf(RoutineFields.ON to on.fv()))
+        return true
+    }
+
+    /**
+     * Gives step [index] of a routine the label [mode] (a tap on its badge); false when the routine or step isn't
+     * there, the step has it already, or Obi may not do it there (only where Navilife already acts by itself).
+     */
+    fun setStepMode(id: String, index: Int, mode: RoutineStepMode): Boolean {
+        val r = items().firstOrNull { it.id == id } ?: return false
+        val step = r.steps.getOrNull(index) ?: return false
+        if (mode !in RoutineRules.modesFor(step.place) || RoutineRules.effectiveMode(step) == mode) return false
+        val steps = r.steps.toMutableList().also { it[index] = step.copy(mode = mode) }
+        replica.commitLocal(EntityTypes.ROUTINE, id, mapOf(RoutineFields.STEPS to RoutineRules.encodeSteps(steps).fv()))
         return true
     }
 

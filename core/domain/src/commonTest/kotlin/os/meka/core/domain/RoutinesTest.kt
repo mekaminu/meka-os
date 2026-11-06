@@ -163,4 +163,39 @@ class RoutinesTest {
         assertEquals(listOf("x"), routines(fold).items().map { it.id })
         assertTrue(EntityTypes.ROUTINE in DataExport.TYPES)
     }
+
+    @Test
+    fun aRoutinesPageShowsItsTilesAndStepsAndABadgeTapMovesTheLabelOn() {
+        val r = routines(fold)
+        val id = r.addStarter("sunday-reset")!!.id!!
+        val d = r.view().detail(id)!!
+        assertEquals("Sunday reset", d.name)
+        assertEquals("Every Sunday at 19:00", d.whenLine)
+        assertEquals("Sun 8 Nov", d.next)
+        assertEquals("4", d.stepCount)
+        assertEquals(RoutineRules.NOT_YET, d.lastRun)
+        assertEquals(listOf("Just show", "Asks you", "Obi does it", "Just show"), d.steps.map { it.badge })
+        assertEquals(listOf("Money", "Week board", "Inbox autopilot", "Home"), d.steps.map { it.place })
+        // Outside the inbox a tap moves Just show ↔ Asks you; Obi does it is offered only for the inbox.
+        assertEquals("Asks you", d.steps[0].nextBadge)
+        assertEquals("ask", d.steps[0].nextCode)
+        assertEquals("does", d.steps[2].modeCode)
+        assertEquals("Just show", d.steps[1].nextBadge)
+        assertEquals("Just show", d.steps[2].nextBadge)
+        assertEquals("Step 1: Show the week ahead of bills, in Money. Just show. Tap to change to Asks you", d.steps[0].spoken)
+        assertFalse(r.setStepMode(id, 0, RoutineStepMode.DOES))
+        assertFalse(r.setStepMode(id, 0, RoutineStepMode.SHOW))
+        assertFalse(r.setStepMode(id, 9, RoutineStepMode.ASK))
+        assertTrue(r.setStepMode(id, 0, RoutineStepMode.ASK))
+        assertTrue(r.setStepMode(id, 2, RoutineStepMode.SHOW))
+        sync()
+        val onMac = routines(mac).view().detail(id)!!
+        assertEquals(listOf("Asks you", "Asks you", "Just show", "Just show"), onMac.steps.map { it.badge })
+        assertEquals(RoutineRules.STARTERS.first().steps.map { it.title }, onMac.steps.map { it.title })
+        // Paused: the NEXT tile says so; tonight's study says Tonight.
+        routines(mac).setOn(id, false)
+        assertEquals("Paused", routines(mac).view().detail(id)!!.next)
+        val study = r.addStarter("study-night")!!.id!!
+        assertEquals("Tonight", r.view().detail(study)!!.next)
+    }
 }

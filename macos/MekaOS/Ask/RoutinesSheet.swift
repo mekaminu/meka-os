@@ -1,7 +1,7 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Daily → Routines, on the Mac (Routines, slice 1), like the Fold's RoutinesPane: how many are on, the rule (a
+/// Ask → Daily → Routines, on the Mac (Routines, slices 1 and 2; a click on a card opens the routine's page), like the Fold's RoutinesPane: how many are on, the rule (a
 /// routine never sends, pays, books or trades), YOUR ROUTINES — each a card with its day tile ("SUN" over "19:00"), its
 /// name, its line, its next run, Remove and an On/Off switch (synced with the Fold) — and START WITH ONE, the starters
 /// not added yet, each with Add. The words are the core's `RoutineRules`. Only Strings and Bools cross to the core.
@@ -14,9 +14,29 @@ struct RoutinesSheet: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
     @State private var said: String?
+    /// Slice 2: the routine whose page is open (nil: the list).
+    @State private var openId: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let v = model.routines, let id = openId, let d = v.detail(id: id) {
+                page(d).transition(.opacity)
+            } else {
+                list
+            }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, MekaSpace.m)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: openId)
+        .padding(MekaSpace.l)
+        .frame(width: 480)
+        .background(palette.surface)
+    }
+
+    @ViewBuilder private var list: some View {
             Text(RoutineRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
             if let v = model.routines {
                 Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body)
@@ -55,15 +75,100 @@ struct RoutinesSheet: View {
                 .scrollIndicators(.never)
                 .frame(maxHeight: 520)
             }
+    }
+
+    /// A routine's own page (slice 2): ‹ Routines, its name and when, the NEXT · STEPS · LAST RUN tiles, its steps with
+    /// their labels (a click moves a label on), LAST TIME, the switch and Remove.
+    private func page(_ d: RoutineDetail) -> some View {
+        let id = d.id
+        let name = d.name
+        let isOn = d.on
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button("‹ \(RoutineRules.shared.BACK)") { openId = nil }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                .accessibilityLabel("Back to \(RoutineRules.shared.BACK)")
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(LoneWordGlue.shared.kept(line: d.name)).font(MekaType.upNextTitle).accessibilityAddTraits(.isHeader)
+                    Text(LoneWordGlue.shared.kept(line: d.whenLine)).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Toggle("", isOn: Binding(get: { isOn }, set: { model.setRoutineOn(id, on: $0) }))
+                    .toggleStyle(.switch).tint(palette.accent).labelsHidden()
+                    .accessibilityLabel(isOn ? "Pause \(name)" : "Switch on \(name)")
+            }
+            .staggeredAppear(0)
+            HStack(spacing: MekaSpace.xs) {
+                pageTile(RoutineRules.shared.NEXT_TILE, d.next)
+                pageTile(RoutineRules.shared.STEPS_TILE, d.stepCount)
+                pageTile(RoutineRules.shared.LAST_TILE, d.lastRun)
+            }
+            .staggeredAppear(1)
+            label(RoutineRules.shared.STEPS_LABEL).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
+            ForEach(Array(d.steps.enumerated()), id: \.offset) { i, st in
+                stepRow(id, st).staggeredAppear(i + 2)
+            }
+            Text(LoneWordGlue.shared.kept(line: d.stepsNote)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            label(RoutineRules.shared.LAST_TIME).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
+            Text(LoneWordGlue.shared.kept(line: d.history)).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button(RoutineRules.shared.REMOVE) {
+                    model.removeRoutine(id)
+                    openId = nil
+                    said = "Removed \(name)"
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(palette.surfaceRaised, in: Capsule())
+                .accessibilityLabel("\(RoutineRules.shared.REMOVE) \(name)")
             }
             .padding(.top, MekaSpace.m)
         }
-        .padding(MekaSpace.l)
-        .frame(width: 480)
-        .background(palette.surface)
+    }
+
+    private func pageTile(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(title.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary).lineLimit(1)
+            Text(value).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
+        }
+        .padding(MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func stepRow(_ id: String, _ st: RoutineStepRow) -> some View {
+        let index = st.index
+        let nextCode = st.nextCode
+        let ink: Color = st.modeCode == "ask" ? palette.accent : (st.modeCode == "does" ? palette.textPrimary : palette.textSecondary)
+        return HStack(alignment: .center, spacing: MekaSpace.xs) {
+            Text(st.number).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(palette.surfaceRaised, in: Circle())
+            VStack(alignment: .leading, spacing: 0) {
+                Text(LoneWordGlue.shared.kept(line: st.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(st.place).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            Spacer(minLength: 0)
+            if let nextCode {
+                Button(st.badge) { model.setRoutineStepMode(id, index: index, mode: nextCode) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption).foregroundStyle(ink)
+                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                    .background(palette.surfaceRaised, in: Capsule())
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: st.badge)
+                    .accessibilityLabel(st.spoken)
+            } else {
+                Text(st.badge).font(MekaType.caption).foregroundStyle(ink).accessibilityLabel(st.spoken)
+            }
+        }
     }
 
     /// The day tile: "SUN" over "19:00".
@@ -111,8 +216,12 @@ struct RoutinesSheet: View {
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+        // Slice 2: a click on the card opens its page (the switch and Remove keep their own clicks).
+        .onTapGesture { openId = id }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(r.spoken)
+        .accessibilityAddTraits(.isButton)
     }
 
     private func starterCard(_ s: RoutineStarterRow) -> some View {

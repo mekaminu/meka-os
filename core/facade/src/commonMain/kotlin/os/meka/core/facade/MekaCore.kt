@@ -5989,6 +5989,15 @@ class MekaCore(
     /** Takes a routine off for good; its starter is offered again. */
     suspend fun removeRoutine(id: String): Boolean = onCore { routines.remove(id) }
 
+    /**
+     * Routines, slice 2: a tap on a step's label on the routine's page gives it the label [mode] (a
+     * [os.meka.core.domain.RoutineStepMode.code]: "show", "ask", "does"), on both apps; false when it can't have it.
+     */
+    suspend fun setRoutineStepMode(id: String, index: Int, mode: String): Boolean = onCore {
+        val m = os.meka.core.domain.RoutineStepMode.entries.firstOrNull { it.code == mode } ?: return@onCore false
+        routines.setStepMode(id, index, m)
+    }
+
     // ---- Goals and habits ----
 
     /** Adds a habit: [perWeek] 1–7, a part of the day the planner prefers, and how long one go takes. */

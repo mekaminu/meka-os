@@ -47,6 +47,12 @@ class RoutinesFacadeTest {
         assertFalse(fold.routinesView.value.rows.single().on)
         assertEquals("All paused", fold.routinesView.value.summary)
 
+        // Slice 2: a step's label changed on the Fold shows on the Mac's page.
+        assertFalse(fold.setRoutineStepMode(row.id, 0, "does"))
+        assertFalse(fold.setRoutineStepMode(row.id, 0, "nope"))
+        assertTrue(fold.setRoutineStepMode(row.id, 0, "ask"))
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Asks you", mac.routinesView.value.detail(row.id)?.steps?.first()?.badge)
         assertTrue(fold.removeRoutine(row.id))
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.routinesView.value.isEmpty)

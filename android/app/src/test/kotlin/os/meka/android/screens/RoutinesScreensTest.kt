@@ -43,8 +43,9 @@ import kotlin.test.fail
  * The quality gate for Ask → Daily → Routines (slice 1): no routines yet (the four starters) and three added with one
  * paused, on the Fold's cover and inner screens, Dark (and Light). Saved under `routines/` and read for nonsense, cut
  * lines, broken words, split dates and clocks, lone words and stray dots, and every button answering a 48 dp touch.
- * By hand: Add puts a starter under YOUR ROUTINES, the switch pauses and resumes it, Remove takes it away and offers the
- * starter again. Invented data only (rule 13).
+ * By hand: Add puts a starter under YOUR ROUTINES, the switch pauses and resumes it, its card opens its page (shot and
+ * read the same way) where a label tap moves the label on, ‹ Routines comes back, and Remove takes it away and offers
+ * the starter again. Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -171,13 +172,32 @@ class RoutinesScreensTest {
         until { sunday() != null && count("routine-row") == 1 }
         if (sunday() == null) fail("$name: Add didn't add Sunday reset")
         if (!onScreen("Added Sunday reset")) fail("$name: Add didn't say so")
-        val row = compose.onAllNodes(hasTestTag("routine-row") and hasClickAction())
-        row[0].performSemanticsAction(SemanticsActions.OnClick)
+        tap("Pause Sunday reset")
         until { sunday()?.on == false }
         if (sunday()?.on != false) fail("$name: the switch didn't pause it")
-        compose.onAllNodes(hasTestTag("routine-row") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        tap("Switch on Sunday reset")
         until { sunday()?.on == true }
         if (sunday()?.on != true) fail("$name: the switch didn't switch it back on")
+        // Slice 2: the card opens the routine's page; a tap on a step's label moves it on; ‹ Routines comes back.
+        compose.onAllNodes(hasTestTag("routine-row") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { count("routine-step") == 4 }
+        if (count("routine-step") != 4) fail("$name: the page doesn't show Sunday reset's 4 steps")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", "cover-dark-page"))
+        val d = core.routinesView.value.detail(sunday()!!.id)!!
+        val lines = listOf(d.name, d.whenLine, d.stepsNote, d.history) + d.steps.map { it.title }
+        ScreenShots.assertSensible(compose, "$name-page")
+        ScreenShots.assertNoBrokenWords(compose, "$name-page")
+        ScreenShots.assertDatesWhole(compose, "$name-page")
+        ScreenShots.assertNoLoneWords(compose, "$name-page", lines)
+        ScreenShots.assertNoDotStartingALine(compose, "$name-page", lines)
+        ScreenShots.assertNoDotEndingALine(compose, "$name-page", lines)
+        assertTouchTargets("$name-page")
+        tap(d.steps[0].spoken)
+        until { core.routinesView.value.detail(d.id)?.steps?.first()?.badge == "Asks you" }
+        if (core.routinesView.value.detail(d.id)?.steps?.first()?.badge != "Asks you") fail("$name: the label didn't move on")
+        tap("Back to ${RoutineRules.BACK}")
+        until { count("routine-page") == 0 && count("routine-row") == 1 }
+        if (count("routine-page") != 0) fail("$name: ‹ Routines left the page open")
         tap("${RoutineRules.REMOVE} Sunday reset")
         until { sunday() == null && count("routine-starter") == 4 }
         if (sunday() != null) fail("$name: Remove left it")

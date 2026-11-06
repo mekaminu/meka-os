@@ -5968,6 +5968,13 @@ final class CoreModel {
     /// Takes a routine off for good; its starter is offered again.
     func removeRoutine(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeRoutine(id: id) } }
 
+    /// Slice 2: a click on a step's label gives it the next label; only the id, the step's index and the label's code
+    /// ("show", "ask", "does") cross.
+    func setRoutineStepMode(_ id: String, index: Int32, mode: String) {
+        MekaHaptics.tick()
+        run { _ = try await $0.setRoutineStepMode(id: id, index: index, mode: mode) }
+    }
+
     // MARK: Work wins (slice 1)
 
     /// What keeping a win said: the line to show under the field and whether it was turned away.
