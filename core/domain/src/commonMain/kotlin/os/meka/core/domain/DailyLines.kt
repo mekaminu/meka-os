@@ -7,7 +7,7 @@ package os.meka.core.domain
  * stories, Shut down "2 left", the Train queue "2 saved", the Life admin hour "Thu 19:00 · 3 jobs", the Bedside clock
  * "Screen saver on/off" (the Fold only). A row with nothing live keeps its fixed words. Both apps; pure, unit-tested.
  */
-enum class DailyRow { BRIEF, WEEK_AHEAD, NEWS, SHUTDOWN, TRAIN_QUEUE, READING, VOICE_NOTES, LIFE_ADMIN, BEDSIDE, WORKING_ON }
+enum class DailyRow { BRIEF, WEEK_AHEAD, NEWS, SHUTDOWN, TRAIN_QUEUE, READING, VOICE_NOTES, LIFE_ADMIN, BEDSIDE, WORKING_ON, ROUTINES }
 
 /** A Daily row's live line; [lit] when it's ready now or wants a look (drawn in the accent). */
 data class DailyLine(val text: String, val lit: Boolean)
@@ -50,6 +50,8 @@ data class DailyInputs(
     val todayDay: Long = 0,
     /** Ada plans with you, part 3 slice 1 ([WorkingOnRules.dailyLine]): what Obi is working on, null for the fixed words. */
     val workingOn: DailyLine? = null,
+    /** Routines, slice 1 ([RoutineRules.dailyLine]): the next routine to run, null for the fixed words. */
+    val routines: DailyLine? = null,
 )
 
 object DailyRules {
@@ -70,6 +72,7 @@ object DailyRules {
         i.reading?.let { m[DailyRow.READING] = it }
         lifeAdmin(i)?.let { m[DailyRow.LIFE_ADMIN] = it }
         i.workingOn?.let { m[DailyRow.WORKING_ON] = it }
+        i.routines?.let { m[DailyRow.ROUTINES] = it }
         return DailyLines(m)
     }
 

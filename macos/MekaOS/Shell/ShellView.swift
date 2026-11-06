@@ -323,6 +323,7 @@ private struct ShellSheetsB: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showLifeAdmin }, set: { model.showLifeAdmin = $0 })) { LifeAdminSheet(palette: palette) }
             // Obi is working on (Ask → Daily): the standing errands he keeps an eye on (Ada plans with you, part 3 slice 1).
             .sheet(isPresented: Binding(get: { model.showWorkingOn }, set: { model.showWorkingOn = $0 })) { WorkingOnSheet(palette: palette) }
+            .sheet(isPresented: Binding(get: { model.showRoutines }, set: { model.showRoutines = $0 })) { RoutinesSheet(palette: palette) }
             // Emergency card (Ask → More): who to call, where things are, key accounts by name; his wife reads it.
             .sheet(isPresented: Binding(get: { model.showEmergency }, set: { model.showEmergency = $0 })) { EmergencySheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showKids }, set: { model.showKids = $0 })) { KidsSheet(palette: palette) }

@@ -187,6 +187,8 @@ class MekaCore(
     private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
     // Annual leave (V1, slice 1): booked days are days off for work mode, like a bank holiday.
     private val leave = os.meka.core.domain.Leave(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    // Routines (slice 1, 2026-11-06): jobs Obi repeats, each with its switch; nothing in a routine sends, pays, books or trades.
+    private val routines = os.meka.core.domain.Routines(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val work = WorkMode(replica, { bankHolidays.calendar() }, leave = { leave.days() }, nowMs = nowMs, away = { trips.awayDays() })
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -690,6 +692,13 @@ class MekaCore(
      * booked days are days off for work mode on both apps.
      */
     val leaveView: StateFlow<os.meka.core.domain.LeaveView> = _leave.asStateFlow()
+
+    private val _routines = MutableStateFlow(os.meka.core.domain.RoutinesView.EMPTY)
+    /**
+     * Routines (slice 1, 2026-11-06; Ask → Daily → Routines): his routines soonest-running first, each with its day
+     * tile, line, next run and switch, and the starters not added yet. Synced, so a switch on either app moves both.
+     */
+    val routinesView: StateFlow<os.meka.core.domain.RoutinesView> = _routines.asStateFlow()
 
     private val _meals = MutableStateFlow(os.meka.core.domain.MealPlanView.EMPTY)
     /**
@@ -5968,6 +5977,17 @@ class MekaCore(
 
     /** The allowance (days a leave year, 1–60) and the month the leave year starts (1–12). */
     suspend fun setLeaveAllowance(days: Int, yearStartMonth: Int): Boolean = onCore { leave.setSettings(days, yearStartMonth) }
+
+    // ---- Routines (slice 1, 2026-11-06; Ask → Daily → Routines) ----
+
+    /** Adds a starter routine ([os.meka.core.domain.RoutineRules.STARTERS]) switched on; null when there's no such starter. */
+    suspend fun addStarterRoutine(key: String): os.meka.core.domain.RoutineSaid? = onCore { routines.addStarter(key) }
+
+    /** Switches a routine on or pauses it, on both apps; false when it isn't there or already so. */
+    suspend fun setRoutineOn(id: String, on: Boolean): Boolean = onCore { routines.setOn(id, on) }
+
+    /** Takes a routine off for good; its starter is offered again. */
+    suspend fun removeRoutine(id: String): Boolean = onCore { routines.remove(id) }
 
     // ---- Goals and habits ----
 
@@ -13879,6 +13899,7 @@ class MekaCore(
         _car.value = _cars.value.first
         _parkingTimers.value = os.meka.core.domain.ParkingTimerRules.view(parkingTimers.all(), _cars.value, nowMs(), cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
+        _routines.value = routines.view()
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
         // Slice 11: the Life grid's lines are kept while the views they're read from, Money's accounts and cards (Money
         // keeps its own copy, so they're handed in), the minute and every record type read here are unchanged.
@@ -13940,6 +13961,7 @@ class MekaCore(
             lifeAdminJobs = _lifeAdmin.value.jobCount,
             todayDay = todayDay,
             workingOn = os.meka.core.domain.WorkingOnRules.dailyLine(workingOnNow()),
+            routines = os.meka.core.domain.RoutineRules.dailyLine(_routines.value),
         ))
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()

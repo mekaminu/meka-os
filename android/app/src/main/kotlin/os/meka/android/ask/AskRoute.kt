@@ -417,6 +417,8 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.WORKING_ON) {
             WorkingOnPane(core, onClose = { pane = null }, onOpen = { place -> pane = null; openHelp(place) })
         }
+        // Routines, slice 1: his routines with their switches and the starters.
+        MekaPane(visible = pane == MoreItem.ROUTINES) { RoutinesPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.AUTONOMY) { AutonomyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ACTIVITY) { ActivityPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.YOUR_DATA) { YourData(core, onClose = { pane = null }) }

@@ -72,6 +72,7 @@ enum class MoreItem(
     EMERGENCY("Emergency card", "Who to call and where things are", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.EMERGENCY),
     FACTS("What Navilife knows", "Car reg, GP, sizes · the facts Navilife answers from", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.FACTS),
     WORKING_ON(os.meka.core.domain.WorkingOnRules.TITLE, os.meka.core.domain.WorkingOnRules.ROW_LINE, null, MoreGroup.DAILY),
+    ROUTINES(os.meka.core.domain.RoutineRules.TITLE, os.meka.core.domain.RoutineRules.ROW_LINE, null, MoreGroup.DAILY),
     BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null, MoreGroup.DAILY),
     WEEK_AHEAD("Week ahead", "The coming week day by day · Sunday at 18:00", null, MoreGroup.DAILY),
     NEWS("News", "Barça, AI and the headlines · topics and sources", null, MoreGroup.DAILY),
@@ -169,6 +170,7 @@ object ShellNav {
         MoreItem.LIFE_ADMIN -> os.meka.core.domain.DailyRow.LIFE_ADMIN
         MoreItem.BEDSIDE -> os.meka.core.domain.DailyRow.BEDSIDE
         MoreItem.WORKING_ON -> os.meka.core.domain.DailyRow.WORKING_ON
+        MoreItem.ROUTINES -> os.meka.core.domain.DailyRow.ROUTINES
         else -> null
     }
 

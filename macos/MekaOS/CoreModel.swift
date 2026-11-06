@@ -191,6 +191,11 @@ final class CoreModel {
     private(set) var leave: LeaveView?
     /// Ask → More → Annual leave.
     var showLeave = false
+    /// Routines (slice 1): his routines with their switches and the starters not added yet (Ask → Daily → Routines).
+    /// Synced with the Fold.
+    private(set) var routines: RoutinesView?
+    /// Ask → Daily → Routines.
+    var showRoutines = false
     /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
     private(set) var wins: WinsView?
     /// Balance view (V2, slice 1): the reviewed week across work, family, health and self against his targets. Synced.
@@ -690,6 +695,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.leaveView { self?.leave = l }
+        })
+        observers.append(Task { [weak self] in
+            for await r in core.routinesView { self?.routines = r }
         })
         observers.append(Task { [weak self] in
             for await w in core.winsView { self?.wins = w }
@@ -5937,6 +5945,28 @@ final class CoreModel {
         MekaHaptics.tick()
         run { _ = try await $0.setLeaveAllowance(days: days, yearStartMonth: yearStartMonth) }
     }
+
+    // MARK: Routines (slice 1)
+
+    /// Adds a starter routine, switched on; only its key crosses. The line to show and whether it was turned away.
+    func addStarterRoutine(_ key: String) async -> (line: String, refused: Bool)? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do {
+            guard let r = try await core.addStarterRoutine(key: key) else { return nil }
+            if r.refused { MekaHaptics.tick() }
+            return (r.line, r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Switches a routine on or pauses it, on both apps; only its id and a Bool cross.
+    func setRoutineOn(_ id: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setRoutineOn(id: id, on: on) } }
+
+    /// Takes a routine off for good; its starter is offered again.
+    func removeRoutine(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeRoutine(id: id) } }
 
     // MARK: Work wins (slice 1)
 
