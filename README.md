@@ -425,6 +425,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/routines/cover-dark-by-hand.png](docs/screens/fold/routines/cover-dark-by-hand.png)
 - [fold/routines/cover-dark-empty.png](docs/screens/fold/routines/cover-dark-empty.png)
 - [fold/routines/cover-dark-many.png](docs/screens/fold/routines/cover-dark-many.png)
+- [fold/routines/cover-dark-page.png](docs/screens/fold/routines/cover-dark-page.png)
 - [fold/routines/cover-light-many.png](docs/screens/fold/routines/cover-light-many.png)
 - [fold/routines/inner-dark-many.png](docs/screens/fold/routines/inner-dark-many.png)
 - [fold/school/cover-dark-empty.png](docs/screens/fold/school/cover-dark-empty.png)
