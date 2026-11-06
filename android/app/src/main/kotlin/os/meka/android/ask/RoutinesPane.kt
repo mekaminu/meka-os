@@ -152,7 +152,7 @@ private fun RoutineCard(r: RoutineRow, modifier: Modifier, onToggle: () -> Unit,
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(LoneWordGlue.kept(r.name), style = MekaType.body, color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary)
             Text(LoneWordGlue.kept(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
-            r.next?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            r.next?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
             Text(RoutineRules.REMOVE, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onRemove() }.minTouch()
                     .semantics { contentDescription = "${RoutineRules.REMOVE} ${r.name}" })
@@ -174,7 +174,7 @@ private fun StarterCard(s: RoutineStarterRow, modifier: Modifier, onAdd: () -> U
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(LoneWordGlue.kept(s.name), style = MekaType.body, color = Meka.colors.textPrimary)
             Text(LoneWordGlue.kept(s.line), style = MekaType.caption, color = Meka.colors.textSecondary)
-            Text(s.whenLine, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(LoneWordGlue.kept(s.whenLine), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         TouchPill(RoutineRules.ADD, Meka.colors.surface, Meka.colors.accent, spoken = "${RoutineRules.ADD} ${s.name}", onClick = onAdd)
     }

@@ -114,7 +114,7 @@ class RoutinesTest {
         val row = v.rows[1]
         assertEquals("SUN", row.day)
         assertEquals("19:00", row.time)
-        assertEquals("Bills · plan the week · inbox · bins", row.line)
+        assertEquals("Bills, plan the week, inbox, bins", row.line)
         assertEquals("Next: Sun 8 Nov", row.next)
         assertEquals("Pause Sunday reset", row.switchSpoken)
         assertEquals(listOf("Morning brief"), v.starters.map { it.name })
@@ -133,7 +133,7 @@ class RoutinesTest {
         val paused = r.view()
         assertEquals("2 on · 1 paused", paused.summary)
         assertEquals("Sunday reset", paused.rows.last().name)
-        assertEquals("Paused · Bills · plan the week · inbox · bins", paused.rows.last().line)
+        assertEquals("Paused · Bills, plan the week, inbox, bins", paused.rows.last().line)
         assertNull(paused.rows.last().next)
         assertEquals("Switch on Sunday reset", paused.rows.last().switchSpoken)
 

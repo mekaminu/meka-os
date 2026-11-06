@@ -26,7 +26,7 @@ object RoutineFields {
     const val MINUTE = "minute"
     /** One step a line: "show|MONEY|Show the week ahead of bills" ([RoutineRules.encodeSteps]). */
     const val STEPS = "steps"
-    /** The short line under its name ("Bills · plan the week · inbox · bins"); made from the steps when absent. */
+    /** The short line under its name ("Bills, plan the week, inbox, bins"); made from the steps when absent. */
     const val SUMMARY = "summary"
     /** Switched on (true) or paused. */
     const val ON = "on"
@@ -89,7 +89,7 @@ data class RoutineRow(
     val day: String,
     /** "19:00". */
     val time: String,
-    /** "Bills · plan the week · inbox · bins", or "Paused · …" while off. */
+    /** "Bills, plan the week, inbox, bins", or "Paused · …" while off. */
     val line: String,
     /** "Next: Sun 8 Nov", "Next: tonight"; null while paused. */
     val next: String?,
@@ -148,7 +148,7 @@ object RoutineRules {
 
     val STARTERS: List<RoutineStarter> = listOf(
         RoutineStarter(
-            "sunday-reset", "Sunday reset", RoutineSchedule(setOf(7), 19 * 60), "Bills · plan the week · inbox · bins",
+            "sunday-reset", "Sunday reset", RoutineSchedule(setOf(7), 19 * 60), "Bills, plan the week, inbox, bins",
             listOf(
                 RoutineStep("Show the week ahead of bills", RoutinePlace.MONEY, RoutineStepMode.SHOW),
                 RoutineStep("Plan next week", RoutinePlace.WEEK_BOARD, RoutineStepMode.ASK),
@@ -157,7 +157,7 @@ object RoutineRules {
             ),
         ),
         RoutineStarter(
-            "morning-brief", "Morning brief", RoutineSchedule(Recurrence.WEEKDAYS, 7 * 60), "Weather · trains · today · one money line",
+            "morning-brief", "Morning brief", RoutineSchedule(Recurrence.WEEKDAYS, 7 * 60), "Weather, trains, today, one money line",
             listOf(
                 RoutineStep("Weather and trains", RoutinePlace.TODAY, RoutineStepMode.SHOW),
                 RoutineStep("What today holds", RoutinePlace.CALENDAR, RoutineStepMode.SHOW),
@@ -165,7 +165,7 @@ object RoutineRules {
             ),
         ),
         RoutineStarter(
-            "study-night", "Study night", RoutineSchedule((1..7).toSet(), 21 * 60), "Tonight’s lessons · tick as you go",
+            "study-night", "Study night", RoutineSchedule((1..7).toSet(), 21 * 60), "Tonight’s lessons, tick as you go",
             listOf(
                 RoutineStep("Open tonight’s lessons", RoutinePlace.STUDY, RoutineStepMode.SHOW),
                 RoutineStep("Tick what you finished", RoutinePlace.STUDY, RoutineStepMode.ASK),
@@ -173,7 +173,7 @@ object RoutineRules {
             ),
         ),
         RoutineStarter(
-            "payday-check", "Payday check", RoutineSchedule(emptySet(), 9 * 60, payday = true), "What came in · bills to come · savings",
+            "payday-check", "Payday check", RoutineSchedule(emptySet(), 9 * 60, payday = true), "What came in, bills to come, savings",
             listOf(
                 RoutineStep("What came in", RoutinePlace.MONEY, RoutineStepMode.SHOW),
                 RoutineStep("Bills before next payday", RoutinePlace.MONEY, RoutineStepMode.SHOW),
@@ -232,7 +232,7 @@ object RoutineRules {
         if (!payday && days.isEmpty()) return@mapNotNull null
         val steps = decodeSteps(s.f(RoutineFields.STEPS).textOrNull)
         val summary = s.f(RoutineFields.SUMMARY).textOrNull?.trim()?.takeIf { it.isNotEmpty() }
-            ?: steps.take(3).joinToString(" · ") { it.title }
+            ?: steps.take(3).joinToString(", ") { it.title }
         RoutineItem(
             id, name, RoutineSchedule(days, minute, payday), steps, summary,
             on = s.f(RoutineFields.ON).boolOrNull ?: true,

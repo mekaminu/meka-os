@@ -68,7 +68,7 @@ struct RoutinesSheet: View {
 
     /// The day tile: "SUN" over "19:00".
     private func dayTile(_ day: String, _ time: String, on: Bool) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: MekaSpace.xxs) {
             Text(day).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(on ? palette.accent : palette.textTertiary).lineLimit(1)
             Text(time).font(MekaType.itemMeta).foregroundStyle(on ? palette.textPrimary : palette.textTertiary).lineLimit(1)
@@ -90,7 +90,7 @@ struct RoutinesSheet: View {
                 Text(LoneWordGlue.shared.kept(line: r.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let next = r.next {
-                    Text(next).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: next)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 Button(RoutineRules.shared.REMOVE) {
                     model.removeRoutine(id)
@@ -123,7 +123,7 @@ struct RoutinesSheet: View {
                 Text(LoneWordGlue.shared.kept(line: s.name)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 Text(LoneWordGlue.shared.kept(line: s.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(s.whenLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: s.whenLine)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             Spacer(minLength: 0)
             Button(RoutineRules.shared.ADD) { add(key) }
