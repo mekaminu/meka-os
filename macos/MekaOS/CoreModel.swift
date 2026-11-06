@@ -5970,6 +5970,12 @@ final class CoreModel {
 
     /// Slice 2: a click on a step's label gives it the next label; only the id, the step's index and the label's code
     /// ("show", "ask", "does") cross.
+    /// Slice 3: Run now, and the Running now card's Carry on · Skip this step · Stop; only the routine's id crosses.
+    func runRoutineNow(_ id: String) { MekaHaptics.light(); run { _ = try await $0.runRoutineNow(id: id) } }
+    func carryOnRoutine(_ id: String) { MekaHaptics.light(); run { _ = try await $0.carryOnRoutine(id: id) } }
+    func skipRoutineStep(_ id: String) { MekaHaptics.light(); run { _ = try await $0.skipRoutineStep(id: id) } }
+    func stopRoutineRun(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.stopRoutineRun(id: id) } }
+
     func setRoutineStepMode(_ id: String, index: Int32, mode: String) {
         MekaHaptics.tick()
         run { _ = try await $0.setRoutineStepMode(id: id, index: index, mode: mode) }

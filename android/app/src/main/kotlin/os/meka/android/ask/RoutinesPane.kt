@@ -4,14 +4,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -54,7 +57,10 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.RoutineDetail
+import os.meka.core.domain.RoutineLogLine
+import os.meka.core.domain.RoutineOutcome
 import os.meka.core.domain.RoutineRow
+import os.meka.core.domain.RoutineRunCard
 import os.meka.core.domain.RoutineStepRow
 import os.meka.core.domain.RoutineRules
 import os.meka.core.domain.RoutineStarterRow
@@ -66,11 +72,14 @@ import os.meka.core.facade.MekaCore
  * over "19:00"), its name, its line, when it runs next and an On/Off switch (synced) — and START WITH ONE, the
  * starters not added yet, each with Add. Slice 2: a tap on a routine opens its own page ([RoutinePage]: when it runs,
  * the NEXT · STEPS · LAST RUN tiles, its steps each with its label, which a tap moves on, LAST TIME, the switch and
- * Remove); ‹ Routines or Back returns. The words are the core's [RoutineRules], the same as the Mac's sheet.
+ * Remove); ‹ Routines or Back returns. Slice 3: Run now on its page starts a run; the Running now card ([RunningCard],
+ * on the list and the page) shows the step it's on, with Carry on · Skip this step · Stop, and LAST TIME lists what
+ * each step came to. The words are the core's [RoutineRules], the same as the Mac's sheet.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; cards stagger in 40 ms apart; the list
  * and a routine's page cross-fade; a switch or a label blends to its new colour with a tick haptic, and the list
- * resizes on the expand spring as a card comes or goes (Add, Remove). Reduced motion: cross-fades and no resize spring.
+ * resizes on the expand spring as a card comes or goes (Add, Remove). The Running now card's bar grows on the expand
+ * spring as steps go by, with a light haptic on each tap. Reduced motion: cross-fades, no resize spring, the bar jumps.
  */
 @Composable
 fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
@@ -95,11 +104,22 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
             open = null
         }
     }
+    // Slice 3: Run now and the Running now card's three taps.
+    fun run(id: String, act: suspend MekaCore.(String) -> Boolean) {
+        haptics.light()
+        scope.launch { runCatching { core.act(id) } }
+    }
+    val runActions = RunActions(
+        carryOn = { run(it) { i -> carryOnRoutine(i) } },
+        skip = { run(it) { i -> skipRoutineStep(i) } },
+        stop = { run(it) { i -> stopRoutineRun(i) } },
+    )
     Crossfade(page?.id, animationSpec = MekaMotion.appear(reduced), label = "routines-page") { shown ->
         val d = shown?.let { v.detail(it) }
         if (d != null) {
             RoutinePage(
-                d, onBack = { open = null }, onToggle = { toggle(d.id, !d.on) }, onRemove = { remove(d.id, d.name) },
+                d, runActions, onRunNow = { run(d.id) { i -> runRoutineNow(i) } },
+                onBack = { open = null }, onToggle = { toggle(d.id, !d.on) }, onRemove = { remove(d.id, d.name) },
                 onLabel = { st ->
                     val next = st.nextCode ?: return@RoutinePage
                     haptics.tick()
@@ -107,7 +127,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
                 },
             )
         } else {
-            RoutinesList(v, said, onClose, onOpen = { open = it }, onToggle = ::toggle, onRemove = ::remove,
+            RoutinesList(v, said, runActions, onClose, onOpen = { open = it }, onToggle = ::toggle, onRemove = ::remove,
                 onAdd = { key ->
                     haptics.light()
                     scope.launch { said = runCatching { core.addStarterRoutine(key) }.getOrNull()?.line ?: RoutineRules.GONE_LINE }
@@ -118,7 +138,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
 
 @Composable
 private fun RoutinesList(
-    v: os.meka.core.domain.RoutinesView, said: String?, onClose: () -> Unit, onOpen: (String) -> Unit,
+    v: os.meka.core.domain.RoutinesView, said: String?, actions: RunActions, onClose: () -> Unit, onOpen: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit, onRemove: (String, String) -> Unit, onAdd: (String) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -138,6 +158,7 @@ private fun RoutinesList(
         said?.let {
             Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("routines-said"))
         }
+        v.running.forEach { card -> RunningCard(card, actions, Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(1))) }
         if (v.rows.isNotEmpty()) {
             Text(RoutineRules.YOURS.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(1)))
@@ -219,7 +240,10 @@ private fun RoutineSwitch(on: Boolean, spoken: String, onToggle: () -> Unit) {
  * switch and Remove.
  */
 @Composable
-private fun RoutinePage(d: RoutineDetail, onBack: () -> Unit, onToggle: () -> Unit, onRemove: () -> Unit, onLabel: (RoutineStepRow) -> Unit) {
+private fun RoutinePage(
+    d: RoutineDetail, actions: RunActions, onRunNow: () -> Unit,
+    onBack: () -> Unit, onToggle: () -> Unit, onRemove: () -> Unit, onLabel: (RoutineStepRow) -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter).testTag("routine-page"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -238,6 +262,12 @@ private fun RoutinePage(d: RoutineDetail, onBack: () -> Unit, onToggle: () -> Un
             PageTile(RoutineRules.STEPS_TILE, d.stepCount, Modifier.weight(1f))
             PageTile(RoutineRules.LAST_TILE, d.lastRun, Modifier.weight(1f))
         }
+        d.running?.let { RunningCard(it, actions, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1))) }
+        d.runNow?.let { label ->
+            Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1))) {
+                TouchPill(label, Meka.colors.accent, Meka.colors.onAccent, spoken = "$label: ${d.name}", onClick = onRunNow)
+            }
+        }
         Text(RoutineRules.STEPS_LABEL.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(2)))
         d.steps.forEachIndexed { i, st -> StepRow(st, Modifier.appear(rememberAppearance(i + 3))) { onLabel(st) } }
@@ -246,7 +276,8 @@ private fun RoutinePage(d: RoutineDetail, onBack: () -> Unit, onToggle: () -> Un
         Text(RoutineRules.LAST_TIME.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(d.steps.size + 4)))
         Text(LoneWordGlue.kept(d.history), style = MekaType.body, color = Meka.colors.textSecondary,
-            modifier = Modifier.appear(rememberAppearance(d.steps.size + 4)))
+            modifier = Modifier.appear(rememberAppearance(d.steps.size + 4)).testTag("routine-history"))
+        d.lastSteps.forEach { LastStepRow(it, Modifier.appear(rememberAppearance(d.steps.size + 4))) }
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), horizontalArrangement = Arrangement.End) {
             TouchPill(RoutineRules.REMOVE, Meka.colors.surfaceRaised, Meka.colors.textSecondary, spoken = "${RoutineRules.REMOVE} ${d.name}", onClick = onRemove)
         }
@@ -312,5 +343,55 @@ private fun StarterCard(s: RoutineStarterRow, modifier: Modifier, onAdd: () -> U
             Text(LoneWordGlue.kept(s.whenLine), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         TouchPill(RoutineRules.ADD, Meka.colors.surface, Meka.colors.accent, spoken = "${RoutineRules.ADD} ${s.name}", onClick = onAdd)
+    }
+}
+
+/** The Running now card's three taps, by routine id. */
+private class RunActions(val carryOn: (String) -> Unit, val skip: (String) -> Unit, val stop: (String) -> Unit)
+
+/**
+ * The Running now card (slice 3, the mockup's): RUNNING NOW · the routine, "Step 2 of 4" with a bar, the step it's on
+ * and its place, "Waiting on you" (an Asks you step) or "Have a look" (Just show), then Carry on · Skip this step · Stop.
+ */
+@Composable
+private fun RunningCard(c: RoutineRunCard, actions: RunActions, modifier: Modifier) {
+    val reduced = Meka.reducedMotion
+    val fill by animateFloatAsState(c.fraction, MekaMotion.expand(reduced), label = "routine-run-bar")
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .padding(MekaSpace.m).testTag("routine-running"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }) {
+            Text(RoutineRules.RUNNING_NOW.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent)
+            Text(LoneWordGlue.kept(c.name), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(c.stepTitle), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            Text("${c.progress} · ${c.place} · ${c.state}", style = MekaType.caption,
+                color = if (c.waitingOnYou) Meka.colors.accent else Meka.colors.textTertiary)
+        }
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
+            Box(Modifier.fillMaxWidth(fill.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            TouchPill(RoutineRules.CARRY_ON, Meka.colors.accent, Meka.colors.onAccent, spoken = "${RoutineRules.CARRY_ON}: ${c.stepTitle}") { actions.carryOn(c.id) }
+            TouchPill(RoutineRules.SKIP_STEP, Meka.colors.surface, Meka.colors.textSecondary, spoken = "${RoutineRules.SKIP_STEP}: ${c.stepTitle}") { actions.skip(c.id) }
+            Box(Modifier.weight(1f))
+            Text(RoutineRules.STOP, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clickable(role = Role.Button) { actions.stop(c.id) }.minTouch()
+                    .semantics { contentDescription = "${RoutineRules.STOP} ${c.name}" })
+        }
+    }
+}
+
+/** One of LAST TIME's steps: its title and what it came to. */
+@Composable
+private fun LastStepRow(l: RoutineLogLine, modifier: Modifier) {
+    Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(LoneWordGlue.kept(l.title), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        Text(l.outcome.label, style = MekaType.caption,
+            color = when (l.outcome) {
+                RoutineOutcome.SKIPPED, RoutineOutcome.NOT_REACHED -> Meka.colors.textTertiary
+                else -> Meka.colors.textPrimary
+            })
     }
 }

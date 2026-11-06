@@ -198,4 +198,84 @@ class RoutinesTest {
         val study = r.addStarter("study-night")!!.id!!
         assertEquals("Tonight", r.view().detail(study)!!.next)
     }
+
+    // ---- Slice 3: running a routine by hand ----
+
+    @Test
+    fun runNowWaitsOnEachStepLetsInboxAutopilotDoItsOwnAndRecordsLastTime() {
+        val r = routines(fold)
+        val id = r.addStarter("sunday-reset")!!.id!!
+        assertEquals("Not yet", r.view().detail(id)!!.lastRun)
+        assertEquals("Run now", r.view().detail(id)!!.runNow)
+        assertTrue(r.runNow(id))
+        assertFalse(r.runNow(id))
+        var card = r.view().running.single()
+        assertEquals("Step 1 of 4", card.progress)
+        assertEquals("Show the week ahead of bills", card.stepTitle)
+        assertEquals("Have a look", card.state)
+        assertFalse(card.waitingOnYou)
+        assertNull(r.view().detail(id)!!.runNow)
+        assertEquals("Running now · step 1 of 4", r.view().rows.single().next)
+        assertTrue(r.carryOn(id))
+        card = r.view().running.single()
+        assertEquals("Step 2 of 4", card.progress)
+        assertEquals("Waiting on you", card.state)
+        assertTrue(card.waitingOnYou)
+        // Carry on past "Plan next week": "Tidy the inbox" is Inbox autopilot's, so the run goes straight to step 4.
+        assertTrue(r.carryOn(id))
+        card = r.view().running.single()
+        assertEquals("Step 4 of 4", card.progress)
+        assertEquals("Bins and car dates", card.stepTitle)
+        world.clock.nowMs = at(fri, 20, 5)
+        assertTrue(r.skipStep(id))
+        assertTrue(r.view().running.isEmpty())
+        assertFalse(r.carryOn(id))
+        val page = r.view().detail(id)!!
+        assertEquals("Today 20:05", page.lastRun)
+        assertEquals("Today at 20:05 · 3 done, 1 skipped", page.history)
+        assertEquals(
+            listOf(RoutineOutcome.SHOWN, RoutineOutcome.DONE, RoutineOutcome.LEFT, RoutineOutcome.SKIPPED),
+            page.lastSteps.map { it.outcome },
+        )
+        assertEquals("Run now", page.runNow)
+        world.clock.nowMs = at(fri + 1, 9)
+        assertEquals("Yesterday", r.view().detail(id)!!.lastRun)
+    }
+
+    @Test
+    fun aRunCarriesOnFromTheOtherAppAndStopMarksTheRestNotReached() {
+        val id = routines(fold).addStarter("morning-brief")!!.id!!
+        assertTrue(routines(fold).runNow(id))
+        sync()
+        assertEquals("Step 1 of 3", routines(mac).view().running.single().progress)
+        assertTrue(routines(mac).carryOn(id))
+        sync()
+        assertEquals("Step 2 of 3", routines(fold).view().running.single().progress)
+        assertTrue(routines(fold).stopRun(id))
+        assertFalse(routines(fold).stopRun(id))
+        sync()
+        val page = routines(mac).view().detail(id)!!
+        assertNull(page.running)
+        assertEquals(listOf(RoutineOutcome.SHOWN, RoutineOutcome.NOT_REACHED, RoutineOutcome.NOT_REACHED), page.lastSteps.map { it.outcome })
+        assertEquals("Today at 20:00 · 1 done", page.history)
+    }
+
+    @Test
+    fun aRunLeftGoingAllNightIsLetGoAndRunNowStartsAfresh() {
+        val r = routines(fold)
+        val id = r.addStarter("study-night")!!.id!!
+        assertTrue(r.runNow(id))
+        world.clock.nowMs = at(fri + 1, 9)
+        assertTrue(r.view().running.isEmpty())
+        assertFalse(r.carryOn(id))
+        assertTrue(r.runNow(id))
+        assertEquals("Step 1 of 3", r.view().running.single().progress)
+    }
+
+    @Test
+    fun aRunsLogReadsBackAndIgnoresJunk() {
+        val log = listOf(RoutineLogLine("Plan next week", RoutineOutcome.DONE), RoutineLogLine("Bins", RoutineOutcome.SKIPPED))
+        assertEquals(log, RoutineRules.decodeLog(RoutineRules.encodeLog(log)))
+        assertEquals(log, RoutineRules.decodeLog("x|nope\n" + RoutineRules.encodeLog(log) + "\nd|\n|"))
+    }
 }

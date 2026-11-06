@@ -1,7 +1,8 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Daily → Routines, on the Mac (Routines, slices 1 and 2; a click on a card opens the routine's page), like the Fold's RoutinesPane: how many are on, the rule (a
+/// Ask → Daily → Routines, on the Mac (Routines, slices 1–3; a click on a card opens the routine's page, where Run now
+/// starts a run and the Running now card offers Carry on · Skip this step · Stop, also above the list), like the Fold's RoutinesPane: how many are on, the rule (a
 /// routine never sends, pays, books or trades), YOUR ROUTINES — each a card with its day tile ("SUN" over "19:00"), its
 /// name, its line, its next run, Remove and an On/Off switch (synced with the Fold) — and START WITH ONE, the starters
 /// not added yet, each with Add. The words are the core's `RoutineRules`. Only Strings and Bools cross to the core.
@@ -54,6 +55,9 @@ struct RoutinesSheet: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(v.running, id: \.id) { c in
+                            runningCard(c).padding(.top, MekaSpace.m).transition(.opacity)
+                        }
                         if !v.rows.isEmpty {
                             label(RoutineRules.shared.YOURS).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
                         }
@@ -105,6 +109,17 @@ struct RoutinesSheet: View {
                 pageTile(RoutineRules.shared.LAST_TILE, d.lastRun)
             }
             .staggeredAppear(1)
+            if let c = d.running {
+                runningCard(c).transition(.opacity)
+            } else if let runNow = d.runNow {
+                Button(runNow) { model.runRoutineNow(id) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta).foregroundStyle(palette.onAccent)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(palette.accent, in: Capsule())
+                    .accessibilityLabel("\(runNow): \(name)")
+                    .transition(.opacity)
+            }
             label(RoutineRules.shared.STEPS_LABEL).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
             ForEach(Array(d.steps.enumerated()), id: \.offset) { i, st in
                 stepRow(id, st).staggeredAppear(i + 2)
@@ -114,6 +129,15 @@ struct RoutinesSheet: View {
             label(RoutineRules.shared.LAST_TIME).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
             Text(LoneWordGlue.shared.kept(line: d.history)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(d.lastSteps.enumerated()), id: \.offset) { _, l in
+                HStack(spacing: MekaSpace.xs) {
+                    Text(LoneWordGlue.shared.kept(line: l.title)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Spacer(minLength: 0)
+                    Text(l.outcomeLabel).font(MekaType.caption)
+                        .foregroundStyle(l.quiet ? palette.textTertiary : palette.textPrimary)
+                }
+                .accessibilityElement(children: .combine)
+            }
             HStack {
                 Spacer()
                 Button(RoutineRules.shared.REMOVE) {
@@ -129,6 +153,56 @@ struct RoutinesSheet: View {
             }
             .padding(.top, MekaSpace.m)
         }
+    }
+
+    /// The Running now card (slice 3): RUNNING NOW, the routine, the step it's on, "Step 2 of 4 · Week board · Waiting on
+    /// you" with a bar that grows on the expand spring, then Carry on · Skip this step · Stop.
+    private func runningCard(_ c: RoutineRunCard) -> some View {
+        let id = c.id
+        let fraction = CGFloat(c.fraction)
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(RoutineRules.shared.RUNNING_NOW.uppercased()).font(MekaType.sectionLabel)
+                    .tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.accent)
+                Text(LoneWordGlue.shared.kept(line: c.name)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: c.stepTitle)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text("\(c.progress) · \(c.place) · \(c.state)").font(MekaType.caption)
+                    .foregroundStyle(c.waitingOnYou ? palette.accent : palette.textTertiary)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(c.spoken)
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.hairline)
+                    Capsule().fill(palette.accent).frame(width: g.size.width * min(max(fraction, 0), 1))
+                }
+            }
+            .frame(height: 4)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: fraction)
+            HStack(spacing: MekaSpace.xs) {
+                Button(RoutineRules.shared.CARRY_ON) { model.carryOnRoutine(id) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta).foregroundStyle(palette.onAccent)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(palette.accent, in: Capsule())
+                    .accessibilityLabel("\(RoutineRules.shared.CARRY_ON): \(c.stepTitle)")
+                Button(RoutineRules.shared.SKIP_STEP) { model.skipRoutineStep(id) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(palette.surface, in: Capsule())
+                    .accessibilityLabel("\(RoutineRules.shared.SKIP_STEP): \(c.stepTitle)")
+                Spacer(minLength: 0)
+                Button(RoutineRules.shared.STOP) { model.stopRoutineRun(id) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .accessibilityLabel("\(RoutineRules.shared.STOP) \(c.name)")
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: c.progress)
     }
 
     private func pageTile(_ title: String, _ value: String) -> some View {

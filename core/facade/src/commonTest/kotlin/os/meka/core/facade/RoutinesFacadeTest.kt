@@ -53,6 +53,18 @@ class RoutinesFacadeTest {
         assertTrue(fold.setRoutineStepMode(row.id, 0, "ask"))
         fold.syncNow(); mac.syncNow()
         assertEquals("Asks you", mac.routinesView.value.detail(row.id)?.steps?.first()?.badge)
+
+        // Slice 3: Run now on the Mac, Carry on and Skip on the Fold, Last time on both.
+        assertTrue(mac.runRoutineNow(row.id))
+        mac.syncNow(); fold.syncNow()
+        assertEquals("Step 1 of 4", fold.routinesView.value.running.single().progress)
+        assertTrue(fold.carryOnRoutine(row.id))
+        assertTrue(fold.carryOnRoutine(row.id))
+        assertTrue(fold.skipRoutineStep(row.id))
+        assertFalse(fold.stopRoutineRun(row.id))
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.routinesView.value.running.isEmpty())
+        assertEquals("Today 10:00", mac.routinesView.value.detail(row.id)?.lastRun)
         assertTrue(fold.removeRoutine(row.id))
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.routinesView.value.isEmpty)

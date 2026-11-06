@@ -5998,6 +5998,21 @@ class MekaCore(
         routines.setStepMode(id, index, m)
     }
 
+    /**
+     * Routines, slice 3: Run now on a routine's page. The Running now card shows on both apps; Obi does it steps
+     * (Inbox autopilot's own work) go by without waiting. False when it can't start (no steps, or running already).
+     */
+    suspend fun runRoutineNow(id: String): Boolean = onCore { routines.runNow(id) }
+
+    /** The Running now card's Carry on: the step it's on is done (or seen) and the run moves on. */
+    suspend fun carryOnRoutine(id: String): Boolean = onCore { routines.carryOn(id) }
+
+    /** The Running now card's Skip this step. */
+    suspend fun skipRoutineStep(id: String): Boolean = onCore { routines.skipStep(id) }
+
+    /** The Running now card's Stop: the run ends, the steps it didn't reach show as Not reached under Last time. */
+    suspend fun stopRoutineRun(id: String): Boolean = onCore { routines.stopRun(id) }
+
     // ---- Goals and habits ----
 
     /** Adds a habit: [perWeek] 1–7, a part of the day the planner prefers, and how long one go takes. */

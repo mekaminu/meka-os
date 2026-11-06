@@ -33,6 +33,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.DateGlue
+import os.meka.core.domain.RoutineOutcome
 import os.meka.core.domain.RoutineRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -195,6 +196,32 @@ class RoutinesScreensTest {
         tap(d.steps[0].spoken)
         until { core.routinesView.value.detail(d.id)?.steps?.first()?.badge == "Asks you" }
         if (core.routinesView.value.detail(d.id)?.steps?.first()?.badge != "Asks you") fail("$name: the label didn't move on")
+        // Slice 3: Run now shows the Running now card; Carry on, Carry on (Tidy the inbox is Inbox autopilot's, so it
+        // goes by), Skip this step, and Last time says what each step came to.
+        fun page() = core.routinesView.value.detail(d.id)
+        tap("${RoutineRules.RUN_NOW}: ${d.name}")
+        until { page()?.running != null && count("routine-running") == 1 }
+        if (count("routine-running") != 1) fail("$name: Run now didn't show the Running now card")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", "cover-dark-running"))
+        val c = page()!!.running!!
+        val runLines = listOf(c.name, c.stepTitle, "${c.progress} · ${c.place} · ${c.state}")
+        ScreenShots.assertSensible(compose, "$name-running")
+        ScreenShots.assertNoBrokenWords(compose, "$name-running")
+        ScreenShots.assertNoLoneWords(compose, "$name-running", runLines)
+        ScreenShots.assertNoDotEndingALine(compose, "$name-running", runLines)
+        assertTouchTargets("$name-running")
+        if (!onScreen(RoutineRules.WAITING)) fail("$name: an Asks you step doesn't say it's waiting on you")
+        tap("${RoutineRules.CARRY_ON}: ${c.stepTitle}")
+        until { page()?.running?.progress == "Step 2 of 4" }
+        tap("${RoutineRules.CARRY_ON}: ${page()!!.running!!.stepTitle}")
+        until { page()?.running?.progress == "Step 4 of 4" }
+        if (page()?.running?.progress != "Step 4 of 4") fail("$name: the run didn't let Inbox autopilot's step go by")
+        tap("${RoutineRules.SKIP_STEP}: ${page()!!.running!!.stepTitle}")
+        until { page()?.running == null && count("routine-running") == 0 }
+        if (count("routine-running") != 0) fail("$name: the card stayed after the last step")
+        if (!onScreen("3 done, 1 skipped")) fail("$name: Last time doesn't say how the run went")
+        if (!onScreen(RoutineOutcome.LEFT.label)) fail("$name: Last time doesn't list the steps")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", "cover-dark-last-time"))
         tap("Back to ${RoutineRules.BACK}")
         until { count("routine-page") == 0 && count("routine-row") == 1 }
         if (count("routine-page") != 0) fail("$name: ‹ Routines left the page open")

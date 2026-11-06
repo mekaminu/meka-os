@@ -5,7 +5,8 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * Routines (build plan "Take first", Meka approved the mockup 2026-11-06 21:34), slice 1: jobs Obi repeats for you,
+ * Routines (build plan "Take first", Meka approved the mockup 2026-11-06 21:34). Slice 3 runs them by hand: Run now,
+ * the Running now card (Carry on · Skip this step · Stop), and LAST TIME. Slice 1: jobs Obi repeats for you,
  * each a name, when it runs (days of the week and a time, or on payday) and its steps, with an on/off switch. Slice 1
  * keeps the list, the starters and the switch; running them (the Running now card, through the notification governor
  * at quiet times), a routine's own page and New routine in one sentence come next.
@@ -34,7 +35,63 @@ object RoutineFields {
     const val STARTER = "starter"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
+    // Slice 3 (2026-11-06): the run going now and the last one finished (additive fields, latest wins).
+    /** When the run going now started (epoch ms); 0 or absent when it isn't running. */
+    const val RUN_AT = "runAtMs"
+    /** The step the run going now is on (0-based). */
+    const val RUN_STEP = "runStep"
+    /** What each step before [RUN_STEP] came to, one line each: "d|Plan next week" ([RoutineOutcome.code]). */
+    const val RUN_LOG = "runLog"
+    /** When the last run finished (epoch ms). */
+    const val LAST_AT = "lastRunAtMs"
+    /** What each step of the last run came to, the same shape as [RUN_LOG]. */
+    const val LAST_LOG = "lastRunLog"
 }
+
+/** What a step came to in a run. */
+enum class RoutineOutcome(val code: Char, val label: String) {
+    SHOWN('s', "Shown"),
+    DONE('d', "Done"),
+    SKIPPED('k', "Skipped"),
+    /** An "Obi does it" step: Navilife's own Inbox autopilot does it, so the run doesn't wait on you. */
+    LEFT('o', "Left to Inbox autopilot"),
+    /** The run stopped before it reached this step. */
+    NOT_REACHED('n', "Not reached"),
+}
+
+/** One step's line in a run's log. */
+data class RoutineLogLine(val title: String, val outcome: RoutineOutcome) {
+    /** What it came to, in words ("Done", "Skipped"). */
+    val outcomeLabel: String get() = outcome.label
+    /** Skipped or not reached: drawn quieter. */
+    val quiet: Boolean get() = outcome == RoutineOutcome.SKIPPED || outcome == RoutineOutcome.NOT_REACHED
+}
+
+/** A run going now: [step] is the step it's on (0-based); [log] what the steps before it came to. */
+data class RoutineRun(val startedAtMs: Long, val step: Int, val log: List<RoutineLogLine>)
+
+/** The last run finished: when, and what each step came to. */
+data class RoutineLastRun(val atMs: Long, val log: List<RoutineLogLine>)
+
+/**
+ * The Running now card (slice 3, the mockup's): "Sunday reset", "Step 2 of 4", the step it's on with its place, and
+ * whether it waits on you (Asks you: Carry on · Skip this step) or only shows (Just show: Carry on · Skip this step).
+ */
+data class RoutineRunCard(
+    val id: String,
+    val name: String,
+    /** "Step 2 of 4". */
+    val progress: String,
+    /** 0.0..1.0 of the steps behind it, for the card's bar. */
+    val fraction: Float,
+    val stepTitle: String,
+    /** The Navilife place the step uses ("Week board"). */
+    val place: String,
+    /** "Waiting on you" for an Asks you step, "Have a look" for a Just show one. */
+    val state: String,
+    val waitingOnYou: Boolean,
+    val spoken: String,
+)
 
 /** How a step runs: Just show · Asks you · Obi does it. */
 enum class RoutineStepMode(val code: String, val label: String) {
@@ -70,6 +127,10 @@ data class RoutineItem(
     val on: Boolean,
     val starter: String?,
     val addedAtMs: Long,
+    /** Slice 3: the run going now, or null. */
+    val run: RoutineRun? = null,
+    /** Slice 3: the last run finished, or null before the first. */
+    val lastRun: RoutineLastRun? = null,
 )
 
 /** A ready-made routine offered under START WITH ONE until it's added. */
@@ -119,6 +180,8 @@ data class RoutinesView(
     val starters: List<RoutineStarterRow>,
     /** Slice 2: each routine's own page, by id ([RoutineRules.detail]). */
     val details: List<RoutineDetail> = emptyList(),
+    /** Slice 3: the Running now cards, the oldest run first. */
+    val running: List<RoutineRunCard> = emptyList(),
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
 
@@ -164,14 +227,20 @@ data class RoutineDetail(
     val next: String,
     /** The STEPS tile: "4". */
     val stepCount: String,
-    /** The LAST RUN tile: "Not yet" until routines run (slice 3). */
+    /** The LAST RUN tile: "Not yet", "Today 19:02", "Yesterday", "Sun 1 Nov". */
     val lastRun: String,
     val steps: List<RoutineStepRow>,
-    /** LAST TIME: what happened the last time it ran. */
+    /** LAST TIME: what happened the last time it ran ("Sun 1 Nov at 19:02 · 3 done, 1 skipped"). */
     val history: String,
     val on: Boolean,
     /** The labels' note under the steps. */
     val stepsNote: String,
+    /** Slice 3: LAST TIME's steps, each with what it came to. */
+    val lastSteps: List<RoutineLogLine> = emptyList(),
+    /** Slice 3: its Running now card while it runs. */
+    val running: RoutineRunCard? = null,
+    /** Slice 3: "Run now", or null while it runs or has no steps. */
+    val runNow: String? = null,
 )
 
 /** What adding or changing a routine said, and whether nothing was written. */
@@ -287,8 +356,27 @@ object RoutineRules {
             on = s.f(RoutineFields.ON).boolOrNull ?: true,
             starter = s.f(RoutineFields.STARTER).textOrNull,
             addedAtMs = s.f(RoutineFields.ADDED_AT).longOrNull ?: 0L,
+            run = s.f(RoutineFields.RUN_AT).longOrNull?.takeIf { it > 0 }?.let { at ->
+                RoutineRun(at, (s.f(RoutineFields.RUN_STEP).longOrNull ?: 0L).toInt().coerceAtLeast(0), decodeLog(s.f(RoutineFields.RUN_LOG).textOrNull))
+            },
+            lastRun = s.f(RoutineFields.LAST_AT).longOrNull?.takeIf { it > 0 }?.let { RoutineLastRun(it, decodeLog(s.f(RoutineFields.LAST_LOG).textOrNull)) },
         )
     }
+
+    fun encodeLog(log: List<RoutineLogLine>): String =
+        log.joinToString("\n") { "${it.outcome.code}|${it.title.replace('\n', ' ')}" }
+
+    fun decodeLog(text: String?): List<RoutineLogLine> = text.orEmpty().lines().mapNotNull { line ->
+        val outcome = RoutineOutcome.entries.firstOrNull { line.length > 2 && line[1] == '|' && it.code == line[0] } ?: return@mapNotNull null
+        RoutineLogLine(line.substring(2).trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null, outcome)
+    }.take(MAX_STEPS)
+
+    /** A run left going longer than this (the phone was put away mid-run) is let go: it no longer shows or blocks Run now. */
+    const val RUN_STALE_MS = 12L * 60 * 60 * 1000
+
+    /** The run going now on [r], or null when there's none or it was left going too long ([RUN_STALE_MS]). */
+    fun liveRun(r: RoutineItem, nowMs: Long): RoutineRun? =
+        r.run?.takeIf { nowMs - it.startedAtMs in 0 until RUN_STALE_MS && it.step < r.steps.size }
 
     /** What adding [s] writes (switched on). */
     fun fields(s: RoutineStarter, nowMs: Long): Map<String, FieldValue> = mapOf(
@@ -411,7 +499,9 @@ object RoutineRules {
         return word.replaceFirstChar { it.uppercase() }
     }
 
-    fun detail(r: RoutineItem, today: Long, nowMinute: Int, payday: Long? = null): RoutineDetail {
+    fun detail(
+        r: RoutineItem, today: Long, nowMinute: Int, payday: Long? = null, nowMs: Long? = null, cal: LocalCalendar = LocalCalendar.UTC,
+    ): RoutineDetail {
         val steps = r.steps.mapIndexed { i, st ->
             val mode = effectiveMode(st)
             val next = nextMode(st)
@@ -420,10 +510,57 @@ object RoutineRules {
                 spoken = "Step ${i + 1}: ${st.title}, in ${st.place.label}. ${mode.label}" + (next?.let { ". Tap to change to ${it.label}" } ?: ""),
             )
         }
+        val card = if (nowMs != null) liveRun(r, nowMs)?.let { runCard(r, it) } else null
+        val last = r.lastRun
         return RoutineDetail(
-            r.id, r.name, whenLine(r.schedule), nextTile(r, today, nowMinute, payday), "${steps.size}", NOT_YET, steps,
-            NO_HISTORY, r.on, STEPS_NOTE,
+            r.id, r.name, whenLine(r.schedule), nextTile(r, today, nowMinute, payday), "${steps.size}",
+            last?.let { lastTile(it.atMs, today, cal) } ?: NOT_YET, steps,
+            last?.let { historyLine(it, today, cal) } ?: NO_HISTORY, r.on, STEPS_NOTE,
+            lastSteps = last?.log.orEmpty(),
+            running = card,
+            runNow = if (card == null && r.steps.isNotEmpty()) RUN_NOW else null,
         )
+    }
+
+    const val RUN_NOW = "Run now"
+    const val RUNNING_NOW = "Running now"
+    const val CARRY_ON = "Carry on"
+    const val SKIP_STEP = "Skip this step"
+    const val STOP = "Stop"
+    const val WAITING = "Waiting on you"
+    const val HAVE_A_LOOK = "Have a look"
+
+    /** The Running now card for [r]'s [run]. */
+    fun runCard(r: RoutineItem, run: RoutineRun): RoutineRunCard {
+        val step = r.steps[run.step]
+        val waiting = effectiveMode(step) == RoutineStepMode.ASK
+        val progress = "Step ${run.step + 1} of ${r.steps.size}"
+        val state = if (waiting) WAITING else HAVE_A_LOOK
+        return RoutineRunCard(
+            r.id, r.name, progress, run.step.toFloat() / r.steps.size, step.title, step.place.label, state, waiting,
+            spoken = "$RUNNING_NOW: ${r.name}. $progress: ${step.title}, in ${step.place.label}. $state",
+        )
+    }
+
+    /** The LAST RUN tile: "Today 19:02", "Yesterday", "Sun 1 Nov". */
+    fun lastTile(atMs: Long, today: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(atMs)
+        return when (today - day) {
+            0L -> "Today ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}"
+            1L -> "Yesterday"
+            else -> CivilDate.shortLabel(day)
+        }
+    }
+
+    /** LAST TIME's line: "Today at 19:02 · 3 done, 1 skipped", "Sun 1 Nov at 19:02 · stopped at step 3". */
+    fun historyLine(last: RoutineLastRun, today: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(last.atMs)
+        val dayWord = when (today - day) { 0L -> "Today"; 1L -> "Yesterday"; else -> CivilDate.shortLabel(day) }
+        val at = "$dayWord at ${LocalClock.formatMinute(cal.minuteOfDay(last.atMs))}"
+        val done = last.log.count { it.outcome != RoutineOutcome.SKIPPED && it.outcome != RoutineOutcome.NOT_REACHED }
+        val skipped = last.log.count { it.outcome == RoutineOutcome.SKIPPED }
+        val parts = listOfNotNull("$done done", skipped.takeIf { it > 0 }?.let { "$it skipped" })
+        return "$at · ${parts.joinToString(", ")}"
     }
 
     /**
@@ -441,7 +578,9 @@ object RoutineRules {
      * The Routines page: his routines, soonest-running first (paused ones after, by name), and the starters he hasn't
      * added yet (by [RoutineItem.starter], or a routine of his with the same name).
      */
-    fun view(items: List<RoutineItem>, today: Long, nowMinute: Int, payday: Long? = null): RoutinesView {
+    fun view(
+        items: List<RoutineItem>, today: Long, nowMinute: Int, payday: Long? = null, nowMs: Long? = null, cal: LocalCalendar = LocalCalendar.UTC,
+    ): RoutinesView {
         fun order(r: RoutineItem): Long {
             if (!r.on) return Long.MAX_VALUE
             val d = nextDay(r.schedule, today, nowMinute, payday) ?: return Long.MAX_VALUE - 1
@@ -452,7 +591,19 @@ object RoutineRules {
         val taken = items.mapNotNull { it.starter }.toSet()
         val names = items.map { it.name.lowercase() }.toSet()
         val starters = STARTERS.filter { it.key !in taken && it.name.lowercase() !in names }.map { starterRow(it) }
-        return RoutinesView(summary(items), rows, starters, items.map { detail(it, today, nowMinute, payday) })
+        val running = if (nowMs == null) emptyList() else items
+            .mapNotNull { r -> liveRun(r, nowMs)?.let { r to it } }
+            .sortedWith(compareBy<Pair<RoutineItem, RoutineRun>> { it.second.startedAtMs }.thenBy { it.first.id })
+            .map { (r, run) -> runCard(r, run) }
+        val runningIds = running.map { it.id }.toSet()
+        val shownRows = rows.map { row ->
+            val card = running.firstOrNull { it.id == row.id } ?: return@map row
+            row.copy(next = "$RUNNING_NOW · ${card.progress.replaceFirstChar { it.lowercase() }}")
+        }
+        return RoutinesView(
+            summary(items), if (runningIds.isEmpty()) rows else shownRows, starters,
+            items.map { detail(it, today, nowMinute, payday, nowMs, cal) }, running,
+        )
     }
 }
 
@@ -467,7 +618,77 @@ class Routines(
 
     fun view(payday: Long? = null): RoutinesView {
         val now = nowMs()
-        return RoutineRules.view(items(), calendar.epochDayOf(now), calendar.minuteOfDay(now), payday)
+        return RoutineRules.view(items(), calendar.epochDayOf(now), calendar.minuteOfDay(now), payday, now, calendar)
+    }
+
+    /**
+     * Slice 3: Run now. Starts a run at its first step; Obi does it steps (Inbox autopilot's own work) go by without
+     * waiting. False when it isn't there, has no steps or is running already. Nothing a step does can send, pay, book
+     * or trade: the steps are read through [RoutineRules.decodeSteps], which drops any that would.
+     */
+    fun runNow(id: String): Boolean {
+        val r = items().firstOrNull { it.id == id } ?: return false
+        if (r.steps.isEmpty() || RoutineRules.liveRun(r, nowMs()) != null) return false
+        advance(r, RoutineRun(nowMs(), 0, emptyList()))
+        return true
+    }
+
+    /** Carry on: the step it's on is done (or seen, for a Just show step) and the run moves on. */
+    fun carryOn(id: String): Boolean = step(id, skip = false)
+
+    /** Skip this step: the run moves on without it. */
+    fun skipStep(id: String): Boolean = step(id, skip = true)
+
+    /** Stops the run going now; the steps it didn't reach show as Not reached. */
+    fun stopRun(id: String): Boolean {
+        val r = items().firstOrNull { it.id == id } ?: return false
+        val run = RoutineRules.liveRun(r, nowMs()) ?: return false
+        val rest = r.steps.drop(run.step).map { RoutineLogLine(it.title, RoutineOutcome.NOT_REACHED) }
+        finish(r.id, run.log + rest)
+        return true
+    }
+
+    private fun step(id: String, skip: Boolean): Boolean {
+        val r = items().firstOrNull { it.id == id } ?: return false
+        val run = RoutineRules.liveRun(r, nowMs()) ?: return false
+        val st = r.steps[run.step]
+        val outcome = when {
+            skip -> RoutineOutcome.SKIPPED
+            RoutineRules.effectiveMode(st) == RoutineStepMode.SHOW -> RoutineOutcome.SHOWN
+            else -> RoutineOutcome.DONE
+        }
+        advance(r, run.copy(step = run.step + 1, log = run.log + RoutineLogLine(st.title, outcome)))
+        return true
+    }
+
+    /** Moves past Obi does it steps, then writes the run where it waits, or the finished run. */
+    private fun advance(r: RoutineItem, start: RoutineRun) {
+        var run = start
+        while (run.step < r.steps.size && RoutineRules.effectiveMode(r.steps[run.step]) == RoutineStepMode.DOES) {
+            run = run.copy(step = run.step + 1, log = run.log + RoutineLogLine(r.steps[run.step].title, RoutineOutcome.LEFT))
+        }
+        if (run.step >= r.steps.size) return finish(r.id, run.log)
+        replica.commitLocal(
+            EntityTypes.ROUTINE, r.id,
+            mapOf(
+                RoutineFields.RUN_AT to run.startedAtMs.fv(),
+                RoutineFields.RUN_STEP to run.step.toLong().fv(),
+                RoutineFields.RUN_LOG to RoutineRules.encodeLog(run.log).fv(),
+            ),
+        )
+    }
+
+    private fun finish(id: String, log: List<RoutineLogLine>) {
+        replica.commitLocal(
+            EntityTypes.ROUTINE, id,
+            mapOf(
+                RoutineFields.RUN_AT to 0L.fv(),
+                RoutineFields.RUN_STEP to 0L.fv(),
+                RoutineFields.RUN_LOG to "".fv(),
+                RoutineFields.LAST_AT to nowMs().fv(),
+                RoutineFields.LAST_LOG to RoutineRules.encodeLog(log).fv(),
+            ),
+        )
     }
 
     /** Adds the starter [key], switched on. Refused when it's already there; null when there's no such starter. */
