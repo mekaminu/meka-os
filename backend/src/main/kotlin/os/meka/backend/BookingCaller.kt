@@ -82,7 +82,8 @@ class BookingCaller(
                 is BookingDialRules.Due.Close -> if (close(hh, c.id, due.state, due.line)) wrote = true
                 is BookingDialRules.Due.Ring -> {
                     if (onCall) continue
-                    if (dialer == null || !runCatching { dialer.dialConfigured() }.getOrDefault(false) || !line.ready()) { report = "waiting: not set up"; continue }
+                    val d = dialer
+                    if (d == null || !runCatching { d.dialConfigured() }.getOrDefault(false) || !line.ready()) { report = "waiting: not set up"; continue }
                     onCall = true
                     report = "rang a card"
                     if (ring(hh, c, due.e164, PutThroughRules.dialable(assistant)!!, text(AboutYouFields.SHOWN_NAME), heads[c.id])) wrote = true
