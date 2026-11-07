@@ -5991,6 +5991,13 @@ class MekaCore(
     suspend fun addRoutineFromSentence(text: String, modes: String): os.meka.core.domain.RoutineSaid =
         onCore { routines.addFromSentence(text, modes) }
 
+    /**
+     * Routines, slice 5: Save routine on New routine opened from an idea of his week ([os.meka.core.domain.RoutineIdea]),
+     * his sentence unchanged; the routine keeps the idea's [idea] key, so the idea isn't offered again.
+     */
+    suspend fun addRoutineFromIdea(text: String, modes: String, idea: String): os.meka.core.domain.RoutineSaid =
+        onCore { routines.addFromSentence(text, modes, idea = idea) }
+
     /** Switches a routine on or pauses it, on both apps; false when it isn't there or already so. */
     suspend fun setRoutineOn(id: String, on: Boolean): Boolean = onCore { routines.setOn(id, on) }
 
@@ -13933,7 +13940,14 @@ class MekaCore(
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         // Routines, slice 3b: a routine whose time has come starts by itself (the governor's wake refreshes first).
         routines.startDue()
-        _routines.value = routines.view()
+        // Routines, slice 5: IDEAS FROM YOUR WEEK read his bin days, his task ticks and his study sessions (all on the device).
+        val routineWeek = os.meka.core.domain.RoutineWeek(
+            binDays = binItems.map { it.weekday }.toSet(),
+            binMinute = binRemind,
+            ticksMs = tasks.all().mapNotNull { t -> t.completedAtMs?.takeIf { nowMs() - it in 0..(os.meka.core.domain.RoutineIdeas.LOOK_BACK_DAYS + 1) * 86_400_000L } },
+            studySessions = studySessionsList.mapNotNull { s -> s.startMin?.let { os.meka.core.domain.CivilDate.isoDayOfWeek(s.day) to it } },
+        )
+        _routines.value = routines.view(week = routineWeek)
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
         // Slice 11: the Life grid's lines are kept while the views they're read from, Money's accounts and cards (Money
         // keeps its own copy, so they're handed in), the minute and every record type read here are unchanged.

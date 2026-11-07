@@ -81,10 +81,11 @@ import os.meka.core.domain.TalkProblem
  * Reduced motion: no resize spring, colours jump.
  */
 @Composable
-internal fun NewRoutinePage(onBack: () -> Unit, onSave: (text: String, modes: String) -> Unit, said: String?) {
+internal fun NewRoutinePage(onBack: () -> Unit, onSave: (text: String, modes: String) -> Unit, said: String?, start: String = "") {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    var typed by rememberSaveable { mutableStateOf("") }
+    // Slice 5: an idea from his week opens with its sentence filled in.
+    var typed by rememberSaveable { mutableStateOf(start) }
     var modes by rememberSaveable { mutableStateOf("") }
     val draft = remember(typed, modes) { RoutineSentence.draft(typed, modes) }
     val context = LocalContext.current
@@ -192,7 +193,7 @@ private fun DraftPart(d: RoutineDraft, onLabel: (Int) -> Unit, onSave: () -> Uni
             if (d.canSave) Meka.colors.accent else Meka.colors.surfaceRaised,
             if (d.canSave) Meka.colors.onAccent else Meka.colors.textTertiary,
             modifier = Modifier.weight(1f).testTag("new-routine-save"),
-            spoken = if (d.canSave) "${RoutineSentence.SAVE}: ${d.name}, ${d.whenTile}, ${d.steps.size} steps" else "${RoutineSentence.SAVE}. ${d.problem}",
+            spoken = if (d.canSave) "${RoutineSentence.SAVE}: ${d.name}, ${d.whenTile}, ${d.steps.size} ${if (d.steps.size == 1) "step" else "steps"}" else "${RoutineSentence.SAVE}. ${d.problem}",
         ) { if (d.canSave) onSave() }
     }
 }

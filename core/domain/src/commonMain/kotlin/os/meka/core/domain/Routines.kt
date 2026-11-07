@@ -183,6 +183,8 @@ data class RoutinesView(
     val details: List<RoutineDetail> = emptyList(),
     /** Slice 3: the Running now cards, the oldest run first. */
     val running: List<RoutineRunCard> = emptyList(),
+    /** Slice 5: IDEAS FROM YOUR WEEK ([RoutineIdeas.ideas]). */
+    val ideas: List<RoutineIdea> = emptyList(),
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
 
@@ -633,6 +635,7 @@ object RoutineRules {
      */
     fun view(
         items: List<RoutineItem>, today: Long, nowMinute: Int, payday: Long? = null, nowMs: Long? = null, cal: LocalCalendar = LocalCalendar.UTC,
+        week: RoutineWeek = RoutineWeek.EMPTY,
     ): RoutinesView {
         fun order(r: RoutineItem): Long {
             if (!r.on) return Long.MAX_VALUE
@@ -656,6 +659,7 @@ object RoutineRules {
         return RoutinesView(
             summary(items), if (runningIds.isEmpty()) rows else shownRows, starters,
             items.map { detail(it, today, nowMinute, payday, nowMs, cal) }, running,
+            ideas = RoutineIdeas.ideas(items, week, today, cal),
         )
     }
 }
@@ -669,9 +673,9 @@ class Routines(
 ) {
     fun items(): List<RoutineItem> = RoutineRules.items(replica.entities(EntityTypes.ROUTINE).associate { it.ref.entityId to it.fields })
 
-    fun view(payday: Long? = null): RoutinesView {
+    fun view(payday: Long? = null, week: RoutineWeek = RoutineWeek.EMPTY): RoutinesView {
         val now = nowMs()
-        return RoutineRules.view(items(), calendar.epochDayOf(now), calendar.minuteOfDay(now), payday, now, calendar)
+        return RoutineRules.view(items(), calendar.epochDayOf(now), calendar.minuteOfDay(now), payday, now, calendar, week)
     }
 
     /**
@@ -772,9 +776,10 @@ class Routines(
      * Slice 4: Save routine on New routine. Reads [text] again as [RoutineSentence.draft] does, with the labels he
      * chose ([modes]), and writes it switched on; refused (nothing written) while the draft has a problem. A name he
      * already has gets " 2". Steps that would send, pay, book or trade were never made, and [RoutineRules.decodeSteps]
-     * drops any on read as well.
+     * drops any on read as well. Slice 5: [idea] is the key of the idea it was opened from ([RoutineIdea.key]), kept as
+     * its starter so the idea isn't offered again.
      */
-    fun addFromSentence(text: String, modes: String, payday: Long? = null): RoutineSaid {
+    fun addFromSentence(text: String, modes: String, payday: Long? = null, idea: String? = null): RoutineSaid {
         val d = RoutineSentence.draft(text, modes)
         val s = d.schedule
         if (d.problem != null || s == null) return RoutineSaid(d.problem ?: RoutineSentence.NEED_WHEN, true)
@@ -795,9 +800,14 @@ class Routines(
                 RoutineFields.SUMMARY to steps.take(4).joinToString(", ") { it.title }.fv(),
                 RoutineFields.ON to true.fv(),
                 RoutineFields.ADDED_AT to now.fv(),
-            ),
+            ) + ideaStarter(idea),
         )
         return RoutineSaid(RoutineSentence.savedLine(name, s, calendar.epochDayOf(now), calendar.minuteOfDay(now), payday), false, id)
+    }
+
+    private fun ideaStarter(idea: String?): Map<String, FieldValue> {
+        val key = idea?.trim()?.takeIf { Regex("""[a-z0-9-]{1,40}""").matches(it) } ?: return emptyMap()
+        return mapOf(RoutineFields.STARTER to (RoutineIdeas.STARTER_PREFIX + key).fv())
     }
 
     /** Switches a routine on or pauses it; false when it isn't there or already so. */

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -36,6 +37,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.RoutineOutcome
+import os.meka.core.domain.RoutineIdeas
 import os.meka.core.domain.RoutineRules
 import os.meka.core.domain.RoutineSentence
 import os.meka.core.facade.MekaCore
@@ -274,6 +276,55 @@ class RoutinesScreensTest {
         if (page.steps[1].badge != "Just show") fail("$name: the label he chose wasn't kept (${page.steps[1].badge})")
         if (page.steps.any { it.title.contains("Sam") }) fail("$name: a step that texts someone was saved")
         if (!onScreen("Saved Sunday evening · first run")) fail("$name: the list doesn't say it was saved")
+    }
+
+    /**
+     * Slice 5: IDEAS FROM YOUR WEEK. With a bin collected on Tuesdays, Bin night shows as a dashed tile saying why; a tap
+     * opens New routine with its sentence filled in (WHEN Mondays and its step), Save routine adds it, and the idea goes.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER) fun ideas() {
+        val name = "routines-ideas"
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        runBlocking {
+            core.tick()
+            check(!core.addBin("Black bin every Tuesday").refused)
+            core.tick()
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { RoutinesPane(core, onClose = {}) }
+            }
+        }
+        until { onScreen(RoutineIdeas.TITLE.uppercase()) }
+        val idea = core.routinesView.value.ideas.singleOrNull() ?: fail("$name: ${core.routinesView.value.ideas.size} ideas, not 1")
+        if (idea.name != "Bin night") fail("$name: the idea is \"${idea.name}\"")
+        compose.onNodeWithTag(ROUTINES_PANE_TAG).performScrollToNode(hasTestTag("routine-idea"))
+        turns()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", "cover-dark-ideas"))
+        val lines = listOf(idea.name, idea.why, RoutineIdeas.NOTE)
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertNoLoneWords(compose, name, lines)
+        ScreenShots.assertNoDotStartingALine(compose, name, lines)
+        ScreenShots.assertNoDotEndingALine(compose, name, lines)
+        assertTouchTargets(name)
+        if (count("routine-idea") != 1 || !onScreen("Bins go out on Tuesdays")) fail("$name: Bin night's tile doesn't say why")
+        compose.onAllNodes(hasContentDescription(idea.spoken) and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { count(NEW_ROUTINE_TAG) == 1 && onScreen("Mondays") }
+        if (!onScreen("Mondays")) fail("$name: New routine didn't open with Bin night's sentence")
+        val d = RoutineSentence.draft(idea.sentence)
+        compose.onAllNodes(hasContentDescription("${RoutineSentence.SAVE}: ${d.name}, ${d.whenTile}, 1 step") and hasClickAction())
+            .fetchSemanticsNodes().ifEmpty { fail("$name: no Save routine for Bin night") }
+        compose.onAllNodes(hasContentDescription("${RoutineSentence.SAVE}: ${d.name}, ${d.whenTile}, 1 step") and hasClickAction())[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { core.routinesView.value.rows.isNotEmpty() && count(NEW_ROUTINE_TAG) == 0 }
+        val v = core.routinesView.value
+        if (v.rows.singleOrNull()?.name != "Bin night") fail("$name: saved as ${v.rows.map { it.name }}")
+        if (v.ideas.isNotEmpty()) fail("$name: Bin night is still offered after it was saved")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun newRoutine() { newRoutine(pane("cover-dark-new-list", Fill.EMPTY)) }

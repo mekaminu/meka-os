@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -40,6 +42,12 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -57,6 +65,8 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.RoutineDetail
+import os.meka.core.domain.RoutineIdea
+import os.meka.core.domain.RoutineIdeas
 import os.meka.core.domain.RoutineLogLine
 import os.meka.core.domain.RoutineOutcome
 import os.meka.core.domain.RoutineRow
@@ -96,6 +106,8 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
     // Slice 4: New routine is open (said or typed in one sentence).
     var making by remember { mutableStateOf(false) }
     var makeSaid by remember { mutableStateOf<String?>(null) }
+    // Slice 5: the idea New routine was opened from (its sentence filled in), or null.
+    var fromIdea by remember { mutableStateOf<RoutineIdea?>(null) }
     BackHandler(enabled = page != null || making) { open = null; making = false }
     fun toggle(id: String, on: Boolean) {
         haptics.tick()
@@ -123,12 +135,14 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
         val d = shown?.takeIf { it != NEW_KEY }?.let { v.detail(it) }
         if (shown == NEW_KEY) {
             NewRoutinePage(
-                onBack = { making = false; makeSaid = null },
+                onBack = { making = false; makeSaid = null; fromIdea = null },
                 said = makeSaid,
+                start = fromIdea?.sentence.orEmpty(),
                 onSave = { text, modes ->
+                    val idea = fromIdea?.takeIf { text.trim() == it.sentence }?.key
                     scope.launch {
-                        val r = runCatching { core.addRoutineFromSentence(text, modes) }.getOrNull()
-                        if (r != null && !r.refused) { said = r.line; makeSaid = null; making = false } else { makeSaid = r?.line ?: RoutineRules.GONE_LINE }
+                        val r = runCatching { if (idea != null) core.addRoutineFromIdea(text, modes, idea) else core.addRoutineFromSentence(text, modes) }.getOrNull()
+                        if (r != null && !r.refused) { said = r.line; makeSaid = null; making = false; fromIdea = null } else { makeSaid = r?.line ?: RoutineRules.GONE_LINE }
                     }
                 },
             )
@@ -144,7 +158,8 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
             )
         } else {
             RoutinesList(v, said, runActions, onClose, onOpen = { open = it }, onToggle = ::toggle, onRemove = ::remove,
-                onNew = { haptics.light(); said = null; makeSaid = null; making = true },
+                onNew = { haptics.light(); said = null; makeSaid = null; fromIdea = null; making = true },
+                onIdea = { idea -> haptics.light(); said = null; makeSaid = null; fromIdea = idea; making = true },
                 onAdd = { key ->
                     haptics.light()
                     scope.launch { said = runCatching { core.addStarterRoutine(key) }.getOrNull()?.line ?: RoutineRules.GONE_LINE }
@@ -157,6 +172,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
 private fun RoutinesList(
     v: os.meka.core.domain.RoutinesView, said: String?, actions: RunActions, onClose: () -> Unit, onOpen: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit, onRemove: (String, String) -> Unit, onAdd: (String) -> Unit, onNew: () -> Unit,
+    onIdea: (RoutineIdea) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -199,6 +215,44 @@ private fun RoutinesList(
                 StarterCard(s, Modifier.appear(rememberAppearance(base + i + 1))) { onAdd(s.key) }
             }
         }
+        // Slice 5: the mockup's IDEAS FROM YOUR WEEK, dashed tiles two to a row; a tap opens New routine filled in.
+        if (v.ideas.isNotEmpty()) {
+            val base = v.rows.size + v.starters.size + 3
+            Text(RoutineIdeas.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(base)))
+            v.ideas.chunked(2).forEachIndexed { row, pair ->
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(rememberAppearance(base + row + 1)),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    pair.forEach { idea -> IdeaTile(idea, Modifier.weight(1f).fillMaxHeight()) { onIdea(idea) } }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            Text(LoneWordGlue.kept(RoutineIdeas.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.appear(rememberAppearance(base + 1)))
+        }
+    }
+}
+
+/** An idea from his week: a dashed tile with its name and why; a tap opens New routine with its sentence. */
+@Composable
+private fun IdeaTile(idea: RoutineIdea, modifier: Modifier, onClick: () -> Unit) {
+    val line = Meka.colors.hairline
+    Column(
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = idea.spoken }
+            .drawBehind {
+                val inset = 0.5.dp.toPx()
+                drawRoundRect(
+                    line, topLeft = Offset(inset, inset), size = Size(size.width - 2 * inset, size.height - 2 * inset),
+                    cornerRadius = CornerRadius(MekaRadius.m.toPx()),
+                    style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
+                )
+            }
+            .minTouch().padding(MekaSpace.m).testTag("routine-idea"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Text(LoneWordGlue.kept(idea.name), style = MekaType.body, color = Meka.colors.textPrimary)
+        Text(LoneWordGlue.kept(idea.why), style = MekaType.caption, color = Meka.colors.textSecondary)
     }
 }
 

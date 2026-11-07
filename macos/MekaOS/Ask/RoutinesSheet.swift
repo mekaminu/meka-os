@@ -24,6 +24,9 @@ struct RoutinesSheet: View {
     @State private var typed = ""
     @State private var modes = ""
     @State private var makeSaid: String?
+    /// Slice 5: the idea New routine was opened from, as plain Strings (its key and its sentence), or nil.
+    @State private var ideaKey: String?
+    @State private var ideaSentence: String?
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -56,6 +59,7 @@ struct RoutinesSheet: View {
                 Button(RoutineSentence.shared.NEW) {
                     MekaHaptics.light()
                     typed = ""; modes = ""; makeSaid = nil; said = nil
+                    ideaKey = nil; ideaSentence = nil
                     making = true
                 }
                 .buttonStyle(MekaPressStyle())
@@ -97,6 +101,22 @@ struct RoutinesSheet: View {
                         ForEach(Array(v.starters.enumerated()), id: \.element.key) { i, s in
                             starterCard(s).staggeredAppear(v.rows.count + i + 2)
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        }
+                        // Slice 5: IDEAS FROM YOUR WEEK, dashed tiles two to a row; a click opens New routine filled in.
+                        if !v.ideas.isEmpty {
+                            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                                label(RoutineIdeas.shared.TITLE).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
+                                LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)],
+                                          alignment: .leading, spacing: MekaSpace.xs) {
+                                    ForEach(Array(v.ideas.enumerated()), id: \.element.key) { i, idea in
+                                        ideaTile(idea).staggeredAppear(v.rows.count + v.starters.count + i + 3)
+                                    }
+                                }
+                                Text(LoneWordGlue.shared.kept(line: RoutineIdeas.shared.NOTE)).font(MekaType.caption)
+                                    .foregroundStyle(palette.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .transition(.opacity)
                         }
                     }
                     .animation(MekaMotion.expand(reduced: reduceMotion), value: v.rows.count)
@@ -180,7 +200,7 @@ struct RoutinesSheet: View {
                     .frame(maxWidth: .infinity).padding(.vertical, MekaSpace.xs)
                     .background(canSave ? palette.accent : palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                     .disabled(!canSave)
-                    .accessibilityLabel(canSave ? "\(RoutineSentence.shared.SAVE): \(d.name), \(d.whenTile), \(d.steps.count) steps" : RoutineSentence.shared.SAVE)
+                    .accessibilityLabel(canSave ? "\(RoutineSentence.shared.SAVE): \(d.name), \(d.whenTile), \(d.steps.count) \(d.steps.count == 1 ? "step" : "steps")" : RoutineSentence.shared.SAVE)
             }
         }
         .onAppear { fieldFocused = true }
@@ -230,12 +250,15 @@ struct RoutinesSheet: View {
     }
 
     private func save(_ text: String, _ chosen: String) {
+        // Slice 5: opened from an idea and the sentence unchanged, the routine keeps the idea's key.
+        let idea: String? = (ideaSentence == text.trimmingCharacters(in: .whitespacesAndNewlines)) ? ideaKey : nil
         Task {
-            let r = await model.addRoutineFromSentence(text, modes: chosen)
+            let r = await model.addRoutineFromSentence(text, modes: chosen, idea: idea)
             withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
                 if let r, !r.refused {
                     said = r.line
                     makeSaid = nil
+                    ideaKey = nil; ideaSentence = nil
                     making = false
                 } else {
                     makeSaid = r?.line ?? RoutineRules.shared.GONE_LINE
@@ -485,6 +508,31 @@ struct RoutinesSheet: View {
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(s.spoken)
+    }
+
+    /// An idea from his week (slice 5): a dashed tile with its name and why; a click opens New routine with its
+    /// sentence. Only its Strings are kept.
+    private func ideaTile(_ idea: RoutineIdea) -> some View {
+        let key = idea.key, sentence = idea.sentence
+        return Button {
+            MekaHaptics.light()
+            said = nil; makeSaid = nil
+            ideaKey = key; ideaSentence = sentence
+            typed = sentence; modes = ""
+            making = true
+        } label: {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(LoneWordGlue.shared.kept(line: idea.name)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(LoneWordGlue.shared.kept(line: idea.why)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.hairline, style: StrokeStyle(lineWidth: 1, dash: [6, 4])))
+            .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(idea.spoken)
     }
 
     private func label(_ text: String) -> some View {

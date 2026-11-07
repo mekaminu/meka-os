@@ -5969,11 +5969,17 @@ final class CoreModel {
 
     /// Routines, slice 4: Save routine on New routine. Only two Strings cross (what he said or typed, and the labels he
     /// chose as codes); the core reads the sentence again. The line to show and whether it was turned away.
-    func addRoutineFromSentence(_ text: String, modes: String) async -> (line: String, refused: Bool)? {
+    /// Slice 5: [idea] is the key of the idea of his week it was opened from (a String), or nil.
+    func addRoutineFromSentence(_ text: String, modes: String, idea: String? = nil) async -> (line: String, refused: Bool)? {
         guard let core else { return nil }
         MekaHaptics.light()
         do {
-            let r = try await core.addRoutineFromSentence(text: text, modes: modes)
+            let r: RoutineSaid
+            if let idea {
+                r = try await core.addRoutineFromIdea(text: text, modes: modes, idea: idea)
+            } else {
+                r = try await core.addRoutineFromSentence(text: text, modes: modes)
+            }
             if r.refused { MekaHaptics.tick() }
             return (r.line, r.refused)
         } catch {
