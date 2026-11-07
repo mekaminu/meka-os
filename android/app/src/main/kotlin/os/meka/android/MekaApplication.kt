@@ -105,6 +105,8 @@ open class MekaApplication : Application() {
     val openWeekAhead = MutableStateFlow(false)
     /** The size-check heads-up (kids' admin, slice 6): Ask with the Kids pane up. */
     val openKids = MutableStateFlow(false)
+    /** Routines, slice 3b: a routine's "has started" notice was tapped: Ask with Routines up. */
+    val openRoutines = MutableStateFlow(false)
     /** A card heads-up (Money manager, slice 7): Ask with the Money pane up (behind the fingerprint as always). */
     val openMoney = MutableStateFlow(false)
     /** The Week board's study line (plan a lesson for a day) → Goals with that course open. */

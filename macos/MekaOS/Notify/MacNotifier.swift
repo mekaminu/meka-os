@@ -114,6 +114,8 @@ enum MacNotifier {
     static let listenAction = "LISTEN"
     /// Pay on a bill's reminder: the core's `NoticeAction.PAY` name. It opens the saved pay link in the browser.
     static let payAction = "PAY"
+    /// Routines, slice 3b: a click on "Study night has started" (target ROUTINES) opens Routines with its Running now card.
+    nonisolated static let openRoutinesAction = "meka.openRoutines"
     /// Wake 10 min earlier on tomorrow's trains heads-up: the core's `NoticeAction.WAKE_EARLIER` name.
     static let wakeEarlierAction = "WAKE_EARLIER"
     /// Wake earlier on this morning's train heads-up (live trains, slice 5): the core's `NoticeAction.WAKE_FOR_TRAIN` name.
@@ -208,8 +210,11 @@ final class MacNotificationActions: NSObject, UNUserNotificationCenterDelegate {
         let request = response.notification.request
         let picture = request.content.userInfo["picture"] as? String
         // A click on a noticed screenshot's notification is its Handle this (screenshots and photos, slice 2).
-        let action = picture != nil && response.actionIdentifier == UNNotificationDefaultActionIdentifier
-            ? MacScreenshotWatch.action : response.actionIdentifier
+        let target = request.content.userInfo["target"] as? String
+        let clicked = response.actionIdentifier == UNNotificationDefaultActionIdentifier
+        let action = picture != nil && clicked
+            ? MacScreenshotWatch.action
+            : (clicked && target == "ROUTINES" ? MacNotifier.openRoutinesAction : response.actionIdentifier)
         let answer = NotificationAnswer(
             key: request.identifier, action: action, habit: request.content.userInfo["habit"] as? String,
             body: request.content.body, link: request.content.userInfo["link"] as? String, picture: picture

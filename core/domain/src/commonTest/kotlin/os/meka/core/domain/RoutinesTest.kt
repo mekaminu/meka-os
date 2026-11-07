@@ -278,4 +278,107 @@ class RoutinesTest {
         assertEquals(log, RoutineRules.decodeLog(RoutineRules.encodeLog(log)))
         assertEquals(log, RoutineRules.decodeLog("x|nope\n" + RoutineRules.encodeLog(log) + "\nd|\n|"))
     }
+
+    // ---- Slice 3b: starting at its time ----
+
+    @Test
+    fun aRoutineStartsByItselfAtItsTimeWithOneQuietNotice() {
+        world.clock.nowMs = at(fri, 18)
+        val r = routines(fold)
+        val id = r.addStarter("study-night")!!.id!!
+        // Before 21:00: nothing starts, but the notice is there ahead so the governor wakes for it.
+        assertTrue(r.startDue().isEmpty())
+        val ahead = RoutineRules.notices(r.items(), world.clock.nowMs, cal).single()
+        assertEquals(at(fri, 21), ahead.atMs)
+        assertEquals(NoticeTarget.ROUTINES, ahead.target)
+        assertEquals(NoticeSource.ROUTINES, ahead.source)
+        assertEquals(NoticeTier.HEADS_UP, ahead.tier)
+        assertEquals("Study night has started", ahead.title)
+        assertEquals("3 steps, starting with open tonight’s lessons", ahead.text)
+        world.clock.nowMs = at(fri, 21, 4)
+        assertEquals(listOf(id), r.startDue())
+        assertTrue(r.startDue().isEmpty())
+        val card = r.view().running.single()
+        assertEquals("Step 1 of 3", card.progress)
+        val n = RoutineRules.notices(r.items(), world.clock.nowMs, cal).single()
+        assertEquals(ahead.key, n.key)
+        assertEquals("Step 1 of 3: Open tonight’s lessons · Have a look", n.text)
+        // Carried through to the end: no notice, and it doesn't start again tonight.
+        repeat(3) { assertTrue(r.carryOn(id)) }
+        assertTrue(r.view().running.isEmpty())
+        assertTrue(r.startDue().isEmpty())
+        assertTrue(RoutineRules.notices(r.items(), world.clock.nowMs, cal).isEmpty())
+        // Tomorrow night it starts again.
+        world.clock.nowMs = at(fri + 1, 21, 1)
+        assertEquals(listOf(id), r.startDue())
+    }
+
+    @Test
+    fun bothAppsStartingAtOnceWriteTheSameRun() {
+        world.clock.nowMs = at(fri, 18)
+        val id = routines(fold).addStarter("study-night")!!.id!!
+        sync()
+        world.clock.nowMs = at(fri, 21)
+        assertEquals(listOf(id), routines(fold).startDue())
+        assertEquals(listOf(id), routines(mac).startDue())
+        sync()
+        val f = routines(fold).items().single().run!!
+        assertEquals(at(fri, 21), f.startedAtMs)
+        assertEquals(f, routines(mac).items().single().run)
+        assertTrue(routines(mac).startDue().isEmpty())
+    }
+
+    @Test
+    fun itDoesntStartWhenPausedOrAlreadyRanToday() {
+        world.clock.nowMs = at(fri, 18)
+        val r = routines(fold)
+        val id = r.addStarter("study-night")!!.id!!
+        // Paused.
+        r.setOn(id, false)
+        world.clock.nowMs = at(fri, 21, 5)
+        assertTrue(r.startDue().isEmpty())
+        assertTrue(RoutineRules.notices(r.items(), world.clock.nowMs, cal).isEmpty())
+        // On again, but run by hand earlier today and stopped: not again tonight.
+        r.setOn(id, true)
+        world.clock.nowMs = at(fri, 19)
+        assertTrue(r.runNow(id))
+        assertTrue(r.stopRun(id))
+        world.clock.nowMs = at(fri, 21, 5)
+        assertTrue(r.startDue().isEmpty())
+        // A run by hand still going at its time: it isn't restarted, and no notice.
+        world.clock.nowMs = at(fri + 1, 20, 30)
+        assertTrue(r.runNow(id))
+        world.clock.nowMs = at(fri + 1, 21, 5)
+        assertTrue(r.startDue().isEmpty())
+        assertTrue(RoutineRules.notices(r.items(), world.clock.nowMs, cal).isEmpty())
+    }
+
+    @Test
+    fun itWaitsForItsNextTimeWhenAddedLateOrMissedByHours() {
+        // Added after today's time: tomorrow's.
+        world.clock.nowMs = at(fri, 21, 30)
+        val r = routines(fold)
+        val id = r.addStarter("study-night")!!.id!!
+        assertTrue(r.startDue().isEmpty())
+        assertTrue(RoutineRules.notices(r.items(), world.clock.nowMs, cal).isEmpty())
+        // More than two hours late (the phone was off): it waits for its next time.
+        world.clock.nowMs = at(fri + 1, 23, 1)
+        assertTrue(r.startDue().isEmpty())
+        world.clock.nowMs = at(fri + 2, 22, 59)
+        assertEquals(listOf(id), r.startDue())
+        // On payday: not until payday has a date.
+        val payday = r.items().single().copy(schedule = RoutineSchedule(emptySet(), 9 * 60, payday = true), run = null)
+        assertNull(RoutineRules.startTimeToday(payday, at(fri + 3, 10), cal))
+    }
+
+    @Test
+    fun aRoutineThatOnlyHasObisStepsFinishesAtItsTimeWithoutANotice() {
+        world.clock.nowMs = at(fri, 18)
+        val r = routines(fold)
+        val id = r.addStarter("sunday-reset")!!.id!!
+        val item = r.items().single()
+        val tidy = item.copy(schedule = RoutineSchedule(setOf(5), 19 * 60), steps = item.steps.filter { it.place == RoutinePlace.INBOX })
+        assertEquals(at(fri, 19), RoutineRules.startTimeToday(tidy, at(fri, 19, 30), cal))
+        assertEquals(id, tidy.id)
+    }
 }

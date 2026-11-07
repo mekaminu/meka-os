@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 
 /** Routines through the facade (slice 1): a starter added on the Fold, paused on the Mac, removed, on both apps. */
 class RoutinesFacadeTest {
-    private val now = 1_791_622_800_000L // Sat 10 Oct 2026, 10:00 in London
+    private var now = 1_791_622_800_000L // Sat 10 Oct 2026, 10:00 in London
 
     private val ops = InMemoryServerOpStore()
 
@@ -69,5 +69,22 @@ class RoutinesFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.routinesView.value.isEmpty)
         assertEquals(4, mac.routinesView.value.starters.size)
+    }
+
+    @Test
+    fun aRoutineStartsAtItsTimeWhenTheGovernorWakesAndPostsOneQuietNotice() = runTest {
+        val fold = core("android")
+        val id = fold.addStarterRoutine("study-night")!!.id!!
+        val ahead = fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertTrue(ahead.post.none { it.source == os.meka.core.domain.NoticeSource.ROUTINES })
+        assertTrue(fold.routinesView.value.running.isEmpty())
+        now += 11 * 3_600_000L + 2 * 60_000L // 21:02
+        val gov = fold.governNotifications(ahead.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = gov.post.single { it.source == os.meka.core.domain.NoticeSource.ROUTINES }
+        assertEquals("Study night has started", n.title)
+        assertEquals(os.meka.core.domain.NoticeTarget.ROUTINES, n.target)
+        assertEquals(id, fold.routinesView.value.running.single().id)
+        val again = fold.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
+        assertTrue(again.post.none { it.source == os.meka.core.domain.NoticeSource.ROUTINES })
     }
 }

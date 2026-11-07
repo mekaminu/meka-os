@@ -329,6 +329,7 @@ object NotifyRouting {
         NoticeTarget.VAULT -> ShellDestination.VAULT
         NoticeTarget.KIDS -> ShellDestination.ASK
         NoticeTarget.MONEY -> ShellDestination.ASK
+        NoticeTarget.ROUTINES -> ShellDestination.ASK
     }
 
     /** What a tap hands MainActivity: a place ("dest:LISTS"), or Ask with the Annual leave pane up ("leave"). */
@@ -337,6 +338,7 @@ object NotifyRouting {
         NoticeTarget.WEEK_AHEAD -> MainActivity.OPEN_WEEK_AHEAD
         NoticeTarget.KIDS -> MainActivity.OPEN_KIDS
         NoticeTarget.MONEY -> MainActivity.OPEN_MONEY
+        NoticeTarget.ROUTINES -> MainActivity.OPEN_ROUTINES
         else -> MainActivity.OPEN_DESTINATION_PREFIX + destination(target).name
     }
 

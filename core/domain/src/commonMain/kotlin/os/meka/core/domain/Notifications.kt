@@ -35,7 +35,7 @@ enum class NoticePrecision { CLOCK, SOFT }
  * Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2);
  * [WEEK_AHEAD] is Ask → More → Week ahead with its pane up (Sunday week ahead, slice 1).
  */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT, KIDS, MONEY }
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT, KIDS, MONEY, ROUTINES }
 
 /**
  * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
@@ -278,6 +278,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * "Sam Taylor replied" · "Quote for the kitchen · Personal · Got it in Time to chase if that settles it". Opens Needs you.
      */
     REPLIED("Replies you were waiting for", NoticeTier.HEADS_UP),
+    /**
+     * Routines, slice 3b ([RoutineRules.notices]): a routine started by itself at its time, "Sunday reset has started" ·
+     * "Step 1 of 4: Show the week ahead of bills · Have a look". Opens Routines with the Running now card.
+     */
+    ROUTINES("Routines starting at their time", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jordan · due today"). */
@@ -737,6 +742,7 @@ object Governor {
         NoticeSource.BALANCE -> "an area short of its target"
         NoticeSource.PROTECTED_MAIL -> "work mail that waited"
         NoticeSource.PRESSURE -> "tomorrow stacking up"
+        NoticeSource.ROUTINES -> if (n == 1) "a routine started" else "$n routines started"
         NoticeSource.REPLIED -> if (n == 1) "a reply you were waiting for" else "$n replies you were waiting for"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
@@ -867,6 +873,8 @@ object NoticeSources {
         pressure: DayPressure? = null,
         /** Speaking up, slice 4: the mail finds, for a reply to an email he put on Waiting for ([SpeakUpRules.replyNotices]). */
         mailFinds: List<MailFind> = emptyList(),
+        /** Routines, slice 3b: his routines, for the quiet notice when one starts at its time. */
+        routines: List<RoutineItem> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -1031,6 +1039,8 @@ object NoticeSources {
         SpeakUpRules.pressureNotice(pressure, nowMs, cal)?.let { out += it }
         // Speaking up, slice 4: a reply he was waiting for (Obi says it only if he turned that moment on).
         out += SpeakUpRules.replyNotices(mailFinds, lists.waiting, nowMs)
+        // Routines, slice 3b: a routine that started by itself at its time.
+        out += RoutineRules.notices(routines, nowMs, cal)
         if (workSchedule != null) ProtectedMailRules.morningNotice(mail, protectedTime, nowMs, workSchedule, holidays, cal)?.let { out += it }
         // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.
         out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal, prepLeadMin)

@@ -207,6 +207,11 @@ fun AskRoute(
     LaunchedEffect(openKids) {
         if (openKids) { pane = MoreItem.KIDS; healthApp?.openKids?.value = false }
     }
+    // Routines, slice 3b: a routine's "has started" notice opens Routines with its Running now card.
+    val openRoutines by remember(healthApp) { healthApp?.openRoutines ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openRoutines) {
+        if (openRoutines) { pane = MoreItem.ROUTINES; healthApp?.openRoutines?.value = false }
+    }
     // A card heads-up (Money manager, slice 7) → the Money pane, which asks for the fingerprint first.
     val openMoney by remember(healthApp) { healthApp?.openMoney ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openMoney) {

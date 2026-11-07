@@ -3365,6 +3365,11 @@ final class CoreModel {
             MacNotifier.remove(key: a.key)
             return
         }
+        // Routines, slice 3b: a click on a routine's "has started" notice opens Routines with its Running now card.
+        if a.action == MacNotifier.openRoutinesAction {
+            showRoutines = true
+            return
+        }
         // Screenshots and photos, slice 2: Handle this on a noticed screenshot reads it again into Handle this.
         if a.action == MacScreenshotWatch.action {
             MacNotifier.remove(key: a.key)

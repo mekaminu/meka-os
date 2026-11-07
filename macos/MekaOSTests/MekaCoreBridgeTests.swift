@@ -406,6 +406,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(v.car)
         XCTAssertEqual(NoticeSource.weekAhead.defaultTier, NoticeTier.headsUp)
         XCTAssertEqual(NotifyRules.shared.targetName(t: NoticeTarget.weekAhead), "WEEK_AHEAD")
+        // Routines, slice 3b: the Mac routes a click on "… has started" by this name.
+        XCTAssertEqual(NotifyRules.shared.targetName(t: NoticeTarget.routines), "ROUTINES")
         // Sunday 11 Oct 2026 looks at the week from Monday 12 Oct.
         XCTAssertEqual(WeekAheadRules.shared.weekStart(today: 20737), 20738)
     }

@@ -13923,6 +13923,8 @@ class MekaCore(
         _car.value = _cars.value.first
         _parkingTimers.value = os.meka.core.domain.ParkingTimerRules.view(parkingTimers.all(), _cars.value, nowMs(), cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
+        // Routines, slice 3b: a routine whose time has come starts by itself (the governor's wake refreshes first).
+        routines.startDue()
         _routines.value = routines.view()
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
         // Slice 11: the Life grid's lines are kept while the views they're read from, Money's accounts and cards (Money
@@ -14112,6 +14114,8 @@ class MekaCore(
             mailFinds = activity.mailFinds(),
             // Protected time, slice 6: at 07:00 the morning it ends, one note for the business mail that waited.
             protectedTime = protectedTime.setting(), workSchedule = work.schedule(),
+            // Routines, slice 3b: the quiet notice when a routine starts at its time.
+            routines = routines.items(),
         )
 
     /**

@@ -5,7 +5,8 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * Routines (build plan "Take first", Meka approved the mockup 2026-11-06 21:34). Slice 3 runs them by hand: Run now,
+ * Routines (build plan "Take first", Meka approved the mockup 2026-11-06 21:34). Slice 3b starts them at their time
+ * with a quiet notice through the governor ([RoutineRules.notices], [Routines.startDue]). Slice 3 runs them by hand: Run now,
  * the Running now card (Carry on · Skip this step · Stop), and LAST TIME. Slice 1: jobs Obi repeats for you,
  * each a name, when it runs (days of the week and a time, or on payday) and its steps, with an on/off switch. Slice 1
  * keeps the list, the starters and the switch; running them (the Running now card, through the notification governor
@@ -378,6 +379,58 @@ object RoutineRules {
     fun liveRun(r: RoutineItem, nowMs: Long): RoutineRun? =
         r.run?.takeIf { nowMs - it.startedAtMs in 0 until RUN_STALE_MS && it.step < r.steps.size }
 
+    // ---- Slice 3b (2026-11-07): starting at its time ----
+
+    /** A routine whose start was missed by more than this (the phone was off) waits for its next time. */
+    const val START_WINDOW_MS = 2L * 60 * 60 * 1000
+
+    /**
+     * When [r] starts today by itself (its day and time, epoch ms), or null when it doesn't: paused, on payday (no
+     * known date yet), no steps, not today, added after today's time, more than [START_WINDOW_MS] past it, or it ran
+     * already today (by hand or by itself, finished or stopped). The run it starts is stamped with this time, so the
+     * Fold and the Mac starting it at once write the same run.
+     */
+    fun startTimeToday(r: RoutineItem, nowMs: Long, cal: LocalCalendar): Long? {
+        if (!r.on || r.schedule.payday || r.steps.isEmpty()) return null
+        val today = cal.epochDayOf(nowMs)
+        if (CivilDate.isoDayOfWeek(today) !in r.schedule.days) return null
+        val at = cal.toEpochMs(today, r.schedule.minute)
+        if (r.addedAtMs >= at || nowMs - at >= START_WINDOW_MS) return null
+        if (r.lastRun?.let { cal.epochDayOf(it.atMs) == today } == true) return null
+        val live = liveRun(r, nowMs)
+        if (live != null && live.startedAtMs != at) return null
+        return at
+    }
+
+    /** The time [r] should start right now ([startTimeToday] reached, nothing running), or null. */
+    fun dueStart(r: RoutineItem, nowMs: Long, cal: LocalCalendar): Long? =
+        startTimeToday(r, nowMs, cal)?.takeIf { nowMs >= it && liveRun(r, nowMs) == null }
+
+    /**
+     * The quiet notice when a routine starts by itself: "Sunday reset has started" · "Step 1 of 4: Show the week ahead
+     * of bills · Have a look", a heads-up through the notification governor (in quiet hours it waits for the next
+     * digest), once per routine a day. A tap opens Routines with the Running now card. Made ahead of its time too, so
+     * the governor wakes for it; gone once the run is finished, stopped or ran by hand earlier today.
+     */
+    fun notices(items: List<RoutineItem>, nowMs: Long, cal: LocalCalendar): List<Notice> = items.mapNotNull { r ->
+        val at = startTimeToday(r, nowMs, cal) ?: return@mapNotNull null
+        val live = liveRun(r, nowMs)
+        val text = if (live != null) {
+            val card = runCard(r, live)
+            "${card.progress}: ${card.stepTitle} · ${card.state}"
+        } else {
+            val first = r.steps.first()
+            "${r.steps.size} ${if (r.steps.size == 1) "step" else "steps"}, starting with ${first.title.replaceFirstChar { it.lowercase() }}"
+        }
+        Notice(
+            key = "$NOTICE_KEY_PREFIX${r.id}:${cal.epochDayOf(at)}", source = NoticeSource.ROUTINES, tier = NoticeTier.HEADS_UP,
+            title = "${r.name} has started", text = text, atMs = at, target = NoticeTarget.ROUTINES,
+            expiresAtMs = at + START_WINDOW_MS,
+        )
+    }
+
+    const val NOTICE_KEY_PREFIX = "routine:"
+
     /** What adding [s] writes (switched on). */
     fun fields(s: RoutineStarter, nowMs: Long): Map<String, FieldValue> = mapOf(
         RoutineFields.NAME to s.name.fv(),
@@ -631,6 +684,19 @@ class Routines(
         if (r.steps.isEmpty() || RoutineRules.liveRun(r, nowMs()) != null) return false
         advance(r, RoutineRun(nowMs(), 0, emptyList()))
         return true
+    }
+
+    /**
+     * Slice 3b: starts each routine whose time has come today ([RoutineRules.dueStart]), as Run now would, stamped with
+     * its time. Called on every refresh (the notification governor's wake included); what it started, by id.
+     */
+    fun startDue(): List<String> {
+        val now = nowMs()
+        return items().mapNotNull { r ->
+            val at = RoutineRules.dueStart(r, now, calendar) ?: return@mapNotNull null
+            advance(r, RoutineRun(at, 0, emptyList()))
+            r.id
+        }
     }
 
     /** Carry on: the step it's on is done (or seen, for a Just show step) and the run moves on. */

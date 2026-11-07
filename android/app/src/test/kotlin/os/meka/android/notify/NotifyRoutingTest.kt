@@ -42,6 +42,9 @@ class NotifyRoutingTest {
         // "Time to check Alex's sizes" opens Ask with the Kids pane up (kids' admin, slice 6).
         assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.KIDS))
         assertEquals(os.meka.android.MainActivity.OPEN_KIDS, NotifyRouting.openExtra(NoticeTarget.KIDS))
+        // "Study night has started" opens Ask with Routines up and its Running now card (Routines, slice 3b).
+        assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.ROUTINES))
+        assertEquals(os.meka.android.MainActivity.OPEN_ROUTINES, NotifyRouting.openExtra(NoticeTarget.ROUTINES))
     }
 
     @Test
