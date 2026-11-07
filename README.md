@@ -426,6 +426,8 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/routines/cover-dark-empty.png](docs/screens/fold/routines/cover-dark-empty.png)
 - [fold/routines/cover-dark-last-time.png](docs/screens/fold/routines/cover-dark-last-time.png)
 - [fold/routines/cover-dark-many.png](docs/screens/fold/routines/cover-dark-many.png)
+- [fold/routines/cover-dark-new-list.png](docs/screens/fold/routines/cover-dark-new-list.png)
+- [fold/routines/cover-dark-new.png](docs/screens/fold/routines/cover-dark-new.png)
 - [fold/routines/cover-dark-page.png](docs/screens/fold/routines/cover-dark-page.png)
 - [fold/routines/cover-dark-running.png](docs/screens/fold/routines/cover-dark-running.png)
 - [fold/routines/cover-light-many.png](docs/screens/fold/routines/cover-light-many.png)
