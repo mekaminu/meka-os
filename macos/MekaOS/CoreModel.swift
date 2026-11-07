@@ -1796,6 +1796,12 @@ final class CoreModel {
         return try? await core.teamView()
     }
 
+    /// Your team (slice 2): Pause for today / Resume on a helper's page, by its code; only a String and a Bool cross.
+    func setTeamPause(_ code: String, on: Bool) async -> TeamView? {
+        guard let core else { return nil }
+        return try? await core.setTeamPause(code: code, on: on)
+    }
+
     /// Review on a helper's sheet: the sheet closes, then Needs you or Money opens. Only the target's name crosses.
     func openFromTeam(_ target: String, reduced: Bool) {
         showTeam = false

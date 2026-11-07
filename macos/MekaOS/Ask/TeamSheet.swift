@@ -4,7 +4,8 @@ import SwiftUI
 /// Ask → Daily → Your team on the Mac (slice 1), like the Fold's TeamPane: WORKING · NEED YOU · DONE TODAY tiles, a
 /// card per helper (its symbol in its colour, name and role, a status with a dot that breathes while it is working or
 /// watching, TODAY and WAITS ON YOU side by side, the wait box lit when something waits), the foot line; a click on a
-/// card shows its page in the sheet (how much it may do by itself, TODAY's log, what waits with Review, ‹ Your team).
+/// card shows its page in the sheet (how much it may do by itself, TODAY's log, what waits with Review, slice 2's
+/// Pause for today / Resume on Obi's, Inbox's and Money's, ‹ Your team).
 /// The words are the core's `TeamRules.view`. Only Strings cross to the core; nothing here acts.
 ///
 /// Motion: the sheet scale-fades (system); tiles and cards stagger in; a card's click gives a tick haptic and the page
@@ -212,6 +213,28 @@ struct TeamSheet: View {
                 }
                 .padding(MekaSpace.xs)
                 .background(palette.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .padding(.top, MekaSpace.xs)
+            }
+            if let pause = c.pauseAction {
+                let paused = c.paused
+                HStack(spacing: MekaSpace.xs) {
+                    Text(LoneWordGlue.shared.kept(line: c.pauseLine ?? "")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button(pause) {
+                        MekaHaptics.tick()
+                        Task {
+                            if let next = await model.setTeamPause(code, on: !paused) { view = next }
+                        }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta).foregroundStyle(paused ? palette.onAccent : palette.textPrimary)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(paused ? palette.accent : palette.surface, in: Capsule())
+                    .accessibilityLabel("\(pause): \(c.title)")
+                }
+                .padding(MekaSpace.xs)
+                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                 .padding(.top, MekaSpace.xs)
             }
             if c.readOnly {

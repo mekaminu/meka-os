@@ -53,4 +53,22 @@ class TeamFacadeTest {
         assertEquals("2", v.tiles.last().value)
         assertEquals(fold.teamView().cards.map { it.today }, v.cards.map { it.today })
     }
+
+    /** Slice 2: Pause for today on the Fold shows on the Mac, holds Money's heads-ups there too, and ends at midnight. */
+    @Test
+    fun aPauseOnTheFoldHoldsTheMacsMoneyHeadsUpsTillMidnight() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val v = fold.setTeamPause("money", true)
+        assertTrue(v.card("money")!!.paused)
+        assertEquals(TeamStatus.PAUSED, v.card("money")!!.status)
+        assertTrue(!fold.setTeamPause("calls", true).card("calls")!!.paused, "Calls can't be paused here")
+        fold.syncNow()
+        mac.syncNow()
+        assertTrue(mac.teamView().card("money")!!.paused)
+        now += 15L * 60 * 60_000 // 01:00 the next day
+        assertTrue(!mac.teamView().card("money")!!.paused, "over at midnight")
+        assertTrue(mac.setTeamPause("obi", true).card("obi")!!.paused)
+        assertTrue(!mac.setTeamPause("obi", false).card("obi")!!.paused, "Resume")
+    }
 }

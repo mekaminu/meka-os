@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
@@ -56,6 +57,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -97,6 +99,7 @@ fun TeamPane(core: MekaCore, onClose: () -> Unit, onReview: (TeamTarget) -> Unit
     val haptics = rememberMekaHaptics()
     var view by remember { mutableStateOf<TeamView?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     // The day's log grows as the helpers work and sync brings the other device's in: read again while open.
     LaunchedEffect(Unit) {
         while (true) {
@@ -134,6 +137,10 @@ fun TeamPane(core: MekaCore, onClose: () -> Unit, onReview: (TeamTarget) -> Unit
             card = open?.let { code -> view?.card(code) },
             onClose = { open = null },
             onReview = { target -> haptics.tick(); open = null; onReview(target) },
+            onPause = { c ->
+                haptics.light()
+                scope.launch { view = runCatching { core.setTeamPause(c.agent.code, !c.paused) }.getOrNull() ?: view }
+            },
         )
     }
 }
@@ -254,7 +261,7 @@ private fun InfoBox(label: String, text: String, lit: Boolean, modifier: Modifie
  */
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-private fun AgentSheet(card: TeamCard?, onClose: () -> Unit, onReview: (TeamTarget) -> Unit) {
+private fun AgentSheet(card: TeamCard?, onClose: () -> Unit, onReview: (TeamTarget) -> Unit, onPause: (TeamCard) -> Unit) {
     val reduced = Meka.reducedMotion
     BackHandler(enabled = card != null, onBack = onClose)
     // Keep the last card while the sheet leaves, so it doesn't empty as it goes.
@@ -313,6 +320,20 @@ private fun AgentSheet(card: TeamCard?, onClose: () -> Unit, onReview: (TeamTarg
                         Text(LoneWordGlue.kept(wait), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                         TouchPill("Review", Meka.colors.accent, Meka.colors.onAccent, spoken = "${target.label}: ${c.title}",
                             modifier = Modifier.testTag("team-review")) { onReview(target) }
+                    }
+                }
+                val pause = c.pauseAction
+                if (pause != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                            .background(Meka.colors.surfaceRaised).padding(MekaSpace.xs),
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(LoneWordGlue.kept(c.pauseLine.orEmpty()), style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.weight(1f).testTag("team-pause-line"))
+                        TouchPill(pause, if (c.paused) Meka.colors.accent else Meka.colors.surface,
+                            if (c.paused) Meka.colors.onAccent else Meka.colors.textPrimary, spoken = "$pause: ${c.title}",
+                            modifier = Modifier.testTag("team-pause")) { onPause(c) }
                     }
                 }
                 if (c.readOnly) {

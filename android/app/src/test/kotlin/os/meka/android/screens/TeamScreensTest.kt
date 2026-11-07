@@ -37,6 +37,7 @@ import os.meka.core.domain.Notice
 import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.NoticeTier
+import os.meka.core.domain.TeamPauseRules
 import os.meka.core.domain.TeamRules
 import os.meka.core.domain.TeamTarget
 import os.meka.core.facade.MekaCore
@@ -174,13 +175,26 @@ class TeamScreensTest {
         if (count("team-sheet") != 1) fail("$name: the card didn't raise its sheet")
         if (count("team-log") != 2) fail("$name: ${count("team-log")} log rows, not Obi's 2")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", "cover-dark-sheet"))
-        val lines = listOf(obi.level) + obi.log.map { it.text }
+        val lines = listOf(obi.level, obi.pauseLine.orEmpty()) + obi.log.map { it.text }
         ScreenShots.assertSensible(compose, "$name-sheet")
         ScreenShots.assertNoBrokenWords(compose, "$name-sheet")
         ScreenShots.assertClocksWhole(compose, "$name-sheet")
         ScreenShots.assertNoLoneWords(compose, "$name-sheet", lines)
         ScreenShots.assertNoDotEndingALine(compose, "$name-sheet", lines)
         assertTouchTargets("$name-sheet")
+        // Slice 2: Pause for today, then Resume.
+        if (count("team-pause") != 1) fail("$name: Obi's sheet has no Pause for today")
+        compose.onAllNodes(hasContentDescription("${TeamPauseRules.PAUSE}: ${obi.title}") and hasClickAction())[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { runBlocking { core.teamView() }.card("obi")!!.paused && onScreen("Paused till midnight") }
+        if (!runBlocking { core.teamView() }.card("obi")!!.paused) fail("$name: Pause for today didn't pause Obi")
+        if (!onScreen("Paused till midnight")) fail("$name: the sheet doesn't say Obi is paused")
+        ScreenShots.assertNoLoneWords(compose, "$name-paused", listOf(TeamPauseRules.pausedLine(obi.agent).orEmpty()))
+        assertTouchTargets("$name-paused")
+        compose.onAllNodes(hasContentDescription("${TeamPauseRules.RESUME}: ${obi.title}") and hasClickAction())[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !runBlocking { core.teamView() }.card("obi")!!.paused }
+        if (runBlocking { core.teamView() }.card("obi")!!.paused) fail("$name: Resume left Obi paused")
         compose.onAllNodes(hasContentDescription("${TeamRules.CLOSE} ${obi.title}") and hasClickAction())[0]
             .performSemanticsAction(SemanticsActions.OnClick)
         until { count("team-sheet") == 0 }

@@ -2130,9 +2130,32 @@ class MekaCore(
                 moneyUpdated = m.bank?.updated,
                 kestrel = _tradingKestrel.value,
                 tradesWaiting = _approvals.value.count { it.kind == os.meka.core.domain.ApprovalKind.TRADE },
+                paused = teamPaused(),
             ),
             nowMs(), ZoneCalendar(timeZone),
         )
+    }
+
+    /** Your team, slice 2: the helpers paused for today (synced; see [os.meka.core.domain.TeamPauseRules]). */
+    private fun teamPaused(): Set<os.meka.core.domain.TeamAgent> = os.meka.core.domain.TeamPauseRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.TeamPauseRules.ENTITY_ID)?.fields, nowMs(),
+    )
+
+    /**
+     * Your team, slice 2: **Pause for today** ([on]) or **Resume** on a helper's sheet, by its code ("obi", "inbox",
+     * "money"). Synced till the next midnight: the governor sends its heads-ups to the digest, Obi doesn't speak up, and
+     * the server's Inbox autopilot does nothing on its own. Calls and Kestrel can't be paused (nothing written). The
+     * team as it now reads.
+     */
+    suspend fun setTeamPause(code: String, on: Boolean): os.meka.core.domain.TeamView {
+        onCore {
+            val a = os.meka.core.domain.TeamAgent.of(code)
+            val fields = a?.let { os.meka.core.domain.TeamPauseRules.fields(it, on, nowMs(), ZoneCalendar(timeZone)) }
+            if (a != null && fields != null && (a in teamPaused()) != on) {
+                replica.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.TeamPauseRules.ENTITY_ID, fields)
+            }
+        }
+        return teamView()
     }
 
     /** Turns a standing errand on or off by its code ("renewals", "birthdays", "follow_ups"), synced; the pane as it now reads. */
@@ -6637,6 +6660,7 @@ class MekaCore(
         Governor.evaluate(
             currentNotices(), notifyPrefs.settings(), device, GovernorState.decode(state), nowMs(), ZoneCalendar(timeZone),
             holdUntilMs = loadAlertHold(),
+            pausedSources = os.meka.core.domain.TeamPauseRules.sources(teamPaused()),
         )
     }
 
@@ -6690,6 +6714,8 @@ class MekaCore(
         result: GovernorResult, keys: List<String>, place: os.meka.core.domain.SpeakPlace, onCall: Boolean, talking: Boolean,
         deviceFocus: Boolean,
     ): os.meka.core.domain.SpeakUpPick? = onCore {
+        // Your team, slice 2: Obi paused for today doesn't speak up.
+        if (os.meka.core.domain.TeamAgent.OBI in teamPaused()) return@onCore null
         val set = keys.toSet()
         val posted = result.post.filter { it.key in set && it.speak != null }
         if (posted.isEmpty()) return@onCore null

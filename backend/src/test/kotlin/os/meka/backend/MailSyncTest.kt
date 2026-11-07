@@ -1743,6 +1743,21 @@ class MailSyncTest {
         assertEquals(2, gmail.tidyCalls.size)
     }
 
+    /** Your team, slice 2: Inbox paused for today on the Fold holds Autopilot till the midnight the app wrote. */
+    @Test
+    fun inboxPausedForTodayHoldsAutopilotTillItsMidnight() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (_, _, i) = world(ms, ops = ops)
+        assertFalse(i.mailPaused("home"))
+        device(ops, EntityTypes.CONTEXT_MODE, os.meka.core.domain.TeamPauseRules.ENTITY_ID, "inbox", FieldValue.Int64(now + 60 * 60_000))
+        assertTrue(i.mailPaused("home"))
+        now += 2 * 60 * 60_000
+        assertFalse(i.mailPaused("home"), "over once its midnight has passed")
+        device(ops, EntityTypes.CONTEXT_MODE, os.meka.core.domain.TeamPauseRules.ENTITY_ID, "money", FieldValue.Int64(now + 60 * 60_000))
+        assertFalse(i.mailPaused("home"), "only Inbox's pause holds Autopilot")
+    }
+
     @Test
     fun offPausedOrUnsureOfHisThreadsMovesNothing() {
         val ms = InMemoryMailStore()

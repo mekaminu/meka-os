@@ -1,5 +1,8 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.fv
+
 /**
  * Your team (Take first, approved by Meka 2026-11-06 21:34; mockup `docs/design/routines/team.dc.html`): one place that
  * shows each of Navilife's helpers as a team member, what each did today and what waits on him. Slice 1 is the screen:
@@ -29,6 +32,8 @@ enum class TeamStatus(val label: String, val live: Boolean) {
     WATCHING("Watching", true),
     IDLE("Idle", false),
     NOT_SET_UP("Not set up", false),
+    /** Slice 2: Pause for today on its sheet, till midnight. */
+    PAUSED("Paused till tomorrow", false),
 }
 
 /** Where Review takes him: Needs you (cards, mail, trades) or Money (Obi's money check). */
@@ -60,7 +65,15 @@ data class TeamCard(
     /** Where Review goes, null with nothing waiting. */
     val review: TeamTarget?,
     val spoken: String,
+    /** Slice 2: paused for the rest of today (Pause for today on its sheet). */
+    val paused: Boolean = false,
 ) {
+    /** Slice 2: its sheet offers Pause for today / Resume (Obi, Inbox and Money; Calls and Kestrel don't). */
+    val pausable: Boolean get() = agent in TeamPauseRules.PAUSABLE
+    /** Slice 2: the sheet's line under the pause button: what pausing does, or that it's paused. */
+    val pauseLine: String? get() = if (paused) TeamPauseRules.pausedLine(agent) else TeamPauseRules.pauseLine(agent)
+    /** Slice 2: the sheet's button, null when it can't be paused. */
+    val pauseAction: String? get() = if (!pausable) null else if (paused) TeamPauseRules.RESUME else TeamPauseRules.PAUSE
     val title: String get() = agent.title
     val role: String get() = agent.role
     val level: String get() = agent.level
@@ -102,6 +115,8 @@ data class TeamInputs(
     val kestrel: TradingKestrelView? = null,
     /** Trade requests waiting in Needs you. */
     val tradesWaiting: Int = 0,
+    /** Slice 2: the helpers paused for today ([TeamPauseRules.read]). */
+    val paused: Set<TeamAgent> = emptySet(),
 )
 
 object TeamRules {
@@ -215,10 +230,13 @@ object TeamRules {
             card(a, if (k != null) TeamStatus.WATCHING else TeamStatus.IDLE, today, n.takeIf { it > 0 }?.let { plural(it, "trade") },
                 line, TeamTarget.NEEDS_YOU, log(a))
         }
-        val cards = listOf(obi, inbox, calls, money, kestrel)
+        val cards = listOf(obi, inbox, calls, money, kestrel).map { c ->
+            if (c.agent !in input.paused || c.agent !in TeamPauseRules.PAUSABLE) c
+            else c.copy(status = TeamStatus.PAUSED, paused = true, spoken = c.spoken.replace(". ${c.status.label}. ", ". ${TeamStatus.PAUSED.label}. "))
+        }
         val need = cards.count { it.waits }
         val done = cards.sumOf { by[it.agent].orEmpty().size }
-        val working = cards.count { it.status != TeamStatus.NOT_SET_UP }
+        val working = cards.count { it.status != TeamStatus.NOT_SET_UP && it.status != TeamStatus.PAUSED }
         val tiles = listOf(
             TeamTile(WORKING.uppercase(), working.toString(), false, "$working of ${cards.size} working"),
             TeamTile(NEED_YOU.uppercase(), need.toString(), need > 0, if (need == 0) "Nobody needs you" else "${plural(need, "helper")} need you"),
@@ -244,4 +262,65 @@ object TeamRules {
         val n = listOf(requestsWaiting > 0, mailWaits, moneyIdeas > 0, tradesWaiting > 0).count { it }
         return if (n == 0) null else DailyLine(if (n == 1) "1 needs you" else "$n need you", true)
     }
+}
+
+/**
+ * Your team, slice 2: **Pause for today** on Obi's, Inbox's and Money's sheets. A pause lasts till the next local
+ * midnight and is synced (a `context_mode` entity, [ENTITY_ID], one Int64 field per helper's code: the moment it ends,
+ * 0 after Resume; LWW), so both apps and the server see it. While paused:
+ * - the governor turns that helper's heads-ups into digest lines ([SOURCES]): they wait for the next digest, nothing
+ *   is lost, and reminders he set himself (tasks, events, sessions, parking, trains, bins, school) still come;
+ * - Obi doesn't speak up;
+ * - Inbox autopilot tidies nothing, marks nothing read and applies no clean-up (the server reads [inboxPaused]).
+ * Calls and Kestrel can't be paused here: Calls has its own switch in Settings → Work mode, and Kestrel runs outside
+ * Navilife. Pausing never sends, pays or trades anything; it only makes a helper do less.
+ */
+object TeamPauseRules {
+    const val ENTITY_ID = "team_pause"
+    const val PAUSE = "Pause for today"
+    const val RESUME = "Resume"
+
+    val PAUSABLE: Set<TeamAgent> = setOf(TeamAgent.OBI, TeamAgent.INBOX, TeamAgent.MONEY)
+
+    /** Each pausable helper's heads-ups (never approvals, critical alerts or reminders he set himself). */
+    val SOURCES: Map<TeamAgent, Set<NoticeSource>> = mapOf(
+        TeamAgent.OBI to setOf(
+            NoticeSource.BRIEF, NoticeSource.SHUTDOWN, NoticeSource.WEEKLY_REVIEW, NoticeSource.WEEK_AHEAD,
+            NoticeSource.PRESSURE, NoticeSource.MEETING_PREP, NoticeSource.BALANCE, NoticeSource.GOALS, NoticeSource.WINS,
+            NoticeSource.LIFE_ADMIN, NoticeSource.ROUTINES, NoticeSource.LEAVE, NoticeSource.APPOINTMENTS,
+            NoticeSource.GIFTS, NoticeSource.KIDS, NoticeSource.DATE_NIGHT,
+        ),
+        TeamAgent.INBOX to setOf(NoticeSource.MAIL_MOMENT, NoticeSource.PROTECTED_MAIL, NoticeSource.REPLIED),
+        TeamAgent.MONEY to setOf(NoticeSource.MONEY, NoticeSource.BILLS, NoticeSource.CARDS, NoticeSource.MONEY_LOOK),
+    )
+
+    fun pauseLine(a: TeamAgent): String? = when (a) {
+        TeamAgent.OBI -> "Till midnight his nudges wait for your next digest and he won't speak up. Reminders you set still come."
+        TeamAgent.INBOX -> "Till midnight Autopilot tidies nothing and its heads-ups wait for your next digest. Mail still arrives."
+        TeamAgent.MONEY -> "Till midnight bills, cards and money heads-ups wait for your next digest."
+        else -> null
+    }
+
+    fun pausedLine(a: TeamAgent): String? = if (a in PAUSABLE) "Paused till midnight · Resume to start again now" else null
+
+    /** What the button says once tapped. */
+    fun switchedLine(a: TeamAgent, paused: Boolean): String =
+        if (paused) "${a.title} is paused till midnight" else "${a.title} is back at work"
+
+    /** The helpers paused now: each field whose end is still ahead. */
+    fun read(fields: Map<String, FieldValue>?, nowMs: Long): Set<TeamAgent> =
+        PAUSABLE.filter { a -> ((fields?.get(a.code) as? FieldValue.Int64)?.value ?: 0L) > nowMs }.toSet()
+
+    /** The server's check before Inbox autopilot acts on its own. */
+    fun inboxPaused(fields: Map<String, FieldValue>?, nowMs: Long): Boolean = TeamAgent.INBOX in read(fields, nowMs)
+
+    /** The next local midnight: when a pause made now ends. */
+    fun untilMs(nowMs: Long, cal: LocalCalendar): Long = cal.toEpochMs(cal.epochDayOf(nowMs) + 1, 0)
+
+    /** The write for Pause for today ([on]) or Resume; null for a helper that can't be paused. */
+    fun fields(a: TeamAgent, on: Boolean, nowMs: Long, cal: LocalCalendar): Map<String, FieldValue>? =
+        if (a !in PAUSABLE) null else mapOf(a.code to (if (on) untilMs(nowMs, cal) else 0L).fv())
+
+    /** The heads-up sources the governor sends to the digest while these helpers are paused. */
+    fun sources(paused: Set<TeamAgent>): Set<NoticeSource> = paused.flatMap { SOURCES[it].orEmpty() }.toSet()
 }

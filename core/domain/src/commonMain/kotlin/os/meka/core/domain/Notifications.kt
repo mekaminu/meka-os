@@ -552,10 +552,16 @@ object Governor {
          * ([AlertHoldRules.HELD_SOURCES]) don't post; one that still applies when it ends posts then.
          */
         holdUntilMs: Long? = null,
+        /**
+         * Your team, slice 2: the sources of the helpers paused for today ([TeamPauseRules.sources]); their heads-ups
+         * become digest lines (they wait for the next digest). Approvals and critical alerts are never touched.
+         */
+        pausedSources: Set<NoticeSource> = emptySet(),
     ): GovernorResult {
         val quietNow = settings.quiet.isQuietAt(nowMs, cal)
         val holding = AlertHoldRules.active(holdUntilMs, nowMs)
         val tiered = notices.map { it.copy(tier = effectiveTier(it, settings)) }
+            .map { if (it.tier == NoticeTier.HEADS_UP && it.source in pausedSources) it.copy(tier = NoticeTier.DIGEST) else it }
             .filter { it.tier != NoticeTier.SILENT && !(holding && AlertHoldRules.holds(it)) }
         val due = tiered.filter { it.atMs <= nowMs }
         fun fresh(n: Notice) = n.key !in state.delivered && (n.expiresAtMs == null || nowMs < n.expiresAtMs)

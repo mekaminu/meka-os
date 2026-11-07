@@ -74,6 +74,7 @@ import os.meka.core.domain.MailCardUnsubRules
 import os.meka.core.domain.AboutYou
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AutonomyRules
+import os.meka.core.domain.TeamPauseRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.BankHolidays
@@ -703,6 +704,14 @@ class Integrations(
     }
 
     private val mailChecks = java.util.concurrent.ConcurrentHashMap<String, MailCheckState>()
+
+    /**
+     * Whether Inbox autopilot holds off acting on its own this check: Navilife paused (What Navilife may do), or Inbox
+     * paused for today on Your team (slice 2, [TeamPauseRules], till the midnight the app wrote).
+     */
+    internal fun mailPaused(hh: String): Boolean =
+        AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused ||
+            TeamPauseRules.inboxPaused(reader.entity(hh, EntityTypes.CONTEXT_MODE, TeamPauseRules.ENTITY_ID), now())
 
     /** A stage of a mail check that never fails the check; a failure is kept for the report as its [MailCheckRules.WHY]. */
     private inline fun stage(a: AccountRow, name: String, block: () -> Unit) {
@@ -1373,7 +1382,7 @@ class Integrations(
         val hh = a.householdId
         val entityId = MailBacklogRules.entityId(a.id)
         val b = reader.entity(hh, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
-        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val paused = mailPaused(hh)
         if (!MailMarkReadRules.shouldMark(b, paused)) return
         val perCheck = if (m.id == MailProviders.OUTLOOK) MailMarkReadRules.PER_CHECK_OUTLOOK else MailMarkReadRules.PER_CHECK_GMAIL
         // Review opens its own list, slice 4: a sender he unticked in Mark read's review stays unread.
@@ -1425,7 +1434,7 @@ class Integrations(
             }
             return
         }
-        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val paused = mailPaused(hh)
         if (!MailBacklogRules.shouldApply(plan, paused, batch)) return
         val done = moved.map { it.id }.toSet()
         val perCheck = if (m.id == MailProviders.OUTLOOK) MailBacklogRules.APPLY_PER_CHECK_OUTLOOK else MailBacklogRules.APPLY_PER_CHECK_GMAIL
@@ -1719,7 +1728,7 @@ class Integrations(
         undoTidies(a, m, token, ms)
         tidiedEmailAsks(a, m, token, ms)
         val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
-        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val paused = mailPaused(hh)
         if (!paused) blockedMail(a, m, token, ms, setting.markRead)
         val check = mailChecks[a.id]
         val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, now())
@@ -1866,7 +1875,7 @@ class Integrations(
         val nowMs = now()
         if (!MailJunkRules.due(junkReviewedAt[a.id], nowMs)) return
         val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
-        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val paused = mailPaused(hh)
         val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, nowMs) ?: return
         // Autopilot's start only gates the review: Junk is a folder he never sorts, so its last few days are looked at.
         val from = nowMs - MailJunkRules.WINDOW_MS
@@ -1949,7 +1958,7 @@ class Integrations(
         }
         val batchId = MailJunkClearRules.batchId(a.id)
         val batch = reader.entity(hh, EntityTypes.MAIL_TIDY, batchId)?.let { MailAutopilotRules.readBatch(batchId, it) }
-        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val paused = mailPaused(hh)
         if (!MailJunkClearRules.shouldClear(b, paused, batch)) return
         val perCheck = if (m.id == MailProviders.OUTLOOK) MailJunkClearRules.PER_CHECK_OUTLOOK else MailJunkClearRules.PER_CHECK_GMAIL
         val never = ms.neverTidied(a.id)

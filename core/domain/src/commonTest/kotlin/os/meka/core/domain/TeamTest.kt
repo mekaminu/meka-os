@@ -116,4 +116,46 @@ class TeamTest {
         assertEquals(DailyLine("1 needs you", true), TeamRules.dailyLine(0, true, 0, 0))
         assertEquals(DailyLine("3 need you", true), TeamRules.dailyLine(2, true, 0, 1))
     }
+
+    // ---- Slice 2: Pause for today ----
+
+    @Test fun aPauseLastsTillMidnightAndOnlyForTheHelpersThatCanPause() {
+        val f = TeamPauseRules.fields(TeamAgent.INBOX, true, now, cal)!!
+        assertEquals(cal.toEpochMs(day + 1, 0), (f["inbox"] as os.meka.core.sync.FieldValue.Int64).value)
+        assertEquals(setOf(TeamAgent.INBOX), TeamPauseRules.read(f, now))
+        assertTrue(TeamPauseRules.inboxPaused(f, at(23, 59)))
+        assertFalse(TeamPauseRules.inboxPaused(f, cal.toEpochMs(day + 1, 0)), "over at midnight")
+        assertEquals(emptySet(), TeamPauseRules.read(TeamPauseRules.fields(TeamAgent.INBOX, false, now, cal), now), "Resume")
+        assertNull(TeamPauseRules.fields(TeamAgent.CALLS, true, now, cal))
+        assertNull(TeamPauseRules.fields(TeamAgent.KESTREL, true, now, cal), "Kestrel runs outside Navilife")
+        assertEquals(emptySet(), TeamPauseRules.read(null, now))
+    }
+
+    @Test fun aPausedHelpersCardSaysSoAndOffersResume() {
+        val v = TeamRules.view(TeamInputs(activity, moneyAccounts = 2, paused = setOf(TeamAgent.MONEY, TeamAgent.KESTREL)), now, cal)
+        val money = v.card("money")!!
+        assertEquals(TeamStatus.PAUSED, money.status)
+        assertTrue(money.paused)
+        assertEquals(TeamPauseRules.RESUME, money.pauseAction)
+        assertTrue(money.spoken.contains("Paused till tomorrow"))
+        assertEquals("1 heads-up", money.today.substringAfter(" · "), "what it did before the pause still shows")
+        assertFalse(v.card("kestrel")!!.paused, "Kestrel can't be paused")
+        assertNull(v.card("kestrel")!!.pauseAction)
+        assertNull(v.card("calls")!!.pauseAction)
+        assertEquals(TeamPauseRules.PAUSE, v.card("obi")!!.pauseAction)
+        assertEquals("4", v.tiles.first().value, "a paused helper isn't working")
+    }
+
+    @Test fun pausedHelpersHeadsUpsWaitForTheDigestButRemindersHeSetStillCome() {
+        val src = TeamPauseRules.sources(setOf(TeamAgent.OBI, TeamAgent.MONEY))
+        assertTrue(NoticeSource.BILLS in src && NoticeSource.BRIEF in src && NoticeSource.ROUTINES in src)
+        listOf(NoticeSource.TASK_REMINDER, NoticeSource.EVENT_REMINDER, NoticeSource.APPROVAL, NoticeSource.TRADING, NoticeSource.SCHOOL)
+            .forEach { assertFalse(it in src, "$it still comes") }
+        fun n(key: String, s: NoticeSource) = Notice(key, s, s.defaultTier, key, "", at(10), NoticeTarget.TODAY)
+        val r = Governor.evaluate(
+            listOf(n("bill", NoticeSource.BILLS), n("task", NoticeSource.TASK_REMINDER)),
+            NotificationSettings(), DeviceAlerts.ALL, GovernorState(lastDigestSlotMs = at(10, 5)), at(10, 5), cal, pausedSources = src,
+        )
+        assertEquals(listOf("task"), r.post.map { it.key })
+    }
 }
