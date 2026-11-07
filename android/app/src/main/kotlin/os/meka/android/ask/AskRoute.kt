@@ -424,6 +424,13 @@ fun AskRoute(
         }
         // Routines, slice 1: his routines with their switches and the starters.
         MekaPane(visible = pane == MoreItem.ROUTINES) { RoutinesPane(core, onClose = { pane = null }) }
+        // Your team, slice 1: each helper's day and what waits on him; Review opens Needs you or Money.
+        MekaPane(visible = pane == MoreItem.TEAM) {
+            TeamPane(core, onClose = { pane = null }, onReview = { target ->
+                if (target == os.meka.core.domain.TeamTarget.MONEY) pane = MoreItem.MONEY
+                else { pane = null; openPlace(ShellDestination.NEEDS_YOU) }
+            })
+        }
         MekaPane(visible = pane == MoreItem.AUTONOMY) { AutonomyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ACTIVITY) { ActivityPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.YOUR_DATA) { YourData(core, onClose = { pane = null }) }

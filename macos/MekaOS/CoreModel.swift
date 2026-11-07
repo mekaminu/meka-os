@@ -196,6 +196,8 @@ final class CoreModel {
     private(set) var routines: RoutinesView?
     /// Ask → Daily → Routines.
     var showRoutines = false
+    /// Ask → Daily → Your team (slice 1): each helper's card and sheet, read when the sheet opens.
+    var showTeam = false
     /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
     private(set) var wins: WinsView?
     /// Balance view (V2, slice 1): the reviewed week across work, family, health and self against his targets. Synced.
@@ -1786,6 +1788,26 @@ final class CoreModel {
     func carryOnObiErrand(_ id: String) async -> Bool {
         guard let core else { return false }
         return (try? await core.carryOnObiErrand(id: id))?.boolValue ?? false
+    }
+
+    /// Your team (slice 1): Obi, Inbox, Calls, Money and Kestrel, what each did today and what waits on him, as the Fold's.
+    func teamView() async -> TeamView? {
+        guard let core else { return nil }
+        return try? await core.teamView()
+    }
+
+    /// Review on a helper's sheet: the sheet closes, then Needs you or Money opens. Only the target's name crosses.
+    func openFromTeam(_ target: String, reduced: Bool) {
+        showTeam = false
+        if target == "MONEY" {
+            go(to: .ask, reduced: reduced)
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
+                self?.showMoney = true
+            }
+        } else {
+            go(to: .needsYou, reduced: reduced)
+        }
     }
 
     /// A card's button in Obi is working on: the sheet closes, then Ask opens the place as Take me there does.

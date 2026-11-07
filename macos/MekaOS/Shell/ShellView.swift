@@ -324,6 +324,7 @@ private struct ShellSheetsB: ViewModifier {
             // Obi is working on (Ask → Daily): the standing errands he keeps an eye on (Ada plans with you, part 3 slice 1).
             .sheet(isPresented: Binding(get: { model.showWorkingOn }, set: { model.showWorkingOn = $0 })) { WorkingOnSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showRoutines }, set: { model.showRoutines = $0 })) { RoutinesSheet(palette: palette) }
+            .sheet(isPresented: Binding(get: { model.showTeam }, set: { model.showTeam = $0 })) { TeamSheet(palette: palette) }
             // Emergency card (Ask → More): who to call, where things are, key accounts by name; his wife reads it.
             .sheet(isPresented: Binding(get: { model.showEmergency }, set: { model.showEmergency = $0 })) { EmergencySheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showKids }, set: { model.showKids = $0 })) { KidsSheet(palette: palette) }

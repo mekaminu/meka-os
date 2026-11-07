@@ -75,7 +75,7 @@ class ShellNavTest {
         )
         assertEquals(LifeTileRules.ORDER, ShellNav.lifeTiles().map { it.tile })
         assertEquals(
-            listOf("Obi is working on", "Routines", "Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Reading", "Voice notes", "Life admin hour", "Bedside clock", "Review"),
+            listOf("Obi is working on", "Routines", "Your team", "Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Reading", "Voice notes", "Life admin hour", "Bedside clock", "Review"),
             ShellNav.daily().map { it.label },
         )
         assertEquals(

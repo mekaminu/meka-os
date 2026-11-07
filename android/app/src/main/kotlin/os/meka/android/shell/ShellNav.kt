@@ -73,6 +73,7 @@ enum class MoreItem(
     FACTS("What Navilife knows", "Car reg, GP, sizes · the facts Navilife answers from", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.FACTS),
     WORKING_ON(os.meka.core.domain.WorkingOnRules.TITLE, os.meka.core.domain.WorkingOnRules.ROW_LINE, null, MoreGroup.DAILY),
     ROUTINES(os.meka.core.domain.RoutineRules.TITLE, os.meka.core.domain.RoutineRules.ROW_LINE, null, MoreGroup.DAILY),
+    TEAM(os.meka.core.domain.TeamRules.TITLE, os.meka.core.domain.TeamRules.ROW_LINE, null, MoreGroup.DAILY),
     BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null, MoreGroup.DAILY),
     WEEK_AHEAD("Week ahead", "The coming week day by day · Sunday at 18:00", null, MoreGroup.DAILY),
     NEWS("News", "Barça, AI and the headlines · topics and sources", null, MoreGroup.DAILY),

@@ -2113,6 +2113,28 @@ class MekaCore(
     /** Ask → Daily → Obi is working on: the cards and the switches. */
     suspend fun workingOnView(): os.meka.core.domain.WorkingOnView = onCore { workingOnNow() }
 
+    /**
+     * Your team (slice 1; Ask → Daily → Your team): Obi, Inbox, Calls, Money and Kestrel, each with today's lines from the
+     * activity log and what waits on him (Needs you's cards from his messages, the mail card, Obi's money check, Kestrel's
+     * requests), as the last refresh has them. Rules, no AI; only reads. Core only.
+     */
+    suspend fun teamView(): os.meka.core.domain.TeamView = onCore {
+        val m = _money.value
+        os.meka.core.domain.TeamRules.view(
+            os.meka.core.domain.TeamInputs(
+                activity = activity.items(),
+                requestsWaiting = _requests.value.size,
+                mailWait = _mailNeeds.value?.headline,
+                moneyIdeas = m.check?.ideas?.size ?: 0,
+                moneyAccounts = m.accounts.size,
+                moneyUpdated = m.bank?.updated,
+                kestrel = _tradingKestrel.value,
+                tradesWaiting = _approvals.value.count { it.kind == os.meka.core.domain.ApprovalKind.TRADE },
+            ),
+            nowMs(), ZoneCalendar(timeZone),
+        )
+    }
+
     /** Turns a standing errand on or off by its code ("renewals", "birthdays", "follow_ups"), synced; the pane as it now reads. */
     suspend fun setStandingErrand(code: String, on: Boolean): os.meka.core.domain.WorkingOnView = onCore {
         os.meka.core.domain.StandingErrand.of(code)?.let { workingOnSettings.set(it, on) }

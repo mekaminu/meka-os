@@ -142,6 +142,8 @@ object ObiCoverage {
         HelpPlace.WORKING_ON -> ObiReach.Areas(listOf(ObiArea.WORKING_ON))
         // Routines, slice 1: the list and its switches; Obi answers how they work from help until routines run.
         HelpPlace.ROUTINES -> ObiReach.Help
+        // Your team, slice 1: who did what today; Obi answers how it works from help.
+        HelpPlace.TEAM -> ObiReach.Help
         HelpPlace.BEDSIDE, HelpPlace.ABOUT_YOU, HelpPlace.NOTIFICATIONS, HelpPlace.SPEAK_UP, HelpPlace.APPEARANCE,
         HelpPlace.VOICE, HelpPlace.TALK, HelpPlace.FAMILY, HelpPlace.WATCH, HelpPlace.RECOVERY, HelpPlace.AUTONOMY,
         HelpPlace.AI, HelpPlace.ACTIVITY, HelpPlace.SETUP, HelpPlace.YOUR_DATA, HelpPlace.SETTINGS,
