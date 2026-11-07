@@ -18,6 +18,7 @@ import os.meka.core.domain.BookingDialRules
 import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.BookingWords
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.CallsSettingsRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.FreeSlot
 import os.meka.core.domain.LocalCalendar
@@ -250,7 +251,9 @@ class LiveCallLine(
         val knows = LiveCallRules.knows((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_KNOWS) as? FieldValue.Text)?.value)
         val first = (fields.latest(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.SHOWN_NAME) as? FieldValue.Text)
             ?.value?.trim()?.split(' ')?.firstOrNull()?.takeIf { n -> n.length in 1..30 && n.all { it.isLetter() || it in "-'" } }
-        val slots = if (LiveCallRules.Knows.BACK in knows) callbackSlots(hh, now) else emptyList()
+        // Slice 4: "Offer a callback slot" (absent = on) as well as "when you'll call back".
+        val slotsOn = fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_SLOTS) != FieldValue.Bool(false)
+        val slots = if (CallsSettingsRules.offersSlots(slotsOn, knows)) callbackSlots(hh, now) else emptyList()
         val labels = slots.map { LiveCallRules.callbackLabel(it, now, calendar) }
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         tickets[token] = LiveCallTicket(

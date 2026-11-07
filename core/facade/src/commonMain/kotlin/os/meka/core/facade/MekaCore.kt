@@ -2119,6 +2119,7 @@ class MekaCore(
      * personal one; the day not gone). The line to show: approved, or why not.
      */
     suspend fun callNowBookingCall(id: String): String = onCore {
+        if (!work.callBooking()) return@onCore os.meka.core.domain.CallsSettingsRules.BOOKING_OFF
         bookingCalls.approve(id, personalNumbers(), ZoneCalendar(timeZone))
     }
 
@@ -7111,6 +7112,29 @@ class MekaCore(
 
     /** Obi on calls: "Live conversation" ([os.meka.core.domain.LiveCallRules]), synced; false when nothing changed. */
     suspend fun setCallLive(on: Boolean): Boolean = onCore { work.setCallLive(on).also { refresh() } }
+
+    /**
+     * Obi on calls, slice 4: the "Obi on calls" page ([os.meka.core.domain.CallsSettingsRules]) as it reads now: this
+     * month's spend, calls and bookings against the cap, the three switches, what callers may know, the booking limits
+     * and how long recordings are kept. The apps read it again whenever [workMode] changes.
+     */
+    suspend fun callsSettings(): os.meka.core.domain.CallsSettingsView = onCore {
+        os.meka.core.domain.CallsSettingsRules.view(_workMode.value, bookingCalls.all(), nowMs())
+    }
+
+    /** The month's cap for Obi's calls (one of £10, £20, £30, £50), synced; false for another amount or no change. */
+    suspend fun setCallLiveCap(gbp: Int): Boolean = onCore { work.setCallLiveCapGbp(gbp).also { if (it) refresh() } }
+
+    /** A What callers may know chip ([os.meka.core.domain.LiveCallRules.Knows.wire]) switched, synced. */
+    suspend fun toggleCallKnows(key: String): Boolean = onCore {
+        work.setCallKnows(os.meka.core.domain.CallsSettingsRules.toggledKnows(work.callKnows(), key)).also { if (it) refresh() }
+    }
+
+    /** "Offer a callback slot" on live calls, synced; false when nothing changed. */
+    suspend fun setCallSlots(on: Boolean): Boolean = onCore { work.setCallSlots(on).also { if (it) refresh() } }
+
+    /** "Booking calls", synced; off, approved cards wait and the server rings nothing. False when nothing changed. */
+    suspend fun setCallBooking(on: Boolean): Boolean = onCore { work.setCallBooking(on).also { if (it) refresh() } }
 
     /**
      * Spam calls still ring, slice 1: the Fold, after a call from an unknown number it watched (not a contact, not

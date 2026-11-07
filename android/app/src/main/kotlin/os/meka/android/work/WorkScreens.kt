@@ -18,6 +18,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -169,6 +171,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         adding = kind
         runCatching { pickContact.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
     }
+    var callsOpen by rememberSaveable { mutableStateOf(false) }
     val schedule = work.schedule
     fun save(s: WorkSchedule) = scope.launch { core.setWorkSchedule(s.days.sorted(), s.startMinute, s.endMinute, s.enabled) }
 
@@ -288,11 +291,12 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         ScreenUnknownRow(work.screenUnknownAlways, work.callAssistant, Modifier.appear(rememberAppearance(4))) {
             haptics.tick(); scope.launch { core.setScreenUnknownAlways(!work.screenUnknownAlways) }
         }
-        LiveCallRow(work.callLive, work.callAssistant, work.callLiveMeter, work.callLiveCapGbp, Modifier.appear(rememberAppearance(4))) {
-            haptics.tick(); scope.launch { core.setCallLive(!work.callLive) }
-        }
-        Spacer(Modifier.height(MekaSpace.m))
-        RecordingKeepSection(work.recordingDays, Modifier.appear(rememberAppearance(4))) { d -> scope.launch { core.setRecordingDays(d) } }
+        // Obi on calls, slice 4: Live conversation, the cap, what callers may know, booking calls and recordings live on
+        // their own page; the row says the month's spend.
+        ObiCallsEntry(
+            os.meka.core.domain.LiveCallRules.line(work.callLive, work.callAssistant, work.callLiveMeter, work.callLiveCapGbp),
+            Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(4)),
+        ) { callsOpen = true }
         Spacer(Modifier.height(MekaSpace.m))
         SpamProtectionSection(core, 4)
 
@@ -311,6 +315,14 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.m))
         DiscordSetupSection(core, 9)
         Spacer(Modifier.height(MekaSpace.xl))
+    }
+    // The page slides in from the right over Work mode (reduced motion: a cross-fade); back or ‹ closes it.
+    AnimatedVisibility(
+        callsOpen,
+        enter = if (Meka.reducedMotion) fadeIn(MekaMotion.appear(true)) else slideInHorizontally(MekaMotion.expand(false)) { it } + fadeIn(MekaMotion.appear(false)),
+        exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else slideOutHorizontally(MekaMotion.expand(false)) { it } + fadeOut(MekaMotion.appear(false)),
+    ) {
+        ObiCallsPane(core) { callsOpen = false }
     }
     }
 }

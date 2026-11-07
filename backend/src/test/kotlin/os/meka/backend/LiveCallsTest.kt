@@ -375,5 +375,11 @@ class LiveCallsTest {
         set(WorkFields.CALL_KNOWS, FieldValue.Text("name"))
         val t3 = withEvents.claim(withEvents.ticket("hh", "twilio", "CB3", "+447700900123", false), "CB3")!!
         assertTrue(t3.callbackSlots.isEmpty())
+        // Slice 4: with call back allowed but "Offer a callback slot" off, none either.
+        set(WorkFields.CALL_KNOWS, FieldValue.Text("busy,back,name"))
+        set(WorkFields.CALL_SLOTS, FieldValue.Bool(false))
+        val t4 = withEvents.claim(withEvents.ticket("hh", "twilio", "CB4", "+447700900123", false), "CB4")!!
+        assertTrue(t4.callbackSlots.isEmpty())
+        assertTrue("Never promise a day or time" in t4.instruction)
     }
 }

@@ -24,6 +24,8 @@ struct WorkSheet: View {
     @State private var spamAdvancedOpen = false
     @State private var spamConfirming = false
     @State private var leavingTo = ""
+    /// Obi on calls, slice 4: the page with Live conversation, the cap, what callers may know, booking calls and recordings.
+    @State private var showObiCalls = false
 
     private static let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     private static let step = 15
@@ -100,8 +102,7 @@ struct WorkSheet: View {
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(3)
             screenUnknown.staggeredAppear(3)
-            liveConversation.staggeredAppear(3)
-            keepRecordings.staggeredAppear(3)
+            obiCallsEntry.staggeredAppear(3)
             spam.staggeredAppear(3)
 
             Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. Navilife never replies or marks anything read.")
@@ -126,6 +127,30 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.screenUnknownAlways)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callLive)
         .onAppear(perform: load)
+        .sheet(isPresented: $showObiCalls) { ObiCallsSheet(palette: palette) }
+    }
+
+    /// Obi on calls, slice 4: one row for the page, its line the month's spend against the cap (cross-fades).
+    private var obiCallsEntry: some View {
+        let line = LiveCallRules.shared.line(on: callLive, assistantOn: callAssistant, meter: model.work?.callLiveMeter, capGbp: model.work?.callLiveCapGbp ?? Int32(LiveCallRules.shared.DEFAULT_CAP_GBP))
+        return Button { MekaHaptics.tick(); showObiCalls = true } label: {
+            HStack(spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(CallsSettingsRules.shared.ENTRY).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(palette.textTertiary).accessibilityHidden(true)
+            }
+            .padding(MekaSpace.s)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .padding(.top, MekaSpace.xs)
+        .accessibilityLabel(CallsSettingsRules.shared.ENTRY)
     }
 
     /// The commute counts everywhere, slice 1: the door-to-door time each way, synced with the Fold (default about

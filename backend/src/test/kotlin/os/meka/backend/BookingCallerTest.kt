@@ -16,6 +16,8 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MekaSchema
+import os.meka.core.domain.WorkFields
+import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
@@ -170,6 +172,23 @@ class BookingCallerTest {
         val row = BookingCallRules.rows(listOf(c), mine, emptyList(), nowMs, LocalCalendar.UTC).single()
         assertEquals(BookingCallRules.BOOKED, row.status)
         assertFalse(row.canCancel || row.canCall)
+    }
+
+    @Test
+    fun withBookingCallsOffAnApprovedCardWaitsAndNothingRings() {
+        val id = approvedCard()
+        val r = fold()
+        r.commitLocal(EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, mapOf(WorkFields.CALL_BOOKING to false.fv()))
+        push(r)
+        assertFalse(caller.tick())
+        assertTrue(dialer.calls.isEmpty())
+        assertEquals(BookingCallState.APPROVED, cardOnFold(id).state)
+        // Back on: the next look rings it.
+        val r2 = fold()
+        r2.commitLocal(EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, mapOf(WorkFields.CALL_BOOKING to true.fv()))
+        push(r2)
+        assertTrue(caller.tick())
+        assertEquals(1, dialer.calls.size)
     }
 
     @Test

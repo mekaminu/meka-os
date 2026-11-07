@@ -13,6 +13,8 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.PutThroughRules
+import os.meka.core.domain.WorkFields
+import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
@@ -87,7 +89,9 @@ class BookingCaller(
                     BookingCallFields.TRANSCRIPT to FieldValue.Text(""), BookingCallFields.WORDS to FieldValue.Text(""),
                 ), heads[c.id])) wrote = true
         }
-        for (c in cards.filter { it.open && it.state == BookingCallState.APPROVED }.sortedBy { it.approvedAtMs ?: it.askedAtMs }) {
+        // Slice 4: with "Booking calls" off (absent = on) approved cards wait; nothing rings.
+        val bookingOn = read(hh, EntityTypes.CONTEXT_MODE)[WorkMode.ENTITY_ID]?.get(WorkFields.CALL_BOOKING)?.value != FieldValue.Bool(false)
+        for (c in cards.filter { bookingOn && it.open && it.state == BookingCallState.APPROVED }.sortedBy { it.approvedAtMs ?: it.askedAtMs }) {
             when (val due = BookingDialRules.due(c, personal, assistant, t, calendar, line.spentPence(), line.capPence(hh))) {
                 null, BookingDialRules.Due.Wait -> Unit
                 is BookingDialRules.Due.Close -> if (close(hh, c.id, due.state, due.line)) wrote = true

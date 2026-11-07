@@ -1955,6 +1955,23 @@ final class CoreModel {
     func setScreenUnknownAlways(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setScreenUnknownAlways(on: on) } }
     /// Obi on calls: "Live conversation" (LiveCallRules), synced. Only a Bool crosses to the core.
     func setCallLive(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setCallLive(on: on) } }
+    /// Obi on calls, slice 4: the "Obi on calls" page as it reads now (the month, the switches, the chips).
+    func callsSettings() async -> CallsSettingsView? {
+        guard let core else { return nil }
+        return try? await core.callsSettings()
+    }
+    /// The month's cap for Obi's calls (£10 · £20 · £30 · £50), synced. Only an Int32 crosses.
+    func setCallLiveCap(_ gbp: Int) {
+        MekaHaptics.tick()
+        let g = Int32(gbp)
+        run { _ = try await $0.setCallLiveCap(gbp: g) }
+    }
+    /// A What callers may know chip switched, by its key; only a String crosses.
+    func toggleCallKnows(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.toggleCallKnows(key: key) } }
+    /// "Offer a callback slot" on live calls, synced. Only a Bool crosses.
+    func setCallSlots(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setCallSlots(on: on) } }
+    /// "Booking calls", synced; off, approved cards wait and nothing rings. Only a Bool crosses.
+    func setCallBooking(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setCallBooking(on: on) } }
     /// "Keep callers' recordings" (call assistant polish 8c): 7 or 30 days, or 0 for don't keep. Synced; the server
     /// deletes older recordings at once. Only an Int32 crosses to the core.
     func setRecordingDays(_ days: Int) {

@@ -50,6 +50,10 @@ object WorkFields {
     const val CALL_LIVE_CAP = "callLiveCapGbp"
     /** What callers may be told ([LiveCallRules.Knows], comma-separated); absent = you're busy, call back, first name. */
     const val CALL_KNOWS = "callKnows"
+    /** Obi on calls, slice 4: "Offer a callback slot" on live calls, Bool, last writer wins; **absent = on**. */
+    const val CALL_SLOTS = "callSlots"
+    /** Obi on calls, slice 4: "Booking calls", Bool, last writer wins; **absent = on**. Off, approved cards wait unrung. */
+    const val CALL_BOOKING = "callBooking"
     // The door-to-door commute ([CommuteFields], 2026-10-13) is on this entity too: commuteToWorkMin, commuteHomeMin.
 }
 
@@ -306,6 +310,12 @@ data class WorkModeState(
     val callLiveCapGbp: Int = LiveCallRules.DEFAULT_CAP_GBP,
     /** This month's spend on live calls as the server last wrote it; null before the first one this month. */
     val callLiveMeter: LiveCallRules.Meter? = null,
+    /** What callers may be told ([LiveCallRules.knows]). */
+    val callKnows: Set<LiveCallRules.Knows> = LiveCallRules.DEFAULT_KNOWS,
+    /** "Offer a callback slot" ([CallsSettingsRules]): on unless turned off. */
+    val callSlots: Boolean = true,
+    /** "Booking calls" ([CallsSettingsRules]): on unless turned off. */
+    val callBooking: Boolean = true,
     /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
     val callAssistantPaused: Boolean = false,
     /** The door-to-door commute each way ([CommuteRules]): counted on office days only. */
@@ -553,7 +563,8 @@ class WorkMode(
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState {
         val base = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays())
             .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), screenUnknownAlways = screenUnknownAlways(), recordingDays = recordingDays(), commute = commute(),
-                callLive = callLive(), callLiveCapGbp = callLiveCapGbp(), callLiveMeter = callLiveMeter())
+                callLive = callLive(), callLiveCapGbp = callLiveCapGbp(), callLiveMeter = callLiveMeter(),
+                callKnows = callKnows(), callSlots = callSlots(), callBooking = callBooking())
         if (epochDay == null) return base
         val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays(), away())
         return base.copy(commuteDays = CommuteRules.dayRows(hours, epochDay))
@@ -627,6 +638,46 @@ class WorkMode(
 
     /** Live calls' monthly cap in pounds (synced; [LiveCallRules.capGbp]). */
     fun callLiveCapGbp(): Int = LiveCallRules.capGbp(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_LIVE_CAP)?.longOrNull)
+
+    /** Sets the monthly cap (one of [LiveCallRules.CAP_CHOICES]), synced; false for another amount or no change. */
+    fun setCallLiveCapGbp(gbp: Int): Boolean {
+        if (gbp !in LiveCallRules.CAP_CHOICES) return false
+        val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_LIVE_CAP)
+        if (stored != null && callLiveCapGbp() == gbp) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_LIVE_CAP to gbp.toLong().fv()))
+        return true
+    }
+
+    /** What callers may be told ([LiveCallRules.knows]); absent reads as the defaults. */
+    fun callKnows(): Set<LiveCallRules.Knows> =
+        LiveCallRules.knows(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_KNOWS)?.textOrNull)
+
+    /** Writes what callers may be told, synced as one value; false when nothing changed. */
+    fun setCallKnows(knows: Set<LiveCallRules.Knows>): Boolean {
+        val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_KNOWS)?.textOrNull
+        val next = LiveCallRules.encodeKnows(knows)
+        if (stored == next || (stored == null && knows == LiveCallRules.DEFAULT_KNOWS)) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_KNOWS to next.fv()))
+        return true
+    }
+
+    /** "Offer a callback slot", synced; absent reads as on. */
+    fun callSlots(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_SLOTS)?.boolOrNull != false
+
+    fun setCallSlots(on: Boolean): Boolean {
+        if (callSlots() == on) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_SLOTS to on.fv()))
+        return true
+    }
+
+    /** "Booking calls", synced; absent reads as on. */
+    fun callBooking(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_BOOKING)?.boolOrNull != false
+
+    fun setCallBooking(on: Boolean): Boolean {
+        if (callBooking() == on) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_BOOKING to on.fv()))
+        return true
+    }
 
     /** This month's live-call spend as the server wrote it ([LiveCallRules.METER_ID]); null before the first call this month. */
     fun callLiveMeter(): LiveCallRules.Meter? {
