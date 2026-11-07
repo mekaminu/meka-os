@@ -203,7 +203,7 @@ private fun Field(label: String, value: String, hint: String, type: KeyboardType
     Text(label, style = MekaType.caption, color = Meka.colors.textSecondary)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
     ) {
         if (value.isEmpty() && hint.isNotEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(
