@@ -110,7 +110,7 @@ object MoneyClear {
 
     /**
      * The base for [MoneyView.clear]: each credit card that owes something (its statement, else its account's balance as
-     * owed) with its rate, from [cards] (marked on Accounts), [balances] (account id → pence) and the cards' statement
+     * owed) with its rate, from [cards] (marked on Accounts), [balances] (account id → pence owed, [MoneyCards.owedFromBalance]; either sign read as owed) and the cards' statement
      * [lines]; null when no card owes anything.
      */
     fun base(

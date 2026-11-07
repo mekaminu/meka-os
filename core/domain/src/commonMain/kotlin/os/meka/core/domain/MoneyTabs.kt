@@ -192,7 +192,7 @@ object MoneyTabs {
     const val CARDS_FROM = "Cards show what you type off each statement, with a reminder 3 days before each payment and before 0% ends."
     const val REFUNDS_FROM = "Refunds on the way are the refunds on Waiting for, checked against your statements. A chase is only copied for you to send yourself."
 
-    const val ACCOUNTS_FROM = "Accounts lists each account from your statements and your banks. A card's balance counts as owed, and an account without a balance leaves net worth partial."
+    const val ACCOUNTS_FROM = "Accounts lists each account from your statements and your banks. A card's balance counts as owed (from your bank, only what it shows you owe, never its available credit), and an account without a balance leaves net worth partial."
     const val BANK_FROM = "Your banks fill Money through Lunch Flow, read-only, every few hours and when you tap Refresh; Navilife never logs in to your bank."
 
     const val PLAN_FROM = "Plan works from your own statements: your average month, your cards and your goals. Nothing here moves or pays money."

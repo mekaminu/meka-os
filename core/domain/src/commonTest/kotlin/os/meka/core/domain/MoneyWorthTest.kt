@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -80,8 +81,9 @@ class MoneyWorthTest {
 
     @Test
     fun aCardsBalanceIsOwedNeverMoneyYouHave() {
-        // Money's wrong numbers (2): a bank card that isn't marked as one still counts as owed, whichever sign the bank
-        // gives; a marked card with nothing typed uses its balance; one with neither is unknown and the total partial.
+        // Money's wrong numbers (2): a bank card that isn't marked as one still counts as a card; a marked card with
+        // nothing typed uses its balance; one with neither is unknown and the total partial. Meka 2026-11-07: from the
+        // bank feed only a negative card balance is owed; a positive one (+£3,000, its available credit) owes nothing.
         val accounts = listOf(
             MoneyAccount("a-current", "Oakbank current", "bank", 1L, MoneyBalance(500_000, today, typed = false)),
             MoneyAccount("a-premier", "Oakbank Premier Card", "bank", 1L, MoneyBalance(300_000, today, typed = false)),
@@ -90,14 +92,18 @@ class MoneyWorthTest {
         )
         val cards = listOf(MoneyCard("a-plat", "Amex Platinum", MoneyCards.CHARGE), MoneyCard("a-gold", "Amex Gold", MoneyCards.CREDIT))
         val v = MoneyWorth.view(accounts, cards, emptyList(), emptyList(), today)
-        // 5,000 − 3,000 − 1,200
-        assertEquals("£800", v.total)
-        assertEquals("You have £5,000 · you owe £4,200", v.splitLine)
+        // 5,000 − 1,200: the Premier card's +£3,000 is not owed
+        assertEquals("£3,800", v.total)
+        assertEquals("You have £5,000 · you owe £1,200", v.splitLine)
+        assertEquals(120_000L, v.cardsOwePence)
         val premier = v.rows.single { it.id == "a-premier" }
         assertEquals(MoneyWorth.CARD, premier.kind)
-        assertEquals("−£3,000", premier.amount)
-        assertEquals("Card · its balance, owed", premier.line)
+        assertEquals("£0", premier.amount)
+        assertFalse(premier.owes)
+        assertEquals("Card · nothing owed · £3,000 available", premier.line)
+        assertEquals("Oakbank Premier Card, card, nothing owed", premier.spoken)
         assertEquals("−£1,200", v.rows.single { it.id == "a-plat" }.amount)
+        assertEquals("Card · its balance, owed", v.rows.single { it.id == "a-plat" }.line)
         val gold = v.rows.single { it.id == "a-gold" }
         assertEquals(MoneyWorth.UNKNOWN_CARD, gold.line)
         assertEquals("", gold.amount)
@@ -195,5 +201,24 @@ class MoneyWorthTest {
         assertTrue(r.add)
         assertEquals("Pension", r.line)
         assertTrue(!r.spoken.contains("£42,000"), r.spoken)
+    }
+    @Test
+    fun aFeedCardInCreditOwesNothingButTypedOrStatementFiguresStayOwed() {
+        val feedOwing = MoneyAccount("c1", "Visa", "bank", 1L, MoneyBalance(-120_000, today, typed = false))
+        val feedRefund = MoneyAccount("c2", "Visa", "bank", 1L, MoneyBalance(1_240, today, typed = false))
+        val typed = MoneyAccount("c3", "Visa", "bank", 1L, MoneyBalance(64_000, today, typed = true))
+        val file = MoneyAccount("c4", "Visa", "csv", 1L, MoneyBalance(64_000, today, typed = false))
+        assertEquals(120_000L, MoneyCards.owedFromBalance(feedOwing))
+        assertEquals(0L, MoneyCards.owedFromBalance(feedRefund))
+        assertEquals(1_240L, MoneyCards.creditFromBalance(feedRefund))
+        assertEquals("Card · nothing owed · £12.40 in credit", MoneyCards.nothingOwedLine(1_240))
+        assertEquals(MoneyCards.NOTHING_OWED, MoneyCards.nothingOwedLine(0))
+        assertEquals(64_000L, MoneyCards.owedFromBalance(typed))
+        assertEquals(0L, MoneyCards.creditFromBalance(typed))
+        assertEquals(64_000L, MoneyCards.owedFromBalance(file))
+        assertNull(MoneyCards.owedFromBalance(MoneyAccount("c5", "Visa", "bank", 1L)))
+        // A statement typed for the card still wins over the feed's sign.
+        val v = MoneyWorth.view(listOf(feedRefund), listOf(MoneyCard("c2", "Visa", MoneyCards.CREDIT, statementPence = 45_000)), emptyList(), emptyList(), today)
+        assertEquals("−£450", v.rows.single().amount)
     }
 }

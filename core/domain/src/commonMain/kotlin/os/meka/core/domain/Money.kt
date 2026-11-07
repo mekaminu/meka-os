@@ -846,7 +846,7 @@ object MoneyRules {
             bills = billsView,
             cards = if (partial) MoneyCards.view(cards.filter { it.id in names }, counted, cardLines, today) else null,
             clear = if (partial) MoneyClear.base(
-                cards.filter { it.id in names }, counted.mapNotNull { a -> a.balance?.let { a.id to it.pence } }.toMap(), cardLines,
+                cards.filter { it.id in names }, counted.mapNotNull { a -> MoneyCards.owedFromBalance(a)?.let { a.id to it } }.toMap(), cardLines,
                 forecastView?.takeIf { it.notReady == null }?.leftPence, today,
             ) else null,
             worth = if (partial) worth else null,

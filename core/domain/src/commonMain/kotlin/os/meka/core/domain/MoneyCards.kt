@@ -138,6 +138,36 @@ object MoneyCards {
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 
+    /**
+     * What a card's account balance says he owes (Meka 2026-11-07: his card from the bank feed read +£3,000, its available
+     * credit, and Navilife said he owed it). From his bank feed ([MoneyBank.SOURCE], not typed) the sign counts: a negative
+     * balance is owed, a positive one is not (it's available credit or money in his favour), so 0. Typed, or from a
+     * statement file, the figure is what he owes whichever sign (as before). Null with no balance.
+     */
+    fun owedFromBalance(a: MoneyAccount): Long? {
+        val b = a.balance ?: return null
+        return if (fromFeed(a)) (-b.pence).coerceAtLeast(0) else kotlin.math.abs(b.pence)
+    }
+
+    /** The money in his favour on a feed card ([owedFromBalance] 0 and the balance positive), else 0. */
+    fun creditFromBalance(a: MoneyAccount): Long =
+        a.balance?.takeIf { fromFeed(a) }?.pence?.coerceAtLeast(0) ?: 0L
+
+    private fun fromFeed(a: MoneyAccount): Boolean = a.source == MoneyBank.SOURCE && a.balance?.typed == false
+
+    /**
+     * The line for a card that owes nothing on its feed balance: "Card · nothing owed · £3,000 available" when the
+     * credit looks like a limit (whole £50s), "Card · nothing owed · £12.40 in credit" otherwise, "Card · nothing owed"
+     * with none.
+     */
+    fun nothingOwedLine(creditPence: Long): String = when {
+        creditPence <= 0 -> NOTHING_OWED
+        creditPence % 5_000 == 0L -> "$NOTHING_OWED · ${fmt(creditPence)} available"
+        else -> "$NOTHING_OWED · ${fmt(creditPence)} in credit"
+    }
+
+    const val NOTHING_OWED = "Card · nothing owed"
+
     /** Whether [name] reads like a card ("Credit card", "Amex", "Visa"), so it's offered first. */
     fun looksLikeCard(name: String): Boolean =
         Regex("""\b(card|credit|amex|american express|visa|mastercard|barclaycard|charge)\b""", RegexOption.IGNORE_CASE).containsMatchIn(name)

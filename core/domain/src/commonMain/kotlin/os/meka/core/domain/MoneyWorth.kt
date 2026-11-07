@@ -193,9 +193,10 @@ object MoneyWorth {
         for (a in accounts.sortedBy { it.name.lowercase() }) {
             val card = cardById[a.id]
             // Money's wrong numbers (2): a card's balance is what he owes, marked as a card or only named like one
-            // ("HSBC Premier Card"); a statement he typed wins, then the account's balance (either sign) as owed.
+            // ("Premier Card"); a statement he typed wins, then the account's balance as owed: from his bank feed only
+            // a negative balance is owed, a positive one is available credit (Meka 2026-11-07), typed either sign.
             if (card != null || (MoneyCards.looksLikeCard(a.name) && !MoneyCards.looksNotCard(a.name))) {
-                val owed = card?.statementPence ?: a.balance?.pence?.let { abs(it) }
+                val owed = card?.statementPence ?: MoneyCards.owedFromBalance(a)
                 if (owed == null) {
                     missing++
                     rows += MoneyWorthRow(a.id, a.name, CARD, "", UNKNOWN_CARD, owes = true,
@@ -204,8 +205,10 @@ object MoneyWorth {
                     flat -= owed
                     cardsOwe += owed
                     val from = if (card?.statementPence != null) "what its statement says you owe" else "its balance, owed"
-                    rows += MoneyWorthRow(a.id, a.name, CARD, signed(-owed), if (owed == 0L) "Card · nothing owed" else "Card · $from",
-                        owes = owed > 0, needsBalance = false, removable = false, spoken = "${a.name}, card, owes ${fmt(owed)}")
+                    val credit = if (card?.statementPence == null) MoneyCards.creditFromBalance(a) else 0L
+                    rows += MoneyWorthRow(a.id, a.name, CARD, signed(-owed), if (owed == 0L) MoneyCards.nothingOwedLine(credit) else "Card · $from",
+                        owes = owed > 0, needsBalance = false, removable = false,
+                        spoken = if (owed == 0L) "${a.name}, card, nothing owed" else "${a.name}, card, owes ${fmt(owed)}")
                 }
                 continue
             }
