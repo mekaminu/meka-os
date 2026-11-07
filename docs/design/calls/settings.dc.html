@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calls settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes growx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.barx{transform-origin:left;animation:growx .6s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.barx{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1100px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<div style="font-size:14px;color:#c9b37e">‹ Calls</div>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:26px;font-weight:700">Obi on calls</div><div style="font-size:13px;color:#8f897f">How he talks to callers and makes bookings</div></div>
+
+<div class="in" style="background:#121214;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">THIS MONTH</span><span style="font-size:12px;color:#8f897f">cap £{{cap}}</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">SPENT</div><div style="font-size:17px;font-weight:600;margin-top:3px">£3.40</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">CALLS</div><div style="font-size:17px;font-weight:600;margin-top:3px">14</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">BOOKED</div><div style="font-size:17px;font-weight:600;margin-top:3px">3</div></div>
+</div>
+<div style="height:8px;border-radius:4px;background:#1d1d20;overflow:hidden"><div class="barx" style="{{capBar}}"></div></div>
+<div style="display:flex;gap:6px"><sc-for list="{{caps}}" as="c" hint-placeholder-count="4"><button type="button" onClick="{{c.go}}" style="{{c.style}}">£{{c.v}}</button></sc-for></div>
+<div style="font-size:12px;color:#8f897f">At the cap Obi goes back to taking simple messages until the 1st.</div>
+</div>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:6px">WHEN SOMEONE CALLS YOU</div>
+<sc-for list="{{toggles}}" as="t" hint-placeholder-count="3">
+<div class="in" style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:center">
+<span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:500">{{t.name}}</span><span style="font-size:12px;color:#8f897f">{{t.sub}}</span></span>
+<button type="button" onClick="{{t.go}}" aria-label="{{t.name}}" style="{{t.sw}}"><span style="{{t.knob}}"></span></button>
+</div>
+</sc-for>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:6px">WHAT CALLERS MAY KNOW</div>
+<div class="in" style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{knows}}" as="k" hint-placeholder-count="5"><button type="button" onClick="{{k.go}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="font-size:12px;color:#8f897f">Never shared: your calendar, address, family, money or mobile.</div>
+</div>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:6px">BOOKING CALLS</div>
+<div class="in" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<div style="background:#121214;border-radius:14px;padding:12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">HOURS</div><div style="font-size:15px;font-weight:600;margin-top:3px">09:00–20:00</div></div>
+<div style="background:#121214;border-radius:14px;padding:12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">LONGEST</div><div style="font-size:15px;font-weight:600;margin-top:3px">5 min</div></div>
+<div style="background:#121214;border-radius:14px;padding:12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">CALLS</div><div style="font-size:15px;font-weight:600;margin-top:3px">Businesses only</div></div>
+<div style="background:#121214;border-radius:14px;padding:12px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">PAYMENTS</div><div style="font-size:15px;font-weight:600;margin-top:3px">Never</div></div>
+</div>
+
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a;margin-top:6px">RECORDINGS</div>
+<div class="in" style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:6px"><sc-for list="{{keeps}}" as="k" hint-placeholder-count="3"><button type="button" onClick="{{k.go}}" style="{{k.style}}">{{k.name}}</button></sc-for></div>
+<div style="font-size:12px;color:#8f897f">Encrypted on your own server. Obi tells callers the call is recorded.</div>
+</div>
+
+<div style="font-size:11.5px;color:#6f6a62;text-align:center;padding-top:6px">Obi always says he’s your AI assistant</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={cap:20,on:{live:1,slot:1,book:1},know:{busy:1,back:1,name:1},keep:'7'};}
+renderVals(){
+var s=this.state,self=this;
+var chip=function(on){return 'border:0;border-radius:999px;padding:8px 12px;font-size:12.5px;'+(on?'background:#c9b37e;color:#111;font-weight:600':'background:#1d1d20;color:#a8a29a');};
+var sw=function(on){return {sw:'border:0;width:46px;height:28px;border-radius:14px;padding:3px;display:flex;flex-shrink:0;'+(on?'background:#c9b37e;justify-content:flex-end':'background:#2a2a2e;justify-content:flex-start'),knob:'width:22px;height:22px;border-radius:11px;background:'+(on?'#111':'#8f897f')};};
+var T=[['live','Live conversation','Obi talks naturally instead of the script'],['slot','Offer a callback slot','From your free times, never the details'],['book','Booking calls','Obi can ring businesses after your tap']];
+var K=[['busy','You’re busy'],['back','When you’ll call back'],['name','Your first name'],['work','Where you work'],['email','Your work email']];
+return {
+cap:String(s.cap),
+capBar:'height:100%;border-radius:4px;background:#c9b37e;width:'+Math.min(100,Math.round(3.4/s.cap*100))+'%',
+caps:[10,20,30,50].map(function(v){return {v:v,go:function(){self.setState({cap:v});},style:'flex:1;border:0;border-radius:999px;height:32px;font-size:12.5px;'+(s.cap===v?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:#1a1a1d;color:#a8a29a')};}),
+toggles:T.map(function(t){var on=!!s.on[t[0]];var x=sw(on);return {name:t[1],sub:t[2],sw:x.sw,knob:x.knob,go:function(){var o=Object.assign({},s.on);if(o[t[0]])delete o[t[0]];else o[t[0]]=1;self.setState({on:o});}};}),
+knows:K.map(function(k){var on=!!s.know[k[0]];return {name:k[1],style:chip(on),go:function(){var o=Object.assign({},s.know);if(o[k[0]])delete o[k[0]];else o[k[0]]=1;self.setState({know:o});}};}),
+keeps:[['0','Don’t keep'],['7','7 days'],['30','30 days']].map(function(k){return {name:k[1],style:chip(s.keep===k[0])+';flex:1',go:function(){self.setState({keep:k[0]});}};})
+};
+}
+}
+</script>
+</body>
+</html>

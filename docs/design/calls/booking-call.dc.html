@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Booking call</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes ring{0%{transform:scale(.9);opacity:.7}100%{transform:scale(1.5);opacity:0}}
+.ring{animation:ring 1.6s ease-out infinite}
+@keyframes wave{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+.wv{transform-origin:center;animation:wave 1s ease-in-out infinite}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.1)}100%{transform:scale(1)}}
+.pop{animation:pop .35s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.ring,.wv,.pop{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1100px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative">
+
+<div style="display:flex;gap:6px;background:#121214;border-radius:999px;padding:4px">
+<sc-for list="{{steps}}" as="st" hint-placeholder-count="3"><button type="button" onClick="{{st.go}}" style="{{st.style}}">{{st.name}}</button></sc-for>
+</div>
+
+<sc-if value="{{isBrief}}" hint-placeholder-val="{{true}}">
+<div class="in" style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#151517;border-radius:16px;padding:12px 14px;font-size:14px;color:#d8d2c6;line-height:1.4"><span style="color:#8f897f">You said · </span>“Book a table for 4 at Rosa’s Kitchen on Saturday, between 7 and 8.”</div>
+<div style="background:#121214;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;letter-spacing:.14em;color:#c9b37e">CALL CARD</span><span style="font-size:12px;color:#8f897f">needs your tap</span></div>
+<div style="display:flex;gap:12px;align-items:center">
+<span style="width:44px;height:44px;border-radius:14px;background:#24231b;color:#c9b37e;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"></path></svg></span>
+<span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:600">Rosa’s Kitchen</span><span style="font-size:12.5px;color:#8f897f">01234 567890 · from their website</span></span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">WHEN</div><div style="font-size:14px;font-weight:600;margin-top:3px">Sat 14 Nov</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">WINDOW</div><div style="font-size:14px;font-weight:600;margin-top:3px">19:00–20:00</div></div>
+<div style="background:#1a1a1d;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">PEOPLE</div><div style="font-size:14px;font-weight:600;margin-top:3px">{{people}}</div></div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;background:#1a1a1d;border-radius:12px;padding:10px 12px"><span style="font-size:13.5px">Party size</span><span style="display:flex;gap:6px"><button type="button" onClick="{{less}}" aria-label="Fewer people" style="width:36px;height:36px;border-radius:18px;border:0;background:#2a2a2e;color:#ededed;font-size:18px">−</button><button type="button" onClick="{{more}}" aria-label="More people" style="width:36px;height:36px;border-radius:18px;border:0;background:#2a2a2e;color:#ededed;font-size:18px">+</button></span></div>
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">OBI MAY SAY</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{shares}}" as="s" hint-placeholder-count="3"><span style="background:#1f2a22;color:#a9d1a9;border-radius:999px;padding:6px 10px;font-size:12.5px">{{s}}</span></sc-for></div>
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">OBI WON’T</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{nevers}}" as="s" hint-placeholder-count="3"><span style="background:#2a1f1f;color:#e3a9a0;border-radius:999px;padding:6px 10px;font-size:12.5px">{{s}}</span></sc-for></div>
+<div style="font-size:12px;color:#8f897f">Your Saturday is free from 18:00 · about 3 min · about 20p</div>
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+<button type="button" onClick="{{call}}" style="border:0;background:#c9b37e;color:#111;border-radius:12px;height:48px;font-size:15px;font-weight:600">Call now</button>
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:48px;font-size:14px">Edit</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isLive}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#121214;border-radius:18px;padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:10px">
+<div style="position:relative;width:84px;height:84px;display:flex;align-items:center;justify-content:center">
+<span class="ring" style="position:absolute;inset:0;border-radius:42px;border:2px solid #c9b37e"></span>
+<span style="width:72px;height:72px;border-radius:36px;background:radial-gradient(circle at 40% 35%,#f0e0b4,#8a7444 70%);display:block"></span>
+</div>
+<div style="font-size:17px;font-weight:600">Obi is on the call</div>
+<div style="font-size:13px;color:#8f897f">Rosa’s Kitchen · 01:12</div>
+<div style="display:flex;gap:4px;height:24px;align-items:center" aria-hidden="true"><sc-for list="{{waves}}" as="w" hint-placeholder-count="9"><span class="wv" style="{{w}}"></span></sc-for></div>
+</div>
+<div style="font-size:11px;letter-spacing:.14em;color:#a8a29a">LIVE WORDS</div>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="5">
+<div class="in" style="{{l.box}}"><div style="font-size:11px;color:#8f897f;margin-bottom:3px">{{l.who}}</div><div style="font-size:14px;line-height:1.4">{{l.t}}</div></div>
+</sc-for>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:46px;font-size:13.5px">Listen</button>
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:46px;font-size:13.5px">Take over</button>
+<button type="button" onClick="{{hang}}" style="border:0;background:#5a2a24;color:#f6d0c8;border-radius:12px;height:46px;font-size:13.5px;font-weight:600">Hang up</button>
+</div>
+<button type="button" onClick="{{finish}}" style="border:1px dashed #3a3428;background:transparent;color:#a8a29a;border-radius:12px;height:40px;font-size:12.5px">Mockup: skip to the result</button>
+</div>
+</sc-if>
+
+<sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#1f2a22;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;gap:12px;align-items:center"><span class="pop" style="width:40px;height:40px;border-radius:20px;background:#8fbf8f;color:#111;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span><span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:600">Booked</span><span style="font-size:12.5px;color:#a9d1a9">Rosa’s Kitchen · 2 min 40 s</span></span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<div style="background:#18221b;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a9d1a9">WHEN</div><div style="font-size:14px;font-weight:600;margin-top:3px">Sat 19:30</div></div>
+<div style="background:#18221b;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a9d1a9">PEOPLE</div><div style="font-size:14px;font-weight:600;margin-top:3px">{{people}}</div></div>
+<div style="background:#18221b;border-radius:12px;padding:10px"><div style="font-size:10.5px;letter-spacing:.12em;color:#a9d1a9">NAME</div><div style="font-size:14px;font-weight:600;margin-top:3px">Alex</div></div>
+</div>
+<div style="font-size:13px;color:#d8d2c6">They asked for a card to hold the table. Obi said you’d confirm yourself: they’ll text the assistant number with a link.</div>
+</div>
+<div style="background:#121214;border-radius:14px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px">In your calendar · Sat 14 Nov 19:30</span><span style="font-size:12.5px;color:#8fbf8f">Added</span></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:44px;font-size:13.5px">▶ Recording</button>
+<button type="button" style="border:0;background:#1d1d20;color:#ededed;border-radius:12px;height:44px;font-size:13.5px">Read the call</button>
+</div>
+<button type="button" onClick="{{reset}}" style="border:0;background:transparent;color:#8f897f;height:40px;font-size:13px">Start again</button>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;background:#2a2721;color:#f0e6cf;border-radius:14px;padding:12px 14px;font-size:13.5px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={view:'brief',people:4,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var names=[['brief','Call card'],['live','On the call'],['done','Result']];
+var lines=[
+['Obi','Hi, I’m Obi, your AI assistant. I’d like to book a table for '+s.people+' this Saturday, between seven and eight, please.'],
+['Rosa’s Kitchen','Let me look… we’ve got 7:30 or 8:15.'],
+['Obi','7:30 is perfect, thank you. The name is Alex.'],
+['Rosa’s Kitchen','Lovely. Can I take a card to hold it?'],
+['Obi','I can’t take payments, I’m afraid. he’ll confirm himself: could you text the link to this number?']
+];
+return {
+steps:names.map(function(n){return {name:n[1],go:function(){self.setState({view:n[0],toast:''});},style:'flex:1;border:0;border-radius:999px;height:34px;font-size:12.5px;font-weight:500;'+(s.view===n[0]?'background:#2a2721;color:#f0e6cf':'background:transparent;color:#a8a29a')};}),
+isBrief:s.view==='brief',isLive:s.view==='live',isDone:s.view==='done',
+people:String(s.people),
+less:function(){self.setState({people:Math.max(1,s.people-1)});},
+more:function(){self.setState({people:Math.min(12,s.people+1)});},
+shares:['Your first name','Party size and time','The assistant number'],
+nevers:['Card or bank details','Deposits or fees','Your address or mobile'],
+call:function(){self.setState({view:'live',toast:''});},
+hang:function(){self.setState({view:'brief',toast:'Call ended · nothing booked'});},
+finish:function(){self.setState({view:'done',toast:''});},
+reset:function(){self.setState({view:'brief',toast:''});},
+waves:[6,14,22,12,18,24,10,16,8].map(function(h,i){return 'width:4px;height:'+h+'px;border-radius:2px;background:#c9b37e;animation-delay:'+(i*90)+'ms';}),
+lines:lines.map(function(l){var obi=l[0]==='Obi';return {who:l[0],t:l[1],box:'border-radius:14px;padding:10px 12px;max-width:86%;'+(obi?'background:#24231b;align-self:flex-end;margin-left:auto':'background:#121214')};}),
+toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
