@@ -2125,6 +2125,25 @@ class MekaCore(
     /** Cancel, before Obi is on the call; false otherwise. */
     suspend fun cancelBookingCall(id: String): Boolean = onCore { bookingCalls.cancel(id) }
 
+    /** Obi on calls, slice 3: Hang up while Obi is on the call (synced; the server ends it). The line to show. */
+    suspend fun hangUpBookingCall(id: String): String = onCore { bookingCalls.hangUp(id) }
+
+    /**
+     * Slice 3: Add to calendar on a booked card: the booking as an event on the account he last added to (a synced
+     * edit the server sends to Google or Outlook), and the card says Added on both apps. The line to show.
+     */
+    suspend fun addBookingCallToCalendar(id: String): String = onCore {
+        val draft = bookingCalls.calendarDraft(id, ZoneCalendar(timeZone)) ?: return@onCore os.meka.core.domain.BookingCallRules.GONE
+        val accounts = _editAccounts.value
+        val last = os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all())
+        val account = accounts.firstOrNull { it.key == last } ?: accounts.firstOrNull()
+            ?: return@onCore "Allow editing on an account in Calendars first"
+        when (val r = calendarEdits.add(account.provider, account.email, draft)) {
+            is os.meka.core.domain.EventEditResult.Made -> { bookingCalls.markAdded(id, r.id); os.meka.core.domain.BookingLiveRules.ADDED_LINE }
+            is os.meka.core.domain.EventEditResult.Refused -> r.reason
+        }
+    }
+
     /**
      * Ada plans with you, part 3 slices 1–2: what Obi is working on, the standing errands (Renewals watcher, Birthday
      * keeper, Follow-up chaser, Inbox keeper, School & clubs) over the radar, Gifts, Waiting for, the mail tidies and

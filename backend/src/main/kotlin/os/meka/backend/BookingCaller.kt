@@ -8,6 +8,7 @@ import os.meka.core.domain.BookingCallFields
 import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingCallState
 import os.meka.core.domain.BookingDialRules
+import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LocalCalendar
@@ -76,6 +77,12 @@ class BookingCaller(
             } else onCall = true
         }
         var report = if (onCall) "on a call" else "idle"
+        // Slice 3: a call's words are kept 7 days, then blanked.
+        for (c in cards.filter { BookingLiveRules.shouldForget(it, t) }) {
+            if (write(hh, EntityTypes.BOOKING_CALL, c.id, mapOf(
+                    BookingCallFields.TRANSCRIPT to FieldValue.Text(""), BookingCallFields.WORDS to FieldValue.Text(""),
+                ), heads[c.id])) wrote = true
+        }
         for (c in cards.filter { it.open && it.state == BookingCallState.APPROVED }.sortedBy { it.approvedAtMs ?: it.askedAtMs }) {
             when (val due = BookingDialRules.due(c, personal, assistant, t, calendar, line.spentPence(), line.capPence(hh))) {
                 null, BookingDialRules.Due.Wait -> Unit
@@ -134,13 +141,46 @@ class BookingCaller(
         else -> VoiceReply.Done
     }
 
+    /** Slice 3: whether he tapped Hang up on the card this booking call is for. */
+    fun hangUpAsked(t: LiveCallTicket): Boolean {
+        val id = t.bookingId ?: return false
+        return read(t.householdId, EntityTypes.BOOKING_CALL)[id]?.get(BookingCallFields.HANG_UP)?.value == FieldValue.Bool(true)
+    }
+
+    /**
+     * Slice 3: the live view's last lines ([words], [os.meka.core.domain.BookingWords] encoded; the business's words
+     * display only) on the card while it's on the call, and when Obi started talking the first time.
+     */
+    fun liveWords(t: LiveCallTicket, words: String) {
+        val hh = t.householdId
+        val id = t.bookingId ?: return
+        val head = read(hh, EntityTypes.BOOKING_CALL)[id] ?: return
+        val c = BookingCallRules.read(id, head.mapValues { it.value.value }) ?: return
+        if (c.state != BookingCallState.CALLING) return
+        val fields = buildMap<String, FieldValue> {
+            put(BookingCallFields.WORDS, FieldValue.Text(words.take(BookingLiveRules.MAX_LIVE + BookingLiveRules.LIVE_LINES * 3)))
+            if (c.answeredAtMs == null) put(BookingCallFields.ANSWERED_AT, FieldValue.Int64(now()))
+        }
+        if (write(hh, EntityTypes.BOOKING_CALL, id, fields, head)) runCatching { onWritten(hh) }
+    }
+
     /** A booking call's session ended: the card's result, and the month's spend for both apps' meter. */
     fun ended(t: LiveCallTicket, end: LiveCallEnd, meter: LiveCallRules.Meter) {
         val hh = t.householdId
         val id = t.bookingId ?: return
         val card = read(hh, EntityTypes.BOOKING_CALL)[id]?.let { f -> BookingCallRules.read(id, f.mapValues { it.value.value }) }
-        val (state, text) = BookingDialRules.result(end.live, end.booking, card)
-        var wrote = close(hh, id, state, text, from = BookingCallState.CALLING)
+        val (state, text) = BookingDialRules.result(end.live, end.booking, card, end.hungUp)
+        // Slice 3: the result card's length, the time and name agreed (the time only inside the card's window) and the words.
+        val extra = buildMap<String, FieldValue> {
+            if (end.live) put(BookingCallFields.SECONDS, FieldValue.Int64(end.seconds))
+            put(BookingCallFields.WORDS, FieldValue.Text(""))
+            if (end.live && end.words.isNotBlank()) put(BookingCallFields.TRANSCRIPT, FieldValue.Text(end.words.take(BookingLiveRules.MAX_TRANSCRIPT + BookingLiveRules.MAX_LINES * 3)))
+            if (state == BookingCallState.BOOKED) {
+                BookingLiveRules.agreedMinute(end.booking?.time, card?.fromMin, card?.toMin)?.let { put(BookingCallFields.BOOKED_MIN, FieldValue.Int64(it.toLong())) }
+                end.booking?.name?.let { put(BookingCallFields.BOOKED_NAME, FieldValue.Text(it)) }
+            }
+        }
+        var wrote = close(hh, id, state, text, from = BookingCallState.CALLING, extra = extra)
         if (end.live) {
             val heads = read(hh, EntityTypes.CONTEXT_MODE)[LiveCallRules.METER_ID]
             if (write(hh, EntityTypes.CONTEXT_MODE, LiveCallRules.METER_ID, mapOf(
@@ -152,7 +192,10 @@ class BookingCaller(
     }
 
     /** Closes card [id] with [state] and [text], only while it is still [from] (approved by default) and not cancelled. */
-    @Synchronized private fun close(hh: String, id: String, state: BookingCallState, text: String, from: BookingCallState = BookingCallState.APPROVED): Boolean {
+    @Synchronized private fun close(
+        hh: String, id: String, state: BookingCallState, text: String, from: BookingCallState = BookingCallState.APPROVED,
+        extra: Map<String, FieldValue> = emptyMap(),
+    ): Boolean {
         val head = read(hh, EntityTypes.BOOKING_CALL)[id] ?: return false
         val c = BookingCallRules.read(id, head.mapValues { it.value.value }) ?: return false
         if (c.state != from || (from == BookingCallState.APPROVED && c.cancelled)) return false
@@ -160,7 +203,7 @@ class BookingCaller(
             BookingCallFields.STATE to FieldValue.Text(state.code),
             BookingCallFields.RESULT to FieldValue.Text(text.take(BookingDialRules.MAX_LINE)),
             BookingCallFields.ENDED_AT to FieldValue.Int64(now()),
-        ), head)
+        ) + extra, head)
     }
 
     /** Appends each field whose value differs from its head, after the head (so the server's write wins). */

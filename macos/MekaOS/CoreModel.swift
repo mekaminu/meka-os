@@ -1814,6 +1814,18 @@ final class CoreModel {
         return (try? await core.cancelBookingCall(id: id))?.boolValue ?? false
     }
 
+    /// Obi on calls, slice 3: Hang up while Obi is on a booking call (synced; the server ends it); the line to show.
+    func hangUpBookingCall(_ id: String) async -> String {
+        guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }
+        return (try? await core.hangUpBookingCall(id: id)) ?? BookingLiveRules.shared.NOT_ON_CALL
+    }
+
+    /// Slice 3: Add to calendar on a booked card (an event on the account last added to); the line to show.
+    func addBookingCallToCalendar(_ id: String) async -> String {
+        guard let core else { return BookingCallRules.shared.GONE }
+        return (try? await core.addBookingCallToCalendar(id: id)) ?? BookingCallRules.shared.GONE
+    }
+
     /// Your team (slice 1): Obi, Inbox, Calls, Money and Kestrel, what each did today and what waits on him, as the Fold's.
     func teamView() async -> TeamView? {
         guard let core else { return nil }

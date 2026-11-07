@@ -111,7 +111,11 @@ object BookingDialRules {
     }
 
     /** What came of the call ([BOOKING_RESULT]'s arguments, cleaned). The business's words: display only. */
-    data class Outcome(val booked: Boolean, val agreed: String?, val reference: String?, val offered: String?, val reason: String?)
+    data class Outcome(
+        val booked: Boolean, val agreed: String?, val reference: String?, val offered: String?, val reason: String?,
+        /** Slice 3: the time agreed as Obi said it ("19:30") and the name it's under; checked before they're kept. */
+        val time: String? = null, val name: String? = null,
+    )
 
     fun outcome(args: Map<String, String>): Outcome {
         fun clean(k: String, max: Int) = args[k]?.replace(Regex("\\s+"), " ")?.trim()?.trim('.', ',', ';')?.take(max)?.trim()?.takeIf { it.isNotEmpty() }
@@ -119,12 +123,17 @@ object BookingDialRules {
             booked = args["booked"]?.trim()?.lowercase() in setOf("true", "yes", "1"),
             agreed = clean("agreed", 80), reference = clean("reference", 24)?.takeIf { r -> r.all { it.isLetterOrDigit() || it in "-/ " } },
             offered = clean("offered", 80), reason = clean("reason", 60),
+            time = clean("time", 12), name = BookingLiveRules.name(args["name"]),
         )
     }
 
-    /** The card's closing state and line for a call that went live ([live]) with Obi's [o] (null: he never said). */
-    fun result(live: Boolean, o: Outcome?, c: BookingCall?): Pair<BookingCallState, String> {
+    /**
+     * The card's closing state and line for a call that went live ([live]) with Obi's [o] (null: he never said);
+     * [hungUp]: he tapped Hang up (a booking already confirmed still counts).
+     */
+    fun result(live: Boolean, o: Outcome?, c: BookingCall?, hungUp: Boolean = false): Pair<BookingCallState, String> {
         if (!live) return BookingCallState.FAILED to NEVER_LIVE
+        if (hungUp && o?.booked != true) return BookingCallState.NOT_BOOKED to BookingLiveRules.HUNG_UP_RESULT
         o ?: return BookingCallState.NOT_BOOKED to NOTHING_AGREED
         val line = if (o.booked) {
             val fallback = c?.let { listOfNotNull(CivilDate.shortLabel(it.day) + (it.fromMin?.let { m -> " " + LocalClock.formatMinute(m) } ?: ""), it.people?.let { p -> "for $p" }).joinToString(" ") }

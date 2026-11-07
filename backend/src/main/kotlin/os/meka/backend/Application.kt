@@ -61,6 +61,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.CallCreditRules
 import os.meka.core.domain.EntityTypes
@@ -1755,6 +1756,20 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
         val clock = launch {
             while (!session.done) { kotlinx.coroutines.delay(250); session.tick() }
         }
+        // Obi on calls, slice 3: a booking call's live words to both apps, and his Hang up from either.
+        val booking = voice.booking
+        val follow = if (!ticket.booking || booking == null) null else launch(Dispatchers.IO) {
+            var lastWords = 0L
+            while (!session.done) {
+                kotlinx.coroutines.delay(BookingLiveRules.HANG_UP_POLL_MS)
+                runCatching { if (booking.hangUpAsked(ticket)) session.hangUpAsked() }
+                val t = System.currentTimeMillis()
+                if (t - lastWords >= BookingLiveRules.WORDS_EVERY_MS) {
+                    lastWords = t
+                    session.liveWords()?.let { w -> runCatching { booking.liveWords(ticket, w) } }
+                }
+            }
+        }
         withContext(Dispatchers.IO) { session.start() }
         try {
             for (frame in incoming) {
@@ -1764,6 +1779,7 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
         } finally {
             session.callerGone()
             clock.cancel()
+            follow?.cancel()
             writer.join()
         }
     }

@@ -10,6 +10,7 @@ import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingCallState
 import os.meka.core.domain.BookingCalls
 import os.meka.core.domain.BookingDialRules
+import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LiveCallRules
@@ -166,6 +167,73 @@ class BookingCallerTest {
         val row = BookingCallRules.rows(listOf(c), mine, emptyList(), nowMs, LocalCalendar.UTC).single()
         assertEquals(BookingCallRules.BOOKED, row.status)
         assertFalse(row.canCancel || row.canCall)
+    }
+
+    @Test
+    fun theLiveWordsReachTheCardAndTheResultKeepsTimeNameAndWords() {
+        val id = approvedCard()
+        caller.tick()
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = stream(model, ended)
+        s.start()
+        assertTrue("\"time\"" in model.sent.single() && "\"name\"" in model.sent.single())
+        assertNull(s.liveWords()) // not live yet
+        model.say("""{"setupComplete":{}}""")
+        // Live: the first look writes when Obi started talking (no words yet).
+        caller.liveWords(s.ticket, assertNotNull(s.liveWords()))
+        assertNotNull(cardOnFold(id).answeredAtMs)
+        model.say("""{"serverContent":{"outputTranscription":{"text":"Hi, this is Obi,"}}}""")
+        model.say("""{"serverContent":{"outputTranscription":{"text":" Alex's AI assistant."}}}""")
+        model.say("""{"serverContent":{"inputTranscription":{"text":"Hello Rosa's, how can I help?"}}}""")
+        val w = assertNotNull(s.liveWords())
+        assertNull(s.liveWords()) // unchanged since
+        caller.liveWords(s.ticket, w)
+        val live = BookingCallRules.rows(listOf(cardOnFold(id)), mine, emptyList(), nowMs, LocalCalendar.UTC).single()
+        assertTrue(live.live && live.canHangUp && !live.showBrief)
+        assertEquals(listOf("Obi" to "Hi, this is Obi, Alex's AI assistant.", "Rosa's Kitchen" to "Hello Rosa's, how can I help?"),
+            live.liveWords.map { it.who to it.text })
+        model.say("""{"toolCall":{"functionCalls":[{"id":"2","name":"booking_result","args":{"booked":true,"agreed":"Sat 19:30 for 4","time":"19:30","name":"Alex"}}]}}""")
+        nowMs += 160_000
+        s.fromCaller("""{"event":"stop"}""")
+        val c = cardOnFold(id)
+        assertEquals(BookingCallState.BOOKED, c.state)
+        assertEquals(19 * 60 + 30, c.bookedMin)
+        assertEquals("Alex", c.bookedName)
+        assertEquals(160L, c.seconds)
+        assertNull(c.words)
+        val row = BookingCallRules.rows(listOf(c), mine, emptyList(), nowMs, LocalCalendar.UTC).single()
+        assertEquals("Rosa's Kitchen · 2 min 40 s", row.lengthLine)
+        assertEquals(listOf("When" to "Sat 19:30", "People" to "4", "Name" to "Alex"), row.resultTiles.map { it.label to it.value })
+        assertTrue(row.canAddToCalendar && row.canRead)
+        assertEquals(2, row.transcript.size)
+        // Seven days after the call the words are blanked; the result stays.
+        nowMs += BookingLiveRules.KEEP_MS + 60_000
+        assertTrue(caller.tick())
+        assertNull(cardOnFold(id).transcript)
+        assertEquals(BookingCallState.BOOKED, cardOnFold(id).state)
+    }
+
+    @Test
+    fun hangUpFromTheFoldEndsTheCallWithAGoodbye() {
+        val id = approvedCard()
+        caller.tick()
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = stream(model, ended)
+        s.start()
+        model.say("""{"setupComplete":{}}""")
+        assertFalse(caller.hangUpAsked(s.ticket))
+        val r = fold()
+        assertEquals(BookingLiveRules.HUNG_UP_LINE, BookingCalls(r, { "x" }, { nowMs }).hangUp(id))
+        push(r)
+        assertTrue(caller.hangUpAsked(s.ticket))
+        s.hangUpAsked()
+        assertTrue(BookingLiveRules.HUNG_UP_TURN in model.sent.last())
+        // The goodbye is said, then the line closes; at the latest after the grace.
+        nowMs += BookingLiveRules.HANG_UP_GRACE_MS + 1
+        s.tick()
+        assertTrue(ended.single().hungUp)
+        assertEquals(BookingLiveRules.HUNG_UP_RESULT, cardOnFold(id).result)
+        assertEquals(BookingCallState.NOT_BOOKED, cardOnFold(id).state)
     }
 
     @Test

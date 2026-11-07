@@ -21,12 +21,16 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,8 +55,12 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.TouchPill
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.rememberAppearance
 import os.meka.core.domain.BookingCallRow
 import os.meka.core.domain.BookingCallRules
+import os.meka.core.domain.BookingLiveRules
+import os.meka.core.domain.BookingWordLine
 import os.meka.core.domain.LoneWordGlue
 
 /**
@@ -62,13 +70,18 @@ import os.meka.core.domain.LoneWordGlue
  * the server's result once the call is over, and Call now · Edit · Cancel. The words are the core's
  * [BookingCallRules.rows], the same as the Mac's.
  *
- * Motion: the card resizes on the expand spring when its state changes (reduced motion: no resize); the pane staggers
- * it in with the rest.
+ * Slice 3: while Obi is on the call the card is the live view (the business · a clock that ticks each second, LIVE
+ * WORDS with the last lines said, Hang up); once it's over the result card (the business · how long, WHEN · PEOPLE ·
+ * NAME tiles, the result, In your calendar with Add to calendar, Read the call).
+ *
+ * Motion: the card resizes on the expand spring when its state changes (reduced motion: no resize); each new live line
+ * fades in on the appear curve; the pane staggers it in with the rest.
  */
 @Composable
 fun BookingCallCard(
     r: BookingCallRow, modifier: Modifier,
     onPeople: (Int) -> Unit, onCall: () -> Unit, onEdit: () -> Unit, onCancel: () -> Unit,
+    onHangUp: () -> Unit = {}, onAddToCalendar: () -> Unit = {}, onRead: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -82,6 +95,14 @@ fun BookingCallCard(
         Text(LoneWordGlue.kept(r.status).uppercase(), style = MekaType.sectionLabel,
             color = if (r.needsYou) Meka.colors.accent else Meka.colors.textTertiary)
         Text(r.business, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
+        if (r.live) {
+            LiveView(r, onHangUp)
+            return@Column
+        }
+        if (!r.showBrief) {
+            ResultView(r, onAddToCalendar, onRead)
+            return@Column
+        }
         Text(LoneWordGlue.kept(r.numberLine), style = MekaType.caption,
             color = if (r.numberOk) Meka.colors.textSecondary else Meka.colors.textTertiary, modifier = Modifier.testTag("call-number"))
         Text(LoneWordGlue.kept(r.what), style = MekaType.body, color = Meka.colors.textSecondary)
@@ -131,6 +152,125 @@ fun BookingCallCard(
                     if (r.canCall) Meka.colors.onAccent else Meka.colors.textTertiary,
                     spoken = "${BookingCallRules.CALL_NOW}: ${r.business}", modifier = Modifier.testTag("call-now"),
                 ) { if (r.canCall) onCall() }
+            }
+        }
+    }
+}
+
+/** Slice 3: the live view: the clock, LIVE WORDS (Obi's lines in the accent) and Hang up. */
+@Composable
+private fun LiveView(r: BookingCallRow, onHangUp: () -> Unit) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(r.id) {
+        while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1_000) }
+    }
+    Text(BookingLiveRules.liveLine(r.business, r.liveSinceMs, now), style = MekaType.caption, color = Meka.colors.textSecondary,
+        modifier = Modifier.testTag("call-clock"))
+    Text(BookingLiveRules.LIVE_WORDS.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+        modifier = Modifier.padding(top = MekaSpace.xs))
+    if (r.liveWords.isEmpty()) {
+        Text(LoneWordGlue.kept(BookingLiveRules.WAITING_WORDS), style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+    Words(r.liveWords, "call-live-words")
+    if (r.canHangUp) {
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.End) {
+            TouchPill(BookingLiveRules.HANG_UP, Meka.colors.critical, Meka.colors.onAccent, spoken = "${BookingLiveRules.HANG_UP}: ${r.business}",
+                modifier = Modifier.testTag("call-hang-up"), onClick = onHangUp)
+        }
+    }
+}
+
+/** The call's lines: who in a small label (Obi in the accent), what was said under it. */
+@Composable
+private fun Words(lines: List<BookingWordLine>, tag: String) {
+    Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        lines.forEachIndexed { i, l ->
+            // Keyed by its place so a line already shown doesn't fade in again when the next one comes.
+            androidx.compose.runtime.key(i) {
+                Column(Modifier.appear(rememberAppearance(0))) {
+                    Text(l.who.uppercase(), style = MekaType.sectionLabel, color = if (l.obi) Meka.colors.accent else Meka.colors.textTertiary)
+                    Text(LoneWordGlue.kept(l.text), style = MekaType.body, color = Meka.colors.textPrimary)
+                }
+            }
+        }
+    }
+}
+
+/** Slice 3: the result card: how long, the tiles, the result line, the calendar row and Read the call. */
+@Composable
+private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: () -> Unit) {
+    r.lengthLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
+    if (r.resultTiles.isNotEmpty()) {
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            r.resultTiles.forEach { Tile(it.label, it.value, Modifier.weight(1f)) }
+        }
+    }
+    r.result?.let {
+        Text(LoneWordGlue.kept(it), style = MekaType.body, color = Meka.colors.textPrimary,
+            modifier = Modifier.padding(top = MekaSpace.xs).testTag("call-result"))
+    }
+    r.calendarLine?.let { line ->
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+            .padding(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            when {
+                r.addedToCalendar -> Text(BookingLiveRules.ADDED, style = MekaType.caption, color = Meka.colors.success,
+                    modifier = Modifier.testTag("call-added"))
+                r.canAddToCalendar -> TouchPill(BookingLiveRules.ADD_TO_CALENDAR, Meka.colors.accent, Meka.colors.onAccent,
+                    spoken = "${BookingLiveRules.ADD_TO_CALENDAR}: ${r.business}", modifier = Modifier.testTag("call-add-calendar"), onClick = onAddToCalendar)
+            }
+        }
+    }
+    if (r.canRead) {
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.End) {
+            TouchPill(BookingLiveRules.READ, Meka.colors.surface, Meka.colors.accent, spoken = "${BookingLiveRules.READ}: ${r.business}",
+                modifier = Modifier.testTag("call-read"), onClick = onRead)
+        }
+    }
+}
+
+/**
+ * Read the call: the whole call in words, Obi's lines and theirs, with how long it's kept. Motion: the scrim fades
+ * and the sheet rises on the expand spring; reduced motion cross-fades.
+ */
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun BookingCallWordsSheet(row: BookingCallRow?, onClose: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    BackHandler(enabled = row != null, onBack = onClose)
+    AnimatedVisibility(visible = row != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+        val r = row ?: return@AnimatedVisibility
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
+                    .pointerInput(Unit) { detectTapGestures { onClose() } }
+                    .semantics { contentDescription = "Close ${BookingLiveRules.READ_TITLE}" },
+            )
+            Column(
+                Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                    .animateEnterExit(
+                        enter = if (reduced) fadeIn(MekaMotion.expand(true)) else slideInVertically(MekaMotion.expand(false)) { it / 3 },
+                        exit = if (reduced) fadeOut(MekaMotion.expand(true)) else slideOutVertically(MekaMotion.expand(false)) { it / 3 },
+                    )
+                    .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                    .background(Meka.colors.surface)
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .heightIn(max = 620.dp)
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(MekaSpace.m)
+                    .testTag("call-words-sheet"),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                Text(BookingLiveRules.READ_TITLE, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
+                Text(listOfNotNull(r.lengthLine ?: r.business, r.result).joinToString(" · ").let { LoneWordGlue.kept(it) },
+                    style = MekaType.caption, color = Meka.colors.textSecondary)
+                Words(r.transcript, "call-transcript")
+                Text(LoneWordGlue.kept(BookingLiveRules.READ_FOOT), style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(top = MekaSpace.xs))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TouchPill(BookingLiveRules.CLOSE, Meka.colors.surfaceRaised, Meka.colors.accent, onClick = onClose)
+                }
             }
         }
     }

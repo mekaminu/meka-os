@@ -28,6 +28,8 @@ struct WorkingOnSheet: View {
     @State private var callNumber = ""
     @State private var callNote = ""
     @State private var callSaid: String?
+    /// Slice 3: the call whose words are open in Read the call (a popover).
+    @State private var readingCall: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -83,7 +85,9 @@ struct WorkingOnSheet: View {
             // The server works an errand a step a minute and sync brings each in: read again while the sheet is open.
             while !Task.isCancelled {
                 if let next = await model.workingOnView() { view = next }
-                try? await Task.sleep(for: .seconds(15))
+                // Every two seconds while Obi is on a call, so the live words keep up.
+                let live = view?.calls.contains { $0.live } ?? false
+                try? await Task.sleep(for: .milliseconds(live ? Int(BookingLiveRules.shared.LIVE_REFRESH_MS) : 15_000))
             }
         }
     }
@@ -213,18 +217,149 @@ struct WorkingOnSheet: View {
         }
     }
 
-    /// One call card (mockup Call card): status, business, number, what, WHEN · WINDOW · PEOPLE, Party size − / +,
-    /// OBI MAY SAY, OBI WON'T, the foot, why Call now is greyed, the result, and Cancel · Edit · Call now.
+    /// One call card (mockup Call card): its status and business, then the brief while it waits (slice 2a), the live
+    /// view while Obi is on the call, or the result card once it's over (slice 3).
     private func callCard(_ r: BookingCallRow) -> some View {
-        let id = r.id
-        let people = Int(r.peopleTile) ?? 1
-        let canCall = r.canCall
-        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(r.status.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(r.needsYou ? palette.accent : palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(r.business).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 .accessibilityAddTraits(.isHeader)
+            if r.live {
+                liveView(r)
+            } else if !r.showBrief {
+                resultView(r)
+            } else {
+                briefView(r)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: r.status)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(r.spoken)
+    }
+
+    /// Slice 3: the live view: the business · a clock ticking each second, LIVE WORDS (Obi's in the accent), Hang up.
+    @ViewBuilder
+    private func liveView(_ r: BookingCallRow) -> some View {
+        let id = r.id
+        let business = r.business
+        let since = r.liveSinceMs
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let nowMs = Int64(ctx.date.timeIntervalSince1970 * 1000)
+            Text(BookingLiveRules.shared.liveLine(business: business, sinceMs: since, nowMs: nowMs))
+                .font(MekaType.caption).foregroundStyle(palette.textSecondary).monospacedDigit()
+        }
+        label(BookingLiveRules.shared.LIVE_WORDS).padding(.top, MekaSpace.xs)
+        if r.liveWords.isEmpty {
+            Text(LoneWordGlue.shared.kept(line: BookingLiveRules.shared.WAITING_WORDS)).font(MekaType.caption)
+                .foregroundStyle(palette.textTertiary)
+        }
+        words(r.liveWords)
+        if r.canHangUp {
+            HStack {
+                Spacer()
+                pill(BookingLiveRules.shared.HANG_UP, ink: palette.onAccent, fill: palette.critical) { hangUp(id) }
+                    .accessibilityLabel("\(BookingLiveRules.shared.HANG_UP): \(business)")
+            }
+            .padding(.top, MekaSpace.xs)
+        }
+    }
+
+    /// The call's lines: who in a small label (Obi in the accent), what was said under it; each fades in.
+    private func words(_ lines: [BookingWordLine]) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(l.who.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                        .foregroundStyle(l.obi ? palette.accent : palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: l.text)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: lines.count)
+    }
+
+    /// Slice 3: the result card: how long, WHEN · PEOPLE · NAME, the result, In your calendar with Add, Read the call.
+    @ViewBuilder
+    private func resultView(_ r: BookingCallRow) -> some View {
+        let id = r.id
+        if let length = r.lengthLine {
+            Text(LoneWordGlue.shared.kept(line: length)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+        }
+        if !r.resultTiles.isEmpty {
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(Array(r.resultTiles.enumerated()), id: \.offset) { _, t in tile(t.label, t.value) }
+            }
+            .padding(.top, MekaSpace.xs)
+        }
+        if let result = r.result {
+            Text(LoneWordGlue.shared.kept(line: result)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, MekaSpace.xs)
+        }
+        if let line = r.calendarLine {
+            HStack(spacing: MekaSpace.xs) {
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Spacer()
+                if r.addedToCalendar {
+                    Text(BookingLiveRules.shared.ADDED).font(MekaType.caption).foregroundStyle(palette.success)
+                } else if r.canAddToCalendar {
+                    pill(BookingLiveRules.shared.ADD_TO_CALENDAR, ink: palette.onAccent, fill: palette.accent) { addToCalendar(id) }
+                        .accessibilityLabel("\(BookingLiveRules.shared.ADD_TO_CALENDAR): \(r.business)")
+                }
+            }
+            .padding(MekaSpace.xs)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+            .padding(.top, MekaSpace.xs)
+        }
+        if r.canRead {
+            HStack {
+                Spacer()
+                pill(BookingLiveRules.shared.READ, ink: palette.accent, fill: palette.surface) { readingCall = id }
+                    .accessibilityLabel("\(BookingLiveRules.shared.READ): \(r.business)")
+                    .popover(isPresented: Binding(get: { readingCall == id }, set: { if !$0 { readingCall = nil } }), arrowEdge: .bottom) {
+                        readPanel(r)
+                    }
+            }
+            .padding(.top, MekaSpace.xs)
+        }
+    }
+
+    /// Read the call: the whole call in words and how long it's kept.
+    private func readPanel(_ r: BookingCallRow) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(BookingLiveRules.shared.READ_TITLE).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            Text(LoneWordGlue.shared.kept(line: [r.lengthLine ?? r.business, r.result].compactMap { $0 }.joined(separator: " · ")))
+                .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView { words(r.transcript) }
+                .scrollIndicators(.never)
+                .frame(maxHeight: 360)
+            Text(LoneWordGlue.shared.kept(line: BookingLiveRules.shared.READ_FOOT)).font(MekaType.caption)
+                .foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(BookingLiveRules.shared.CLOSE) { readingCall = nil }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 380)
+    }
+
+    /// The brief while the card waits (slice 2a): number, what, the tiles, Party size, may say, won't, foot, buttons.
+    @ViewBuilder
+    private func briefView(_ r: BookingCallRow) -> some View {
+        let id = r.id
+        let people = Int(r.peopleTile) ?? 1
+        let canCall = r.canCall
+        Group {
             Text(LoneWordGlue.shared.kept(line: r.numberLine)).font(MekaType.caption)
                 .foregroundStyle(r.numberOk ? palette.textSecondary : palette.textTertiary)
             Text(LoneWordGlue.shared.kept(line: r.what)).font(MekaType.body).foregroundStyle(palette.textSecondary)
@@ -290,11 +425,6 @@ struct WorkingOnSheet: View {
             }
             .padding(.top, MekaSpace.xs)
         }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(r.spoken)
     }
 
     private func tile(_ title: String, _ value: String) -> some View {
@@ -354,6 +484,28 @@ struct WorkingOnSheet: View {
     private func callNow(_ id: String) {
         Task {
             let line = await model.callNowBookingCall(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func hangUp(_ id: String) {
+        Task {
+            let line = await model.hangUpBookingCall(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func addToCalendar(_ id: String) {
+        Task {
+            let line = await model.addBookingCallToCalendar(id)
             let next = await model.workingOnView()
             withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
                 callSaid = line

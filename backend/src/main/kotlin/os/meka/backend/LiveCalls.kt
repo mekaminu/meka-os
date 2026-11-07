@@ -15,6 +15,8 @@ import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.BookingDialRules
+import os.meka.core.domain.BookingLiveRules
+import os.meka.core.domain.BookingWords
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.FreeSlot
@@ -194,6 +196,9 @@ data class LiveCallEnd(
     val putThrough: Boolean = false,
     /** Slice 2b: what came of a booking call ([BookingDialRules.BOOKING_RESULT]); the business's words, display only. */
     val booking: BookingDialRules.Outcome? = null,
+    /** Slice 3: a booking call's words ([BookingWords.all]) and whether he tapped Hang up. */
+    val words: String = "",
+    val hungUp: Boolean = false,
 )
 
 /**
@@ -337,7 +342,7 @@ fun interface ModelDial {
  * service; [hangUp] closes its stream (the phone service then asks [VoiceStep.LIVE_ENDED]).
  */
 class LiveCallSession(
-    private val ticket: LiveCallTicket,
+    val ticket: LiveCallTicket,
     private val streamSid: String,
     private val dial: ModelDial,
     private val model: String,
@@ -356,6 +361,10 @@ class LiveCallSession(
     private var message: LiveCallRules.Message? = null
     private var putThrough = false
     private var outcome: BookingDialRules.Outcome? = null
+    /** Slice 3: a booking call's words as said, for the live view and Read the call; Hang up and its goodbye. */
+    private val words = BookingWords()
+    private var hungUp = false
+    private var awaitingBye = false
     private val heard = StringBuilder()
     private var callerBytes = 0L
     private var obiBytes = 0L
@@ -430,7 +439,14 @@ class LiveCallSession(
                 down.reset()
                 toCaller(buildJsonObject { put("event", "clear"); put("streamSid", streamSid) }.toString())
             }
-            is LiveProtocol.Event.Heard -> if (heard.length < MAX_HEARD) heard.append(e.text.take(MAX_HEARD - heard.length))
+            is LiveProtocol.Event.Heard -> {
+                if (heard.length < MAX_HEARD) heard.append(e.text.take(MAX_HEARD - heard.length))
+                if (ticket.booking) words.add(false, e.text)
+            }
+            is LiveProtocol.Event.Said -> if (ticket.booking) {
+                words.add(true, e.text)
+                awaitingBye = false
+            }
             is LiveProtocol.Event.ToolCall -> when {
                 // Slice 2b: a booking call has its own result tool and no message-taking.
                 ticket.booking && e.name == BookingDialRules.BOOKING_RESULT -> {
@@ -450,7 +466,7 @@ class LiveCallSession(
                 }
                 else -> link?.send(LiveProtocol.toolAnswer(e.id, e.name, null, error = "Not available on calls."))
             }
-            LiveProtocol.Event.TurnComplete -> if (endingAt != null) {
+            LiveProtocol.Event.TurnComplete -> if (endingAt != null && !awaitingBye) {
                 // Played out on the phone side, the mark comes back: then the line closes.
                 toCaller(buildJsonObject { put("event", "mark"); put("streamSid", streamSid); putJsonObject("mark") { put("name", BYE_MARK) } }.toString())
             }
@@ -460,6 +476,20 @@ class LiveCallSession(
 
     @Synchronized private fun modelClosed() { if (!done) finish() }
 
+    /** Slice 3: a booking call's last few lines when they changed (the first time once Obi is live: empty); null otherwise. */
+    @Synchronized fun liveWords(): String? = if (done || !live || !ticket.booking) null else words.liveIfChanged()
+
+    /** Slice 3: he tapped Hang up: Obi says goodbye and the line closes within [BookingLiveRules.HANG_UP_GRACE_MS]. */
+    @Synchronized fun hangUpAsked() {
+        if (done || hungUp || !ticket.booking) return
+        hungUp = true
+        if (!live) return finish()
+        awaitingBye = true
+        val by = nowMs() + BookingLiveRules.HANG_UP_GRACE_MS
+        endingAt = endingAt?.coerceAtMost(by) ?: by
+        link?.send(turn(BookingLiveRules.HUNG_UP_TURN))
+    }
+
     private fun finish() {
         if (done) return
         done = true
@@ -467,7 +497,10 @@ class LiveCallSession(
         val seconds = ((nowMs() - startedAt) / 1_000).coerceAtLeast(0)
         val obi = obiBytes / (24_000 * 2)
         // The outcome first, then the phone side: its end step (the put-through) must find it.
-        runCatching { onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live, outcome)) }
+        runCatching {
+            onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live, outcome,
+                words = if (ticket.booking) words.all() else "", hungUp = hungUp))
+        }
         runCatching { hangUp() }
     }
 
@@ -542,6 +575,8 @@ class LiveCallSession(
                     putJsonObject("booked") { put("type", "BOOLEAN"); put("description", "True only if they confirmed the booking.") }
                     s("agreed", "What was booked, briefly: day, time, party size and the name it's under.")
                     s("reference", "A booking reference they gave, if any.")
+                    s("time", "The time booked, 24-hour HH:MM (for example 19:30), if it was booked.")
+                    s("name", "The name the booking is under, if it was booked.")
                     s("offered", "Other times or options they offered, if it wasn't booked.")
                     s("reason", "Why it wasn't booked, in a few words (\"voicemail\" for a voicemail or recorded menu).")
                 }

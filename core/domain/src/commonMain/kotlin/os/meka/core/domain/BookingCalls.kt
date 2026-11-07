@@ -37,6 +37,22 @@ object BookingCallFields {
     const val ENDED_AT = "endedAt"
     /** Set on Cancel or the Ask card's Undo; a cancelled card never rings. */
     const val CANCELLED = "cancelled"
+    /** Slice 3 (server): when the business answered and Obi started talking. */
+    const val ANSWERED_AT = "answeredAt"
+    /** Slice 3 (server): the last few lines said, while Obi is on the call ([BookingWords.encode]); cleared after. */
+    const val WORDS = "words"
+    /** Slice 3 (server): the whole call in words once it's over, kept [BookingLiveRules.KEEP_DAYS] days, then blanked. */
+    const val TRANSCRIPT = "transcript"
+    /** Slice 3 (server): how long Obi was on the line, in seconds. */
+    const val SECONDS = "seconds"
+    /** Slice 3 (server): the time agreed, minutes of the day, only when it falls in the card's window. */
+    const val BOOKED_MIN = "bookedMin"
+    /** Slice 3 (server): the name the booking is under, as Obi gave it. */
+    const val BOOKED_NAME = "bookedName"
+    /** Slice 3 (device): Hang up was tapped; the server ends the call within seconds. */
+    const val HANG_UP = "hangUp"
+    /** Slice 3 (device): the calendar edit Add to calendar made. */
+    const val CALENDAR_EDIT = "calendarEdit"
 }
 
 enum class BookingCallState(val code: String) {
@@ -67,6 +83,16 @@ data class BookingCall(
     val cancelled: Boolean,
     /** When the server started ringing (slice 2b), or null. */
     val calledAtMs: Long? = null,
+    /** Slice 3: when the call was over, when Obi started talking, how long he was on, what was said and agreed. */
+    val endedAtMs: Long? = null,
+    val answeredAtMs: Long? = null,
+    val seconds: Long? = null,
+    val words: String? = null,
+    val transcript: String? = null,
+    val bookedMin: Int? = null,
+    val bookedName: String? = null,
+    val hangUp: Boolean = false,
+    val calendarEditId: String? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -104,7 +130,27 @@ data class BookingCallRow(
     val canChangePeople: Boolean,
     val canCancel: Boolean,
     val spoken: String,
-)
+    /** Slice 3: Obi is on the call now: the live view (the clock from [liveSinceMs], the last lines, Hang up). */
+    val live: Boolean = false,
+    /** When the clock starts (answered, else ringing); -1 when not on the call. */
+    val liveSinceMs: Long = -1,
+    val liveWords: List<BookingWordLine> = emptyList(),
+    val canHangUp: Boolean = false,
+    /** The brief (WHEN · WINDOW · PEOPLE, may say, won't, the foot) shows until the call starts. */
+    val showBrief: Boolean = true,
+    /** Slice 3: the result card's tiles (WHEN · PEOPLE · NAME) on a booked card. */
+    val resultTiles: List<BookingTile> = emptyList(),
+    /** "Rosa's Kitchen · 2 min 40 s" once a call Obi talked on is over. */
+    val lengthLine: String? = null,
+    /** "In your calendar · Sat 14 Nov 19:30" on a booked card with a time. */
+    val calendarLine: String? = null,
+    val canAddToCalendar: Boolean = false,
+    val addedToCalendar: Boolean = false,
+    /** Read the call: the whole call in words, kept [BookingLiveRules.KEEP_DAYS] days. */
+    val transcript: List<BookingWordLine> = emptyList(),
+) {
+    val canRead: Boolean get() = transcript.isNotEmpty()
+}
 
 object BookingCallRules {
     const val TITLE = "Calls for you"
@@ -234,6 +280,12 @@ object BookingCallRules {
             approvedAtMs = num(BookingCallFields.APPROVED_AT), result = text(BookingCallFields.RESULT),
             cancelled = (f[BookingCallFields.CANCELLED] as? FieldValue.Bool)?.value == true,
             calledAtMs = num(BookingCallFields.CALLED_AT),
+            endedAtMs = num(BookingCallFields.ENDED_AT), answeredAtMs = num(BookingCallFields.ANSWERED_AT),
+            seconds = num(BookingCallFields.SECONDS), words = text(BookingCallFields.WORDS), transcript = text(BookingCallFields.TRANSCRIPT),
+            bookedMin = num(BookingCallFields.BOOKED_MIN)?.toInt()?.takeIf { it in 0 until 24 * 60 },
+            bookedName = text(BookingCallFields.BOOKED_NAME),
+            hangUp = (f[BookingCallFields.HANG_UP] as? FieldValue.Bool)?.value == true,
+            calendarEditId = text(BookingCallFields.CALENDAR_EDIT),
         )
     }
 
@@ -333,7 +385,7 @@ object BookingCallRules {
                 val status = when (c.state) {
                     BookingCallState.DRAFT -> NEEDS_TAP
                     BookingCallState.APPROVED -> waitingLine(nowMs, cal)
-                    BookingCallState.CALLING -> CALLING
+                    BookingCallState.CALLING -> if (c.hangUp) BookingLiveRules.HANGING_UP else CALLING
                     BookingCallState.BOOKED -> BOOKED
                     BookingCallState.NOT_BOOKED -> NOT_BOOKED
                     BookingCallState.FAILED -> FAILED
@@ -357,8 +409,8 @@ object BookingCallRules {
                     maySay = maySay(c.people), wont = WONT_LIST, foot = foot, blocked = block, result = c.result,
                     canCall = draft && block == null, canEdit = draft, canChangePeople = draft && c.people != null,
                     canCancel = draft || c.state == BookingCallState.APPROVED,
-                    spoken = listOfNotNull("Call card for ${c.business}", c.what, "$whenTile, $window", c.people?.let { "$it people" }, status, block).joinToString(". "),
-                )
+                    spoken = listOfNotNull("Call card for ${c.business}", c.what, "$whenTile, $window", c.people?.let { "$it people" }, status, block, c.result).joinToString(". "),
+                ).let { BookingLiveRules.withLive(it, c, nowMs, cal) }
             }
     }
 
@@ -421,6 +473,26 @@ class BookingCalls(private val replica: Replica, private val newId: () -> String
             BookingCallFields.APPROVED_AT to nowMs().fv(),
         ))
         return BookingCallRules.APPROVED_LINE
+    }
+
+    /** Slice 3: Hang up while Obi is on the call; the server ends it within seconds. Returns the line to show. */
+    fun hangUp(id: String): String {
+        val c = one(id) ?: return BookingLiveRules.NOT_ON_CALL
+        if (c.cancelled || c.state != BookingCallState.CALLING) return BookingLiveRules.NOT_ON_CALL
+        if (!c.hangUp) replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.HANG_UP to true.fv()))
+        return BookingLiveRules.HUNG_UP_LINE
+    }
+
+    /** Slice 3: the event a booked card's Add to calendar would make, or null (not booked, no time, added already). */
+    fun calendarDraft(id: String, cal: LocalCalendar): EventDraft? {
+        val c = one(id) ?: return null
+        if (c.calendarEditId != null) return null
+        return BookingLiveRules.calendarDraft(c, cal)
+    }
+
+    /** Slice 3: Add to calendar made edit [editId] for card [id]; the card says Added on both apps. */
+    fun markAdded(id: String, editId: String) {
+        replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.CALENDAR_EDIT to editId.fv()))
     }
 
     /** Cancel (or the Ask card's Undo): only before Obi is on the call. */

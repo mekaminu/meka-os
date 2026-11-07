@@ -103,11 +103,14 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
     // Obi on calls, slice 2a: the call card being edited (the edit sheet is open while set) and the line under CALLS FOR YOU.
     var editing by remember { mutableStateOf<os.meka.core.domain.BookingCallRow?>(null) }
     var callSaid by remember { mutableStateOf<String?>(null) }
-    // The server works an errand a step a minute and sync brings each step in: read again while the pane is open.
+    // Slice 3: the call whose words are open in Read the call.
+    var reading by remember { mutableStateOf<os.meka.core.domain.BookingCallRow?>(null) }
+    // The server works an errand a step a minute and sync brings each step in: read again while the pane is open
+    // (every two seconds while Obi is on a call, so the live words keep up).
     LaunchedEffect(Unit) {
         while (true) {
             view = runCatching { core.workingOnView() }.getOrNull() ?: view
-            delay(REFRESH_MS)
+            delay(if (view?.calls?.any { it.live } == true) os.meka.core.domain.BookingLiveRules.LIVE_REFRESH_MS else REFRESH_MS)
         }
     }
     val reduced = Meka.reducedMotion
@@ -198,6 +201,21 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                         }
                     },
                     onEdit = { haptics.tick(); callSaid = null; editing = r },
+                    onHangUp = {
+                        haptics.medium()
+                        scope.launch {
+                            callSaid = runCatching { core.hangUpBookingCall(r.id) }.getOrNull() ?: os.meka.core.domain.BookingLiveRules.NOT_ON_CALL
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
+                    onAddToCalendar = {
+                        haptics.tick()
+                        scope.launch {
+                            callSaid = runCatching { core.addBookingCallToCalendar(r.id) }.getOrNull() ?: os.meka.core.domain.BookingCallRules.GONE
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
+                    onRead = { haptics.tick(); reading = r },
                     onCancel = {
                         haptics.tick()
                         scope.launch {
@@ -225,6 +243,7 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                 }
             }
         }
+        BookingCallWordsSheet(reading, onClose = { reading = null })
         BookingCallEditSheet(editing, onClose = { editing = null }) { business, number, note ->
             val r = editing ?: return@BookingCallEditSheet
             haptics.tick()
