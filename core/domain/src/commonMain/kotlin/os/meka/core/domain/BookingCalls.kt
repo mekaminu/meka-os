@@ -31,6 +31,10 @@ object BookingCallFields {
     const val APPROVED_AT = "approvedAt"
     /** Written by the server (slice 2b): what came of the call, in its own words, display only. */
     const val RESULT = "result"
+    /** Written by the server (slice 2b) when it starts ringing; a card on the call long after is closed as failed. */
+    const val CALLED_AT = "calledAt"
+    /** Written by the server (slice 2b) when the call is over. */
+    const val ENDED_AT = "endedAt"
     /** Set on Cancel or the Ask card's Undo; a cancelled card never rings. */
     const val CANCELLED = "cancelled"
 }
@@ -61,6 +65,8 @@ data class BookingCall(
     val approvedAtMs: Long?,
     val result: String?,
     val cancelled: Boolean,
+    /** When the server started ringing (slice 2b), or null. */
+    val calledAtMs: Long? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -227,6 +233,7 @@ object BookingCallRules {
             state = BookingCallState.of(text(BookingCallFields.STATE)), askedAtMs = num(BookingCallFields.ASKED_AT) ?: 0,
             approvedAtMs = num(BookingCallFields.APPROVED_AT), result = text(BookingCallFields.RESULT),
             cancelled = (f[BookingCallFields.CANCELLED] as? FieldValue.Bool)?.value == true,
+            calledAtMs = num(BookingCallFields.CALLED_AT),
         )
     }
 

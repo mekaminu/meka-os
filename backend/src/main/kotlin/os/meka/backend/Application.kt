@@ -1068,7 +1068,12 @@ fun Application.mekaSync(
                 if (!provider.verify(url, form) { call.request.header(it) }) throw Forbidden()
                 val event = provider.parse(call.parameters["step"].orEmpty(), form)
                     ?: return@post call.respondText("unknown step", status = HttpStatusCode.NotFound)
-                val reply = withContext(Dispatchers.IO) { voice.assistant.handle(provider.id, event) }
+                val booking = voice.booking
+                val reply = withContext(Dispatchers.IO) {
+                    // Obi on calls, slice 2b: a booking call's steps are the booking caller's.
+                    if (event is VoiceEvent.BookingEnded || event is VoiceEvent.BookingStatus) booking?.handle(event) ?: VoiceReply.HangUp
+                    else voice.assistant.handle(provider.id, event)
+                }
                 // Transcribed (or failed): keep the recording in MEKA's own bucket (polish 8c), then delete the phone
                 // service's copy, off the request (in that order, so it is fetched before it goes).
                 if (event is VoiceEvent.Transcribed) event.recording?.let { rec ->
@@ -1378,6 +1383,7 @@ fun main(args: Array<String>) {
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup, ds)
             voice?.let { startRecordingSweep(it.assistant) }
             voice?.let { startCallClipsWarm(it) }
+            voice?.booking?.let { startBookingCaller(it) }
             // The call assistant's low-balance guard: the phone service's credit, read a few times a day.
             voice?.providers?.values?.filterIsInstance<CreditSource>()?.firstOrNull()?.let { source ->
                 val devices = PostgresDeviceRegistry(ds)
@@ -1600,7 +1606,17 @@ fun voiceFromEnv(
     )
     // Callers hear a chosen Google voice (natural voice, slice 3): its lines made once, on Google's meter.
     val clips = speech?.let { sp -> CallClips(synth = { text, v -> sp.googleClip(text, v) }, store = recordings) }
-    return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl, clips, liveCalls)
+    val twilio = TwilioVoice.fromSecret(secret)
+    // Obi on calls, slice 2b: approved call cards are rung from the assistant's number, Obi live on the brief.
+    val booking = liveCalls?.takeIf { System.getenv("MEKA_BOOKING_CALLS") != "off" }?.let { live ->
+        BookingCaller(
+            opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() }, line = live.line, dialer = twilio,
+            twiml = { ticket -> twilio.bookingTwiml(publicUrl, ticket) },
+            statusUrl = publicUrl.trimEnd('/') + VoiceStep.path(TwilioVoice.ID, VoiceStep.BOOKING_STATUS),
+            onWritten = { hh -> push?.serverChanged(hh) },
+        )
+    }
+    return VoiceRoutes(assistant, listOf(twilio), publicUrl, clips, liveCalls, booking)
 }
 
 /**
@@ -1726,10 +1742,10 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
                 Thread.ofVirtual().name("live-call-end").start {
                     runCatching {
                         val meter = live.line.record(ticket, end)
-                        voice.assistant.liveEnded(ticket, end, meter)
+                        if (ticket.booking) voice.booking?.ended(ticket, end, meter) else voice.assistant.liveEnded(ticket, end, meter)
                     }.onFailure { log.warn("live call: not written (${it::class.simpleName})") }
                 }
-                log.info("live call: ended after ${end.seconds} s${if (end.live) "" else " (never went live, script takes it)"}")
+                log.info("live call: ended after ${end.seconds} s${if (ticket.booking) " (booking)" else if (end.live) "" else " (never went live, script takes it)"}")
             },
         )
         val writer = launch {

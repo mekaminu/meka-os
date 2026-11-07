@@ -97,6 +97,10 @@ sealed class VoiceEvent {
     data class Transcribed(override val callId: String, val text: String?, val recording: String? = null) : VoiceEvent()
     /** Obi on calls, slice 1: the live stream ended ([VoiceStep.LIVE_ENDED]); a call that never went live gets the script. */
     data class LiveEnded(override val callId: String, val from: String?, val to: String? = null) : VoiceEvent()
+    /** Obi on calls, slice 2b: a booking call's stream ended ([VoiceStep.BOOKING_ENDED]). */
+    data class BookingEnded(override val callId: String) : VoiceEvent()
+    /** Slice 2b: the phone service's end of a booking call ([VoiceStep.BOOKING_STATUS]): completed, busy, no-answer, failed, canceled. */
+    data class BookingStatus(override val callId: String, val status: String?) : VoiceEvent()
 }
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
@@ -174,6 +178,9 @@ object VoiceStep {
     const val DIALED = "dialed"
     /** Obi on calls, slice 1: the live stream ended. */
     const val LIVE_ENDED = "live-ended"
+    /** Obi on calls, slice 2b: an outbound booking call's stream ended, and the call's final status. */
+    const val BOOKING_ENDED = "booking-ended"
+    const val BOOKING_STATUS = "booking-status"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -549,6 +556,9 @@ class CallAssistant(
                 if (exists(hh, id)) putThroughDone(hh, id, taken = false)
                 VoiceReply.Goodbye(PutThroughRules.MISSED)
             }
+            // Slice 2b: booking calls are the [BookingCaller]'s (the route hands them there); never the assistant's.
+            is VoiceEvent.BookingEnded -> VoiceReply.HangUp
+            is VoiceEvent.BookingStatus -> VoiceReply.Done
             is VoiceEvent.Transcribed -> {
                 // With Transcribe on, the words wait for it ([transcribeKept], off the request); Twilio's are its fallback.
                 if (!transcribesLater(event)) settle(hh, id, event.text)
@@ -1027,6 +1037,8 @@ class VoiceRoutes(
     val clips: CallClips? = null,
     /** Obi on calls, slice 1: the live stream's route; null keeps every call on the script. */
     val live: LiveCallRoutes? = null,
+    /** Obi on calls, slice 2b: rings approved call cards; null rings nothing. */
+    val booking: BookingCaller? = null,
 ) {
     val providers: Map<String, VoiceProvider> = providers.associateBy { it.id }
 }
@@ -1072,8 +1084,40 @@ class TwilioVoice(
     private val delete: (url: String, headers: Map<String, String>) -> Int = { url, headers -> jdkDelete(url, headers) },
     /** GET [url] with [headers], no redirects followed: the status, the body (at most [VoiceRecordingRules.MAX_BYTES] + 1 bytes) and `Location`. */
     private val get: (url: String, headers: Map<String, String>) -> HttpFetched = { url, headers -> jdkGet(url, headers) },
-) : VoiceProvider, CreditSource {
+    /** POST a form to [url] with [headers] (slice 2b's outbound calls). */
+    private val post: (url: String, form: Map<String, String>, headers: Map<String, String>) -> HttpFetched = { url, form, headers -> jdkPost(url, form, headers) },
+) : VoiceProvider, CreditSource, OutboundDialer {
     override val id = ID
+
+    override fun dialConfigured(): Boolean = creditConfigured()
+
+    /**
+     * Obi on calls, slice 2b: makes an outbound call (`Calls.json`) to [to] from [from] with [twiml] as its markup, ringing
+     * at most [ringSeconds] and ended by the phone service at [limitSeconds]; its final status goes to [statusUrl]. The
+     * call's SID, or null (not set up, refused); only the HTTP status is logged, never a number.
+     */
+    override fun dial(to: String, from: String, twiml: String, statusUrl: String, ringSeconds: Int, limitSeconds: Int): String? {
+        val sid = accountSid()?.trim()?.takeIf { accountSidPattern.matches(it) } ?: return null
+        val token = authToken()?.takeIf { it.isNotBlank() } ?: return null
+        val auth = Base64.getEncoder().encodeToString("$sid:$token".toByteArray(Charsets.UTF_8))
+        val form = linkedMapOf(
+            "To" to to, "From" to from, "Twiml" to twiml, "Timeout" to ringSeconds.toString(), "TimeLimit" to limitSeconds.toString(),
+            "StatusCallback" to statusUrl, "StatusCallbackMethod" to "POST",
+        )
+        val r = runCatching { post("https://api.twilio.com/2010-04-01/Accounts/$sid/Calls.json", form, mapOf("Authorization" to "Basic $auth")) }
+            .getOrElse { System.err.println("booking call: couldn't reach the phone service (${it::class.simpleName})"); return null }
+        if (r.status !in 200..299) { System.err.println("booking call: the phone service refused the call (${r.status})"); return null }
+        return runCatching { Json.parseToJsonElement(r.body.decodeToString()).jsonObject["sid"]?.jsonPrimitive?.content }.getOrNull()
+            ?.takeIf { it.startsWith("CA") && it.length <= 64 }
+    }
+
+    /** The markup of a booking call: stream it to the server with the call's ticket, then ask what next. */
+    fun bookingTwiml(baseUrl: String, ticket: String): String {
+        val base = baseUrl.trimEnd('/')
+        return """<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${xml(LiveCallRoutes.streamUrl(base))}">""" +
+            """<Parameter name="ticket" value="${xml(ticket)}"/></Stream></Connect>""" +
+            """<Redirect method="POST">${xml(base + VoiceStep.path(ID, VoiceStep.BOOKING_ENDED))}</Redirect></Response>"""
+    }
 
     override fun verify(url: String, form: Map<String, String>, header: (String) -> String?): Boolean {
         val token = authToken()?.takeIf { it.isNotBlank() } ?: return false
@@ -1095,6 +1139,8 @@ class TwilioVoice(
             VoiceStep.WHISPER_ANSWERED -> VoiceEvent.WhisperAnswered(call, parentOf(form), form["Digits"])
             VoiceStep.DIALED -> VoiceEvent.Dialed(call)
             VoiceStep.LIVE_ENDED -> VoiceEvent.LiveEnded(call, from, form["To"])
+            VoiceStep.BOOKING_ENDED -> VoiceEvent.BookingEnded(call)
+            VoiceStep.BOOKING_STATUS -> VoiceEvent.BookingStatus(call, form["CallStatus"]?.trim()?.take(20))
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -1224,6 +1270,16 @@ class TwilioVoice(
             val resp = client.send(req.build(), java.net.http.HttpResponse.BodyHandlers.ofInputStream())
             val body = resp.body().use { it.readNBytes(VoiceRecordingRules.MAX_BYTES + 1) }
             return HttpFetched(resp.statusCode(), body, resp.headers().firstValue("Location").orElse(null))
+        }
+
+        fun jdkPost(url: String, form: Map<String, String>, headers: Map<String, String>): HttpFetched {
+            fun enc(s: String) = java.net.URLEncoder.encode(s, Charsets.UTF_8)
+            val body = form.entries.joinToString("&") { (k, v) -> enc(k) + "=" + enc(v) }
+            val req = java.net.http.HttpRequest.newBuilder(java.net.URI(url)).timeout(java.time.Duration.ofSeconds(20))
+                .header("Content-Type", "application/x-www-form-urlencoded").POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+            headers.forEach { (k, v) -> req.header(k, v) }
+            val resp = java.net.http.HttpClient.newHttpClient().send(req.build(), java.net.http.HttpResponse.BodyHandlers.ofInputStream())
+            return HttpFetched(resp.statusCode(), resp.body().use { it.readNBytes(64 * 1024) })
         }
 
         fun jdkDelete(url: String, headers: Map<String, String>): Int {

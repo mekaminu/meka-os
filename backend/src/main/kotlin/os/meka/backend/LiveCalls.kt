@@ -14,6 +14,7 @@ import os.meka.core.domain.AboutYouFields
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
+import os.meka.core.domain.BookingDialRules
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.FreeSlot
@@ -176,13 +177,23 @@ data class LiveCallTicket(
     val canPutThrough: Boolean = false,
     /** Slice 1c: the free times Obi may offer for a callback ([LiveCallRules.callbackSlots]); empty = none offered. */
     val callbackSlots: List<FreeSlot> = emptyList(),
-)
+    /** Slice 2b: an outbound booking call for this call card (Obi's tools are then [BookingDialRules.BOOKING_RESULT] and end call). */
+    val bookingId: String? = null,
+    /** Slice 2b: the number the booking call rings (for its cost). */
+    val bookingNumber: String? = null,
+) {
+    val booking: Boolean get() = bookingId != null
+    /** How long the ticket may wait for its stream: a booking call rings first. */
+    val ttlMs: Long get() = if (booking) BookingDialRules.TICKET_MS else LiveCallRules.TICKET_MS
+}
 
 /** How a live call went, for the summary and the meter. [message] and [heard] are the caller's: untrusted, display only. */
 data class LiveCallEnd(
     val live: Boolean, val seconds: Long, val obiSeconds: Long, val message: LiveCallRules.Message?, val heard: String,
     /** Slice 1b: Obi told the caller he'd try to put them through ([LiveCallRules.PUT_THROUGH_ANSWER]). */
     val putThrough: Boolean = false,
+    /** Slice 2b: what came of a booking call ([BookingDialRules.BOOKING_RESULT]); the business's words, display only. */
+    val booking: BookingDialRules.Outcome? = null,
 )
 
 /**
@@ -220,7 +231,7 @@ class LiveCallLine(
         if (!on || !configured()) return null
         if (!LiveCallRules.allowed(on, spentPence(), capPence(hh))) return null
         val now = nowMs()
-        tickets.entries.removeIf { now - it.value.mintedAtMs > LiveCallRules.TICKET_MS }
+        tickets.entries.removeIf { now - it.value.mintedAtMs > it.value.ttlMs }
         wentLive.entries.removeIf { now - it.value > KEEP_MS }
         outcomes.entries.removeIf { now - it.value.first > KEEP_MS }
         if (tickets.size >= MAX_TICKETS) return null
@@ -235,6 +246,29 @@ class LiveCallLine(
         )
         token
     }.getOrNull()
+
+    /**
+     * Slice 2b: a one-use ticket for an outbound booking call on card [cardId] to [e164], with Obi's [instruction]. Its
+     * call id is bound once the phone service has made the call ([bind]). Null when Gemini isn't set up or too many wait.
+     */
+    fun bookingTicket(hh: String, provider: String, cardId: String, e164: String, instruction: String): String? = runCatching {
+        if (!configured()) return null
+        val now = nowMs()
+        tickets.entries.removeIf { now - it.value.mintedAtMs > it.value.ttlMs }
+        if (tickets.size >= MAX_TICKETS) return null
+        val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        tickets[token] = LiveCallTicket(token, hh, provider, "", null, false, instruction, now, bookingId = cardId, bookingNumber = e164)
+        token
+    }.getOrNull()
+
+    /** Slice 2b: the phone service made the booking call [callId] for ticket [token]: only that call's stream may claim it. */
+    fun bind(token: String, callId: String) { tickets.computeIfPresent(token) { _, t -> if (t.callId.isEmpty()) t.copy(callId = callId) else t } }
+
+    /** Slice 2b: a booking ticket whose call was never made. */
+    fun drop(token: String) { tickets.remove(token) }
+
+    /** Whether Gemini is set up for live calls. */
+    fun ready(): Boolean = runCatching { configured() }.getOrDefault(false)
 
     /** Free callback times from the synced work schedule, bank holidays and events; none when any of it can't be read. */
     private fun callbackSlots(hh: String, now: Long): List<FreeSlot> = runCatching {
@@ -253,7 +287,7 @@ class LiveCallLine(
     /** The ticket for the stream that opened with [token] for [callId]; used once, and only within [LiveCallRules.TICKET_MS]. */
     fun claim(token: String?, callId: String?): LiveCallTicket? {
         val t = token?.takeIf { it.length == 32 }?.let { tickets.remove(it) } ?: return null
-        if (t.callId != callId || nowMs() - t.mintedAtMs > LiveCallRules.TICKET_MS) return null
+        if (t.callId.isEmpty() || t.callId != callId || nowMs() - t.mintedAtMs > t.ttlMs) return null
         return t
     }
 
@@ -270,8 +304,9 @@ class LiveCallLine(
 
     /** Counts a call that went live; this month's spend and calls after it. */
     fun record(t: LiveCallTicket, end: LiveCallEnd): LiveCallRules.Meter {
+        val cost = if (t.booking) BookingDialRules.costMicroUsd(t.bookingNumber, end.seconds, end.obiSeconds) else LiveCallRules.costMicroUsd(end.seconds, end.obiSeconds)
         if (end.live) runCatching {
-            store.add(LiveCallRow(t.token, t.householdId, month(), t.mintedAtMs, end.seconds, LiveCallRules.costMicroUsd(end.seconds, end.obiSeconds)))
+            store.add(LiveCallRow(t.token, t.householdId, month(), t.mintedAtMs, end.seconds, cost))
         }
         val m = month()
         return LiveCallRules.Meter(m, spentPence(m), runCatching { store.monthCalls(m) }.getOrDefault(0))
@@ -320,6 +355,7 @@ class LiveCallSession(
     private var endingAt: Long? = null
     private var message: LiveCallRules.Message? = null
     private var putThrough = false
+    private var outcome: BookingDialRules.Outcome? = null
     private val heard = StringBuilder()
     private var callerBytes = 0L
     private var obiBytes = 0L
@@ -335,7 +371,7 @@ class LiveCallSession(
             if (done) { l?.close(); return }
             val ok = l ?: return finish()
             link = ok
-            if (!ok.send(setup(model, voice, ticket.instruction))) finish()
+            if (!ok.send(setup(model, voice, ticket.instruction, ticket.booking))) finish()
         }
     }
 
@@ -371,7 +407,7 @@ class LiveCallSession(
             endingAt?.let { now >= it } == true -> finish()
             secs >= LiveCallRules.WRAP_UP_SECONDS && !wrapped -> {
                 wrapped = true
-                link?.send(turn(LiveCallRules.WRAP_UP))
+                link?.send(turn(if (ticket.booking) BookingDialRules.WRAP_UP else LiveCallRules.WRAP_UP))
             }
         }
     }
@@ -382,7 +418,7 @@ class LiveCallSession(
             LiveProtocol.Event.SetupComplete -> if (!live) {
                 live = true
                 runCatching { onLive() }
-                link?.send(turn(LiveCallRules.KICKOFF))
+                link?.send(turn(if (ticket.booking) BookingDialRules.KICKOFF else LiveCallRules.KICKOFF))
             }
             is LiveProtocol.Event.Audio -> for (chunk in e.chunks) {
                 val pcm = runCatching { Base64.getDecoder().decode(chunk) }.getOrNull() ?: continue
@@ -395,15 +431,20 @@ class LiveCallSession(
                 toCaller(buildJsonObject { put("event", "clear"); put("streamSid", streamSid) }.toString())
             }
             is LiveProtocol.Event.Heard -> if (heard.length < MAX_HEARD) heard.append(e.text.take(MAX_HEARD - heard.length))
-            is LiveProtocol.Event.ToolCall -> when (e.name) {
-                LiveCallRules.TAKE_MESSAGE -> {
+            is LiveProtocol.Event.ToolCall -> when {
+                // Slice 2b: a booking call has its own result tool and no message-taking.
+                ticket.booking && e.name == BookingDialRules.BOOKING_RESULT -> {
+                    if (outcome == null) outcome = BookingDialRules.outcome(e.args)
+                    link?.send(LiveProtocol.toolAnswer(e.id, e.name, "Noted. Thank them, say goodbye in one sentence, then call ${LiveCallRules.END_CALL}."))
+                }
+                !ticket.booking && e.name == LiveCallRules.TAKE_MESSAGE -> {
                     val first = message == null
                     if (first) message = LiveCallRules.message(e.args)
                     // Slice 1b: a genuine urgent caller is told to hold; the end step rings his mobile.
                     if (first) putThrough = LiveCallRules.offersPutThrough(message!!, ticket.canPutThrough)
                     link?.send(LiveProtocol.toolAnswer(e.id, e.name, if (putThrough) LiveCallRules.PUT_THROUGH_ANSWER else LiveCallRules.TAKEN_ANSWER))
                 }
-                LiveCallRules.END_CALL -> {
+                e.name == LiveCallRules.END_CALL -> {
                     if (endingAt == null) endingAt = nowMs() + LiveCallRules.GOODBYE_MS
                     link?.send(LiveProtocol.toolAnswer(e.id, e.name, "Ending the call after your goodbye."))
                 }
@@ -426,7 +467,7 @@ class LiveCallSession(
         val seconds = ((nowMs() - startedAt) / 1_000).coerceAtLeast(0)
         val obi = obiBytes / (24_000 * 2)
         // The outcome first, then the phone side: its end step (the put-through) must find it.
-        runCatching { onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live)) }
+        runCatching { onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live, outcome)) }
         runCatching { hangUp() }
     }
 
@@ -456,7 +497,7 @@ class LiveCallSession(
         }.toString()
 
         /** The call's setup: audio answers in [voice], Obi's instruction, his two tools, and both sides transcribed. */
-        fun setup(model: String, voice: String, instruction: String): String = buildJsonObject {
+        fun setup(model: String, voice: String, instruction: String, booking: Boolean = false): String = buildJsonObject {
             putJsonObject("setup") {
                 put("model", if (model.startsWith("models/")) model else "models/$model")
                 putJsonObject("generationConfig") {
@@ -466,7 +507,7 @@ class LiveCallSession(
                     }
                 }
                 putJsonObject("systemInstruction") { putJsonArray("parts") { add(buildJsonObject { put("text", instruction) }) } }
-                putJsonArray("tools") { add(buildJsonObject { putJsonArray("functionDeclarations") { add(takeMessageTool()); add(endCallTool()) } }) }
+                putJsonArray("tools") { add(buildJsonObject { putJsonArray("functionDeclarations") { if (booking) add(bookingResultTool()) else add(takeMessageTool()); add(endCallTool()) } }) }
                 putJsonObject("inputAudioTranscription") {}
                 putJsonObject("outputAudioTranscription") {}
             }
@@ -488,6 +529,23 @@ class LiveCallSession(
                     putJsonObject("scam") { put("type", "BOOLEAN"); put("description", "True if it sounds like a scam.") }
                 }
                 putJsonArray("required") { add("who"); add("about"); add("urgent") }
+            }
+        }
+
+        private fun bookingResultTool() = buildJsonObject {
+            put("name", BookingDialRules.BOOKING_RESULT)
+            put("description", "Record what came of the booking call. Call once, when it's booked or clear it can't be.")
+            putJsonObject("parameters") {
+                put("type", "OBJECT")
+                putJsonObject("properties") {
+                    fun s(name: String, d: String) = putJsonObject(name) { put("type", "STRING"); put("description", d) }
+                    putJsonObject("booked") { put("type", "BOOLEAN"); put("description", "True only if they confirmed the booking.") }
+                    s("agreed", "What was booked, briefly: day, time, party size and the name it's under.")
+                    s("reference", "A booking reference they gave, if any.")
+                    s("offered", "Other times or options they offered, if it wasn't booked.")
+                    s("reason", "Why it wasn't booked, in a few words (\"voicemail\" for a voicemail or recorded menu).")
+                }
+                putJsonArray("required") { add("booked") }
             }
         }
 

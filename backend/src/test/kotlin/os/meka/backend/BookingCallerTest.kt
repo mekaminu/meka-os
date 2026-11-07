@@ -1,0 +1,257 @@
+package os.meka.backend
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import os.meka.core.domain.AboutYouFields
+import os.meka.core.domain.AboutYouRules
+import os.meka.core.domain.AskProposal
+import os.meka.core.domain.BookingCallFields
+import os.meka.core.domain.BookingCallRules
+import os.meka.core.domain.BookingCallState
+import os.meka.core.domain.BookingCalls
+import os.meka.core.domain.BookingDialRules
+import os.meka.core.domain.CivilDate
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.LiveCallRules
+import os.meka.core.domain.LocalCalendar
+import os.meka.core.domain.MekaSchema
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.HlcClock
+import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.InMemoryServerOpStore
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Obi on calls, slice 2b: the server rings an approved call card with Obi live on its brief. Invented data only. */
+class BookingCallerTest {
+    private val today = CivilDate.toEpochDay(2026, 11, 7) // a Saturday; London is on GMT in November
+    private var nowMs = LocalCalendar.UTC.toEpochMs(today, 11 * 60)
+    private val ops = InMemoryServerOpStore()
+    private val store = InMemoryLiveCallStore()
+    private var keyIn = true
+    private val line = LiveCallLine(FieldReader.scanning(ops), store, configured = { keyIn }, nowMs = { nowMs })
+    private val woken = mutableListOf<String>()
+
+    private class Dialer : OutboundDialer {
+        var on = true
+        var refuse = false
+        val calls = mutableListOf<List<String>>()
+        override fun dialConfigured() = on
+        override fun dial(to: String, from: String, twiml: String, statusUrl: String, ringSeconds: Int, limitSeconds: Int): String? {
+            calls += listOf(to, from, twiml, statusUrl, ringSeconds.toString(), limitSeconds.toString())
+            return if (refuse) null else "CA" + "b".repeat(32)
+        }
+    }
+
+    private val dialer = Dialer()
+    private val twilio = TwilioVoice(authToken = { null })
+    private val caller = BookingCaller(
+        ops, BankSync.scanning(ops), { "hh" }, line, dialer, twiml = { twilio.bookingTwiml("https://meka.example", it) },
+        statusUrl = "https://meka.example/v1/voice/twilio/booking-status", now = { nowMs }, onWritten = { woken += it },
+    )
+
+    private val held = HashMap<Replica, InMemoryReplicaStore>()
+    private var k = 0
+
+    /** Meka's Fold after pulling everything the server holds. */
+    private fun fold(): Replica {
+        val id = k++
+        var n = 0
+        val s = InMemoryReplicaStore()
+        val r = Replica("hh", "fold", HlcClock("fold", { nowMs }), s, MekaSchema) { "fold$id-${n++}" }
+        r.applyRemoteBatch(ops.after("hh", 0, 100_000).map { it.op })
+        held[r] = s
+        return r
+    }
+
+    private fun push(r: Replica) = held.getValue(r).pendingPush(100_000).forEach { ops.append(it) }
+
+    private val mine = listOf("07700 900123", "020 7946 0000", null, null)
+
+    /** About you on the Fold, and one approved card for Saturday 19:00–20:00 for 4 at a landline. */
+    private fun approvedCard(number: String = "01234 567890"): String {
+        val r = fold()
+        r.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(
+            AboutYouFields.SHOWN_NAME to "Alex Example".fv(), AboutYouFields.MOBILE to "07700 900123".fv(), AboutYouFields.ASSISTANT_NUMBER to "020 7946 0000".fv(),
+        ))
+        val calls = BookingCalls(r, { "card1" }, { nowMs })
+        val id = calls.draft(AskProposal.BookCall("Rosa's Kitchen", "Table for 4", 4, today + 7, 19 * 60, 20 * 60))!!
+        assertTrue(calls.edit(id, null, number, "a high chair"))
+        assertEquals(BookingCallRules.APPROVED_LINE, calls.approve(id, mine, LocalCalendar.UTC))
+        push(r)
+        return id
+    }
+
+    private fun cardOnFold(id: String) = BookingCalls(fold(), { "x" }, { nowMs }).all().single { it.id == id }
+
+    private class FakeModel : ModelDial, ModelLink {
+        val sent = mutableListOf<String>()
+        var onText: ((String) -> Unit)? = null
+        var refuse = false
+        override fun open(onText: (String) -> Unit, onClosed: () -> Unit): ModelLink? { if (refuse) return null; this.onText = onText; return this }
+        override fun send(text: String): Boolean { sent += text; return true }
+        override fun close() {}
+        fun say(json: String) = onText!!(json)
+    }
+
+    /** The phone service opens the stream of the call it made, with the ticket from the markup. */
+    private fun stream(model: FakeModel, ended: MutableList<LiveCallEnd>): LiveCallSession {
+        val twiml = dialer.calls.last()[2]
+        val token = Regex("""name="ticket" value="([0-9a-f]{32})"""").find(twiml)!!.groupValues[1]
+        val t = assertNotNull(line.claim(token, "CA" + "b".repeat(32)))
+        assertTrue(t.booking)
+        return LiveCallSession(t, "MZ1", model, "gemini-test-live", "Charon", {}, {}, { line.markLive(t.callId) }, { e ->
+            ended += e
+            line.ended(t.callId, e)
+            caller.ended(t, e, line.record(t, e))
+        }, nowMs = { nowMs })
+    }
+
+    @Test
+    fun anApprovedCardIsRungAndBookedWithObiOnTheBrief() {
+        val id = approvedCard()
+        assertTrue(caller.tick())
+        // On the call before anything rang; from the assistant's number, to the business, ringing 40 s, ended by 5½ min.
+        val (to, from, twiml) = dialer.calls.single()
+        val status = dialer.calls.single()[3]; val ring = dialer.calls.single()[4]; val limit = dialer.calls.single()[5]
+        assertEquals("+441234567890", to)
+        assertEquals("+442079460000", from)
+        assertTrue("<Connect><Stream url=\"wss://meka.example/v1/voice/twilio/stream\">" in twiml && "booking-ended" in twiml)
+        assertTrue(status.endsWith("/booking-status"))
+        assertEquals("40", ring); assertEquals("${BookingDialRules.LIMIT_SECONDS}", limit)
+        assertEquals(BookingCallState.CALLING, cardOnFold(id).state)
+        assertEquals(listOf("hh"), woken)
+        // One call at a time: the next look rings nothing more.
+        assertFalse(caller.tick())
+        assertEquals(1, dialer.calls.size)
+
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = stream(model, ended)
+        s.start()
+        val setup = Json.parseToJsonElement(model.sent.single()).jsonObject["setup"].toString()
+        assertTrue(BookingDialRules.BOOKING_RESULT in setup && LiveCallRules.END_CALL in setup)
+        assertFalse(LiveCallRules.TAKE_MESSAGE in setup)
+        assertTrue("Alex's AI assistant" in setup && "a high chair" in setup && "020 7946 0000" in setup)
+        assertFalse("07700" in setup)
+        model.say("""{"setupComplete":{}}""")
+        assertTrue(BookingDialRules.KICKOFF in model.sent.last())
+        // Taking a message isn't one of his tools on a booking call.
+        model.say("""{"toolCall":{"functionCalls":[{"id":"1","name":"take_message","args":{"who":"x","about":"y","urgent":false}}]}}""")
+        assertTrue("Not available" in model.sent.last())
+        model.say("""{"toolCall":{"functionCalls":[{"id":"2","name":"booking_result","args":{"booked":true,"agreed":"Sat 14 Nov 19:30 for 4 under Alex","reference":"RK204"}}]}}""")
+        assertTrue("toolResponse" in model.sent.last())
+        nowMs += 150_000
+        s.fromCaller("""{"event":"stop"}""")
+        assertTrue(ended.single().live)
+
+        val c = cardOnFold(id)
+        assertEquals(BookingCallState.BOOKED, c.state)
+        assertEquals("Booked · Sat 14 Nov 19:30 for 4 under Alex · ref RK204", c.result)
+        // The month's spend for both apps' meter, at the outbound rate.
+        val meter = FieldReader.scanning(ops).latest("hh", EntityTypes.CONTEXT_MODE, LiveCallRules.METER_ID, LiveCallRules.METER_CALLS)
+        assertEquals(FieldValue.Int64(1), meter)
+        assertTrue(store.monthMicroUsd(line.month()) >= BookingDialRules.costMicroUsd("+441234567890", 150, 0))
+        // The stream's end step hangs up; the final status changes nothing.
+        assertEquals(VoiceReply.HangUp, caller.handle(VoiceEvent.BookingEnded("CA" + "b".repeat(32))))
+        assertEquals(VoiceReply.Done, caller.handle(VoiceEvent.BookingStatus("CA" + "b".repeat(32), "completed")))
+        assertEquals(BookingCallState.BOOKED, cardOnFold(id).state)
+        // The Fold shows it as the card's result.
+        val row = BookingCallRules.rows(listOf(c), mine, emptyList(), nowMs, LocalCalendar.UTC).single()
+        assertEquals(BookingCallRules.BOOKED, row.status)
+        assertFalse(row.canCancel || row.canCall)
+    }
+
+    @Test
+    fun noAnswerAndBusyCloseTheCardAsNotBooked() {
+        val id = approvedCard()
+        caller.tick()
+        assertIs<VoiceReply.Goodbye>(caller.handle(VoiceEvent.BookingEnded("CA" + "b".repeat(32))))
+        caller.handle(VoiceEvent.BookingStatus("CA" + "b".repeat(32), "no-answer"))
+        val c = cardOnFold(id)
+        assertEquals(BookingCallState.NOT_BOOKED, c.state)
+        assertEquals(BookingDialRules.NO_ANSWER, c.result)
+        // An unknown call's status is ignored.
+        assertEquals(VoiceReply.Done, caller.handle(VoiceEvent.BookingStatus("CA" + "c".repeat(32), "busy")))
+    }
+
+    @Test
+    fun obiNotStartingClosesTheCardAndTheBusinessHearsWhy() {
+        val id = approvedCard()
+        caller.tick()
+        val model = FakeModel().also { it.refuse = true }; val ended = mutableListOf<LiveCallEnd>()
+        stream(model, ended).start()
+        assertFalse(ended.single().live)
+        assertEquals(BookingDialRules.NEVER_LIVE, cardOnFold(id).result)
+        assertEquals(VoiceReply.Goodbye(BookingDialRules.SORRY), caller.handle(VoiceEvent.BookingEnded("CA" + "b".repeat(32))))
+        // Nothing was spent.
+        assertEquals(0L, store.monthMicroUsd(line.month()))
+    }
+
+    @Test
+    fun outsideHoursItWaitsAndNotSetUpRingsNothing() {
+        nowMs = LocalCalendar.UTC.toEpochMs(today, 8 * 60)
+        val id = approvedCard()
+        assertFalse(caller.tick())
+        assertEquals(BookingCallState.APPROVED, cardOnFold(id).state)
+        nowMs = LocalCalendar.UTC.toEpochMs(today, 9 * 60)
+        dialer.on = false
+        assertFalse(caller.tick())
+        keyIn = false; dialer.on = true
+        assertFalse(caller.tick())
+        assertTrue(dialer.calls.isEmpty())
+        keyIn = true
+        assertTrue(caller.tick())
+        assertEquals(1, dialer.calls.size)
+    }
+
+    @Test
+    fun aRefusedCallAPersonalNumberAndAStuckCallAreClosed() {
+        val id = approvedCard()
+        dialer.refuse = true
+        caller.tick()
+        assertEquals(BookingCallState.FAILED to BookingDialRules.DIAL_FAILED, cardOnFold(id).let { it.state to it.result })
+
+        // His own mobile slipped onto a card (an edit on another device): the server never rings it.
+        val r = fold()
+        r.commitLocal(EntityTypes.BOOKING_CALL, "card2", BookingCallRules.draftFields(AskProposal.BookCall("Oak Barbers", "Haircut", null, today + 1, null, null), nowMs) + mapOf(
+            BookingCallFields.NUMBER to "+447700900123".fv(), BookingCallFields.STATE to BookingCallState.APPROVED.code.fv(),
+        ))
+        push(r)
+        dialer.refuse = false
+        caller.tick()
+        assertEquals(1, dialer.calls.size)
+        assertTrue(cardOnFold("card2").result!!.startsWith("Not rung · That's a personal number"))
+
+        // A card left on the call (a restart lost the call) is closed after a while.
+        val r2 = fold()
+        r2.commitLocal(EntityTypes.BOOKING_CALL, "card3", BookingCallRules.draftFields(AskProposal.BookCall("The Oak", "Table", 2, today + 1, null, null), nowMs) + mapOf(
+            BookingCallFields.STATE to BookingCallState.CALLING.code.fv(), BookingCallFields.CALLED_AT to FieldValue.Int64(nowMs),
+        ))
+        push(r2)
+        nowMs += BookingDialRules.STUCK_MS + 1
+        caller.tick()
+        assertEquals(BookingCallState.FAILED to BookingDialRules.STUCK, cardOnFold("card3").let { it.state to it.result })
+    }
+
+    @Test
+    fun aCardCancelledBeforeTheLookNeverRings() {
+        val r = fold()
+        r.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.ASSISTANT_NUMBER to "020 7946 0000".fv()))
+        val calls = BookingCalls(r, { "card1" }, { nowMs })
+        val id = calls.draft(AskProposal.BookCall("Rosa's Kitchen", "Table for 4", 4, today + 7, 19 * 60, 20 * 60))!!
+        calls.edit(id, null, "01234 567890", null)
+        calls.approve(id, mine, LocalCalendar.UTC)
+        assertTrue(calls.cancel(id))
+        push(r)
+        assertFalse(caller.tick())
+        assertTrue(dialer.calls.isEmpty())
+        assertNull(cardOnFold(id).result)
+    }
+}
