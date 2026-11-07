@@ -424,6 +424,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/review/inner-dark-one.png](docs/screens/fold/review/inner-dark-one.png)
 - [fold/routines/cover-dark-by-hand.png](docs/screens/fold/routines/cover-dark-by-hand.png)
 - [fold/routines/cover-dark-empty.png](docs/screens/fold/routines/cover-dark-empty.png)
+- [fold/routines/cover-dark-ideas.png](docs/screens/fold/routines/cover-dark-ideas.png)
 - [fold/routines/cover-dark-last-time.png](docs/screens/fold/routines/cover-dark-last-time.png)
 - [fold/routines/cover-dark-many.png](docs/screens/fold/routines/cover-dark-many.png)
 - [fold/routines/cover-dark-new-list.png](docs/screens/fold/routines/cover-dark-new-list.png)
