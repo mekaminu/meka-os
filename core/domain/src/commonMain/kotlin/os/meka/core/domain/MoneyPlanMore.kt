@@ -37,6 +37,40 @@ data class MoneyForecastTiles(
     val by: List<MoneyPlanTile>, val cutLabel: String, val cutNote: String, val cutPence: Long, val spoken: String,
 )
 
+/** One day of the no-spend week: its letter and [state] ([MoneyNoSpendView.WEEK_FREE] etc.). */
+data class MoneyWeekDot(val letter: String, val state: Int, val spoken: String) {
+    val noSpend: Boolean get() = state == MoneyNoSpendView.WEEK_FREE
+    val spent: Boolean get() = state == MoneyNoSpendView.WEEK_SPENT
+    val pending: Boolean get() = state == MoneyNoSpendView.WEEK_NOT_YET
+}
+
+data class MoneyNoSpendTile(val on: Boolean, val dots: List<MoneyWeekDot>, val count: String, val button: String, val spoken: String) {
+    fun dotAt(i: Int): MoneyWeekDot = dots[i]
+}
+
+/** A fun money chip: £[pounds], [chosen] when it's the week's allowance. */
+data class MoneyFunChip(val pounds: Int, val label: String, val chosen: Boolean)
+
+/** [value] "£25" (left, or "£5 over"), [of] "of £60", [share] what's left of it (0–1) for the pot's bar. */
+data class MoneyFunTile(val hasPot: Boolean, val value: String, val of: String, val share: Float, val over: Boolean, val chips: List<MoneyFunChip>, val spoken: String) {
+    fun chipAt(i: Int): MoneyFunChip = chips[i]
+}
+
+data class MoneyChallengeTiles(val noSpend: MoneyNoSpendTile, val funMoney: MoneyFunTile, val capRow: String, val capSet: String)
+
+/** One account's bar: [amount] its fees (or [NO_FEES]), [share] of the biggest, [sub] its rate and payments. */
+data class MoneyAbroadBar(val id: String, val name: String, val amount: String, val share: Float, val good: Boolean, val sub: String, val spoken: String)
+
+data class MoneyAbroadPayment(val what: String, val fee: String, val spoken: String)
+
+data class MoneyAbroadTiles(
+    val head: String, val feesLabel: String, val fees: String, val lit: Boolean, val line: String,
+    val bars: List<MoneyAbroadBar>, val payments: List<MoneyAbroadPayment>, val more: String?, val spoken: String,
+) {
+    fun barAt(i: Int): MoneyAbroadBar = bars[i]
+    fun paymentAt(i: Int): MoneyAbroadPayment = payments[i]
+}
+
 object MoneyPlanMore {
     const val GOALS_EMPTY_TITLE = "No money goals yet"
     const val GOALS_EMPTY_LINE = "Start one from a plan"
@@ -146,5 +180,94 @@ object MoneyPlanMore {
             else "That adds ${fmt(cut * 12)} by ${Recurrence.MONTH_SHORT[end % 12]} ${end / 12}"
         val spoken = tiles.joinToString(". ") { it.spoken } + ". " + by.joinToString(". ") { it.spoken }
         return MoneyForecastTiles(tiles, s, SPANS, bars, by, cutLabel, cutNote, cut, spoken)
+    }
+
+    // ---- Slice 2: CHALLENGES as two tiles, PAYING ABROAD as a fees tile and a bar per account ----
+
+    const val NO_SPEND = "NO-SPEND DAYS"
+    const val THIS_WEEK = "this week"
+    const val START_COUNTING = "Start counting"
+    const val STOP_COUNTING = "Stop counting"
+    const val FUN = "FUN MONEY"
+    const val FUN_NOT_SET = "Not set"
+    const val FUN_PICK = "Pick a week's fun money"
+    val FUN_CHIPS = listOf(40, 60, 80)
+    const val CAP_ROW = "Cap a category for the month"
+    const val CAP_SET = "Set ›"
+    const val ABROAD_HEAD = "PAYING ABROAD · LAST 12 MONTHS"
+    const val FEES_LABEL = "FOREIGN FEES"
+    const val SHOW_PAYMENTS = "See the payments behind it"
+    const val HIDE_PAYMENTS = "Hide payments"
+    const val NO_FEES = "No fees"
+    /** The payments list stops here; the rest are counted in a last line. */
+    const val PAYMENTS_SHOWN = 12
+    private val WEEK_LETTERS = listOf("M", "T", "W", "T", "F", "S", "S")
+
+
+
+
+
+
+    fun challengeTiles(ch: MoneyChallengesView): MoneyChallengeTiles {
+        val ns = ch.noSpend
+        val week = ns?.week?.takeIf { it.size == 7 } ?: List(7) { MoneyNoSpendView.WEEK_NOT_YET }
+        val names = CivilDate.DAY_LONG
+        val dots = week.mapIndexed { i, st ->
+            MoneyWeekDot(WEEK_LETTERS[i], if (ch.noSpendOn) st else MoneyNoSpendView.WEEK_NOT_YET,
+                names[i] + when { !ch.noSpendOn || st == MoneyNoSpendView.WEEK_NOT_YET -> ", not counted yet"; st == MoneyNoSpendView.WEEK_FREE -> ", no spending"; else -> ", spent" })
+        }
+        val n = if (ch.noSpendOn) week.count { it == MoneyNoSpendView.WEEK_FREE } else 0
+        val noSpend = MoneyNoSpendTile(ch.noSpendOn, dots, if (ch.noSpendOn) "$n" else "—",
+            if (ch.noSpendOn) STOP_COUNTING else START_COUNTING,
+            if (ch.noSpendOn) "No-spend days, $n $THIS_WEEK" else "No-spend days, not counting")
+        val f = ch.funMoney
+        val funTile = if (f == null || f.limitPence <= 0) {
+            MoneyFunTile(false, FUN_NOT_SET, FUN_PICK, 0f, false, FUN_CHIPS.map { MoneyFunChip(it, "£$it", false) }, "Fun money, not set")
+        } else {
+            val over = f.leftPence < 0
+            val value = if (over) "${fmt(-f.leftPence)} over" else fmt(f.leftPence)
+            val share = (f.leftPence.toFloat() / f.limitPence).coerceIn(0f, 1f)
+            MoneyFunTile(true, value, "of ${fmt(f.limitPence)}", share, over,
+                FUN_CHIPS.map { MoneyFunChip(it, "£$it", it * 100L == f.limitPence) },
+                "Fun money this week, " + (if (over) value else "$value left") + " of ${fmt(f.limitPence)}")
+        }
+        return MoneyChallengeTiles(noSpend, funTile, CAP_ROW, CAP_SET)
+    }
+
+    /** What a fun money chip sends to [MoneyChallenges.parseFun]; a tap on the chosen one takes it off. */
+    fun funText(pounds: Int): String = "£$pounds"
+
+
+
+
+    /** PAYING ABROAD as tiles, or null with no account to show (the trip banner still leads the screen). */
+    fun abroadTiles(tv: MoneyTravelView): MoneyAbroadTiles? {
+        if (tv.rows.isEmpty()) return null
+        val total = tv.feesPence
+        val best = tv.rows.firstOrNull { it.good }
+        val line = when {
+            total == 0L -> "No foreign fees on your payments abroad"
+            best != null -> "Could be £0 paying with ${best.name}, as it charged no fees abroad"
+            else -> "Could be £0 with a card that has no foreign fees"
+        }
+        val tallest = tv.rows.maxOf { it.feePence }.coerceAtLeast(1)
+        val bars = tv.rows.map { r ->
+            val amount = if (r.feePence == 0L) NO_FEES else fmt(r.feePence)
+            val pays = "${r.payments} payment${if (r.payments == 1) "" else "s"} abroad"
+            val sub = if (r.feePence == 0L) "$pays · ${fmt(r.spentPence)}"
+                else listOfNotNull(MoneyTravel.rate(r.feePence, r.spentPence)?.let { "$it of ${fmt(r.spentPence)}" },
+                    pays.takeIf { r.payments > 0 }).joinToString(" · ").ifEmpty { r.line }
+            MoneyAbroadBar(r.id, r.name, amount, if (r.feePence == 0L) 1f else (r.feePence.toFloat() / tallest).coerceIn(0.04f, 1f),
+                r.feePence == 0L, sub, "${r.name}, $amount, $sub")
+        }
+        val payments = tv.fees.take(PAYMENTS_SHOWN).map { f ->
+            val what = "${f.what ?: "Foreign fee"} · ${CivilDate.shortLabel(f.day)}"
+            MoneyAbroadPayment(what, "${fmt(f.pence)} fee", "$what, ${fmt(f.pence)} fee")
+        }
+        val rest = tv.fees.size - payments.size
+        val more = if (rest > 0) "and $rest more" else null
+        val fees = fmt(total)
+        return MoneyAbroadTiles(ABROAD_HEAD, FEES_LABEL, fees, total > 0, line, bars, payments, more,
+            "Foreign fees in the last 12 months, $fees. $line. " + bars.joinToString(". ") { it.spoken })
     }
 }

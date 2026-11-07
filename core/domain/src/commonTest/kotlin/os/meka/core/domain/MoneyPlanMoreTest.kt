@@ -106,4 +106,84 @@ class MoneyPlanMoreTest {
         assertEquals(MoneyPlanMore.ADD_NO_NAME, MoneyPlanMore.newGoal(" ", "£200").exceptionOrNull()?.message)
         assertEquals("Holiday · £2,000 added to Goals", MoneyPlanMore.addedSaid(MoneyPlanMore.NewGoal("Holiday", "£2,000")))
     }
+
+    // ---- Slice 2 ----
+
+    private val sat17 = CivilDate.toEpochDay(2026, 10, 17)
+    private fun cl(m: Int, day: Int, pence: Long, c: MoneyCategory) = MoneyChallengeLine(d(m, day), pence, c)
+
+    @Test
+    fun noSpendWeekDotsAndFunMoneyPot() {
+        val lines = listOf(
+            cl(10, 1, -500, MoneyCategory.COFFEE),
+            cl(10, 12, -1_000, MoneyCategory.TAKEAWAY), // Monday: spent
+            cl(10, 14, -3_500, MoneyCategory.EATING_OUT), // Wednesday: spent
+            cl(10, 15, -100, MoneyCategory.SUBSCRIPTIONS), // Thursday: a subscription doesn't count
+        )
+        val v = MoneyChallenges.view(lines, MoneyChallengeSetting(noSpend = true, funPence = 6_000), sat17)!!
+        // Statements reach Thu 15th, so Fri–Sun aren't counted yet.
+        assertEquals(listOf(0, 1, 0, 1, 2, 2, 2), v.noSpend!!.week)
+        val t = MoneyPlanMore.challengeTiles(v)
+        assertTrue(t.noSpend.on)
+        assertEquals("2", t.noSpend.count)
+        assertEquals(MoneyPlanMore.STOP_COUNTING, t.noSpend.button)
+        assertEquals("Tuesday, no spending", t.noSpend.dotAt(1).spoken)
+        // Fun money: £45 spent of £60 this week → £15 left, a quarter of the pot.
+        assertTrue(t.funMoney.hasPot)
+        assertEquals("£15", t.funMoney.value)
+        assertEquals("of £60", t.funMoney.of)
+        assertEquals(0.25f, t.funMoney.share)
+        assertEquals(listOf(false, true, false), t.funMoney.chips.map { it.chosen })
+        assertEquals(MoneyPlanMore.CAP_ROW, t.capRow)
+        // Over the pot.
+        val over = MoneyPlanMore.challengeTiles(MoneyChallenges.view(lines, MoneyChallengeSetting(funPence = 4_000), sat17)!!)
+        assertEquals("£5 over", over.funMoney.value)
+        assertTrue(over.funMoney.over)
+        assertEquals(0f, over.funMoney.share)
+        assertEquals(MoneyPlanMore.START_COUNTING, over.noSpend.button)
+        assertTrue(over.noSpend.dots.all { it.state == MoneyNoSpendView.WEEK_NOT_YET })
+        // Nothing set: Not set, the chips to pick one.
+        val none = MoneyPlanMore.challengeTiles(MoneyChallenges.view(lines, MoneyChallengeSetting(), sat17)!!)
+        assertFalse(none.funMoney.hasPot)
+        assertEquals(MoneyPlanMore.FUN_NOT_SET, none.funMoney.value)
+        assertEquals("—", none.noSpend.count)
+    }
+
+    private val names = mapOf("a-card" to "Credit card", "a-travel" to "Travel card")
+    private fun tl(acc: String, m: Int, day: Int, pence: Long, text: String, c: MoneyCategory) = MoneyTravelLine(acc, d(m, day), pence, text, c)
+    private val trip = listOf(
+        tl("a-card", 7, 20, -10_000, "RESTAURANTE SOL EUR 116.20", MoneyCategory.EATING_OUT),
+        tl("a-card", 7, 20, -299, "NON-STERLING TRANSACTION FEE", MoneyCategory.FEES),
+        tl("a-card", 7, 21, -5_000, "MERCADO 58.10 EUR", MoneyCategory.GROCERIES),
+        tl("a-card", 7, 22, -150, "Non-sterling transaction fee", MoneyCategory.FEES),
+        tl("a-travel", 7, 22, -4_000, "TAPAS BAR €46.50", MoneyCategory.EATING_OUT),
+    )
+
+    @Test
+    fun payingAbroadAsAFeesTileBarsAndThePaymentsBehindIt() {
+        val tv = MoneyTravel.view(trip, names, sat17)!!
+        assertEquals(449L, tv.feesPence)
+        // Newest fee first, each with the payment it came with.
+        assertEquals(listOf("Groceries" to 150L, "Eating out" to 299L), tv.fees.map { it.what to it.pence })
+        val t = MoneyPlanMore.abroadTiles(tv)!!
+        assertEquals(MoneyPlanMore.ABROAD_HEAD, t.head)
+        assertEquals("£4.49", t.fees)
+        assertTrue(t.lit)
+        assertEquals("Could be £0 paying with Travel card, as it charged no fees abroad", t.line)
+        assertEquals(listOf("Travel card", "Credit card"), t.bars.map { it.name })
+        assertEquals(MoneyPlanMore.NO_FEES, t.barAt(0).amount)
+        assertTrue(t.barAt(0).good)
+        assertEquals("£4.49", t.barAt(1).amount)
+        assertEquals(1f, t.barAt(1).share)
+        assertEquals("about 3% of £150 · 2 payments abroad", t.barAt(1).sub)
+        assertEquals("1 payment abroad · £40", t.barAt(0).sub)
+        assertEquals("Groceries · Wed 22 Jul", t.paymentAt(0).what)
+        assertEquals("£1.50 fee", t.paymentAt(0).fee)
+        assertNull(t.more)
+        // No fees at all.
+        val clean = MoneyPlanMore.abroadTiles(MoneyTravel.view(trip.filter { it.account == "a-travel" }, names, sat17)!!)!!
+        assertEquals("£0", clean.fees)
+        assertFalse(clean.lit)
+        assertTrue(clean.payments.isEmpty())
+    }
 }

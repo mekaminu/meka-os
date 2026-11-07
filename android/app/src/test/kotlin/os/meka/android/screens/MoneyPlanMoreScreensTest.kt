@@ -69,9 +69,15 @@ class MoneyPlanMoreScreensTest {
                     "09/$mm/2026,TESCO STORES 2041,-64.90\n" +
                     (if (m < 10) "28/$mm/2026,TESCO STORES 2041,-58.20\n" else "")
             }
+        /** Slice 2: a week away on the card in invented statements — two payments abroad, each with a foreign fee. */
+        const val CARD = "Date,Description,Amount\n" +
+            "12/10/2026,RESTAURANTE SOL EUR 46.20,-40.00\n" +
+            "12/10/2026,NON-STERLING TRANSACTION FEE,-1.20\n" +
+            "13/10/2026,MERCADO CENTRAL 23.10 EUR,-20.00\n" +
+            "13/10/2026,NON-STERLING TRANSACTION FEE,-0.60\n"
     }
 
-    private fun open(): MekaCore {
+    private fun open(card: Boolean = false): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, ThemeChoice.DARK)
         val core = MekaCore(
@@ -83,6 +89,7 @@ class MoneyPlanMoreScreensTest {
             core.tick()
             core.openMoney()
             check(!core.importMoneyStatement("Current account", CURRENT).refused)
+            if (card) check(!core.importMoneyStatement("Credit card", CARD).refused)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
@@ -162,5 +169,44 @@ class MoneyPlanMoreScreensTest {
         scrollTo("money-forecast-tiles")
         assertTrue(showsText(MoneyPlanMore.OUT))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-tiles-unfolded"))
+    }
+
+    private fun until(core: MekaCore, check: () -> Boolean) {
+        repeat(40) { if (!check()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
+    }
+
+    /** Slice 2: CHALLENGES as two tiles (No-spend days, Fun money with £40/£60/£80) and PAYING ABROAD's fees tile and bars. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun challengesAreTwoTilesAndPayingAbroadShowsItsFees() {
+        val core = open(card = true)
+        pick(MoneyTab.PLAN)
+        scrollTo("money-challenge-tiles")
+        assertTrue(showsText(MoneyPlanMore.NO_SPEND) && showsText(MoneyPlanMore.FUN), "the challenges should be two tiles")
+        assertTrue(showsText(MoneyPlanMore.START_COUNTING) && showsText(MoneyPlanMore.FUN_NOT_SET), "nothing set yet")
+        tap("money-nospend-toggle")
+        until(core) { showsText(MoneyPlanMore.STOP_COUNTING) }
+        assertTrue(showsText(MoneyPlanMore.STOP_COUNTING), "Start counting should switch no-spend days on")
+        tap("money-fun-chip-60")
+        until(core) { showsText("of £60") }
+        assertTrue(showsText("of £60"), "£60 should set the week's fun money")
+        assertTrue(shows("money-cap-row"), "Cap a category for the month should follow the tiles")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-challenges-tiles-cover"))
+        scrollTo("money-abroad-fees")
+        assertTrue(showsText(MoneyPlanMore.ABROAD_HEAD) && showsText("£1.80"), "the year's foreign fees should be the big tile")
+        assertTrue(shows("money-abroad-payments-toggle"))
+        tap("money-abroad-payments-toggle")
+        assertTrue(shows("money-abroad-payments") && showsText("£1.20 fee"), "See the payments behind it should list each fee")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-abroad-tiles-cover"))
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun challengesAndPayingAbroadOnTheOpenFold() {
+        open(card = true)
+        pick(MoneyTab.PLAN)
+        scrollTo("money-challenge-tiles")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-challenges-tiles-unfolded"))
+        scrollTo("money-abroad-fees")
+        assertTrue(showsText(MoneyPlanMore.FEES_LABEL))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-abroad-tiles-unfolded"))
     }
 }

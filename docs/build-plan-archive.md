@@ -5343,3 +5343,18 @@ The item's board text when it was closed:
   start tile scrolls to What if I save… / Clear my cards, Add a £ goal as a popover, CoreModel.moneyAddGoal. Tests:
   MoneyPlanMoreTest, MoneyPlanMoreFacadeTest, MoneyPlanMoreScreensTest (cover and open Fold shots),
   MekaCoreBridgeTests.testPlanLowerHalfReachesSwift. No server change, no migration.
+- Slice 2, 2026-11-07: CHALLENGES as two tiles and PAYING ABROAD as a fees tile and bars, to the same mockup. Core
+  (domain, all additive with defaults): `MoneyNoSpendView.week` (this week Monday–Sunday: spent / no-spend / not reached
+  yet), `MoneyChallengeBar.leftPence`/`limitPence`, `MoneyTravelRow.feePence`/`spentPence`/`payments`,
+  `MoneyTravelView.fees` (each foreign fee, newest first, paired with the payment abroad it came with on the same account
+  up to 3 days before, named by its category). `MoneyPlanMore.challengeTiles` (No-spend days dots, count, Start / Stop
+  counting; Fun money pot with left / over, a share bar and £40 / £60 / £80 chips, the chosen one takes it off) and
+  `abroadTiles` (FOREIGN FEES total, "Could be £0 …" line, a bar per account against the biggest fee, the payments list
+  up to 12 and "and N more"); top-level `MoneyWeekDot`, `MoneyNoSpendTile`, `MoneyFunChip`, `MoneyFunTile`,
+  `MoneyChallengeTiles`, `MoneyAbroadBar`, `MoneyAbroadPayment`, `MoneyAbroadTiles`. Fold: `MoneyChallengeTilesBlock` and
+  `MoneyAbroadTilesBlock` in MoneyPlanMoreBlocks.kt, wired in MoneyPane (the old ChallengesBlock and the Set a challenge
+  row gave way to the tiles and "Cap a category for the month · Set ›", which opens the same sheet; caps still bars with
+  Remove). Mac: `MoneyChallengeTilesView`, `MoneyAbroadTilesView` in MoneyPlanMoreViews.swift; the Set a challenge
+  popover hangs off the tiles. Tests: MoneyPlanMoreTest (week dots, pot, chips, fees pairing, bars), MoneyPlanMoreScreensTest
+  (cover and open Fold shots with an invented card's week abroad), MoneyPlanLayoutScreensTest now taps money-cap-row,
+  MekaCoreBridgeTests.testPlanChallengesAndAbroadReachSwift. No server change, no migration.

@@ -776,42 +776,19 @@ struct MoneySheet: View {
     private func challenges(_ ch: MoneyChallengesView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             MoneyLabel(ch.head, palette: palette).padding(.top, MekaSpace.xs)
-            if let i = ch.intro {
-                Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Text(MoneyChallenges.shared.SWITCH).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Spacer()
-                Button(ch.noSpendOn ? "On ✓" : "Count them") {
-                    let on = !ch.noSpendOn
-                    Task { said = await model.moneyNoSpend(on: on) }
-                }
-                .buttonStyle(MekaPressStyle()).font(MekaType.caption)
-                .foregroundStyle(ch.noSpendOn ? palette.accent : palette.textSecondary)
-                .accessibilityLabel("\(MoneyChallenges.shared.SWITCH)\(ch.noSpendOn ? ", on" : ", off")")
-            }
-            if let ns = ch.noSpend {
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    if ns.days.count > 0 {
-                        HStack(spacing: 3) { // rhythm: ok (the month's day dots are one mark)
-                            ForEach(0..<ns.days.count, id: \.self) { i in
-                                Circle().fill(ns.dayAt(i: Int32(i)) ? palette.accent : palette.surfaceRaised).frame(width: 6, height: 6)
-                            }
-                        }
+            // Plan's lower half, slice 2: No-spend days and Fun money as two tiles, then the caps; the Cap a category row
+            // opens the Set a challenge popover (fun money typed, a category cap).
+            MoneyChallengeTilesView(
+                tiles: MoneyPlanMore.shared.challengeTiles(ch: ch), palette: palette, reduced: reduceMotion,
+                onNoSpend: { on in Task { said = await model.moneyNoSpend(on: on) } },
+                onFun: { pounds, chosen in
+                    Task {
+                        if chosen { said = await model.moneyChallengeRemove(key: MoneyChallenges.shared.FUN_KEY) }
+                        else { said = await model.moneyFunMoney(text: MoneyPlanMore.shared.funText(pounds: pounds)) }
                     }
-                    Text(ns.line).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
-                    if let st = ns.streakLine {
-                        Text(st).font(MekaType.caption).foregroundStyle(ns.lit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(ns.spoken)
-            }
-            if let f = ch.funMoney { challengeBar(f) }
-            ForEach(ch.caps, id: \.key) { c in challengeBar(c).transition(.opacity) }
-            if let t = ch.throughLine { Text(t).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
-            // Layout rules on Plan (e): fun money and caps are set in a popover, not in fields on the page.
-            linkRow(MoneyPlanLayout.shared.SET_CHALLENGE, line: MoneyPlanLayout.shared.SET_CHALLENGE_LINE, lit: false) { setChallengeOpen = true }
+                },
+                onCap: { setChallengeOpen = true }
+            )
                 .popover(isPresented: $setChallengeOpen, arrowEdge: .trailing) {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         Text(MoneyPlanLayout.shared.SET_CHALLENGE_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -822,6 +799,8 @@ struct MoneySheet: View {
                     .padding(MekaSpace.m)
                     .frame(width: 360)
                 }
+            ForEach(ch.caps, id: \.key) { c in challengeBar(c).transition(.opacity) }
+            if let t = ch.throughLine { Text(t).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
         }
         .moneyCard(palette)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
@@ -994,22 +973,16 @@ struct MoneySheet: View {
     /// a brass dot by one that charged none. Lines cross-fade as they change.
     private func travel(_ tv: MoneyTravelView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            MoneyLabel(tv.head, palette: palette).padding(.top, MekaSpace.xs)
-            if let t = tv.tip {
-                Text(t).font(MekaType.body).foregroundStyle(tv.tipLit ? palette.accent : palette.textSecondary)
-                    .contentTransition(.opacity).fixedSize(horizontal: false, vertical: true)
-            }
-            ForEach(tv.rows, id: \.id) { r in
-                HStack(spacing: MekaSpace.xs) {
-                    Circle().fill(r.good ? palette.accent : palette.surfaceRaised).frame(width: 8, height: 8)
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
-                    }
+            // Plan's lower half, slice 2: the year's fees as a tile, a bar per account, the payments behind it.
+            if let at = MoneyPlanMore.shared.abroadTiles(tv: tv) {
+                MoneyLabel(at.head, palette: palette).padding(.top, MekaSpace.xs)
+                MoneyAbroadTilesView(tiles: at, palette: palette, reduced: reduceMotion)
+            } else {
+                MoneyLabel(tv.head, palette: palette).padding(.top, MekaSpace.xs)
+                if let t = tv.tip {
+                    Text(t).font(MekaType.body).foregroundStyle(tv.tipLit ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity).fixedSize(horizontal: false, vertical: true)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(r.spoken)
-                .transition(.opacity)
             }
         }
         .moneyCard(palette)

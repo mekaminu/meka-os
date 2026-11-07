@@ -2151,6 +2151,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyPlanMore.shared.CUT_MAX_POUNDS, 600)
     }
 
+    func testPlanChallengesAndAbroadReachSwift() {
+        // Plan's lower half, slice 2: the challenge tiles' words, the fun money chips and their text cross to Swift.
+        XCTAssertEqual(MoneyPlanMore.shared.funText(pounds: 40), "£40")
+        XCTAssertEqual(MoneyPlanMore.shared.FUN_CHIPS.map { $0.int32Value }, [40, 60, 80])
+        XCTAssertEqual(MoneyPlanMore.shared.ABROAD_HEAD, "PAYING ABROAD · LAST 12 MONTHS")
+        XCTAssertEqual(MoneyNoSpendView.companion.WEEK_FREE, 1)
+    }
+
     func testMoneyCardsReachSwift() {
         // Money manager, slice 7: the cards block's words cross to Swift, typed values parse; a locked screen has none.
         XCTAssertEqual(MoneyCards.shared.HEAD, "CARDS")

@@ -201,9 +201,9 @@ class MoneyPlanLayoutScreensTest {
         tap("money-whatif-sheet-done")
 
         // Challenges: the fields only in the Set a challenge sheet.
-        scrollTo("money-set-challenge-row")
+        scrollTo("money-cap-row")
         if (showsText(MoneyChallenges.FUN_HINT)) fail("the fun money field sits open on the page")
-        tap("money-set-challenge-row")
+        tap("money-cap-row")
         assertTrue(showsText(MoneyChallenges.FUN_HINT) && showsText(MoneyChallenges.CAP_HINT), "Set a challenge should open both fields")
         tap("money-set-challenge-sheet-done")
 

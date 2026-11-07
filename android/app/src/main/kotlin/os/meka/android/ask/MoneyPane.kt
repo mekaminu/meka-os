@@ -910,23 +910,34 @@ fun MoneyPane(
                 // Layout rules on Plan (a), (e): the challenges in one card; fun money and caps are set in a sheet.
                 item(key = "challenges") {
                     MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-challenges-card") {
-                        ChallengesBlock(ch, Modifier,
-                            onNoSpend = { on -> scope.launch { runCatching { core.moneyNoSpend(on) }.getOrNull()?.let(say) } },
-                            onRemove = { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } })
-                        MoneyLinkRow(MoneyPlanLayout.SET_CHALLENGE, MoneyPlanLayout.SET_CHALLENGE_LINE, false, "money-set-challenge-row") {
-                            haptics.tick(); said = null; setChallengeOpen = true
-                        }
+                        // Plan's lower half, slice 2: No-spend days and Fun money as two tiles, then the caps and Cap a category ›.
+                        MoneyChallengeTilesBlock(MoneyPlanMore.challengeTiles(ch),
+                            onNoSpend = { on -> haptics.tick(); scope.launch { runCatching { core.moneyNoSpend(on) }.getOrNull()?.let(say) } },
+                            onFun = { pounds, chosen ->
+                                haptics.tick()
+                                scope.launch {
+                                    runCatching { if (chosen) core.moneyChallengeRemove(MoneyChallenges.FUN_KEY) else core.moneyFunMoney(MoneyPlanMore.funText(pounds)) }
+                                        .getOrNull()?.let(say)
+                                }
+                            },
+                            onCap = { haptics.tick(); said = null; setChallengeOpen = true })
+                        ch.caps.forEach { ChallengeBar(it) { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } } }
+                        ch.throughLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
                     }
                 }
             }
             // Slice 17: PAYING ABROAD — which accounts charged foreign fees, and the one to use (Plan).
             v.travel?.takeIf { has(MoneySection.TRAVEL) }?.let { tv ->
                 item(key = "travel-head") {
-                    MoneyLabel(tv.head,
+                    MoneyLabel(if (tv.rows.isNotEmpty()) MoneyPlanMore.ABROAD_HEAD else tv.head,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "travel") {
-                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-travel-card") { TravelBlock(tv, Modifier) }
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-travel-card") {
+                        // Plan's lower half, slice 2: the year's fees as a tile, a bar per account, the payments behind it.
+                        val at = MoneyPlanMore.abroadTiles(tv)
+                        if (at != null) MoneyAbroadTilesBlock(at, onTick = { haptics.tick() }) else TravelBlock(tv, Modifier)
+                    }
                 }
             }
             // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part is worked
@@ -2073,50 +2084,6 @@ private fun BusinessMailBlock(m: MoneyBusinessMailView, onBusinessTxn: (String) 
         }
         m.moreLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Text(m.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
-    }
-}
-
-/**
- * Slice 15: CHALLENGES — the No-spend days switch and, when on, the month's days as dots (brass = no spending) with the
- * count and the streak; fun money for the week and each category cap as a bar (brass from 90%) with what's left and the
- * run; fields to set them. Bars grow on the appear spring and lines cross-fade (MekaMotion.appear honours reduced motion).
- */
-@Composable
-private fun ChallengesBlock(ch: MoneyChallengesView, modifier: Modifier, onNoSpend: (Boolean) -> Unit, onRemove: (String) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        ch.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(MoneyChallenges.SWITCH, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-            Text(if (ch.noSpendOn) "On ✓" else "Count them", style = MekaType.caption,
-                color = if (ch.noSpendOn) Meka.colors.accent else Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onNoSpend(!ch.noSpendOn) }
-                    .semantics { contentDescription = MoneyChallenges.SWITCH + if (ch.noSpendOn) ", on" else ", off" }
-                    .minTouch().padding(MekaSpace.xs))
-        }
-        ch.noSpend?.let { ns ->
-            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = ns.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                if (ns.days.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok (the month's day dots are one mark)
-                        ns.days.forEachIndexed { i, free ->
-                            val c by animateColorAsState(if (free) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "money-nospend-$i")
-                            Box(Modifier.size(7.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(c))
-                        }
-                    }
-                }
-                Crossfade(ns.line, animationSpec = MekaMotion.appear(reduced), label = "money-nospend-line") { l ->
-                    Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
-                }
-                ns.streakLine?.let { st ->
-                    Crossfade(st, animationSpec = MekaMotion.appear(reduced), label = "money-nospend-streak") { l ->
-                        Text(l, style = MekaType.caption, color = if (ns.lit) Meka.colors.accent else Meka.colors.textSecondary)
-                    }
-                }
-            }
-        }
-        ch.funMoney?.let { ChallengeBar(it, onRemove) }
-        ch.caps.forEach { ChallengeBar(it, onRemove) }
-        ch.throughLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 

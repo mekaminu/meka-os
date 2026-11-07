@@ -20,7 +20,18 @@ package os.meka.core.domain
 data class MoneyTravelLine(val account: String, val day: Long, val pence: Long, val text: String, val category: MoneyCategory)
 
 /** One account's year abroad: [good] when it charged no foreign fees on payments abroad. */
-data class MoneyTravelRow(val id: String, val name: String, val line: String, val good: Boolean, val spoken: String)
+data class MoneyTravelRow(
+    val id: String, val name: String, val line: String, val good: Boolean, val spoken: String,
+    /** Plan's lower half, slice 2: the year's foreign fees, what was paid abroad and how many payments, for its bar. */
+    val feePence: Long = 0, val spentPence: Long = 0, val payments: Int = 0,
+)
+
+/**
+ * Plan's lower half, slice 2: one foreign fee behind PAYING ABROAD's total, newest first: the account, its [day], the
+ * [pence] charged and [what] it was for (the category of the payment abroad it came with, by the account and within
+ * [MoneyTravel.FEE_PAIR_DAYS] before it), null when no payment matches.
+ */
+data class MoneyTravelFee(val account: String, val day: Long, val pence: Long, val what: String?)
 
 /**
  * PAYING ABROAD on the Money screen (this month only): [tip] which to use, [rows] each account, [banner] when he's abroad
@@ -34,14 +45,20 @@ data class MoneyTravelView(
     val banner: String?,
     val foot: String,
     val spoken: String,
+    /** Plan's lower half, slice 2: each foreign fee in the last year, newest first ("See the payments behind it"). */
+    val fees: List<MoneyTravelFee> = emptyList(),
 ) {
     fun rowAt(i: Int): MoneyTravelRow = rows[i]
+    fun feeAt(i: Int): MoneyTravelFee = fees[i]
+    val feesPence: Long get() = rows.sumOf { it.feePence }
 }
 
 object MoneyTravel {
     const val HEAD = "PAYING ABROAD"
     const val WINDOW_DAYS = 365
     const val TRIP_AHEAD_DAYS = 14L
+    /** A fee is matched to a payment abroad on the same account up to this many days before it. */
+    const val FEE_PAIR_DAYS = 3L
     const val FOOT = "From your own statements over the last year: payments in another currency and the foreign fees charged for them. Your card's terms say what it charges · not financial advice."
     const val NOTHING = "Nothing paid abroad in your statements in the last year, so there's no card to compare yet · your card's terms say what it charges abroad."
 
@@ -101,8 +118,9 @@ object MoneyTravel {
                 "${fmt(s.fees)} in foreign fees" + (if (s.n > 0) " on ${n(s.n, "payment")}" else " · ${n(s.feeN, "fee")}"),
                 rate(s.fees, s.spent)?.let { "$it of ${fmt(s.spent)}" },
             ).joinToString(" · ")
-            MoneyTravelRow(s.id, s.name, line, s.fees == 0L && s.n > 0, "${s.name}, $line")
+            MoneyTravelRow(s.id, s.name, line, s.fees == 0L && s.n > 0, "${s.name}, $line", s.fees, s.spent, s.n)
         }
+        val fees = pairFees(recent, names)
 
         val worstSaid = worst?.let { w -> "${w.name} charged ${fmt(w.fees)} in fees" + (rate(w.fees, w.spent)?.let { " ($it)" } ?: "") }
         val tip = when {
@@ -131,7 +149,21 @@ object MoneyTravel {
             }
         }
         val spoken = listOfNotNull(banner, tip).joinToString(". ")
-        return MoneyTravelView(HEAD, tip, best != null || going, rows, banner, foot(source), spoken)
+        return MoneyTravelView(HEAD, tip, best != null || going, rows, banner, foot(source), spoken, fees)
+    }
+
+    /** Each foreign fee with the payment abroad it came with (same account, the nearest day up to [FEE_PAIR_DAYS] before). */
+    private fun pairFees(recent: List<MoneyTravelLine>, names: Map<String, String>): List<MoneyTravelFee> {
+        val used = HashSet<Int>()
+        val abroad = recent.withIndex().filter { (_, l) -> isAbroad(l.text) && l.category.spend && l.category != MoneyCategory.FEES }
+        return recent.filter { MoneyWatch.isForeignFee(it.text) }
+            .sortedWith(compareByDescending<MoneyTravelLine> { it.day }.thenBy { it.pence })
+            .map { f ->
+                val match = abroad.filter { (i, l) -> i !in used && l.account == f.account && l.day in (f.day - FEE_PAIR_DAYS)..f.day }
+                    .minByOrNull { (_, l) -> f.day - l.day }
+                match?.let { used += it.index }
+                MoneyTravelFee(names[f.account] ?: f.account, f.day, -f.pence, match?.value?.category?.label)
+            }
     }
 
     /** Ask's answer to "which card should I use abroad?": the tip, then each account's line. */

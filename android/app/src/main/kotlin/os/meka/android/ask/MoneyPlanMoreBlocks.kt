@@ -49,6 +49,8 @@ import os.meka.core.domain.MoneyGoalsEmpty
 import os.meka.core.domain.MoneyPlanBar
 import os.meka.core.domain.MoneyPlanMore
 import os.meka.core.domain.MoneyPlanTile
+import os.meka.core.domain.MoneyChallengeTiles
+import os.meka.core.domain.MoneyAbroadTiles
 
 /**
  * Plan's lower half (approved mockup `docs/design/money/Phone-PlanMore.dc.html`), slice 1: Goals' empty card with its
@@ -210,4 +212,180 @@ internal fun ColumnScope.MoneyAddGoalFields(onAdd: (String, String) -> Unit) {
             .clickable(role = Role.Button) { onAdd(name, amount) }
             .testTag("money-add-goal").minTouch().padding(horizontal = MekaSpace.m),
     )
+}
+
+/**
+ * Plan's lower half, slice 2: CHALLENGES as two tiles side by side — No-spend days as this week's dots (gold = no
+ * spending, dashed = not reached yet) with the count and Start / Stop counting; Fun money as a pot with what's left, a
+ * bar and £40 / £60 / £80 (a tap on the chosen one takes it off) — then any caps as bars and "Cap a category for the
+ * month · Set ›". Dots and bars change on the appear spring; reduced motion shows them at once.
+ */
+@Composable
+internal fun ColumnScope.MoneyChallengeTilesBlock(
+    t: MoneyChallengeTiles, onNoSpend: (Boolean) -> Unit, onFun: (Int, Boolean) -> Unit, onCap: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Row(Modifier.fillMaxWidth().testTag("money-challenge-tiles"), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Column(
+            Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                .testTag("money-nospend-tile").padding(MekaSpace.xs),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            Text(MoneyPlanMore.NO_SPEND, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1)
+            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = t.noSpend.spoken },
+                horizontalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok (the week's dots are one mark)
+                t.noSpend.dots.forEachIndexed { i, d ->
+                    val fill by animateColorAsState(
+                        when {
+                            d.noSpend -> Meka.colors.accent
+                            d.spent -> Meka.colors.surface
+                            else -> Meka.colors.surfaceRaised
+                        }, MekaMotion.appear(reduced), label = "money-week-dot-$i",
+                    )
+                    val dashed = d.pending
+                    Box(
+                        Modifier.weight(1f).height(20.dp).clip(CircleShape).background(fill)
+                            .then(if (dashed) Modifier.border(BorderStroke(1.dp, Meka.colors.textTertiary.copy(alpha = 0.4f)), CircleShape) else Modifier),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(d.letter, style = MekaType.micro, maxLines = 1, softWrap = false,
+                            color = if (d.noSpend) Meka.colors.onAccent else Meka.colors.textTertiary)
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Crossfade(t.noSpend.count, animationSpec = MekaMotion.appear(reduced), label = "money-nospend-count") { c ->
+                    Text(c, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.testTag("money-nospend-count"))
+                }
+                Text(MoneyPlanMore.THIS_WEEK, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1)
+            }
+            Text(
+                t.noSpend.button, style = MekaType.captionStrong, textAlign = TextAlign.Center, maxLines = 1,
+                color = if (t.noSpend.on) Meka.colors.accent else Meka.colors.onAccent,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                    .background(if (t.noSpend.on) Meka.colors.surface else Meka.colors.accent)
+                    .clickable(role = Role.Switch) { onNoSpend(!t.noSpend.on) }
+                    .testTag("money-nospend-toggle").minTouch().padding(horizontal = MekaSpace.xxs),
+            )
+        }
+        Column(
+            Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                .testTag("money-fun-tile").padding(MekaSpace.xs),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            val f = t.funMoney
+            Text(MoneyPlanMore.FUN, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1)
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = f.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Crossfade(f.value, animationSpec = MekaMotion.appear(reduced), label = "money-fun-value") { v ->
+                    Text(v, style = MekaType.metaStrong, maxLines = 1, modifier = Modifier.testTag("money-fun-value"),
+                        color = when { f.over -> Meka.colors.critical; f.hasPot -> Meka.colors.textPrimary; else -> Meka.colors.textSecondary })
+                }
+                Text(f.of, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2)
+            }
+            var shown by remember { mutableStateOf(if (reduced) f.share else 0f) }
+            LaunchedEffect(f.share) { shown = f.share }
+            val share by animateFloatAsState(shown, MekaMotion.appear(reduced), label = "money-fun-pot")
+            Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)) {
+                Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(8.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                f.chips.forEach { c ->
+                    val fill by animateColorAsState(if (c.chosen) Meka.colors.accent.copy(alpha = 0.18f) else Meka.colors.surface, MekaMotion.appear(reduced), label = "money-fun-chip-${c.pounds}")
+                    Text(
+                        c.label, style = MekaType.caption, textAlign = TextAlign.Center, maxLines = 1, softWrap = false,
+                        color = if (c.chosen) Meka.colors.textPrimary else Meka.colors.textSecondary,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                            .clickable(role = Role.Button) { onFun(c.pounds, c.chosen) }
+                            .semantics { contentDescription = "Fun money ${c.label} a week" + if (c.chosen) ", chosen, tap to take it off" else "" }
+                            .testTag("money-fun-chip-${c.pounds}").minTouch(),
+                    )
+                }
+            }
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button) { onCap() }
+            .semantics(mergeDescendants = true) { contentDescription = "${t.capRow}, set" }
+            .testTag("money-cap-row").minTouch().padding(horizontal = MekaSpace.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(t.capRow, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Text(t.capSet, style = MekaType.body, color = Meka.colors.accent)
+    }
+}
+
+/**
+ * Plan's lower half, slice 2: PAYING ABROAD's card — the year's foreign fees in a big tile with what it could be, a bar
+ * per account (its fees against the biggest; one with no fees is a full gold bar), and See the payments behind it, which
+ * unfolds each fee with what it was for. Bars grow on the appear spring; the list unfolds on the expand spring (reduced
+ * motion: fades).
+ */
+@Composable
+internal fun ColumnScope.MoneyAbroadTilesBlock(t: MoneyAbroadTiles, onTick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${t.feesLabel}, ${t.fees}. ${t.line}" },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Column(
+            Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                .background(if (t.lit) Meka.colors.critical.copy(alpha = 0.16f) else Meka.colors.surfaceRaised)
+                .testTag("money-abroad-fees").padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Text(t.feesLabel, style = MekaType.micro, color = if (t.lit) Meka.colors.critical else Meka.colors.textSecondary, maxLines = 1)
+            Crossfade(t.fees, animationSpec = MekaMotion.appear(reduced), label = "money-abroad-fees-value") { v ->
+                Text(v, style = MekaType.upNextCardTitle, color = if (t.lit) Meka.colors.critical else Meka.colors.textPrimary, maxLines = 1)
+            }
+        }
+        Text(t.line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+    }
+    t.bars.forEach { b ->
+        Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = b.spoken }.testTag("money-abroad-bar-${b.id}"),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(b.name, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                Text(b.amount, style = MekaType.metaStrong, color = if (b.good) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
+            }
+            var shown by remember { mutableStateOf(if (reduced) b.share else 0f) }
+            LaunchedEffect(b.share) { shown = b.share }
+            val share by animateFloatAsState(shown, MekaMotion.appear(reduced), label = "money-abroad-bar-${b.id}")
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
+                Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(if (b.good) Meka.colors.accent else Meka.colors.critical))
+            }
+            Text(b.sub, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+    }
+    if (t.payments.isNotEmpty()) {
+        var open by remember { mutableStateOf(false) }
+        Text(
+            if (open) MoneyPlanMore.HIDE_PAYMENTS else MoneyPlanMore.SHOW_PAYMENTS,
+            style = MekaType.captionStrong, color = Meka.colors.textPrimary, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                .clickable(role = Role.Button) { onTick(); open = !open }
+                .testTag("money-abroad-payments-toggle").minTouch(),
+        )
+        androidx.compose.animation.AnimatedVisibility(
+            visible = open,
+            enter = if (reduced) androidx.compose.animation.fadeIn(MekaMotion.appear(true))
+                else androidx.compose.animation.expandVertically(MekaMotion.expand(false)) + androidx.compose.animation.fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) androidx.compose.animation.fadeOut(MekaMotion.appear(true))
+                else androidx.compose.animation.shrinkVertically(MekaMotion.expand(false)) + androidx.compose.animation.fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(Modifier.fillMaxWidth().testTag("money-abroad-payments"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                t.payments.forEach { p ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
+                            .semantics(mergeDescendants = true) { contentDescription = p.spoken }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(p.what, style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                        Text(p.fee, style = MekaType.caption, color = Meka.colors.critical, maxLines = 1)
+                    }
+                }
+                t.more?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            }
+        }
+    }
 }
