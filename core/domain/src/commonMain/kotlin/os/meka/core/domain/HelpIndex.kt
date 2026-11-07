@@ -678,10 +678,7 @@ internal object HelpIndex {
             keywords = listOf("your team", "team", "agents", "helpers", "who did what", "what did obi do today", "inbox agent", "calls agent", "money agent", "kestrel", "what waits on me", "team screen", "pause obi", "pause inbox", "pause for today"),
             what = "Navilife's helpers as a team: Obi, Inbox, Calls, Money and Kestrel, each with what it did today and what waits on you, and tiles for how many are working, how many need you and how much was done today.",
             how = "Open it from Ask → Daily. Tap a helper's card for its sheet: today's log, how much it may do by itself, and what waits on you with Review, which takes you to Needs you (or Money for Obi's money check ideas).",
-            tips = listOf(
-                "Nothing on this screen acts for you. Kestrel's card only reads: a trade is answered in Needs you, with your fingerprint, and Navilife never approves one by itself.",
-                "Pause for today on Obi's, Inbox's or Money's sheet makes it do less till midnight: its heads-ups wait for your next digest, a paused Obi doesn't speak up and a paused Inbox tidies nothing. Reminders you set still come; Resume starts it again now.",
-            ),
+            tips = listOf("Nothing on this screen acts for you. Kestrel's card only reads: a trade is answered in Needs you, with your fingerprint, and Navilife never approves one by itself.", "Pause for today on Obi's, Inbox's or Money's sheet makes it do less till midnight: its heads-ups wait for your next digest, a paused Obi doesn't speak up and a paused Inbox tidies nothing. Reminders you set still come; Resume starts it again now."),
             fold = HelpPlace.TEAM,
             foldWhere = "Ask → Daily → Your team",
             mac = HelpPlace.TEAM,
