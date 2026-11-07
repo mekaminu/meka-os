@@ -135,7 +135,9 @@ object CallNoticeRules {
         }
         // Item (c) slice 2: the assistant rang him to put the caller through.
         val put = PutThroughRules.happened(item.putThrough)?.let { " · $it" } ?: ""
-        return "Sent to your call assistant · $at · $left$put"
+        // Obi on calls, slice 1c: the callback he agreed at one of your free times.
+        val back = item.callback?.takeIf { item.ended == null }?.let { " · asked you to $it" } ?: ""
+        return "Sent to your call assistant · $at · $left$put$back"
     }
 
     /** What it was about: the start of the words, or why there's nothing to read. */

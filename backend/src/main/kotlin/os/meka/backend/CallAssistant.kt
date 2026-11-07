@@ -585,6 +585,13 @@ class CallAssistant(
         val values = CallAssistantRules.messageFields(t.from, t.mintedAtMs, t.atWork, seconds = end.seconds.toInt()) + buildMap<String, FieldValue> {
             m?.intro?.let { put(HeldMessageFields.INTRO, it.fv()) }
             if (words != null) put(HeldMessageFields.TEXT, words.fv()) else put(HeldMessageFields.NO_TRANSCRIPT, true.fv())
+            // Slice 1c: a callback agreed at one of the free times Obi was given (never a time the caller named).
+            if (m?.scam != true) liveLine?.let { line ->
+                line.agreedCallback(t, m)?.let { slot ->
+                    put(HeldMessageFields.CALLBACK_AT, FieldValue.Int64(slot.startMs))
+                    put(HeldMessageFields.CALLBACK_LINE, line.callbackLine(slot).fv())
+                }
+            }
         }
         if (!write(hh, id, values)) return
         val urgent = m?.urgent == true && m?.scam != true

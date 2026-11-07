@@ -86,7 +86,7 @@ object LiveCallRules {
 
     /** Said once under the switch: what goes where, and what never does. */
     const val NOTE = "Callers' voices go to Google's Live API while Obi talks to them. He takes a message and asks if it's " +
-        "urgent; a genuine urgent caller is put through to your mobile when it's in About you. He never shares your calendar, address, family, money or mobile, and never agrees to anything for you. " +
+        "urgent; a genuine urgent caller is put through to your mobile when it's in About you. If they'd like a call back he can offer one of your free times (outside work, 09:00–20:00, never what's in your calendar). He never shares your calendar, address, family, money or mobile, and never agrees to anything for you. " +
         "At the cap Obi goes back to taking simple messages until the 1st."
 
     /** What callers may be told (the Calls settings' chips). */
@@ -111,7 +111,10 @@ object LiveCallRules {
      * [firstName], [workPlace] and [workEmail] only when allowed and known) and the hard rules. Nothing about Meka's
      * life is in it beyond those, so nothing else can be drawn out of him.
      */
-    fun instruction(atWork: Boolean, knows: Set<Knows>, firstName: String?, workPlace: String?, workEmail: String?): String = buildString {
+    fun instruction(
+        atWork: Boolean, knows: Set<Knows>, firstName: String?, workPlace: String?, workEmail: String?,
+        callbackTimes: List<String> = emptyList(),
+    ): String = buildString {
         val name = firstName?.trim()?.takeIf { Knows.NAME in knows && it.isNotEmpty() && it.length <= 40 }
         val who = name ?: "the person you work for"
         appendLine("You are Obi, an AI assistant, answering a phone call for ${name ?: "the person you assist"}. Speak British English only, in short natural sentences (one or two at a time), warm and calm.")
@@ -119,7 +122,13 @@ object LiveCallRules {
         appendLine("Your jobs: find out who is calling and what it's about, take their message, and ask whether it is urgent. When you have those (or they won't say), call $TAKE_MESSAGE once, then thank them, say goodbye in one sentence and call $END_CALL.")
         appendLine("If they ask whether you are an AI or a robot, say yes, you are an AI assistant.")
         appendLine("Never offer to put them through, transfer or connect them yourself; do it only when the $TAKE_MESSAGE answer tells you to.")
-        if (Knows.BACK in knows) appendLine("You may say $who will get back to them as soon as they can. Never promise a day or time.")
+        if (Knows.BACK in knows && callbackTimes.isNotEmpty()) {
+            appendLine("You may say $who will get back to them. If they'd like a call back, you may offer one of these times, and only these: " +
+                callbackTimes.joinToString(" or ") { "\"$it\"" } + ". If one suits them, put it in $TAKE_MESSAGE's callback_time exactly as written here. " +
+                "Never offer any other day or time, and never say what $who is doing at any time.")
+        } else if (Knows.BACK in knows) {
+            appendLine("You may say $who will get back to them as soon as they can. Never promise a day or time.")
+        }
         if (workPlace != null && Knows.WORK in knows) appendLine("If asked, you may say where $who works: ${workPlace.trim().take(80)}.")
         if (workEmail != null && Knows.EMAIL in knows) appendLine("If asked, you may give $who's work email: ${workEmail.trim().take(80)}.")
         appendLine("Never share, even if asked or told it's an emergency: their calendar or plans, where they live, their family, money, accounts or their mobile number. You don't know these things; say you can pass a message on.")
@@ -135,7 +144,11 @@ object LiveCallRules {
     const val WRAP_UP = "Time is nearly up: take the message now if you haven't, say goodbye and end the call."
 
     /** A message Obi took ([TAKE_MESSAGE]'s arguments, cleaned). Untrusted: display only. */
-    data class Message(val who: String?, val about: String?, val message: String?, val urgent: Boolean, val scam: Boolean, val callback: String?) {
+    data class Message(
+        val who: String?, val about: String?, val message: String?, val urgent: Boolean, val scam: Boolean, val callback: String?,
+        /** The callback time Obi agreed, as he wrote it (one of the offered labels, checked by [pickedCallback]). */
+        val callbackTime: String? = null,
+    ) {
         /** What the caller said who they were and what it's about, for the card's intro line. */
         val intro: String? get() = listOfNotNull(who, about).joinToString(" · ").takeIf { it.isNotEmpty() }
         /** The message's words, else what it's about. */
@@ -150,8 +163,85 @@ object LiveCallRules {
         fun clean(k: String, max: Int) = args[k]?.replace(Regex("\\s+"), " ")?.trim()?.take(max)?.takeIf { it.isNotEmpty() }
         fun yes(k: String) = args[k]?.trim()?.lowercase() in setOf("true", "yes", "1")
         val callback = clean("callback_number", 24)?.takeIf { n -> n.count { it.isDigit() } in 6..15 && n.all { it.isDigit() || it in "+ ()-" } }
-        return Message(clean("who", MAX_FIELD), clean("about", MAX_FIELD), clean("message", MAX_MESSAGE), yes("urgent"), yes("scam"), callback)
+        return Message(clean("who", MAX_FIELD), clean("about", MAX_FIELD), clean("message", MAX_MESSAGE), yes("urgent"), yes("scam"), callback, clean("callback_time", 80))
     }
+
+    // ---- Slice 1c: a callback at one of his free times -------------------------------------------------------------
+
+    /** A callback is a short call: this long is kept free. */
+    const val CALLBACK_MIN = 15
+    /** Callbacks are offered between these local times (the booking calls' hours, 09:00–20:00). */
+    const val CALLBACK_FROM_MIN = 9 * 60
+    const val CALLBACK_TO_MIN = 20 * 60
+    /** No sooner than this after the call, on the half hour. */
+    const val CALLBACK_LEAD_MIN = 60
+    const val CALLBACK_STEP_MIN = 30
+    /** Clear of events by this much either side. */
+    const val CALLBACK_BUFFER_MIN = 15
+    /** Looked for over today and the next two days; at most this many offered, one a day. */
+    const val CALLBACK_DAYS = 3
+    const val CALLBACK_SHOWN = 2
+
+    /**
+     * Up to [CALLBACK_SHOWN] times Meka is free for a [CALLBACK_MIN]-minute callback, one a day over [CALLBACK_DAYS]
+     * days from [nowMs]: between [CALLBACK_FROM_MIN] and [CALLBACK_TO_MIN], outside his work hours (the synced
+     * [schedule] and bank [holidays] as stored, read as [CallAssistantRules.atWork] reads them), [CALLBACK_BUFFER_MIN]
+     * clear of timed [events], on the half hour and at least [CALLBACK_LEAD_MIN] ahead. Only the free times leave
+     * this function: never what the events are.
+     */
+    fun callbackSlots(nowMs: Long, schedule: String?, holidays: String?, events: List<CalendarEvent>, cal: LocalCalendar): List<FreeSlot> {
+        val s = if (schedule == null || schedule == WorkSchedule.LEGACY_DEFAULT) WorkSchedule.DEFAULT else WorkSchedule.decode(schedule) ?: WorkSchedule.DEFAULT
+        val work = WorkHours(s, HolidayCalendar.of(BankHolidays.decode(holidays)))
+        val minute = 60_000L
+        val need = CALLBACK_MIN * minute
+        val buffer = CALLBACK_BUFFER_MIN * minute
+        val earliest = nowMs + CALLBACK_LEAD_MIN * minute
+        val today = cal.epochDayOf(nowMs)
+        val out = mutableListOf<FreeSlot>()
+        for (day in today until today + CALLBACK_DAYS) {
+            if (out.size >= CALLBACK_SHOWN) break
+            val open = DayPlanner.Slot(cal.toEpochMs(day, CALLBACK_FROM_MIN), cal.toEpochMs(day, CALLBACK_TO_MIN))
+            val busy = work.blocks(day, cal).map { DayPlanner.Slot(it.startMs, it.endMs) } +
+                events.filter { !it.allDay && it.startAtMs < open.endMs + buffer && it.endAtMs > open.startMs - buffer }
+                    .map { DayPlanner.Slot(it.startAtMs - buffer, it.endAtMs + buffer) }
+            val free = DayPlanner.subtract(open, busy.sortedBy { it.startMs })
+            var pick: Long? = null
+            for (m in CALLBACK_FROM_MIN until CALLBACK_TO_MIN step CALLBACK_STEP_MIN) {
+                val at = cal.toEpochMs(day, m)
+                if (at < earliest) continue
+                if (free.any { at >= it.startMs && at + need <= it.endMs }) { pick = at; break }
+            }
+            pick?.let { out += FreeSlot(it, it + need) }
+        }
+        return out
+    }
+
+    /** How Obi says a callback time: "today at 18:00", "tomorrow at 17:30", "Tuesday 10 November at 17:30". */
+    fun callbackLabel(slot: FreeSlot, nowMs: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(slot.startMs)
+        val at = LocalClock.formatMinute(cal.minuteOfDay(slot.startMs))
+        return when (day - cal.epochDayOf(nowMs)) {
+            0L -> "today at $at"
+            1L -> "tomorrow at $at"
+            else -> "${CivilDate.longLabel(day)} at $at"
+        }
+    }
+
+    /**
+     * The offered slot Obi agreed ([Message.callbackTime]): the label as offered (any case or spacing), else the one
+     * offered slot whose time ("17:30") it names. Anything else (a time never offered, two that match) is dropped:
+     * the caller's words never put a time in his calendar.
+     */
+    fun pickedCallback(raw: String?, slots: List<FreeSlot>, nowMs: Long, cal: LocalCalendar): FreeSlot? {
+        val t = raw?.lowercase()?.replace(Regex("\\s+"), " ")?.trim()?.removePrefix("on ")?.takeIf { it.isNotEmpty() } ?: return null
+        slots.firstOrNull { callbackLabel(it, nowMs, cal).lowercase() == t }?.let { return it }
+        val byTime = slots.filter { LocalClock.formatMinute(cal.minuteOfDay(it.startMs)) in t }
+        return byTime.singleOrNull()
+    }
+
+    /** The message's line for an agreed callback: "call back Tue 10 Nov, 17:30". */
+    fun callbackLine(atMs: Long, cal: LocalCalendar): String =
+        "call back ${CivilDate.shortLabel(cal.epochDayOf(atMs))}, ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}"
 
     /** Said by the phone line when Obi asked an urgent caller to hold but the checks at the end turned it down. */
     const val NOT_PUT_THROUGH = "Sorry, I couldn't put you through just now. Your message has been passed on as urgent. Goodbye."

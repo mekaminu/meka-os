@@ -1514,6 +1514,19 @@ fun approvalsFromEnv(opStore: PostgresOpStore, onWritten: (householdId: String) 
     return ApprovalRoutes(desk, listOf(ApprovalDesk.kestrel(SecretsManagerPublisherKey(secret))))
 }
 
+/** Obi on calls, slice 1c: the household's synced calendar events, hidden ones left out, for free callback times. */
+fun liveCallEvents(opStore: PostgresOpStore, hh: String): List<os.meka.core.domain.CalendarEvent> {
+    val reader = opStoreReader(opStore)
+    val hidden = reader.entities(hh, EntityTypes.EVENT_MARK)
+        .filter { (_, f) -> (f[os.meka.core.domain.EventMarkFields.HIDDEN] as? FieldValue.Bool)?.value == true }.keys
+    return reader.entities(hh, EntityTypes.EVENT).mapNotNull { (id, f) ->
+        if (id in hidden) null
+        else os.meka.core.domain.CalendarEvent.from(
+            os.meka.core.sync.EntitySnapshot(os.meka.core.sync.EntityRef(EntityTypes.EVENT, id), hh, f, os.meka.core.sync.Hlc.ZERO),
+        )
+    }
+}
+
 /** What the devices wrote, by one indexed query per type ([PostgresOpStore.latestFields]). */
 fun opStoreReader(opStore: PostgresOpStore): EntityReader = object : EntityReader {
     override fun entities(householdId: String, entityType: String) = opStore.latestFields(householdId, entityType)
@@ -1562,7 +1575,11 @@ fun voiceFromEnv(
         val reader = os.meka.backend.integrations.SecretCache.shared.reader(gemini, GeminiLiveTokens::secret) { it.key != null }
         val rate = os.meka.backend.integrations.EcbDollarRate.network()
         LiveCallRoutes(
-            LiveCallLine(fields, PostgresLiveCallStore(ds!!), configured = { reader()?.key != null }, gbpPerUsd = { rate.read()?.gbpPerUsdMicros }),
+            LiveCallLine(
+                fields, PostgresLiveCallStore(ds!!), configured = { reader()?.key != null }, gbpPerUsd = { rate.read()?.gbpPerUsdMicros },
+                // Slice 1c: free callback times from the synced events (only the times reach Obi).
+                events = { hh -> liveCallEvents(opStore, hh) },
+            ),
             GeminiLiveDial({ reader()?.key }),
         )
     }

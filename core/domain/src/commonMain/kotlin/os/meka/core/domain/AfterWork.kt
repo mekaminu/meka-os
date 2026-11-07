@@ -68,6 +68,13 @@ data class CapturedItem(
     val ended: String? = null,
     /** Whether the assistant put this urgent caller through and he took it ([HeldMessageFields.PUT_THROUGH]); null = not tried. */
     val putThrough: String? = null,
+    /**
+     * Obi on calls, slice 1c: the callback Obi agreed with a live caller at one of Meka's free times, as the server
+     * wrote it ("call back Tue 10 Nov, 17:30", [HeldMessageFields.CALLBACK_LINE]); null = none agreed.
+     */
+    val callback: String? = null,
+    /** When that callback is ([HeldMessageFields.CALLBACK_AT]); null = none agreed. */
+    val callbackAtMs: Long? = null,
 ) {
     /** The call assistant ended this call as a likely scam ([CallIntroRules.judge]); never urgent. */
     val endedAsScam: Boolean get() = fromCallAssistant && ended == CallIntroRules.ENDED_SCAM
@@ -93,12 +100,16 @@ data class CapturedItem(
         CaptureKind.VOICE_MESSAGE -> if (endedAsScam) CallIntroRules.DISPLAY_SCAM + (summary?.let { " \u00b7 $it" } ?: "") else if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let {
             // Call notifications, slice 2: the AI's one-line summary first, then the words.
             "Voice message \u00b7 " + (summary?.let { s -> "$s \u00b7 " } ?: "") + "\u201c$it\u201d"
-        } ?: when {
+        }?.plus(callbackPart) ?: when {
             noTranscript -> "Voice message \u00b7 no words came through"
             transcribing -> "Voice message \u00b7 Transcribing\u2026"
             else -> "Voice message"
-        }
+        } + callbackPart
     }
+
+    /** " · Call back Tue 10 Nov, 17:30" after a call-assistant message with an agreed callback; else nothing. */
+    private val callbackPart: String get() =
+        callback?.takeIf { fromCallAssistant && !endedAsScam }?.let { " \u00b7 " + it.replaceFirstChar { c -> c.uppercaseChar() } } ?: ""
 }
 
 /**
@@ -670,6 +681,13 @@ object HeldMessageFields {
      * · [PutThroughRules.MISSED_VALUE]; written once by the server). Absent = not tried. Added 2026-10-17.
      */
     const val PUT_THROUGH = "putThrough"
+    /**
+     * Obi on calls, slice 1c: a callback Obi agreed with a live caller at one of Meka's free times
+     * ([LiveCallRules.callbackSlots]): when (Int64 epoch ms) and its line ([LiveCallRules.callbackLine], Text), both
+     * written once by the server. Absent = none agreed. Added 2026-11-07.
+     */
+    const val CALLBACK_AT = "callbackAtMs"
+    const val CALLBACK_LINE = "callbackLine"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -780,6 +798,8 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             intro = e[HeldMessageFields.INTRO].textOrNull?.let(CallIntroRules::clean),
             ended = e[HeldMessageFields.ENDED].textOrNull,
             putThrough = e[HeldMessageFields.PUT_THROUGH].textOrNull,
+            callback = e[HeldMessageFields.CALLBACK_LINE].textOrNull?.trim()?.take(60)?.takeIf { it.startsWith("call back ") },
+            callbackAtMs = e[HeldMessageFields.CALLBACK_AT].longOrNull,
         )
     }
 

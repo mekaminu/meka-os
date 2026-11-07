@@ -346,4 +346,34 @@ class LiveCallsTest {
         line.ended("CA10", LiveCallEnd(true, 30, 10, m, "", putThrough = true))
         assertEquals(VoiceReply.Goodbye(LiveCallRules.NOT_PUT_THROUGH), assistant.handle("twilio", VoiceEvent.LiveEnded("CA10", "+447700900456", "+447700900999")))
     }
+
+    @Test
+    fun aLiveCallerCanBeOfferedOneOfHisFreeTimesForACallback() {
+        // Friday 6 Nov 21:20: nothing left today; Saturday clear of a 08:30–10:00 event, then Sunday morning.
+        val sat = LondonCalendar.epochDayOf(nowMs) + 1
+        val busy = os.meka.core.domain.CalendarEvent(
+            id = "e1", title = "Swimming", startAtMs = LondonCalendar.toEpochMs(sat, 8 * 60 + 30), endAtMs = LondonCalendar.toEpochMs(sat, 10 * 60),
+            allDay = false, location = null, provider = "google", account = null, calendarName = null,
+        )
+        val withEvents = LiveCallLine(FieldReader.scanning(ops), store, configured = { true }, nowMs = { nowMs }, events = { listOf(busy) })
+        val talker = CallAssistant(ops, FieldReader.scanning(ops), household = { "hh" }, now = { nowMs }, liveLine = withEvents)
+        on()
+        val t = withEvents.claim(withEvents.ticket("hh", "twilio", "CB1", "+447700900123", false), "CB1")!!
+        assertEquals(2, t.callbackSlots.size)
+        assertTrue("\"tomorrow at 10:30\" or \"Sunday 8 November at 09:00\"" in t.instruction, t.instruction)
+        assertFalse("Swimming" in t.instruction)
+        val meter = LiveCallRules.Meter(LiveCallRules.month(nowMs), 4, 1)
+        talker.liveEnded(t, LiveCallEnd(true, 60, 20, LiveCallRules.message(mapOf("who" to "Sam", "about" to "the boiler", "callback_time" to "tomorrow at 10:30")), ""), meter)
+        val id = CallAssistantRules.heldId("twilio", "CB1")
+        assertEquals(FieldValue.Int64(LondonCalendar.toEpochMs(sat, 10 * 60 + 30)), field(id, HeldMessageFields.CALLBACK_AT))
+        assertEquals(FieldValue.Text("call back Sat 7 Nov, 10:30"), field(id, HeldMessageFields.CALLBACK_LINE))
+        // A time the caller named that was never offered is not kept.
+        val t2 = t.copy(callId = "CB2")
+        talker.liveEnded(t2, LiveCallEnd(true, 60, 20, LiveCallRules.message(mapOf("who" to "Sam", "about" to "the boiler", "callback_time" to "Monday at 13:00")), ""), meter)
+        assertNull(field(CallAssistantRules.heldId("twilio", "CB2"), HeldMessageFields.CALLBACK_AT))
+        // Without "when you'll call back" allowed, no times are offered.
+        set(WorkFields.CALL_KNOWS, FieldValue.Text("name"))
+        val t3 = withEvents.claim(withEvents.ticket("hh", "twilio", "CB3", "+447700900123", false), "CB3")!!
+        assertTrue(t3.callbackSlots.isEmpty())
+    }
 }

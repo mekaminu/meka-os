@@ -12,7 +12,12 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import os.meka.core.domain.AboutYouFields
 import os.meka.core.domain.AboutYouRules
+import os.meka.core.domain.BankHolidayFields
+import os.meka.core.domain.BankHolidayStore
+import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.FreeSlot
+import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LiveModeRules
 import os.meka.core.domain.WorkFields
@@ -169,6 +174,8 @@ data class LiveCallTicket(
     val atWork: Boolean, val instruction: String, val mintedAtMs: Long,
     /** Slice 1b: an urgent caller may be put through (his mobile and the assistant's number usable, not his own number calling). */
     val canPutThrough: Boolean = false,
+    /** Slice 1c: the free times Obi may offer for a callback ([LiveCallRules.callbackSlots]); empty = none offered. */
+    val callbackSlots: List<FreeSlot> = emptyList(),
 )
 
 /** How a live call went, for the summary and the meter. [message] and [heard] are the caller's: untrusted, display only. */
@@ -190,6 +197,9 @@ class LiveCallLine(
     private val gbpPerUsd: () -> Long? = { null },
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
+    /** Slice 1c: the household's synced calendar events, for the free callback times (only the times reach Obi). */
+    private val events: (String) -> List<CalendarEvent> = { emptyList() },
+    private val calendar: LocalCalendar = LondonCalendar,
 ) {
     private val tickets = ConcurrentHashMap<String, LiveCallTicket>()
     /** Calls that went live, by call id, until a few minutes after (the stream's end step asks). */
@@ -217,10 +227,28 @@ class LiveCallLine(
         val knows = LiveCallRules.knows((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_KNOWS) as? FieldValue.Text)?.value)
         val first = (fields.latest(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.SHOWN_NAME) as? FieldValue.Text)
             ?.value?.trim()?.split(' ')?.firstOrNull()?.takeIf { n -> n.length in 1..30 && n.all { it.isLetter() || it in "-'" } }
+        val slots = if (LiveCallRules.Knows.BACK in knows) callbackSlots(hh, now) else emptyList()
+        val labels = slots.map { LiveCallRules.callbackLabel(it, now, calendar) }
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        tickets[token] = LiveCallTicket(token, hh, provider, callId, from, atWork, LiveCallRules.instruction(atWork, knows, first, null, null), now, canPutThrough)
+        tickets[token] = LiveCallTicket(
+            token, hh, provider, callId, from, atWork, LiveCallRules.instruction(atWork, knows, first, null, null, labels), now, canPutThrough, slots,
+        )
         token
     }.getOrNull()
+
+    /** Free callback times from the synced work schedule, bank holidays and events; none when any of it can't be read. */
+    private fun callbackSlots(hh: String, now: Long): List<FreeSlot> = runCatching {
+        fun text(entity: String, field: String) = (fields.latest(hh, EntityTypes.CONTEXT_MODE, entity, field) as? FieldValue.Text)?.value
+        LiveCallRules.callbackSlots(
+            now, text(WorkMode.ENTITY_ID, WorkFields.SCHEDULE), text(BankHolidayStore.ENTITY_ID, BankHolidayFields.DATES), events(hh), calendar,
+        )
+    }.getOrDefault(emptyList())
+
+    /** The callback a live call agreed: one of the ticket's offered times, or null. */
+    fun agreedCallback(t: LiveCallTicket, m: LiveCallRules.Message?): FreeSlot? =
+        LiveCallRules.pickedCallback(m?.callbackTime, t.callbackSlots, t.mintedAtMs, calendar)
+
+    fun callbackLine(slot: FreeSlot): String = LiveCallRules.callbackLine(slot.startMs, calendar)
 
     /** The ticket for the stream that opened with [token] for [callId]; used once, and only within [LiveCallRules.TICKET_MS]. */
     fun claim(token: String?, callId: String?): LiveCallTicket? {
@@ -455,6 +483,7 @@ class LiveCallSession(
                     s("about", "What it's about, in a few words.")
                     s("message", "Their message, in their words, briefly.")
                     s("callback_number", "A number they asked to be called back on, if they gave one.")
+                    s("callback_time", "The call-back time they chose, exactly as one of the times you were allowed to offer; leave out otherwise.")
                     putJsonObject("urgent") { put("type", "BOOLEAN"); put("description", "True only if they said it's urgent.") }
                     putJsonObject("scam") { put("type", "BOOLEAN"); put("description", "True if it sounds like a scam.") }
                 }
