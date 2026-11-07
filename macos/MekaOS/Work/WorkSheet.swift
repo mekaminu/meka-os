@@ -144,7 +144,7 @@ struct WorkSheet: View {
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(palette.textTertiary).accessibilityHidden(true)
             }
-            .padding(MekaSpace.s)
+            .padding(MekaSpace.xs)
             .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(Rectangle())
         }

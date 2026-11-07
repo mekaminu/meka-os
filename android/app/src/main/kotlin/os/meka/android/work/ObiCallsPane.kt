@@ -183,8 +183,8 @@ private fun MonthCard(v: CallsSettingsView, modifier: Modifier, onCap: (Int) -> 
     LaunchedEffect(Unit) { shown = true }
     val share by animateFloatAsState(if (shown) v.fraction else 0f, MekaMotion.expand(reduced), label = "obi-calls-bar")
     Column(
-        modifier.fillMaxWidth().padding(top = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(CallsSettingsRules.THIS_MONTH.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
@@ -216,7 +216,7 @@ private fun MonthCard(v: CallsSettingsView, modifier: Modifier, onCap: (Int) -> 
 @Composable
 private fun LimitTile(label: String, value: String, modifier: Modifier, raised: Boolean = false) {
     Column(
-        modifier.clip(RoundedCornerShape(MekaRadius.s)).background(if (raised) Meka.colors.surfaceRaised else Meka.colors.surface).padding(MekaSpace.s),
+        modifier.clip(RoundedCornerShape(MekaRadius.s)).background(if (raised) Meka.colors.surfaceRaised else Meka.colors.surface).padding(MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, maxLines = 1)
@@ -234,7 +234,7 @@ private fun ToggleRow(t: CallsToggle, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(role = Role.Switch) { haptics.tick(); onToggle() }
             .semantics { contentDescription = t.title; selected = t.on }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {

@@ -51,7 +51,7 @@ struct ObiCallsSheet: View {
             month(v).staggeredAppear(1)
 
             label(CallsSettingsRules.shared.WHEN_CALLS).staggeredAppear(2)
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 ForEach(Array(v.toggles.enumerated()), id: \.offset) { _, t in toggle(t) }
             }
             .padding(MekaSpace.m)
@@ -82,7 +82,7 @@ struct ObiCallsSheet: View {
     }
 
     private func month(_ v: CallsSettingsView) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
                 Text(CallsSettingsRules.shared.THIS_MONTH.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                     .foregroundStyle(palette.textTertiary)
