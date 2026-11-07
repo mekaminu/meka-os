@@ -158,4 +158,26 @@ class TeamTest {
         )
         assertEquals(listOf("task"), r.post.map { it.key })
     }
+
+    /** Slice 3: Ask's team lines are the screen's counts and fixed words, never the log's summaries. */
+    @Test fun askLinesCarryTheScreensWordsNotTheLog() {
+        val v = TeamRules.view(TeamInputs(activity, mailWait = "2 emails need you", paused = setOf(TeamAgent.MONEY)), now, cal)
+        val head = TeamAskRules.askLines(v, full = false)
+        assertEquals(1, head.size)
+        assertTrue(head.single().startsWith("Your team · 5 helpers · 4 working · 1 needs you · "), head.single())
+        val full = TeamAskRules.askLines(v, full = true)
+        assertEquals(TeamAskRules.ASK_MAX, full.size)
+        assertTrue(full.any { it.startsWith("Inbox · Working · today: 1 tidy · 1 unsubscribe · waits on you: 2 emails · may: ") }, full.joinToString("\n"))
+        assertTrue(full.any { it.startsWith("Money · Paused till tomorrow") }, full.joinToString("\n"))
+        assertTrue(full.none { "Archived 31 emails" in it || "Took a message" in it })
+        assertEquals(emptyList(), TeamAskRules.askLines(TeamView.EMPTY, full = true))
+    }
+
+    @Test fun askedKnowsATeamQuestion() {
+        listOf("What did my team do today?", "what did Inbox do today", "Is Obi paused?", "Who needs me?", "Anything from Kestrel?")
+            .forEach { assertTrue(TeamAskRules.asked(it), it) }
+        listOf("What's in my inbox?", "How much money have I got?", "Why is the sky blue?")
+            .forEach { assertFalse(TeamAskRules.asked(it), it) }
+    }
 }
+

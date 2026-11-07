@@ -1816,6 +1816,21 @@ final class CoreModel {
         }
     }
 
+    /// Your team (slice 3): Ask the team… — the sheet closes, Ask comes forward with the cursor in its field (or Talk
+    /// starts listening), and for a few minutes what's asked carries the team in full. Nothing crosses but the call.
+    func askTeam(listen: Bool, reduced: Bool) {
+        showTeam = false
+        Task { [weak self] in
+            if let core = self?.core { try? await core.askTeamStarted() }
+            try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
+            guard let self else { return }
+            if listen { self.requestTalk(reduced: reduced) } else { self.go(to: .ask, reduced: reduced); self.askFocusRequests += 1 }
+        }
+    }
+
+    /// Your team (slice 3): bumped by Ask the team…; Ask's section puts the cursor in its field.
+    var askFocusRequests = 0
+
     /// A card's button in Obi is working on: the sheet closes, then Ask opens the place as Take me there does.
     func openFromWorkingOn(_ place: HelpPlace, reduced: Bool) {
         showWorkingOn = false

@@ -79,7 +79,17 @@ import os.meka.core.domain.TalkProblem
  * with reduced motion); the bar and every button press like every control.
  */
 @Composable
-internal fun MoneyAskBar(modifier: Modifier = Modifier, onMic: () -> Unit = {}, onOpen: () -> Unit) {
+internal fun MoneyAskBar(
+    modifier: Modifier = Modifier,
+    onMic: () -> Unit = {},
+    /** Your team, slice 3: the same bar says "Ask the team…" at the foot of Your team. */
+    text: String = MoneyChat.BAR,
+    spoken: String = MoneyChat.BAR_SPOKEN,
+    micSpoken: String = MoneyChatSpoken.MIC_SPOKEN,
+    tag: String = "money-ask-bar",
+    micTag: String = "money-ask-mic",
+    onOpen: () -> Unit,
+) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l))
             .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.l))
@@ -87,21 +97,21 @@ internal fun MoneyAskBar(modifier: Modifier = Modifier, onMic: () -> Unit = {}, 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            Modifier.weight(1f).testTag("money-ask-bar")
+            Modifier.weight(1f).testTag(tag)
                 .clickable(role = Role.Button, onClick = onOpen)
-                .clearAndSetSemantics { contentDescription = MoneyChat.BAR_SPOKEN; role = Role.Button }
+                .clearAndSetSemantics { contentDescription = spoken; role = Role.Button }
                 .minTouch().padding(start = MekaSpace.m, end = MekaSpace.xs, top = MekaSpace.xs, bottom = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             ObiDot()
-            Text(MoneyChat.BAR, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(text, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.weight(1f))
         }
         // Slice 3: the mockup's mic: opens Obi · money already listening.
         Box(
-            Modifier.testTag("money-ask-mic").clip(CircleShape)
+            Modifier.testTag(micTag).clip(CircleShape)
                 .clickable(role = Role.Button, onClick = onMic)
-                .clearAndSetSemantics { contentDescription = MoneyChatSpoken.MIC_SPOKEN; role = Role.Button }
+                .clearAndSetSemantics { contentDescription = micSpoken; role = Role.Button }
                 // Walk-through 2026-11-02 A8: a full finger-sized round target, not the glyph's width.
                 .size(MekaSpace.touch),
             contentAlignment = Alignment.Center,

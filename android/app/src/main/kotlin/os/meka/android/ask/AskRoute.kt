@@ -294,6 +294,9 @@ fun AskRoute(
     LaunchedEffect(talkWaiting) {
         if (talkWaiting && os.meka.core.domain.StageRules.fieldHidden(listState.firstVisibleItemIndex)) listState.scrollToItem(0)
     }
+    // Your team, slice 3: Ask the team… brings the field back to the top and puts the cursor in it.
+    var askFocus by remember { mutableStateOf(0) }
+    LaunchedEffect(askFocus) { if (askFocus > 0) listState.scrollToItem(0) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
         val columns = os.meka.core.domain.LifeTileRules.columns(maxWidth.value)
         LazyColumn(
@@ -316,6 +319,7 @@ fun AskRoute(
                     openItem = openItem,
                     searchEpoch = searchEpoch,
                     openHelp = openHelp,
+                    focusEpoch = askFocus,
                 )
             }
             // Setup or Health, one row, only when something needs a look (Fold review 2026-10-12, item 7).
@@ -429,6 +433,10 @@ fun AskRoute(
             TeamPane(core, onClose = { pane = null }, onReview = { target ->
                 if (target == os.meka.core.domain.TeamTarget.MONEY) pane = MoreItem.MONEY
                 else { pane = null; openPlace(ShellDestination.NEEDS_YOU) }
+            }, onAsk = { listen ->
+                // Slice 3: Ask the team… is Obi in Ask's field (or listening), the team in what he sees.
+                pane = null
+                if (listen) healthApp?.talkListenNow?.value = true else askFocus += 1
             })
         }
         MekaPane(visible = pane == MoreItem.AUTONOMY) { AutonomyPane(core, onClose = { pane = null }) }

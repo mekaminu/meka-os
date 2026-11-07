@@ -1,5 +1,6 @@
 package os.meka.android.ask
 
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -125,6 +126,8 @@ fun AskMekaSection(
     searchEpoch: Int = 0,
     /** Take me there under a help answer (Ask knows how Navilife itself works): opens that screen. */
     openHelp: (os.meka.core.domain.HelpPlace) -> Unit = {},
+    /** Your team, slice 3: bumped by Ask the team…, puts the cursor in the field with the keyboard up. */
+    focusEpoch: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -141,6 +144,14 @@ fun AskMekaSection(
     var asked by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(asks) { status = core.aiStatus() }
     val canAsk = status?.canAsk != false
+    val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(focusEpoch) {
+        if (focusEpoch == 0) return@LaunchedEffect
+        // The pane springs away first; the field is composed again at the list's top by then.
+        kotlinx.coroutines.delay(FIELD_FOCUS_DELAY_MS)
+        runCatching { fieldFocus.requestFocus() }
+        keyboard?.show()
+    }
     val reduced = Meka.reducedMotion
     val context = LocalContext.current
     // After the first ask on this phone the paragraph under the field becomes a one-line hint (Fold review 17:56, item 2).
@@ -398,7 +409,7 @@ fun AskMekaSection(
                     cursorBrush = SolidColor(Meka.colors.accent),
                     keyboardOptions = KeyboardOptions(imeAction = if (canAsk) ImeAction.Send else ImeAction.Search),
                     keyboardActions = KeyboardActions(onSend = { onReturn() }, onSearch = { onReturn() }),
-                    modifier = Modifier.fillMaxWidth().testTag(ASK_FIELD_TAG)
+                    modifier = Modifier.fillMaxWidth().focusRequester(fieldFocus).testTag(ASK_FIELD_TAG)
                         .semantics { contentDescription = AskFieldRules.fieldLabel(canAsk) },
                 )
             }
@@ -807,3 +818,6 @@ private fun ExampleChip(label: String, onClick: () -> Unit) {
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
+
+/** Your team, slice 3: how long Ask the team… waits for the pane to leave before the field takes the cursor. */
+private const val FIELD_FOCUS_DELAY_MS = 250L

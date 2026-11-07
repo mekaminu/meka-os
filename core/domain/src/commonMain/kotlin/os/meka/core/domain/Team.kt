@@ -324,3 +324,52 @@ object TeamPauseRules {
     /** The heads-up sources the governor sends to the digest while these helpers are paused. */
     fun sources(paused: Set<TeamAgent>): Set<NoticeSource> = paused.flatMap { SOURCES[it].orEmpty() }.toSet()
 }
+
+/**
+ * Your team, slice 3: **Ask the team…** at the foot of the screen talks to Obi, and Obi sees the team. Ask's `team`
+ * lines (an [ObiArea]) are the screen's own words: with a question about the team or a helper (or one asked from the
+ * team's bar, for [WINDOW_MS]), the head then a line per helper (status, what it did today, what waits on him, how much
+ * it may do by itself); otherwise the head alone. Only counts and Navilife's fixed words, never the log's summaries
+ * (an email's subject is someone else's words), so the lines are his own. Nothing here acts: no helper sends, pays or
+ * trades by itself, and a trade is answered in Needs you.
+ */
+object TeamAskRules {
+    const val BAR = "Ask the team…"
+    const val BAR_LABEL = "Ask the team. Obi answers, knowing what each helper did today"
+    const val MIC_LABEL = "Talk to Obi about the team"
+    /** A question asked within this long of tapping the bar carries the team in full. */
+    const val WINDOW_MS = 5 * 60_000L
+    const val ASK_MAX = 1 + 5
+
+    private val ASKED = Regex(
+        """\b(your team|my team|the team|team (do|did|done|doing)|helpers?|agents?|kestrel|who('s| is) working|who needs me|""" +
+            """(inbox|calls|money|obi) (do|did|done|doing|been doing|paused)|is (inbox|obi|money) paused|paused (today|helpers?)|done today)\b""",
+    )
+
+    fun asked(q: String): Boolean = ASKED.containsMatchIn(q.lowercase())
+
+    private fun plural(n: Int, one: String, many: String = one + "s") = "${SpeechRules.grouped(n.toLong())} ${if (n == 1) one else many}"
+
+    /**
+     * "Your team · 5 helpers · 4 working · 1 needs you · 7 done today", then (when [full]) "Inbox · Working · today: 3
+     * tidies · waits on you: 2 emails · may: Tidies by itself · Undo in Activity". Nothing before the screen has read.
+     */
+    fun askLines(v: TeamView, full: Boolean): List<String> {
+        if (v.cards.isEmpty()) return emptyList()
+        val working = v.cards.count { it.status != TeamStatus.NOT_SET_UP && it.status != TeamStatus.PAUSED }
+        val done = v.tiles.lastOrNull()?.value ?: "0"
+        val head = "${TeamRules.TITLE} · ${plural(v.cards.size, "helper")} · $working working · " +
+            (if (v.needCount == 0) "nobody needs you" else "${v.needCount} need${if (v.needCount == 1) "s" else ""} you") +
+            " · $done done today"
+        if (!full) return listOf(head)
+        val lines = v.cards.map { c ->
+            listOfNotNull(
+                c.title, c.status.label, "today: ${c.today}",
+                "waits on you: ${if (c.waits) c.wait else TeamRules.NOTHING.lowercase()}",
+                "may: ${c.level}",
+                if (c.readOnly) "read only here, trades answered in Needs you" else null,
+            ).joinToString(" · ")
+        }
+        return (listOf(head) + lines).take(ASK_MAX)
+    }
+}

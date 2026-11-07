@@ -7,6 +7,8 @@ import SwiftUI
 /// card shows its page in the sheet (how much it may do by itself, TODAY's log, what waits with Review, slice 2's
 /// Pause for today / Resume on Obi's, Inbox's and Money's, ‹ Your team).
 /// The words are the core's `TeamRules.view`. Only Strings cross to the core; nothing here acts.
+/// Slice 3: **Ask the team…** at the foot closes the sheet into Ask's field (the mic: Talk, listening); for a few
+/// minutes what's asked carries the team in full (`TeamAskRules`).
 ///
 /// Motion: the sheet scale-fades (system); tiles and cards stagger in; a card's click gives a tick haptic and the page
 /// cross-fades in on the expand spring; the live dot breathes. Reduce Motion: cross-fades and a still dot.
@@ -68,6 +70,14 @@ struct TeamSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, MekaSpace.m)
                     .staggeredAppear(v.cards.count + 2)
+                // Slice 3: Ask the team… talks to Obi: Ask's field (or Talk, listening), the team in what he sees.
+                MoneyAskBarView(palette: palette, onMic: { model.askTeam(listen: true, reduced: reduceMotion) },
+                                text: TeamAskRules.shared.BAR, spoken: TeamAskRules.shared.BAR_LABEL,
+                                micSpoken: TeamAskRules.shared.MIC_LABEL) {
+                    model.askTeam(listen: false, reduced: reduceMotion)
+                }
+                .padding(.top, MekaSpace.m)
+                .staggeredAppear(v.cards.count + 3)
             }
         }
         .scrollIndicators(.never)

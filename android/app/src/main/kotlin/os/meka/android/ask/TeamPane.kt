@@ -74,6 +74,7 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.TeamAgent
+import os.meka.core.domain.TeamAskRules
 import os.meka.core.domain.TeamCard
 import os.meka.core.domain.TeamRules
 import os.meka.core.domain.TeamTarget
@@ -82,6 +83,8 @@ import os.meka.core.domain.TeamView
 import os.meka.core.facade.MekaCore
 
 const val TEAM_PANE_TAG = "team-pane"
+const val TEAM_ASK_TAG = "team-ask-bar"
+const val TEAM_ASK_MIC_TAG = "team-ask-mic"
 
 /**
  * Ask → Daily → Your team (slice 1; mockup `docs/design/routines/team.dc.html`): WORKING · NEED YOU · DONE TODAY tiles,
@@ -89,13 +92,19 @@ const val TEAM_PANE_TAG = "team-pane"
  * watching, TODAY and WAITS ON YOU side by side, the wait box lit when something waits), the foot line, and a tap on a
  * card raises its sheet: name and how much it may do by itself, TODAY's log, what waits with Review (Needs you or
  * Money), Close. The words are the core's [TeamRules.view], the same as the Mac's sheet. Nothing here acts.
+ * Slice 3: **Ask the team…** at the foot (the Money bar's look): a tap closes the pane into Ask's field, the mic into
+ * Obi already listening, and for a few minutes what's asked carries the team in full ([TeamAskRules]).
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the tiles, then the cards, stagger in
  * 40 ms apart; a card's tap gives a tick haptic and the sheet rises on the expand spring over a fading scrim; the live
  * dot breathes on the frame clock. Reduced motion: cross-fades and a still dot.
  */
 @Composable
-fun TeamPane(core: MekaCore, onClose: () -> Unit, onReview: (TeamTarget) -> Unit) {
+fun TeamPane(
+    core: MekaCore, onClose: () -> Unit, onReview: (TeamTarget) -> Unit,
+    /** Slice 3: Ask the team… — Obi in Ask's field ([listen]: already listening), the team in what he sees. */
+    onAsk: (listen: Boolean) -> Unit = {},
+) {
     val haptics = rememberMekaHaptics()
     var view by remember { mutableStateOf<TeamView?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
@@ -132,6 +141,13 @@ fun TeamPane(core: MekaCore, onClose: () -> Unit, onReview: (TeamTarget) -> Unit
             }
             Text(LoneWordGlue.kept(TeamRules.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(v.cards.size + 2)))
+            // Slice 3: Ask the team… talks to Obi: Ask's field (or the mic, listening), with the team in what he sees.
+            MoneyAskBar(
+                Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(v.cards.size + 3)),
+                onMic = { haptics.light(); scope.launch { runCatching { core.askTeamStarted() }; onAsk(true) } },
+                text = TeamAskRules.BAR, spoken = TeamAskRules.BAR_LABEL, micSpoken = TeamAskRules.MIC_LABEL,
+                tag = TEAM_ASK_TAG, micTag = TEAM_ASK_MIC_TAG,
+            ) { haptics.tick(); scope.launch { runCatching { core.askTeamStarted() }; onAsk(false) } }
         }
         AgentSheet(
             card = open?.let { code -> view?.card(code) },

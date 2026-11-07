@@ -28,6 +28,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.TEAM_ASK_MIC_TAG
+import os.meka.android.ask.TEAM_ASK_TAG
 import os.meka.android.ask.TeamPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -38,6 +40,7 @@ import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.TeamPauseRules
+import os.meka.core.domain.TeamAskRules
 import os.meka.core.domain.TeamRules
 import os.meka.core.domain.TeamTarget
 import os.meka.core.facade.MekaCore
@@ -113,6 +116,7 @@ class TeamScreensTest {
     )
 
     private var reviewed: TeamTarget? = null
+    private val asked = mutableListOf<Boolean>()
 
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
@@ -134,7 +138,7 @@ class TeamScreensTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    TeamPane(core, onClose = {}, onReview = { reviewed = it })
+                    TeamPane(core, onClose = {}, onReview = { reviewed = it }, onAsk = { asked += it })
                 }
             }
         }
@@ -200,6 +204,13 @@ class TeamScreensTest {
         until { count("team-sheet") == 0 }
         if (count("team-sheet") != 0) fail("$name: Close left the sheet up")
         if (reviewed != null) fail("$name: nothing was reviewed, yet $reviewed opened")
+        // Slice 3: Ask the team… goes to Ask's field, its mic to Obi listening.
+        if (!onScreen(TeamAskRules.BAR)) fail("$name: no Ask the team… at the foot")
+        compose.onAllNodes(hasTestTag(TEAM_ASK_TAG) and hasClickAction(), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { asked.isNotEmpty() }
+        compose.onAllNodes(hasTestTag(TEAM_ASK_MIC_TAG) and hasClickAction(), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { asked.size == 2 }
+        if (asked != listOf(false, true)) fail("$name: Ask the team… asked $asked, not the field then listening")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverQuiet() { pane("cover-dark-quiet", Fill.QUIET) }

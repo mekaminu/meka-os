@@ -126,6 +126,8 @@ struct AskMekaSection: View {
         }
         .onChange(of: model.talkAfterBriefBack) { _, back in if back != nil { takeTalkAfterBrief() } }
         .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
+        // Your team, slice 3: Ask the team… puts the cursor in the field.
+        .onChange(of: model.askFocusRequests) { _, _ in focused = true }
         .onChange(of: model.helloRequested) { _, asked in if asked { takeHelloRequest() } }
         // Slice 3: "Hello Navilife" isn't listened for over a conversation.
         .onChange(of: talk.active) { _, active in MacHelloWake.shared.setTalking(active) }

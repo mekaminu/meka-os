@@ -13,6 +13,10 @@ import SwiftUI
 struct MoneyAskBarView: View {
     let palette: MekaPalette
     var onMic: () -> Void = {}
+    /// Your team, slice 3: the same bar says "Ask the team…" at the foot of Your team.
+    var text: String = MoneyChat.shared.BAR
+    var spoken: String = MoneyChat.shared.BAR_SPOKEN
+    var micSpoken: String = MoneyChatSpoken.shared.MIC_SPOKEN
     let onOpen: () -> Void
 
     var body: some View {
@@ -22,14 +26,14 @@ struct MoneyAskBarView: View {
                     Circle()
                         .fill(RadialGradient(colors: [palette.accent, palette.accent.opacity(0.45)], center: .topLeading, startRadius: 0, endRadius: 22))
                         .frame(width: 20, height: 20)
-                    Text(MoneyChat.shared.BAR).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    Text(text).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
                     Spacer(minLength: MekaSpace.xs)
                 }
                 .padding(.leading, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .contentShape(Rectangle())
             }
             .buttonStyle(MekaPressStyle())
-            .accessibilityLabel(MoneyChat.shared.BAR_SPOKEN)
+            .accessibilityLabel(spoken)
             // Slice 3: the mockup's mic opens Obi · money with Dictation already listening.
             Button { MekaHaptics.tick(); onMic() } label: {
                 Image(systemName: "mic").font(MekaType.body).foregroundStyle(palette.accent)
@@ -37,8 +41,8 @@ struct MoneyAskBarView: View {
             }
             .buttonStyle(MekaPressStyle())
             .padding(.trailing, MekaSpace.xs)
-            .help(MoneyChatSpoken.shared.MIC_SPOKEN)
-            .accessibilityLabel(MoneyChatSpoken.shared.MIC_SPOKEN)
+            .help(micSpoken)
+            .accessibilityLabel(micSpoken)
         }
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.background))
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.l).stroke(palette.hairline, lineWidth: 1))

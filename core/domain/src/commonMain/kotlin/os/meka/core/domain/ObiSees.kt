@@ -47,7 +47,9 @@ enum class ObiArea(val key: String, val kind: AskItemKind, val label: String, va
     HEALTH("health", AskItemKind.HEALTH, "Navilife's health (what's working)", "Ask → Settings → Health", ObiRestRules.HEALTH_MAX),
     VAULT("vault", AskItemKind.VAULT, "the Vault's documents", "Ask → Settings → Vault", ObiRestRules.VAULT_MAX),
     // Ada plans with you, part 3 slice 1 ([WorkingOnRules]): the standing errands, his own renewals, birthdays and waiting-fors.
-    WORKING_ON("working_on", AskItemKind.WORKING_ON, "What Obi is working on", "Ask → Daily → Obi is working on", WorkingOnRules.ASK_MAX);
+    WORKING_ON("working_on", AskItemKind.WORKING_ON, "What Obi is working on", "Ask → Daily → Obi is working on", WorkingOnRules.ASK_MAX),
+    // Your team, slice 3 ([TeamAskRules]): each helper's day and what waits on him, the screen's own words.
+    TEAM("team", AskItemKind.TEAM, "Your team", "Ask → Daily → Your team", TeamAskRules.ASK_MAX);
 
     companion object {
         fun of(key: String?): ObiArea? = key?.trim()?.lowercase()?.let { k -> entries.firstOrNull { it.key == k } }

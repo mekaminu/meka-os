@@ -2118,9 +2118,23 @@ class MekaCore(
      * activity log and what waits on him (Needs you's cards from his messages, the mail card, Obi's money check, Kestrel's
      * requests), as the last refresh has them. Rules, no AI; only reads. Core only.
      */
-    suspend fun teamView(): os.meka.core.domain.TeamView = onCore {
+    suspend fun teamView(): os.meka.core.domain.TeamView = onCore { teamNow() }
+
+    /**
+     * Your team, slice 3: **Ask the team…** was tapped. For [os.meka.core.domain.TeamAskRules.WINDOW_MS] the questions
+     * asked carry the team in full (Ask's `team` lines), whatever words they use; Obi answers in Ask as ever.
+     */
+    suspend fun askTeamStarted() {
+        onCore { teamAskUntilMs = nowMs() + os.meka.core.domain.TeamAskRules.WINDOW_MS }
+    }
+
+    /** Your team, slice 3: until when a question carries the team in full (0: only when it is about the team). */
+    private var teamAskUntilMs = 0L
+
+    /** The team as the core's last refresh has it. Caller is on the core. */
+    private fun teamNow(): os.meka.core.domain.TeamView {
         val m = _money.value
-        os.meka.core.domain.TeamRules.view(
+        return os.meka.core.domain.TeamRules.view(
             os.meka.core.domain.TeamInputs(
                 activity = activity.items(),
                 requestsWaiting = _requests.value.size,
@@ -10781,6 +10795,8 @@ class MekaCore(
                 workingOn = obiSeesLines(os.meka.core.domain.ObiArea.WORKING_ON, q, cal, full = os.meka.core.domain.WorkingOnRules.asked(q)),
                 // Part 3 slice 4: what Obi found on the web for an errand is other people's words (ADR-006).
                 workingOnFromWeb = os.meka.core.domain.WorkingOnRules.fromWeb(workingOnNow(), os.meka.core.domain.WorkingOnRules.asked(q)),
+                // Your team, slice 3: each helper's day, all of it when asked about (or from Ask the team…), else one line.
+                team = obiSeesLines(os.meka.core.domain.ObiArea.TEAM, q, cal, full = teamAsked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -12433,9 +12449,13 @@ class MekaCore(
             os.meka.core.domain.ObiArea.HEALTH -> os.meka.core.domain.ObiRestRules.healthLines(_health.value, full)
             os.meka.core.domain.ObiArea.VAULT -> os.meka.core.domain.ObiRestRules.vaultLines(_documents.value, full)
             os.meka.core.domain.ObiArea.WORKING_ON -> os.meka.core.domain.WorkingOnRules.askLines(workingOnNow(), full)
+            os.meka.core.domain.ObiArea.TEAM -> os.meka.core.domain.TeamAskRules.askLines(teamNow(), full)
         }
         return lines.take(area.max)
     }
+
+    /** Your team, slice 3: whether [q] is about the team, or was asked from Ask the team… a moment ago. Caller is on the core. */
+    private fun teamAsked(q: String): Boolean = os.meka.core.domain.TeamAskRules.asked(q) || nowMs() < teamAskUntilMs
 
     /** Obi sees everything, slice 1: whether [q] is about his study (a study word or one of his courses' names). Caller is on the core. */
     private fun studyAsked(q: String): Boolean = os.meka.core.domain.StudyAskRules.isAbout(q, study.courses().map { it.title })
