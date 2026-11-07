@@ -31,6 +31,7 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.NEW_ROUTINE_TAG
+import os.meka.android.ask.ROUTINES_PANE_TAG
 import os.meka.android.ask.RoutinesPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
