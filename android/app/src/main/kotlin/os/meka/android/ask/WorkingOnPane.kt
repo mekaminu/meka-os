@@ -208,6 +208,13 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                             view = runCatching { core.workingOnView() }.getOrNull() ?: view
                         }
                     },
+                    onTakeOver = {
+                        haptics.medium()
+                        scope.launch {
+                            callSaid = runCatching { core.takeOverBookingCall(r.id) }.getOrNull() ?: os.meka.core.domain.BookingLiveRules.NOT_ON_CALL
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
                     onAddToCalendar = {
                         haptics.tick()
                         scope.launch {

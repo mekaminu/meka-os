@@ -127,8 +127,26 @@ class BookingCaller(
 
     /** The phone service's steps for a booking call. */
     fun handle(event: VoiceEvent): VoiceReply = when (event) {
-        // The stream is over: Obi said goodbye himself, or he never started talking and the business hears why.
-        is VoiceEvent.BookingEnded -> if (line.wasLive(event.callId)) VoiceReply.HangUp else VoiceReply.Goodbye(BookingDialRules.SORRY)
+        // The stream is over: Obi said goodbye himself (or handed over: slice 3b rings his mobile), or he never started
+        // talking and the business hears why.
+        is VoiceEvent.BookingEnded -> when {
+            !line.wasLive(event.callId) -> VoiceReply.Goodbye(BookingDialRules.SORRY)
+            line.outcome(event.callId)?.takenOver == true -> handOver(event.callId)
+            else -> VoiceReply.HangUp
+        }
+        // Slice 3b: his mobile answered: the whisper, only for a call he asked to take over.
+        is VoiceEvent.BookingWhisper -> if (handingOver(event.parent) != null) VoiceReply.Whisper(BookingLiveRules.TAKE_OVER_WHISPER, VoiceStep.BOOKING_WHISPER_ANSWERED)
+            else VoiceReply.HangUp
+        is VoiceEvent.BookingWhisperAnswered -> {
+            val p = handingOver(event.parent)
+            if (p == null || !PutThroughRules.takes(event.digits)) VoiceReply.HangUp
+            else {
+                if (write(p.first, EntityTypes.BOOKING_CALL, p.second, mapOf(BookingCallFields.TAKEN_AT to FieldValue.Int64(now())),
+                        read(p.first, EntityTypes.BOOKING_CALL)[p.second])) runCatching { onWritten(p.first) }
+                VoiceReply.Connect
+            }
+        }
+        is VoiceEvent.BookingTakenDialed -> takenDialed(event)
         is VoiceEvent.BookingStatus -> {
             val p = pending.remove(event.callId)
             // A call Obi talked on is closed by its session's end ([ended]); any other one by how it ended.
@@ -139,6 +157,69 @@ class BookingCaller(
             VoiceReply.Done
         }
         else -> VoiceReply.Done
+    }
+
+    /** Slice 3b: the household and card of booking call [callId] while it's being handed to him, else null. */
+    private fun handingOver(callId: String?): Pair<String, String>? = callId?.takeIf { it.isNotBlank() }?.let { handing[it] }
+
+    /** Slice 3b: calls being handed to him (his mobile rung), by call id: the household and card. Memory only. */
+    private val handing = ConcurrentHashMap<String, Pair<String, String>>()
+
+    /** Slice 3b: ring his mobile from the assistant's number; without one the business hears he'll call back. */
+    private fun handOver(callId: String): VoiceReply {
+        val p = pending[callId] ?: return VoiceReply.Goodbye(BookingLiveRules.TAKE_OVER_SORRY)
+        val profile = read(p.first, EntityTypes.HOUSEHOLD_PROFILE)[AboutYouRules.ENTITY_ID].orEmpty()
+        fun text(f: String) = (profile[f]?.value as? FieldValue.Text)?.value
+        val mobile = PutThroughRules.dialable(text(AboutYouFields.MOBILE))
+        val from = PutThroughRules.dialable(text(AboutYouFields.ASSISTANT_NUMBER))
+        if (mobile == null || from == null) {
+            missed(p.first, p.second)
+            return VoiceReply.Goodbye(BookingLiveRules.TAKE_OVER_SORRY)
+        }
+        handing[callId] = p
+        System.err.println("booking call: putting the call through to the owner") // no names, no numbers
+        return VoiceReply.TakeOver(mobile, from)
+    }
+
+    /** Slice 3b: his mobile's leg is over: taken (how long, on the meter) or missed (the business was told he'll call back). */
+    private fun takenDialed(e: VoiceEvent.BookingTakenDialed): VoiceReply {
+        val (hh, id) = handing.remove(e.callId) ?: return VoiceReply.HangUp
+        val head = read(hh, EntityTypes.BOOKING_CALL)[id] ?: return VoiceReply.HangUp
+        val c = BookingCallRules.read(id, head.mapValues { it.value.value }) ?: return VoiceReply.HangUp
+        if (c.takenAtMs == null) {
+            missed(hh, id)
+            return VoiceReply.Goodbye(BookingLiveRules.TAKE_OVER_SORRY)
+        }
+        val secs = e.seconds.coerceAtLeast(0)
+        var wrote = write(hh, EntityTypes.BOOKING_CALL, id, mapOf(
+            BookingCallFields.YOUR_SECONDS to FieldValue.Int64(secs),
+            BookingCallFields.RESULT to FieldValue.Text(BookingLiveRules.takenLine(true, secs, c.result).take(BookingDialRules.MAX_LINE)),
+        ), head)
+        val e164 = (BookingCallRules.numberCheck(c.number, emptyList()) as? os.meka.core.domain.NumberCheck.Ok)?.e164
+        val meter = line.recordHandOver(hh, e.callId, e164, secs)
+        val heads = read(hh, EntityTypes.CONTEXT_MODE)[LiveCallRules.METER_ID]
+        if (write(hh, EntityTypes.CONTEXT_MODE, LiveCallRules.METER_ID, mapOf(
+                LiveCallRules.METER_MONTH to FieldValue.Text(meter.month), LiveCallRules.METER_PENCE to FieldValue.Int64(meter.spentPence),
+                LiveCallRules.METER_CALLS to FieldValue.Int64(meter.calls),
+            ), heads)) wrote = true
+        if (wrote) runCatching { onWritten(hh) }
+        return VoiceReply.HangUp
+    }
+
+    /** Slice 3b: he didn't take it: Not booked, they were told he'll call back (from taken, or still on the call). */
+    private fun missed(hh: String, id: String) {
+        val closed = close(hh, id, BookingCallState.NOT_BOOKED, BookingLiveRules.TAKE_OVER_MISSED, from = BookingCallState.TAKEN) ||
+            close(hh, id, BookingCallState.NOT_BOOKED, BookingLiveRules.TAKE_OVER_MISSED, from = BookingCallState.CALLING)
+        if (closed) runCatching { onWritten(hh) }
+    }
+
+    /** Slice 3b: whether he tapped Take over on this booking call's card (and his mobile is in About you to ring). */
+    fun takeOverAsked(t: LiveCallTicket): Boolean {
+        val id = t.bookingId ?: return false
+        val hh = t.householdId
+        if (read(hh, EntityTypes.BOOKING_CALL)[id]?.get(BookingCallFields.TAKE_OVER)?.value != FieldValue.Bool(true)) return false
+        val mobile = (read(hh, EntityTypes.HOUSEHOLD_PROFILE)[AboutYouRules.ENTITY_ID]?.get(AboutYouFields.MOBILE)?.value as? FieldValue.Text)?.value
+        return PutThroughRules.dialable(mobile) != null
     }
 
     /** Slice 3: whether he tapped Hang up on the card this booking call is for. */
@@ -169,7 +250,7 @@ class BookingCaller(
         val hh = t.householdId
         val id = t.bookingId ?: return
         val card = read(hh, EntityTypes.BOOKING_CALL)[id]?.let { f -> BookingCallRules.read(id, f.mapValues { it.value.value }) }
-        val (state, text) = BookingDialRules.result(end.live, end.booking, card, end.hungUp)
+        val (state, text) = BookingDialRules.result(end.live, end.booking, card, end.hungUp, end.takenOver)
         // Slice 3: the result card's length, the time and name agreed (the time only inside the card's window) and the words.
         val extra = buildMap<String, FieldValue> {
             if (end.live) put(BookingCallFields.SECONDS, FieldValue.Int64(end.seconds))

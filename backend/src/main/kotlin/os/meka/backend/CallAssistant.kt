@@ -7,6 +7,7 @@ import os.meka.backend.integrations.Integrations
 import os.meka.core.domain.AboutYouFields
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AssistantHangupRules
+import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.PutThroughRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BlockedCallerFields
@@ -101,6 +102,16 @@ sealed class VoiceEvent {
     data class BookingEnded(override val callId: String) : VoiceEvent()
     /** Slice 2b: the phone service's end of a booking call ([VoiceStep.BOOKING_STATUS]): completed, busy, no-answer, failed, canceled. */
     data class BookingStatus(override val callId: String, val status: String?) : VoiceEvent()
+    /** Slice 3b: his mobile answered a taken-over booking call ([callId] his leg, [parent] the booking call). */
+    data class BookingWhisper(override val callId: String, val parent: String?) : VoiceEvent()
+    /** Slice 3b: his key press after the whisper (1 takes the call). */
+    data class BookingWhisperAnswered(override val callId: String, val parent: String?, val digits: String?) : VoiceEvent()
+    /** Slice 3b: his mobile's leg of a taken-over booking call ended ([callId] the booking call; [seconds] his leg's length). */
+    data class BookingTakenDialed(override val callId: String, val seconds: Long) : VoiceEvent()
+
+    /** Whether this step belongs to an outbound booking call (the [BookingCaller]'s, never the assistant's). */
+    val forBooking: Boolean get() = this is BookingEnded || this is BookingStatus || this is BookingWhisper ||
+        this is BookingWhisperAnswered || this is BookingTakenDialed
 }
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
@@ -147,8 +158,13 @@ sealed class VoiceReply {
         /** Obi on calls, slice 1b: Obi already asked them to hold in the live call, so [PutThroughRules.HOLD] isn't said again. */
         val toldToHold: Boolean = false,
     ) : VoiceReply()
-    /** Played to Meka when he answers: who it is and "press 1" ([VoiceStep.WHISPER_ANSWERED]); silence hangs up his leg. */
-    data class Whisper(val text: String) : VoiceReply()
+    /** Played to Meka when he answers: who it is and "press 1" ([answerStep]); silence hangs up his leg. */
+    data class Whisper(val text: String, val answerStep: String = VoiceStep.WHISPER_ANSWERED) : VoiceReply()
+    /**
+     * Obi on calls, slice 3b: he took a booking call over: ring [mobile] from [callerId] (the assistant's number), the
+     * whisper when he answers ([VoiceStep.BOOKING_WHISPER]), then [VoiceStep.BOOKING_TAKEN_DIALED].
+     */
+    data class TakeOver(val mobile: String, val callerId: String) : VoiceReply()
     /** He pressed 1: say so, then the phone service connects the two. */
     data object Connect : VoiceReply()
     /**
@@ -181,6 +197,10 @@ object VoiceStep {
     /** Obi on calls, slice 2b: an outbound booking call's stream ended, and the call's final status. */
     const val BOOKING_ENDED = "booking-ended"
     const val BOOKING_STATUS = "booking-status"
+    /** Slice 3b: a booking call he took over: his mobile's whisper, his key, and his leg's end. */
+    const val BOOKING_WHISPER = "booking-whisper"
+    const val BOOKING_WHISPER_ANSWERED = "booking-whisper-answered"
+    const val BOOKING_TAKEN_DIALED = "booking-taken-dialed"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -559,6 +579,7 @@ class CallAssistant(
             // Slice 2b: booking calls are the [BookingCaller]'s (the route hands them there); never the assistant's.
             is VoiceEvent.BookingEnded -> VoiceReply.HangUp
             is VoiceEvent.BookingStatus -> VoiceReply.Done
+            is VoiceEvent.BookingWhisper, is VoiceEvent.BookingWhisperAnswered, is VoiceEvent.BookingTakenDialed -> VoiceReply.HangUp
             is VoiceEvent.Transcribed -> {
                 // With Transcribe on, the words wait for it ([transcribeKept], off the request); Twilio's are its fallback.
                 if (!transcribesLater(event)) settle(hh, id, event.text)
@@ -1141,6 +1162,9 @@ class TwilioVoice(
             VoiceStep.LIVE_ENDED -> VoiceEvent.LiveEnded(call, from, form["To"])
             VoiceStep.BOOKING_ENDED -> VoiceEvent.BookingEnded(call)
             VoiceStep.BOOKING_STATUS -> VoiceEvent.BookingStatus(call, form["CallStatus"]?.trim()?.take(20))
+            VoiceStep.BOOKING_WHISPER -> VoiceEvent.BookingWhisper(call, parentOf(form))
+            VoiceStep.BOOKING_WHISPER_ANSWERED -> VoiceEvent.BookingWhisperAnswered(call, parentOf(form), form["Digits"])
+            VoiceStep.BOOKING_TAKEN_DIALED -> VoiceEvent.BookingTakenDialed(call, form["DialCallDuration"]?.trim()?.toLongOrNull()?.coerceIn(0, 24 * 3600) ?: 0)
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -1186,8 +1210,12 @@ class TwilioVoice(
                 """<Dial timeout="${PutThroughRules.RING_SECONDS}" callerId="${xml(reply.callerId)}" action="${url(VoiceStep.DIALED)}" method="POST">""" +
                 """<Number url="${url(VoiceStep.WHISPER)}" method="POST">${xml(reply.mobile)}</Number></Dial>"""
             is VoiceReply.Whisper ->
-                """<Gather input="dtmf" numDigits="1" timeout="${PutThroughRules.WHISPER_SECONDS}" action="${url(VoiceStep.WHISPER_ANSWERED)}" method="POST">""" +
+                """<Gather input="dtmf" numDigits="1" timeout="${PutThroughRules.WHISPER_SECONDS}" action="${url(reply.answerStep)}" method="POST">""" +
                     say(reply.text) + "</Gather><Hangup/>"
+            // Slice 3b: a booking call he took over rings his mobile; the whisper (press 1) keeps it off his voicemail.
+            is VoiceReply.TakeOver ->
+                """<Dial timeout="${BookingLiveRules.TAKE_OVER_RING_SECONDS}" callerId="${xml(reply.callerId)}" action="${url(VoiceStep.BOOKING_TAKEN_DIALED)}" method="POST">""" +
+                    """<Number url="${url(VoiceStep.BOOKING_WHISPER)}" method="POST">${xml(reply.mobile)}</Number></Dial>"""
             VoiceReply.Connect -> say(PutThroughRules.CONNECTING)
             // Obi on calls, slice 1: the call's audio to Navilife's server; when the stream ends, ask what next.
             is VoiceReply.LiveStream -> """<Connect><Stream url="${xml(LiveCallRoutes.streamUrl(base))}">""" +

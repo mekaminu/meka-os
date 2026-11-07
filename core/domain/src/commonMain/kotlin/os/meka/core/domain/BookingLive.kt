@@ -1,7 +1,7 @@
 package os.meka.core.domain
 
 /**
- * Obi on calls, part B slice 3 (mockup `docs/design/calls/booking-call.dc.html`, the live call and the result): while
+ * Obi on calls, part B slice 3 (and 3b's Take over; mockup `docs/design/calls/booking-call.dc.html`, the live call and the result): while
  * Obi is on a booking call the card is the **live view** (Obi is on the call · the business · a clock, LIVE WORDS with
  * the last few lines said, and Hang up); once it's over the **result card** (Booked · the business · how long, WHEN ·
  * PEOPLE · NAME tiles, the result line, In your calendar with Add to calendar, and Read the call). What the business
@@ -112,6 +112,34 @@ object BookingLiveRules {
         "Say sorry, you have to go, thank them and say goodbye in one short sentence, then call ${LiveCallRules.END_CALL}."
     const val HUNG_UP_RESULT = "Not booked · you hung up · nothing was agreed"
 
+    // Slice 3b: Take over. He taps it; Obi tells them he's putting them through; the server rings his mobile from the
+    // assistant's number with a whisper (press 1); the business is put through to him and he finishes the call himself.
+    const val TAKE_OVER = "Take over"
+    const val TAKE_OVER_LINE = "Taking over · Obi is putting them through · your mobile rings in a moment, press 1 to take it"
+    const val TAKING_OVER = "Putting you through · your mobile rings in a moment"
+    const val NO_MOBILE = "Add your mobile in About you to take calls over"
+    const val TAKEN = "You took the call"
+    const val PUTTING_THROUGH = "You took over · ringing your mobile"
+    const val TAKEN_RESULT = "You took the call from Obi"
+    const val TAKE_OVER_MISSED = "Not booked · you didn't pick up · they were told you'll call them back"
+    /** Played to him when his mobile answers; 1 takes the call. */
+    const val TAKE_OVER_WHISPER = "Your booking call from Obi. Press 1 to take it."
+    /** Said to the business when his mobile didn't take it. */
+    const val TAKE_OVER_SORRY = "Sorry, he can't come to the phone just now. He'll call you back himself. Thank you, goodbye."
+    /** His mobile rings this long (the whisper then waits [PutThroughRules.WHISPER_SECONDS] for his 1). */
+    const val TAKE_OVER_RING_SECONDS = 20
+    /** Once he has the call, it can run this much longer before the phone service ends it. */
+    const val TAKE_OVER_MAX_SECONDS = 20 * 60
+
+    /** Obi's turn when he taps Take over: nothing more agreed, a hand-over in one sentence, then the line moves to him. */
+    const val TAKE_OVER_TURN = "The person you assist wants to speak to them himself now. Don't agree anything more. " +
+        "Say in one short sentence that you're putting them through to him and ask them to hold a moment, then call ${LiveCallRules.END_CALL}."
+
+    /** The result line once the hand-over is settled: taken ("You took the call from Obi · 3 min 10 s") or missed. */
+    fun takenLine(taken: Boolean, yourSeconds: Long?, before: String?): String = if (!taken) TAKE_OVER_MISSED else
+        listOfNotNull(TAKEN_RESULT, yourSeconds?.takeIf { it > 0 }?.let { "you talked ${length(it)}" },
+            before?.substringAfter(PUTTING_THROUGH, "")?.removePrefix(" · ")?.takeIf { it.isNotBlank() }).joinToString(" · ")
+
     /** "01:12" from [sinceMs] to [nowMs] (minutes can pass 59: "12:05"). */
     fun clock(sinceMs: Long, nowMs: Long): String {
         val s = ((nowMs - sinceMs) / 1_000).coerceAtLeast(0)
@@ -188,7 +216,7 @@ object BookingLiveRules {
         (c.transcript != null || c.words != null) && c.state.finished && c.endedAtMs != null && nowMs - c.endedAtMs > KEEP_MS
 
     /** [row] with slice 3's live view or result card for [c]. */
-    fun withLive(row: BookingCallRow, c: BookingCall, nowMs: Long, cal: LocalCalendar): BookingCallRow {
+    fun withLive(row: BookingCallRow, c: BookingCall, nowMs: Long, cal: LocalCalendar, hasMobile: Boolean = false): BookingCallRow {
         val live = !c.cancelled && c.state == BookingCallState.CALLING
         val finished = c.state.finished
         val transcript = if (finished && kept(c, nowMs)) BookingWords.decode(c.transcript, c.business) else emptyList()
@@ -205,9 +233,13 @@ object BookingLiveRules {
             liveSinceMs = if (live) (c.answeredAtMs ?: c.calledAtMs ?: nowMs) else -1,
             liveWords = if (live) BookingWords.decode(c.words, c.business) else emptyList(),
             canHangUp = live && !c.hangUp,
+            canTakeOver = live && !c.hangUp && !c.takeOver && hasMobile,
             showBrief = !live && !finished,
             resultTiles = tiles,
-            lengthLine = if (finished && c.seconds != null && c.seconds > 0) "${c.business} · ${length(c.seconds)}" else null,
+            lengthLine = if (finished && c.seconds != null && c.seconds > 0) {
+                "${c.business} · ${if (c.state == BookingCallState.TAKEN) "Obi " else ""}${length(c.seconds)}" +
+                    (c.yourSeconds?.takeIf { it > 0 && c.state == BookingCallState.TAKEN }?.let { " · you ${length(it)}" } ?: "")
+            } else null,
             calendarLine = if (booked && at != null) "In your calendar · ${CivilDate.shortLabel(c.day)} ${LocalClock.formatMinute(at)}" else null,
             canAddToCalendar = draftable && c.calendarEditId == null,
             addedToCalendar = booked && c.calendarEditId != null,

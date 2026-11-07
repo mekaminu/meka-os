@@ -2098,7 +2098,7 @@ class MekaCore(
             val from = cal.epochDayOf(e.startAtMs); val to = cal.epochDayOf((e.endAtMs - 1).coerceAtLeast(e.startAtMs))
             days.any { it in from..to }
         }
-        return os.meka.core.domain.BookingCallRules.rows(all, personalNumbers(), dayEvents, nowMs(), cal)
+        return os.meka.core.domain.BookingCallRules.rows(all, personalNumbers(), dayEvents, nowMs(), cal, aboutYou.profile().mobile)
     }
 
     /** Obi on calls, slice 2a: CALLS FOR YOU, the call cards as Obi is working on shows them. Core only. */
@@ -2127,6 +2127,12 @@ class MekaCore(
 
     /** Obi on calls, slice 3: Hang up while Obi is on the call (synced; the server ends it). The line to show. */
     suspend fun hangUpBookingCall(id: String): String = onCore { bookingCalls.hangUp(id) }
+
+    /**
+     * Obi on calls, slice 3b: Take over while Obi is on the call (synced): Obi tells them he's putting them through and
+     * the server rings his mobile from About you, press 1 to take it. The line to show.
+     */
+    suspend fun takeOverBookingCall(id: String): String = onCore { bookingCalls.takeOver(id, aboutYou.profile().mobile) }
 
     /**
      * Slice 3: Add to calendar on a booked card: the booking as an event on the account he last added to (a synced

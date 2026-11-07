@@ -1820,6 +1820,12 @@ final class CoreModel {
         return (try? await core.hangUpBookingCall(id: id)) ?? BookingLiveRules.shared.NOT_ON_CALL
     }
 
+    /// Obi on calls, slice 3b: Take over while Obi is on a booking call (synced; the server rings his mobile); the line to show.
+    func takeOverBookingCall(_ id: String) async -> String {
+        guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }
+        return (try? await core.takeOverBookingCall(id: id)) ?? BookingLiveRules.shared.NOT_ON_CALL
+    }
+
     /// Slice 3: Add to calendar on a booked card (an event on the account last added to); the line to show.
     func addBookingCallToCalendar(_ id: String) async -> String {
         guard let core else { return BookingCallRules.shared.GONE }

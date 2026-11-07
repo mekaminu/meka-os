@@ -50,6 +50,9 @@ class BookingCallsFacadeTest {
         assertTrue(approved.canCancel)
         // Slice 3: Hang up is only for a call Obi is on, Add to calendar only for a booked card.
         assertEquals(os.meka.core.domain.BookingLiveRules.NOT_ON_CALL, fold.hangUpBookingCall(approved.id))
+        // Slice 3b: Take over likewise, and never offered before the call.
+        assertEquals(os.meka.core.domain.BookingLiveRules.NOT_ON_CALL, fold.takeOverBookingCall(approved.id))
+        assertFalse(approved.canTakeOver)
         assertEquals(BookingCallRules.GONE, fold.addBookingCallToCalendar(approved.id))
         assertTrue(approved.showBrief && !approved.live)
         // The Ask card's Undo still cancels it before anything rings.

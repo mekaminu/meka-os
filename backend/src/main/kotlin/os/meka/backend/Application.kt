@@ -1072,7 +1072,7 @@ fun Application.mekaSync(
                 val booking = voice.booking
                 val reply = withContext(Dispatchers.IO) {
                     // Obi on calls, slice 2b: a booking call's steps are the booking caller's.
-                    if (event is VoiceEvent.BookingEnded || event is VoiceEvent.BookingStatus) booking?.handle(event) ?: VoiceReply.HangUp
+                    if (event.forBooking) booking?.handle(event) ?: VoiceReply.HangUp
                     else voice.assistant.handle(provider.id, event)
                 }
                 // Transcribed (or failed): keep the recording in MEKA's own bucket (polish 8c), then delete the phone
@@ -1763,6 +1763,8 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
             while (!session.done) {
                 kotlinx.coroutines.delay(BookingLiveRules.HANG_UP_POLL_MS)
                 runCatching { if (booking.hangUpAsked(ticket)) session.hangUpAsked() }
+                // Slice 3b: Take over: Obi hands over, then the end step rings his mobile.
+                runCatching { if (booking.takeOverAsked(ticket)) session.takeOverAsked() }
                 val t = System.currentTimeMillis()
                 if (t - lastWords >= BookingLiveRules.WORDS_EVERY_MS) {
                     lastWords = t

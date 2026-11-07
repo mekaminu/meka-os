@@ -630,7 +630,7 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.ROUTINE && field == RoutineFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.ROUTINE -> MergePolicy.Lww
         // Call cards: a Cancel on any device stands; his edits, Call now and the server's progress, the latest wins.
-        entityType == EntityTypes.BOOKING_CALL && (field == BookingCallFields.CANCELLED || field == BookingCallFields.HANG_UP) -> MergePolicy.TrueWins
+        entityType == EntityTypes.BOOKING_CALL && (field == BookingCallFields.CANCELLED || field == BookingCallFields.HANG_UP || field == BookingCallFields.TAKE_OVER) -> MergePolicy.TrueWins
         entityType == EntityTypes.BOOKING_CALL -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal

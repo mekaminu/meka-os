@@ -53,12 +53,20 @@ object BookingCallFields {
     const val HANG_UP = "hangUp"
     /** Slice 3 (device): the calendar edit Add to calendar made. */
     const val CALENDAR_EDIT = "calendarEdit"
+    /** Slice 3b (device): Take over was tapped; Obi tells them he's putting them through and the server rings his mobile. */
+    const val TAKE_OVER = "takeOver"
+    /** Slice 3b (server): when he pressed 1 on his mobile and the business was put through to him. */
+    const val TAKEN_AT = "takenAt"
+    /** Slice 3b (server): how long he was on the call himself, in seconds. */
+    const val YOUR_SECONDS = "yourSeconds"
 }
 
 enum class BookingCallState(val code: String) {
-    DRAFT("draft"), APPROVED("approved"), CALLING("calling"), BOOKED("booked"), NOT_BOOKED("not_booked"), FAILED("failed");
+    DRAFT("draft"), APPROVED("approved"), CALLING("calling"), BOOKED("booked"), NOT_BOOKED("not_booked"), FAILED("failed"),
+    /** Slice 3b: he took the call from Obi (his mobile rang; he finishes it himself). */
+    TAKEN("taken");
 
-    val finished: Boolean get() = this == BOOKED || this == NOT_BOOKED || this == FAILED
+    val finished: Boolean get() = this == BOOKED || this == NOT_BOOKED || this == FAILED || this == TAKEN
 
     companion object {
         fun of(code: String?): BookingCallState = entries.firstOrNull { it.code == code } ?: DRAFT
@@ -93,6 +101,10 @@ data class BookingCall(
     val bookedName: String? = null,
     val hangUp: Boolean = false,
     val calendarEditId: String? = null,
+    /** Slice 3b: Take over tapped; when he took it on his mobile; how long he talked himself. */
+    val takeOver: Boolean = false,
+    val takenAtMs: Long? = null,
+    val yourSeconds: Long? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -136,6 +148,8 @@ data class BookingCallRow(
     val liveSinceMs: Long = -1,
     val liveWords: List<BookingWordLine> = emptyList(),
     val canHangUp: Boolean = false,
+    /** Slice 3b: Take over (his mobile is in About you, nothing tapped yet). */
+    val canTakeOver: Boolean = false,
     /** The brief (WHEN · WINDOW · PEOPLE, may say, won't, the foot) shows until the call starts. */
     val showBrief: Boolean = true,
     /** Slice 3: the result card's tiles (WHEN · PEOPLE · NAME) on a booked card. */
@@ -286,6 +300,8 @@ object BookingCallRules {
             bookedName = text(BookingCallFields.BOOKED_NAME),
             hangUp = (f[BookingCallFields.HANG_UP] as? FieldValue.Bool)?.value == true,
             calendarEditId = text(BookingCallFields.CALENDAR_EDIT),
+            takeOver = (f[BookingCallFields.TAKE_OVER] as? FieldValue.Bool)?.value == true,
+            takenAtMs = num(BookingCallFields.TAKEN_AT), yourSeconds = num(BookingCallFields.YOUR_SECONDS),
         )
     }
 
@@ -373,7 +389,11 @@ object BookingCallRules {
         return if (m in CALL_FROM_MIN until CALL_TO_MIN) WAITING else "Waiting to ring · Obi rings at 09:00, when calls start"
     }
 
-    fun rows(calls: List<BookingCall>, personal: Collection<String?>, events: List<CalendarEvent>, nowMs: Long, cal: LocalCalendar): List<BookingCallRow> {
+    /** [mobile]: his own mobile from About you, for Take over (slice 3b); none hides it. */
+    fun rows(
+        calls: List<BookingCall>, personal: Collection<String?>, events: List<CalendarEvent>, nowMs: Long, cal: LocalCalendar,
+        mobile: String? = null,
+    ): List<BookingCallRow> {
         val today = cal.epochDayOf(nowMs)
         return calls.filter { !it.cancelled }
             .sortedWith(compareBy<BookingCall> { it.state.finished }.thenByDescending { it.askedAtMs })
@@ -385,7 +405,12 @@ object BookingCallRules {
                 val status = when (c.state) {
                     BookingCallState.DRAFT -> NEEDS_TAP
                     BookingCallState.APPROVED -> waitingLine(nowMs, cal)
-                    BookingCallState.CALLING -> if (c.hangUp) BookingLiveRules.HANGING_UP else CALLING
+                    BookingCallState.CALLING -> when {
+                        c.hangUp -> BookingLiveRules.HANGING_UP
+                        c.takeOver -> BookingLiveRules.TAKING_OVER
+                        else -> CALLING
+                    }
+                    BookingCallState.TAKEN -> BookingLiveRules.TAKEN
                     BookingCallState.BOOKED -> BOOKED
                     BookingCallState.NOT_BOOKED -> NOT_BOOKED
                     BookingCallState.FAILED -> FAILED
@@ -410,7 +435,7 @@ object BookingCallRules {
                     canCall = draft && block == null, canEdit = draft, canChangePeople = draft && c.people != null,
                     canCancel = draft || c.state == BookingCallState.APPROVED,
                     spoken = listOfNotNull("Call card for ${c.business}", c.what, "$whenTile, $window", c.people?.let { "$it people" }, status, block, c.result).joinToString(". "),
-                ).let { BookingLiveRules.withLive(it, c, nowMs, cal) }
+                ).let { BookingLiveRules.withLive(it, c, nowMs, cal, PutThroughRules.dialable(mobile) != null) }
             }
     }
 
@@ -481,6 +506,18 @@ class BookingCalls(private val replica: Replica, private val newId: () -> String
         if (c.cancelled || c.state != BookingCallState.CALLING) return BookingLiveRules.NOT_ON_CALL
         if (!c.hangUp) replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.HANG_UP to true.fv()))
         return BookingLiveRules.HUNG_UP_LINE
+    }
+
+    /**
+     * Slice 3b: Take over while Obi is on the call: Obi tells them he's putting them through, then the server rings
+     * [mobile] (About you) and he presses 1 to take it. Returns the line to show.
+     */
+    fun takeOver(id: String, mobile: String?): String {
+        val c = one(id) ?: return BookingLiveRules.NOT_ON_CALL
+        if (c.cancelled || c.state != BookingCallState.CALLING || c.hangUp) return BookingLiveRules.NOT_ON_CALL
+        if (PutThroughRules.dialable(mobile) == null) return BookingLiveRules.NO_MOBILE
+        if (!c.takeOver) replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.TAKE_OVER to true.fv()))
+        return BookingLiveRules.TAKE_OVER_LINE
     }
 
     /** Slice 3: the event a booked card's Add to calendar would make, or null (not booked, no time, added already). */

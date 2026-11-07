@@ -14,8 +14,11 @@ object BookingDialRules {
 
     /** How long the business's phone rings before it counts as no answer. */
     const val RING_SECONDS = 40
-    /** The phone service ends the call at this length whatever happens (Obi wraps up before). */
-    const val LIMIT_SECONDS = LiveCallRules.MAX_SECONDS + 30
+    /**
+     * The phone service ends the call at this length whatever happens. Obi's part ends at [LiveCallRules.MAX_SECONDS]
+     * (his session closes the stream and the line hangs up); slice 3b: the rest is for him once he takes over.
+     */
+    const val LIMIT_SECONDS = LiveCallRules.MAX_SECONDS + BookingLiveRules.TAKE_OVER_MAX_SECONDS
     /** A booking stream's ticket lasts long enough for the ringing. */
     const val TICKET_MS = 120_000L
     /** A card still "on the call" this long after ringing began is closed as failed (a lost call, a restart). */
@@ -129,10 +132,14 @@ object BookingDialRules {
 
     /**
      * The card's closing state and line for a call that went live ([live]) with Obi's [o] (null: he never said);
-     * [hungUp]: he tapped Hang up (a booking already confirmed still counts).
+     * [hungUp]: he tapped Hang up (a booking already confirmed still counts); [takenOver]: he tapped Take over (slice 3b).
      */
-    fun result(live: Boolean, o: Outcome?, c: BookingCall?, hungUp: Boolean = false): Pair<BookingCallState, String> {
+    fun result(live: Boolean, o: Outcome?, c: BookingCall?, hungUp: Boolean = false, takenOver: Boolean = false): Pair<BookingCallState, String> {
         if (!live) return BookingCallState.FAILED to NEVER_LIVE
+        // Slice 3b: he took the call: his mobile rings next; whatever Obi had agreed is kept on the line.
+        if (takenOver && !hungUp) return BookingCallState.TAKEN to listOfNotNull(
+            BookingLiveRules.PUTTING_THROUGH, o?.takeIf { it.booked }?.let { "Obi had booked ${it.agreed ?: "it"}" + (it.reference?.let { r -> " · ref $r" } ?: "") },
+        ).joinToString(" · ").take(MAX_LINE)
         if (hungUp && o?.booked != true) return BookingCallState.NOT_BOOKED to BookingLiveRules.HUNG_UP_RESULT
         o ?: return BookingCallState.NOT_BOOKED to NOTHING_AGREED
         val line = if (o.booked) {
@@ -151,6 +158,13 @@ object BookingDialRules {
         "no-answer" -> BookingCallState.NOT_BOOKED to NO_ANSWER
         "completed" -> BookingCallState.FAILED to NEVER_LIVE
         else -> BookingCallState.FAILED to DIAL_FAILED
+    }
+
+    /** Slice 3b: his own leg once he took over: his mobile's outbound minute plus the business's line kept open (no Gemini). */
+    fun handOverMicroUsd(businessE164: String?, seconds: Long): Long {
+        val s = seconds.coerceAtLeast(0)
+        val business = if (businessE164?.startsWith("+447") == true) BookingCallRules.MOBILE_MICRO_USD_PER_MIN else BookingCallRules.LANDLINE_MICRO_USD_PER_MIN
+        return (s + 59) / 60 * (BookingCallRules.MOBILE_MICRO_USD_PER_MIN + business)
     }
 
     /** What a booking call cost: the outbound minute (landline or mobile) and the stream, plus Gemini Live. */

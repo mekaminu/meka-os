@@ -140,4 +140,50 @@ class BookingLiveRulesTest {
         assertEquals(BookingLiveRules.HUNG_UP_LINE, calls.hangUp(id))
         assertTrue(calls.all().single().hangUp)
     }
+
+    @Test
+    fun takeOverNeedsYourMobileAndACallInProgress() {
+        val c = card(BookingCallState.CALLING)
+        fun live(c: BookingCall, mobile: String?) = BookingCallRules.rows(listOf(c), emptyList(), emptyList(), now, LocalCalendar.UTC, mobile).single()
+        assertFalse(live(c, null).canTakeOver)
+        assertTrue(live(c, "07700 900123").canTakeOver)
+        val asked = live(c.copy(takeOver = true), "07700 900123")
+        assertFalse(asked.canTakeOver)
+        assertEquals(BookingLiveRules.TAKING_OVER, asked.status)
+        assertFalse(live(c.copy(hangUp = true), "07700 900123").canTakeOver)
+
+        var n = 0
+        val r = os.meka.core.sync.Replica("hh", "fold", os.meka.core.sync.HlcClock("fold", { now }), os.meka.core.sync.InMemoryReplicaStore(), MekaSchema) { "op${n++}" }
+        val calls = BookingCalls(r, { "c1" }, { now })
+        val id = calls.draft(AskProposal.BookCall("Rosa's Kitchen", "Table for 4", 4, day, 19 * 60, 20 * 60))!!
+        assertEquals(BookingLiveRules.NOT_ON_CALL, calls.takeOver(id, "07700 900123"))
+        r.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.STATE to os.meka.core.sync.FieldValue.Text(BookingCallState.CALLING.code)))
+        assertEquals(BookingLiveRules.NO_MOBILE, calls.takeOver(id, null))
+        assertFalse(calls.all().single().takeOver)
+        assertEquals(BookingLiveRules.TAKE_OVER_LINE, calls.takeOver(id, "07700 900123"))
+        assertTrue(calls.all().single().takeOver)
+    }
+
+    @Test
+    fun aTakenCallSaysYouTookItAndHowLongEachOfYouTalked() {
+        val o = BookingDialRules.outcome(mapOf("booked" to "true", "agreed" to "Sat 19:30 for 4", "reference" to "RK204"))
+        val c = card(BookingCallState.CALLING)
+        assertEquals(BookingCallState.TAKEN to BookingLiveRules.PUTTING_THROUGH, BookingDialRules.result(true, null, c, takenOver = true))
+        val (state, line) = BookingDialRules.result(true, o, c, takenOver = true)
+        assertEquals(BookingCallState.TAKEN, state)
+        assertEquals("You took over · ringing your mobile · Obi had booked Sat 19:30 for 4 · ref RK204", line)
+        // Hang up wins over Take over; a call that never went live is still a failed call.
+        assertEquals(BookingCallState.NOT_BOOKED, BookingDialRules.result(true, null, c, hungUp = true, takenOver = true).first)
+        assertEquals(BookingCallState.FAILED, BookingDialRules.result(false, null, c, takenOver = true).first)
+        assertEquals("You took the call from Obi · you talked 3 min 10 s · Obi had booked Sat 19:30 for 4 · ref RK204", BookingLiveRules.takenLine(true, 190, line))
+        assertEquals("You took the call from Obi", BookingLiveRules.takenLine(true, 0, BookingLiveRules.PUTTING_THROUGH))
+        assertEquals(BookingLiveRules.TAKE_OVER_MISSED, BookingLiveRules.takenLine(false, 0, line))
+        val r = row(card(BookingCallState.TAKEN, "seconds" to 70L, "result" to "You took the call from Obi", "ended" to now).copy(yourSeconds = 190))
+        assertTrue(BookingCallState.TAKEN.finished && !r.live && !r.showBrief && !r.canTakeOver)
+        assertEquals(BookingLiveRules.TAKEN, r.status)
+        assertEquals("Rosa's Kitchen · Obi 1 min 10 s · you 3 min 10 s", r.lengthLine)
+        assertTrue(r.resultTiles.isEmpty() && r.calendarLine == null)
+        // His own leg is metered at his mobile's rate plus the business's line, by the minute.
+        assertEquals(4 * (31_000L + 16_000L), BookingDialRules.handOverMicroUsd("+441234567890", 190))
+    }
 }

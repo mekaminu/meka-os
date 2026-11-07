@@ -260,8 +260,13 @@ struct WorkingOnSheet: View {
         }
         words(r.liveWords)
         if r.canHangUp {
-            HStack {
+            HStack(spacing: MekaSpace.xs) {
                 Spacer()
+                // Slice 3b: Take over (his mobile is in About you): Obi puts them through to his mobile, press 1 to take it.
+                if r.canTakeOver {
+                    pill(BookingLiveRules.shared.TAKE_OVER, ink: palette.accent, fill: palette.surface) { takeOver(id) }
+                        .accessibilityLabel("\(BookingLiveRules.shared.TAKE_OVER): \(business)")
+                }
                 pill(BookingLiveRules.shared.HANG_UP, ink: palette.onAccent, fill: palette.critical) { hangUp(id) }
                     .accessibilityLabel("\(BookingLiveRules.shared.HANG_UP): \(business)")
             }
@@ -495,6 +500,17 @@ struct WorkingOnSheet: View {
     private func hangUp(_ id: String) {
         Task {
             let line = await model.hangUpBookingCall(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func takeOver(_ id: String) {
+        Task {
+            let line = await model.takeOverBookingCall(id)
             let next = await model.workingOnView()
             withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
                 callSaid = line

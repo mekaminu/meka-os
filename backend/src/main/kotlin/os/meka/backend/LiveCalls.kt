@@ -135,7 +135,12 @@ object CallAudio {
 }
 
 /** One live call as the meter keeps it. */
-data class LiveCallRow(val id: String, val householdId: String, val month: String, val startedAtMs: Long, val seconds: Long, val microUsd: Long)
+data class LiveCallRow(val id: String, val householdId: String, val month: String, val startedAtMs: Long, val seconds: Long, val microUsd: Long) {
+    companion object {
+        /** Slice 3b: a taken-over call's own leg (his mobile and the line kept open) ends its id with this; it costs, but isn't a call. */
+        const val HANDED_OVER = "-you"
+    }
+}
 
 interface LiveCallStore {
     /** Adds the call once (a second add of the same id is ignored). */
@@ -148,7 +153,7 @@ class InMemoryLiveCallStore : LiveCallStore {
     private val rows = LinkedHashMap<String, LiveCallRow>()
     @Synchronized override fun add(row: LiveCallRow) { rows.putIfAbsent(row.id, row) }
     @Synchronized override fun monthMicroUsd(month: String) = rows.values.filter { it.month == month }.sumOf { it.microUsd }
-    @Synchronized override fun monthCalls(month: String) = rows.values.count { it.month == month }.toLong()
+    @Synchronized override fun monthCalls(month: String) = rows.values.count { it.month == month && !it.id.endsWith(LiveCallRow.HANDED_OVER) }.toLong()
 }
 
 class PostgresLiveCallStore(private val ds: DataSource) : LiveCallStore {
@@ -164,7 +169,7 @@ class PostgresLiveCallStore(private val ds: DataSource) : LiveCallStore {
     }
 
     override fun monthMicroUsd(month: String): Long = one("SELECT COALESCE(SUM(micro_usd), 0) FROM live_call WHERE month = ?", month)
-    override fun monthCalls(month: String): Long = one("SELECT COUNT(*) FROM live_call WHERE month = ?", month)
+    override fun monthCalls(month: String): Long = one("SELECT COUNT(*) FROM live_call WHERE month = ? AND id NOT LIKE '%${LiveCallRow.HANDED_OVER}'", month)
 
     private fun one(sql: String, month: String): Long = ds.connection.use { c ->
         c.prepareStatement(sql).use { st -> st.setString(1, month); st.executeQuery().use { rs -> rs.next(); rs.getLong(1) } }
@@ -199,6 +204,8 @@ data class LiveCallEnd(
     /** Slice 3: a booking call's words ([BookingWords.all]) and whether he tapped Hang up. */
     val words: String = "",
     val hungUp: Boolean = false,
+    /** Slice 3b: he tapped Take over: the end step rings his mobile. */
+    val takenOver: Boolean = false,
 )
 
 /**
@@ -317,6 +324,15 @@ class LiveCallLine(
         return LiveCallRules.Meter(m, spentPence(m), runCatching { store.monthCalls(m) }.getOrDefault(0))
     }
 
+    /** Slice 3b: the hand-over leg of booking call [callId] ([seconds] with him), at the mobile rate plus the business's line. */
+    fun recordHandOver(hh: String, callId: String, businessE164: String?, seconds: Long): LiveCallRules.Meter {
+        if (seconds > 0) runCatching {
+            store.add(LiveCallRow(callId.take(64) + LiveCallRow.HANDED_OVER, hh, month(), nowMs(), seconds, BookingDialRules.handOverMicroUsd(businessE164, seconds)))
+        }
+        val m = month()
+        return LiveCallRules.Meter(m, spentPence(m), runCatching { store.monthCalls(m) }.getOrDefault(0))
+    }
+
     private fun rate(): Long = runCatching { gbpPerUsd() }.getOrNull()?.takeIf { it > 0 } ?: LiveModeRules.FALLBACK_GBP_PER_USD_MICROS
 
     companion object {
@@ -364,6 +380,7 @@ class LiveCallSession(
     /** Slice 3: a booking call's words as said, for the live view and Read the call; Hang up and its goodbye. */
     private val words = BookingWords()
     private var hungUp = false
+    private var takenOver = false
     private var awaitingBye = false
     private val heard = StringBuilder()
     private var callerBytes = 0L
@@ -490,6 +507,20 @@ class LiveCallSession(
         link?.send(turn(BookingLiveRules.HUNG_UP_TURN))
     }
 
+    /**
+     * Slice 3b: he tapped Take over: Obi says he's putting them through and the stream closes within
+     * [BookingLiveRules.HANG_UP_GRACE_MS]; the end step then rings his mobile. Never after Hang up.
+     */
+    @Synchronized fun takeOverAsked() {
+        if (done || hungUp || takenOver || !ticket.booking) return
+        takenOver = true
+        if (!live) return finish()
+        awaitingBye = true
+        val by = nowMs() + BookingLiveRules.HANG_UP_GRACE_MS
+        endingAt = endingAt?.coerceAtMost(by) ?: by
+        link?.send(turn(BookingLiveRules.TAKE_OVER_TURN))
+    }
+
     private fun finish() {
         if (done) return
         done = true
@@ -499,7 +530,7 @@ class LiveCallSession(
         // The outcome first, then the phone side: its end step (the put-through) must find it.
         runCatching {
             onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live, outcome,
-                words = if (ticket.booking) words.all() else "", hungUp = hungUp))
+                words = if (ticket.booking) words.all() else "", hungUp = hungUp, takenOver = takenOver && live && !hungUp))
         }
         runCatching { hangUp() }
     }

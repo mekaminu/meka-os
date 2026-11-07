@@ -236,6 +236,66 @@ class BookingCallerTest {
         assertEquals(BookingCallState.NOT_BOOKED, cardOnFold(id).state)
     }
 
+    /** Slice 3b: a live call he asked to take over from the Fold; returns the card and the session's end. */
+    private fun takenOver(): Pair<String, LiveCallEnd> {
+        val id = approvedCard()
+        caller.tick()
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = stream(model, ended)
+        s.start()
+        model.say("""{"setupComplete":{}}""")
+        assertFalse(caller.takeOverAsked(s.ticket))
+        val r = fold()
+        assertEquals(BookingLiveRules.TAKE_OVER_LINE, BookingCalls(r, { "x" }, { nowMs }).takeOver(id, "07700 900123"))
+        push(r)
+        assertTrue(caller.takeOverAsked(s.ticket))
+        s.takeOverAsked()
+        assertTrue(BookingLiveRules.TAKE_OVER_TURN in model.sent.last())
+        nowMs += BookingLiveRules.HANG_UP_GRACE_MS + 1
+        s.tick()
+        return id to ended.single()
+    }
+
+    @Test
+    fun takeOverRingsYourMobileWithAWhisperAndPutsTheBusinessThrough() {
+        val (id, end) = takenOver()
+        assertTrue(end.takenOver && !end.hungUp)
+        assertEquals(BookingCallState.TAKEN, cardOnFold(id).state)
+        assertEquals(BookingLiveRules.PUTTING_THROUGH, cardOnFold(id).result)
+        val sid = "CA" + "b".repeat(32)
+        // The stream's end rings his mobile from the assistant's number, with the whisper first.
+        val ring = assertIs<VoiceReply.TakeOver>(caller.handle(VoiceEvent.BookingEnded(sid)))
+        assertEquals("+447700900123", ring.mobile); assertEquals("+442079460000", ring.callerId)
+        val (_, xml) = twilio.render(ring, "https://meka.example", CallVoice.DEFAULT) { _, _ -> null }
+        assertTrue("booking-taken-dialed" in xml && "booking-whisper" in xml && "+447700900123" in xml)
+        val whisper = assertIs<VoiceReply.Whisper>(caller.handle(VoiceEvent.BookingWhisper("CA" + "d".repeat(32), sid)))
+        assertEquals(VoiceStep.BOOKING_WHISPER_ANSWERED, whisper.answerStep)
+        // Another call's leg gets nothing; a key other than 1 hangs his leg up.
+        assertEquals(VoiceReply.HangUp, caller.handle(VoiceEvent.BookingWhisper("CA" + "d".repeat(32), "CA" + "e".repeat(32))))
+        assertEquals(VoiceReply.HangUp, caller.handle(VoiceEvent.BookingWhisperAnswered("CA" + "d".repeat(32), sid, "2")))
+        assertEquals(VoiceReply.Connect, caller.handle(VoiceEvent.BookingWhisperAnswered("CA" + "d".repeat(32), sid, "1")))
+        val callsBefore = store.monthCalls(line.month())
+        val spentBefore = store.monthMicroUsd(line.month())
+        assertEquals(VoiceReply.HangUp, caller.handle(VoiceEvent.BookingTakenDialed(sid, 190)))
+        val c = cardOnFold(id)
+        assertEquals(BookingCallState.TAKEN, c.state)
+        assertEquals("You took the call from Obi · you talked 3 min 10 s", c.result)
+        assertEquals(190L, c.yourSeconds)
+        // His leg costs (on the meter) but isn't another call.
+        assertEquals(callsBefore, store.monthCalls(line.month()))
+        assertEquals(spentBefore + BookingDialRules.handOverMicroUsd("+441234567890", 190), store.monthMicroUsd(line.month()))
+    }
+
+    @Test
+    fun aTakeOverYouDontPickUpTellsThemYoullCallBack() {
+        val (id, _) = takenOver()
+        val sid = "CA" + "b".repeat(32)
+        assertIs<VoiceReply.TakeOver>(caller.handle(VoiceEvent.BookingEnded(sid)))
+        assertEquals(VoiceReply.Goodbye(BookingLiveRules.TAKE_OVER_SORRY), caller.handle(VoiceEvent.BookingTakenDialed(sid, 0)))
+        assertEquals(BookingCallState.NOT_BOOKED, cardOnFold(id).state)
+        assertEquals(BookingLiveRules.TAKE_OVER_MISSED, cardOnFold(id).result)
+    }
+
     @Test
     fun noAnswerAndBusyCloseTheCardAsNotBooked() {
         val id = approvedCard()
