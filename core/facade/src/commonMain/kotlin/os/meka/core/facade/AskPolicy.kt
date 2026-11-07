@@ -120,5 +120,7 @@ object AskPolicy {
         // Starts one of Obi's errands, like Ask Obi for an errand in Obi is working on: the server only searches the web
         // and drafts for him; nothing is sent, booked or bought.
         is AskProposal.StartErrand -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+        // Keeps a call card in Obi is working on; nothing rings until his own Call now on the card.
+        is AskProposal.BookCall -> ActionType.CREATE_TASK to PolicyDomain.TASKS
     }
 }

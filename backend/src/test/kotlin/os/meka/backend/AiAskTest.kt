@@ -90,6 +90,8 @@ class AiAskTest {
         assertTrue("add_promise" in AskService.KINDS && "add_promise" in AskService.SYSTEM)
         assertTrue("trips lines" in AskService.SYSTEM)
         assertTrue("add_booking" in AskService.KINDS && "add_booking" in AskService.SYSTEM)
+        // Obi on calls, slice 2a: a call card, which rings nothing until his Call now.
+        assertTrue("book_call" in AskService.KINDS && "\"kind\":\"book_call\"" in AskService.SYSTEM && "Call now" in AskService.SYSTEM)
         assertTrue("radar lines" in AskService.SYSTEM)
         assertTrue("done_renewal" in AskService.KINDS && "done_renewal" in AskService.SYSTEM)
         assertTrue("wins lines" in AskService.SYSTEM)

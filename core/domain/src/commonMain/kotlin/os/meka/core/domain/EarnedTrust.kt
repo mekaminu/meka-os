@@ -81,6 +81,8 @@ object TrustRules {
         is AskProposal.StudyTick, is AskProposal.StudyPlan -> null
         // An errand (part 3 slice 4) spends AI steps and web searches on his behalf, so he always starts it himself.
         is AskProposal.StartErrand -> null
+        // A call card (Obi on calls, slice 2a) leads to a real phone call, so he always makes it himself.
+        is AskProposal.BookCall -> null
         // Skipping the life admin hour (slice 3) frees an hour Meka chose to keep, so he always sees it first.
         is AskProposal.SkipLifeAdmin -> null
         // A gift idea (Gift planner slice 2) is Meka's own note about someone, so he always sees it before it's kept.

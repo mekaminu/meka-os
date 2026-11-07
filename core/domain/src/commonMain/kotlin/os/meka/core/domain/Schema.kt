@@ -169,6 +169,8 @@ object EntityTypes {
     const val OBI_JOB = "obi_job"
     /** Routines, slice 1 (2026-11-06): one routine (name, when, its steps, on/off; see [Routines]). */
     const val ROUTINE = "routine"
+    /** Obi on calls, slice 2a (2026-11-07): one call card for a booking Obi rings a business about (see [BookingCalls]). */
+    const val BOOKING_CALL = "booking_call"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -181,7 +183,7 @@ object EntityTypes {
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
         TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM, TRIP_TEMPLATE,
-        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB, ROUTINE,
+        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB, ROUTINE, BOOKING_CALL,
     )
 }
 
@@ -627,6 +629,9 @@ object MekaSchema : SchemaRegistry {
         // Routines: one removed on any device is gone for good; the switch, the name and the steps, the latest wins.
         entityType == EntityTypes.ROUTINE && field == RoutineFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.ROUTINE -> MergePolicy.Lww
+        // Call cards: a Cancel on any device stands; his edits, Call now and the server's progress, the latest wins.
+        entityType == EntityTypes.BOOKING_CALL && field == BookingCallFields.CANCELLED -> MergePolicy.TrueWins
+        entityType == EntityTypes.BOOKING_CALL -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

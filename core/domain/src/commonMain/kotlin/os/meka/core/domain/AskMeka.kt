@@ -144,6 +144,11 @@ sealed interface AskProposal {
      * boiler"), his words tidied ([ObiJobRules.tidyAsk]). The server only searches the web and drafts; nothing is sent.
      */
     data class StartErrand(val text: String) : AskProposal
+    /**
+     * Obi on calls, slice 2a: a call card for a booking Obi rings [business] about ("Table for 4" on [day], window
+     * [fromMin]–[toMin]); the tap only keeps the card. Nothing rings until Call now on the card ([BookingCallRules]).
+     */
+    data class BookCall(val business: String, val what: String, val people: Int?, val day: Long, val fromMin: Int?, val toMin: Int?) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -214,6 +219,8 @@ sealed interface AskUndo {
     data class UntickLesson(val lessonId: String) : AskUndo
     /** The errand card: the errand it started is stopped (only while it is still open). */
     data class StopErrand(val jobId: String) : AskUndo
+    /** Obi on calls, slice 2a: the call card the Ask card made is cancelled (while nothing has rung). */
+    data class CancelBookingCall(val callId: String) : AskUndo
     /** The Study plan card: each lesson gets the day it had ([before], null for none) while it is still on [day]. */
     data class PutBackLessonPlan(val before: Map<String, Long?>, val day: Long) : AskUndo
     /** The booking card: the booking it added leaves the trip (only while it is still there). */
@@ -293,7 +300,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event", "add_trip_item", "study_done", "plan_lesson", "start_errand")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event", "add_trip_item", "study_done", "plan_lesson", "start_errand", "book_call")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -591,6 +598,10 @@ object AskRules {
             "study_done" -> StudyAskCards.tick(studyCourses, studyLessons, a.title) ?: return null
             "plan_lesson" -> StudyAskCards.plan(studyCourses, studyLessons, a.title, day(), today) ?: return null
             "start_errand" -> AskProposal.StartErrand(ObiJobRules.tidyAsk(a.title ?: return null) ?: return null)
+            "book_call" -> {
+                if ((a.time != null && minute == null) || (a.date != null && day() == null)) return null
+                BookingCallRules.proposal(a.title, day(), minute, a.minutes, today, cal.minuteOfDay(nowMs)) ?: return null
+            }
             "add_booking" -> TripAskRules.proposal(trips, a.title, day(), minute, today, cal.minuteOfDay(nowMs)) ?: return null
             // Edit your calendars, completeness slice 4: only an event MEKA sent a handle for; a bad day or time isn't guessed at.
             "move_event" -> {
@@ -719,6 +730,7 @@ object AskRules {
         is AskProposal.StudyTick -> StudyAskCards.tickDone(p)
         is AskProposal.StudyPlan -> StudyAskCards.planDone(p, today)
         is AskProposal.StartErrand -> ObiJobRules.startedLine(p.text)
+        is AskProposal.BookCall -> BookingCallRules.doneLine(p)
     }
 
     /** The card's words for [p]. */
@@ -753,6 +765,7 @@ object AskRules {
         is AskProposal.StudyTick -> StudyAskCards.tickCard(p)
         is AskProposal.StudyPlan -> StudyAskCards.planCard(p, today)
         is AskProposal.StartErrand -> AskCard(p, ObiJobRules.cardLine(p.text), ObiJobRules.CARD_BUTTON)
+        is AskProposal.BookCall -> AskCard(p, BookingCallRules.cardLine(p), BookingCallRules.CARD_BUTTON)
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

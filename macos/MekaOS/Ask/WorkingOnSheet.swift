@@ -22,6 +22,12 @@ struct WorkingOnSheet: View {
     /// Part 3 slice 5: the errand whose question he is answering (its popover is open), and the answer field.
     @State private var answering: String?
     @State private var answerText = ""
+    /// Obi on calls, slice 2a: the call card being edited (its popover is open), its three fields, and the line under CALLS FOR YOU.
+    @State private var editingCall: String?
+    @State private var callBusiness = ""
+    @State private var callNumber = ""
+    @State private var callNote = ""
+    @State private var callSaid: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -40,6 +46,7 @@ struct WorkingOnSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         jobsSection(v)
+                        callsSection(v)
                         if !v.cards.isEmpty {
                             label(WorkingOnRules.shared.WATCHING).padding(.top, MekaSpace.m)
                                 .accessibilityAddTraits(.isHeader)
@@ -58,6 +65,7 @@ struct WorkingOnSheet: View {
                     }
                     .animation(MekaMotion.expand(reduced: reduceMotion), value: v.cards.count)
                     .animation(MekaMotion.expand(reduced: reduceMotion), value: v.jobs.count)
+                    .animation(MekaMotion.expand(reduced: reduceMotion), value: v.calls.count)
                 }
                 .scrollIndicators(.never)
                 .frame(maxHeight: 520)
@@ -181,6 +189,188 @@ struct WorkingOnSheet: View {
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(j.spoken)
+    }
+
+    // MARK: Obi on calls, slice 2a: CALLS FOR YOU
+
+    @ViewBuilder
+    private func callsSection(_ v: WorkingOnView) -> some View {
+        if !v.calls.isEmpty {
+            label(BookingCallRules.shared.TITLE).padding(.top, MekaSpace.m)
+                .accessibilityAddTraits(.isHeader)
+            Text(LoneWordGlue.shared.kept(line: BookingCallRules.shared.INTRO)).font(MekaType.caption)
+                .foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let callSaid {
+                Text(LoneWordGlue.shared.kept(line: callSaid)).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+            ForEach(Array(v.calls.enumerated()), id: \.element.id) { i, r in
+                callCard(r).staggeredAppear(v.jobs.count + i + 2)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    /// One call card (mockup Call card): status, business, number, what, WHEN · WINDOW · PEOPLE, Party size − / +,
+    /// OBI MAY SAY, OBI WON'T, the foot, why Call now is greyed, the result, and Cancel · Edit · Call now.
+    private func callCard(_ r: BookingCallRow) -> some View {
+        let id = r.id
+        let people = Int(r.peopleTile) ?? 1
+        let canCall = r.canCall
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(r.status.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(r.needsYou ? palette.accent : palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(r.business).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text(LoneWordGlue.shared.kept(line: r.numberLine)).font(MekaType.caption)
+                .foregroundStyle(r.numberOk ? palette.textSecondary : palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: r.what)).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            HStack(spacing: MekaSpace.xs) {
+                tile(BookingCallRules.shared.WHEN, r.whenTile)
+                tile(BookingCallRules.shared.WINDOW, r.windowTile)
+                tile(BookingCallRules.shared.PEOPLE, r.peopleTile)
+            }
+            .padding(.top, MekaSpace.xs)
+            if r.canChangePeople {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(BookingCallRules.shared.PARTY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Spacer()
+                    pill("−", ink: palette.accent, fill: palette.surface) { if people > 1 { setPeople(id, people - 1) } }
+                        .accessibilityLabel("One fewer person")
+                    pill("+", ink: palette.accent, fill: palette.surface) { if people < Int(BookingCallRules.shared.MAX_PEOPLE) { setPeople(id, people + 1) } }
+                        .accessibilityLabel("One more person")
+                }
+            }
+            if let note = r.note {
+                Text(LoneWordGlue.shared.kept(line: "Ask for: \(note)")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            label(BookingCallRules.shared.MAY_SAY).padding(.top, MekaSpace.xs)
+            ForEach(r.maySay, id: \.self) { s in Text("· \(s)").font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            label(BookingCallRules.shared.WONT).padding(.top, MekaSpace.xs)
+            ForEach(r.wont, id: \.self) { s in Text("· \(s)").font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            if let foot = r.foot {
+                Text(LoneWordGlue.shared.kept(line: foot)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, MekaSpace.xs)
+            }
+            if let result = r.result {
+                Text(LoneWordGlue.shared.kept(line: result)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let blocked = r.blocked {
+                Text(LoneWordGlue.shared.kept(line: blocked)).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                Spacer()
+                if r.canCancel {
+                    pill(BookingCallRules.shared.CANCEL, ink: palette.textSecondary, fill: palette.surface) { cancelCall(id) }
+                        .accessibilityLabel("\(BookingCallRules.shared.CANCEL): \(r.business)")
+                }
+                if r.canEdit {
+                    pill(BookingCallRules.shared.EDIT, ink: palette.accent, fill: palette.surface) {
+                        callSaid = nil
+                        callBusiness = r.business
+                        callNumber = r.numberOk ? String(r.numberLine.split(separator: "·").first ?? "").trimmingCharacters(in: .whitespaces) : ""
+                        callNote = r.note ?? ""
+                        editingCall = id
+                    }
+                    .accessibilityLabel("\(BookingCallRules.shared.EDIT): \(r.business)")
+                    .popover(isPresented: Binding(get: { editingCall == id }, set: { if !$0 { editingCall = nil } }), arrowEdge: .bottom) {
+                        callEditPanel(id)
+                    }
+                    pill(BookingCallRules.shared.CALL_NOW, ink: canCall ? palette.onAccent : palette.textTertiary, fill: canCall ? palette.accent : palette.surface) {
+                        if canCall { callNow(id) }
+                    }
+                    .accessibilityLabel("\(BookingCallRules.shared.CALL_NOW): \(r.business)")
+                }
+            }
+            .padding(.top, MekaSpace.xs)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(r.spoken)
+    }
+
+    private func tile(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            label(title)
+            Text(value).font(MekaType.body).foregroundStyle(palette.textPrimary)
+        }
+        .padding(MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+    }
+
+    /// Edit the call card: who to ring, their number and anything Obi should ask for; Save and Cancel.
+    private func callEditPanel(_ id: String) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(BookingCallRules.shared.EDIT_TITLE).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            Text(BookingCallRules.shared.EDIT_BUSINESS).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            TextField(BookingCallRules.shared.EDIT_BUSINESS, text: $callBusiness).textFieldStyle(.roundedBorder)
+            Text(BookingCallRules.shared.EDIT_NUMBER).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            TextField("01234 567890", text: $callNumber).textFieldStyle(.roundedBorder)
+            Text(BookingCallRules.shared.EDIT_NOTE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            TextField(BookingCallRules.shared.EDIT_NOTE_HINT, text: $callNote).textFieldStyle(.roundedBorder)
+                .onSubmit { saveCall(id) }
+            HStack {
+                Spacer()
+                Button(BookingCallRules.shared.CANCEL) { editingCall = nil }
+                Button(BookingCallRules.shared.SAVE) { saveCall(id) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 360)
+    }
+
+    private func setPeople(_ id: String, _ people: Int) {
+        Task {
+            let next = await model.setBookingCallPeople(id, people: people)
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { if let next { view = next } }
+        }
+    }
+
+    private func saveCall(_ id: String) {
+        let business = String(callBusiness.prefix(Int(BookingCallRules.shared.MAX_BUSINESS)))
+        let number = String(callNumber.prefix(24))
+        let note = String(callNote.prefix(Int(BookingCallRules.shared.MAX_NOTE)))
+        Task {
+            let ok = await model.editBookingCall(id, business: business, number: number, note: note)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = ok ? BookingCallRules.shared.SAVED : BookingCallRules.shared.GONE
+                editingCall = nil
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func callNow(_ id: String) {
+        Task {
+            let line = await model.callNowBookingCall(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func cancelCall(_ id: String) {
+        Task {
+            let ok = await model.cancelBookingCall(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = ok ? BookingCallRules.shared.CANCELLED_LINE : BookingCallRules.shared.GONE
+                if let next { view = next }
+            }
+        }
     }
 
     private func askPanel() -> some View {

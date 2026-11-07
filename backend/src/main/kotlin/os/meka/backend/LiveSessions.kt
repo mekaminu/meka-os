@@ -370,7 +370,7 @@ class GeminiLiveTokens(
                         putJsonObject("date") { put("type", "STRING"); put("description", "YYYY-MM-DD, when the action takes one.") }
                         putJsonObject("time") { put("type", "STRING"); put("description", "HH:MM (24-hour), when the action takes one.") }
                         putJsonObject("hours") { put("type", "INTEGER"); put("description", "Hours, for start_fast.") }
-                        putJsonObject("minutes") { put("type", "INTEGER"); put("description", "Minutes, for set_timer.") }
+                        putJsonObject("minutes") { put("type", "INTEGER"); put("description", "Minutes, for set_timer, or a book_call's window length.") }
                     }
                     putJsonArray("required") { add("kind") }
                 }

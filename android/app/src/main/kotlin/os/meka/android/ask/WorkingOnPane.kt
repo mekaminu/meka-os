@@ -100,6 +100,9 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
     // Part 3 slice 5: the errand whose question he is answering (the answer sheet is open while set).
     var answering by remember { mutableStateOf<ObiJobRow?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
+    // Obi on calls, slice 2a: the call card being edited (the edit sheet is open while set) and the line under CALLS FOR YOU.
+    var editing by remember { mutableStateOf<os.meka.core.domain.BookingCallRow?>(null) }
+    var callSaid by remember { mutableStateOf<String?>(null) }
     // The server works an errand a step a minute and sync brings each step in: read again while the pane is open.
     LaunchedEffect(Unit) {
         while (true) {
@@ -170,7 +173,42 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                     },
                 )
             }
-            val base = v.jobs.size + 2
+            // Obi on calls, slice 2a: CALLS FOR YOU, the call cards Ask made; nothing rings until Call now.
+            if (v.calls.isNotEmpty()) {
+                Text(os.meka.core.domain.BookingCallRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(v.jobs.size + 2)))
+                Text(LoneWordGlue.kept(os.meka.core.domain.BookingCallRules.INTRO), style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.appear(rememberAppearance(v.jobs.size + 2)))
+                callSaid?.let {
+                    Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.testTag("call-said"))
+                }
+            }
+            v.calls.forEachIndexed { i, r ->
+                BookingCallCard(
+                    r, Modifier.appear(rememberAppearance(v.jobs.size + 3 + i)),
+                    onPeople = { n ->
+                        haptics.tick()
+                        scope.launch { view = runCatching { core.setBookingCallPeople(r.id, n) }.getOrNull() ?: view }
+                    },
+                    onCall = {
+                        haptics.medium()
+                        scope.launch {
+                            callSaid = runCatching { core.callNowBookingCall(r.id) }.getOrNull() ?: os.meka.core.domain.BookingCallRules.GONE
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
+                    onEdit = { haptics.tick(); callSaid = null; editing = r },
+                    onCancel = {
+                        haptics.tick()
+                        scope.launch {
+                            val ok = runCatching { core.cancelBookingCall(r.id) }.getOrDefault(false)
+                            callSaid = if (ok) os.meka.core.domain.BookingCallRules.CANCELLED_LINE else os.meka.core.domain.BookingCallRules.GONE
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
+                )
+            }
+            val base = v.jobs.size + v.calls.size + 3
             if (v.cards.isNotEmpty()) {
                 Text(WorkingOnRules.WATCHING.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(base)))
@@ -185,6 +223,16 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                     haptics.tick()
                     scope.launch { view = runCatching { core.setStandingErrand(s.errand.code, !s.on) }.getOrNull() ?: view }
                 }
+            }
+        }
+        BookingCallEditSheet(editing, onClose = { editing = null }) { business, number, note ->
+            val r = editing ?: return@BookingCallEditSheet
+            haptics.tick()
+            scope.launch {
+                val ok = runCatching { core.editBookingCall(r.id, business, number, note) }.getOrDefault(false)
+                callSaid = if (ok) os.meka.core.domain.BookingCallRules.SAVED else os.meka.core.domain.BookingCallRules.GONE
+                editing = null
+                view = runCatching { core.workingOnView() }.getOrNull() ?: view
             }
         }
         ErrandTextSheet(

@@ -54,6 +54,7 @@ class AskPolicyTest {
         AskProposal.StudyTick("lesson-1", "Pivot tables", "Excel"),
         AskProposal.StudyPlan(listOf("lesson-1"), "“Pivot tables”", "Excel", 20_001),
         AskProposal.StartErrand("Find someone to service the boiler"),
+        AskProposal.BookCall("Rosa's Kitchen", "Table for 4", 4, 20_005, 19 * 60, 20 * 60),
     )
 
     private fun kindName(p: AskProposal): String = when (p) {
@@ -85,6 +86,7 @@ class AskPolicyTest {
         is AskProposal.StudyTick -> "study_done"
         is AskProposal.StudyPlan -> "plan_lesson"
         is AskProposal.StartErrand -> "start_errand"
+        is AskProposal.BookCall -> "book_call"
     }
 
     @Test
@@ -92,7 +94,7 @@ class AskPolicyTest {
         // One sample per kind, and every model-proposable wire kind is among them.
         val names = every.map(::kindName)
         assertEquals(names.size, names.toSet().size, names.toString())
-        assertEquals(28, names.size)
+        assertEquals(29, names.size)
         assertTrue(names.containsAll(AskRules.KINDS), (AskRules.KINDS - names.toSet()).toString())
         for (p in every) {
             // Shown as a card from his own lines and from lines with other people's words alike; never run untapped.

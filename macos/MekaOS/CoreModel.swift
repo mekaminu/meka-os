@@ -1790,6 +1790,30 @@ final class CoreModel {
         return (try? await core.carryOnObiErrand(id: id))?.boolValue ?? false
     }
 
+    /// Obi on calls, slice 2a: Party size − / + on a call card waiting for him (synced); the sheet as it now reads.
+    func setBookingCallPeople(_ id: String, people: Int) async -> WorkingOnView? {
+        guard let core else { return nil }
+        return try? await core.setBookingCallPeople(id: id, people: Int32(people))
+    }
+
+    /// Edit a call card: who to ring, their number and a note for Obi; false when it no longer waits for him.
+    func editBookingCall(_ id: String, business: String, number: String, note: String) async -> Bool {
+        guard let core else { return false }
+        return (try? await core.editBookingCall(id: id, business: business, number: number, note: note))?.boolValue ?? false
+    }
+
+    /// Call now on a call card: approved for the server to ring, checked again in the core; the line to show.
+    func callNowBookingCall(_ id: String) async -> String {
+        guard let core else { return BookingCallRules.shared.GONE }
+        return (try? await core.callNowBookingCall(id: id)) ?? BookingCallRules.shared.GONE
+    }
+
+    /// Cancel a call card before Obi is on the call; false otherwise.
+    func cancelBookingCall(_ id: String) async -> Bool {
+        guard let core else { return false }
+        return (try? await core.cancelBookingCall(id: id))?.boolValue ?? false
+    }
+
     /// Your team (slice 1): Obi, Inbox, Calls, Money and Kestrel, what each did today and what waits on him, as the Fold's.
     func teamView() async -> TeamView? {
         guard let core else { return nil }

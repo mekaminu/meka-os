@@ -54,9 +54,11 @@ data class WorkingOnView(
     val summary: String,
     /** Part 3 slice 4: the errands he asked Obi for ([ObiJobRules.rows]), needing him first. */
     val jobs: List<ObiJobRow> = emptyList(),
+    /** Obi on calls, slice 2a: CALLS FOR YOU, the call cards ([BookingCallRules.rows]), open ones first. */
+    val calls: List<BookingCallRow> = emptyList(),
 ) {
-    val needCount: Int get() = cards.count { it.needsYou } + jobs.count { it.needsYou }
-    val isEmpty: Boolean get() = cards.isEmpty() && jobs.isEmpty()
+    val needCount: Int get() = cards.count { it.needsYou } + jobs.count { it.needsYou } + calls.count { it.needsYou }
+    val isEmpty: Boolean get() = cards.isEmpty() && jobs.isEmpty() && calls.isEmpty()
     /** Errands he asked for that are still open (Stop shows). */
     val openJobs: Int get() = jobs.count { it.canStop }
 
@@ -235,6 +237,7 @@ object WorkingOnRules {
     fun view(
         setting: WorkingOnSetting, renewals: RenewalsView, gifts: GiftsView, waiting: List<WaitingItem>, today: Long,
         inbox: WorkingOnCard? = null, school: WorkingOnCard? = null, jobs: List<ObiJobRow> = emptyList(),
+        calls: List<BookingCallRow> = emptyList(),
     ): WorkingOnView {
         val cards = StandingErrand.entries.filter { setting.isOn(it) }.mapNotNull { e ->
             when (e) {
@@ -246,17 +249,21 @@ object WorkingOnRules {
             }
         }.sortedBy { if (it.needsYou) 0 else 1 }
         val switches = StandingErrand.entries.map { WorkingOnSwitch(it, setting.isOn(it)) }
-        val need = cards.count { it.needsYou } + jobs.count { it.needsYou }
+        val need = cards.count { it.needsYou } + jobs.count { it.needsYou } + calls.count { it.needsYou }
+        // Obi on calls, slice 2a: open call cards are counted after the errands.
+        val openCalls = calls.count { it.canCancel }
+        val callsPart = if (openCalls > 0) " · ${plural(openCalls, "call card")}" else ""
         val open = jobs.count { it.canStop }
         val needs = if (need > 0) " · $need need${if (need == 1) "s" else ""} you" else " · nothing needs you"
         val summary = when {
-            switches.none { it.on } && open == 0 -> ALL_OFF_LINE
-            cards.isEmpty() && open == 0 -> EMPTY_LINE
-            cards.isEmpty() -> "On ${plural(open, "errand")} for you$needs"
-            open == 0 -> "Keeping an eye on ${plural(cards.size, "thing")}$needs"
-            else -> "Keeping an eye on ${plural(cards.size, "thing")} · on ${plural(open, "errand")}$needs"
+            switches.none { it.on } && open == 0 && openCalls == 0 -> ALL_OFF_LINE
+            cards.isEmpty() && open == 0 && openCalls == 0 -> EMPTY_LINE
+            cards.isEmpty() && open == 0 -> "Holding ${plural(openCalls, "call card")} for you$needs"
+            cards.isEmpty() -> "On ${plural(open, "errand")} for you$callsPart$needs"
+            open == 0 -> "Keeping an eye on ${plural(cards.size, "thing")}$callsPart$needs"
+            else -> "Keeping an eye on ${plural(cards.size, "thing")} · on ${plural(open, "errand")}$callsPart$needs"
         }
-        return WorkingOnView(cards, switches, summary, jobs)
+        return WorkingOnView(cards, switches, summary, jobs, calls)
     }
 
     /** Ask → Daily's row: "2 need you" (lit), "Watching 3 things", "All off"; null (the fixed words) with nothing to watch. */

@@ -2085,6 +2085,45 @@ class MekaCore(
 
     private val workingOnSettings = os.meka.core.domain.WorkingOnSettings(replica)
     private val obiJobs = os.meka.core.domain.ObiJobs(replica, ids::next, nowMs)
+    private val bookingCalls = os.meka.core.domain.BookingCalls(replica, ids::next, nowMs)
+
+    /** Numbers a booking call may never ring: his own mobile, the assistant's, his partner's and his voicemail's. */
+    private fun personalNumbers(): List<String?> = aboutYou.profile().let { listOf(it.mobile, it.assistantNumber, it.partnerPhone, it.voicemailNumber) }
+
+    private fun bookingCallRowsNow(): List<os.meka.core.domain.BookingCallRow> {
+        val all = bookingCalls.all()
+        val cal = ZoneCalendar(timeZone)
+        val days = all.map { it.day }.toSet()
+        val dayEvents = if (days.isEmpty()) emptyList() else events.all().filter { e ->
+            val from = cal.epochDayOf(e.startAtMs); val to = cal.epochDayOf((e.endAtMs - 1).coerceAtLeast(e.startAtMs))
+            days.any { it in from..to }
+        }
+        return os.meka.core.domain.BookingCallRules.rows(all, personalNumbers(), dayEvents, nowMs(), cal)
+    }
+
+    /** Obi on calls, slice 2a: CALLS FOR YOU, the call cards as Obi is working on shows them. Core only. */
+    suspend fun bookingCallRows(): List<os.meka.core.domain.BookingCallRow> = onCore { bookingCallRowsNow() }
+
+    /** Party size − / + on a card waiting for him; the pane as it now reads. */
+    suspend fun setBookingCallPeople(id: String, people: Int): os.meka.core.domain.WorkingOnView = onCore {
+        bookingCalls.setPeople(id, people); workingOnNow()
+    }
+
+    /** Edit: who to ring, their number and a note for Obi; false when the card no longer waits for him. */
+    suspend fun editBookingCall(id: String, business: String?, number: String?, note: String?): Boolean = onCore {
+        bookingCalls.edit(id, business, number, note)
+    }
+
+    /**
+     * Call now: his tap approves the card for the server to ring, checked again here (a UK business number, never a
+     * personal one; the day not gone). The line to show: approved, or why not.
+     */
+    suspend fun callNowBookingCall(id: String): String = onCore {
+        bookingCalls.approve(id, personalNumbers(), ZoneCalendar(timeZone))
+    }
+
+    /** Cancel, before Obi is on the call; false otherwise. */
+    suspend fun cancelBookingCall(id: String): Boolean = onCore { bookingCalls.cancel(id) }
 
     /**
      * Ada plans with you, part 3 slices 1–2: what Obi is working on, the standing errands (Renewals watcher, Birthday
@@ -2107,6 +2146,7 @@ class MekaCore(
             workingOnSettings.setting(), renewals.view(), gifts.view(), _lists.value.waiting, today, inbox, schoolCard,
             // Part 3 slice 4: the errands he asked Obi for, as the server has worked them so far.
             jobs = os.meka.core.domain.ObiJobRules.rows(obiJobs.all(), nowMs(), ZoneCalendar(timeZone)),
+            calls = bookingCallRowsNow(),
         )
     }
 
@@ -11109,6 +11149,11 @@ class MekaCore(
                 val asked = obiJobs.ask(p.text)
                 os.meka.core.domain.AskUndo.StopErrand(asked.id ?: throw os.meka.core.domain.ValidationException(asked.line))
             }
+            // Obi on calls, slice 2a: keeps the call card (three open already is refused); nothing rings until Call now.
+            is os.meka.core.domain.AskProposal.BookCall -> {
+                val id = bookingCalls.draft(p) ?: throw os.meka.core.domain.ValidationException(os.meka.core.domain.BookingCallRules.TOO_MANY)
+                os.meka.core.domain.AskUndo.CancelBookingCall(id)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -11198,6 +11243,7 @@ class MekaCore(
             }
             // Stopped only while it is still open (finished or stopped since, it stays as it is).
             is os.meka.core.domain.AskUndo.StopErrand -> obiJobs.stop(undo.jobId)
+            is os.meka.core.domain.AskUndo.CancelBookingCall -> bookingCalls.cancel(undo.callId)
         }
     }
 
