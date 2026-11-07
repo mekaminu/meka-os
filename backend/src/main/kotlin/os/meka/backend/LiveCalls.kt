@@ -167,10 +167,16 @@ class PostgresLiveCallStore(private val ds: DataSource) : LiveCallStore {
 data class LiveCallTicket(
     val token: String, val householdId: String, val provider: String, val callId: String, val from: String?,
     val atWork: Boolean, val instruction: String, val mintedAtMs: Long,
+    /** Slice 1b: an urgent caller may be put through (his mobile and the assistant's number usable, not his own number calling). */
+    val canPutThrough: Boolean = false,
 )
 
 /** How a live call went, for the summary and the meter. [message] and [heard] are the caller's: untrusted, display only. */
-data class LiveCallEnd(val live: Boolean, val seconds: Long, val obiSeconds: Long, val message: LiveCallRules.Message?, val heard: String)
+data class LiveCallEnd(
+    val live: Boolean, val seconds: Long, val obiSeconds: Long, val message: LiveCallRules.Message?, val heard: String,
+    /** Slice 1b: Obi told the caller he'd try to put them through ([LiveCallRules.PUT_THROUGH_ANSWER]). */
+    val putThrough: Boolean = false,
+)
 
 /**
  * Whether a call goes live, and its tickets: "Live conversation" on ([WorkFields.CALL_LIVE]), the Gemini key in, and
@@ -188,6 +194,8 @@ class LiveCallLine(
     private val tickets = ConcurrentHashMap<String, LiveCallTicket>()
     /** Calls that went live, by call id, until a few minutes after (the stream's end step asks). */
     private val wentLive = ConcurrentHashMap<String, Long>()
+    /** How each call that went live ended, by call id, for the stream's end step (the put-through) and its whisper. */
+    private val outcomes = ConcurrentHashMap<String, Pair<Long, LiveCallEnd>>()
 
     fun month(): String = LiveCallRules.month(nowMs())
 
@@ -197,19 +205,20 @@ class LiveCallLine(
         LiveCallRules.capGbp((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_LIVE_CAP) as? FieldValue.Int64)?.value) * 100L
 
     /** A one-use ticket for this call when it may go live, else null (the scripted turns answer). Never throws. */
-    fun ticket(hh: String, provider: String, callId: String, from: String?, atWork: Boolean): String? = runCatching {
+    fun ticket(hh: String, provider: String, callId: String, from: String?, atWork: Boolean, canPutThrough: Boolean = false): String? = runCatching {
         val on = fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_LIVE) == FieldValue.Bool(true)
         if (!on || !configured()) return null
         if (!LiveCallRules.allowed(on, spentPence(), capPence(hh))) return null
         val now = nowMs()
         tickets.entries.removeIf { now - it.value.mintedAtMs > LiveCallRules.TICKET_MS }
         wentLive.entries.removeIf { now - it.value > KEEP_MS }
+        outcomes.entries.removeIf { now - it.value.first > KEEP_MS }
         if (tickets.size >= MAX_TICKETS) return null
         val knows = LiveCallRules.knows((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_KNOWS) as? FieldValue.Text)?.value)
         val first = (fields.latest(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.SHOWN_NAME) as? FieldValue.Text)
             ?.value?.trim()?.split(' ')?.firstOrNull()?.takeIf { n -> n.length in 1..30 && n.all { it.isLetter() || it in "-'" } }
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        tickets[token] = LiveCallTicket(token, hh, provider, callId, from, atWork, LiveCallRules.instruction(atWork, knows, first, null, null), now)
+        tickets[token] = LiveCallTicket(token, hh, provider, callId, from, atWork, LiveCallRules.instruction(atWork, knows, first, null, null), now, canPutThrough)
         token
     }.getOrNull()
 
@@ -224,6 +233,12 @@ class LiveCallLine(
     fun markLive(callId: String) { wentLive[callId] = nowMs() }
 
     fun wasLive(callId: String): Boolean = wentLive.containsKey(callId)
+
+    /** Kept as soon as the session ends (before the phone side is told), so the end step sees it. */
+    fun ended(callId: String, end: LiveCallEnd) { if (end.live) outcomes[callId] = nowMs() to end }
+
+    /** How the live call [callId] ended, within [KEEP_MS]; null when it never went live or is unknown. */
+    fun outcome(callId: String): LiveCallEnd? = outcomes[callId]?.takeIf { nowMs() - it.first <= KEEP_MS }?.second
 
     /** Counts a call that went live; this month's spend and calls after it. */
     fun record(t: LiveCallTicket, end: LiveCallEnd): LiveCallRules.Meter {
@@ -276,6 +291,7 @@ class LiveCallSession(
     private var wrapped = false
     private var endingAt: Long? = null
     private var message: LiveCallRules.Message? = null
+    private var putThrough = false
     private val heard = StringBuilder()
     private var callerBytes = 0L
     private var obiBytes = 0L
@@ -353,8 +369,11 @@ class LiveCallSession(
             is LiveProtocol.Event.Heard -> if (heard.length < MAX_HEARD) heard.append(e.text.take(MAX_HEARD - heard.length))
             is LiveProtocol.Event.ToolCall -> when (e.name) {
                 LiveCallRules.TAKE_MESSAGE -> {
-                    if (message == null) message = LiveCallRules.message(e.args)
-                    link?.send(LiveProtocol.toolAnswer(e.id, e.name, "Message taken. Thank them and say goodbye, then end the call."))
+                    val first = message == null
+                    if (first) message = LiveCallRules.message(e.args)
+                    // Slice 1b: a genuine urgent caller is told to hold; the end step rings his mobile.
+                    if (first) putThrough = LiveCallRules.offersPutThrough(message!!, ticket.canPutThrough)
+                    link?.send(LiveProtocol.toolAnswer(e.id, e.name, if (putThrough) LiveCallRules.PUT_THROUGH_ANSWER else LiveCallRules.TAKEN_ANSWER))
                 }
                 LiveCallRules.END_CALL -> {
                     if (endingAt == null) endingAt = nowMs() + LiveCallRules.GOODBYE_MS
@@ -376,10 +395,11 @@ class LiveCallSession(
         if (done) return
         done = true
         runCatching { link?.close() }
-        runCatching { hangUp() }
         val seconds = ((nowMs() - startedAt) / 1_000).coerceAtLeast(0)
         val obi = obiBytes / (24_000 * 2)
-        runCatching { onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString())) }
+        // The outcome first, then the phone side: its end step (the put-through) must find it.
+        runCatching { onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live)) }
+        runCatching { hangUp() }
     }
 
     private fun media(mu: ByteArray) = buildJsonObject {

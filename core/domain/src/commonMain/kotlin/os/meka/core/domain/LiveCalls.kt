@@ -86,7 +86,7 @@ object LiveCallRules {
 
     /** Said once under the switch: what goes where, and what never does. */
     const val NOTE = "Callers' voices go to Google's Live API while Obi talks to them. He takes a message and asks if it's " +
-        "urgent; he never shares your calendar, address, family, money or mobile, and never agrees to anything for you. " +
+        "urgent; a genuine urgent caller is put through to your mobile when it's in About you. He never shares your calendar, address, family, money or mobile, and never agrees to anything for you. " +
         "At the cap Obi goes back to taking simple messages until the 1st."
 
     /** What callers may be told (the Calls settings' chips). */
@@ -118,6 +118,7 @@ object LiveCallRules {
         appendLine("Start by saying exactly: \"${ObiCallRules.OPENING}\"" + if (atWork && Knows.BUSY in knows) " Then say $who is at work and can't take the call right now, and ask who's calling and what it's about." else " Then say $who can't take the call right now, and ask who's calling and what it's about.")
         appendLine("Your jobs: find out who is calling and what it's about, take their message, and ask whether it is urgent. When you have those (or they won't say), call $TAKE_MESSAGE once, then thank them, say goodbye in one sentence and call $END_CALL.")
         appendLine("If they ask whether you are an AI or a robot, say yes, you are an AI assistant.")
+        appendLine("Never offer to put them through, transfer or connect them yourself; do it only when the $TAKE_MESSAGE answer tells you to.")
         if (Knows.BACK in knows) appendLine("You may say $who will get back to them as soon as they can. Never promise a day or time.")
         if (workPlace != null && Knows.WORK in knows) appendLine("If asked, you may say where $who works: ${workPlace.trim().take(80)}.")
         if (workEmail != null && Knows.EMAIL in knows) appendLine("If asked, you may give $who's work email: ${workEmail.trim().take(80)}.")
@@ -150,6 +151,31 @@ object LiveCallRules {
         fun yes(k: String) = args[k]?.trim()?.lowercase() in setOf("true", "yes", "1")
         val callback = clean("callback_number", 24)?.takeIf { n -> n.count { it.isDigit() } in 6..15 && n.all { it.isDigit() || it in "+ ()-" } }
         return Message(clean("who", MAX_FIELD), clean("about", MAX_FIELD), clean("message", MAX_MESSAGE), yes("urgent"), yes("scam"), callback)
+    }
+
+    /** Said by the phone line when Obi asked an urgent caller to hold but the checks at the end turned it down. */
+    const val NOT_PUT_THROUGH = "Sorry, I couldn't put you through just now. Your message has been passed on as urgent. Goodbye."
+
+    /** [TAKE_MESSAGE]'s answer for an ordinary message. */
+    const val TAKEN_ANSWER = "Message taken. Thank them and say goodbye, then end the call."
+
+    /** [TAKE_MESSAGE]'s answer when Obi is to try putting the caller through ([offersPutThrough]). */
+    const val PUT_THROUGH_ANSWER = "Message taken. Because it's urgent, say in one sentence that you'll try to put them " +
+        "through now and ask them to hold for a moment (don't say goodbye), then call $END_CALL. If it doesn't connect, " +
+        "the phone line will tell them."
+
+    /**
+     * Whether Obi tries putting this caller through (the live counterpart of [PutThroughRules.offer]'s first checks):
+     * a put-through possible for the call ([canPutThrough]: his mobile and the assistant's number usable, not his own
+     * number calling), the caller said it's urgent, Obi didn't think it a scam, and who they are and what it's about
+     * read as a real introduction judged plainly OK. The number's reputation is checked again when the line is dialled.
+     */
+    fun offersPutThrough(m: Message, canPutThrough: Boolean): Boolean {
+        if (!canPutThrough || !m.urgent || m.scam) return false
+        val intro = m.intro ?: return false
+        if (!CallIntroRules.real(intro)) return false
+        val j = CallIntroRules.judge(CallIntroRules.clean(intro), null)
+        return j.verdict == IntroVerdict.OK && !j.reported
     }
 
     /** The conversation's words as a fallback when Obi never called [TAKE_MESSAGE]: what the caller said, trimmed. */

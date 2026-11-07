@@ -105,4 +105,23 @@ class LiveCallRulesTest {
         assertNull(LiveCallRules.heardText("  hm "))
         assertEquals("Hello it's Sam", LiveCallRules.heardText(" Hello   it's Sam "))
     }
+
+    @Test
+    fun onlyAGenuineUrgentCallerIsOfferedAPutThrough() {
+        val school = LiveCallRules.message(mapOf("who" to "Sam from Oakfield School", "about" to "Alex has had a fall", "urgent" to "true"))
+        assertTrue(LiveCallRules.offersPutThrough(school, canPutThrough = true))
+        // No mobile set (or the caller is his own mobile): never offered.
+        assertFalse(LiveCallRules.offersPutThrough(school, canPutThrough = false))
+        // Not urgent, or Obi thought it a scam.
+        assertFalse(LiveCallRules.offersPutThrough(school.copy(urgent = false), true))
+        assertFalse(LiveCallRules.offersPutThrough(school.copy(scam = true), true))
+        // Nobody said who they were.
+        assertFalse(LiveCallRules.offersPutThrough(LiveCallRules.message(mapOf("about" to "urgent", "urgent" to "true")), true))
+        // A claim to be the bank or the police about payment or fraud is judged, not taken at its word.
+        val bank = LiveCallRules.message(mapOf("who" to "your bank's fraud team", "about" to "move your money to a safe account now", "urgent" to "true"))
+        assertFalse(LiveCallRules.offersPutThrough(bank, true))
+        // Obi is told never to offer it himself.
+        assertTrue("only when the take_message answer tells you to" in LiveCallRules.instruction(true, LiveCallRules.DEFAULT_KNOWS, "Alex", null, null))
+        assertTrue(LiveCallRules.END_CALL in LiveCallRules.PUT_THROUGH_ANSWER)
+    }
 }

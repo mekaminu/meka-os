@@ -1705,6 +1705,7 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
             hangUp = { out.close() },
             onLive = { live.line.markLive(ticket.callId); log.info("live call: Obi is talking to a caller") },
             onEnd = { end ->
+                live.line.ended(ticket.callId, end)
                 Thread.ofVirtual().name("live-call-end").start {
                     runCatching {
                         val meter = live.line.record(ticket, end)

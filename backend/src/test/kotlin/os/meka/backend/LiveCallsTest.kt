@@ -3,10 +3,13 @@ package os.meka.backend
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import os.meka.core.domain.AboutYouFields
+import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.LiveCallRules
+import os.meka.core.domain.PutThroughRules
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
@@ -265,5 +268,82 @@ class LiveCallsTest {
         assistant.liveEnded(t, LiveCallEnd(true, 8, 3, null, "hm"), LiveCallRules.Meter("x", 0, 1))
         assertNull(field(CallAssistantRules.heldId("twilio", "CA3"), HeldMessageFields.KIND))
         assertEquals(FieldValue.Int64(1), FieldReader.scanning(ops).latest("hh", EntityTypes.CONTEXT_MODE, LiveCallRules.METER_ID, LiveCallRules.METER_CALLS))
+    }
+
+    private fun profile(field: String, value: String) {
+        ops.append(Op("p${seq++}", "hh", EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, field, FieldValue.Text(value), Hlc(nowMs + seq, 0, "fold"), emptyList(), "fold"))
+    }
+
+    private val urgentCall = """{"toolCall":{"functionCalls":[{"id":"1","name":"take_message","args":{"who":"Sam from Oakfield School","about":"Alex has had a fall","message":"Please call the office","urgent":true}}]}}"""
+
+    @Test
+    fun aGenuineUrgentLiveCallerIsToldToHoldAndPutThrough() {
+        on()
+        profile(AboutYouFields.MOBILE, "07700 900456")
+        val reply = assistant.handle("twilio", VoiceEvent.Incoming("CA5", "+447700900123", "+447700900999")) as VoiceReply.LiveStream
+        val t = line.claim(reply.ticket, "CA5")!!
+        assertTrue(t.canPutThrough)
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val order = mutableListOf<String>()
+        val s = LiveCallSession(t, "MZ5", model, "gemini-test-live", "Charon", {}, { order += "hangUp" }, { line.markLive("CA5") },
+            { e -> order += "ended"; ended += e; line.ended("CA5", e) }, nowMs = { nowMs })
+        s.start()
+        model.say("""{"setupComplete":{}}""")
+        model.say(urgentCall)
+        assertTrue(LiveCallRules.PUT_THROUGH_ANSWER.take(30) in model.sent.last(), model.sent.last())
+        model.say("""{"toolCall":{"functionCalls":[{"id":"2","name":"end_call","args":{}}]}}""")
+        nowMs += 40_000
+        s.tick()
+        // The outcome is kept before the phone side is told the stream is over.
+        assertEquals(listOf("ended", "hangUp"), order)
+        assertTrue(ended.single().putThrough)
+        val put = assistant.handle("twilio", VoiceEvent.LiveEnded("CA5", "+447700900123", "+447700900999"))
+        assertEquals(VoiceReply.PutThrough("+447700900456", "+447700900999", toldToHold = true), put)
+        val (_, xml) = TwilioVoice(authToken = { "t" }).render(put, "https://meka.example/")
+        assertFalse(PutThroughRules.HOLD in xml, "Obi already asked them to hold")
+        assertTrue("<Dial" in xml && "+447700900456" in xml)
+        // His mobile answers before the message is written: the live outcome vouches for the whisper.
+        val whisper = assistant.handle("twilio", VoiceEvent.Whisper("CL1", "CA5")) as VoiceReply.Whisper
+        assertTrue("Oakfield School" in whisper.text)
+        // The usual message, marked urgent, and what happened once he took it.
+        assistant.liveEnded(t, ended.single(), line.record(t, ended.single()))
+        val id = CallAssistantRules.heldId("twilio", "CA5")
+        assertEquals(FieldValue.Bool(true), field(id, HeldMessageFields.URGENT))
+        assertEquals(VoiceReply.Connect, assistant.handle("twilio", VoiceEvent.WhisperAnswered("CL1", "CA5", "1")))
+        assertEquals(FieldValue.Text(PutThroughRules.TAKEN), field(id, HeldMessageFields.PUT_THROUGH))
+    }
+
+    @Test
+    fun withoutHisMobileAnUrgentLiveCallerJustLeavesTheMessage() {
+        on()
+        val reply = assistant.handle("twilio", VoiceEvent.Incoming("CA6", "+447700900123", "+447700900999")) as VoiceReply.LiveStream
+        val t = line.claim(reply.ticket, "CA6")!!
+        assertFalse(t.canPutThrough)
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = LiveCallSession(t, "MZ6", model, "m", "Charon", {}, {}, { line.markLive("CA6") }, { e -> ended += e; line.ended("CA6", e) }, nowMs = { nowMs })
+        s.start()
+        model.say("""{"setupComplete":{}}""")
+        model.say(urgentCall)
+        assertTrue(LiveCallRules.TAKEN_ANSWER in model.sent.last())
+        s.callerGone()
+        assertFalse(ended.single().putThrough)
+        assertEquals(VoiceReply.HangUp, assistant.handle("twilio", VoiceEvent.LiveEnded("CA6", "+447700900123", "+447700900999")))
+        // A whisper for a call nobody can vouch for is refused.
+        assertEquals(VoiceReply.HangUp, assistant.handle("twilio", VoiceEvent.Whisper("CL2", "CA6")))
+    }
+
+    @Test
+    fun aPutThroughTurnedDownAtTheEndSaysSo() {
+        on()
+        profile(AboutYouFields.MOBILE, "07700 900456")
+        line.markLive("CA9")
+        // Too short to be a person (an automated call), though Obi offered it.
+        val m = LiveCallRules.message(mapOf("who" to "Sam from Oakfield School", "about" to "Alex has had a fall", "urgent" to "true"))
+        line.ended("CA9", LiveCallEnd(true, 2, 1, m, "", putThrough = true))
+        assertEquals(VoiceReply.Goodbye(LiveCallRules.NOT_PUT_THROUGH), assistant.handle("twilio", VoiceEvent.LiveEnded("CA9", "+447700900123", "+447700900999")))
+        // His own mobile calling is never put through to itself.
+        line.markLive("CA10")
+        line.ended("CA10", LiveCallEnd(true, 30, 10, m, "", putThrough = true))
+        assertEquals(VoiceReply.Goodbye(LiveCallRules.NOT_PUT_THROUGH), assistant.handle("twilio", VoiceEvent.LiveEnded("CA10", "+447700900456", "+447700900999")))
     }
 }

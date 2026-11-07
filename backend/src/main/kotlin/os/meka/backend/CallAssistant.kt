@@ -96,7 +96,7 @@ sealed class VoiceEvent {
      */
     data class Transcribed(override val callId: String, val text: String?, val recording: String? = null) : VoiceEvent()
     /** Obi on calls, slice 1: the live stream ended ([VoiceStep.LIVE_ENDED]); a call that never went live gets the script. */
-    data class LiveEnded(override val callId: String, val from: String?) : VoiceEvent()
+    data class LiveEnded(override val callId: String, val from: String?, val to: String? = null) : VoiceEvent()
 }
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
@@ -138,7 +138,11 @@ sealed class VoiceReply {
      * Item (c) slice 2: tell the caller to hold and ring [mobile] from [callerId] (the assistant's own number, so his
      * Fold lets it ring), playing the whisper when he answers ([VoiceStep.WHISPER]); then [VoiceStep.DIALED].
      */
-    data class PutThrough(val mobile: String, val callerId: String) : VoiceReply()
+    data class PutThrough(
+        val mobile: String, val callerId: String,
+        /** Obi on calls, slice 1b: Obi already asked them to hold in the live call, so [PutThroughRules.HOLD] isn't said again. */
+        val toldToHold: Boolean = false,
+    ) : VoiceReply()
     /** Played to Meka when he answers: who it is and "press 1" ([VoiceStep.WHISPER_ANSWERED]); silence hangs up his leg. */
     data class Whisper(val text: String) : VoiceReply()
     /** He pressed 1: say so, then the phone service connects the two. */
@@ -464,11 +468,18 @@ class CallAssistant(
                 event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n -> runCatching { reputation?.invoke(hh, n, 0) } }
                 val atWork = atWork(hh)
                 // Obi on calls, slice 1: with Live conversation on and under the cap, Obi talks to them himself.
-                liveLine?.ticket(hh, provider, event.callId, event.from, atWork)?.let { return VoiceReply.LiveStream(it) }
+                liveLine?.ticket(hh, provider, event.callId, event.from, atWork, canPutThrough(hh, event.from, event.to))?.let { return VoiceReply.LiveStream(it) }
                 VoiceReply.AskWho(atWork)
             }
             // The stream ended: over if Obi talked to them; otherwise Google never answered, so the script takes the call.
-            is VoiceEvent.LiveEnded -> if (liveLine?.wasLive(event.callId) == true) VoiceReply.HangUp else VoiceReply.AskWho(atWork(hh))
+            is VoiceEvent.LiveEnded -> {
+                val line = liveLine
+                if (line?.wasLive(event.callId) != true) return VoiceReply.AskWho(atWork(hh))
+                // Slice 1b: Obi told a genuine urgent caller to hold: ring his mobile, or say it couldn't be done.
+                val end = line.outcome(event.callId)
+                if (end?.putThrough != true) return VoiceReply.HangUp
+                runCatching { livePutThrough(hh, event, end) }.getOrNull() ?: VoiceReply.Goodbye(LiveCallRules.NOT_PUT_THROUGH)
+            }
             is VoiceEvent.Introduced -> introduced(hh, id, event)
             is VoiceEvent.Recorded -> {
                 val intro = introOf(event.callId)
@@ -517,8 +528,11 @@ class CallAssistant(
             is VoiceEvent.Whisper -> {
                 val parent = event.parent?.takeIf { it.isNotBlank() } ?: return VoiceReply.HangUp
                 val heldId = CallAssistantRules.heldId(provider, parent)
-                if (!exists(hh, heldId)) return VoiceReply.HangUp
-                val intro = introOf(parent) ?: (fields.latest(hh, EntityTypes.HELD_MESSAGE, heldId, HeldMessageFields.INTRO) as? FieldValue.Text)?.value
+                // A live call's put-through is vouched for by its outcome too (its message may still be being written).
+                val liveEnd = liveLine?.outcome(parent)?.takeIf { it.putThrough }
+                if (!exists(hh, heldId) && liveEnd == null) return VoiceReply.HangUp
+                val intro = introOf(parent) ?: liveEnd?.message?.intro
+                    ?: (fields.latest(hh, EntityTypes.HELD_MESSAGE, heldId, HeldMessageFields.INTRO) as? FieldValue.Text)?.value
                 VoiceReply.Whisper(PutThroughRules.whisper(intro))
             }
             is VoiceEvent.WhisperAnswered -> {
@@ -598,6 +612,32 @@ class CallAssistant(
         val judged = CallIntroRules.judge(CallIntroRules.clean(intro), rep)
         if (!PutThroughRules.offer(true, intro, judged, rep, seconds, from, mobile, assistant)) return null
         return VoiceReply.PutThrough(PutThroughRules.dialable(mobile)!!, PutThroughRules.dialable(assistant)!!)
+    }
+
+    /**
+     * Obi on calls, slice 1b: whether a live call could be put through at all, decided when it starts so Obi knows
+     * whether to offer it: his mobile in About you and the assistant's number usable and different, and the caller
+     * not his own mobile.
+     */
+    private fun canPutThrough(hh: String, from: String?, to: String?): Boolean = runCatching {
+        val mobile = PutThroughRules.dialable(profileText(hh, AboutYouFields.MOBILE)) ?: return false
+        val own = PutThroughRules.dialable(to ?: profileText(hh, AboutYouFields.ASSISTANT_NUMBER)) ?: return false
+        mobile != own && PutThroughRules.dialable(from) != mobile
+    }.getOrDefault(false)
+
+    /**
+     * Slice 1b: the live call is over and Obi asked the urgent caller to hold. The same checks as the scripted
+     * put-through ([PutThroughRules.offer]: who they said they were judged plainly OK with the number's reputation, a
+     * call long enough not to be automated, his mobile and the assistant's number); the reply that rings him, or null.
+     */
+    private fun livePutThrough(hh: String, event: VoiceEvent.LiveEnded, end: LiveCallEnd): VoiceReply? {
+        val m = end.message ?: return null
+        val mobile = profileText(hh, AboutYouFields.MOBILE) ?: return null
+        val assistant = event.to ?: profileText(hh, AboutYouFields.ASSISTANT_NUMBER)
+        val rep = event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n -> runCatching { reputation?.invoke(hh, n, 0) }.getOrNull() }
+        val judged = CallIntroRules.judge(CallIntroRules.clean(m.intro), rep)
+        if (!PutThroughRules.offer(m.urgent && !m.scam, m.intro, judged, rep, end.seconds.toInt(), event.from, mobile, assistant)) return null
+        return VoiceReply.PutThrough(PutThroughRules.dialable(mobile)!!, PutThroughRules.dialable(assistant)!!, toldToHold = true)
     }
 
     /** The put-through's outcome on the message, and an Activity entry; once per call (the first outcome stands). */
@@ -1047,7 +1087,7 @@ class TwilioVoice(
             VoiceStep.WHISPER -> VoiceEvent.Whisper(call, parentOf(form))
             VoiceStep.WHISPER_ANSWERED -> VoiceEvent.WhisperAnswered(call, parentOf(form), form["Digits"])
             VoiceStep.DIALED -> VoiceEvent.Dialed(call)
-            VoiceStep.LIVE_ENDED -> VoiceEvent.LiveEnded(call, from)
+            VoiceStep.LIVE_ENDED -> VoiceEvent.LiveEnded(call, from, form["To"])
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -1089,7 +1129,7 @@ class TwilioVoice(
                     say(s.thanks(reply.atWork)) + "<Hangup/>"
             is VoiceReply.Goodbye -> (if (reply.aiAnswer) say(ObiCallRules.AI_ANSWER) else "") + say(reply.text) + "<Hangup/>"
             // Item (c) slice 2: ring his mobile from the assistant's own number; the whisper plays when he answers.
-            is VoiceReply.PutThrough -> say(PutThroughRules.HOLD) +
+            is VoiceReply.PutThrough -> (if (reply.toldToHold) "" else say(PutThroughRules.HOLD)) +
                 """<Dial timeout="${PutThroughRules.RING_SECONDS}" callerId="${xml(reply.callerId)}" action="${url(VoiceStep.DIALED)}" method="POST">""" +
                 """<Number url="${url(VoiceStep.WHISPER)}" method="POST">${xml(reply.mobile)}</Number></Dial>"""
             is VoiceReply.Whisper ->
