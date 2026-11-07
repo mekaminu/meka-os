@@ -7038,6 +7038,9 @@ class MekaCore(
     /** "Screen unknown callers all the time" ([os.meka.core.domain.ScreenUnknownRules]), synced; false when nothing changed. */
     suspend fun setScreenUnknownAlways(on: Boolean): Boolean = onCore { work.setScreenUnknownAlways(on).also { refresh() } }
 
+    /** Obi on calls: "Live conversation" ([os.meka.core.domain.LiveCallRules]), synced; false when nothing changed. */
+    suspend fun setCallLive(on: Boolean): Boolean = onCore { work.setCallLive(on).also { refresh() } }
+
     /**
      * Spam calls still ring, slice 1: the Fold, after a call from an unknown number it watched (not a contact, not
      * called lately, not household, not claiming to be an official body), says how many incoming calls the number made

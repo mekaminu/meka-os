@@ -24,6 +24,7 @@ import os.meka.core.domain.ObiCallRules
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
+import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.MekaVoiceFields
 import os.meka.core.domain.MekaVoiceRules
 import os.meka.core.domain.MekaVoiceStore
@@ -94,6 +95,8 @@ sealed class VoiceEvent {
      * recording, which the server then deletes from the phone service (the words live on only in the summary).
      */
     data class Transcribed(override val callId: String, val text: String?, val recording: String? = null) : VoiceEvent()
+    /** Obi on calls, slice 1: the live stream ended ([VoiceStep.LIVE_ENDED]); a call that never went live gets the script. */
+    data class LiveEnded(override val callId: String, val from: String?) : VoiceEvent()
 }
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
@@ -140,6 +143,11 @@ sealed class VoiceReply {
     data class Whisper(val text: String) : VoiceReply()
     /** He pressed 1: say so, then the phone service connects the two. */
     data object Connect : VoiceReply()
+    /**
+     * Obi on calls, slice 1: stream the call to Navilife's server ([LiveCallRoutes.PATH]) with its one-use [ticket], then
+     * ask [VoiceStep.LIVE_ENDED] when the stream ends.
+     */
+    data class LiveStream(val ticket: String) : VoiceReply()
     /** End this leg without a word. */
     data object HangUp : VoiceReply()
     /** Turn the call away as busy: the assistant is switched off or nobody is set up to take it. */
@@ -160,6 +168,8 @@ object VoiceStep {
     const val WHISPER = "whisper"
     const val WHISPER_ANSWERED = "whisper-answered"
     const val DIALED = "dialed"
+    /** Obi on calls, slice 1: the live stream ended. */
+    const val LIVE_ENDED = "live-ended"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -402,6 +412,8 @@ class CallAssistant(
      * answers null for no lookup (off, pending, failed). Null: the assistant judges from the caller's words alone.
      */
     private val reputation: ((householdId: String, number: String, waitMs: Long) -> NumberReputation?)? = null,
+    /** Obi on calls, slice 1: whether a call goes live and its tickets; null keeps every call on the script. */
+    private val liveLine: LiveCallLine? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
 
@@ -450,8 +462,13 @@ class CallAssistant(
                 }
                 // The number's reputation starts now (not waited for), so it's ready when they've said who they are.
                 event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n -> runCatching { reputation?.invoke(hh, n, 0) } }
-                VoiceReply.AskWho(atWork(hh))
+                val atWork = atWork(hh)
+                // Obi on calls, slice 1: with Live conversation on and under the cap, Obi talks to them himself.
+                liveLine?.ticket(hh, provider, event.callId, event.from, atWork)?.let { return VoiceReply.LiveStream(it) }
+                VoiceReply.AskWho(atWork)
             }
+            // The stream ended: over if Obi talked to them; otherwise Google never answered, so the script takes the call.
+            is VoiceEvent.LiveEnded -> if (liveLine?.wasLive(event.callId) == true) VoiceReply.HangUp else VoiceReply.AskWho(atWork(hh))
             is VoiceEvent.Introduced -> introduced(hh, id, event)
             is VoiceEvent.Recorded -> {
                 val intro = introOf(event.callId)
@@ -524,6 +541,46 @@ class CallAssistant(
                 VoiceReply.Done
             }
         }
+    }
+
+    /**
+     * Obi on calls, slice 1: what a live call left. A call that went live is kept as a voice message (who and what it's
+     * about as its intro, the message or else what the caller said as its words, no recording), urgent when the caller
+     * said so (never when Obi thought it a scam), read like any message (summary and scam check), and the month's
+     * spend written for both apps' meter line. A live call with nothing said is noted as a hang-up. Once per call.
+     */
+    fun liveEnded(t: LiveCallTicket, end: LiveCallEnd, meter: LiveCallRules.Meter) {
+        val hh = t.householdId
+        val id = CallAssistantRules.heldId(t.provider, t.callId)
+        if (!end.live) return
+        write(
+            hh, LiveCallRules.METER_ID,
+            mapOf(
+                LiveCallRules.METER_MONTH to meter.month.fv(), LiveCallRules.METER_PENCE to FieldValue.Int64(meter.spentPence),
+                LiveCallRules.METER_CALLS to FieldValue.Int64(meter.calls),
+            ),
+            EntityTypes.CONTEXT_MODE, opBase = id + "livemeter",
+        )
+        val m = end.message
+        val words = m?.text ?: LiveCallRules.heardText(end.heard)
+        if (m?.intro == null && words == null) {
+            noteHangup(hh, id, t.from)
+            runCatching { onWritten(hh) }
+            return
+        }
+        val values = CallAssistantRules.messageFields(t.from, t.mintedAtMs, t.atWork, seconds = end.seconds.toInt()) + buildMap<String, FieldValue> {
+            m?.intro?.let { put(HeldMessageFields.INTRO, it.fv()) }
+            if (words != null) put(HeldMessageFields.TEXT, words.fv()) else put(HeldMessageFields.NO_TRANSCRIPT, true.fv())
+        }
+        if (!write(hh, id, values)) return
+        val urgent = m?.urgent == true && m?.scam != true
+        if (urgent && write(hh, id, mapOf(HeldMessageFields.URGENT to true.fv(), HeldMessageFields.URGENT_BY to CallNoticeRules.BY_SPEECH.fv()))) {
+            runCatching { onUrgent(hh) }
+        } else {
+            runCatching { onWritten(hh) }
+        }
+        val read = listOfNotNull(m?.intro, words).joinToString(". ")
+        runCatching { readWords(hh, id, read) }
     }
 
     /**
@@ -921,6 +978,8 @@ class VoiceRoutes(
     val publicUrl: String,
     /** The lines in a chosen Google voice (natural voice, slice 3); null when the server has no Google voices. */
     val clips: CallClips? = null,
+    /** Obi on calls, slice 1: the live stream's route; null keeps every call on the script. */
+    val live: LiveCallRoutes? = null,
 ) {
     val providers: Map<String, VoiceProvider> = providers.associateBy { it.id }
 }
@@ -988,6 +1047,7 @@ class TwilioVoice(
             VoiceStep.WHISPER -> VoiceEvent.Whisper(call, parentOf(form))
             VoiceStep.WHISPER_ANSWERED -> VoiceEvent.WhisperAnswered(call, parentOf(form), form["Digits"])
             VoiceStep.DIALED -> VoiceEvent.Dialed(call)
+            VoiceStep.LIVE_ENDED -> VoiceEvent.LiveEnded(call, from)
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -1036,6 +1096,10 @@ class TwilioVoice(
                 """<Gather input="dtmf" numDigits="1" timeout="${PutThroughRules.WHISPER_SECONDS}" action="${url(VoiceStep.WHISPER_ANSWERED)}" method="POST">""" +
                     say(reply.text) + "</Gather><Hangup/>"
             VoiceReply.Connect -> say(PutThroughRules.CONNECTING)
+            // Obi on calls, slice 1: the call's audio to Navilife's server; when the stream ends, ask what next.
+            is VoiceReply.LiveStream -> """<Connect><Stream url="${xml(LiveCallRoutes.streamUrl(base))}">""" +
+                """<Parameter name="ticket" value="${xml(reply.ticket)}"/></Stream></Connect>""" +
+                """<Redirect method="POST">${url(VoiceStep.LIVE_ENDED)}</Redirect>"""
             VoiceReply.HangUp -> "<Hangup/>"
             VoiceReply.Busy -> """<Reject reason="busy"/>"""
             VoiceReply.Done -> ""

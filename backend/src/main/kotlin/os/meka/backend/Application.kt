@@ -55,6 +55,12 @@ import os.meka.backend.integrations.PostgresMailStore
 import os.meka.backend.integrations.SecretsManagerOAuthClients
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.readText
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.CallCreditRules
 import os.meka.core.domain.EntityTypes
@@ -175,6 +181,13 @@ fun Application.mekaSync(
             call.application.environment.log.error("unhandled ${e::class.simpleName}")
             call.respondText("internal error", status = HttpStatusCode.InternalServerError)
         }
+    }
+
+    // Obi on calls, slice 1: the phone service's audio stream (a WebSocket) for live calls.
+    val liveCalls = voice?.live
+    if (voice != null && liveCalls != null) {
+        install(WebSockets) { maxFrameSize = 256L * 1024 }
+        routing { liveCallStream(voice, liveCalls) }
     }
 
     routing {
@@ -1362,7 +1375,7 @@ fun main(args: Array<String>) {
                     brain = ai?.provider?.let { ModelErrandBrain(it) }, search = brave, onWritten = { hh -> push?.serverChanged(hh) },
                 ))
             }
-            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup)
+            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup, ds)
             voice?.let { startRecordingSweep(it.assistant) }
             voice?.let { startCallClipsWarm(it) }
             // The call assistant's low-balance guard: the phone service's credit, read a few times a day.
@@ -1535,12 +1548,24 @@ fun assistantCallsReader(opStore: PostgresOpStore): (String) -> List<os.meka.cor
 fun voiceFromEnv(
     opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null, ai: AiLayer? = null,
     numberLookup: NumberLookup? = null,
+    /** Obi on calls, slice 1: the live-call meter's database; null keeps every call on the script. */
+    ds: DataSource? = null,
 ): VoiceRoutes? {
     val secret = System.getenv("MEKA_VOICE_TWILIO_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL")?.takeIf { it.isNotBlank() } ?: return null
     // Callers' recordings (polish 8c) in MEKA's own private bucket; none kept without one.
     val bucket = System.getenv("MEKA_BLOB_BUCKET")?.takeIf { it.isNotBlank() }
     val recordings = bucket?.let { S3RecordingStore(it) }
+    // Obi on calls, slice 1: callers talk to Obi live through the Gemini key the server already holds (never handed out).
+    val fields = FieldReader { hh, type, id, field -> opStore.latestValue(hh, type, id, field) }
+    val liveCalls = System.getenv("MEKA_GEMINI_SECRET")?.takeIf { it.isNotBlank() && ds != null && System.getenv("MEKA_LIVE_CALLS") != "off" }?.let { gemini ->
+        val reader = os.meka.backend.integrations.SecretCache.shared.reader(gemini, GeminiLiveTokens::secret) { it.key != null }
+        val rate = os.meka.backend.integrations.EcbDollarRate.network()
+        LiveCallRoutes(
+            LiveCallLine(fields, PostgresLiveCallStore(ds!!), configured = { reader()?.key != null }, gbpPerUsd = { rate.read()?.gbpPerUsdMicros }),
+            GeminiLiveDial({ reader()?.key }),
+        )
+    }
     val assistant = CallAssistant(
         ops = opStore, fields = FieldReader { hh, type, id, field -> opStore.latestValue(hh, type, id, field) }, household = { devices.soleHousehold() },
         speechVoices = { speech?.offered().orEmpty() },
@@ -1554,10 +1579,11 @@ fun voiceFromEnv(
         scamCheck = ai?.provider?.let { CallScamCheck(it) },
         // The assistant talks to them (2026-10-17): the caller's number's web reputation while they say who they are.
         reputation = numberLookup?.let { lookup -> { hh, number, waitMs -> lookup.reputation(hh, number, waitMs) } },
+        liveLine = liveCalls?.line,
     )
     // Callers hear a chosen Google voice (natural voice, slice 3): its lines made once, on Google's meter.
     val clips = speech?.let { sp -> CallClips(synth = { text, v -> sp.googleClip(text, v) }, store = recordings) }
-    return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl, clips)
+    return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl, clips, liveCalls)
 }
 
 /**
@@ -1624,6 +1650,7 @@ object Migrations {
         27 to "/db/V27__number_lookup.sql",
         28 to "/db/V28__talk_timing.sql",
         29 to "/db/V29__live_session.sql",
+        30 to "/db/V30__live_call.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->
@@ -1637,5 +1664,73 @@ object Migrations {
             c.prepareStatement("INSERT INTO schema_migration(version) VALUES (?)").use { it.setInt(1, v); it.executeUpdate() }
         }
         c.commit()
+    }
+}
+
+
+/**
+ * Obi on calls, slice 1: the phone service's stream of one call. Its first frames name the call and carry the one-use
+ * ticket the call's markup gave it ([VoiceReply.LiveStream]); without a matching ticket the stream is closed at once
+ * (and the call falls back to the script). Audio then flows both ways through a [LiveCallSession] until either side
+ * ends it. Nothing of what is said is logged.
+ */
+internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, live: LiveCallRoutes) {
+    webSocket(LiveCallRoutes.PATH) {
+        val log = call.application.environment.log
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        fun obj(t: String) = runCatching { json.parseToJsonElement(t) as? kotlinx.serialization.json.JsonObject }.getOrNull()
+        fun str(o: kotlinx.serialization.json.JsonObject?, k: String) =
+            (o?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        // "connected", then "start" with the call, the stream and our ticket.
+        val start = kotlinx.coroutines.withTimeoutOrNull(10_000) {
+            for (frame in incoming) {
+                if (frame !is Frame.Text) continue
+                val o = obj(frame.readText()) ?: continue
+                if (str(o, "event") == "start") return@withTimeoutOrNull o
+            }
+            null
+        } ?: return@webSocket close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "no start"))
+        val info = start["start"] as? kotlinx.serialization.json.JsonObject
+        val streamSid = str(info, "streamSid") ?: str(start, "streamSid")
+        val params = info?.get("customParameters") as? kotlinx.serialization.json.JsonObject
+        val ticket = live.line.claim(str(params, "ticket"), str(info, "callSid"))
+        if (ticket == null || streamSid == null) {
+            log.warn("live call: stream refused (no matching ticket)")
+            return@webSocket close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "no ticket"))
+        }
+        val out = kotlinx.coroutines.channels.Channel<String>(capacity = 2_048)
+        val session = LiveCallSession(
+            ticket, streamSid, live.dial, live.model, live.voice,
+            toCaller = { out.trySend(it) },
+            hangUp = { out.close() },
+            onLive = { live.line.markLive(ticket.callId); log.info("live call: Obi is talking to a caller") },
+            onEnd = { end ->
+                Thread.ofVirtual().name("live-call-end").start {
+                    runCatching {
+                        val meter = live.line.record(ticket, end)
+                        voice.assistant.liveEnded(ticket, end, meter)
+                    }.onFailure { log.warn("live call: not written (${it::class.simpleName})") }
+                }
+                log.info("live call: ended after ${end.seconds} s${if (end.live) "" else " (never went live, script takes it)"}")
+            },
+        )
+        val writer = launch {
+            for (t in out) send(Frame.Text(t))
+            runCatching { close(CloseReason(CloseReason.Codes.NORMAL, "done")) }
+        }
+        val clock = launch {
+            while (!session.done) { kotlinx.coroutines.delay(250); session.tick() }
+        }
+        withContext(Dispatchers.IO) { session.start() }
+        try {
+            for (frame in incoming) {
+                if (frame is Frame.Text) session.fromCaller(frame.readText())
+                if (session.done) break
+            }
+        } finally {
+            session.callerGone()
+            clock.cancel()
+            writer.join()
+        }
     }
 }

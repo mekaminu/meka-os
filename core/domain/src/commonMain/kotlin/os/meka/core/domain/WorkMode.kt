@@ -41,6 +41,15 @@ object WorkFields {
      * Int64, one of [VoiceRecordingRules.KEEP_CHOICES] (0 = don't keep). Last writer wins; absent (or an old 30) = 7. Added 2026-10-10.
      */
     const val RECORDING_DAYS = "callRecordingDays"
+    /**
+     * Obi on calls, slice 1 ([LiveCallRules], Meka approved 2026-11-07): "Live conversation", Bool, last writer wins;
+     * **absent = off**. On, with the call assistant on, callers talk to Obi live instead of the script.
+     */
+    const val CALL_LIVE = "callLive"
+    /** Live calls' monthly cap in pounds (Int64, one of [LiveCallRules.CAP_CHOICES]); absent = £20. */
+    const val CALL_LIVE_CAP = "callLiveCapGbp"
+    /** What callers may be told ([LiveCallRules.Knows], comma-separated); absent = you're busy, call back, first name. */
+    const val CALL_KNOWS = "callKnows"
     // The door-to-door commute ([CommuteFields], 2026-10-13) is on this entity too: commuteToWorkMin, commuteHomeMin.
 }
 
@@ -291,6 +300,12 @@ data class WorkModeState(
     val screenUnknownAlways: Boolean = false,
     /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7 or 0 (don't keep). */
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
+    /** Obi on calls ([LiveCallRules]): "Live conversation", off until Meka turns it on. */
+    val callLive: Boolean = false,
+    /** Live calls' monthly cap in pounds ([LiveCallRules.capGbp]). */
+    val callLiveCapGbp: Int = LiveCallRules.DEFAULT_CAP_GBP,
+    /** This month's spend on live calls as the server last wrote it; null before the first one this month. */
+    val callLiveMeter: LiveCallRules.Meter? = null,
     /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
     val callAssistantPaused: Boolean = false,
     /** The door-to-door commute each way ([CommuteRules]): counted on office days only. */
@@ -537,7 +552,8 @@ class WorkMode(
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState {
         val base = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays())
-            .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), screenUnknownAlways = screenUnknownAlways(), recordingDays = recordingDays(), commute = commute())
+            .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), screenUnknownAlways = screenUnknownAlways(), recordingDays = recordingDays(), commute = commute(),
+                callLive = callLive(), callLiveCapGbp = callLiveCapGbp(), callLiveMeter = callLiveMeter())
         if (epochDay == null) return base
         val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays(), away())
         return base.copy(commuteDays = CommuteRules.dayRows(hours, epochDay))
@@ -598,6 +614,25 @@ class WorkMode(
     /** How long callers' recordings are kept, in days (synced; [VoiceRecordingRules.keepDays]). */
     fun recordingDays(): Int =
         VoiceRecordingRules.keepDays(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)?.longOrNull)
+
+    /** "Live conversation" on calls ([LiveCallRules]), synced; absent reads as off. */
+    fun callLive(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_LIVE)?.boolOrNull == true
+
+    /** Turns "Live conversation" on or off, synced; false when nothing changed. */
+    fun setCallLive(on: Boolean): Boolean {
+        if (callLive() == on) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_LIVE to on.fv()))
+        return true
+    }
+
+    /** Live calls' monthly cap in pounds (synced; [LiveCallRules.capGbp]). */
+    fun callLiveCapGbp(): Int = LiveCallRules.capGbp(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_LIVE_CAP)?.longOrNull)
+
+    /** This month's live-call spend as the server wrote it ([LiveCallRules.METER_ID]); null before the first call this month. */
+    fun callLiveMeter(): LiveCallRules.Meter? {
+        val e = replica.entity(EntityTypes.CONTEXT_MODE, LiveCallRules.METER_ID) ?: return null
+        return LiveCallRules.meter(e[LiveCallRules.METER_MONTH]?.textOrNull, e[LiveCallRules.METER_PENCE]?.longOrNull, e[LiveCallRules.METER_CALLS]?.longOrNull, LiveCallRules.month(nowMs()))
+    }
 
     /** "Keep callers' recordings": one of [VoiceRecordingRules.KEEP_CHOICES]. Returns whether anything changed. */
     fun setRecordingDays(days: Int): Boolean {

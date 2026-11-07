@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.websockets)
     implementation(libs.postgres)
     implementation(libs.hikari)
     implementation(libs.logback)

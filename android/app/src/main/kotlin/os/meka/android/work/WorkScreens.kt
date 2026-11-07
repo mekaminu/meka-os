@@ -288,6 +288,9 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         ScreenUnknownRow(work.screenUnknownAlways, work.callAssistant, Modifier.appear(rememberAppearance(4))) {
             haptics.tick(); scope.launch { core.setScreenUnknownAlways(!work.screenUnknownAlways) }
         }
+        LiveCallRow(work.callLive, work.callAssistant, work.callLiveMeter, work.callLiveCapGbp, Modifier.appear(rememberAppearance(4))) {
+            haptics.tick(); scope.launch { core.setCallLive(!work.callLive) }
+        }
         Spacer(Modifier.height(MekaSpace.m))
         RecordingKeepSection(work.recordingDays, Modifier.appear(rememberAppearance(4))) { d -> scope.launch { core.setRecordingDays(d) } }
         Spacer(Modifier.height(MekaSpace.m))
@@ -736,6 +739,32 @@ internal fun reportScamCall(context: Context, number: String) {
  * "Screen unknown callers all the time" (Meka 2026-10-22): a switch row under the call assistant; the On/Off pill
  * fills gold on the appear spring and the line under it cross-fades. Needs the call assistant on to do anything.
  */
+@Composable
+internal fun LiveCallRow(
+    on: Boolean, assistantOn: Boolean, meter: os.meka.core.domain.LiveCallRules.Meter?, capGbp: Int,
+    modifier: Modifier = Modifier, onToggle: () -> Unit,
+) {
+    // Obi on calls, slice 1 (Meka approved 2026-11-07): callers talk to Obi live; the line says the month's spend.
+    val rules = os.meka.core.domain.LiveCallRules
+    val reduced = Meka.reducedMotion
+    val fill by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "call-live")
+    Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
+                .semantics { contentDescription = rules.TITLE; selected = on }
+                .minTouch().padding(vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(rules.TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            os.meka.android.designsystem.SwitchPill(on, fill)
+        }
+        Crossfade(rules.line(on, assistantOn, meter, capGbp), animationSpec = MekaMotion.appear(reduced), label = "call-live-line") { line ->
+            Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        Text(LoneWordGlue.kept(rules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
 @Composable
 internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
     val reduced = Meka.reducedMotion

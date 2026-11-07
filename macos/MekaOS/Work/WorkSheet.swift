@@ -31,6 +31,7 @@ struct WorkSheet: View {
     private var atWork: Bool { model.work?.atWork ?? false }
     private var callAssistant: Bool { model.work?.callAssistant ?? false }
     private var screenUnknownAlways: Bool { model.work?.screenUnknownAlways ?? false }
+    private var callLive: Bool { model.work?.callLive ?? false }
     private var recordingDays: Int { Int(model.work?.recordingDays ?? Int32(VoiceRecordingRules.shared.DEFAULT_KEEP_DAYS)) }
     private static let keepChoices = [7, 0]
 
@@ -99,6 +100,7 @@ struct WorkSheet: View {
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(3)
             screenUnknown.staggeredAppear(3)
+            liveConversation.staggeredAppear(3)
             keepRecordings.staggeredAppear(3)
             spam.staggeredAppear(3)
 
@@ -122,6 +124,7 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.screenUnknownAlways)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callLive)
         .onAppear(perform: load)
     }
 
@@ -355,6 +358,28 @@ struct WorkSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.rows.map(\.key) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.suspects.map(\.key) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: blockRefused)
+    }
+
+    /// Obi on calls, slice 1 (Meka approved 2026-11-07): "Live conversation", synced with the Fold. Callers talk to Obi
+    /// live on Navilife's server; the line under it says this month's spend against the cap and cross-fades.
+    private var liveConversation: some View {
+        let line = LiveCallRules.shared.line(on: callLive, assistantOn: callAssistant, meter: model.work?.callLiveMeter, capGbp: model.work?.callLiveCapGbp ?? Int32(LiveCallRules.shared.DEFAULT_CAP_GBP))
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Toggle(isOn: Binding(get: { callLive }, set: { model.setCallLive($0) })) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(LiveCallRules.shared.TITLE).font(MekaType.itemMeta)
+                    Text(LoneWordGlue.shared.kept(line: line))
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                }
+            }
+            .toggleStyle(.switch)
+            Text(LoneWordGlue.shared.kept(line: LiveCallRules.shared.NOTE))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, MekaSpace.xs)
     }
 
     /// "Screen unknown callers all the time" (Meka 2026-10-22): synced with the Fold, where the screening happens.
