@@ -82,6 +82,9 @@ class ObiCallsScreensTest {
             }
         }
         turns()
+        // The page reads the core on its own thread: wait in real time until it has drawn, then let it settle.
+        ScreenShots.awaitShows(compose, name, "cap £20")
+        turns()
         compose.waitForIdle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("obi-calls", name))
         ScreenShots.assertSensible(compose, name)
