@@ -14,7 +14,6 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -31,7 +30,6 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.NEW_ROUTINE_TAG
-import os.meka.android.ask.ROUTINES_PANE_TAG
 import os.meka.android.ask.RoutinesPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -303,8 +301,6 @@ class RoutinesScreensTest {
         until { onScreen(RoutineIdeas.TITLE.uppercase()) }
         val idea = core.routinesView.value.ideas.singleOrNull() ?: fail("$name: ${core.routinesView.value.ideas.size} ideas, not 1")
         if (idea.name != "Bin night") fail("$name: the idea is \"${idea.name}\"")
-        compose.onNodeWithTag(ROUTINES_PANE_TAG).performScrollToNode(hasTestTag("routine-idea"))
-        turns()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", "cover-dark-ideas"))
         val lines = listOf(idea.name, idea.why, RoutineIdeas.NOTE)
         ScreenShots.assertSensible(compose, name)
