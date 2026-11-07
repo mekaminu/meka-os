@@ -146,7 +146,7 @@ class MoneyPlanMoreTest {
         val none = MoneyPlanMore.challengeTiles(MoneyChallenges.view(lines, MoneyChallengeSetting(), sat17)!!)
         assertFalse(none.funMoney.hasPot)
         assertEquals(MoneyPlanMore.FUN_NOT_SET, none.funMoney.value)
-        assertEquals("—", none.noSpend.count)
+        assertEquals("0", none.noSpend.count)
     }
 
     private val names = mapOf("a-card" to "Credit card", "a-travel" to "Travel card")

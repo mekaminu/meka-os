@@ -190,6 +190,8 @@ class MoneyPlanMoreScreensTest {
         until(core) { showsText("of £60") }
         assertTrue(showsText("of £60"), "£60 should set the week's fun money")
         assertTrue(shows("money-cap-row"), "Cap a category for the month should follow the tiles")
+        val tv = core.moneyView.value.travel ?: fail("the card's week abroad should make PAYING ABROAD")
+        if (MoneyPlanMore.abroadTiles(tv) == null) fail("PAYING ABROAD should have the card's row: ${tv.tip}")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-challenges-tiles-cover"))
         scrollTo("money-abroad-fees")
         assertTrue(showsText(MoneyPlanMore.ABROAD_HEAD) && showsText("£1.80"), "the year's foreign fees should be the big tile")

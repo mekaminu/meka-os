@@ -211,9 +211,11 @@ struct MoneyChallengeTilesView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(ns.spoken)
+            if ns.on {
             HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xxs) {
                 Text(ns.count).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).contentTransition(.numericText())
                 Text(MoneyPlanMore.shared.THIS_WEEK).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
             }
             Button {
                 MekaHaptics.tick()

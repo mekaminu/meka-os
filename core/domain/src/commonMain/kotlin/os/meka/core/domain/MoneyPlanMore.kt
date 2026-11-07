@@ -217,7 +217,7 @@ object MoneyPlanMore {
                 names[i] + when { !ch.noSpendOn || st == MoneyNoSpendView.WEEK_NOT_YET -> ", not counted yet"; st == MoneyNoSpendView.WEEK_FREE -> ", no spending"; else -> ", spent" })
         }
         val n = if (ch.noSpendOn) week.count { it == MoneyNoSpendView.WEEK_FREE } else 0
-        val noSpend = MoneyNoSpendTile(ch.noSpendOn, dots, if (ch.noSpendOn) "$n" else "—",
+        val noSpend = MoneyNoSpendTile(ch.noSpendOn, dots, "$n",
             if (ch.noSpendOn) STOP_COUNTING else START_COUNTING,
             if (ch.noSpendOn) "No-spend days, $n $THIS_WEEK" else "No-spend days, not counting")
         val f = ch.funMoney

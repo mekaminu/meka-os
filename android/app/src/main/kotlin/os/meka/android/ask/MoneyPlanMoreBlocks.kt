@@ -253,7 +253,7 @@ internal fun ColumnScope.MoneyChallengeTilesBlock(
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            if (t.noSpend.on) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Crossfade(t.noSpend.count, animationSpec = MekaMotion.appear(reduced), label = "money-nospend-count") { c ->
                     Text(c, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.testTag("money-nospend-count"))
                 }
@@ -324,12 +324,12 @@ internal fun ColumnScope.MoneyChallengeTilesBlock(
 @Composable
 internal fun ColumnScope.MoneyAbroadTilesBlock(t: MoneyAbroadTiles, onTick: () -> Unit) {
     val reduced = Meka.reducedMotion
-    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${t.feesLabel}, ${t.fees}. ${t.line}" },
+    Row(Modifier.fillMaxWidth().testTag("money-abroad-fees").semantics(mergeDescendants = true) { contentDescription = "${t.feesLabel}, ${t.fees}. ${t.line}" },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Column(
             Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .background(if (t.lit) Meka.colors.critical.copy(alpha = 0.16f) else Meka.colors.surfaceRaised)
-                .testTag("money-abroad-fees").padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text(t.feesLabel, style = MekaType.micro, color = if (t.lit) Meka.colors.critical else Meka.colors.textSecondary, maxLines = 1)
