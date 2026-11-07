@@ -87,4 +87,20 @@ class RoutinesFacadeTest {
         val again = fold.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
         assertTrue(again.post.none { it.source == os.meka.core.domain.NoticeSource.ROUTINES })
     }
+
+    @Test
+    fun aRoutineSaidInOneSentenceOnTheFoldShowsOnTheMac() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val refused = fold.addRoutineFromSentence("show my bills", "")
+        assertTrue(refused.refused)
+        assertTrue(fold.routinesView.value.rows.isEmpty())
+        val said = fold.addRoutineFromSentence(os.meka.core.domain.RoutineSentence.HINT, "show,show,does,show")
+        assertEquals("Saved Sunday evening · first run tomorrow at 19:00", said.line)
+        fold.syncNow(); mac.syncNow()
+        val row = mac.routinesView.value.rows.single()
+        assertEquals("Sunday evening", row.name)
+        assertEquals("SUN", row.day)
+        assertEquals("Just show", mac.routinesView.value.detail(row.id)?.steps?.get(1)?.badge)
+    }
 }

@@ -1,7 +1,9 @@
+import AppKit
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Daily → Routines, on the Mac (Routines, slices 1–3; a click on a card opens the routine's page, where Run now
+/// Ask → Daily → Routines, on the Mac (Routines, slices 1–4; slice 4: + New opens New routine, said by Dictation or
+/// typed in one sentence; a click on a card opens the routine's page, where Run now
 /// starts a run and the Running now card offers Carry on · Skip this step · Stop, also above the list), like the Fold's RoutinesPane: how many are on, the rule (a
 /// routine never sends, pays, books or trades), YOUR ROUTINES — each a card with its day tile ("SUN" over "19:00"), its
 /// name, its line, its next run, Remove and an On/Off switch (synced with the Fold) — and START WITH ONE, the starters
@@ -17,10 +19,18 @@ struct RoutinesSheet: View {
     @State private var said: String?
     /// Slice 2: the routine whose page is open (nil: the list).
     @State private var openId: String?
+    /// Slice 4: New routine is open; what he said or typed, the labels he chose (codes), and what Save said.
+    @State private var making = false
+    @State private var typed = ""
+    @State private var modes = ""
+    @State private var makeSaid: String?
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            if let v = model.routines, let id = openId, let d = v.detail(id: id) {
+            if making {
+                newPage.transition(.opacity)
+            } else if let v = model.routines, let id = openId, let d = v.detail(id: id) {
                 page(d).transition(.opacity)
             } else {
                 list
@@ -32,13 +42,29 @@ struct RoutinesSheet: View {
             .padding(.top, MekaSpace.m)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: openId)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: making)
         .padding(MekaSpace.l)
         .frame(width: 480)
         .background(palette.surface)
     }
 
     @ViewBuilder private var list: some View {
-            Text(RoutineRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
+            HStack(alignment: .center) {
+                Text(RoutineRules.shared.TITLE).font(MekaType.upNextTitle)
+                Spacer(minLength: 0)
+                // Slice 4: the mockup's brass + New beside the title opens New routine.
+                Button(RoutineSentence.shared.NEW) {
+                    MekaHaptics.light()
+                    typed = ""; modes = ""; makeSaid = nil; said = nil
+                    making = true
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta).foregroundStyle(palette.onAccent)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(palette.accent, in: Capsule())
+                .accessibilityLabel(RoutineSentence.shared.NEW_SPOKEN)
+            }
+            .staggeredAppear(0)
             if let v = model.routines {
                 Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body)
                     .foregroundStyle(palette.textSecondary)
@@ -79,6 +105,143 @@ struct RoutinesSheet: View {
                 .scrollIndicators(.never)
                 .frame(maxHeight: 520)
             }
+    }
+
+    /// New routine (slice 4, the mockup's): ‹ Routines, the title, the field he types or dictates the routine into (the
+    /// mic starts macOS Dictation in it), the foot line, then OBI MADE THESE STEPS: WHEN · STARTS WITH, each step with
+    /// its place and label (a click moves it on), the note, what was left out, what's missing and Save routine. The draft
+    /// is the core's `RoutineSentence.draft`, worked out here on the main actor from two Strings; Save sends only those
+    /// two Strings to the core. Motion: the steps stagger in and re-flow on the expand spring as he types.
+    @ViewBuilder private var newPage: some View {
+        let d = RoutineSentence.shared.draft(text: typed, modes: modes)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button("‹ \(RoutineRules.shared.BACK)") { making = false }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                .accessibilityLabel("Back to \(RoutineRules.shared.BACK)")
+            Text(RoutineSentence.shared.TITLE).font(MekaType.upNextTitle).accessibilityAddTraits(.isHeader).staggeredAppear(0)
+            HStack(alignment: .top, spacing: MekaSpace.xs) {
+                TextField(RoutineSentence.shared.HINT, text: $typed, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(MekaType.body)
+                    .lineLimit(3...6)
+                    .focused($fieldFocused)
+                    .onChange(of: typed) { _, _ in modes = "" }
+                    .accessibilityLabel(RoutineSentence.shared.TITLE)
+                Button { dictate() } label: { Image(systemName: "mic").foregroundStyle(palette.accent) }
+                    .buttonStyle(MekaPressStyle())
+                    .frame(width: 32, height: 32)
+                    .background(palette.surface, in: Circle())
+                    .help(RoutineSentence.shared.MIC_SPOKEN)
+                    .accessibilityLabel(RoutineSentence.shared.MIC_SPOKEN)
+            }
+            .padding(MekaSpace.m)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .staggeredAppear(1)
+            Text(LoneWordGlue.shared.kept(line: RoutineSentence.shared.FOOT)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            if let makeSaid {
+                Text(LoneWordGlue.shared.kept(line: makeSaid)).font(MekaType.caption).foregroundStyle(palette.accent).transition(.opacity)
+            }
+            if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        label(RoutineSentence.shared.MADE).padding(.top, MekaSpace.m).accessibilityAddTraits(.isHeader)
+                        HStack(spacing: MekaSpace.xs) {
+                            pageTile(RoutineSentence.shared.WHEN_TILE, d.whenTile)
+                            pageTile(RoutineSentence.shared.STARTS_TILE, d.startsWith)
+                        }
+                        ForEach(Array(d.steps.enumerated()), id: \.offset) { i, st in
+                            draftStepRow(d, st).staggeredAppear(i + 2)
+                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        }
+                        if !d.steps.isEmpty {
+                            Text(LoneWordGlue.shared.kept(line: RoutineSentence.shared.NOTE)).font(MekaType.caption)
+                                .foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        if let left = d.leftOut {
+                            Text(LoneWordGlue.shared.kept(line: left)).font(MekaType.caption).foregroundStyle(palette.accent)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if let p = d.problem {
+                            Text(LoneWordGlue.shared.kept(line: p)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .animation(MekaMotion.expand(reduced: reduceMotion), value: d.steps.count)
+                }
+                .scrollIndicators(.never)
+                .frame(maxHeight: 420)
+                let canSave = d.canSave
+                let text = typed
+                let chosen = d.modes
+                Button(RoutineSentence.shared.SAVE) { save(text, chosen) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta).foregroundStyle(canSave ? palette.onAccent : palette.textTertiary)
+                    .frame(maxWidth: .infinity).padding(.vertical, MekaSpace.xs)
+                    .background(canSave ? palette.accent : palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                    .disabled(!canSave)
+                    .accessibilityLabel(canSave ? "\(RoutineSentence.shared.SAVE): \(d.name), \(d.whenTile), \(d.steps.count) steps" : RoutineSentence.shared.SAVE)
+            }
+        }
+        .onAppear { fieldFocused = true }
+    }
+
+    private func draftStepRow(_ d: RoutineDraft, _ st: RoutineDraftStep) -> some View {
+        let index = st.index
+        let hasNext = st.nextCode != nil
+        let ink: Color = st.modeCode == "ask" ? palette.accent : (st.modeCode == "does" ? palette.textPrimary : palette.textSecondary)
+        let relabelled = RoutineSentence.shared.relabel(d: d, index: index)
+        return HStack(alignment: .center, spacing: MekaSpace.xs) {
+            Text(st.number).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(palette.surface, in: Circle())
+            VStack(alignment: .leading, spacing: 0) {
+                Text(LoneWordGlue.shared.kept(line: st.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(st.place).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            Spacer(minLength: 0)
+            if hasNext {
+                Button(st.badge) { MekaHaptics.tick(); modes = relabelled }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption).foregroundStyle(ink)
+                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                    .background(palette.surface, in: Capsule())
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: st.badge)
+                    .accessibilityLabel(st.spoken)
+            } else {
+                Text(st.badge).font(MekaType.caption).foregroundStyle(ink).accessibilityLabel(st.spoken)
+            }
+        }
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+
+    /// The mic: the field takes focus and macOS Dictation listens into it. Dictation is the Mac's own; nothing is
+    /// recorded or kept here.
+    private func dictate() {
+        MekaHaptics.tick()
+        fieldFocused = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            NSApp.sendAction(Selector(("startDictation:")), to: nil, from: nil)
+        }
+    }
+
+    private func save(_ text: String, _ chosen: String) {
+        Task {
+            let r = await model.addRoutineFromSentence(text, modes: chosen)
+            withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
+                if let r, !r.refused {
+                    said = r.line
+                    makeSaid = nil
+                    making = false
+                } else {
+                    makeSaid = r?.line ?? RoutineRules.shared.GONE_LINE
+                }
+            }
+        }
     }
 
     /// A routine's own page (slice 2): ‹ Routines, its name and when, the NEXT · STEPS · LAST RUN tiles, its steps with

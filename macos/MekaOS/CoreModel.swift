@@ -5967,6 +5967,21 @@ final class CoreModel {
         }
     }
 
+    /// Routines, slice 4: Save routine on New routine. Only two Strings cross (what he said or typed, and the labels he
+    /// chose as codes); the core reads the sentence again. The line to show and whether it was turned away.
+    func addRoutineFromSentence(_ text: String, modes: String) async -> (line: String, refused: Bool)? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do {
+            let r = try await core.addRoutineFromSentence(text: text, modes: modes)
+            if r.refused { MekaHaptics.tick() }
+            return (r.line, r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Switches a routine on or pauses it, on both apps; only its id and a Bool cross.
     func setRoutineOn(_ id: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setRoutineOn(id: id, on: on) } }
 

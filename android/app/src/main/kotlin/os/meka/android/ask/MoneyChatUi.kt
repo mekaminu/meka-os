@@ -111,7 +111,7 @@ internal fun MoneyAskBar(modifier: Modifier = Modifier, onMic: () -> Unit = {}, 
 
 /** The mockup's line mic (24-unit box): the capsule, the cradle and the stand, stroked in [color]. */
 @Composable
-private fun MicGlyph(color: Color, modifier: Modifier = Modifier) {
+internal fun MicGlyph(color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier.size(18.dp)) {
         val u = size.width / 24f
         val stroke = Stroke(width = 2f * u, cap = StrokeCap.Round)

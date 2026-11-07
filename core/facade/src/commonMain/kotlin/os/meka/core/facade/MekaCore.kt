@@ -5983,6 +5983,14 @@ class MekaCore(
     /** Adds a starter routine ([os.meka.core.domain.RoutineRules.STARTERS]) switched on; null when there's no such starter. */
     suspend fun addStarterRoutine(key: String): os.meka.core.domain.RoutineSaid? = onCore { routines.addStarter(key) }
 
+    /**
+     * Routines, slice 4: Save routine on New routine. [text] is what he said or typed, [modes] the labels he chose on
+     * the draft ([os.meka.core.domain.RoutineDraft.modes]); the core reads the sentence again the same way and saves it
+     * switched on, on both apps. Refused (with the line to show) while it has no time or no steps.
+     */
+    suspend fun addRoutineFromSentence(text: String, modes: String): os.meka.core.domain.RoutineSaid =
+        onCore { routines.addFromSentence(text, modes) }
+
     /** Switches a routine on or pauses it, on both apps; false when it isn't there or already so. */
     suspend fun setRoutineOn(id: String, on: Boolean): Boolean = onCore { routines.setOn(id, on) }
 

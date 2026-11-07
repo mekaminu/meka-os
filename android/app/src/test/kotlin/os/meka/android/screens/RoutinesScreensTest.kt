@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -28,6 +29,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.NEW_ROUTINE_TAG
 import os.meka.android.ask.RoutinesPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -35,6 +37,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.RoutineOutcome
 import os.meka.core.domain.RoutineRules
+import os.meka.core.domain.RoutineSentence
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -231,6 +234,49 @@ class RoutinesScreensTest {
         if (count("routine-starter") != 4) fail("$name: the starter isn't offered again")
     }
 
+    /**
+     * Slice 4 by hand: + New opens New routine; the mockup's sentence typed becomes WHEN Sundays 19:00 and four steps
+     * (shot and read); a part that would text someone is left out and named; a tap on Plan next week's label moves it
+     * on; Save routine adds it switched on and the list says when it first runs.
+     */
+    private fun newRoutine(core: MekaCore) {
+        val name = "routines-new"
+        fun tap(description: String) {
+            val n = compose.onAllNodes(hasContentDescription(description) and hasClickAction())
+            if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$description\"")
+            n[0].performSemanticsAction(SemanticsActions.OnClick)
+        }
+        tap(RoutineSentence.NEW_SPOKEN)
+        until { count(NEW_ROUTINE_TAG) == 1 }
+        if (count(NEW_ROUTINE_TAG) != 1) fail("$name: + New didn't open New routine")
+        compose.onNodeWithTag("new-routine-field").performTextInput(RoutineSentence.HINT + ", and text Sam I'm home")
+        until { count("new-routine-step") == 4 }
+        if (count("new-routine-step") != 4) fail("$name: ${count("new-routine-step")} steps, not 4")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", "cover-dark-new"))
+        val d = RoutineSentence.draft(RoutineSentence.HINT + ", and text Sam I'm home")
+        val lines = listOfNotNull(RoutineSentence.FOOT, RoutineSentence.NOTE, d.leftOut, d.whenTile) + d.steps.map { it.title }
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertNoBrokenWords(compose, name)
+        ScreenShots.assertClocksWhole(compose, name)
+        ScreenShots.assertNoLoneWords(compose, name, lines)
+        ScreenShots.assertNoDotStartingALine(compose, name, lines)
+        ScreenShots.assertNoDotEndingALine(compose, name, lines)
+        assertTouchTargets(name)
+        if (!onScreen("Sundays 19:00")) fail("$name: WHEN doesn't say Sundays 19:00")
+        if (count("new-routine-left-out") != 1 || !onScreen("Left out: Text Sam")) fail("$name: the text to Sam isn't named as left out")
+        tap(d.steps[1].spoken)
+        until { onScreen("Just show") && compose.onAllNodes(hasContentDescription(d.steps[1].spoken)).fetchSemanticsNodes().isEmpty() }
+        tap("${RoutineSentence.SAVE}: ${d.name}, ${d.whenTile}, 4 steps")
+        until { core.routinesView.value.rows.isNotEmpty() && count(NEW_ROUTINE_TAG) == 0 }
+        val row = core.routinesView.value.rows.singleOrNull() ?: fail("$name: Save didn't add it")
+        if (row.name != "Sunday evening") fail("$name: saved as \"${row.name}\"")
+        val page = core.routinesView.value.detail(row.id)!!
+        if (page.steps[1].badge != "Just show") fail("$name: the label he chose wasn't kept (${page.steps[1].badge})")
+        if (page.steps.any { it.title.contains("Sam") }) fail("$name: a step that texts someone was saved")
+        if (!onScreen("Saved Sunday evening · first run")) fail("$name: the list doesn't say it was saved")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER) fun newRoutine() { newRoutine(pane("cover-dark-new-list", Fill.EMPTY)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverMany() { pane("cover-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { pane("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }

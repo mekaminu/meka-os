@@ -768,6 +768,38 @@ class Routines(
         return RoutineSaid("Added ${s.name} · ${RoutineRules.whenLine(s.schedule)}", false, id)
     }
 
+    /**
+     * Slice 4: Save routine on New routine. Reads [text] again as [RoutineSentence.draft] does, with the labels he
+     * chose ([modes]), and writes it switched on; refused (nothing written) while the draft has a problem. A name he
+     * already has gets " 2". Steps that would send, pay, book or trade were never made, and [RoutineRules.decodeSteps]
+     * drops any on read as well.
+     */
+    fun addFromSentence(text: String, modes: String, payday: Long? = null): RoutineSaid {
+        val d = RoutineSentence.draft(text, modes)
+        val s = d.schedule
+        if (d.problem != null || s == null) return RoutineSaid(d.problem ?: RoutineSentence.NEED_WHEN, true)
+        val steps = RoutineSentence.steps(d).filter { RoutineRules.refusal(it.title) == null }.take(RoutineRules.MAX_STEPS)
+        if (steps.isEmpty()) return RoutineSaid(RoutineSentence.NEED_STEPS, true)
+        val names = items().map { it.name.lowercase() }.toSet()
+        val name = generateSequence(1) { it + 1 }.map { if (it == 1) d.name else "${d.name} $it" }.first { it.lowercase() !in names }
+        val now = nowMs()
+        val id = newId()
+        replica.commitLocal(
+            EntityTypes.ROUTINE, id,
+            mapOf(
+                RoutineFields.NAME to name.fv(),
+                RoutineFields.DAYS to RoutineRules.encodeDays(s.days).fv(),
+                RoutineFields.PAYDAY to s.payday.fv(),
+                RoutineFields.MINUTE to s.minute.toLong().fv(),
+                RoutineFields.STEPS to RoutineRules.encodeSteps(steps).fv(),
+                RoutineFields.SUMMARY to steps.take(4).joinToString(", ") { it.title }.fv(),
+                RoutineFields.ON to true.fv(),
+                RoutineFields.ADDED_AT to now.fv(),
+            ),
+        )
+        return RoutineSaid(RoutineSentence.savedLine(name, s, calendar.epochDayOf(now), calendar.minuteOfDay(now), payday), false, id)
+    }
+
     /** Switches a routine on or pauses it; false when it isn't there or already so. */
     fun setOn(id: String, on: Boolean): Boolean {
         val r = items().firstOrNull { it.id == id } ?: return false

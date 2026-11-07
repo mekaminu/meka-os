@@ -63,6 +63,7 @@ import os.meka.core.domain.RoutineRow
 import os.meka.core.domain.RoutineRunCard
 import os.meka.core.domain.RoutineStepRow
 import os.meka.core.domain.RoutineRules
+import os.meka.core.domain.RoutineSentence
 import os.meka.core.domain.RoutineStarterRow
 import os.meka.core.facade.MekaCore
 
@@ -74,7 +75,8 @@ import os.meka.core.facade.MekaCore
  * the NEXT · STEPS · LAST RUN tiles, its steps each with its label, which a tap moves on, LAST TIME, the switch and
  * Remove); ‹ Routines or Back returns. Slice 3: Run now on its page starts a run; the Running now card ([RunningCard],
  * on the list and the page) shows the step it's on, with Carry on · Skip this step · Stop, and LAST TIME lists what
- * each step came to. The words are the core's [RoutineRules], the same as the Mac's sheet.
+ * each step came to. Slice 4: + New beside the title opens [NewRoutinePage] (said or typed in one sentence, Save adds it
+ * switched on and the list says when it first runs). The words are the core's [RoutineRules], the same as the Mac's sheet.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; cards stagger in 40 ms apart; the list
  * and a routine's page cross-fade; a switch or a label blends to its new colour with a tick haptic, and the list
@@ -91,7 +93,10 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
     // Slice 2: the routine whose page is open (null: the list).
     var open by remember { mutableStateOf<String?>(null) }
     val page = open?.let { v.detail(it) }
-    BackHandler(enabled = page != null) { open = null }
+    // Slice 4: New routine is open (said or typed in one sentence).
+    var making by remember { mutableStateOf(false) }
+    var makeSaid by remember { mutableStateOf<String?>(null) }
+    BackHandler(enabled = page != null || making) { open = null; making = false }
     fun toggle(id: String, on: Boolean) {
         haptics.tick()
         scope.launch { runCatching { core.setRoutineOn(id, on) } }
@@ -114,9 +119,20 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
         skip = { run(it) { i -> skipRoutineStep(i) } },
         stop = { run(it) { i -> stopRoutineRun(i) } },
     )
-    Crossfade(page?.id, animationSpec = MekaMotion.appear(reduced), label = "routines-page") { shown ->
-        val d = shown?.let { v.detail(it) }
-        if (d != null) {
+    Crossfade(if (making) NEW_KEY else page?.id, animationSpec = MekaMotion.appear(reduced), label = "routines-page") { shown ->
+        val d = shown?.takeIf { it != NEW_KEY }?.let { v.detail(it) }
+        if (shown == NEW_KEY) {
+            NewRoutinePage(
+                onBack = { making = false; makeSaid = null },
+                said = makeSaid,
+                onSave = { text, modes ->
+                    scope.launch {
+                        val r = runCatching { core.addRoutineFromSentence(text, modes) }.getOrNull()
+                        if (r != null && !r.refused) { said = r.line; makeSaid = null; making = false } else { makeSaid = r?.line ?: RoutineRules.GONE_LINE }
+                    }
+                },
+            )
+        } else if (d != null) {
             RoutinePage(
                 d, runActions, onRunNow = { run(d.id) { i -> runRoutineNow(i) } },
                 onBack = { open = null }, onToggle = { toggle(d.id, !d.on) }, onRemove = { remove(d.id, d.name) },
@@ -128,6 +144,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
             )
         } else {
             RoutinesList(v, said, runActions, onClose, onOpen = { open = it }, onToggle = ::toggle, onRemove = ::remove,
+                onNew = { haptics.light(); said = null; makeSaid = null; making = true },
                 onAdd = { key ->
                     haptics.light()
                     scope.launch { said = runCatching { core.addStarterRoutine(key) }.getOrNull()?.line ?: RoutineRules.GONE_LINE }
@@ -139,7 +156,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
 @Composable
 private fun RoutinesList(
     v: os.meka.core.domain.RoutinesView, said: String?, actions: RunActions, onClose: () -> Unit, onOpen: (String) -> Unit,
-    onToggle: (String, Boolean) -> Unit, onRemove: (String, String) -> Unit, onAdd: (String) -> Unit,
+    onToggle: (String, Boolean) -> Unit, onRemove: (String, String) -> Unit, onAdd: (String) -> Unit, onNew: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -149,8 +166,13 @@ private fun RoutinesList(
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        Text(MoreItem.ROUTINES.label, style = MekaType.greeting, color = Meka.colors.textPrimary,
-            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ROUTINES)).appear(rememberAppearance(0)))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(MoreItem.ROUTINES.label, style = MekaType.greeting, color = Meka.colors.textPrimary,
+                modifier = Modifier.weight(1f).sharedTitleInPane(SharedMotion.paneKey(MoreItem.ROUTINES)).appear(rememberAppearance(0)))
+            // Slice 4: the mockup's brass + New beside the title opens New routine.
+            TouchPill(RoutineSentence.NEW, Meka.colors.accent, Meka.colors.onAccent, modifier = Modifier.testTag("routines-new"),
+                spoken = RoutineSentence.NEW_SPOKEN, onClick = onNew)
+        }
         Text(LoneWordGlue.kept(v.summary), style = MekaType.body, color = Meka.colors.textSecondary,
             modifier = Modifier.appear(rememberAppearance(0)).testTag("routines-summary"))
         Text(LoneWordGlue.kept(RoutineRules.RULE_LINE), style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -182,6 +204,9 @@ private fun RoutinesList(
 
 /** The pane's own column, for the hand tests. */
 const val ROUTINES_PANE_TAG = "routines-pane"
+
+/** The cross-fade's key for New routine (routine ids never start with "+"). */
+private const val NEW_KEY = "+new"
 
 /** The day tile: "SUN" over "19:00", on the raised surface. */
 @Composable

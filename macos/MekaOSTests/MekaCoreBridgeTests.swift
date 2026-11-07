@@ -412,6 +412,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(WeekAheadRules.shared.weekStart(today: 20737), 20738)
     }
 
+    func testNewRoutineFromASentenceThroughTheBridge() async throws {
+        // Routines, slice 4: the draft is worked out on the Mac from two Strings, and Save sends only those two.
+        let d = RoutineSentence.shared.draft(text: RoutineSentence.shared.HINT, modes: "")
+        XCTAssertTrue(d.canSave)
+        XCTAssertEqual(d.whenTile, "Sundays 19:00")
+        XCTAssertEqual(d.steps.count, 4)
+        XCTAssertEqual(d.steps[2].badge, "Obi does it")
+        let chosen = RoutineSentence.shared.relabel(d: d, index: 1)
+        XCTAssertEqual(chosen, "show,show,does,show")
+        XCTAssertNotNil(RoutineSentence.shared.draft(text: "Every Friday at 5pm text Sam", modes: "").problem)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "routine-sentence-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let text = RoutineSentence.shared.HINT
+        let r = try await core.addRoutineFromSentence(text: text, modes: chosen)
+        XCTAssertFalse(r.refused)
+        XCTAssertTrue(r.line.hasPrefix("Saved Sunday evening"))
+        let row = try XCTUnwrap(core.routinesView.value.rows.first)
+        XCTAssertEqual(row.name, "Sunday evening")
+        XCTAssertEqual(core.routinesView.value.detail(id: row.id)?.steps[1].badge, "Just show")
+    }
+
     func testWeekAheadSettingReachesSwift() async throws {
         // Sunday week ahead, slice 2: the heads-up's time setting and the Listen button's name.
         let core = MacCoreFactory.shared.create(
