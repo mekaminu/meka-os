@@ -262,6 +262,11 @@ struct WorkingOnSheet: View {
         if r.canHangUp {
             HStack(spacing: MekaSpace.xs) {
                 Spacer()
+                // Slice 3c: Listen (his mobile is in About you): his mobile rings, press 1 and he hears both sides, muted.
+                if r.canListen {
+                    pill(BookingLiveRules.shared.LISTEN, ink: palette.textPrimary, fill: palette.surface) { listen(id) }
+                        .accessibilityLabel("\(BookingLiveRules.shared.LISTEN): \(business)")
+                }
                 // Slice 3b: Take over (his mobile is in About you): Obi puts them through to his mobile, press 1 to take it.
                 if r.canTakeOver {
                     pill(BookingLiveRules.shared.TAKE_OVER, ink: palette.accent, fill: palette.surface) { takeOver(id) }
@@ -500,6 +505,17 @@ struct WorkingOnSheet: View {
     private func hangUp(_ id: String) {
         Task {
             let line = await model.hangUpBookingCall(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func listen(_ id: String) {
+        Task {
+            let line = await model.listenToBookingCall(id)
             let next = await model.workingOnView()
             withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
                 callSaid = line

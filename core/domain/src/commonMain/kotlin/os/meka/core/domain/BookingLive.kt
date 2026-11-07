@@ -112,6 +112,18 @@ object BookingLiveRules {
         "Say sorry, you have to go, thank them and say goodbye in one short sentence, then call ${LiveCallRules.END_CALL}."
     const val HUNG_UP_RESULT = "Not booked · you hung up · nothing was agreed"
 
+    // Slice 3c: Listen. He taps it; the server rings his mobile from the assistant's number with a whisper (press 1);
+    // he then hears Obi and the business, muted: nothing he says reaches the call. Take over still works while listening.
+    const val LISTEN = "Listen"
+    const val LISTEN_LINE = "Listening in · your mobile rings in a moment, press 1 to hear the call · they won't hear you"
+    const val RINGING_TO_LISTEN = "Obi is on the call · your mobile rings so you can listen in"
+    const val LISTENING = "You're listening in · they can't hear you"
+    const val NO_MOBILE_LISTEN = "Add your mobile in About you to listen in on calls"
+    /** Played to him when his mobile answers; 1 starts listening. */
+    const val LISTEN_WHISPER = "Obi's booking call. Press 1 to listen in. They won't hear you."
+    /** His mobile rings this long for Listen. */
+    const val LISTEN_RING_SECONDS = 20
+
     // Slice 3b: Take over. He taps it; Obi tells them he's putting them through; the server rings his mobile from the
     // assistant's number with a whisper (press 1); the business is put through to him and he finishes the call himself.
     const val TAKE_OVER = "Take over"
@@ -234,6 +246,8 @@ object BookingLiveRules {
             liveWords = if (live) BookingWords.decode(c.words, c.business) else emptyList(),
             canHangUp = live && !c.hangUp,
             canTakeOver = live && !c.hangUp && !c.takeOver && hasMobile,
+            canListen = live && !c.hangUp && !c.takeOver && !c.listen && hasMobile,
+            listening = live && !c.hangUp && !c.takeOver && c.listen && (c.listeningAtMs ?: 0) > 0,
             showBrief = !live && !finished,
             resultTiles = tiles,
             lengthLine = if (finished && c.seconds != null && c.seconds > 0) {

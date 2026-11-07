@@ -59,6 +59,10 @@ object BookingCallFields {
     const val TAKEN_AT = "takenAt"
     /** Slice 3b (server): how long he was on the call himself, in seconds. */
     const val YOUR_SECONDS = "yourSeconds"
+    /** Slice 3c (device): Listen was tapped; the server rings his mobile so he can hear the call, muted. */
+    const val LISTEN = "listen"
+    /** Slice 3c (server): when he pressed 1 on his mobile and started listening in; -1 once his listening leg is over. */
+    const val LISTENING_AT = "listeningAt"
 }
 
 enum class BookingCallState(val code: String) {
@@ -105,6 +109,9 @@ data class BookingCall(
     val takeOver: Boolean = false,
     val takenAtMs: Long? = null,
     val yourSeconds: Long? = null,
+    /** Slice 3c: Listen tapped; when his mobile started listening in. */
+    val listen: Boolean = false,
+    val listeningAtMs: Long? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -150,6 +157,10 @@ data class BookingCallRow(
     val canHangUp: Boolean = false,
     /** Slice 3b: Take over (his mobile is in About you, nothing tapped yet). */
     val canTakeOver: Boolean = false,
+    /** Slice 3c: Listen (his mobile is in About you, nothing tapped yet). */
+    val canListen: Boolean = false,
+    /** Slice 3c: his mobile is listening in now. */
+    val listening: Boolean = false,
     /** The brief (WHEN · WINDOW · PEOPLE, may say, won't, the foot) shows until the call starts. */
     val showBrief: Boolean = true,
     /** Slice 3: the result card's tiles (WHEN · PEOPLE · NAME) on a booked card. */
@@ -302,6 +313,8 @@ object BookingCallRules {
             calendarEditId = text(BookingCallFields.CALENDAR_EDIT),
             takeOver = (f[BookingCallFields.TAKE_OVER] as? FieldValue.Bool)?.value == true,
             takenAtMs = num(BookingCallFields.TAKEN_AT), yourSeconds = num(BookingCallFields.YOUR_SECONDS),
+            listen = (f[BookingCallFields.LISTEN] as? FieldValue.Bool)?.value == true,
+            listeningAtMs = num(BookingCallFields.LISTENING_AT),
         )
     }
 
@@ -408,6 +421,8 @@ object BookingCallRules {
                     BookingCallState.CALLING -> when {
                         c.hangUp -> BookingLiveRules.HANGING_UP
                         c.takeOver -> BookingLiveRules.TAKING_OVER
+                        c.listen && (c.listeningAtMs ?: 0) > 0 -> BookingLiveRules.LISTENING
+                        c.listen && c.listeningAtMs == null -> BookingLiveRules.RINGING_TO_LISTEN
                         else -> CALLING
                     }
                     BookingCallState.TAKEN -> BookingLiveRules.TAKEN
@@ -518,6 +533,18 @@ class BookingCalls(private val replica: Replica, private val newId: () -> String
         if (PutThroughRules.dialable(mobile) == null) return BookingLiveRules.NO_MOBILE
         if (!c.takeOver) replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.TAKE_OVER to true.fv()))
         return BookingLiveRules.TAKE_OVER_LINE
+    }
+
+    /**
+     * Slice 3c: Listen while Obi is on the call: the server rings [mobile] (About you) from the assistant's number;
+     * press 1 and he hears both sides, muted (the business never hears him). Returns the line to show.
+     */
+    fun listen(id: String, mobile: String?): String {
+        val c = one(id) ?: return BookingLiveRules.NOT_ON_CALL
+        if (c.cancelled || c.state != BookingCallState.CALLING || c.hangUp || c.takeOver) return BookingLiveRules.NOT_ON_CALL
+        if (PutThroughRules.dialable(mobile) == null) return BookingLiveRules.NO_MOBILE_LISTEN
+        if (!c.listen) replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.LISTEN to true.fv()))
+        return BookingLiveRules.LISTEN_LINE
     }
 
     /** Slice 3: the event a booked card's Add to calendar would make, or null (not booked, no time, added already). */

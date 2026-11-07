@@ -1821,6 +1821,12 @@ final class CoreModel {
     }
 
     /// Obi on calls, slice 3b: Take over while Obi is on a booking call (synced; the server rings his mobile); the line to show.
+    /// Obi on calls, slice 3c: Listen while Obi is on a booking call (synced; the server rings his mobile, muted); the line to show.
+    func listenToBookingCall(_ id: String) async -> String {
+        guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }
+        return (try? await core.listenToBookingCall(id: id)) ?? BookingLiveRules.shared.NOT_ON_CALL
+    }
+
     func takeOverBookingCall(_ id: String) async -> String {
         guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }
         return (try? await core.takeOverBookingCall(id: id)) ?? BookingLiveRules.shared.NOT_ON_CALL

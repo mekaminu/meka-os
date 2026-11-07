@@ -108,10 +108,14 @@ sealed class VoiceEvent {
     data class BookingWhisperAnswered(override val callId: String, val parent: String?, val digits: String?) : VoiceEvent()
     /** Slice 3b: his mobile's leg of a taken-over booking call ended ([callId] the booking call; [seconds] his leg's length). */
     data class BookingTakenDialed(override val callId: String, val seconds: Long) : VoiceEvent()
+    /** Slice 3c: his key press on his listening leg ([callId] his leg; 1 starts listening). */
+    data class BookingListenAnswered(override val callId: String, val digits: String?) : VoiceEvent()
+    /** Slice 3c: his listening leg ended ([seconds] its length, from the phone service's final status). */
+    data class BookingListenStatus(override val callId: String, val seconds: Long) : VoiceEvent()
 
     /** Whether this step belongs to an outbound booking call (the [BookingCaller]'s, never the assistant's). */
     val forBooking: Boolean get() = this is BookingEnded || this is BookingStatus || this is BookingWhisper ||
-        this is BookingWhisperAnswered || this is BookingTakenDialed
+        this is BookingWhisperAnswered || this is BookingTakenDialed || this is BookingListenAnswered || this is BookingListenStatus
 }
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
@@ -165,6 +169,8 @@ sealed class VoiceReply {
      * whisper when he answers ([VoiceStep.BOOKING_WHISPER]), then [VoiceStep.BOOKING_TAKEN_DIALED].
      */
     data class TakeOver(val mobile: String, val callerId: String) : VoiceReply()
+    /** Obi on calls, slice 3c: he pressed 1 on his listening leg: the call's sound to him over a stream with [ticket]. */
+    data class ListenStream(val ticket: String) : VoiceReply()
     /** He pressed 1: say so, then the phone service connects the two. */
     data object Connect : VoiceReply()
     /**
@@ -201,6 +207,9 @@ object VoiceStep {
     const val BOOKING_WHISPER = "booking-whisper"
     const val BOOKING_WHISPER_ANSWERED = "booking-whisper-answered"
     const val BOOKING_TAKEN_DIALED = "booking-taken-dialed"
+    /** Slice 3c: his listening leg: his key after the whisper, and the leg's final status. */
+    const val BOOKING_LISTEN_ANSWERED = "booking-listen-answered"
+    const val BOOKING_LISTEN_STATUS = "booking-listen-status"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -579,7 +588,9 @@ class CallAssistant(
             // Slice 2b: booking calls are the [BookingCaller]'s (the route hands them there); never the assistant's.
             is VoiceEvent.BookingEnded -> VoiceReply.HangUp
             is VoiceEvent.BookingStatus -> VoiceReply.Done
-            is VoiceEvent.BookingWhisper, is VoiceEvent.BookingWhisperAnswered, is VoiceEvent.BookingTakenDialed -> VoiceReply.HangUp
+            is VoiceEvent.BookingWhisper, is VoiceEvent.BookingWhisperAnswered, is VoiceEvent.BookingTakenDialed,
+            is VoiceEvent.BookingListenAnswered -> VoiceReply.HangUp
+            is VoiceEvent.BookingListenStatus -> VoiceReply.Done
             is VoiceEvent.Transcribed -> {
                 // With Transcribe on, the words wait for it ([transcribeKept], off the request); Twilio's are its fallback.
                 if (!transcribesLater(event)) settle(hh, id, event.text)
@@ -1165,6 +1176,8 @@ class TwilioVoice(
             VoiceStep.BOOKING_WHISPER -> VoiceEvent.BookingWhisper(call, parentOf(form))
             VoiceStep.BOOKING_WHISPER_ANSWERED -> VoiceEvent.BookingWhisperAnswered(call, parentOf(form), form["Digits"])
             VoiceStep.BOOKING_TAKEN_DIALED -> VoiceEvent.BookingTakenDialed(call, form["DialCallDuration"]?.trim()?.toLongOrNull()?.coerceIn(0, 24 * 3600) ?: 0)
+            VoiceStep.BOOKING_LISTEN_ANSWERED -> VoiceEvent.BookingListenAnswered(call, form["Digits"])
+            VoiceStep.BOOKING_LISTEN_STATUS -> VoiceEvent.BookingListenStatus(call, form["CallDuration"]?.trim()?.toLongOrNull()?.coerceIn(0, 24 * 3600) ?: 0)
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -1217,6 +1230,9 @@ class TwilioVoice(
                 """<Dial timeout="${BookingLiveRules.TAKE_OVER_RING_SECONDS}" callerId="${xml(reply.callerId)}" action="${url(VoiceStep.BOOKING_TAKEN_DIALED)}" method="POST">""" +
                     """<Number url="${url(VoiceStep.BOOKING_WHISPER)}" method="POST">${xml(reply.mobile)}</Number></Dial>"""
             VoiceReply.Connect -> say(PutThroughRules.CONNECTING)
+            // Slice 3c: his listening leg hears the call one way; when Obi's part ends the stream closes and the leg hangs up.
+            is VoiceReply.ListenStream -> """<Connect><Stream url="${xml(BookingListen.streamUrl(base))}">""" +
+                """<Parameter name="ticket" value="${xml(reply.ticket)}"/></Stream></Connect><Hangup/>"""
             // Obi on calls, slice 1: the call's audio to Navilife's server; when the stream ends, ask what next.
             is VoiceReply.LiveStream -> """<Connect><Stream url="${xml(LiveCallRoutes.streamUrl(base))}">""" +
                 """<Parameter name="ticket" value="${xml(reply.ticket)}"/></Stream></Connect>""" +

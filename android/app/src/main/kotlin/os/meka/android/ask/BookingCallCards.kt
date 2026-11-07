@@ -77,6 +77,9 @@ import os.meka.core.domain.LoneWordGlue
  * Slice 3b: Take over beside Hang up (shown once his mobile is in About you): Obi tells them he's putting them through
  * and his mobile rings from the assistant's number; press 1 and the call is his.
  *
+ * Slice 3c: Listen first in the row (same condition): his mobile rings, press 1 and he hears both sides, muted; the
+ * status says when he's listening.
+ *
  * Motion: the card resizes on the expand spring when its state changes (reduced motion: no resize); each new live line
  * fades in on the appear curve; the pane staggers it in with the rest.
  */
@@ -85,6 +88,7 @@ fun BookingCallCard(
     r: BookingCallRow, modifier: Modifier,
     onPeople: (Int) -> Unit, onCall: () -> Unit, onEdit: () -> Unit, onCancel: () -> Unit,
     onHangUp: () -> Unit = {}, onAddToCalendar: () -> Unit = {}, onRead: () -> Unit = {}, onTakeOver: () -> Unit = {},
+    onListen: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -99,7 +103,7 @@ fun BookingCallCard(
             color = if (r.needsYou) Meka.colors.accent else Meka.colors.textTertiary)
         Text(r.business, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
         if (r.live) {
-            LiveView(r, onHangUp, onTakeOver)
+            LiveView(r, onHangUp, onTakeOver, onListen)
             return@Column
         }
         if (!r.showBrief) {
@@ -160,9 +164,9 @@ fun BookingCallCard(
     }
 }
 
-/** Slice 3: the live view: the clock, LIVE WORDS (Obi's lines in the accent), Take over (3b) and Hang up. */
+/** Slice 3: the live view: the clock, LIVE WORDS (Obi's lines in the accent), Listen (3c), Take over (3b) and Hang up. */
 @Composable
-private fun LiveView(r: BookingCallRow, onHangUp: () -> Unit, onTakeOver: () -> Unit) {
+private fun LiveView(r: BookingCallRow, onHangUp: () -> Unit, onTakeOver: () -> Unit, onListen: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(r.id) {
         while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1_000) }
@@ -177,6 +181,10 @@ private fun LiveView(r: BookingCallRow, onHangUp: () -> Unit, onTakeOver: () -> 
     Words(r.liveWords, "call-live-words")
     if (r.canHangUp) {
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End)) {
+            if (r.canListen) {
+                TouchPill(BookingLiveRules.LISTEN, Meka.colors.surface, Meka.colors.textPrimary, spoken = "${BookingLiveRules.LISTEN}: ${r.business}",
+                    modifier = Modifier.testTag("call-listen"), onClick = onListen)
+            }
             if (r.canTakeOver) {
                 TouchPill(BookingLiveRules.TAKE_OVER, Meka.colors.surface, Meka.colors.accent, spoken = "${BookingLiveRules.TAKE_OVER}: ${r.business}",
                     modifier = Modifier.testTag("call-take-over"), onClick = onTakeOver)

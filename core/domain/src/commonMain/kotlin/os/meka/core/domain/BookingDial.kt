@@ -167,6 +167,10 @@ object BookingDialRules {
         return (s + 59) / 60 * (BookingCallRules.MOBILE_MICRO_USD_PER_MIN + business)
     }
 
+    /** Slice 3c: his listening leg: his mobile's outbound minute plus its stream, by the minute (no Gemini, no second business line). */
+    fun listenMicroUsd(seconds: Long): Long =
+        (seconds.coerceAtLeast(0) + 59) / 60 * (BookingCallRules.MOBILE_MICRO_USD_PER_MIN + BookingCallRules.STREAM_MICRO_USD_PER_MIN)
+
     /** What a booking call cost: the outbound minute (landline or mobile) and the stream, plus Gemini Live. */
     fun costMicroUsd(e164: String?, seconds: Long, obiSeconds: Long): Long {
         val s = seconds.coerceAtLeast(0)

@@ -186,4 +186,42 @@ class BookingLiveRulesTest {
         // His own leg is metered at his mobile's rate plus the business's line, by the minute.
         assertEquals(4 * (31_000L + 16_000L), BookingDialRules.handOverMicroUsd("+441234567890", 190))
     }
+
+    @Test
+    fun listenNeedsYourMobileAndShowsWhileYouListen() {
+        val c = card(BookingCallState.CALLING)
+        fun live(c: BookingCall, mobile: String?) = BookingCallRules.rows(listOf(c), emptyList(), emptyList(), now, LocalCalendar.UTC, mobile).single()
+        assertFalse(live(c, null).canListen)
+        assertTrue(live(c, "07700 900123").canListen)
+        val asked = live(c.copy(listen = true), "07700 900123")
+        assertFalse(asked.canListen)
+        assertFalse(asked.listening)
+        assertEquals(BookingLiveRules.RINGING_TO_LISTEN, asked.status)
+        // Take over is still there while he listens.
+        assertTrue(asked.canTakeOver)
+        val on = live(c.copy(listen = true, listeningAtMs = now), "07700 900123")
+        assertTrue(on.listening)
+        assertEquals(BookingLiveRules.LISTENING, on.status)
+        // His mobile hung up (or never took it): back to Obi is on the call, Listen not offered again.
+        val over = live(c.copy(listen = true, listeningAtMs = -1), "07700 900123")
+        assertFalse(over.listening || over.canListen)
+        assertEquals(BookingCallRules.CALLING, over.status)
+        assertFalse(live(c.copy(hangUp = true), "07700 900123").canListen)
+        assertFalse(live(c.copy(takeOver = true), "07700 900123").canListen)
+        assertFalse(live(c.copy(takeOver = true, listen = true, listeningAtMs = now), "07700 900123").listening)
+
+        var n = 0
+        val r = os.meka.core.sync.Replica("hh", "fold", os.meka.core.sync.HlcClock("fold", { now }), os.meka.core.sync.InMemoryReplicaStore(), MekaSchema) { "op${n++}" }
+        val calls = BookingCalls(r, { "c1" }, { now })
+        val id = calls.draft(AskProposal.BookCall("Rosa's Kitchen", "Table for 4", 4, day, 19 * 60, 20 * 60))!!
+        assertEquals(BookingLiveRules.NOT_ON_CALL, calls.listen(id, "07700 900123"))
+        r.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.STATE to os.meka.core.sync.FieldValue.Text(BookingCallState.CALLING.code)))
+        assertEquals(BookingLiveRules.NO_MOBILE_LISTEN, calls.listen(id, null))
+        assertFalse(calls.all().single().listen)
+        assertEquals(BookingLiveRules.LISTEN_LINE, calls.listen(id, "07700 900123"))
+        assertTrue(calls.all().single().listen)
+        // His listening leg: his mobile's minute and its stream.
+        assertEquals(2 * (31_000L + 4_000L), BookingDialRules.listenMicroUsd(61))
+        assertEquals(0L, BookingDialRules.listenMicroUsd(0))
+    }
 }

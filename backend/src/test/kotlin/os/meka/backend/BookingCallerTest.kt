@@ -47,15 +47,18 @@ class BookingCallerTest {
         override fun dialConfigured() = on
         override fun dial(to: String, from: String, twiml: String, statusUrl: String, ringSeconds: Int, limitSeconds: Int): String? {
             calls += listOf(to, from, twiml, statusUrl, ringSeconds.toString(), limitSeconds.toString())
-            return if (refuse) null else "CA" + "b".repeat(32)
+            // Slice 3c: his listening leg is a call of its own.
+            return if (refuse) null else if ("listen" in statusUrl) "CA" + "c".repeat(32) else "CA" + "b".repeat(32)
         }
     }
 
     private val dialer = Dialer()
+    private val hub = BookingListen { nowMs }
     private val twilio = TwilioVoice(authToken = { null })
     private val caller = BookingCaller(
         ops, BankSync.scanning(ops), { "hh" }, line, dialer, twiml = { twilio.bookingTwiml("https://meka.example", it) },
         statusUrl = "https://meka.example/v1/voice/twilio/booking-status", now = { nowMs }, onWritten = { woken += it },
+        listen = hub, listenTwiml = { "<Response>whisper</Response>" }, listenStatusUrl = "https://meka.example/v1/voice/twilio/booking-listen-status",
     )
 
     private val held = HashMap<Replica, InMemoryReplicaStore>()
@@ -112,7 +115,7 @@ class BookingCallerTest {
             ended += e
             line.ended(t.callId, e)
             caller.ended(t, e, line.record(t, e))
-        }, nowMs = { nowMs })
+        }, nowMs = { nowMs }, listen = hub)
     }
 
     @Test
@@ -381,5 +384,116 @@ class BookingCallerTest {
         assertFalse(caller.tick())
         assertTrue(dialer.calls.isEmpty())
         assertNull(cardOnFold(id).result)
+    }
+
+    /** Slice 3c: a live call he asked to listen in on from the Fold, his mobile rung; the session and his leg's id. */
+    private fun listenedTo(): Triple<String, LiveCallSession, MutableList<LiveCallEnd>> {
+        val id = approvedCard()
+        caller.tick()
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = stream(model, ended)
+        s.start()
+        model.say("""{"setupComplete":{}}""")
+        assertFalse(caller.listenAsked(s.ticket))
+        val r = fold()
+        assertEquals(BookingLiveRules.LISTEN_LINE, BookingCalls(r, { "x" }, { nowMs }).listen(id, "07700 900123"))
+        push(r)
+        assertTrue(caller.listenAsked(s.ticket))
+        caller.ringToListen(s.ticket)
+        // Rung once, from the assistant's number, its end to the listening leg's own status step.
+        assertFalse(caller.listenAsked(s.ticket))
+        val leg = dialer.calls.last()
+        assertEquals(listOf("+447700900123", "+442079460000", "<Response>whisper</Response>"), leg.take(3))
+        assertTrue("booking-listen-status" in leg[3])
+        assertEquals(BookingLiveRules.LISTEN_RING_SECONDS.toString(), leg[4])
+        assertTrue(cardOnFold(id).listen && cardOnFold(id).listeningAtMs == null)
+        return Triple(id, s, ended)
+    }
+
+    @Test
+    fun listenRingsYourMobileAndYouHearBothSidesMuted() {
+        val (id, s, ended) = listenedTo()
+        val legSid = "CA" + "c".repeat(32)
+        // A key other than 1, or another leg, hangs up; 1 starts the sound over the listening stream.
+        assertEquals(VoiceReply.HangUp, caller.handle(VoiceEvent.BookingListenAnswered(legSid, "2")))
+        assertEquals(VoiceReply.HangUp, caller.handle(VoiceEvent.BookingListenAnswered("CA" + "e".repeat(32), "1")))
+        val go = assertIs<VoiceReply.ListenStream>(caller.handle(VoiceEvent.BookingListenAnswered(legSid, "1")))
+        assertEquals(nowMs, cardOnFold(id).listeningAtMs)
+        val (_, xml) = twilio.render(go, "https://meka.example", CallVoice.DEFAULT) { _, _ -> null }
+        assertTrue("wss://meka.example/v1/voice/twilio/listen" in xml && go.ticket in xml && "<Hangup/>" in xml)
+        val heard = mutableListOf<ByteArray>()
+        var closed = false
+        assertNotNull(hub.attach(go.ticket, { heard += it }, { closed = true }))
+        assertNull(hub.attach(go.ticket, {}, {}))
+        // The business's frames reach him as they're said.
+        val frame = ByteArray(160) { 0x55 }
+        s.fromCaller("""{"event":"media","media":{"track":"inbound","payload":"${java.util.Base64.getEncoder().encodeToString(frame)}"}}""")
+        assertEquals(1, heard.size)
+        assertEquals(160, heard.single().size)
+        // Obi's part ends: his leg's stream closes; its minutes are on the meter but it isn't a call.
+        s.hangUpAsked()
+        nowMs += BookingLiveRules.HANG_UP_GRACE_MS + 1
+        s.tick()
+        assertTrue(closed && ended.single().hungUp)
+        assertFalse(hub.active(s.ticket.callId))
+        val callsBefore = store.monthCalls(line.month())
+        val spentBefore = store.monthMicroUsd(line.month())
+        assertEquals(VoiceReply.Done, caller.handle(VoiceEvent.BookingListenStatus(legSid, 65)))
+        assertEquals(callsBefore, store.monthCalls(line.month()))
+        assertEquals(spentBefore + BookingDialRules.listenMicroUsd(65), store.monthMicroUsd(line.month()))
+        assertEquals(BookingCallState.NOT_BOOKED, cardOnFold(id).state)
+    }
+
+    @Test
+    fun aListeningLegThatEndsWhileObiTalksPutsTheCardBack() {
+        val (id, s, _) = listenedTo()
+        val legSid = "CA" + "c".repeat(32)
+        // He never pressed 1: the leg ends and the card says Obi is on the call again; nothing more is rung.
+        assertEquals(VoiceReply.Done, caller.handle(VoiceEvent.BookingListenStatus(legSid, 0)))
+        assertEquals(-1L, cardOnFold(id).listeningAtMs)
+        assertFalse(caller.listenAsked(s.ticket))
+        val rows = BookingCallRules.rows(listOf(cardOnFold(id)), emptyList(), emptyList(), nowMs, LocalCalendar.UTC, "07700 900123")
+        assertEquals(BookingCallRules.CALLING, rows.single().status)
+        assertFalse(rows.single().listening || rows.single().canListen)
+    }
+
+    @Test
+    fun withoutYourMobileListenSaysSoOnTheCard() {
+        val id = approvedCard()
+        caller.tick()
+        val model = FakeModel(); val ended = mutableListOf<LiveCallEnd>()
+        val s = stream(model, ended)
+        s.start()
+        model.say("""{"setupComplete":{}}""")
+        val r = fold()
+        BookingCalls(r, { "x" }, { nowMs }).listen(id, "07700 900123")
+        // His mobile taken out of About you before the server looks.
+        r.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.MOBILE to "".fv()))
+        push(r)
+        val before = dialer.calls.size
+        caller.ringToListen(s.ticket)
+        assertEquals(before, dialer.calls.size)
+        assertEquals(-1L, cardOnFold(id).listeningAtMs)
+    }
+
+    @Test
+    fun theMixKeepsThePaceOfTheBusinessAndObiIsCutOffCleanly() {
+        val mix = ListenMix()
+        val silence = ByteArray(160) { 0xFF.toByte() }
+        // Nothing from Obi: the business's frame as it is.
+        assertTrue(mix.business(silence).contentEquals(silence))
+        val obi = ByteArray(400) { 0x30 }
+        mix.obi(obi)
+        val out = mix.business(silence)
+        assertEquals(160, out.size)
+        assertTrue(CallAudio.muLawToPcm(out).contentEquals(CallAudio.muLawToPcm(obi.copyOf(160))))
+        assertEquals(240, mix.queued())
+        mix.clear()
+        assertEquals(0, mix.queued())
+        assertTrue(mix.business(silence).contentEquals(silence))
+        // A runaway queue keeps only the newest.
+        val small = ListenMix(maxQueued = 100)
+        small.obi(ByteArray(80)); small.obi(ByteArray(80))
+        assertEquals(100, small.queued())
     }
 }

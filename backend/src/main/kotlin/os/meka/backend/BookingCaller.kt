@@ -48,6 +48,10 @@ class BookingCaller(
     private val now: () -> Long = System::currentTimeMillis,
     private val calendar: LocalCalendar = LondonCalendar,
     private val onWritten: (householdId: String) -> Unit = {},
+    /** Slice 3c: the booking calls he can listen in on, his listening leg's markup (the whisper) and where its status goes. */
+    private val listen: BookingListen? = null,
+    private val listenTwiml: () -> String = { "" },
+    private val listenStatusUrl: String = "",
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
     private val rng = SecureRandom()
@@ -147,6 +151,8 @@ class BookingCaller(
             }
         }
         is VoiceEvent.BookingTakenDialed -> takenDialed(event)
+        is VoiceEvent.BookingListenAnswered -> listenAnswered(event)
+        is VoiceEvent.BookingListenStatus -> listenEnded(event)
         is VoiceEvent.BookingStatus -> {
             val p = pending.remove(event.callId)
             // A call Obi talked on is closed by its session's end ([ended]); any other one by how it ended.
@@ -220,6 +226,86 @@ class BookingCaller(
         if (read(hh, EntityTypes.BOOKING_CALL)[id]?.get(BookingCallFields.TAKE_OVER)?.value != FieldValue.Bool(true)) return false
         val mobile = (read(hh, EntityTypes.HOUSEHOLD_PROFILE)[AboutYouRules.ENTITY_ID]?.get(AboutYouFields.MOBILE)?.value as? FieldValue.Text)?.value
         return PutThroughRules.dialable(mobile) != null
+    }
+
+    /** Slice 3c: booking calls whose listening leg was rung (by the business's call id): once a call. Memory only. */
+    private val listenRung = ConcurrentHashMap.newKeySet<String>()
+
+    /** Slice 3c: his listening legs being rung or listening, by the leg's call id: the ticket. Memory only. */
+    private val listenLegs = ConcurrentHashMap<String, Leg>()
+    private data class Leg(val token: String, val householdId: String, val bookingId: String)
+
+    /** Slice 3c: whether he tapped Listen on this booking call's card and his leg isn't rung yet. */
+    fun listenAsked(t: LiveCallTicket): Boolean {
+        val id = t.bookingId ?: return false
+        if (listen == null || t.callId in listenRung) return false
+        val f = read(t.householdId, EntityTypes.BOOKING_CALL)[id] ?: return false
+        fun yes(k: String) = f[k]?.value == FieldValue.Bool(true)
+        return yes(BookingCallFields.LISTEN) && !yes(BookingCallFields.HANG_UP) && !yes(BookingCallFields.TAKE_OVER)
+    }
+
+    /**
+     * Slice 3c: rings his mobile from the assistant's number for booking call [t]: the whisper, press 1, then he hears
+     * both sides, muted. Without his mobile, the assistant's number, the month's room or a live call, it says so on the card.
+     */
+    fun ringToListen(t: LiveCallTicket) {
+        val id = t.bookingId ?: return
+        val hub = listen ?: return
+        if (!listenRung.add(t.callId)) return
+        val hh = t.householdId
+        val profile = read(hh, EntityTypes.HOUSEHOLD_PROFILE)[AboutYouRules.ENTITY_ID].orEmpty()
+        fun text(f: String) = (profile[f]?.value as? FieldValue.Text)?.value
+        val mobile = PutThroughRules.dialable(text(AboutYouFields.MOBILE))
+        val from = PutThroughRules.dialable(text(AboutYouFields.ASSISTANT_NUMBER))
+        val d = dialer
+        val token = if (mobile == null || from == null || d == null || line.spentPence() >= line.capPence(hh)) null else hub.ticket(hh, id, t.callId)
+        val sid = token?.let { tk ->
+            runCatching { d!!.dial(mobile!!, from!!, listenTwiml(), listenStatusUrl, BookingLiveRules.LISTEN_RING_SECONDS, BookingDialRules.LIMIT_SECONDS) }.getOrNull()
+                .also { if (it == null) hub.drop(tk) }
+        }
+        if (sid == null || token == null) return listenOver(hh, id)
+        listenLegs[sid] = Leg(token, hh, id)
+        System.err.println("booking call: ringing the owner to listen in") // no names, no numbers
+    }
+
+    /** Slice 3c: his key on the listening leg: 1 (and the call still live) starts the sound; anything else hangs up. */
+    private fun listenAnswered(e: VoiceEvent.BookingListenAnswered): VoiceReply {
+        val token = listenLegs[e.callId]?.token ?: return VoiceReply.HangUp
+        val t = listen?.peek(token)
+        if (t == null || !PutThroughRules.takes(e.digits)) return VoiceReply.HangUp
+        val head = read(t.householdId, EntityTypes.BOOKING_CALL)[t.bookingId]
+        if (write(t.householdId, EntityTypes.BOOKING_CALL, t.bookingId, mapOf(BookingCallFields.LISTENING_AT to FieldValue.Int64(now())), head)) {
+            runCatching { onWritten(t.householdId) }
+        }
+        return VoiceReply.ListenStream(token)
+    }
+
+    /** Slice 3c: his listening leg is over: its minutes on the meter (not a call), and the card stops saying he listens. */
+    private fun listenEnded(e: VoiceEvent.BookingListenStatus): VoiceReply {
+        val leg = listenLegs.remove(e.callId) ?: return VoiceReply.Done
+        listen?.drop(leg.token)
+        val hh = leg.householdId
+        val meter = line.recordListen(hh, e.callId, e.seconds)
+        var wrote = false
+        if (e.seconds > 0) {
+            val heads = read(hh, EntityTypes.CONTEXT_MODE)[LiveCallRules.METER_ID]
+            wrote = write(hh, EntityTypes.CONTEXT_MODE, LiveCallRules.METER_ID, mapOf(
+                LiveCallRules.METER_MONTH to FieldValue.Text(meter.month), LiveCallRules.METER_PENCE to FieldValue.Int64(meter.spentPence),
+                LiveCallRules.METER_CALLS to FieldValue.Int64(meter.calls),
+            ), heads)
+        }
+        if (wrote) runCatching { onWritten(hh) }
+        // While the call is still on, the card goes back to Obi is on the call; a closed card needs nothing.
+        listenOver(hh, leg.bookingId)
+        return VoiceReply.Done
+    }
+
+    /** Slice 3c: the card no longer says he's listening (or being rung to), while the call is still on. */
+    private fun listenOver(hh: String, id: String) {
+        val head = read(hh, EntityTypes.BOOKING_CALL)[id] ?: return
+        val c = BookingCallRules.read(id, head.mapValues { it.value.value }) ?: return
+        if (c.state != BookingCallState.CALLING) return
+        if (write(hh, EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.LISTENING_AT to FieldValue.Int64(-1)), head)) runCatching { onWritten(hh) }
     }
 
     /** Slice 3: whether he tapped Hang up on the card this booking call is for. */

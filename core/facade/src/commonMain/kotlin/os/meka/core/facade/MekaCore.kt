@@ -2135,6 +2135,12 @@ class MekaCore(
     suspend fun takeOverBookingCall(id: String): String = onCore { bookingCalls.takeOver(id, aboutYou.profile().mobile) }
 
     /**
+     * Obi on calls, slice 3c: Listen while Obi is on the call (synced): the server rings his mobile from About you, press 1
+     * and he hears both sides, muted. The line to show.
+     */
+    suspend fun listenToBookingCall(id: String): String = onCore { bookingCalls.listen(id, aboutYou.profile().mobile) }
+
+    /**
      * Slice 3: Add to calendar on a booked card: the booking as an event on the account he last added to (a synced
      * edit the server sends to Google or Outlook), and the card says Added on both apps. The line to show.
      */

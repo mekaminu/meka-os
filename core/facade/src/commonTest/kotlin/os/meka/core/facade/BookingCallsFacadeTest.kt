@@ -53,6 +53,9 @@ class BookingCallsFacadeTest {
         // Slice 3b: Take over likewise, and never offered before the call.
         assertEquals(os.meka.core.domain.BookingLiveRules.NOT_ON_CALL, fold.takeOverBookingCall(approved.id))
         assertFalse(approved.canTakeOver)
+        // Slice 3c: Listen likewise.
+        assertEquals(os.meka.core.domain.BookingLiveRules.NOT_ON_CALL, fold.listenToBookingCall(approved.id))
+        assertFalse(approved.canListen)
         assertEquals(BookingCallRules.GONE, fold.addBookingCallToCalendar(approved.id))
         assertTrue(approved.showBrief && !approved.live)
         // The Ask card's Undo still cancels it before anything rings.

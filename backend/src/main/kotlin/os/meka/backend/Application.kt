@@ -188,7 +188,7 @@ fun Application.mekaSync(
     val liveCalls = voice?.live
     if (voice != null && liveCalls != null) {
         install(WebSockets) { maxFrameSize = 256L * 1024 }
-        routing { liveCallStream(voice, liveCalls) }
+        routing { liveCallStream(voice, liveCalls); bookingListenStream(liveCalls.listen) }
     }
 
     routing {
@@ -1615,6 +1615,12 @@ fun voiceFromEnv(
             twiml = { ticket -> twilio.bookingTwiml(publicUrl, ticket) },
             statusUrl = publicUrl.trimEnd('/') + VoiceStep.path(TwilioVoice.ID, VoiceStep.BOOKING_STATUS),
             onWritten = { hh -> push?.serverChanged(hh) },
+            // Slice 3c: Listen rings his mobile with a whisper; 1 and he hears the call, muted.
+            listen = live.listen,
+            listenTwiml = {
+                twilio.render(VoiceReply.Whisper(BookingLiveRules.LISTEN_WHISPER, VoiceStep.BOOKING_LISTEN_ANSWERED), publicUrl, CallVoice.DEFAULT) { _, _ -> null }.second
+            },
+            listenStatusUrl = publicUrl.trimEnd('/') + VoiceStep.path(TwilioVoice.ID, VoiceStep.BOOKING_LISTEN_STATUS),
         )
     }
     return VoiceRoutes(assistant, listOf(twilio), publicUrl, clips, liveCalls, booking)
@@ -1748,6 +1754,7 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
                 }
                 log.info("live call: ended after ${end.seconds} s${if (ticket.booking) " (booking)" else if (end.live) "" else " (never went live, script takes it)"}")
             },
+            listen = if (ticket.booking) live.listen else null,
         )
         val writer = launch {
             for (t in out) send(Frame.Text(t))
@@ -1765,6 +1772,8 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
                 runCatching { if (booking.hangUpAsked(ticket)) session.hangUpAsked() }
                 // Slice 3b: Take over: Obi hands over, then the end step rings his mobile.
                 runCatching { if (booking.takeOverAsked(ticket)) session.takeOverAsked() }
+                // Slice 3c: Listen rings his mobile once; 1 and he hears both sides, muted.
+                runCatching { if (booking.listenAsked(ticket)) booking.ringToListen(ticket) }
                 val t = System.currentTimeMillis()
                 if (t - lastWords >= BookingLiveRules.WORDS_EVERY_MS) {
                     lastWords = t

@@ -333,6 +333,15 @@ class LiveCallLine(
         return LiveCallRules.Meter(m, spentPence(m), runCatching { store.monthCalls(m) }.getOrDefault(0))
     }
 
+    /** Slice 3c: his listening leg [legId] ([seconds] long) at his mobile's rate and its stream; costs, but isn't a call. */
+    fun recordListen(hh: String, legId: String, seconds: Long): LiveCallRules.Meter {
+        if (seconds > 0) runCatching {
+            store.add(LiveCallRow(legId.take(64) + LiveCallRow.HANDED_OVER, hh, month(), nowMs(), seconds, BookingDialRules.listenMicroUsd(seconds)))
+        }
+        val m = month()
+        return LiveCallRules.Meter(m, spentPence(m), runCatching { store.monthCalls(m) }.getOrDefault(0))
+    }
+
     private fun rate(): Long = runCatching { gbpPerUsd() }.getOrNull()?.takeIf { it > 0 } ?: LiveModeRules.FALLBACK_GBP_PER_USD_MICROS
 
     companion object {
@@ -368,8 +377,11 @@ class LiveCallSession(
     private val onLive: () -> Unit,
     private val onEnd: (LiveCallEnd) -> Unit,
     private val nowMs: () -> Long = System::currentTimeMillis,
+    /** Slice 3c: a booking call's audio for his phone when he listens in (both sides mixed); null for callers. */
+    private val listen: BookingListen? = null,
 ) {
     private val startedAt = nowMs()
+    init { if (ticket.booking) listen?.open(ticket.callId) }
     private var link: ModelLink? = null
     private var live = false
     private var wrapped = false
@@ -411,6 +423,7 @@ class LiveCallSession(
                 if (str(media, "track").let { it != null && it != "inbound" }) return
                 val payload = str(media, "payload") ?: return
                 callerBytes += payload.length * 3L / 4
+                listen?.business(ticket.callId, payload)
                 if (!live) return
                 CallAudio.callerToModel(payload)?.let { link?.send(LiveProtocol.audio(it)) }
             }
@@ -450,10 +463,11 @@ class LiveCallSession(
                 val pcm = runCatching { Base64.getDecoder().decode(chunk) }.getOrNull() ?: continue
                 obiBytes += pcm.size
                 val mu = down.push(pcm)
-                if (mu.isNotEmpty()) toCaller(media(mu))
+                if (mu.isNotEmpty()) { toCaller(media(mu)); listen?.obi(ticket.callId, mu) }
             }
             LiveProtocol.Event.Interrupted -> {
                 down.reset()
+                listen?.clear(ticket.callId)
                 toCaller(buildJsonObject { put("event", "clear"); put("streamSid", streamSid) }.toString())
             }
             is LiveProtocol.Event.Heard -> {
@@ -525,6 +539,8 @@ class LiveCallSession(
         if (done) return
         done = true
         runCatching { link?.close() }
+        // Slice 3c: his listening leg goes with Obi's part of the call (a take-over then rings his mobile).
+        runCatching { listen?.end(ticket.callId) }
         val seconds = ((nowMs() - startedAt) / 1_000).coerceAtLeast(0)
         val obi = obiBytes / (24_000 * 2)
         // The outcome first, then the phone side: its end step (the put-through) must find it.
@@ -697,7 +713,11 @@ class GeminiLiveDial(
 }
 
 /** The stream route's dependencies. */
-class LiveCallRoutes(val line: LiveCallLine, val dial: ModelDial, val model: String = LiveModeRules.model(System.getenv("MEKA_LIVE_MODEL")), val voice: String = LiveModeRules.DEFAULT_VOICE) {
+class LiveCallRoutes(
+    val line: LiveCallLine, val dial: ModelDial, val model: String = LiveModeRules.model(System.getenv("MEKA_LIVE_MODEL")), val voice: String = LiveModeRules.DEFAULT_VOICE,
+    /** Slice 3c: booking calls he listens in on. */
+    val listen: BookingListen = BookingListen(),
+) {
     companion object {
         const val PATH = "/v1/voice/twilio/stream"
 
