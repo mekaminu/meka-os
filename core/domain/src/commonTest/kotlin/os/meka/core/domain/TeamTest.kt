@@ -170,7 +170,13 @@ class TeamTest {
         assertTrue(full.any { it.startsWith("Inbox · Working · today: 1 tidy · 1 unsubscribe · waits on you: 2 emails · may: ") }, full.joinToString("\n"))
         assertTrue(full.any { it.startsWith("Money · Paused till tomorrow") }, full.joinToString("\n"))
         assertTrue(full.none { "Archived 31 emails" in it || "Took a message" in it })
+        // Every line fits Ask's line whole.
+        assertTrue(full.all { it.length <= AskRules.MAX_LINE }, full.joinToString("\n"))
         assertEquals(emptyList(), TeamAskRules.askLines(TeamView.EMPTY, full = true))
+        // A quiet day: nothing unless asked about.
+        val quiet = TeamRules.view(TeamInputs(emptyList()), now, cal)
+        assertEquals(emptyList(), TeamAskRules.askLines(quiet, full = false))
+        assertEquals(TeamAskRules.ASK_MAX, TeamAskRules.askLines(quiet, full = true).size)
     }
 
     @Test fun askedKnowsATeamQuestion() {

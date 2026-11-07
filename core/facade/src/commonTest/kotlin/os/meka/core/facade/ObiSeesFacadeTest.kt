@@ -133,22 +133,28 @@ class ObiSeesFacadeTest {
     fun obiSeesTheTeamAndAskTheTeamCarriesItInFull() = runTest {
         val c = core()
         c.tick()
+        // A quiet day sends nothing about the team unless asked.
+        c.askMeka("Why is the sky blue?")
+        assertEquals(0, server.asked.last().second.items.count { it.kind == AskItemKind.TEAM })
+        // Paused for today, the head line goes with every question.
+        c.setTeamPause("inbox", true)
         c.askMeka("Why is the sky blue?")
         val brief = server.asked.last().second.items.filter { it.kind == AskItemKind.TEAM }.map { it.line }
         assertEquals(1, brief.size)
         assertTrue(brief.single().startsWith("Your team · 5 helpers"), brief.single())
+        c.setTeamPause("inbox", false)
         c.askMeka("What did Inbox do today?")
         val full = server.asked.last().second.items.filter { it.kind == AskItemKind.TEAM }.map { it.line }
         assertEquals(6, full.size)
         assertTrue(full.any { it.startsWith("Inbox · Ready · today: Nothing yet today · waits on you: nothing") }, full.joinToString("\n"))
-        assertTrue(full.any { it.startsWith("Kestrel") && "trades answered in Needs you" in it }, full.joinToString("\n"))
+        assertTrue(full.any { it.startsWith("Kestrel") && "read only here · may: Every trade needs your yes" in it }, full.joinToString("\n"))
         // From the team's bar, a question in other words carries the team too, for five minutes.
         c.askTeamStarted()
         c.askMeka("Anything I should look at?")
         assertEquals(6, server.asked.last().second.items.count { it.kind == AskItemKind.TEAM })
         now += os.meka.core.domain.TeamAskRules.WINDOW_MS + 1
         c.askMeka("Anything I should look at?")
-        assertEquals(1, server.asked.last().second.items.count { it.kind == AskItemKind.TEAM })
+        assertEquals(0, server.asked.last().second.items.count { it.kind == AskItemKind.TEAM })
         // The orb's look-up reads the same lines.
         assertTrue(c.liveNavilife("team", "").lines().first().startsWith("team: Your team · 5 helpers"))
     }

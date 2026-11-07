@@ -352,7 +352,8 @@ object TeamAskRules {
 
     /**
      * "Your team · 5 helpers · 4 working · 1 needs you · 7 done today", then (when [full]) "Inbox · Working · today: 3
-     * tidies · waits on you: 2 emails · may: Tidies by itself · Undo in Activity". Nothing before the screen has read.
+     * tidies · waits on you: 2 emails · may: Tidies by itself · Undo in Activity". Nothing before the screen has read,
+     * nor, unless [full], on a quiet day.
      */
     fun askLines(v: TeamView, full: Boolean): List<String> {
         if (v.cards.isEmpty()) return emptyList()
@@ -361,13 +362,15 @@ object TeamAskRules {
         val head = "${TeamRules.TITLE} · ${plural(v.cards.size, "helper")} · $working working · " +
             (if (v.needCount == 0) "nobody needs you" else "${v.needCount} need${if (v.needCount == 1) "s" else ""} you") +
             " · $done done today"
-        if (!full) return listOf(head)
+        // A quiet day (nothing done, nothing waiting, nobody paused) sends nothing unless he asks about the team.
+        val quiet = done == "0" && v.needCount == 0 && v.cards.none { it.paused }
+        if (!full) return if (quiet) emptyList() else listOf(head)
         val lines = v.cards.map { c ->
             listOfNotNull(
                 c.title, c.status.label, "today: ${c.today}",
                 "waits on you: ${if (c.waits) c.wait else TeamRules.NOTHING.lowercase()}",
+                if (c.readOnly) "read only here" else null,
                 "may: ${c.level}",
-                if (c.readOnly) "read only here, trades answered in Needs you" else null,
             ).joinToString(" · ")
         }
         return (listOf(head) + lines).take(ASK_MAX)
