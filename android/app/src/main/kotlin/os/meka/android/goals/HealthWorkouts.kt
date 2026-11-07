@@ -43,8 +43,7 @@ object HealthWorkouts {
 
     /**
      * Screen tests only: Robolectric reports Health Connect's platform service missing from a background thread once
-     * the client is made (CI runs 1477, 1551, 1552, 1601), so a screen test that isn't about Health Connect says it
-     * isn't there. Null (the app) asks Health Connect.
+     * the client is made (CI runs 1477, 1551, 1552, 1601), so the screen tests (ShotApplication) say it isn't there. Null (the app) asks Health Connect.
      */
     @Volatile
     internal var availableForTests: Boolean? = null
