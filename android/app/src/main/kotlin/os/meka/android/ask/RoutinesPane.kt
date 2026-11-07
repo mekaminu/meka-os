@@ -56,6 +56,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.SlideSwitch
 import os.meka.android.designsystem.TouchPill
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
@@ -307,19 +308,11 @@ private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, o
  */
 @Composable
 private fun RoutineSwitch(on: Boolean, spoken: String, onToggle: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val track by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "routine-switch")
-    val knobAt by animateFloatAsState(if (on) 1f else 0f, MekaMotion.expand(reduced), label = "routine-knob")
     Box(
         Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Switch) { onToggle() }
             .semantics { contentDescription = spoken; selected = on }.minTouch().testTag("routine-switch"),
         contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(width = 44.dp, height = 26.dp).clip(CircleShape).background(track).padding(3.dp)) { // rhythm: ok (the knob's inset in its track)
-            Box(Modifier.offset(x = 18.dp * knobAt).size(20.dp).clip(CircleShape)
-                .background(if (on) Meka.colors.background else Meka.colors.textTertiary))
-        }
-    }
+    ) { SlideSwitch(on) }
 }
 
 /**

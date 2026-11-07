@@ -6,10 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,5 +76,26 @@ fun SwitchPill(on: Boolean, fill: Color, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent, maxLines = 1)
+    }
+}
+
+/**
+ * The approved mockups' sliding switch (Routines, Obi on calls): a 44 × 26 track, brass when on and the hairline when
+ * off, with a round knob that slides on the expand spring (jumps under reduced motion). Only the picture: the row
+ * around it is the 48 dp switch. Tagged `slide-switch` so the shots can find it.
+ */
+@Composable
+fun SlideSwitch(on: Boolean, modifier: Modifier = Modifier) {
+    val reduced = Meka.reducedMotion
+    val track by androidx.compose.animation.animateColorAsState(
+        if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "slide-switch",
+    )
+    val knobAt by androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0f, MekaMotion.expand(reduced), label = "slide-knob")
+    Box(
+        modifier.testTag("slide-switch").size(width = 44.dp, height = 26.dp).clip(CircleShape).background(track)
+            .padding(3.dp), // rhythm: ok (the knob's inset in its track)
+    ) {
+        Box(Modifier.offset(x = 18.dp * knobAt).size(20.dp).clip(CircleShape)
+            .background(if (on) Meka.colors.background else Meka.colors.textTertiary))
     }
 }

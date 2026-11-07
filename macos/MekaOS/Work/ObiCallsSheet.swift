@@ -19,7 +19,7 @@ struct ObiCallsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(CallsSettingsRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
+            Text(CallsSettingsRules.shared.TITLE).font(MekaType.greeting).tracking(MekaType.greetingTracking).staggeredAppear(0)
             Text(CallsSettingsRules.shared.SUB).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
             ScrollView {
                 if let v = view {
@@ -51,26 +51,31 @@ struct ObiCallsSheet: View {
             month(v).staggeredAppear(1)
 
             label(CallsSettingsRules.shared.WHEN_CALLS).staggeredAppear(2)
+            // The design check (2026-11-07): each switch is its own card, as on the mockup.
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                ForEach(Array(v.toggles.enumerated()), id: \.offset) { _, t in toggle(t) }
+                ForEach(Array(v.toggles.enumerated()), id: \.offset) { _, t in card { toggle(t) } }
             }
-            .padding(MekaSpace.m)
-            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .staggeredAppear(2)
 
             label(CallsSettingsRules.shared.KNOWS_TITLE).staggeredAppear(3)
-            chips(v.knows) { c in model.toggleCallKnows(c.key) }.staggeredAppear(3)
-            caption(CallsSettingsRules.shared.NEVER).staggeredAppear(3)
+            card {
+                chips(v.knows) { c in model.toggleCallKnows(c.key) }
+                caption(CallsSettingsRules.shared.NEVER)
+            }
+            .staggeredAppear(3)
 
             label(CallsSettingsRules.shared.LIMITS_TITLE).staggeredAppear(4)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)], spacing: MekaSpace.xs) {
-                ForEach(Array(v.limits.enumerated()), id: \.offset) { _, l in tile(l.label, l.value) }
+                ForEach(Array(v.limits.enumerated()), id: \.offset) { _, l in tile(l.label, l.value, raised: true) }
             }
             .staggeredAppear(4)
 
             label(CallsSettingsRules.shared.RECORDINGS_TITLE).staggeredAppear(5)
-            chips(v.keeps) { c in if !c.on, let d = Int(c.key) { model.setRecordingDays(d) } }.staggeredAppear(5)
-            caption(CallsSettingsRules.shared.RECORDINGS_NOTE).staggeredAppear(5)
+            card {
+                chips(v.keeps) { c in if !c.on, let d = Int(c.key) { model.setRecordingDays(d) } }
+                caption(CallsSettingsRules.shared.RECORDINGS_NOTE)
+            }
+            .staggeredAppear(5)
 
             Text(CallsSettingsRules.shared.FOOTER).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -118,7 +123,7 @@ struct ObiCallsSheet: View {
             }
         })) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(t.title).font(MekaType.itemMeta)
+                Text(t.title).font(MekaType.body)
                 Text(LoneWordGlue.shared.kept(line: t.sub)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 if let line = t.line {
                     Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -152,16 +157,25 @@ struct ObiCallsSheet: View {
         }
     }
 
-    private func tile(_ label: String, _ value: String) -> some View {
+    private func tile(_ label: String, _ value: String, raised: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(label.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary).lineLimit(1)
-            Text(value).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+            Text(value).font(MekaType.upNextCardTitle).tracking(MekaType.upNextCardTitleTracking)
+                .foregroundStyle(palette.textPrimary).contentTransition(.opacity)
         }
         .padding(MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .background(raised ? palette.surfaceRaised : palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .combine)
+    }
+
+    /// A section's card, as on the mockup: raised on the sheet, 16 inside, its lines 8 apart.
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) { content() }
+            .padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
     }
 
     private func label(_ text: String) -> some View {

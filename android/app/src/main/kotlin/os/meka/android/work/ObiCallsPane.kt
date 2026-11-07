@@ -2,7 +2,6 @@ package os.meka.android.work
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,7 +45,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
-import os.meka.android.designsystem.SwitchPill
+import os.meka.android.designsystem.SlideSwitch
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
@@ -109,14 +108,14 @@ fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
         ) {
             Text("‹ Work mode", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-            Text(CallsSettingsRules.TITLE, style = MekaType.nowTitle, color = Meka.colors.textPrimary,
+            Text(CallsSettingsRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
                 modifier = Modifier.semantics { heading() }.appear(rememberAppearance(0)))
             Text(CallsSettingsRules.SUB, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
             if (v != null) {
             MonthCard(v, Modifier.appear(rememberAppearance(1))) { gbp -> scope.launch { core.setCallLiveCap(gbp) } }
 
             Section(CallsSettingsRules.WHEN_CALLS, 2)
-            Column(Modifier.appear(rememberAppearance(2)).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)) {
+            Column(Modifier.appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 v.toggles.forEach { t ->
                     ToggleRow(t) {
                         scope.launch {
@@ -131,15 +130,17 @@ fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
             }
 
             Section(CallsSettingsRules.KNOWS_TITLE, 3)
-            FlowRow(Modifier.appear(rememberAppearance(3)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                val haptics = rememberMekaHaptics()
-                v.knows.forEach { c ->
-                    SettingChip(c.label, c.on, spoken = "${CallsSettingsRules.KNOWS_TITLE}: ${c.label}") {
-                        haptics.tick(); scope.launch { core.toggleCallKnows(c.key) }
+            Card(Modifier.appear(rememberAppearance(3))) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    val haptics = rememberMekaHaptics()
+                    v.knows.forEach { c ->
+                        SettingChip(c.label, c.on, spoken = "${CallsSettingsRules.KNOWS_TITLE}: ${c.label}") {
+                            haptics.tick(); scope.launch { core.toggleCallKnows(c.key) }
+                        }
                     }
                 }
+                Text(LoneWordGlue.kept(CallsSettingsRules.NEVER), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
-            Text(LoneWordGlue.kept(CallsSettingsRules.NEVER), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(3)))
 
             Section(CallsSettingsRules.LIMITS_TITLE, 4)
             Column(Modifier.appear(rememberAppearance(4)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -151,15 +152,17 @@ fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
             }
 
             Section(CallsSettingsRules.RECORDINGS_TITLE, 5)
-            Row(Modifier.appear(rememberAppearance(5)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                val haptics = rememberMekaHaptics()
-                v.keeps.forEach { c ->
-                    SettingChip(c.label, c.on, spoken = "${CallsSettingsRules.RECORDINGS_TITLE}: ${c.label}") {
-                        if (!c.on) { haptics.tick(); scope.launch { core.setRecordingDays(c.key.toInt()) } }
+            Card(Modifier.appear(rememberAppearance(5))) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    val haptics = rememberMekaHaptics()
+                    v.keeps.forEach { c ->
+                        SettingChip(c.label, c.on, spoken = "${CallsSettingsRules.RECORDINGS_TITLE}: ${c.label}") {
+                            if (!c.on) { haptics.tick(); scope.launch { core.setRecordingDays(c.key.toInt()) } }
+                        }
                     }
                 }
+                Text(LoneWordGlue.kept(CallsSettingsRules.RECORDINGS_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
-            Text(LoneWordGlue.kept(CallsSettingsRules.RECORDINGS_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(5)))
 
             Text(CallsSettingsRules.FOOTER, style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.l, bottom = MekaSpace.xl).appear(rememberAppearance(6)),
@@ -221,30 +224,39 @@ private fun LimitTile(label: String, value: String, modifier: Modifier, raised: 
     ) {
         Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, maxLines = 1)
         Crossfade(value, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "obi-calls-tile") { t ->
-            Text(t, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+            Text(t, style = MekaType.upNextCardTitle, color = Meka.colors.textPrimary)
         }
     }
+}
+
+/** A section's card (the mockup's): the surface, rounded, 16 dp inside, its lines 8 dp apart. */
+@Composable
+private fun Card(modifier: Modifier, content: @Composable () -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) { content() }
 }
 
 @Composable
 private fun ToggleRow(t: CallsToggle, onToggle: () -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
-    val fill by animateColorAsState(if (t.on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "obi-calls-switch")
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Switch) { haptics.tick(); onToggle() }
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .clickable(role = Role.Switch) { haptics.tick(); onToggle() }
             .semantics { contentDescription = t.title; selected = t.on }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            .minTouch().padding(MekaSpace.m),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(t.title, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+            Text(t.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Text(LoneWordGlue.kept(t.sub), style = MekaType.caption, color = Meka.colors.textTertiary)
             Crossfade(t.line, animationSpec = MekaMotion.appear(reduced), label = "obi-calls-switch-line") { l ->
                 if (l != null) Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
-        SwitchPill(t.on, fill)
+        SlideSwitch(t.on)
     }
 }

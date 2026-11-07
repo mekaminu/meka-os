@@ -39,7 +39,8 @@ class CallsSettingsTest {
         assertEquals(listOf("£10", "£20", "£30", "£50"), v.caps.map { it.label })
         assertEquals(listOf(false, true, false, false), v.caps.map { it.on })
         assertEquals(listOf(true, true, true), v.toggles.map { it.on })
-        assertEquals("On · £3.40 of £20 this month · 14 calls", v.toggles[0].line)
+        assertNull(v.toggles[0].line) // THIS MONTH already says it
+        assertEquals("On · £3.40 of £20 this month · 14 calls", v.entryLine)
         assertNull(v.toggles[1].line)
         assertNull(v.toggles[2].line)
         assertEquals(listOf("You're busy", "When you'll call back", "Your first name", "Where you work", "Your work email"), v.knows.map { it.label })
@@ -54,6 +55,8 @@ class CallsSettingsTest {
         val full = CallsSettingsRules.view(work.copy(callLiveCapGbp = 10, callLiveMeter = LiveCallRules.Meter("2026-11", 1_200, 30)), calls, nov7)
         assertTrue(full.atCap)
         assertEquals(1f, full.fraction)
+        assertEquals("At this month's £10 cap · callers hear the script until the 1st", full.toggles[0].line)
+        assertEquals("Off · callers hear the short script and leave a message", CallsSettingsRules.view(work.copy(callLive = false), calls, nov7).toggles[0].line)
 
         // The slot switch says why it does nothing; Booking off says what happens.
         val noBack = CallsSettingsRules.view(work.copy(callKnows = setOf(LiveCallRules.Knows.NAME), callBooking = false), calls, nov7)

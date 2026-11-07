@@ -89,7 +89,10 @@ object CallsSettingsRules {
             atCap = atCap,
             caps = LiveCallRules.CAP_CHOICES.map { CallsChip(it.toString(), "£$it", it == work.callLiveCapGbp) },
             toggles = listOf(
-                CallsToggle(CallsSwitch.LIVE, LiveCallRules.TITLE, LiveCallRules.SUB, work.callLive, live),
+                // The design check (2026-11-07): "On · £x of £y" repeats THIS MONTH, so the page's row keeps the line only
+                // when it says something else (off, at the cap, the assistant off); Work mode's entry row keeps it all.
+                CallsToggle(CallsSwitch.LIVE, LiveCallRules.TITLE, LiveCallRules.SUB, work.callLive,
+                    live.takeUnless { work.callAssistant && work.callLive && !atCap }),
                 CallsToggle(CallsSwitch.SLOTS, SLOTS_TITLE, SLOTS_SUB, work.callSlots, slotsLine),
                 CallsToggle(CallsSwitch.BOOKING, BOOKING_TITLE, BOOKING_SUB, work.callBooking, bookingLine),
             ),
