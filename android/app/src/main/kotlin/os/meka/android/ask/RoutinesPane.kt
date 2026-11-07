@@ -42,7 +42,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.drawBehind
@@ -288,13 +287,13 @@ private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, o
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }
             .semantics { contentDescription = r.spoken }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("routine-row"),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("routine-row"),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DayTile(r.day, r.time, r.on)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(r.name, style = MekaType.body.copy(fontWeight = FontWeight.SemiBold), color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary,
+            Text(r.name, style = MekaType.upNextCardTitle, color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -316,7 +315,7 @@ private fun RoutineSwitch(on: Boolean, spoken: String, onToggle: () -> Unit) {
             .semantics { contentDescription = spoken; selected = on }.minTouch().testTag("routine-switch"),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(width = 44.dp, height = 26.dp).clip(CircleShape).background(track).padding(3.dp)) {
+        Box(Modifier.size(width = 44.dp, height = 26.dp).clip(CircleShape).background(track).padding(3.dp)) { // rhythm: ok (the knob's inset in its track)
             Box(Modifier.offset(x = 18.dp * knobAt).size(20.dp).clip(CircleShape)
                 .background(if (on) Meka.colors.background else Meka.colors.textTertiary))
         }

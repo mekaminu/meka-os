@@ -453,7 +453,7 @@ struct RoutinesSheet: View {
         return HStack(alignment: .center, spacing: MekaSpace.m) {
             dayTile(r.day, r.time, on: r.on)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(r.name).font(MekaType.body.weight(.semibold))
+                Text(r.name).font(MekaType.upNextCardTitle)
                     .foregroundStyle(r.on ? palette.textPrimary : palette.textTertiary)
                     .lineLimit(1).truncationMode(.tail)
                 Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -466,7 +466,7 @@ struct RoutinesSheet: View {
                 .labelsHidden()
                 .accessibilityLabel(r.switchSpoken)
         }
-        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
