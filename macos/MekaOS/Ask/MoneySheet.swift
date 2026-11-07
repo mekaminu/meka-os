@@ -112,6 +112,14 @@ struct MoneySheet: View {
     @State private var obiLooking = false
     @State private var ideaOpenId: String? = nil
     @State private var whatIfOpen = false
+    /// Plan's lower half: the forecast's 6 · 12 months, What if I cut… (in memory only), Add a £ goal's popover and its
+    /// fields, and the part a start tile scrolls to.
+    @State private var forecastSpan: Int32 = 12
+    @State private var cutPounds: Int32 = 0
+    @State private var addGoalOpen = false
+    @State private var addGoalName = ""
+    @State private var addGoalAmount = ""
+    @State private var scrollTarget: String?
     @State private var setChallengeOpen = false
     @State private var refundOpenId: String? = nil
     @State private var finedLooks: Set<String> = []
@@ -171,6 +179,7 @@ struct MoneySheet: View {
                     .frame(maxWidth: MoneyMacLayout.askWidth, alignment: .leading)
                     .staggeredAppear(2)
                     .popover(isPresented: $chatOpen, arrowEdge: .bottom) { chatPanel(v) }
+                    ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
                             HStack(alignment: .top, spacing: MoneyMacLayout.gap) {
@@ -182,6 +191,13 @@ struct MoneySheet: View {
                         }
                         .id(tab.name)
                         .transition(.opacity)
+                    }
+                    // Plan's lower half: a goal start tile (Save £ a month, Clear my cards) scrolls to its card.
+                    .onChange(of: scrollTarget) { _, target in
+                        guard let target else { return }
+                        if reduceMotion { proxy.scrollTo(target, anchor: .top) } else { withAnimation(MekaMotion.appear(reduced: false)) { proxy.scrollTo(target, anchor: .top) } }
+                        scrollTarget = nil
+                    }
                     }
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: tab.name)
                     .scrollIndicators(.never)
@@ -266,7 +282,7 @@ struct MoneySheet: View {
             if let b = v.bank, has(.bank, v), on("bank", col) { bank(b).staggeredAppear(2) }
             if let t = v.trading, has(.trading, v) { trading(t, col).staggeredAppear(2) }
             if let m = v.month, tabOfMonth { month(m, v, col).staggeredAppear(2) }
-            if let g = v.goals, has(.goals, v), on("goals", col) { moneyGoals(g).staggeredAppear(3) }
+            if let g = v.goals, has(.goals, v), on("goals", col) { moneyGoals(g, v).staggeredAppear(3) }
             if let ch = v.challenges, has(.challenges, v), on("challenges", col) { challenges(ch).staggeredAppear(3) }
             if let tv = v.travel, has(.travel, v), on("travel", col) { travel(tv).transition(.opacity) }
             // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part is worked
@@ -446,7 +462,7 @@ struct MoneySheet: View {
             }
             // Money redesign, Plan (mockup): What if I save… — worked out on this Mac as he slides, Make it a goal.
             if let b = v.save, has(.save, v), on("save", col) {
-                MoneyLabel(MoneySave.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs)
+                MoneyLabel(MoneySave.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs).id("money-save")
                 MoneySaveCardView(base: b, palette: palette, reduced: reduceMotion) { amount, months, rate in
                     Task { said = await model.moneySaveGoal(amountPence: amount, months: months, rateBp: rate) }
                 }
@@ -454,7 +470,7 @@ struct MoneySheet: View {
             }
             // Money redesign, Plan (mockup): Clear my cards — one amount a month across his cards, worked out here as he slides.
             if let b = v.clear, has(.clear, v), on("clear", col) {
-                MoneyLabel(MoneyClear.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs)
+                MoneyLabel(MoneyClear.shared.HEAD, palette: palette).padding(.top, MekaSpace.xs).id("money-clear")
                 MoneyClearCardView(base: b, palette: palette, reduced: reduceMotion) { pay, order in
                     Task { said = await model.moneyClearGoal(payPence: pay, order: order) }
                 }
@@ -834,9 +850,19 @@ struct MoneySheet: View {
     /// and "£240 of £600", a bar in its own colour and its pace note (amber when behind). A click opens the goal's
     /// popover, where it can follow an account's balance (the chips were open on the page before). The bar glides and
     /// the lines cross-fade (snap with Reduce Motion).
-    private func moneyGoals(_ gv: MoneyGoalsView) -> some View {
+    private func moneyGoals(_ gv: MoneyGoalsView, _ v: MoneyView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             MoneyLabel(gv.head, palette: palette).padding(.top, MekaSpace.xs)
+            // Plan's lower half: no £ goal yet → start tiles (Save £ a month · Clear my cards · Add a £ goal).
+            if let e = MoneyPlanMore.shared.goalsEmpty(goals: gv, hasSave: v.save != nil && has(.save, v), hasClear: v.clear != nil && has(.clear, v)) {
+                MoneyGoalsEmptyView(empty: e, palette: palette) { key in
+                    said = nil
+                    if key == MoneyPlanMore.shared.START_SAVE { scrollTarget = "money-save" }
+                    else if key == MoneyPlanMore.shared.START_CLEAR { scrollTarget = "money-clear" }
+                    else { addGoalOpen = true }
+                }
+                .popover(isPresented: $addGoalOpen, arrowEdge: .trailing) { addGoalPopover() }
+            } else {
             VStack(alignment: .leading, spacing: MekaSpace.m) {
                 if gv.rows.isEmpty {
                     Text(gv.empty ?? MoneyGoals.shared.EMPTY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -847,6 +873,35 @@ struct MoneySheet: View {
             .padding(MekaSpace.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.l))
+            }
+        }
+    }
+
+    /// Add a £ goal: what for and how much, then Add goal (Return in the amount adds it too); closes once it's added.
+    private func addGoalPopover() -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(MoneyPlanMore.shared.ADD_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            TextField(MoneyPlanMore.shared.ADD_NAME_HINT, text: $addGoalName).textFieldStyle(.roundedBorder)
+            TextField(MoneyPlanMore.shared.ADD_AMOUNT_HINT, text: $addGoalAmount).textFieldStyle(.roundedBorder)
+                .onSubmit { addGoal() }
+            if let s = said, s.refused { Text(s.line).font(MekaType.caption).foregroundStyle(palette.accent) }
+            HStack {
+                Button(MoneyCards.shared.DONE) { addGoalOpen = false }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(MoneyPlanMore.shared.ADD) { addGoal() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 320)
+    }
+
+    private func addGoal() {
+        let name = addGoalName
+        let amount = addGoalAmount
+        Task {
+            let r = await model.moneyAddGoal(name: name, amount: amount)
+            said = r
+            if let r, !r.refused { addGoalName = ""; addGoalAmount = ""; addGoalOpen = false }
         }
     }
 
@@ -1393,7 +1448,13 @@ struct MoneySheet: View {
             } else {
                 // Layout rules on Plan (a), (e): the forecast in one card; the what-ifs behind its What if… row (a popover).
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    forecastRows(f)
+                    // Plan's lower half: tiles, bars and What if I cut… once there's pay in; the sentences otherwise.
+                    if let t = MoneyPlanMore.shared.forecast(f: f, span: forecastSpan, cutPounds: cutPounds) {
+                        MoneyForecastTilesView(tiles: t, palette: palette, reduced: reduceMotion,
+                                               onSpan: { forecastSpan = $0 }, onCut: { cutPounds = $0 })
+                    } else {
+                        forecastRows(f)
+                    }
                     linkRow(MoneyPlanLayout.shared.WHAT_IF_ROW, line: MoneyPlanLayout.shared.whatIfBrief(f: f),
                             lit: MoneyPlanLayout.shared.whatIfOn(f: f)) { whatIfOpen = true }
                         .popover(isPresented: $whatIfOpen, arrowEdge: .trailing) {

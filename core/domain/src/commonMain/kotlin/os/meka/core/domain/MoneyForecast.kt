@@ -35,6 +35,13 @@ data class MoneyForecastView(
     val trading: MoneyCutChip? = null, val tradingLine: String? = null,
     /** Plan's What if I save… ([MoneySave]): his average month's money left over in pence, before any what-if; null with no pay in. */
     val leftPence: Long? = null,
+    /**
+     * Plan's lower half (mockup `Phone-PlanMore.dc.html`, 2026-11-07): the average month in and out, rounded as shown
+     * (pence), what's left over a month rounded, what the what-ifs that are on add a month, and the month it's worked
+     * out in (year × 12 + month − 1), for [MoneyPlanMore]'s tiles and bars. Zero/null before the forecast is ready.
+     */
+    val inRounded: Long = 0L, val outRounded: Long = 0L, val leftRounded: Long = 0L, val whatIfPence: Long = 0L,
+    val thisMonth: Int = 0,
 )
 
 /**
@@ -200,6 +207,8 @@ object MoneyForecast {
         val basis = "From $span ($n whole months) · $NOT_ADVICE"
         val extraLine = if (whatIf.extraPence > 0) "${signed(whatIf.extraPence)} a month coming in · your own figure" else null
         return MoneyForecastView(HEAD, null, pace, left, income > 0 && leftRounded <= -1_000, rows, cuts, extraLine, basis,
-            tradingChip, trading?.let { tradingLine(it) }, leftPence = net.takeIf { income > 0 })
+            tradingChip, trading?.let { tradingLine(it) }, leftPence = net.takeIf { income > 0 },
+            inRounded = roundTen(income.coerceAtLeast(0)), outRounded = roundTen(out), leftRounded = leftRounded,
+            whatIfPence = saved, thisMonth = thisMonth)
     }
 }

@@ -991,6 +991,23 @@ class MekaCore(
         os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneySave.goalSaid(g.title), undo = moneySaveGoalUndoPrefix + id)
     }
 
+    /**
+     * Plan's lower half: Goals' empty card → Add a £ goal: "Holiday" with the number "£2,000" in Goals (a year's goal),
+     * from the sheet's two fields ([os.meka.core.domain.MoneyPlanMore.newGoal]). Undo (by [undoMoneyCategory]) deletes it.
+     * Only while Money is open.
+     */
+    suspend fun moneyAddGoal(name: String, amount: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val g = os.meka.core.domain.MoneyPlanMore.newGoal(name, amount).getOrElse {
+            return@onCore os.meka.core.domain.MoneySaved(it.message ?: os.meka.core.domain.MoneyPlanMore.ADD_BAD_AMOUNT, refused = true)
+        }
+        val id = goals.addGoal(g.title, null, GoalHorizon.YEAR)
+        goals.setMetric(id, g.target)
+        refreshMoney()
+        refresh()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyPlanMore.addedSaid(g), undo = moneySaveGoalUndoPrefix + id)
+    }
+
     /** ‹ / ›: [step] −1 a month earlier, +1 a month later (never past this month). */
     suspend fun moneyStep(step: Int) = onCore {
         if (!moneyOpen) return@onCore

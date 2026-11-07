@@ -5288,6 +5288,18 @@ final class CoreModel {
         }
     }
 
+    /// Plan's lower half: Goals' empty card → Add a £ goal ("Holiday", "£2,000"), Undo deletes it (MoneyPlanMore in the
+    /// core). Only the two strings cross into the core.
+    func moneyAddGoal(name: String, amount: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyAddGoal(name: name, amount: amount))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Ask Obi → Make it a goal: "Save £1,215 by Jul 2027" in Goals, Undo deletes it (MoneyChat.goal in the core).
     func moneyChatGoal(amountPence: Int64, months: Int32) async -> MoneySaid? {
         guard let core else { return nil }

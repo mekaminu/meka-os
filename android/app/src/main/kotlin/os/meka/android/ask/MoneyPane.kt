@@ -95,6 +95,7 @@ import os.meka.core.domain.MoneyBank
 import os.meka.core.domain.MoneyBankView
 import os.meka.core.domain.MoneyBills
 import os.meka.core.domain.MoneyPlanLayout
+import os.meka.core.domain.MoneyPlanMore
 import os.meka.core.domain.MoneyCardRow
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyCardsView
@@ -327,6 +328,11 @@ fun MoneyPane(
     var wideNow by remember { mutableStateOf(false) }
     var whatIfOpen by rememberSaveable { mutableStateOf(false) }
     var setChallengeOpen by rememberSaveable { mutableStateOf(false) }
+    // Plan's lower half: the forecast's 6 · 12 months toggle, What if I cut… (in memory only, never stored or synced) and
+    // Goals' empty card's Add a £ goal sheet.
+    var forecastSpan by rememberSaveable { mutableStateOf(12) }
+    var cutPounds by remember { mutableStateOf(0) }
+    var addGoalOpen by rememberSaveable { mutableStateOf(false) }
     // An idea's step (from the lead card or its sheet): Set a cap opens Set a challenge; See Clear my cards scrolls to it.
     fun ideaStep(i: MoneyIdea) {
         when (i.actKey) {
@@ -837,7 +843,20 @@ fun MoneyPane(
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "goals") {
-                    MoneyGoalsCard(gv, Modifier.animateItem().appear(rememberAppearance(6))) { id -> haptics.tick(); said = null; goalSheetId = id }
+                    // Plan's lower half: no £ goal yet → a card with start tiles (Save £ a month · Clear my cards · Add a £ goal).
+                    val empty = MoneyPlanMore.goalsEmpty(gv, hasSave = v.save != null && has(MoneySection.SAVE), hasClear = v.clear != null && has(MoneySection.CLEAR))
+                    if (empty != null) {
+                        MoneyGoalsEmptyCard(empty, Modifier.animateItem().appear(rememberAppearance(6))) { key ->
+                            haptics.tick(); said = null
+                            when (key) {
+                                MoneyPlanMore.START_SAVE -> scope.launch { scrollToKey(listState, MoneyColumns.scrollKey("save-head", wideNow), reduced) }
+                                MoneyPlanMore.START_CLEAR -> scope.launch { scrollToKey(listState, MoneyColumns.scrollKey("clear-head", wideNow), reduced) }
+                                else -> addGoalOpen = true
+                            }
+                        }
+                    } else {
+                        MoneyGoalsCard(gv, Modifier.animateItem().appear(rememberAppearance(6))) { id -> haptics.tick(); said = null; goalSheetId = id }
+                    }
                 }
             }
             v.regular?.takeIf { has(MoneySection.REGULAR) }?.let { r ->
@@ -871,7 +890,11 @@ fun MoneyPane(
                 // Layout rules on Plan (a), (e): the forecast in one card; the what-ifs behind its What if… row (a sheet).
                 if (f.notReady == null) item(key = "forecast") {
                     MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "money-forecast-card") {
-                        ForecastBlock(f, Modifier)
+                        // Plan's lower half: tiles, bars and What if I cut… once there's pay in; the sentences otherwise.
+                        val tiles = MoneyPlanMore.forecast(f, forecastSpan, cutPounds)
+                        if (tiles != null) {
+                            MoneyForecastTilesBlock(tiles, onSpan = { forecastSpan = it }, onCut = { cutPounds = it }, onTick = { haptics.tick() })
+                        } else ForecastBlock(f, Modifier)
                         MoneyLinkRow(MoneyPlanLayout.WHAT_IF_ROW, MoneyPlanLayout.whatIfBrief(f), MoneyPlanLayout.whatIfOn(f), "money-whatif-row") {
                             haptics.tick(); said = null; whatIfOpen = true
                         }
@@ -1282,6 +1305,17 @@ fun MoneyPane(
         WhatIfBlock(f,
             onCut = { key -> haptics.tick(); scope.launch { runCatching { core.moneyForecastCut(key) } } },
             onExtra = { text -> scope.launch { runCatching { core.moneyForecastExtra(text) }.getOrNull()?.let(say) } })
+        SheetSaid(said)
+    }
+    // Plan's lower half: Goals' empty card → Add a £ goal (what for, how much).
+    MoneyDetailSheet(v.goals?.takeIf { addGoalOpen }, title = { MoneyPlanMore.ADD_SHEET },
+        tag = "money-add-goal-sheet", done = MoneyCards.DONE, onClose = { addGoalOpen = false }) { _ ->
+        MoneyAddGoalFields { name, amount ->
+            haptics.light()
+            scope.launch {
+                runCatching { core.moneyAddGoal(name, amount) }.getOrNull()?.let { r -> say(r); if (!r.refused) addGoalOpen = false }
+            }
+        }
         SheetSaid(said)
     }
     // Layout rules on Plan (e): set fun money for the week or a category cap in a sheet.

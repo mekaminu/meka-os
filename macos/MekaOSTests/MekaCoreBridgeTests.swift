@@ -2140,6 +2140,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MoneyView.companion.LOCKED.forecast)
     }
 
+    func testPlanLowerHalfReachesSwift() {
+        // Plan's lower half, slice 1: the start tiles, the short bar tags and the slider's steps cross to Swift.
+        let none = MoneyGoalsView(head: MoneyGoals.shared.HEAD, rows: [], empty: MoneyGoals.shared.EMPTY, foot: MoneyGoals.shared.FOOT)
+        let e = MoneyPlanMore.shared.goalsEmpty(goals: none, hasSave: true, hasClear: false)
+        XCTAssertEqual(e?.tiles.map { $0.name }, ["Save £ a month", "Add a £ goal"])
+        XCTAssertEqual(e?.title, "No money goals yet")
+        XCTAssertEqual(MoneyPlanMore.shared.short(p: 630_000), "+£6.3k")
+        XCTAssertEqual(MoneyPlanMore.shared.cutPence(pounds: 160), 15_000)
+        XCTAssertEqual(MoneyPlanMore.shared.CUT_MAX_POUNDS, 600)
+    }
+
     func testMoneyCardsReachSwift() {
         // Money manager, slice 7: the cards block's words cross to Swift, typed values parse; a locked screen has none.
         XCTAssertEqual(MoneyCards.shared.HEAD, "CARDS")
