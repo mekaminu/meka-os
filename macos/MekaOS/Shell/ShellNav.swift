@@ -323,6 +323,7 @@ enum ShellNav {
         case .lifeAdmin: .lifeAdmin
         case .workingOn: .workingOn
         case .routines: .routines
+        case .team: .team
         default: nil
         }
     }

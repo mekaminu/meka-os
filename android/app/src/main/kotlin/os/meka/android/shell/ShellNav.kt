@@ -172,6 +172,7 @@ object ShellNav {
         MoreItem.BEDSIDE -> os.meka.core.domain.DailyRow.BEDSIDE
         MoreItem.WORKING_ON -> os.meka.core.domain.DailyRow.WORKING_ON
         MoreItem.ROUTINES -> os.meka.core.domain.DailyRow.ROUTINES
+        MoreItem.TEAM -> os.meka.core.domain.DailyRow.TEAM
         else -> null
     }
 

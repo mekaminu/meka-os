@@ -235,4 +235,13 @@ object TeamRules {
         return TeamCard(a, status, today, if (waits) wait!! else NOTHING, waits, log,
             waitLine.takeIf { waits }, target.takeIf { waits }, spoken)
     }
+
+    /**
+     * Ask → Daily's row line: how many helpers wait on him ("2 need you", lit), from what the core already holds without
+     * reading the log; null (the row's fixed words) when nothing waits.
+     */
+    fun dailyLine(requestsWaiting: Int, mailWaits: Boolean, moneyIdeas: Int, tradesWaiting: Int): DailyLine? {
+        val n = listOf(requestsWaiting > 0, mailWaits, moneyIdeas > 0, tradesWaiting > 0).count { it }
+        return if (n == 0) null else DailyLine(if (n == 1) "1 needs you" else "$n need you", true)
+    }
 }

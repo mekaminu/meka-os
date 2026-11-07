@@ -108,7 +108,7 @@ struct TeamSheet: View {
     }
 
     private func icon(_ code: String) -> some View {
-        Image(systemName: symbol(code)).font(.system(size: 18, weight: .regular))
+        Image(systemName: symbol(code)).font(MekaType.body)
             .foregroundStyle(tint(code))
             .frame(width: 44, height: 44)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))

@@ -14049,6 +14049,10 @@ class MekaCore(
             todayDay = todayDay,
             workingOn = os.meka.core.domain.WorkingOnRules.dailyLine(workingOnNow()),
             routines = os.meka.core.domain.RoutineRules.dailyLine(_routines.value),
+            team = os.meka.core.domain.TeamRules.dailyLine(
+                _requests.value.size, _mailNeeds.value != null, _money.value.check?.ideas?.size ?: 0,
+                _approvals.value.count { it.kind == os.meka.core.domain.ApprovalKind.TRADE },
+            ),
         ))
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()

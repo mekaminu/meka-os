@@ -110,4 +110,10 @@ class TeamTest {
         assertEquals(TeamRules.LOG_MAX, log.size)
         assertEquals("Reminder 11", log.last().text)
     }
+
+    @Test fun theDailyRowSaysHowManyWait() {
+        assertNull(TeamRules.dailyLine(0, false, 0, 0))
+        assertEquals(DailyLine("1 needs you", true), TeamRules.dailyLine(0, true, 0, 0))
+        assertEquals(DailyLine("3 need you", true), TeamRules.dailyLine(2, true, 0, 1))
+    }
 }
