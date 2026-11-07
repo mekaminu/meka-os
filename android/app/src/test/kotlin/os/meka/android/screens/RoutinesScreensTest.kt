@@ -135,7 +135,7 @@ class RoutinesScreensTest {
         until { onScreen(RoutineRules.TITLE) && (fill == Fill.EMPTY || onScreen(RoutineRules.YOURS.uppercase())) }
         compose.waitForIdle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", name))
-        val lines = listOf(v.summary, RoutineRules.RULE_LINE) + v.rows.flatMap { listOfNotNull(it.name, it.line, it.next) } +
+        val lines = listOf(v.summary, RoutineRules.RULE_LINE) + v.rows.flatMap { listOf(it.name, it.line) } +
             v.starters.flatMap { listOf(it.name, it.line, it.whenLine) }
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
@@ -157,14 +157,16 @@ class RoutinesScreensTest {
             Fill.MANY -> {
                 if (v.summary != "2 on · 1 paused") fail("$name: the summary reads \"${v.summary}\"")
                 if (count("routine-row") != 3) fail("$name: ${count("routine-row")} rows, not 3")
-                if (!onScreen("Next: tonight")) fail("$name: Study night's next run isn't said")
+                // The design check (2026-11-07): the mockup's rows carry no next run or Remove (both on the page).
+                if (onScreen("Next: tonight")) fail("$name: a row still says its next run")
+                if (count("routines-rule") != 1) fail("$name: the rule isn't said once at the foot")
                 if (!onScreen("Paused · ")) fail("$name: the paused routine isn't marked")
             }
         }
         return core
     }
 
-    /** By hand: Add a starter, pause it with its switch and switch it back on, then Remove it. */
+    /** By hand: Add a starter, pause it with its switch and switch it back on, then Remove it from its page. */
     private fun byHand(core: MekaCore) {
         val name = "routines-by-hand"
         fun tap(description: String) {
@@ -229,6 +231,11 @@ class RoutinesScreensTest {
         tap("Back to ${RoutineRules.BACK}")
         until { count("routine-page") == 0 && count("routine-row") == 1 }
         if (count("routine-page") != 0) fail("$name: ‹ Routines left the page open")
+        if (compose.onAllNodes(hasContentDescription("${RoutineRules.REMOVE} Sunday reset")).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: Remove is still on the list's row")
+        }
+        compose.onAllNodes(hasTestTag("routine-row") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { count("routine-step") == 4 }
         tap("${RoutineRules.REMOVE} Sunday reset")
         until { sunday() == null && count("routine-starter") == 4 }
         if (sunday() != null) fail("$name: Remove left it")

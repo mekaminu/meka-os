@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -41,6 +42,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -54,7 +57,6 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
-import os.meka.android.designsystem.SwitchPill
 import os.meka.android.designsystem.TouchPill
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
@@ -79,8 +81,8 @@ import os.meka.core.facade.MekaCore
 
 /**
  * Ask → Daily → Routines (Routines, slice 1; the approved mockup `docs/design/routines/routines.dc.html`): how many are
- * on, the rule (a routine never sends, pays, books or trades), YOUR ROUTINES — each a card with its day tile ("SUN"
- * over "19:00"), its name, its line, when it runs next and an On/Off switch (synced) — and START WITH ONE, the
+ * on, YOUR ROUTINES — each a row with its day tile ("SUN"
+ * over "19:00"), its name, its line and a switch (synced) — START WITH ONE, ideas, and the rule at the foot; the
  * starters not added yet, each with Add. Slice 2: a tap on a routine opens its own page ([RoutinePage]: when it runs,
  * the NEXT · STEPS · LAST RUN tiles, its steps each with its label, which a tap moves on, LAST TIME, the switch and
  * Remove); ‹ Routines or Back returns. Slice 3: Run now on its page starts a run; the Running now card ([RunningCard],
@@ -157,7 +159,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
                 },
             )
         } else {
-            RoutinesList(v, said, runActions, onClose, onOpen = { open = it }, onToggle = ::toggle, onRemove = ::remove,
+            RoutinesList(v, said, runActions, onClose, onOpen = { open = it }, onToggle = ::toggle,
                 onNew = { haptics.light(); said = null; makeSaid = null; fromIdea = null; making = true },
                 onIdea = { idea -> haptics.light(); said = null; makeSaid = null; fromIdea = idea; making = true },
                 onAdd = { key ->
@@ -171,7 +173,7 @@ fun RoutinesPane(core: MekaCore, onClose: () -> Unit) {
 @Composable
 private fun RoutinesList(
     v: os.meka.core.domain.RoutinesView, said: String?, actions: RunActions, onClose: () -> Unit, onOpen: (String) -> Unit,
-    onToggle: (String, Boolean) -> Unit, onRemove: (String, String) -> Unit, onAdd: (String) -> Unit, onNew: () -> Unit,
+    onToggle: (String, Boolean) -> Unit, onAdd: (String) -> Unit, onNew: () -> Unit,
     onIdea: (RoutineIdea) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -191,8 +193,6 @@ private fun RoutinesList(
         }
         Text(LoneWordGlue.kept(v.summary), style = MekaType.body, color = Meka.colors.textSecondary,
             modifier = Modifier.appear(rememberAppearance(0)).testTag("routines-summary"))
-        Text(LoneWordGlue.kept(RoutineRules.RULE_LINE), style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.appear(rememberAppearance(0)))
         said?.let {
             Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("routines-said"))
         }
@@ -204,7 +204,7 @@ private fun RoutinesList(
         v.rows.forEachIndexed { i, r ->
             RoutineCard(
                 r, Modifier.appear(rememberAppearance(i + 2)),
-                onOpen = { onOpen(r.id) }, onToggle = { onToggle(r.id, !r.on) }, onRemove = { onRemove(r.id, r.name) },
+                onOpen = { onOpen(r.id) }, onToggle = { onToggle(r.id, !r.on) },
             )
         }
         if (v.starters.isNotEmpty()) {
@@ -230,6 +230,9 @@ private fun RoutinesList(
             Text(LoneWordGlue.kept(RoutineIdeas.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.appear(rememberAppearance(base + 1)))
         }
+        // The design check (2026-11-07): the mockup's top is the title and one line; the rule is said once, at the foot.
+        Text(LoneWordGlue.kept(RoutineRules.RULE_LINE), style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.padding(top = MekaSpace.m).testTag("routines-rule").appear(rememberAppearance(v.rows.size + 2)))
     }
 }
 
@@ -276,41 +279,48 @@ private fun DayTile(day: String, time: String, on: Boolean) {
 }
 
 /**
- * One of his routines: the tile, the name, its line and next run, Remove, and the On/Off switch. Slice 2: a tap on
- * the card opens its page; the switch is its own 48 dp touch.
+ * One of his routines, as the mockup's row: the tile, the name, its steps on one line ("Paused · …" when off) and the
+ * switch. Slice 2: a tap on the row opens its page (when it runs next, Remove); the switch is its own 48 dp touch.
  */
 @Composable
-private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, onToggle: () -> Unit, onRemove: () -> Unit) {
+private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, onToggle: () -> Unit) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }
             .semantics { contentDescription = r.spoken }
-            .padding(MekaSpace.m).testTag("routine-row"),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s).testTag("routine-row"),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DayTile(r.day, r.time, r.on)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(LoneWordGlue.kept(r.name), style = MekaType.body, color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary)
-            Text(LoneWordGlue.kept(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
-            r.next?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
-            Text(RoutineRules.REMOVE, style = MekaType.caption, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onRemove() }.minTouch()
-                    .semantics { contentDescription = "${RoutineRules.REMOVE} ${r.name}" })
+            Text(r.name, style = MekaType.body.copy(fontWeight = FontWeight.SemiBold), color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         RoutineSwitch(r.on, r.switchSpoken, onToggle)
     }
 }
 
-/** The On/Off switch: its own 48 dp touch, the pill blending to the accent when on. */
+/**
+ * The mockup's switch: a 44 × 26 track (brass when on, the hairline when off) with a round knob that slides on the
+ * expand spring (jumps under reduced motion); its own 48 dp touch.
+ */
 @Composable
 private fun RoutineSwitch(on: Boolean, spoken: String, onToggle: () -> Unit) {
-    val dot by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "routine-switch")
+    val reduced = Meka.reducedMotion
+    val track by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "routine-switch")
+    val knobAt by animateFloatAsState(if (on) 1f else 0f, MekaMotion.expand(reduced), label = "routine-knob")
     Box(
         Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Switch) { onToggle() }
             .semantics { contentDescription = spoken; selected = on }.minTouch().testTag("routine-switch"),
         contentAlignment = Alignment.Center,
-    ) { SwitchPill(on, dot) }
+    ) {
+        Box(Modifier.size(width = 44.dp, height = 26.dp).clip(CircleShape).background(track).padding(3.dp)) {
+            Box(Modifier.offset(x = 18.dp * knobAt).size(20.dp).clip(CircleShape)
+                .background(if (on) Meka.colors.background else Meka.colors.textTertiary))
+        }
+    }
 }
 
 /**

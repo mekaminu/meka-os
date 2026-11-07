@@ -6,7 +6,7 @@ import SwiftUI
 /// typed in one sentence; a click on a card opens the routine's page, where Run now
 /// starts a run and the Running now card offers Carry on · Skip this step · Stop, also above the list), like the Fold's RoutinesPane: how many are on, the rule (a
 /// routine never sends, pays, books or trades), YOUR ROUTINES — each a card with its day tile ("SUN" over "19:00"), its
-/// name, its line, its next run, Remove and an On/Off switch (synced with the Fold) — and START WITH ONE, the starters
+/// name, its line and an On/Off switch (synced with the Fold; next run and Remove on its page) — and START WITH ONE, the starters
 /// not added yet, each with Add. The words are the core's `RoutineRules`. Only Strings and Bools cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); cards stagger in; a switch slides with a tick haptic and the list re-flows
@@ -75,10 +75,6 @@ struct RoutinesSheet: View {
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                     .staggeredAppear(0)
-                Text(LoneWordGlue.shared.kept(line: RoutineRules.shared.RULE_LINE)).font(MekaType.caption)
-                    .foregroundStyle(palette.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .staggeredAppear(0)
                 if let said {
                     Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .transition(.opacity)
@@ -118,6 +114,12 @@ struct RoutinesSheet: View {
                             }
                             .transition(.opacity)
                         }
+                        // The design check (2026-11-07): the mockup's top is the title and one line; the rule is said
+                        // once, at the foot.
+                        Text(LoneWordGlue.shared.kept(line: RoutineRules.shared.RULE_LINE)).font(MekaType.caption)
+                            .foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, MekaSpace.m)
                     }
                     .animation(MekaMotion.expand(reduced: reduceMotion), value: v.rows.count)
                     .animation(MekaMotion.expand(reduced: reduceMotion), value: v.starters.count)
@@ -443,28 +445,19 @@ struct RoutinesSheet: View {
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
     }
 
+    /// One of his routines, as the mockup's row: the tile, the name, its steps on one line ("Paused · …" when off) and
+    /// the switch. A click opens its page, which says when it runs next and has Remove.
     private func routineCard(_ r: RoutineRow) -> some View {
         let id = r.id
-        let name = r.name
         let isOn = r.on
         return HStack(alignment: .center, spacing: MekaSpace.m) {
             dayTile(r.day, r.time, on: r.on)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(LoneWordGlue.shared.kept(line: r.name)).font(MekaType.body)
+                Text(r.name).font(MekaType.body.weight(.semibold))
                     .foregroundStyle(r.on ? palette.textPrimary : palette.textTertiary)
-                Text(LoneWordGlue.shared.kept(line: r.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let next = r.next {
-                    Text(LoneWordGlue.shared.kept(line: next)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                }
-                Button(RoutineRules.shared.REMOVE) {
-                    model.removeRoutine(id)
-                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { said = "Removed \(name)" }
-                }
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.caption)
-                .foregroundStyle(palette.accent)
-                .accessibilityLabel("\(RoutineRules.shared.REMOVE) \(name)")
+                    .lineLimit(1).truncationMode(.tail)
+                Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .lineLimit(1).truncationMode(.tail)
             }
             Spacer(minLength: 0)
             Toggle("", isOn: Binding(get: { isOn }, set: { model.setRoutineOn(id, on: $0) }))
@@ -473,11 +466,11 @@ struct RoutinesSheet: View {
                 .labelsHidden()
                 .accessibilityLabel(r.switchSpoken)
         }
-        .padding(MekaSpace.m)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
-        // Slice 2: a click on the card opens its page (the switch and Remove keep their own clicks).
+        // Slice 2: a click on the card opens its page (the switch keeps its own click).
         .onTapGesture { openId = id }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(r.spoken)
