@@ -38,8 +38,16 @@ object HealthWorkouts {
      */
     const val READ_IN_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
 
-    fun available(context: Context): Boolean =
-        runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
+    fun available(context: Context): Boolean = availableForTests
+        ?: runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
+
+    /**
+     * Screen tests only: Robolectric reports Health Connect's platform service missing from a background thread once
+     * the client is made (CI runs 1477, 1551, 1552, 1601), so a screen test that isn't about Health Connect says it
+     * isn't there. Null (the app) asks Health Connect.
+     */
+    @Volatile
+    internal var availableForTests: Boolean? = null
 
     fun isOn(context: Context): Boolean = prefs(context).getBoolean(KEY_ON, false)
 

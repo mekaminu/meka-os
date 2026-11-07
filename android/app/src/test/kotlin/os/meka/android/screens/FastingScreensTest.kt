@@ -253,6 +253,12 @@ class FastingScreensTest {
     // while the Goals screen's Workouts and Sleep sections ask whether Health Connect is there.
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun goalsTileOpensTheScreenAndBackLeavesIt() {
+        // The Fasting tile is what's under test here: Workouts and Sleep see Health Connect as not on this phone.
+        os.meka.android.goals.HealthWorkouts.availableForTests = false
+        try { goalsTile() } finally { os.meka.android.goals.HealthWorkouts.availableForTests = null }
+    }
+
+    private fun goalsTile() {
         val core = prepared(Fill.EMPTY)
         compose.mainClock.autoAdvance = false
         compose.setContent { MekaTheme { GoalsRoute(core) } }
