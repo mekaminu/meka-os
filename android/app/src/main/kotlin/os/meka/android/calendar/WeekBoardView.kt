@@ -1034,7 +1034,7 @@ private fun BoardHintRow(hint: os.meka.core.domain.BoardHint, onApply: () -> Uni
         Text(if (dense) hint.shownBrief else hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             // The walk-through 2026-11-08, A6: "Move to Sat" was cut to "Move to" in a narrow column; there it says "To Sat".
-            TouchPill(if (dense) hint.actionBrief else hint.action, spoken = hint.action, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
+            TouchPill(if (dense) hint.actionBrief else hint.action, spoken = hint.action, pad = if (dense) MekaSpace.xs else MekaSpace.m, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
             TouchPill(os.meka.core.domain.BoardHintRules.NOT_NOW, fill = Meka.colors.surfaceRaised, ink = Meka.colors.textSecondary, onClick = onDismiss)
         }
     }
@@ -1907,24 +1907,20 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
             overflow = TextOverflow.Ellipsis, color = Meka.colors.textPrimary,
             textDecoration = if (card.done && BoardPlannerRules.STRIKE_DONE) TextDecoration.LineThrough else null,
         )
-        // The walk-through 2026-11-02, A6 ("Side h…" on a narrow column): the foot is a flow, so when the chips and the
-        // area's name don't fit whole beside the tick they move under it, at the card's full width, and are cut short
-        // only if even that is too narrow.
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        // The walk-throughs 2026-11-02 and 2026-11-08, A6 ("Side h…", then Boiler service's "Ot…", "H…" in a lane): the
+        // chips and the area's name sit beside the tick only when they fit there whole; otherwise they go under it, and
+        // the name under the chips, so each is cut short only if even the card's full width is too narrow. (A FlowRow
+        // measured each in the room left on the line, so the ellipsis took it before the line could break.)
+        FitLine(Modifier.fillMaxWidth()) {
             // The tick keeps its own target (Compose widens a small one's touch area to 48 dp past its edges).
             TickTarget(
                 card.done, card.title, onTick, column = if (dense) DENSE_TICK_COLUMN else FOOT_TICK, height = if (dense) DENSE_TICK_COLUMN else FOOT_TICK,
                 circle = if (dense) BoardDenseRules.TICK.dp else 20.dp,
             )
-            // The walk-through 2026-11-08, A6 (Boiler service's "Ot…", "H…" in a lane): the chips and the area's name
-            // share the line only when both fit whole; otherwise the name moves under the chips instead of both being cut.
-            FlowRow(
-                Modifier.align(Alignment.CenterVertically).testTag(CARD_FOOT_TAG),
-                horizontalArrangement = Arrangement.End, verticalArrangement = Arrangement.Center,
-            ) {
+            FitLine(Modifier.testTag(CARD_FOOT_TAG)) {
                 if (foot.isNotEmpty()) {
                     FlowRow(
-                        Modifier.align(Alignment.CenterVertically).padding(vertical = MekaSpace.xxs),
+                        Modifier.padding(vertical = MekaSpace.xxs),
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs, Alignment.End),
                         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                     ) { foot.forEach { CardChipPill(it) } }
@@ -1936,7 +1932,7 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                 val src = card.source
                 val words = BoardMatchRules.footLabel(card)
                 if (area != null || src != null) {
-                    Row(Modifier.align(Alignment.CenterVertically).padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                         val dot = if (area != null) Meka.colors.areaTone(area) else Meka.colors.calendarTone(src!!.tone)
                         Box(Modifier.size(if (dense) BoardDenseRules.DOT.dp else 8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
                         if (words != null && BoardMatchRules.footWords(compact)) {
@@ -1949,6 +1945,38 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A card's foot line: its children side by side when their natural widths fit (the first at the start, the rest
+ * packed at the end, all centred on the line), else one under another, the first at the start and the rest at the end,
+ * each given the full width (so a long one is cut short only when even that is too narrow).
+ */
+@Composable
+private fun FitLine(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(content, modifier) { items, c ->
+        val loose = c.copy(minWidth = 0, minHeight = 0)
+        val natural = items.map { it.maxIntrinsicWidth(loose.maxHeight) }
+        val fits = natural.sum() <= c.maxWidth
+        if (fits) {
+            val placed = items.mapIndexed { i, m -> m.measure(loose.copy(maxWidth = natural[i].coerceAtMost(c.maxWidth))) }
+            val width = if (c.hasBoundedWidth && c.minWidth == c.maxWidth) c.maxWidth else placed.sumOf { it.width }.coerceIn(c.minWidth, c.maxWidth)
+            val height = (placed.maxOfOrNull { it.height } ?: 0).coerceIn(c.minHeight, c.maxHeight)
+            layout(width, height) {
+                placed.firstOrNull()?.placeRelative(0, (height - placed[0].height) / 2)
+                var x = width
+                placed.drop(1).reversed().forEach { p -> x -= p.width; p.placeRelative(x, (height - p.height) / 2) }
+            }
+        } else {
+            val placed = items.map { it.measure(loose) }
+            val width = if (c.hasBoundedWidth && c.minWidth == c.maxWidth) c.maxWidth else (placed.maxOfOrNull { it.width } ?: 0).coerceIn(c.minWidth, c.maxWidth)
+            val height = placed.sumOf { it.height }.coerceIn(c.minHeight, c.maxHeight)
+            layout(width, height) {
+                var y = 0
+                placed.forEachIndexed { i, p -> p.placeRelative(if (i == 0) 0 else width - p.width, y); y += p.height }
             }
         }
     }

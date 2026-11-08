@@ -5453,8 +5453,10 @@ something is ticked; `BoardOpenFoldRules.barSlot` keeps its room otherwise, so t
 and its pill cut to "Move to" in the ~110 dp columns: `BoardHint.brief` is now "1h over" (it sits in that day's column)
 and the new `actionBrief` "To Sat" is the narrow column's pill, the screen reader's action still "Move to Sat" (the Mac's
 columns show the full line and pill, unchanged). A lane card's foot (Boiler service: "Ot…", "H…") split the width between
-the chips and the area's name; the foot is now a flow, so the name moves under the chips when both don't fit (Fold; the
-Mac's lanes are wide enough). The header's "Today is 4h over · move “Batch cook…” to Sun?" over the weekend row is right
+the chips and the area's name: a FlowRow measures each item in the room left on its line, so the ellipsis cut it before
+the line could break (CI 1st push caught "Other" cut). New `FitLine` (WeekBoardView) lays its children side by side only
+when their natural widths fit, else one under another at full width; the tick ↔ foot and chips ↔ name both use it (Fold;
+the Mac's lanes are wide enough). The narrow pill also takes `TouchPill(pad = xs)` (CI caught "To Sat" cut at 16 dp). The header's "Today is 4h over · move “Batch cook…” to Sun?" over the weekend row is right
 (today's column is above, scrolled to the weekend by design, week 2's A6) and was left. Tests: BoardHintTest,
 BoardLookTest, BoardOpenFoldTest; BoardScreensTest's scrolled shot fails if the brief wraps or the pill is cut, the areas
 shot if a lane card's chips or area name are cut. Core, Fold and Mac; no server change, no migration; Mac checked nightly.

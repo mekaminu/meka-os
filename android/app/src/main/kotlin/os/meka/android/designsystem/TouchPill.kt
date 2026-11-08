@@ -39,6 +39,8 @@ fun TouchPill(
     ink: Color,
     modifier: Modifier = Modifier,
     spoken: String? = null,
+    /** The word's side padding inside the pill (a narrow Board column uses [MekaSpace.xs] so "To Sat" shows whole). */
+    pad: androidx.compose.ui.unit.Dp = MekaSpace.m,
     onClick: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -52,7 +54,7 @@ fun TouchPill(
     ) {
         Box(
             Modifier.testTag("touch-pill").height(DonePillSpec.HEIGHT_DP.dp).clip(RoundedCornerShape(MekaRadius.pill))
-                .background(fill).padding(horizontal = MekaSpace.m),
+                .background(fill).padding(horizontal = pad),
             contentAlignment = Alignment.Center,
         ) {
             Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "touch-pill-label") { t ->
