@@ -1673,7 +1673,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.NOT_NOW, "Not now")
         XCTAssertEqual(rules.withDismissed(before: "a", key: "reply"), "a;reply")
         let hint = BoardHint(taskId: "t1", kind: BoardHintKind.reply, key: "reply", line: "From an email · give it 15m for the reply?",
-                             action: "15m", toDay: -1, minutes: 15, brief: "From an email · give it 15m for the reply?")
+                             action: "15m", toDay: -1, minutes: 15, brief: "From an email · give it 15m for the reply?",
+                             actionBrief: "15m")
         XCTAssertEqual(hint.shown, "✦ From an email · give it 15m for the reply?")
         XCTAssertEqual(hint.spoken, "Obi suggests: From an email, give it 15m for the reply?")
     }
