@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Fold spread</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .28s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+input{font-family:DM Sans,sans-serif}
+input::placeholder{color:#6f6a62}
+@media (prefers-reduced-motion:reduce){.in{animation:none}}
+</style>
+</helmet>
+<div style="width:884px;height:980px;box-sizing:border-box;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;padding:18px 20px 0;gap:14px;overflow:hidden">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;gap:14px;align-items:center"><span style="font-size:28px;font-weight:700">November</span><span style="display:flex;gap:4px;background:#121214;border-radius:999px;padding:4px"><sc-for list="{{counts}}" as="c" hint-placeholder-count="3"><button type="button" onClick="{{c.go}}" style="{{c.style}}">{{c.name}}</button></sc-for></span></div>
+<div style="display:flex;gap:6px">
+<sc-for list="{{strip}}" as="d" hint-placeholder-count="7"><button type="button" onClick="{{d.go}}" style="{{d.style}}"><span style="font-size:11px;opacity:.75">{{d.w}}</span><span style="font-size:16px;font-weight:600">{{d.n}}</span><span style="font-size:10px;opacity:.8">{{d.len}}</span></button></sc-for>
+</div>
+</div>
+<div style="flex:1;display:grid;grid-template-columns:{{cols}};gap:{{gap}};min-height:0">
+<sc-for list="{{pages}}" as="p" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:10px;min-height:0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="{{p.head}}">{{p.title}}</span><span style="background:#24231b;color:#e3d3a6;border-radius:8px;padding:5px 9px;font-size:13px;font-weight:600">{{p.tot}}</span></div>
+<div style="height:5px;border-radius:3px;background:#1d1d20;overflow:hidden"><div style="{{p.bar}}"></div></div>
+<div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+<sc-for list="{{p.tasks}}" as="t" hint-placeholder-count="3">
+<div class="in" style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #141416">
+<button type="button" onClick="{{t.tick}}" aria-label="Done" style="width:44px;height:44px;margin:-10px -10px -10px -12px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="{{t.tickStyle}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></button>
+<span style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+<sc-if value="{{t.time}}" hint-placeholder-val="{{false}}"><span style="font-size:12.5px;color:#a8a29a">{{t.time}}</span></sc-if>
+<span style="{{t.titleStyle}}">{{t.title}}</span>
+<span style="display:flex;gap:6px;align-items:center;font-size:12px;color:#8f897f"><span style="{{t.dot}}"></span>{{t.area}}</span>
+</span>
+<span style="background:#1a1a1d;color:#d8d2c6;border-radius:8px;padding:5px 8px;font-size:12.5px;flex-shrink:0">{{t.len}}</span>
+</div>
+</sc-for>
+<sc-if value="{{p.empty}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:#6f6a62;padding:20px 0">Nothing planned yet</div></sc-if>
+</div>
+<div style="display:flex;gap:8px;align-items:center;background:#151517;border-radius:14px;padding:4px 4px 4px 12px;margin-bottom:16px">
+<label for="{{p.inputId}}" style="position:absolute;left:-9999px">Add a task</label>
+<input id="{{p.inputId}}" value="{{p.draft}}" onInput="{{p.type}}" onKeyDown="{{p.enter}}" placeholder="{{p.ph}}" style="flex:1;border:0;background:transparent;color:#ededed;font-size:14.5px;outline:none;min-width:0;height:38px">
+<button type="button" onClick="{{p.add}}" aria-label="Add task" style="width:38px;height:38px;border-radius:11px;border:0;background:#c9b37e;color:#111;font-size:20px;font-weight:600">+</button>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":884,"height":980}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={sel:0,count:3,drafts:{},n:20,days:[
+[{id:1,title:'Complete feedbacks',len:30,area:'Work',time:'9:00',done:false},{id:2,title:'Review plan for DL',len:30,area:'Work',time:'9:30',done:false},{id:3,title:'Call the school about Friday',len:15,area:'Kids',time:'',done:true}],
+[{id:4,title:'Prep slides for the review',len:60,area:'Work',time:'10:00',done:false},{id:5,title:'Gym',len:45,area:'Personal',time:'18:00',done:false}],
+[{id:6,title:'Book the MOT',len:15,area:'Car',time:'',done:false}],
+[],[{id:7,title:'Study · Module 6',len:90,area:'Study',time:'21:00',done:false}],[{id:8,title:'Football',len:120,area:'Kids',time:'10:00',done:false}],[]]};}
+renderVals(){
+var s=this.state,self=this;
+var W=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],N=[9,10,11,12,13,14,15];
+var colors={Work:'#8a9bd1',Car:'#d9a35b',Kids:'#7fb3a8',Personal:'#c9b37e',Study:'#9fc0e0'};
+var fmt=function(m){return Math.floor(m/60)+':'+String(m%60).padStart(2,'0');};
+var sum=function(l){return l.reduce(function(a,t){return a+t.len;},0);};
+var k=s.count;var start=Math.min(s.sel,7-k);var pair=[];for(var j=0;j<k;j++)pair.push(start+j);
+return {
+cols:'repeat('+s.count+',minmax(0,1fr))',gap:s.count===2?'28px':'18px',
+counts:[[1,'1 day'],[2,'2 days'],[3,'3 days']].map(function(c){return {name:c[1],go:function(){self.setState({count:c[0]});},style:'border:0;border-radius:999px;height:32px;padding:0 12px;font-size:12.5px;'+(s.count===c[0]?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:transparent;color:#a8a29a')};}),
+strip:W.map(function(w,i){var on=pair.indexOf(i)>=0;var l=sum(s.days[i]);return {w:w.charAt(0),n:N[i],len:l?fmt(l):'·',go:function(){self.setState({sel:i});},
+ style:'border:0;border-radius:12px;width:54px;height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;'+(on?'background:#c9b37e;color:#111':'background:#121214;color:#ededed')};}),
+pages:pair.map(function(i){var day=s.days[i];var tot=sum(day);var dm=sum(day.filter(function(t){return t.done;}));
+ var addText=function(){var t=(s.drafts[i]||'').trim();if(!t)return;var n=s.n+1;var d=s.days.slice();d[i]=d[i].concat([{id:n,title:t,len:30,area:'Personal',time:'',done:false}]);var dr=Object.assign({},s.drafts);dr[i]='';self.setState({days:d,n:n,drafts:dr});};
+ return {title:(s.count===3?W[i].slice(0,3):W[i])+' '+N[i]+(i===0?' · today':''),head:(s.count===3?'font-size:17px;':'font-size:20px;')+'font-weight:700;'+(i===0?'color:#e3d3a6':''),tot:fmt(tot),empty:day.length===0,inputId:'sp'+i,draft:s.drafts[i]||'',ph:s.count===3?'Add · Enter for next':'Add to '+W[i]+' · Enter for the next',
+ bar:'height:100%;background:#c9b37e;width:'+(tot?Math.round(dm/tot*100):0)+'%',
+ type:function(e){var dr=Object.assign({},s.drafts);dr[i]=e.target.value;self.setState({drafts:dr});},
+ enter:function(e){if(e.key==='Enter'){e.preventDefault();addText();}},add:addText,
+ tasks:day.map(function(t){return {title:t.title,time:t.time,area:t.area,len:fmt(t.len),
+  dot:'width:7px;height:7px;border-radius:4px;background:'+(colors[t.area]||'#a8a29a'),
+  titleStyle:'font-size:16px;line-height:1.3;'+(t.done?'color:#6f6a62;text-decoration:line-through':''),
+  tickStyle:'width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'+(t.done?'background:#c9b37e;color:#111':'border:1.5px solid #5a5650;color:transparent'),
+  tick:function(){var d=s.days.slice();d[i]=d[i].map(function(y){return y.id===t.id?Object.assign({},y,{done:!y.done}):y;});self.setState({days:d});}};})};})
+};
+}
+}
+</script>
+</body>
+</html>

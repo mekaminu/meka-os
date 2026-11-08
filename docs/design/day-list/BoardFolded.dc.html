@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Week board folded</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .28s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+input{font-family:DM Sans,sans-serif}
+input::placeholder{color:#6f6a62}
+@media (prefers-reduced-motion:reduce){.in{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:1000px;box-sizing:border-box;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;position:relative;overflow:hidden">
+
+<div style="padding:16px 16px 0;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;gap:8px;align-items:baseline"><span style="font-size:24px;font-weight:700">November</span><span style="font-size:13px;color:#8f897f">Week 46 · {{weekTotal}}</span></div>
+<span style="display:flex;gap:6px"><button type="button" aria-label="Last week" style="width:40px;height:40px;border-radius:20px;border:0;background:#121214;color:#a8a29a">‹</button><button type="button" aria-label="Next week" style="width:40px;height:40px;border-radius:20px;border:0;background:#121214;color:#ededed">›</button></span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px">
+<sc-for list="{{strip}}" as="d" hint-placeholder-count="7"><button type="button" onClick="{{d.go}}" style="{{d.style}}"><span style="font-size:11px;opacity:.75">{{d.w}}</span><span style="font-size:17px;font-weight:600">{{d.n}}</span><span style="font-size:10.5px;opacity:.8">{{d.len}}</span></button></sc-for>
+</div>
+</div>
+
+<div style="padding:14px 16px 8px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:17px;font-weight:600">{{dayTitle}}</span><span style="background:#24231b;color:#e3d3a6;border-radius:8px;padding:5px 9px;font-size:13px;font-weight:600">{{dayTotal}}</span></div>
+<div style="height:5px;border-radius:3px;background:#1d1d20;overflow:hidden"><div style="{{bar}}"></div></div>
+</div>
+
+<div style="flex:1;overflow:auto;padding:0 16px">
+<sc-for list="{{tasks}}" as="t" hint-placeholder-count="4">
+<div class="in" style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #141416">
+<button type="button" onClick="{{t.tick}}" aria-label="Done" style="width:44px;height:44px;margin:-10px -10px -10px -12px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="{{t.tickStyle}}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></button>
+<span style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+<sc-if value="{{t.time}}" hint-placeholder-val="{{true}}"><span style="font-size:12.5px;color:#a8a29a">{{t.time}}</span></sc-if>
+<span style="{{t.titleStyle}}">{{t.title}}</span>
+<span style="display:flex;gap:6px;align-items:center;font-size:12px;color:#8f897f"><span style="{{t.dot}}"></span>{{t.area}}</span>
+</span>
+<span style="background:#1a1a1d;color:#d8d2c6;border-radius:8px;padding:5px 8px;font-size:12.5px;flex-shrink:0">{{t.len}}</span>
+</div>
+</sc-for>
+<sc-if value="{{empty}}" hint-placeholder-val="{{false}}"><div style="font-size:14px;color:#6f6a62;padding:24px 0">Nothing planned · add tasks below</div></sc-if>
+<div style="font-size:12px;color:#6f6a62;padding:14px 0">Hold a task and drag it onto a day above to move it</div>
+</div>
+
+<div style="padding:10px 12px 16px">
+<div style="display:flex;gap:8px;align-items:center;background:#151517;border-radius:16px;padding:6px 6px 6px 14px">
+<label for="addf" style="position:absolute;left:-9999px">New task</label>
+<input id="addf" value="{{draft}}" onInput="{{type}}" onKeyDown="{{enter}}" placeholder="{{ph}}" style="flex:1;border:0;background:transparent;color:#ededed;font-size:15px;outline:none;min-width:0;height:40px">
+<button type="button" onClick="{{add}}" aria-label="Add task" style="width:40px;height:40px;border-radius:12px;border:0;background:#c9b37e;color:#111;font-size:22px;font-weight:600">+</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={sel:0,draft:'',n:20,days:[
+[{id:1,title:'Complete feedbacks',len:30,area:'Work',time:'9:00',done:false},{id:2,title:'Review plan for DL',len:30,area:'Work',time:'9:30',done:false},{id:3,title:'Call the school about Friday',len:15,area:'Kids',time:'',done:true}],
+[{id:4,title:'Prep slides for the review',len:60,area:'Work',time:'10:00',done:false},{id:5,title:'Gym',len:45,area:'Personal',time:'18:00',done:false}],
+[{id:6,title:'Book the MOT',len:15,area:'Car',time:'',done:false}],
+[],[{id:7,title:'Study · Module 6',len:90,area:'Study',time:'21:00',done:false}],[{id:8,title:'Football · 10:00',len:120,area:'Kids',time:'10:00',done:false}],[]]};}
+renderVals(){
+var s=this.state,self=this;
+var W=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],N=[9,10,11,12,13,14,15];
+var colors={Work:'#8a9bd1',Car:'#d9a35b',Kids:'#7fb3a8',Home:'#b48ad1',Personal:'#c9b37e',Study:'#9fc0e0'};
+var fmt=function(m){return Math.floor(m/60)+':'+String(m%60).padStart(2,'0');};
+var sum=function(l){return l.reduce(function(a,t){return a+t.len;},0);};
+var day=s.days[s.sel];var tot=sum(day);var doneM=sum(day.filter(function(t){return t.done;}));
+var all=s.days.reduce(function(a,d){return a+sum(d);},0);
+var addText=function(){var t=s.draft.trim();if(!t)return;var n=s.n+1;var d=s.days.slice();d[s.sel]=d[s.sel].concat([{id:n,title:t,len:30,area:'Personal',time:'',done:false}]);self.setState({days:d,n:n,draft:''});};
+return {
+weekTotal:fmt(all)+' planned',
+strip:W.map(function(w,i){var on=s.sel===i;var l=sum(s.days[i]);return {w:w.charAt(0),n:N[i],len:l?fmt(l):'·',go:function(){self.setState({sel:i});},
+ style:'border:0;border-radius:12px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;'+(on?'background:#c9b37e;color:#111':'background:#121214;color:#ededed')};}),
+dayTitle:W[s.sel]+' '+N[s.sel]+' November'+(s.sel===0?' · today':''),
+dayTotal:fmt(tot),
+bar:'height:100%;background:#c9b37e;border-radius:3px;transition:width .4s;width:'+(tot?Math.round(doneM/tot*100):0)+'%',
+tasks:day.map(function(t){return {title:t.title,time:t.time,area:t.area,len:fmt(t.len),
+ dot:'width:7px;height:7px;border-radius:4px;background:'+(colors[t.area]||'#a8a29a'),
+ titleStyle:'font-size:16px;line-height:1.3;'+(t.done?'color:#6f6a62;text-decoration:line-through':''),
+ tickStyle:'width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'+(t.done?'background:#c9b37e;color:#111':'border:1.5px solid #5a5650;color:transparent'),
+ tick:function(){var d=s.days.slice();d[s.sel]=d[s.sel].map(function(y){return y.id===t.id?Object.assign({},y,{done:!y.done}):y;});self.setState({days:d});}};}),
+empty:day.length===0,
+draft:s.draft,ph:'Add to '+W[s.sel]+' · Enter for the next',
+type:function(e){self.setState({draft:e.target.value});},
+enter:function(e){if(e.key==='Enter'){e.preventDefault();addText();}},
+add:addText
+};
+}
+}
+</script>
+</body>
+</html>

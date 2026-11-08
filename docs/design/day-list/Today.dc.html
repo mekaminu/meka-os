@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today with the Day list</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .28s cubic-bezier(.2,.8,.2,1) both}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(201,179,126,.55)}50%{box-shadow:0 0 0 6px rgba(201,179,126,0)}}
+.glow{animation:glow 1.8s ease-in-out infinite}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.glow{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:1000px;box-sizing:border-box;padding:18px 18px 0;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;position:relative;overflow:hidden">
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:3px">
+<div style="font-size:28px;font-weight:700;line-height:1.15">Good evening, Alex</div>
+<div style="font-size:13.5px;color:#a8a29a">Sunday 8 November · 9° clear</div>
+</div>
+<span style="width:48px;height:48px;border-radius:24px;border:1.5px solid #6b5a36;flex-shrink:0"></span>
+</div>
+
+<div style="display:flex;gap:16px;align-items:center">
+<span style="font-size:14px;color:#c9b37e">Search</span>
+<button type="button" onClick="{{go3}}" class="glow" style="border:1.5px solid #c9b37e;background:#24231b;color:#e3d3a6;border-radius:999px;height:36px;padding:0 14px;font-size:14px;font-weight:600;display:flex;gap:8px;align-items:center"><span style="width:20px;height:20px;border-radius:10px;background:#c9b37e;color:#111;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>Plan my day</button>
+</div>
+
+<div style="background:#121214;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">UP NEXT</span>
+<span style="font-size:16px;font-weight:600">Complete feedbacks</span>
+</div>
+
+<div style="display:flex;flex-direction:column">
+<button type="button" onClick="{{go1}}" class="glow" style="border:1.5px solid #c9b37e;background:#24231b;color:#ededed;border-radius:12px;min-height:48px;padding:0 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+<span style="display:flex;gap:10px;align-items:center"><span style="width:20px;height:20px;border-radius:10px;background:#c9b37e;color:#111;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">1</span><span style="font-size:12px;letter-spacing:.14em;color:#e3d3a6">ANYTIME TODAY · 4 · 1:30</span></span>
+<span style="font-size:13px;color:#c9b37e">Open list ›</span>
+</button>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;align-items:center;min-height:46px;border-bottom:1px solid #141416">
+<span style="width:20px;height:20px;border-radius:10px;border:1.5px solid #5a5650;box-sizing:border-box;flex-shrink:0"></span>
+<span style="flex:1;font-size:15.5px">{{r.t}}</span>
+<span style="background:#1a1a1d;color:#d8d2c6;border-radius:8px;padding:4px 7px;font-size:12px">{{r.l}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="background:#121214;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">HOW YOU GET TO THE DAY LIST</span>
+<span style="font-size:13.5px;color:#d8d2c6"><b style="color:#e3d3a6">1</b> Tap the Anytime today heading</span>
+<span style="font-size:13.5px;color:#d8d2c6"><b style="color:#e3d3a6">2</b> Start typing below: Enter keeps it open for the next task</span>
+<span style="font-size:13.5px;color:#d8d2c6"><b style="color:#e3d3a6">3</b> Plan my day</span>
+<span style="font-size:12.5px;color:#8f897f">Also: hold the app icon → Add tasks · the home-screen widget · a day’s heading on the Week board</span>
+</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:18px;right:18px;bottom:96px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 12px;font-size:13px">{{toast}}</div></sc-if>
+
+<div style="position:absolute;left:14px;right:14px;bottom:24px;display:flex;align-items:center;gap:8px">
+<button type="button" onClick="{{go2}}" class="glow" style="flex:1;border:1.5px solid #c9b37e;background:#151517;color:#8f897f;border-radius:999px;height:52px;padding:0 8px 0 10px;display:flex;align-items:center;gap:10px;font-size:15px;text-align:left"><span style="width:22px;height:22px;border-radius:11px;background:#c9b37e;color:#111;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span>Add a task…</button>
+<span style="width:48px;height:48px;border-radius:24px;border:1.5px solid #c9b37e;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={toast:''};}
+renderVals(){
+var self=this;
+return {
+rows:[{t:'Complete feedbacks',l:'0:30'},{t:'Review plan for DL',l:'0:30'},{t:'Call the school about Friday',l:'0:15'},{t:'Reply to the landlord',l:'0:15'}],
+go1:function(){self.setState({toast:'Opens the Day list for today'});},
+go2:function(){self.setState({toast:'Opens the Day list with the add bar ready · type, Enter, type the next'});},
+go3:function(){self.setState({toast:'Opens the Day list with Fit times ready'});},
+toast:this.state.toast
+};
+}
+}
+</script>
+</body>
+</html>
