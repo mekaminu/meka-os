@@ -5578,3 +5578,12 @@ switch (`_workMode.value.callAssistant`), so that pair was the shots' fixture. T
 AppointmentsFacadeTest, the Mac bridge test; LifePlacesScreensTest fails if the head says to chase and no row does,
 AdminPlacesScreensTest if "all in hand" sits over a lit row. Core only; both apps draw the lines from the core; Mac
 checked nightly.
+
+
+## Today's clipped first letters (TOP bug, 2026-11-08)
+
+Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:
+
+- [ ] **Take first (TOP, small bug; seen on Meka's Today screenshots 2026-11-08 22:09): the first letter of lines is cut off at the left edge**: "Orochi Framework" shows as "Jrochi", "Next week" as "\ext week", "Nvidia" as "\vidia", "Huang", "TechCrunch" clipped, in the Study week card and the news cards (folded phone). A clip or a negative offset on those cards' text (likely an enter animation's translateX or a clipped `graphicsLayer`); find it, fix it, and add a screen test that the first glyph of a card's text sits inside the card's padding. Also on the same shots: the Study week card is narrower than every other card (ends ~80% of the width), and the timeline's "All day · Todoist" label sits far left of its task with a wide gap.
+
+Landed 2026-11-08: `Modifier.wordsTap` and `Modifier.bleedSides` in android designsystem/Rhythm.kt (TextTap.BLEED 8 dp, RADIUS 10 dp); used in TodayRoute (date, train queue, week ahead, pressure fixes, Search, Plan my day, Done today more, study check-in rows), TaskDetailRows (Delete), CommandCentre (Open Calendar ›, Open News ›), ChecklistSection (Remove), NeedsYouMeanwhileItems (+N more). The study nudge and check-in cards moved from TodayHeaderRow's left column to just after it (full width). Today's AllDayLabel takes `padding(start = TIME_COLUMN)` as CalendarRoute already did. Test: android WordsTapTest (Robolectric native graphics: tapped words pixel-identical to plain words; the old `clip(RoundedCornerShape(MekaRadius.m)).clickable` differs). Other screens may still clip words the same way; they follow when the Today rebuild and the look review reach them.

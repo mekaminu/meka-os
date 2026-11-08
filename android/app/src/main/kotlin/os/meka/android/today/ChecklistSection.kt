@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.wordsTap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -279,8 +280,7 @@ private fun ChecklistTemplatesRow(task: Task, empty: Boolean, actions: TodayActi
                         } else {
                             Text(
                                 "Remove", style = MekaType.caption, color = Meka.colors.critical,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                    .clickable(role = Role.Button) {
+                                modifier = Modifier.wordsTap {
                                         haptics.tick()
                                         actions.removeTemplate(t)
                                         choices = choices?.let { c -> ChecklistTemplateRules.view(c.saved - t) }

@@ -1,6 +1,11 @@
 package os.meka.android.designsystem
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -51,4 +56,34 @@ fun Modifier.bleedStart(start: Dp): Modifier = layout { measurable, constraints 
     val placeable = measurable.measure(constraints)
     val s = start.roundToPx()
     layout((placeable.width - s).coerceAtLeast(0), placeable.height) { placeable.place(-s, 0) }
+}
+
+/**
+ * Words you tap straight on the page or in a card (the date, a link line, a course's rows in the study check-in): the
+ * tap's rounded highlight reaches [TextTap.BLEED] past the words on each side and insets them by the same, so the words
+ * stay exactly where they were and the clip's corners never cut a first or last letter (Meka 2026-11-08 22:09, Today:
+ * "Orochi" showed as "Jrochi" and "Next week" as "\ext week", because a 16 dp rounded clip sat right on the words).
+ * Use it in place of `clip(RoundedCornerShape(..)).clickable(..)` on words.
+ */
+fun Modifier.wordsTap(role: Role? = Role.Button, onClickLabel: String? = null, onClick: () -> Unit): Modifier =
+    bleedSides(TextTap.BLEED)
+        .clip(RoundedCornerShape(TextTap.RADIUS))
+        .clickable(role = role, onClickLabel = onClickLabel, onClick = onClick)
+        .padding(horizontal = TextTap.BLEED)
+
+/** [wordsTap]'s sizes: the bleed is at least the corner's reach on a one-line row, so the curve stays clear of the words. */
+object TextTap {
+    val BLEED: Dp = MekaSpace.xs
+    val RADIUS: Dp = MekaRadius.s
+}
+
+/** Lays this out [by] wider on each side than its slot, reporting the slot's own size, so it bleeds into the insets. */
+fun Modifier.bleedSides(by: Dp): Modifier = layout { measurable, constraints ->
+    val px = by.roundToPx()
+    val wider = constraints.copy(
+        minWidth = if (constraints.minWidth > 0) constraints.minWidth + 2 * px else 0,
+        maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + 2 * px else constraints.maxWidth,
+    )
+    val p = measurable.measure(wider)
+    layout((p.width - 2 * px).coerceAtLeast(0), p.height) { p.place(-px, 0) }
 }

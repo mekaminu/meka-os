@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.wordsTap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -132,8 +133,7 @@ internal fun ComingUpColumn(
         item(key = "open") {
             Text(
                 "Open Calendar ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-                    .clickable(role = Role.Button, onClick = openCalendar)
+                modifier = Modifier.padding(top = MekaSpace.xs).wordsTap(onClick = openCalendar)
                     .padding(vertical = MekaSpace.xxs).animateItem().appear(rememberAppearance(1 + c.days.size)),
             )
         }
@@ -184,8 +184,7 @@ private fun NewsGlanceView(g: NewsGlance, modifier: Modifier, openEvent: (Calend
         }
         Text(
             "Open News ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button) { openNews(null) }.padding(vertical = MekaSpace.xxs),
+            modifier = Modifier.padding(top = MekaSpace.xs).wordsTap { openNews(null) }.padding(vertical = MekaSpace.xxs),
         )
     }
 }

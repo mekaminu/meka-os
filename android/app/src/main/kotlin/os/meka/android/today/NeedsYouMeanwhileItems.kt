@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.wordsTap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -146,7 +147,7 @@ private fun MeanwhileRow(l: MeanwhileLine, open: () -> Unit, modifier: Modifier,
 @Composable
 private fun MeanwhileMore(text: String, open: () -> Unit, modifier: Modifier) {
     Text(text, style = MekaType.caption, color = Meka.colors.accent,
-        modifier = modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Open Lists") { open() }
+        modifier = modifier.wordsTap(onClickLabel = "Open Lists") { open() }
             // Works by hand (quality gate): "+2 more" keeps its look; the tap reaches the 48 dp around it.
             .minTouch())
 }

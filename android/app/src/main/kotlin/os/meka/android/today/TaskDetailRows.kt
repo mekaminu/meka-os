@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.wordsTap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -249,7 +250,7 @@ internal fun DetailActions(task: Task, actions: TodayActions) {
         }
         Text(
             "Delete", style = MekaType.itemMeta, color = Meka.colors.critical,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { haptics.tick(); actions.delete(task.id) }
+            modifier = Modifier.wordsTap { haptics.tick(); actions.delete(task.id) }
                 .padding(vertical = MekaSpace.xs),
         )
     }

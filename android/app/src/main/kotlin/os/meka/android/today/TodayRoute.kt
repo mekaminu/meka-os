@@ -6,6 +6,7 @@ import os.meka.android.ask.WeekAheadPane
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.TickSize
 import os.meka.android.designsystem.bleedStart
+import os.meka.android.designsystem.wordsTap
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import os.meka.android.work.AfterWorkHost
@@ -944,8 +945,7 @@ private fun TodayPane(
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         // Tap the date: tomorrow, any time of day (Meka 2026-10-26).
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                            modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.s))
-                                .clickable(role = Role.Button, onClickLabel = "See tomorrow") { openTomorrow() })
+                            modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap(onClickLabel = "See tomorrow") { openTomorrow() })
                     }
                     // "14° · light rain from 16:00": cross-fades as the day moves on; nothing until a forecast arrives. On
                     // an office day it says both places (Places item 2), so it may take a second line.
@@ -1006,8 +1006,7 @@ private fun TodayPane(
                         Crossfade(queue, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "train-queue-line") { l ->
                             Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
-                                    .clickable(role = Role.Button) { openQueue() }
+                                modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap { openQueue() }
                                     .semantics { contentDescription = l.spoken })
                         }
                     }
@@ -1017,8 +1016,7 @@ private fun TodayPane(
                         Crossfade(week, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "week-ahead-line") { l ->
                             Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
-                                    .clickable(role = Role.Button) { openWeekAhead() }
+                                modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap { openWeekAhead() }
                                     .semantics { contentDescription = l.spoken })
                         }
                     }
@@ -1128,6 +1126,74 @@ private fun TodayPane(
                             }
                         }
                     }
+                    // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
+                    // (lit in the accent on Monday); cross-fades as it comes and changes.
+                    today.reflection?.let { thing ->
+                        Crossfade(thing, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflection-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
+                    // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
+                    // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
+                    today.pressure?.let { pressure ->
+                        Crossfade(pressure, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "pressure-line") { p ->
+                            Column(Modifier.padding(top = MekaSpace.xxs)) {
+                                Text(p.line, style = MekaType.caption, color = Meka.colors.calendar3, maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { contentDescription = p.spoken })
+                                if (core != null && p.fixes.isNotEmpty()) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                        p.fixes.forEach { fix ->
+                                            Text(
+                                                fix.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                                modifier = Modifier.wordsTap {
+                                                    carryScope.launch {
+                                                        val line = runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()
+                                                        if (line != null) undo?.show(line) { core.undoBoardMove() }
+                                                    }
+                                                }.padding(vertical = MekaSpace.xxs),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
+                    today.dateNight?.let { night ->
+                        Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
+                    // Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day; lit in the
+                    // accent, cross-fades as it comes and changes.
+                    today.lifeAdmin?.let { admin ->
+                        Crossfade(admin, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "life-admin-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
+                    SyncLine(sync)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+                        modifier = Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            "Search", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.wordsTap { openSearch() }.padding(vertical = MekaSpace.xxs),
+                        )
+                        Text(
+                            "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.wordsTap { openPlan() }.padding(vertical = MekaSpace.xxs),
+                        )
+                    }
+                    }
+                    // The study cards run the page's full width under the header, not beside the face (Meka 2026-11-08 22:09:
+                    // the study week card ended at about 80% of the width, narrower than every other card).
                     // Study plan, slice 2b rest: from 10 min before a study session, Obi's quiet card ("Study in 8 min ·
                     // Data analytics", the time, lessons and where) with Start, then Done (its lessons ticked, Undo on the
                     // bar) and Not now. A tap shows in the same frame; the card unfolds, cross-fades and folds away.
@@ -1167,74 +1233,6 @@ private fun TodayPane(
                             },
                             onChange = { id -> openStudy(id) },
                         )
-                    }
-                    // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
-                    // (lit in the accent on Monday); cross-fades as it comes and changes.
-                    today.reflection?.let { thing ->
-                        Crossfade(thing, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflection-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
-                    // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
-                    today.pressure?.let { pressure ->
-                        Crossfade(pressure, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "pressure-line") { p ->
-                            Column(Modifier.padding(top = MekaSpace.xxs)) {
-                                Text(p.line, style = MekaType.caption, color = Meka.colors.calendar3, maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { contentDescription = p.spoken })
-                                if (core != null && p.fixes.isNotEmpty()) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                                        p.fixes.forEach { fix ->
-                                            Text(
-                                                fix.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                                                    carryScope.launch {
-                                                        val line = runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()
-                                                        if (line != null) undo?.show(line) { core.undoBoardMove() }
-                                                    }
-                                                }.padding(vertical = MekaSpace.xxs),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
-                    today.dateNight?.let { night ->
-                        Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day; lit in the
-                    // accent, cross-fades as it comes and changes.
-                    today.lifeAdmin?.let { admin ->
-                        Crossfade(admin, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "life-admin-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    SyncLine(sync)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
-                        modifier = Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()),
-                    ) {
-                        Text(
-                            "Search", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openSearch() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openPlan() }.padding(vertical = MekaSpace.xxs),
-                        )
-                    }
                     }
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs), recover = connect.recover, waiting = connect.waiting)
                     if (battery.line != null) {
@@ -1452,7 +1450,9 @@ private fun TodayPane(
             if (head != null) {
                 if (head == DayHead.ALL_DAY) item(key = "allday-label") {
                     Headed(tl.sectionLabel, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
-                        AllDayLabel(tl.allDayLabel, m)
+                        // In the title column over its rows, as the Calendar draws it (Meka 2026-11-08 22:09: "All day ·
+                        // Todoist" sat far left of its task with a wide gap).
+                        AllDayLabel(tl.allDayLabel, m.padding(start = TIME_COLUMN))
                     }
                 }
                 items(AllDayRules.shown(tl.allDayItems, allDayOpen), key = { "a-" + it.event.id }) { a ->
@@ -1538,7 +1538,7 @@ private fun TodayPane(
                 os.meka.core.domain.DoneTodayRules.moreLine(today.doneToday, doneChoice, doneOpen)?.let { more ->
                     item(key = "done-more") {
                         Text(more, style = MekaType.caption, color = Meka.colors.textTertiary,
-                            modifier = Modifier.animateItem().clip(RoundedCornerShape(MekaRadius.m)).clickable { doneOpen = true }
+                            modifier = Modifier.animateItem().wordsTap(role = null) { doneOpen = true }
                                 .minTouch().padding(vertical = MekaSpace.xs))
                     }
                 }
@@ -1973,8 +1973,7 @@ private fun StudyCheckinCard(
         }
         c.rows.forEach { r ->
             Column(
-                Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-                    .clickable(role = Role.Button) { onChange(r.courseId) }
+                Modifier.padding(top = MekaSpace.xs).fillMaxWidth().wordsTap { onChange(r.courseId) }
                     .semantics(mergeDescendants = true) { contentDescription = r.spoken },
             ) {
                 Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
