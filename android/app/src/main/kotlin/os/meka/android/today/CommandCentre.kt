@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -223,6 +224,21 @@ private fun ComingUpDayView(day: ComingUpDay, modifier: Modifier, openEvent: (Ca
 private val COMING_UP_TIME = 84.dp
 
 /** The compact Needs you column beside Today, with its count in the heading. */
+/**
+ * The open Fold's housekeeping at the head of the Needs you column (walk-through week 3, A1): the Navilife health line
+ * and the Set up Navilife card, each only while it has something to say, so nothing is drawn when all is well. Their own
+ * motion (the line's cross-fade, the card's expand) is unchanged.
+ */
+@Composable
+internal fun SideHousekeeping(core: MekaCore) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.gutter).testTag(SIDE_HOUSEKEEPING_TAG)) {
+        os.meka.android.ask.HealthTodayLine(core, Modifier.padding(top = MekaSpace.l))
+        os.meka.android.ask.SetupTodayCard(core, Modifier.padding(top = MekaSpace.l))
+    }
+}
+
+internal const val SIDE_HOUSEKEEPING_TAG = "side-housekeeping"
+
 @Composable
 internal fun CommandNeedsYou(core: MekaCore, stack: NeedsYouStack, moves: DecisionMoves, modifier: Modifier, openAfterWork: () -> Unit) {
     NeedsYouColumn(core, stack, moves, modifier, openAfterWork, compact = true)

@@ -115,6 +115,8 @@ class TodayScreensTest {
         const val SETTLE_MS = 3_000L
         /** A two-line title adds ~22 dp to the mockup's ~122 dp card. */
         const val UP_NEXT_MAX_DP = 150f
+        /** The setup card's label as drawn (SetupTodayCard). */
+        const val SETUP_LABEL = "SET UP NAVILIFE"
         /** Titles that may take two lines on the cover screen, so their rows are taller by right. */
         val LONG_TITLES = listOf("Plan Saturday's football run with Alex")
         /** The Calendar screen's coming days (its ev4–ev6), seeded into the full day's shots. */
@@ -167,6 +169,7 @@ class TodayScreensTest {
             fail("$name: a Fasting card with no fast running")
         }
         check(core.fastingView.value.current != null == (fill == Fill.FASTING))
+        if (name.startsWith("inner") && fill != Fill.EMPTY) assertDayLeadsInner(name, timeline = fill == Fill.ONE)
         if (fill == Fill.MANY) {
             // A16: the full day has the Calendar's coming days, so Coming up never says there's nothing ahead.
             val ahead = CommandCentreRules.comingUp(core.calendarView.value, CommandCentreRules.DAYS_SHARED, CommandCentreRules.LINES_SHARED)
@@ -202,6 +205,34 @@ class TodayScreensTest {
             if (node.boundsInRoot.bottom > clearBy + 0.5f) {
                 fail("$name: a row ends at ${node.boundsInRoot.bottom / density} dp, under the capture bar's fade (${clearBy / density} dp)")
             }
+        }
+    }
+
+    /**
+     * Walk-through 2026-11-08, A1 (third week): on the open Fold the setup card and health line pushed Up next's buttons
+     * and the TODAY · AT WORK timeline under the capture bar before any scroll. They now head the Needs you column, so
+     * unscrolled, Up next's buttons (and with one task, the timeline's work row) end above the bar's fade, and the setup
+     * card is not in Today's column.
+     */
+    private fun assertDayLeadsInner(name: String, timeline: Boolean) {
+        val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+        val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val clearBy = bar.top - MotionMath.FOOT_FADE_DP * density
+        fun inToday(n: androidx.compose.ui.semantics.SemanticsNode) = n.boundsInRoot.center.x in bar.left..bar.right
+        val chips = compose.onAllNodesWithTag(NOW_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes().filter(::inToday)
+        if (chips.isEmpty()) fail("$name: Up next's buttons aren't in Today's column")
+        chips.forEach { n ->
+            if (n.boundsInRoot.bottom > clearBy + 0.5f) {
+                fail("$name: Up next's button ends at ${n.boundsInRoot.bottom / density} dp, under the capture bar's fade (${clearBy / density} dp)")
+            }
+        }
+        if (timeline) {
+            val work = compose.onAllNodes(hasText("09:00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().filter(::inToday)
+            if (work.isEmpty()) fail("$name: the timeline's work row isn't in Today's column")
+            if (work.minOf { it.boundsInRoot.bottom } > clearBy + 0.5f) fail("$name: the timeline's work row is under the capture bar")
+        }
+        compose.onAllNodes(hasText(SETUP_LABEL), useUnmergedTree = true).fetchSemanticsNodes().forEach { n ->
+            if (inToday(n)) fail("$name: the setup card is in Today's column, not beside it")
         }
     }
 

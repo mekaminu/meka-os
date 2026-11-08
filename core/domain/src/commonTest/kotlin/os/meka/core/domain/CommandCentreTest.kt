@@ -58,6 +58,9 @@ class CommandCentreTest {
         assertTrue(CommandCentreRules.todayListsNeedsYou(CommandLayout.SINGLE))
         assertFalse(CommandCentreRules.todayListsNeedsYou(CommandLayout.TWO))
         assertFalse(CommandCentreRules.todayListsNeedsYou(CommandLayout.THREE))
+        assertTrue(CommandCentreRules.todayCarriesSetup(CommandLayout.SINGLE))
+        assertFalse(CommandCentreRules.todayCarriesSetup(CommandLayout.TWO))
+        assertFalse(CommandCentreRules.todayCarriesSetup(CommandLayout.THREE))
         assertEquals(0f, CommandCentreRules.sideShare(CommandLayout.SINGLE))
         assertTrue(CommandCentreRules.sideShare(CommandLayout.THREE) > CommandCentreRules.sideShare(CommandLayout.TWO))
     }

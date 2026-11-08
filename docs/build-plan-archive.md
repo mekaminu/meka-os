@@ -5420,3 +5420,14 @@ fixture's move and its P&L disagree. The liquidation line still reads 17%. **A3*
 step-based auto size (15 → 11 sp); the Mac's `MoneyTilesView` scales the figure down to 0.7 and the label to 0.8 rather
 than truncate. New `ScreenShots.assertNotCut` (overflowed width, or the last visible line ending before the text) runs on
 the review's cover shot over every tile's value. Core, Fold and Mac; no server change, no migration; Mac checked nightly.
+
+Slice 2 (2026-11-08): **A1** (third week) Today under the capture bar. The cover's "many" shot is a viewport mid-list
+(its `-end` shot shows the last row clear, 4 Nov); the real fault was the open Fold: the Navilife health line and the Set
+up Navilife card sat in Today's column above Up next, so with one task the TODAY · AT WORK heading was the last thing
+above the bar and, while fasting, Up next's buttons were under it, while the Needs you column beside it stood empty.
+Core `CommandCentreRules.todayCarriesSetup(layout)` (SINGLE only; CommandCentreTest); `TodayPane(carriesSetup)` drops
+the two when a column is beside Today, and the Needs you slot of `CommandSide` gets `SideHousekeeping` (CommandCentre.kt:
+the health line, then the setup card, each only while it has something to say, their own motion unchanged) above the
+Needs you list. TodayScreensTest's inner shots now fail, unscrolled, unless Up next's buttons (and with one task the
+timeline's work row) end above the bar's fade and the setup card sits outside Today's column. The Mac already has setup
+as one quiet line under the greeting, so no Mac change; core touched, Mac checked nightly. No server change, no migration.

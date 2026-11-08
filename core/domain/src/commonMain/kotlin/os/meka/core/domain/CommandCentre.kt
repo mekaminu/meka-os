@@ -108,6 +108,13 @@ object CommandCentreRules {
     /** Today lists what needs you itself only when no Needs you column is beside it (never shown twice). */
     fun todayListsNeedsYou(layout: CommandLayout): Boolean = layout == CommandLayout.SINGLE
 
+    /**
+     * The open Fold's housekeeping (the Navilife health line and the Set up Navilife card) sits at the top of the
+     * column beside Today, so Up next and the day's timeline lead Today's own column (walk-through week 3, A1: they
+     * were pushed under the capture bar). Alone, Today carries them itself.
+     */
+    fun todayCarriesSetup(layout: CommandLayout): Boolean = layout == CommandLayout.SINGLE
+
     /** "Needs you" · "Needs you · 3" · "Needs you · 9+" */
     fun needsYouHeading(count: Int): String = when {
         count <= 0 -> "Needs you"

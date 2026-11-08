@@ -420,6 +420,7 @@ private fun TodayRouteContent(
                         openTomorrow = { showTomorrow = true },
                         openActivity = { showActivity = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
+                        carriesSetup = CommandCentreRules.todayCarriesSetup(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
@@ -437,7 +438,18 @@ private fun TodayRouteContent(
                     CommandSide(
                         columns, m,
                         detail = { dm -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, dm, onClose = { selectedId = null }) },
-                        needsYou = { nm -> CommandNeedsYou(core, stack, moves, nm, openAfterWork = { showAfterWork = true }) },
+                        needsYou = { nm ->
+                            // Walk-through week 3, A1: on the open Fold the health line and the setup card head this
+                            // column, so Up next and the timeline lead Today's own column above the capture bar.
+                            if (CommandCentreRules.todayCarriesSetup(layout)) {
+                                CommandNeedsYou(core, stack, moves, nm, openAfterWork = { showAfterWork = true })
+                            } else {
+                                Column(nm) {
+                                    SideHousekeeping(core)
+                                    CommandNeedsYou(core, stack, moves, Modifier.weight(1f).fillMaxWidth(), openAfterWork = { showAfterWork = true })
+                                }
+                            }
+                        },
                         comingUp = { cm, shared ->
                             ComingUpColumn(
                                 calendar, shared, cm, openEvent = { eventOpen = it }, openCalendar = openCalendar,
@@ -757,6 +769,8 @@ private fun TodayPane(
     eventHandlers: EventActionHandlers? = null,
     /** False in the command centre, where the Needs you column beside Today shows them. */
     listsNeedsYou: Boolean = true,
+    /** False in the command centre, where the column beside Today carries the health line and the setup card (A1). */
+    carriesSetup: Boolean = true,
     /** The closed Fold's cover screen (Fold modes, slice 3): the "now" card heads Today in place of Up next. */
     now: NowView? = null,
     nowHandlers: NowHandlers? = null,
@@ -1233,9 +1247,9 @@ private fun TodayPane(
                     // "What Navilife may do" completeness: while paused, one brass line with Resume.
                     if (core != null) os.meka.android.ask.AutonomyTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
                     // Anything else MEKA depends on that needs a look (Reliability first, item 3): one quiet line.
-                    if (core != null && now == null) os.meka.android.ask.HealthTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
+                    if (core != null && now == null && carriesSetup) os.meka.android.ask.HealthTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
                     // Setup checklist: a card while something is left to set up ("Not today" folds it away until tomorrow).
-                    if (core != null && now == null) os.meka.android.ask.SetupTodayCard(core, Modifier.padding(top = MekaSpace.xs))
+                    if (core != null && now == null && carriesSetup) os.meka.android.ask.SetupTodayCard(core, Modifier.padding(top = MekaSpace.xs))
                     // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
                     // (two loops, then it rests). Off in Appearance hides it.
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
