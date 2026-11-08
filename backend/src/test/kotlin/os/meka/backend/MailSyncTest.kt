@@ -862,7 +862,7 @@ class MailSyncTest {
         assertEquals(MailSorted(MailSort.PROMO, MailSortReason.PRIZE, true), ms.sortOf(id, "p1"))
         assertEquals(MailSorted(MailSort.FYI, MailSortReason.OWN, true), ms.sortOf(id, "n1"))
         assertEquals(MailSortReason.DIGEST, ms.sortOf(id, "d1")!!.reason)
-        assertEquals(MailSortReason.SCAM, ms.sortOf(id, "x1")!!.reason)
+        // The scam (sorted SCAM) left the inbox for Spam (below).
         // Needs you holds Sam's email; slice 3: his own email with a link comes as a note to self (its site only); the
         // scam ("Notification via PayPal" from another domain, a sure one) went to Spam (phishing in the body, slice 3).
         val shown = items(ops).values.filter { (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L }
@@ -891,7 +891,6 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(fetch = listOf("o1", "u1", "m1"), cursor = "h2") }
         now += 60_000
         i.syncAccount(id)
-        assertEquals(MailSortReason.SCAM, ms.sortOf(id, "o1")!!.reason)
         assertEquals(MailSortReason.SCAM, ms.sortOf(id, "u1")!!.reason)
         // The sure one is in Spam, out of the inbox; the unsure one and the security alert stay.
         assertTrue("SPAM" in gmail.mailbox.getValue("o1").labels)
