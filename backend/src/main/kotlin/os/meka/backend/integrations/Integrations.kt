@@ -1677,7 +1677,7 @@ class Integrations(
         val scams = inbox.filter { (h, s) -> MailScamRules.bodyDue(s) && bodyChecked[bodyKey(a.id, h.id)].orEmpty().isNotEmpty() }
             .associateTo(HashMap<String, MailSorted>()) { (h, _) -> h.id to MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true) }
         val due = inbox
-            .filter { (h, s) -> h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS && MailScamRules.bodyDue(s) && bodyKey(a.id, h.id) !in bodyChecked }
+            .filter { (h, s) -> h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS && MailScamRules.bodyDue(s) && !bodyChecked.containsKey(bodyKey(a.id, h.id)) }
             .sortedByDescending { it.first.receivedAtMs }
             .take(MailScamRules.BODY_PER_CHECK)
         if (bodyChecked.size > 20_000) bodyChecked.clear()
