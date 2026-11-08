@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today redesigned</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+.pop{animation:pop .3s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+input{font-family:DM Sans,sans-serif}
+input::placeholder{color:#6f6a62}
+@media (prefers-reduced-motion:reduce){.in,.pop{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1500px;box-sizing:border-box;padding:16px 16px 110px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative">
+
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13px;color:#a8a29a">Sunday 8 November</span><span style="font-size:24px;font-weight:700">Good evening, Alex</span></div>
+<span style="display:flex;gap:8px;align-items:center"><span style="background:#121214;border-radius:999px;padding:7px 12px;font-size:13px;color:#d8d2c6">3° clear</span><span style="width:40px;height:40px;border-radius:20px;border:1.5px solid #6b5a36;position:relative;display:block" aria-hidden="true"><span style="position:absolute;left:19px;top:7px;width:2px;height:13px;background:#c9b37e;border-radius:1px"></span><span style="position:absolute;left:19px;top:19px;width:11px;height:2px;background:#c9b37e;border-radius:1px"></span></span></span>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{t.go}}" style="border:0;background:#121214;color:#ededed;border-radius:14px;padding:10px 12px;text-align:left;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;letter-spacing:.12em;color:#a8a29a">{{t.k}}</span><span style="font-size:17px;font-weight:600">{{t.v}}</span><span style="font-size:11.5px;color:#8f897f">{{t.s}}</span></button></sc-for>
+</div>
+
+<sc-if value="{{up}}" hint-placeholder-val="{{true}}">
+<div class="in" style="background:#121214;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;letter-spacing:.14em;color:#c9b37e">NOW</span><span style="background:#33281a;color:#d9a35b;border-radius:999px;padding:3px 9px;font-size:11.5px">waiting 17 days</span></div>
+<div style="font-size:18px;font-weight:600">Do feedback for all</div>
+<div style="display:flex;gap:8px">
+<button type="button" onClick="{{upDone}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:38px;padding:0 16px;font-size:13.5px;font-weight:600">Done</button>
+<button type="button" onClick="{{upSmall}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:38px;padding:0 14px;font-size:13.5px">Break it down</button>
+<button type="button" onClick="{{upLater}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:38px;padding:0 14px;font-size:13.5px">Later…</button>
+</div>
+</div>
+</sc-if>
+
+<div class="in" style="background:#121214;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">THIS EVENING · {{eveDone}} OF 3</span><button type="button" onClick="{{eveLater}}" style="border:0;background:transparent;color:#a8a29a;font-size:13px">Later</button></div>
+<sc-for list="{{evening}}" as="e" hint-placeholder-count="3">
+<button type="button" onClick="{{e.go}}" style="border:0;background:#1a1a1d;color:#ededed;border-radius:12px;min-height:50px;padding:0 12px;display:flex;align-items:center;gap:12px;text-align:left">
+<span style="{{e.dot}}">{{e.n}}</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="{{e.titleStyle}}">{{e.t}}</span><span style="font-size:12px;color:#8f897f">{{e.s}}</span></span>
+<span style="color:#c9b37e">›</span>
+</button>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column">
+<button type="button" onClick="{{openList}}" style="border:0;background:transparent;color:#ededed;padding:0 0 6px;display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">TODAY · {{openCount}} LEFT · {{totLen}}</span><span style="font-size:13px;color:#c9b37e">Open list ›</span></button>
+<div style="height:4px;border-radius:2px;background:#1d1d20;overflow:hidden;margin-bottom:4px"><div style="{{bar}}"></div></div>
+<sc-for list="{{tasks}}" as="t" hint-placeholder-count="3">
+<div class="in" style="display:flex;gap:12px;align-items:center;min-height:48px;border-bottom:1px solid #141416">
+<button type="button" onClick="{{t.tick}}" aria-label="Done" style="width:44px;height:44px;margin:0 -10px 0 -12px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="{{t.cls}}" style="{{t.tickStyle}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></button>
+<span style="{{t.titleStyle}}">{{t.title}}</span>
+<span style="font-size:12px;color:#8f897f">{{t.meta}}</span>
+</div>
+</sc-for>
+<div style="display:flex;gap:8px;align-items:center;margin-top:6px;border:1px dashed #2e2e32;border-radius:12px;padding:2px 4px 2px 12px">
+<label for="tadd" style="position:absolute;left:-9999px">Add a task for today</label>
+<input id="tadd" value="{{draft}}" onInput="{{type}}" onKeyDown="{{enter}}" placeholder="+ Add for today · Enter for the next" style="flex:1;border:0;background:transparent;color:#ededed;font-size:14.5px;outline:none;min-width:0;height:40px">
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">SCHEDULE</span>
+<div style="background:#121214;border-radius:14px;padding:4px 14px">
+<div style="display:flex;gap:12px;align-items:center;min-height:44px;border-bottom:1px solid #1a1a1d"><span style="width:52px;font-size:12.5px;color:#8f897f">All day</span><span style="flex:1;font-size:14.5px">Set up a call with two contacts</span><span style="width:7px;height:7px;border-radius:4px;background:#7fb3a8"></span></div>
+<div style="display:flex;gap:12px;align-items:center;min-height:44px"><span style="width:52px;font-size:12.5px;color:#c9b37e">Now</span><span style="flex:1;font-size:14px;color:#8f897f">Nothing else today · 1 earlier ›</span></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">ALSO TODAY</span>
+<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">
+<sc-for list="{{also}}" as="a" hint-placeholder-count="4">
+<button type="button" onClick="{{a.go}}" style="flex:0 0 150px;border:0;background:#121214;color:#ededed;border-radius:14px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:5px">
+<span style="display:flex;gap:6px;align-items:center;font-size:11px;letter-spacing:.12em;color:#a8a29a"><span style="{{a.dot}}"></span>{{a.k}}</span>
+<span style="font-size:15px;font-weight:600;line-height:1.25">{{a.v}}</span>
+<span style="font-size:12px;color:#8f897f">{{a.s}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">NEWS</span><span style="font-size:12.5px;color:#8f897f">swipe ›</span></div>
+<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scroll-snap-type:x mandatory">
+<sc-for list="{{newsItems}}" as="n" hint-placeholder-count="4">
+<button type="button" onClick="{{n.go}}" style="flex:0 0 250px;scroll-snap-align:start;border:0;background:#121214;color:#ededed;border-radius:14px;padding:10px;display:flex;gap:10px;align-items:center;text-align:left">
+<span style="{{n.thumb}}"><span style="font-size:11px;font-weight:700">{{n.tag}}</span></span>
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:13.5px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{n.t}}</span><span style="font-size:11.5px;color:#8f897f">{{n.src}}</span></span>
+</button>
+</sc-for>
+</div>
+</div>
+
+<button type="button" style="border:0;background:transparent;color:#8f897f;padding:4px 0;font-size:12.5px;text-align:left">Navilife sorted 63 things for you today · Activity ›</button>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:80px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 12px;font-size:13px">{{toast}}</div></sc-if>
+
+<div style="position:sticky;bottom:16px;display:flex;align-items:center;gap:8px;background:#151517;border-radius:999px;padding:6px 6px 6px 18px">
+<span style="flex:1;font-size:15px;color:#8f897f">Capture anything…</span>
+<span style="width:40px;height:40px;border-radius:20px;border:1.5px solid #c9b37e;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={up:true,news:false,draft:'',n:5,eve:{review:true},toast:'',
+tasks:[{id:1,title:'Cancel a subscription',len:10,done:false},{id:2,title:'Reply to the landlord',len:15,done:true},{id:3,title:'Pack the gym bag',len:10,done:false}]};}
+renderVals(){
+var s=this.state,self=this;
+var fmt=function(m){return Math.floor(m/60)+':'+String(m%60).padStart(2,'0');};
+var open=s.tasks.filter(function(t){return !t.done;});
+var tot=s.tasks.reduce(function(a,t){return a+t.len;},0);var dm=s.tasks.filter(function(t){return t.done;}).reduce(function(a,t){return a+t.len;},0);
+var addText=function(){var t=s.draft.trim();if(!t)return;var n=s.n+1;self.setState({tasks:s.tasks.concat([{id:n,title:t,len:30,done:false}]),n:n,draft:''});};
+var E=[['review','Review your week','2 done this week · 1 carried over'],['shut','Shut down the day',open.length+' left · move or drop them'],['plan','Plan tomorrow','Mon 9 · nothing planned yet']];
+var eveDone=E.filter(function(e){return s.eve[e[0]];}).length;
+return {
+tiles:[{k:'TASKS',v:(s.tasks.length-open.length)+' of '+s.tasks.length,s:'done today',go:function(){self.setState({toast:'Opens the Day list'});}},{k:'NEXT',v:'Free',s:'nothing else today',go:function(){self.setState({toast:'Opens Calendar'});}},{k:'MAIL',v:'210',s:'unread · tidy 5',go:function(){self.setState({toast:'Opens mail · Tidy 5 ready'});}}],
+up:s.up,
+upDone:function(){self.setState({up:false,toast:'Done · that one waited 17 days'});},
+upSmall:function(){self.setState({toast:'Obi suggests 3 smaller steps'});},
+upLater:function(){self.setState({toast:'Tomorrow · Next week · Someday · Drop it'});},
+openList:function(){self.setState({toast:'Opens the Day list for today'});},
+openCount:open.length,totLen:fmt(tot),
+bar:'height:100%;background:#c9b37e;border-radius:2px;transition:width .4s;width:'+(tot?Math.round(dm/tot*100):0)+'%',
+tasks:s.tasks.map(function(t){return {title:t.title,meta:fmt(t.len),cls:t.done?'pop':'',
+ titleStyle:'flex:1;font-size:15.5px;'+(t.done?'color:#6f6a62;text-decoration:line-through':''),
+ tickStyle:'width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;'+(t.done?'background:#c9b37e;color:#111':'border:1.5px solid #5a5650;color:transparent'),
+ tick:function(){self.setState({tasks:s.tasks.map(function(y){return y.id===t.id?Object.assign({},y,{done:!y.done}):y;})});}};}),
+draft:s.draft,type:function(e){self.setState({draft:e.target.value});},
+enter:function(e){if(e.key==='Enter'){e.preventDefault();addText();}},
+also:[{k:'STUDY',v:'0 of 2 courses',s:'this week · plan next',dot:'width:7px;height:7px;border-radius:4px;background:#9fc0e0'},{k:'RENEWAL',v:'Streaming app',s:'cancel by 22 Nov',dot:'width:7px;height:7px;border-radius:4px;background:#d9a35b'},{k:'WEEK AHEAD',v:'5 office days',s:'1 match · 4 events',dot:'width:7px;height:7px;border-radius:4px;background:#8a9bd1'},{k:'BINS',v:'Blue bin',s:'out Tuesday night',dot:'width:7px;height:7px;border-radius:4px;background:#7fb3a8'}].map(function(a){return Object.assign(a,{go:function(){self.setState({toast:'Opens '+a.k.toLowerCase()});}});}),
+eveDone:eveDone,
+evening:E.map(function(e,i){var d=!!s.eve[e[0]];return {n:d?'✓':String(i+1),t:e[1],s:e[2],
+ dot:'width:28px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;flex-shrink:0;'+(d?'background:#c9b37e;color:#111':'border:1.5px solid #5a5650;color:#a8a29a'),
+ titleStyle:'font-size:15px;font-weight:500;'+(d?'color:#8f897f':''),
+ go:function(){var o=Object.assign({},s.eve);o[e[0]]=true;self.setState({eve:o,toast:e[1]+' · opens'});}};}),
+eveLater:function(){self.setState({toast:'Evening card back at 21:00'});},
+newsItems:[['TC','A tech company opens an inquiry into its CEO','TechCrunch · 1 h ago','#24231b','#c9b37e'],['BBC','A TV host steps down from a reality show','BBC News · 49 min ago','#2a1f1f','#e3a9a0'],['FT','Markets steady ahead of a rate decision','FT · 2 h ago','#1f2430','#9fb3d9'],['BBC','Weekend weather: cold and clear','BBC Weather · 3 h ago','#1f2a22','#a9d1a9']].map(function(n){return {tag:n[0],t:n[1],src:n[2],thumb:'width:56px;height:56px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:'+n[3]+';color:'+n[4],go:function(){self.setState({toast:'Opens the story'});}};}),
+toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
