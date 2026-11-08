@@ -309,6 +309,28 @@ object ScreenShots {
         if (split.isNotEmpty()) fail("$name splits $what across lines:\n" + split.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * Fails when one of [texts] (matched whole) is drawn cut: wider than its room, or its last line ending before the
+     * text does (walk-through 2026-11-08, A3: the review's "£2,125.91" drawn as "£2,125."). Ones not on screen are skipped.
+     */
+    fun assertNotCut(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val cut = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && text in texts && action != null) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.let { r ->
+                    if (r.didOverflowWidth || r.getLineEnd(r.lineCount - 1, visibleEnd = true) < text.trimEnd().length) cut += text
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (cut.isNotEmpty()) fail("$name draws these cut:\n" + cut.joinToString("\n") { "- \"$it\"" })
+    }
+
     /** Fails when one of [texts] (matched whole, e.g. a field's hint) takes more than a line; ones not on screen are skipped. */
     fun assertEachOneLine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
         val wrapped = texts.filter { t ->

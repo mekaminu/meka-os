@@ -94,6 +94,18 @@ data class TradingPosition(
         val l = liquidation?.toDoubleOrNull()?.takeIf { it > 0 } ?: return null
         return abs(m - l) / m
     }
+
+    /**
+     * What the move from entry to mark comes to, in cents ((mark − entry) × size; null without both prices or a size).
+     * Hyperliquid's own unrealised figure also counts what it rounds, so the two agree to within a few cents; the
+     * walk-through (2026-11-08, A2) found invented data where they didn't ("entry $60,000, now $60,000, −$10.00").
+     */
+    val priceMoveCents: Long? get() {
+        val e = entry?.toDoubleOrNull() ?: return null
+        val m = mark?.toDoubleOrNull() ?: return null
+        val n = size.trim().toDoubleOrNull() ?: return null
+        return kotlin.math.round((m - e) * n * 100).toLong()
+    }
 }
 
 /**

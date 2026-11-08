@@ -132,8 +132,10 @@ struct MoneyTilesView: View {
         HStack(spacing: MekaSpace.xs) {
             ForEach(tiles, id: \.label) { t in
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(t.label).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    Text(t.label).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1).minimumScaleFactor(0.8)
+                    // The figure whole ("£2,125.91"), stepping down to fit rather than cut (walk-through 2026-11-08, A3).
                     Text(t.value).font(MekaType.metaStrong).foregroundStyle(t.lit ? palette.accent : palette.textPrimary).lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .contentTransition(.opacity)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

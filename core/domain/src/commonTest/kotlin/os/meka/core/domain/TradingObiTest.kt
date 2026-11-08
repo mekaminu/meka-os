@@ -31,8 +31,12 @@ class TradingObiTest {
 
     @Test
     fun obiSaysTheShareTheNearestLiquidationAndFunding() {
-        val btc = TradingPosition("BTC", "0.1", "60000", "60000", "49800", -1_000, 5)
-        val eth = TradingPosition("ETH", "-2", "3000", "3000", "3900", 500, 3)
+        val btc = TradingPosition("BTC", "0.1", "60000", "59900", "49800", -1_000, 5)
+        val eth = TradingPosition("ETH", "-2", "3000", "2997.5", "3900", 500, 3)
+        // The invented positions add up: the move from entry to now is what's not yet taken (walk-through A2).
+        assertEquals(btc.unrealisedCents, btc.priceMoveCents)
+        assertEquals(eth.unrealisedCents, eth.priceMoveCents)
+        assertNull(TradingPosition("BTC", "0.1", null, "60000", null, 0, null).priceMoveCents)
         val r = assertNotNull(TradingRisk.view(listOf(wallet(listOf(eth, btc), listOf(coin(-3_820)))), worth(7_000_000, 630_000), TradingCcy.USD))
         assertEquals(
             "Trading is 9% of everything you hold. Your BTC long is 5×: a 17% drop reaches its liquidation price. " +

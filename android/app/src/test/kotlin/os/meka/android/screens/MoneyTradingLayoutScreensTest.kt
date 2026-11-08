@@ -92,6 +92,9 @@ class MoneyTradingLayoutScreensTest {
      * What the server would have written: the address read (equity, a BTC long 5× about 17% from liquidation, funding
      * paid over the month) and one request from Kestrel waiting in the approvals inbox. All invented.
      */
+    /** The seeded BTC long: down $100 from entry on 0.1, so $10.00 not yet taken; 5×, liquidation 17% below now. */
+    private val SEED_BTC = TradingPosition("BTC", "0.1", "60000", "59900", "49800", -1_000, 5)
+
     private fun seedKestrelAndRisk(store: InMemoryReplicaStore, equityCard: Boolean = false) {
         var k = 0
         val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
@@ -100,7 +103,7 @@ class MoneyTradingLayoutScreensTest {
             TradingWalletFields.ADDRESS to ADDRESS.fv(), TradingWalletFields.LABEL to "Main".fv(),
             TradingWalletFields.STATE to TradingTracker.OK.fv(), TradingWalletFields.READ_AT to now.fv(),
             TradingWalletFields.EQUITY to 650_000L.fv(), TradingWalletFields.UNREALISED to (-1_000L).fv(),
-            TradingWalletFields.POSITIONS to TradingTracker.encode(listOf(TradingPosition("BTC", "0.1", "60000", "60000", "49800", -1_000, 5))).fv(),
+            TradingWalletFields.POSITIONS to TradingTracker.encode(listOf(SEED_BTC)).fv(),
             TradingWalletFields.TRADES to TradingTracker.encodeTrades(listOf(TradingCoinStats("BTC", 3, 2, 1, 4_200, 300, -3_820, 6_000, -1_800, 4_000, -1_800))).fv(),
             TradingWalletFields.TRADES_AT to now.fv(),
         ) + if (!equityCard) emptyMap() else mapOf(
@@ -243,6 +246,8 @@ class MoneyTradingLayoutScreensTest {
         assertTrue(risk.line.contains("Your BTC long is 5×: a 17% drop reaches its liquidation price."), risk.line)
         assertTrue(risk.line.contains("Funding has cost $38.20"), risk.line)
         assertTrue(shows("money-trading-risk-card"), "Obi's risk line sits in its own card")
+        // Walk-through A2 (2026-11-08): the shot's position adds up — its entry-to-now move is what's not yet taken.
+        assertEquals(SEED_BTC.unrealisedCents, SEED_BTC.priceMoveCents, "entry ${SEED_BTC.entry}, now ${SEED_BTC.mark}")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-risk"))
         scrollTo("money-kestrel-card")
         assertTrue(showsText("1 trade waiting for your OK"), "Kestrel's card says what's waiting")

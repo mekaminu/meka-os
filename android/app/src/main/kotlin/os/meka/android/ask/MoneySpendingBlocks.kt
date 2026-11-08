@@ -197,7 +197,13 @@ internal fun MoneyTiles(tiles: List<MoneyTile>, modifier: Modifier = Modifier) {
                     t.label, style = MekaType.caption.copy(color = Meka.colors.textSecondary), maxLines = 1, softWrap = false,
                     autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
                 )
-                Text(t.value, style = MekaType.metaStrong, color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
+                // Walk-through A3 (2026-11-08): the figure whole ("£2,125.91", never "£2,125."), stepping down to fit
+                // three tiles on the closed Fold rather than cutting at the point.
+                BasicText(
+                    t.value, style = MekaType.metaStrong.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary),
+                    maxLines = 1, softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = MekaType.metaStrong.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 11)
+                )
             }
         }
     }

@@ -5407,3 +5407,16 @@ The item's board text when it was closed:
 - Server: `LiveCallLine` takes the household's call cards (`bookings`, Application reads them from the op store) and `bookingFor`; `ticket` adds the call-back lines to Obi's instruction and keeps the card on the ticket (`callbackFor`, `callbackBusiness`); a matched business goes live even with Live conversation off, while Booking calls is on, within the month's cap. `CallAssistant.liveEnded` and the scripted Recorded step write the booking link on the message and They rang back on the card (fixed op ids, once per call); never for a judged scam.
 - Apps: the call card shows the They rang back line (accent caption) under the result on the Fold (BookingCallCards.kt) and the Mac (WorkingOnSheet.swift).
 - Tests: BookingCallbackRulesTest, LiveCallRulesTest (the message line), LiveCallsTest.aBusinessRingingBackAboutABookingTalksToObiWhoKnowsIt (CI). No migration.
+
+
+## Found and fixing, week 3 (walk-through 2026-11-08)
+
+Slice 1 (2026-11-08): **A2** the open position's P&L was the shots' invented data, not a sum: entry $60,000, mark $60,000
+and −$10.00 unrealised. The seeded BTC long (MoneyTradingLayoutScreensTest `SEED_BTC`, TradingObiTest) is now marked at
+$59,900, so 0.1 × −$100 = −$10.00; the ETH short in TradingObiTest is marked $2,997.50 for its +$5.00. Core
+`TradingPosition.priceMoveCents` ((mark − entry) × size, in cents; null without both prices) lets both tests fail when a
+fixture's move and its P&L disagree. The liquidation line still reads 17%. **A3** `MoneyTiles` (Fold) drew the figure with
+`Text(maxLines = 1)`, which cut "£2,125.91" at the point on the cover; it is now `BasicText` with no soft wrap and a
+step-based auto size (15 → 11 sp); the Mac's `MoneyTilesView` scales the figure down to 0.7 and the label to 0.8 rather
+than truncate. New `ScreenShots.assertNotCut` (overflowed width, or the last visible line ending before the text) runs on
+the review's cover shot over every tile's value. Core, Fold and Mac; no server change, no migration; Mac checked nightly.

@@ -133,6 +133,9 @@ class MoneyLayoutScreensTest {
         scrollTo("money-review-card")
         assertTrue(showsText("Came in"), "the review should show its tiles")
         assertTrue(!showsText("In September you spent"), "the review's sentences live behind ⓘ")
+        // Walk-through A3 (2026-11-08): each tile's figure is drawn whole on the cover ("£2,125.91", never "£2,125.").
+        val rv = core.moneyView.value.review ?: fail("no month in review")
+        ScreenShots.assertNotCut(compose, "money-layout-review-cover", rv.tiles.map { it.value })
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-layout-review-cover.png")
         tap("money-review-info")
         assertTrue(shows("money-info-sheet"), "ⓘ should open the review's sheet")
