@@ -291,6 +291,9 @@ class BoardScreensTest {
         if (compose.onAllNodesWithContentDescription("House, 1 task").fetchSemanticsNodes().isEmpty()) fail("the House list doesn't hold the card")
         if (compose.onAllNodesWithTag(AREA_DOT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no area dot on the card")
         ScreenShots.assertShows(compose, "areas", "House")
+        // The walk-through 2026-11-08, A6: the lane card's chips and area name were both cut ("Ot…", "H…").
+        val boiler = core.weekBoard.value.find(id)?.card ?: throw AssertionError("no Boiler service card")
+        ScreenShots.assertNotCut(compose, "inner-dark-areas", os.meka.core.domain.BoardPlannerRules.footChips(boiler).map { it.label } + listOfNotNull(os.meka.core.domain.BoardMatchRules.footLabel(boiler)))
 
         // The menu's Family row calls this (Robolectric can't reach a card's dropdown popup); the screen must follow.
         runBlocking { core.areaOnBoard(id, os.meka.core.domain.BoardArea.FAMILY) }
@@ -777,6 +780,10 @@ class BoardScreensTest {
             ?: throw AssertionError("no Obi thought on the full day")
         if (compose.onAllNodesWithText(hint.shownBrief, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no \"${hint.shownBrief}\" under the card")
         if (compose.onAllNodesWithText(hint.shown, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("the long \"${hint.shown}\" in a narrow column")
+        // The walk-through 2026-11-08, A6: "over" alone on a line and the pill cut to "Move to": both whole now.
+        ScreenShots.assertEachOneLine(compose, "inner-dark-scrolled", listOf(hint.shownBrief))
+        if (compose.onAllNodesWithText(hint.actionBrief, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no \"${hint.actionBrief}\" pill")
+        ScreenShots.assertNotCut(compose, "inner-dark-scrolled", listOf(hint.actionBrief))
         assertEquals("the month's row moved with the week", monthBefore, monthTop(), 1f)
     }
 

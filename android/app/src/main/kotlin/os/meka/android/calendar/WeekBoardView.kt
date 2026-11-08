@@ -1030,9 +1030,11 @@ private fun BoardHintRow(hint: os.meka.core.domain.BoardHint, onApply: () -> Uni
     ) {
         // The walk-through 2026-11-02, A6: in the open Fold's narrow columns the line says only how far over (the
         // pill says where), so it no longer takes three lines.
-        Text(if (LocalBoardDense.current) hint.shownBrief else hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        val dense = LocalBoardDense.current
+        Text(if (dense) hint.shownBrief else hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            TouchPill(hint.action, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
+            // The walk-through 2026-11-08, A6: "Move to Sat" was cut to "Move to" in a narrow column; there it says "To Sat".
+            TouchPill(if (dense) hint.actionBrief else hint.action, spoken = hint.action, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
             TouchPill(os.meka.core.domain.BoardHintRules.NOT_NOW, fill = Meka.colors.surfaceRaised, ink = Meka.colors.textSecondary, onClick = onDismiss)
         }
     }
@@ -1529,7 +1531,7 @@ private fun DayColumn(
                 Spacer(Modifier.weight(1f))
                 Text(head.weekday, style = if (dense) BoardType.weekdayDense else MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1)
             }
-            BoardLookRules.progress(day)?.let { DoneBar(it) }
+            BoardLookRules.bar(day)?.let { DoneBar(it) }
             // The walk-through's A6: a day with no cards keeps the bar's room, so its pill lines up with its neighbours'.
             if (BoardOpenFoldRules.barSlot(day)) Spacer(Modifier.padding(top = MekaSpace.xxs).height(2.dp).testTag(BAR_SLOT_TAG))
         }
@@ -1914,10 +1916,15 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                 card.done, card.title, onTick, column = if (dense) DENSE_TICK_COLUMN else FOOT_TICK, height = if (dense) DENSE_TICK_COLUMN else FOOT_TICK,
                 circle = if (dense) BoardDenseRules.TICK.dp else 20.dp,
             )
-            Row(Modifier.align(Alignment.CenterVertically).testTag(CARD_FOOT_TAG), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            // The walk-through 2026-11-08, A6 (Boiler service's "Ot…", "H…" in a lane): the chips and the area's name
+            // share the line only when both fit whole; otherwise the name moves under the chips instead of both being cut.
+            FlowRow(
+                Modifier.align(Alignment.CenterVertically).testTag(CARD_FOOT_TAG),
+                horizontalArrangement = Arrangement.End, verticalArrangement = Arrangement.Center,
+            ) {
                 if (foot.isNotEmpty()) {
                     FlowRow(
-                        Modifier.weight(1f, fill = false).padding(vertical = MekaSpace.xxs),
+                        Modifier.align(Alignment.CenterVertically).padding(vertical = MekaSpace.xxs),
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs, Alignment.End),
                         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                     ) { foot.forEach { CardChipPill(it) } }
@@ -1929,7 +1936,7 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                 val src = card.source
                 val words = BoardMatchRules.footLabel(card)
                 if (area != null || src != null) {
-                    Row(Modifier.weight(1f, fill = false).padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.align(Alignment.CenterVertically).padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                         val dot = if (area != null) Meka.colors.areaTone(area) else Meka.colors.calendarTone(src!!.tone)
                         Box(Modifier.size(if (dense) BoardDenseRules.DOT.dp else 8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
                         if (words != null && BoardMatchRules.footWords(compact)) {

@@ -5444,3 +5444,17 @@ waiting for its number (or for Use this number) didn't count. Now any draft need
 which says "Call card · not rung" (`NOT_RUNG`); BookingCallRulesTest (the summary "Holding 1 call card for you · 1 needs
 you", the gone draft), WorkingOnScreensTest's found shot fails on "nothing needs you". Core only, both apps follow (the
 card's status line is lit in accent when it needs him); Mac checked nightly. No server change, no migration.
+
+Slice 4 (2026-11-08): **A6** Board on Saturday. Read against the four shots: the "underline" under Sat 24 on the
+unfolded board was the day's empty done bar (a grey 2 dp track under a day with cards and none ticked; Sunday, with no
+cards, had none), read beside today's gold date as a second "today". Core `BoardLookRules.bar(day)` draws the bar only once
+something is ticked; `BoardOpenFoldRules.barSlot` keeps its room otherwise, so the pills still line up (Fold
+`WeekBoardView` DayHead and the Mac's `WeekBoardScreen` both use it). The in-column OVER hint left "over" alone on a line
+and its pill cut to "Move to" in the ~110 dp columns: `BoardHint.brief` is now "1h over" (it sits in that day's column)
+and the new `actionBrief` "To Sat" is the narrow column's pill, the screen reader's action still "Move to Sat" (the Mac's
+columns show the full line and pill, unchanged). A lane card's foot (Boiler service: "Ot…", "H…") split the width between
+the chips and the area's name; the foot is now a flow, so the name moves under the chips when both don't fit (Fold; the
+Mac's lanes are wide enough). The header's "Today is 4h over · move “Batch cook…” to Sun?" over the weekend row is right
+(today's column is above, scrolled to the weekend by design, week 2's A6) and was left. Tests: BoardHintTest,
+BoardLookTest, BoardOpenFoldTest; BoardScreensTest's scrolled shot fails if the brief wraps or the pill is cut, the areas
+shot if a lane card's chips or area name are cut. Core, Fold and Mac; no server change, no migration; Mac checked nightly.

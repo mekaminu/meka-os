@@ -70,7 +70,9 @@ class BoardOpenFoldTest {
         // The walk-through's A6 (2026-10-30): Fri (no cards, no bar) had its pill higher than Wed/Thu's.
         assertTrue(BoardOpenFoldRules.barSlot(day(past = false)))
         assertTrue(BoardOpenFoldRules.barSlot(day(past = true)))
-        assertFalse(BoardOpenFoldRules.barSlot(day(past = false, cards = listOf(card("a")))))
+        // Nothing ticked yet: no bar (2026-11-08, A6), so the room is kept.
+        assertTrue(BoardOpenFoldRules.barSlot(day(past = false, cards = listOf(card("a")))))
+        assertFalse(BoardOpenFoldRules.barSlot(day(past = false, cards = listOf(card("a"), card("b", done = true)))))
     }
 
     @Test

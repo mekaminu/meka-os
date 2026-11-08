@@ -67,6 +67,13 @@ object BoardLookRules {
         return DayProgress(day.cards.count { it.done }, day.cards.size)
     }
 
+    /**
+     * The thin done bar under a day's header: [progress] once something is ticked, else none (the walk-through
+     * 2026-11-08, A6: an empty grey track under "24 Oct" read as that day being underlined, while today is the gold
+     * date). Its room is kept ([BoardOpenFoldRules.barSlot]) so the pills still line up.
+     */
+    fun bar(day: BoardDay): DayProgress? = progress(day)?.takeIf { it.done > 0 }
+
     /** The small tag beside the day number: "Today · Office", "Home", "Today"; null on an ordinary day off. */
     fun tag(day: BoardDay): String? = listOfNotNull(if (day.isToday) "Today" else null, day.placeLabel)
         .joinToString(" · ").ifEmpty { null }

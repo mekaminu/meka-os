@@ -527,10 +527,10 @@ private struct BoardColumnView: View {
                     Spacer(minLength: 0)
                     Text(head.weekday).font(BoardFont.weekday).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
-                if let progress = BoardLookRules.shared.progress(day: day) {
+                if let progress = BoardLookRules.shared.bar(day: day) {
                     DayProgressBar(progress: progress, palette: palette)
                 } else if BoardOpenFoldRules.shared.barSlot(day: day) {
-                    // The walk-through's A6: a day with no cards keeps the bar's room, so the pills line up.
+                    // The walk-through's A6: a day with no bar yet (no cards, or none ticked) keeps its room, so the pills line up.
                     Color.clear.frame(height: 2)
                 }
                 // The open Fold's alignment pass (c): one pill on every column, a past day's saying what was done.

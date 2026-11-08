@@ -47,10 +47,10 @@ object BoardOpenFoldRules {
     const val NOTHING = "no tasks"
 
     /**
-     * Whether a day head keeps its done bar's room with no bar drawn: a day with no cards (no [BoardLookRules.progress])
+     * Whether a day head keeps its done bar's room with no bar drawn: a day with no bar drawn yet (no cards, or none ticked: [BoardLookRules.bar])
      * holds the 2 dp line's place, so its pill lines up with the days beside it that have a bar.
      */
-    fun barSlot(day: BoardDay): Boolean = BoardLookRules.progress(day) == null
+    fun barSlot(day: BoardDay): Boolean = BoardLookRules.bar(day) == null
 
     /**
      * A row's height (dp) from each of its columns' content height [contents] (head, cards and "+ add"): the fullest

@@ -28,14 +28,20 @@ data class BoardHint(
     /**
      * The line for a narrow day column (the walk-through 2026-11-02, A6: "Today is 1h over · move it to Sat?" took three
      * lines in the open Fold's ~110 dp columns): OVER says only "Today is 1h over", as its pill already says where
-     * ("Move to Sat"); the others keep [line].
+     * ("Move to Sat"); the others keep [line]. The walk-through 2026-11-08, A6: even that left "over" alone on a line,
+     * so it is now just "1h over" (the hint sits under its card, in that day's own column).
      */
     val brief: String = line,
+    /**
+     * The pill in a narrow column (the walk-through 2026-11-08, A6: "Move to Sat" was cut to "Move to"): OVER says
+     * "To Sat"; the others keep [action]. The screen reader's action still says [action].
+     */
+    val actionBrief: String = action,
 ) {
     /** "✦ Thu is 1h over · move it to Sat?" */
     val shown: String get() = "${BoardHintRules.MARK} $line"
 
-    /** "✦ Thu is 1h over" in a narrow column (see [brief]). */
+    /** "✦ 1h over" in a narrow column (see [brief]). */
     val shownBrief: String get() = "${BoardHintRules.MARK} $brief"
 
     /** Screen readers: "Obi suggests: Thu is 1h over, move it to Sat?". */
@@ -91,7 +97,8 @@ object BoardHintRules {
             val name = BoardNudgeRules.dayName(d.epochDay, today)
             val to = PressureRules.shortDay(fix.toDay, today)
             val head = "$name is ${TaskEstimateRules.label(over)} over"
-            add(BoardHint(fix.taskId, BoardHintKind.OVER, "over:${d.epochDay}", "$head · move it to $to?", "Move to $to", toDay = fix.toDay, brief = head))
+            add(BoardHint(fix.taskId, BoardHintKind.OVER, "over:${d.epochDay}", "$head · move it to $to?", "Move to $to", toDay = fix.toDay,
+                brief = "${TaskEstimateRules.label(over)} over", actionBrief = "To $to"))
         }
         val cards = ahead.flatMap { it.openCards } + week.lane.filter { !it.done }
         cards.forEach { add(slipped(it, today, calendar)) }

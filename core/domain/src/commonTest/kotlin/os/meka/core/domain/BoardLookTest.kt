@@ -46,6 +46,9 @@ class BoardLookTest {
         assertEquals(false, p.complete)
         assertTrue(BoardLookRules.progress(day(listOf(card("x", done = true))))!!.complete)
         assertNull(BoardLookRules.progress(day(emptyList())))
+        // The bar is drawn once something is ticked: an empty grey track read as an underline (walk-through 2026-11-08, A6).
+        assertEquals(p, BoardLookRules.bar(d))
+        assertNull(BoardLookRules.bar(day(listOf(card("y"), card("z")))))
         assertEquals("Today · Office", BoardLookRules.tag(d))
         assertEquals("Home", BoardLookRules.tag(day(emptyList(), place = "Home")))
         assertEquals("Today", BoardLookRules.tag(day(emptyList(), today = true)))
