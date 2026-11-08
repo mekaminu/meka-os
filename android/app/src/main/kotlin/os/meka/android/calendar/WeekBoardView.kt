@@ -1966,7 +1966,11 @@ private fun FitLine(modifier: Modifier = Modifier, content: @Composable () -> Un
         val natural = items.map { it.maxIntrinsicWidth(loose.maxHeight) }
         val fits = natural.sum() <= c.maxWidth
         if (fits) {
-            val placed = items.mapIndexed { i, m -> m.measure(loose.copy(maxWidth = natural[i].coerceAtMost(c.maxWidth))) }
+            // A hair of the line's spare room for each (A6's last bit: "Other" and "To Sat" measured cut at exactly
+            // their natural width, the text's float width rounding past it), never past the line.
+            val spare = if (c.hasBoundedWidth) c.maxWidth - natural.sum() else Int.MAX_VALUE
+            val slack = if (items.isEmpty()) 0 else minOf(FIT_SLACK.roundToPx(), spare / items.size)
+            val placed = items.mapIndexed { i, m -> m.measure(loose.copy(maxWidth = (natural[i] + slack).coerceAtMost(c.maxWidth))) }
             val width = if (c.hasBoundedWidth && c.minWidth == c.maxWidth) c.maxWidth else placed.sumOf { it.width }.coerceIn(c.minWidth, c.maxWidth)
             val height = (placed.maxOfOrNull { it.height } ?: 0).coerceIn(c.minHeight, c.maxHeight)
             layout(width, height) {
@@ -2047,6 +2051,10 @@ private fun EventCard(e: os.meka.core.domain.BoardEventCard, onOpen: () -> Unit)
 
 /** The tick's drawn square in a planner card's foot (dp); Compose widens its touch area to 48 dp past its edges. */
 private val FOOT_TICK = 24.dp
+
+/** The most of a foot line's spare room [FitLine] gives each child past its natural width (text's float rounding). */
+private val FIT_SLACK = 2.dp
+
 /** The density pass: the tick's column on the unfolded board (its touch area still widened to 48 dp). */
 private val DENSE_TICK_COLUMN = 20.dp
 

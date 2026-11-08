@@ -5522,3 +5522,11 @@ TomorrowScreensTest read `shutdownView.value.peek` once before `setContent`, whi
 `shutdownView` in composition, checks after the move that the core's peek says "1 task" and the drawn peek matches with
 no "2 tasks" anywhere, and after the rename that "Gym before work" no longer shows beside the edited detail. Test only;
 no app, server or migration change.
+
+**Slice 6 (2026-11-08, A6's last bit):** the lane card's "Other" chip (and the Board's narrow "To Sat" hint pill, the
+same `FitLine`) measured cut under Robolectric while the area name beside it, also micro type, measured whole: each
+child was laid out at exactly its natural (max intrinsic) width, and a pill's text, its float width rounding past that
+whole pixel, ellipsized its last letters. `FitLine` now gives each child up to 2 dp of the line's spare room past its
+natural width (never past the line; none when the line is exactly full), so a word that fits is drawn whole.
+BoardScreensTest's areas shot checks the card's chips whole again beside its area name. Fold only (the Mac's SwiftUI
+lane card has no such measure); no core, server or migration change.
