@@ -88,7 +88,7 @@ fun BookingCallCard(
     r: BookingCallRow, modifier: Modifier,
     onPeople: (Int) -> Unit, onCall: () -> Unit, onEdit: () -> Unit, onCancel: () -> Unit,
     onHangUp: () -> Unit = {}, onAddToCalendar: () -> Unit = {}, onRead: () -> Unit = {}, onTakeOver: () -> Unit = {},
-    onListen: () -> Unit = {},
+    onListen: () -> Unit = {}, onTryAgain: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -107,7 +107,7 @@ fun BookingCallCard(
             return@Column
         }
         if (!r.showBrief) {
-            ResultView(r, onAddToCalendar, onRead)
+            ResultView(r, onAddToCalendar, onRead, onTryAgain)
             return@Column
         }
         Text(LoneWordGlue.kept(r.numberLine), style = MekaType.caption,
@@ -213,7 +213,7 @@ private fun Words(lines: List<BookingWordLine>, tag: String) {
 
 /** Slice 3: the result card: how long, the tiles, the result line, the calendar row and Read the call. */
 @Composable
-private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: () -> Unit) {
+private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: () -> Unit, onTryAgain: () -> Unit) {
     r.lengthLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
     if (r.resultTiles.isNotEmpty()) {
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -236,10 +236,21 @@ private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: (
             }
         }
     }
-    if (r.canRead) {
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.End) {
-            TouchPill(BookingLiveRules.READ, Meka.colors.surface, Meka.colors.accent, spoken = "${BookingLiveRules.READ}: ${r.business}",
-                modifier = Modifier.testTag("call-read"), onClick = onRead)
+    r.triedAgainLine?.let {
+        Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.padding(top = MekaSpace.xs).testTag("call-tried-again"))
+    }
+    if (r.canRead || r.canTryAgain) {
+        // Try again sits last, in the accent: the one thing to act on when a call wasn't booked.
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End)) {
+            if (r.canRead) {
+                TouchPill(BookingLiveRules.READ, Meka.colors.surface, Meka.colors.accent, spoken = "${BookingLiveRules.READ}: ${r.business}",
+                    modifier = Modifier.testTag("call-read"), onClick = onRead)
+            }
+            if (r.canTryAgain) {
+                TouchPill(BookingCallRules.TRY_AGAIN, Meka.colors.accent, Meka.colors.onAccent, spoken = "${BookingCallRules.TRY_AGAIN}: ${r.business}",
+                    modifier = Modifier.testTag("call-try-again"), onClick = onTryAgain)
+            }
         }
     }
 }

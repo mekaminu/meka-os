@@ -33,6 +33,10 @@ import os.meka.android.ask.WorkingOnPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.BookingCallFields
+import os.meka.core.domain.BookingCallRules
+import os.meka.core.domain.BookingCallState
+import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MekaSchema
@@ -78,7 +82,7 @@ class WorkingOnScreensTest {
         const val SETTLE_MS = 3_000L
     }
 
-    private enum class Fill { EMPTY, ONE, MANY, ERRANDS }
+    private enum class Fill { EMPTY, ONE, MANY, ERRANDS, CALL }
 
     private var opened: HelpPlace? = null
 
@@ -121,7 +125,7 @@ class WorkingOnScreensTest {
     private suspend fun fill(core: MekaCore, fill: Fill) {
         val today = core.todayEpochDay()
         when (fill) {
-            Fill.EMPTY, Fill.ERRANDS -> Unit
+            Fill.EMPTY, Fill.ERRANDS, Fill.CALL -> Unit
             Fill.ONE -> core.addWaiting("The drill back", "Casey", 0)
             Fill.MANY -> {
                 core.addRenewal("Home insurance", ObligationKind.INSURANCE, today + 15, RenewalRepeat.YEARLY, null, null)
@@ -162,11 +166,30 @@ class WorkingOnScreensTest {
         ))
     }
 
+    /**
+     * Try again: a booking call that wasn't booked, as the server leaves it (written here as Navilife's server would):
+     * Rosa's Kitchen full at 7 on Saturday, with what they offered. Invented data only.
+     */
+    private fun seedNotBooked(store: ReplicaStore) {
+        var k = 0
+        val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
+        server.commitLocal(EntityTypes.BOOKING_CALL, "call-rosa", mapOf(
+            BookingCallFields.BUSINESS to "Rosa's Kitchen".fv(), BookingCallFields.NUMBER to "+441234567890".fv(),
+            BookingCallFields.WHAT to "Table for 4".fv(), BookingCallFields.DAY to CivilDate.toEpochDay(2026, 10, 24).fv(),
+            BookingCallFields.FROM to (19L * 60).fv(), BookingCallFields.TO to (20L * 60).fv(), BookingCallFields.PEOPLE to 4L.fv(),
+            BookingCallFields.STATE to BookingCallState.NOT_BOOKED.code.fv(), BookingCallFields.ASKED_AT to (now - 7_200_000L).fv(),
+            BookingCallFields.APPROVED_AT to (now - 7_000_000L).fv(), BookingCallFields.CALLED_AT to (now - 3_700_000L).fv(),
+            BookingCallFields.ENDED_AT to (now - 3_600_000L).fv(), BookingCallFields.SECONDS to 95L.fv(),
+            BookingCallFields.RESULT to "Not booked · they're full at 7 on Saturday · they offered 21:00".fv(),
+        ))
+    }
+
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
         if (fill == Fill.ERRANDS) seedErrands(store)
+        if (fill == Fill.CALL) seedNotBooked(store)
         val core = core(store)
         context.useCoreForScreens(core)
         runBlocking {
@@ -188,7 +211,7 @@ class WorkingOnScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", name))
         val lines = listOf(v.summary, WorkingOnRules.INTRO, ObiJobRules.INTRO, ObiJobRules.EMPTY, ObiJobRules.DRAFT_FOOT) +
             v.cards.flatMap { listOfNotNull(it.did, it.need) } + v.jobs.flatMap { listOfNotNull(it.title, it.status, it.did, it.need) } +
-            v.switches.map { it.line }
+            v.switches.map { it.line } + v.calls.flatMap { listOfNotNull(it.status, it.result, it.lengthLine, it.triedAgainLine) }
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -218,6 +241,12 @@ class WorkingOnScreensTest {
                 if (!onScreen(ObiJobRules.DRAFT_LABEL.uppercase())) fail("$name: no draft box")
                 if (!onScreen("Working · step 2 of 2")) fail("$name: the fence's status isn't shown")
             }
+            Fill.CALL -> {
+                val r = v.calls.singleOrNull() ?: fail("$name: ${v.calls.size} call cards, not 1")
+                if (!r.canTryAgain) fail("$name: a not-booked call can't be tried again")
+                if (compose.onAllNodes(hasTestTag("call-try-again"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Try again")
+                if (!onScreen("they offered 21:00")) fail("$name: the result isn't shown")
+            }
             Fill.MANY -> {
                 if (cards != 3) fail("$name: $cards cards, not 3")
                 if (v.summary != "Keeping an eye on 3 things · 3 need you") fail("$name: the summary reads \"${v.summary}\"")
@@ -225,6 +254,24 @@ class WorkingOnScreensTest {
             }
         }
         return core
+    }
+
+    /** Try again by hand: a new card for the same brief, waiting for Call now; the old one says it was tried again. */
+    private fun tryAgainByHand(core: MekaCore) {
+        val name = "working-on-try-again"
+        val n = compose.onAllNodes(hasContentDescription("${BookingCallRules.TRY_AGAIN}: Rosa's Kitchen") and hasClickAction())
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no Try again")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        fun calls() = runBlocking { core.workingOnView() }.calls
+        until { calls().size == 2 && onScreen(BookingCallRules.TRIED_AGAIN) }
+        val rows = calls()
+        if (rows.size != 2) fail("$name: ${rows.size} call cards after Try again, not 2")
+        val fresh = rows.first()
+        if (!fresh.canCall || fresh.business != "Rosa's Kitchen" || fresh.peopleTile != "4") fail("$name: the new card isn't the same brief: $fresh")
+        if (rows.last().canTryAgain || rows.last().triedAgainLine == null) fail("$name: the old card can still be tried again")
+        if (!onScreen(BookingCallRules.TRIED_AGAIN)) fail("$name: Try again didn't say so")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-tried-again"))
+        ScreenShots.assertNoBrokenWords(compose, name)
     }
 
     /** Works by hand: Open Waiting for opens Lists; Turn off takes the chaser's card away, Turn on brings it back. */
@@ -304,6 +351,10 @@ class WorkingOnScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverErrandsLight() { pane("cover-light-errands", Fill.ERRANDS, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerErrands() { pane("inner-dark-errands", Fill.ERRANDS) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun errandsByHand() { errandsByHand(pane("cover-dark-errands-by-hand", Fill.ERRANDS)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBooked() { pane("cover-dark-not-booked", Fill.CALL) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBookedLight() { pane("cover-light-not-booked", Fill.CALL, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun innerNotBooked() { pane("inner-dark-not-booked", Fill.CALL) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun tryAgainByHand() { tryAgainByHand(pane("cover-dark-try-again", Fill.CALL)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverOne() { pane("cover-dark-one", Fill.ONE) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverMany() { pane("cover-dark-many", Fill.MANY) }

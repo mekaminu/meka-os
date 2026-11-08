@@ -1814,6 +1814,12 @@ final class CoreModel {
         return (try? await core.cancelBookingCall(id: id))?.boolValue ?? false
     }
 
+    /// Try again on a call card that wasn't booked: a new card for the same brief, waiting for Call now; the line to show.
+    func tryAgainBookingCall(_ id: String) async -> String {
+        guard let core else { return BookingCallRules.shared.GONE }
+        return (try? await core.tryAgainBookingCall(id: id)) ?? BookingCallRules.shared.GONE
+    }
+
     /// Obi on calls, slice 3: Hang up while Obi is on a booking call (synced; the server ends it); the line to show.
     func hangUpBookingCall(_ id: String) async -> String {
         guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }

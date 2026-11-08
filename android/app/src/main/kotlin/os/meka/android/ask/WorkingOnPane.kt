@@ -230,6 +230,13 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
                         }
                     },
                     onRead = { haptics.tick(); reading = r },
+                    onTryAgain = {
+                        haptics.medium()
+                        scope.launch {
+                            callSaid = runCatching { core.tryAgainBookingCall(r.id) }.getOrNull() ?: os.meka.core.domain.BookingCallRules.GONE
+                            view = runCatching { core.workingOnView() }.getOrNull() ?: view
+                        }
+                    },
                     onCancel = {
                         haptics.tick()
                         scope.launch {

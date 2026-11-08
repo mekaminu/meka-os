@@ -143,6 +143,61 @@ class BookingCallRulesTest {
     }
 
     @Test
+    fun tryAgainMakesANewCardWithTheSameBriefOnlyForACallNotBooked() {
+        val (calls, replica) = store()
+        val p = BookingCallRules.proposal("Table for 4 at Rosa's Kitchen", saturday, 19 * 60, null, today, 0)!!
+        val id = calls.draft(p)!!
+        calls.edit(id, null, "01234 567890", "a quiet table")
+        calls.approve(id, emptyList(), cal)
+        // Not finished yet: no Try again.
+        assertEquals(BookingCallRules.NOT_RETRYABLE, calls.tryAgain(id, cal))
+        assertFalse(BookingCallRules.rows(calls.all(), emptyList(), emptyList(), now, cal).single().canTryAgain)
+        replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(
+            BookingCallFields.STATE to FieldValue.Text(BookingCallState.NOT_BOOKED.code),
+            BookingCallFields.RESULT to FieldValue.Text("Not booked · full at 7 · they offered 21:00"),
+        ))
+        assertTrue(BookingCallRules.rows(calls.all(), emptyList(), emptyList(), now, cal).single().canTryAgain)
+        assertEquals(BookingCallRules.TRIED_AGAIN, calls.tryAgain(id, cal))
+        val fresh = calls.all().single { it.id != id }
+        assertEquals(BookingCallState.DRAFT, fresh.state)
+        assertEquals("Rosa's Kitchen", fresh.business)
+        assertEquals("+441234567890", fresh.number)
+        assertEquals(saturday, fresh.day)
+        assertEquals(19 * 60, fresh.fromMin)
+        assertEquals(20 * 60, fresh.toMin)
+        assertEquals(4, fresh.people)
+        assertEquals("a quiet table", fresh.note)
+        assertNull(fresh.result)
+        val rows = BookingCallRules.rows(calls.all(), emptyList(), emptyList(), now, cal)
+        // The new card waits for his tap, first; the old one keeps its result and loses Try again.
+        assertEquals(fresh.id, rows.first().id)
+        assertTrue(rows.first().canCall && rows.first().needsYou)
+        val old = rows.last()
+        assertFalse(old.canTryAgain)
+        assertEquals(BookingCallRules.TRIED_AGAIN_LINE, old.triedAgainLine)
+        assertEquals(BookingCallRules.TRIED_AGAIN_LINE, calls.tryAgain(id, cal))
+        assertEquals(2, calls.all().size)
+    }
+
+    @Test
+    fun tryAgainNeverForABookedCallADayGoneOrWhenThreeAreOpen() {
+        val (calls, replica) = store()
+        val p = BookingCallRules.proposal("Table for 2 at Rosa's", saturday, 19 * 60, null, today, 0)!!
+        val booked = calls.draft(p)!!
+        replica.commitLocal(EntityTypes.BOOKING_CALL, booked, mapOf(BookingCallFields.STATE to FieldValue.Text(BookingCallState.BOOKED.code)))
+        assertEquals(BookingCallRules.NOT_RETRYABLE, calls.tryAgain(booked, cal))
+        val failed = calls.draft(p)!!
+        replica.commitLocal(EntityTypes.BOOKING_CALL, failed, mapOf(BookingCallFields.STATE to FieldValue.Text(BookingCallState.FAILED.code)))
+        val later = cal.toEpochMs(saturday + 1, 9 * 60)
+        assertFalse(BookingCallRules.canTryAgain(calls.all().single { it.id == failed }, later, cal))
+        // The window gone on the day itself.
+        assertFalse(BookingCallRules.canTryAgain(calls.all().single { it.id == failed }, cal.toEpochMs(saturday, 20 * 60), cal))
+        assertTrue(BookingCallRules.canTryAgain(calls.all().single { it.id == failed }, cal.toEpochMs(saturday, 18 * 60), cal))
+        repeat(3) { calls.draft(p)!! }
+        assertEquals(BookingCallRules.TOO_MANY, calls.tryAgain(failed, cal))
+    }
+
+    @Test
     fun obiIsWorkingOnCountsTheCards() {
         val (calls, _) = store()
         calls.draft(BookingCallRules.proposal("Table for 2 at Rosa's", saturday, 19 * 60, null, today, 0)!!)

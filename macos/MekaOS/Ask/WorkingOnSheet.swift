@@ -328,14 +328,25 @@ struct WorkingOnSheet: View {
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
             .padding(.top, MekaSpace.xs)
         }
-        if r.canRead {
-            HStack {
+        if let tried = r.triedAgainLine {
+            Text(LoneWordGlue.shared.kept(line: tried)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .padding(.top, MekaSpace.xs)
+        }
+        if r.canRead || r.canTryAgain {
+            HStack(spacing: MekaSpace.xs) {
                 Spacer()
-                pill(BookingLiveRules.shared.READ, ink: palette.accent, fill: palette.surface) { readingCall = id }
-                    .accessibilityLabel("\(BookingLiveRules.shared.READ): \(r.business)")
-                    .popover(isPresented: Binding(get: { readingCall == id }, set: { if !$0 { readingCall = nil } }), arrowEdge: .bottom) {
-                        readPanel(r)
-                    }
+                if r.canRead {
+                    pill(BookingLiveRules.shared.READ, ink: palette.accent, fill: palette.surface) { readingCall = id }
+                        .accessibilityLabel("\(BookingLiveRules.shared.READ): \(r.business)")
+                        .popover(isPresented: Binding(get: { readingCall == id }, set: { if !$0 { readingCall = nil } }), arrowEdge: .bottom) {
+                            readPanel(r)
+                        }
+                }
+                // Try again: a new card for the same brief, waiting for Call now (nothing rings by itself).
+                if r.canTryAgain {
+                    pill(BookingCallRules.shared.TRY_AGAIN, ink: palette.onAccent, fill: palette.accent) { tryAgain(id) }
+                        .accessibilityLabel("\(BookingCallRules.shared.TRY_AGAIN): \(r.business)")
+                }
             }
             .padding(.top, MekaSpace.xs)
         }
@@ -538,6 +549,17 @@ struct WorkingOnSheet: View {
     private func addToCalendar(_ id: String) {
         Task {
             let line = await model.addBookingCallToCalendar(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func tryAgain(_ id: String) {
+        Task {
+            let line = await model.tryAgainBookingCall(id)
             let next = await model.workingOnView()
             withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
                 callSaid = line

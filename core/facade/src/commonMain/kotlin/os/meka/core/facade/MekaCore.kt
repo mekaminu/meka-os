@@ -2126,6 +2126,12 @@ class MekaCore(
     /** Cancel, before Obi is on the call; false otherwise. */
     suspend fun cancelBookingCall(id: String): Boolean = onCore { bookingCalls.cancel(id) }
 
+    /**
+     * Try again on a call card that wasn't booked or didn't go through (its day not gone): a new card with the same
+     * brief, waiting for his Call now (synced; nothing rings by itself). The line to show.
+     */
+    suspend fun tryAgainBookingCall(id: String): String = onCore { bookingCalls.tryAgain(id, ZoneCalendar(timeZone)) }
+
     /** Obi on calls, slice 3: Hang up while Obi is on the call (synced; the server ends it). The line to show. */
     suspend fun hangUpBookingCall(id: String): String = onCore { bookingCalls.hangUp(id) }
 

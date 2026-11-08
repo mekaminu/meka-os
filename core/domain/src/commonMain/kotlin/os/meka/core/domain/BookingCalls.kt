@@ -63,6 +63,8 @@ object BookingCallFields {
     const val LISTEN = "listen"
     /** Slice 3c (server): when he pressed 1 on his mobile and started listening in; -1 once his listening leg is over. */
     const val LISTENING_AT = "listeningAt"
+    /** Try again (device): the new card made from this one; the old card keeps its result and loses Try again. */
+    const val RETRIED_AS = "retriedAs"
 }
 
 enum class BookingCallState(val code: String) {
@@ -112,6 +114,8 @@ data class BookingCall(
     /** Slice 3c: Listen tapped; when his mobile started listening in. */
     val listen: Boolean = false,
     val listeningAtMs: Long? = null,
+    /** Try again: the id of the new card made from this one, or null. */
+    val retriedAs: String? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -173,6 +177,10 @@ data class BookingCallRow(
     val addedToCalendar: Boolean = false,
     /** Read the call: the whole call in words, kept [BookingLiveRules.KEEP_DAYS] days. */
     val transcript: List<BookingWordLine> = emptyList(),
+    /** Try again on a call that wasn't booked or didn't go through, while its day hasn't gone: a new card to approve. */
+    val canTryAgain: Boolean = false,
+    /** "Tried again · the new card is above" once Try again made a new card. */
+    val triedAgainLine: String? = null,
 ) {
     val canRead: Boolean get() = transcript.isNotEmpty()
 }
@@ -211,6 +219,10 @@ object BookingCallRules {
     const val EDIT_NOTE_HINT = "A window seat, a high chair, a quiet table…"
     const val SAVE = "Save"
     const val SAVED = "Call card saved"
+    const val TRY_AGAIN = "Try again"
+    const val TRIED_AGAIN = "New call card ready · check it, then Call now"
+    const val TRIED_AGAIN_LINE = "Tried again · the new card is above"
+    const val NOT_RETRYABLE = "Only a call that wasn't booked can be tried again"
 
     const val MAX_OPEN = 3
     const val MAX_BUSINESS = 60
@@ -315,6 +327,7 @@ object BookingCallRules {
             takenAtMs = num(BookingCallFields.TAKEN_AT), yourSeconds = num(BookingCallFields.YOUR_SECONDS),
             listen = (f[BookingCallFields.LISTEN] as? FieldValue.Bool)?.value == true,
             listeningAtMs = num(BookingCallFields.LISTENING_AT),
+            retriedAs = text(BookingCallFields.RETRIED_AS),
         )
     }
 
@@ -396,6 +409,33 @@ object BookingCallRules {
         return (numberCheck(c.number, personal) as? NumberCheck.Refused)?.line
     }
 
+    /**
+     * Try again: a call that wasn't booked (they were full, no answer, busy, the line failed) can become a new card
+     * for the same brief, while its day hasn't gone and it hasn't been tried again already. Booked and taken calls
+     * never; a cancelled one has nothing to retry. The new card waits for his Call now like any other.
+     */
+    fun canTryAgain(c: BookingCall, nowMs: Long, cal: LocalCalendar): Boolean {
+        if (c.cancelled || c.retriedAs != null) return false
+        if (c.state != BookingCallState.NOT_BOOKED && c.state != BookingCallState.FAILED) return false
+        val today = cal.epochDayOf(nowMs)
+        if (c.day < today) return false
+        return !(c.day == today && c.toMin != null && c.toMin <= cal.minuteOfDay(nowMs))
+    }
+
+    /** The fields Try again's new card writes: the old brief (who, number, what, day, window, people, note), as a draft. */
+    fun retryFields(c: BookingCall, nowMs: Long): Map<String, FieldValue> = buildMap {
+        put(BookingCallFields.BUSINESS, c.business.fv())
+        c.number?.let { put(BookingCallFields.NUMBER, it.fv()) }
+        put(BookingCallFields.WHAT, c.what.fv())
+        put(BookingCallFields.DAY, c.day.fv())
+        c.fromMin?.let { put(BookingCallFields.FROM, it.toLong().fv()) }
+        c.toMin?.let { put(BookingCallFields.TO, it.toLong().fv()) }
+        c.people?.let { put(BookingCallFields.PEOPLE, it.toLong().fv()) }
+        c.note?.let { put(BookingCallFields.NOTE, it.fv()) }
+        put(BookingCallFields.STATE, BookingCallState.DRAFT.code.fv())
+        put(BookingCallFields.ASKED_AT, nowMs.fv())
+    }
+
     /** The line for a card waiting to ring outside calling hours: "Waiting to ring · Obi rings at 09:00". */
     fun waitingLine(nowMs: Long, cal: LocalCalendar): String {
         val m = cal.minuteOfDay(nowMs)
@@ -451,6 +491,7 @@ object BookingCallRules {
                     canCancel = draft || c.state == BookingCallState.APPROVED,
                     spoken = listOfNotNull("Call card for ${c.business}", c.what, "$whenTile, $window", c.people?.let { "$it people" }, status, block, c.result).joinToString(". "),
                 ).let { BookingLiveRules.withLive(it, c, nowMs, cal, PutThroughRules.dialable(mobile) != null) }
+                    .copy(canTryAgain = canTryAgain(c, nowMs, cal), triedAgainLine = if (c.retriedAs != null) TRIED_AGAIN_LINE else null)
             }
     }
 
@@ -557,6 +598,24 @@ class BookingCalls(private val replica: Replica, private val newId: () -> String
     /** Slice 3: Add to calendar made edit [editId] for card [id]; the card says Added on both apps. */
     fun markAdded(id: String, editId: String) {
         replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.CALENDAR_EDIT to editId.fv()))
+    }
+
+    /**
+     * Try again on a call that wasn't booked: a new draft card with the same brief (it waits for his Call now; nothing
+     * rings by itself), and the old card remembers it so Try again goes. Returns the line to show.
+     */
+    fun tryAgain(id: String, cal: LocalCalendar): String {
+        val c = one(id) ?: return BookingCallRules.GONE
+        if (!BookingCallRules.canTryAgain(c, nowMs(), cal)) {
+            return if (c.state == BookingCallState.NOT_BOOKED || c.state == BookingCallState.FAILED) {
+                if (c.retriedAs != null) BookingCallRules.TRIED_AGAIN_LINE else BookingCallRules.DAY_GONE
+            } else BookingCallRules.NOT_RETRYABLE
+        }
+        if (all().count { it.open } >= BookingCallRules.MAX_OPEN) return BookingCallRules.TOO_MANY
+        val newId = newId()
+        replica.commitLocal(EntityTypes.BOOKING_CALL, newId, BookingCallRules.retryFields(c, nowMs()))
+        replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.RETRIED_AS to newId.fv()))
+        return BookingCallRules.TRIED_AGAIN
     }
 
     /** Cancel (or the Ask card's Undo): only before Obi is on the call. */

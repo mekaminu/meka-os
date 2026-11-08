@@ -57,6 +57,9 @@ class BookingCallsFacadeTest {
         assertEquals(os.meka.core.domain.BookingLiveRules.NOT_ON_CALL, fold.listenToBookingCall(approved.id))
         assertFalse(approved.canListen)
         assertEquals(BookingCallRules.GONE, fold.addBookingCallToCalendar(approved.id))
+        // Try again is only for a call that wasn't booked.
+        assertEquals(BookingCallRules.NOT_RETRYABLE, fold.tryAgainBookingCall(approved.id))
+        assertFalse(approved.canTryAgain)
         assertTrue(approved.showBrief && !approved.live)
         // The Ask card's Undo still cancels it before anything rings.
         assertTrue(fold.undoAsk(assertIs<AskUndo.CancelBookingCall>(done.undo)))
