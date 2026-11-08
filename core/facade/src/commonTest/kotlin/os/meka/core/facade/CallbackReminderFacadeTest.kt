@@ -48,7 +48,7 @@ class CallbackReminderFacadeTest {
         // A second tap on the Mac keeps the one task.
         assertEquals("Reminder set · Tomorrow · 10:20", mac.remindCallback(msg))
         // No call back agreed: nothing to offer, and a tap says it's gone.
-        assertNull(fold.callbackChip(item(null)).also { })
+        assertNull(fold.callbackChip(item(null).copy(id = "twilio:CB2")))
         assertEquals(CallbackReminderRules.GONE, fold.remindCallback(item(null).copy(id = "twilio:CB2")))
     }
 }
