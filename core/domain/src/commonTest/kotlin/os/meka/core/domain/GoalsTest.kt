@@ -37,6 +37,8 @@ class GoalsTest {
         val h = g.addHabit("Stretch", perWeek = 7)
         assertEquals(HabitPace.DUE, habit(h).pace)
         assertEquals("To do today", habit(h).meta)
+        // Walk-through 2026-11-08 A8: the line names habits, so it never reads as a task count beside "4 tasks".
+        assertEquals("1 habit to do today", g.view(d.tasks.all()).paceLine)
         g.setHabitDone(h, true)
         assertEquals(HabitPace.DONE_TODAY, habit(h).pace)
         nextDay()

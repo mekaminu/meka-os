@@ -318,4 +318,19 @@ class MorningBriefTest {
         assertEquals(listOf("e-1", "t-2"), v.dayLines.map { it.id })
         assertEquals(listOf(null, "2"), v.dayLines.map { it.taskId })
     }
+
+    /** Walk-through 2026-11-08 A8: a task in Focus isn't drawn again under Today; events and the other tasks are. */
+    @Test
+    fun aFocusTaskIsNotRepeatedUnderToday() {
+        val v = MorningBriefView.EMPTY.copy(
+            day = listOf(
+                TomorrowRow("e-1", "09:00", "Standup", true, null),
+                TomorrowRow("t-2", null, "Renew passport", false, "Overdue"),
+                TomorrowRow("t-3", null, "Milk", false, null),
+            ),
+            story = BriefStory(focus = listOf(BriefFocus("Renew passport", null, taskId = "2"))),
+        )
+        assertEquals(listOf("2"), v.focusLines.map { it.taskId })
+        assertEquals(listOf("e-1", "t-3"), v.dayLines.map { it.id })
+    }
 }

@@ -158,12 +158,16 @@ data class GoalsView(
     /** The hand-made gym habit to offer "Let MEKA book “gym”" on; null when there is none or a habit is already booked. */
     val bookOffer: HabitItem? get() = SessionRules.bookOffer(habits)
 
-    /** "1 habit behind · 2 to do today"; "All habits on track" or null with no habits. */
+    /**
+     * "1 habit behind · 2 to do today"; "1 habit to do today" alone (walk-through 2026-11-08 A8: a bare "1 to do today"
+     * under the brief's "4 tasks" read as a task count); "All habits on track" or null with no habits.
+     */
     val paceLine: String? get() {
         if (habits.isEmpty()) return null
+        fun habits(n: Int) = if (n == 1) "habit" else "habits"
         val parts = listOfNotNull(
-            behind.takeIf { it > 0 }?.let { "$it ${if (it == 1) "habit" else "habits"} behind" },
-            dueToday.takeIf { it > 0 }?.let { "$it to do today" },
+            behind.takeIf { it > 0 }?.let { "$it ${habits(it)} behind" },
+            dueToday.takeIf { it > 0 }?.let { if (behind > 0) "$it to do today" else "$it ${habits(it)} to do today" },
         )
         return parts.joinToString(" · ").ifEmpty { "All habits on track" }
     }

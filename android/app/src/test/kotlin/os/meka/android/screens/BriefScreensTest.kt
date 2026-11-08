@@ -259,6 +259,11 @@ class BriefScreensTest {
                 if (v.headlines.size != 4) fail("$name: ${v.headlines.size} headlines, not the four from Top stories, World and AI (chosen by default)")
                 if (v.fastingLine == null) fail("$name: a fast is running, but the brief doesn't say so")
                 if (v.waitingLine == null) fail("$name: a chase today, but nothing waiting")
+                // Walk-through 2026-11-08 A8: a Focus task isn't drawn again under Today, and the habit line says habit.
+                val focus = v.focusLines.mapNotNull { it.taskId }.toSet()
+                if (focus.isEmpty()) fail("$name: an overdue task and three for today, but no Focus")
+                v.dayLines.firstOrNull { it.taskId in focus }?.let { fail("$name: \"${it.title}\" is in Focus and again under Today") }
+                if (v.habitsLine?.contains("habit") != true) fail("$name: the habits line \"${v.habitsLine}\" doesn't say habit, so it reads as tasks")
             }
         }
     }
@@ -319,10 +324,11 @@ class BriefScreensTest {
     fun aTaskTicksByHand() {
         val name = "cover-dark-tick"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
-        if (core.briefView.value.dayLines.none { it.title == "Fix the gate latch" }) fail("$name: Fix the gate latch isn't in Today")
+        fun shown() = core.briefView.value.let { it.focusLines + it.dayLines }.filter { it.title == "Fix the gate latch" }
+        if (shown().isEmpty()) fail("$name: Fix the gate latch isn't in Focus or Today")
         tap(name, "Fix the gate latch's circle", hasContentDescription("Complete Fix the gate latch"))
-        until { core.briefView.value.dayLines.none { it.title == "Fix the gate latch" } }
-        if (core.briefView.value.dayLines.any { it.title == "Fix the gate latch" }) fail("$name: the ticked task is still in Today")
+        until { shown().isEmpty() }
+        if (shown().isNotEmpty()) fail("$name: the ticked task is still in the brief")
     }
 
     /** Got it marks the brief read; the check shows and Done is left to close it. */

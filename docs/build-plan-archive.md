@@ -5559,3 +5559,12 @@ Setup's "12 steps left" counts accounts, devices and choices to connect (`SetupR
 read as one count disagreeing. The Ask label now names what it counts: `LifeTileRules.setUpLabel` → "Places to set up
 · 10" (drawn in caps on both apps, which read it from the core). LifeTilesTest checks the wording and that it never
 says "step"; AskScreensTest already taps the label by the core's text. Core only; both apps follow; Mac checked nightly.
+
+**Slice 10, 2026-11-08 (A8, the brief, real).** The brief's full-morning shots showed the Focus task twice (Focus, then
+again in Today's rows) and, under You, "1 to do today" below "2 events · 4 tasks", which read as a second task count.
+`MorningBriefView.dayLines` now leaves out tasks already in `focusLines` (Today keeps the events and the smaller ones
+Focus counts with "+ N smaller ones on Today"; `daySummary` still counts the whole day), and `GoalsView.paceLine` names
+habits when "to do today" stands alone ("1 habit to do today"; "1 habit behind · 2 to do today" unchanged). Tests:
+MorningBriefTest.aFocusTaskIsNotRepeatedUnderToday, GoalsTest's daily habit line; BriefScreensTest's full morning fails
+if a Focus task repeats under Today or the habits line doesn't say habit, and the tick test finds the task in Focus or
+Today. Core only; both apps draw both lists from the core; Mac checked nightly.

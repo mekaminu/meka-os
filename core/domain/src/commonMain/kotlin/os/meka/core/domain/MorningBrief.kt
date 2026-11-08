@@ -96,8 +96,15 @@ data class MorningBriefView(
     /** Week board item (10): "Thursday is stacking up: Trip form, Council tax and Gym" within two days; null otherwise. */
     val pressureLine: String? = null,
 ) {
-    /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
-    val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
+    /**
+     * [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. A task already
+     * in Focus above isn't drawn again (walk-through 2026-11-08 A8: the Focus task was repeated under Today), so Today
+     * lists the events and the "+ 2 smaller ones on Today" that Focus counts; [daySummary] still counts the whole day.
+     */
+    val dayLines: List<BriefDayLine> get() {
+        val inFocus = focusLines.mapNotNull { it.taskId }.toSet()
+        return day.map(BriefRules::dayLine).filter { it.taskId == null || it.taskId !in inFocus }
+    }
 
     /** Slice 3: the tasks the spoken brief names, with why ("Overdue"), as the pane's Focus rows ([BriefCardRules]). */
     val focusLines: List<BriefDayLine> get() = BriefCardRules.focusLines(story)
