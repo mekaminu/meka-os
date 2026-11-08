@@ -111,7 +111,7 @@ data class AppointmentView(
     val suggestions: List<AppointmentSuggestion>,
     /** One card per appointment due and not booked or set aside, most overdue first. */
     val nudges: List<AppointmentNudge>,
-    /** "4 appointments · 1 due", "3 appointments · all in hand", or [AppointmentRules.EMPTY_SUMMARY]. */
+    /** "4 appointments · 1 due", "4 appointments · 1 due · 1 needs a date", "3 appointments · all in hand", or [AppointmentRules.EMPTY_SUMMARY]. */
     val summary: String,
 ) {
     companion object {
@@ -479,10 +479,18 @@ object AppointmentRules {
         val suggestions = PRESETS.filter { it.id !in keys }.map { suggestion(it) }
         val nudges = rows.mapNotNull { (_, item) -> nudge(item, today) }
         val due = nudges.size
+        // The walk-through 2026-11-08 A8: one with no last visit noted is lit and asks "When did you last go?", so the
+        // head never says "all in hand" over it; it says how many need a date.
+        val undated = rows.count { it.first.state == AppointmentState.UNKNOWN }
+        val count = "${items.size} ${if (items.size == 1) "appointment" else "appointments"}"
         val summary = when {
             items.isEmpty() -> EMPTY_SUMMARY
-            due > 0 -> "${items.size} ${if (items.size == 1) "appointment" else "appointments"} · $due due"
-            else -> "${items.size} ${if (items.size == 1) "appointment" else "appointments"} · all in hand"
+            due == 0 && undated == 0 -> "$count · all in hand"
+            else -> listOfNotNull(
+                count,
+                due.takeIf { it > 0 }?.let { "$it due" },
+                undated.takeIf { it > 0 }?.let { "$it ${if (it == 1) "needs a date" else "need a date"}" },
+            ).joinToString(" · ")
         }
         return AppointmentView(rows.map { it.first }, suggestions, nudges, summary)
     }

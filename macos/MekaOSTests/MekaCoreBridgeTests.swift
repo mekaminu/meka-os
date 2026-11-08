@@ -173,7 +173,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let row = try XCTUnwrap(core.peopleView.value.rows.first)
         XCTAssertEqual(core.peopleView.value.rows.count, 1)
         XCTAssertEqual(row.name, "Theo")
-        XCTAssertEqual(row.owedLine, "You promised 1 · Waiting for 1")
+        XCTAssertEqual(row.owedLine, "You promised 1, 1 due · Waiting for 1")
         XCTAssertTrue(row.lit)
         XCTAssertEqual(row.promised.map(\.id), [id])
         XCTAssertEqual(core.peopleView.value.summary, "1 person · 1 promise due")

@@ -70,7 +70,10 @@ class AppointmentsTest {
         val v = AppointmentRules.view(listOf(optician, gp, car, dentist, haircut, barber), today)
         assertEquals(listOf("barber", "haircut", "dentist", "gp", "car", "optician"), v.rows.map { it.id })
         assertEquals(listOf("haircut", "dentist"), v.nudges.map { it.id })
-        assertEquals("6 appointments · 2 due", v.summary)
+        assertEquals("6 appointments · 2 due · 1 needs a date", v.summary)
+        // With no last visit noted it's never "all in hand" (the walk-through 2026-11-08 A8).
+        assertEquals("2 appointments · 1 needs a date", AppointmentRules.view(listOf(optician, gp), today).summary)
+        assertEquals("1 appointment · all in hand", AppointmentRules.view(listOf(optician), today).summary)
         val n = v.nudges[1]
         assertEquals("Due tomorrow · every 6 months", n.line)
         assertEquals("Last went Sun 12 Apr. Booked the next one?", n.question)

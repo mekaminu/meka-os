@@ -172,6 +172,8 @@ class AdminPlacesScreensTest {
                 ScreenShots.assertDatesWhole(compose, name)
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != AppointmentRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
+                // The walk-through 2026-11-08 A8: never "all in hand" over a lit row (due, or asking when he last went).
+                if (v.summary.endsWith("all in hand") && v.rows.any { it.lit }) fail("$name: \"${v.summary}\" over a row that needs him")
                 if (fill == Fill.MANY && v.rows.size != 5) fail("$name: ${v.rows.size} rows for five")
                 v.rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.title) }
             }

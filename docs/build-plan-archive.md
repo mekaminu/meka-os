@@ -5568,3 +5568,13 @@ habits when "to do today" stands alone ("1 habit to do today"; "1 habit behind �
 MorningBriefTest.aFocusTaskIsNotRepeatedUnderToday, GoalsTest's daily habit line; BriefScreensTest's full morning fails
 if a Focus task repeats under Today or the habits line doesn't say habit, and the tick test finds the task in Focus or
 Today. Core only; both apps draw both lists from the core; Mac checked nightly.
+
+**Slice 11, 2026-11-08 (A8, People and Appointments, real).** People's head counted only what's due ("1 to chase")
+while each row counted everything ("Waiting for 1" twice); `PeopleRules.row` now adds the row's due count in the head's
+words ("Waiting for 1, 1 to chase", "You promised 2, 1 due"). Appointments' head said "all in hand" over a row asking
+"When did you last go?"; `AppointmentRules.view` now counts those ("4 appointments · 1 due · 1 needs a date") and says
+"all in hand" only when nothing is due or undated. Health's and Setup's Call assistant rows both read Work mode's one
+switch (`_workMode.value.callAssistant`), so that pair was the shots' fixture. Tests: PeopleTest, AppointmentsTest,
+AppointmentsFacadeTest, the Mac bridge test; LifePlacesScreensTest fails if the head says to chase and no row does,
+AdminPlacesScreensTest if "all in hand" sits over a lit row. Core only; both apps draw the lines from the core; Mac
+checked nightly.

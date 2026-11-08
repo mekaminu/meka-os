@@ -36,16 +36,19 @@ class PeopleTest {
         )
         assertEquals(listOf("Mum", "Theo", "Argos"), v.rows.map { it.name }) // lit first, then by name
         val theo = v.rows[1]
-        assertEquals("You promised 2", theo.owedLine)
+        assertEquals("You promised 2, 1 due", theo.owedLine)
         assertEquals(listOf("Lift to football", "Fix the bike"), theo.promised.map { it.title }) // due first
         assertEquals("Birthday Thu 15 Oct · in 3 days · turns 10", theo.birthday)
         assertTrue(theo.lit)
         val mum = v.rows[0]
-        assertEquals("Waiting for 1", mum.owedLine)
+        assertEquals("Waiting for 1, 1 to chase", mum.owedLine)
         assertEquals("Birthday Tue 3 Nov · in 22 days · turns 60", mum.birthday)
         assertTrue(mum.lit) // the chase is due, not the birthday
         val argos = v.rows[2]
         assertFalse(argos.lit)
+        assertEquals("Waiting for 1", argos.owedLine) // nothing to chase yet: no due count
+        // The rows' due counts add up to the head's (the walk-through 2026-11-08 A8).
+        assertEquals(1, v.rows.sumOf { r -> r.waiting.count { it.due } })
         assertNull(argos.birthday)
         assertEquals("3 people · 1 promise due · 1 to chase", v.summary)
         assertTrue(theo.spoken.startsWith("Theo. You promised: Lift to football, Theo · due today."))

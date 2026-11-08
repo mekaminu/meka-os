@@ -41,7 +41,7 @@ data class PersonRow(
     /** [People.key] of the name. */
     val key: String,
     val name: String,
-    /** "You promised 2 · Waiting for 1", null when nothing is owed either way. */
+    /** "You promised 2, 1 due · Waiting for 1", "Waiting for 1, 1 to chase"; null when nothing is owed either way. */
     val owedLine: String?,
     /** What Meka promised them, due first. */
     val promised: List<PersonOwed>,
@@ -183,9 +183,13 @@ object PeopleRules {
     private fun row(a: Acc, today: Long, nowMs: Long, cal: LocalCalendar): PersonRow {
         val promised = a.promised.sortedWith(compareBy<PersonOwed> { if (it.due) 0 else 1 })
         val waiting = a.waiting.sortedWith(compareBy<PersonOwed> { if (it.due) 0 else 1 })
+        // The walk-through 2026-11-08 A8: the head counts what's due ("1 to chase"), so each row says its own due count
+        // in the same words; two rows of "Waiting for 1" never read as disagreeing with "1 to chase".
+        val dueP = promised.count { it.due }
+        val dueW = waiting.count { it.due }
         val owed = listOfNotNull(
-            promised.size.takeIf { it > 0 }?.let { "You promised $it" },
-            waiting.size.takeIf { it > 0 }?.let { "Waiting for $it" },
+            promised.size.takeIf { it > 0 }?.let { "You promised $it" + if (dueP > 0) ", $dueP due" else "" },
+            waiting.size.takeIf { it > 0 }?.let { "Waiting for $it" + if (dueW > 0) ", $dueW to chase" else "" },
         ).joinToString(" · ").ifEmpty { null }
         val birthday = a.birthday?.let { birthdayLine(it, today) }
         val soon = a.birthday?.let { GiftRules.next(it, today) - today <= BIRTHDAY_SOON_DAYS } == true

@@ -158,6 +158,9 @@ class LifePlacesScreensTest {
                 if (fill == Fill.EMPTY && v.summary != PeopleRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nobody in")
                 if (fill != Fill.EMPTY && v.rows.isEmpty()) fail("$name: no person shown with a promise in")
                 v.rows.forEach { ScreenShots.assertShows(compose, name, it.name) }
+                // The walk-through 2026-11-08 A8: a row due to chase says so in the head's words.
+                val chase = v.rows.sumOf { r -> r.waiting.count { it.due } }
+                if (chase > 0 && v.rows.none { it.owedLine?.contains("to chase") == true }) fail("$name: \"$chase to chase\" in the head but no row says it")
             }
             Place.ERRANDS -> {
                 val v = core.errandsView.value
