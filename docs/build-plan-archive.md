@@ -5514,3 +5514,11 @@ the Mac's lanes are wide enough). The narrow pill also takes `TouchPill(pad = xs
 (today's column is above, scrolled to the weekend by design, week 2's A6) and was left. Tests: BoardHintTest,
 BoardLookTest, BoardOpenFoldTest; BoardScreensTest's scrolled shot fails if the brief wraps or the pill is cut, the areas
 shot if a lane card's chips or area name are cut. Core, Fold and Mac; no server change, no migration; Mac checked nightly.
+
+Slice 5 (2026-11-08): **A7** Tomorrow's banner kept "2 tasks" after one moved to Today, and the edit shot showed the
+detail titled "Gym, legs day" over a peek still saying "first 07:40 Gym before work". Both were the shots' fixture:
+TomorrowScreensTest read `shutdownView.value.peek` once before `setContent`, while Today on the Fold (TodayRoute's
+`shutdown.peek`) and the Mac (TodayView's `s.peek`) already draw it from the live view. The test now collects
+`shutdownView` in composition, checks after the move that the core's peek says "1 task" and the drawn peek matches with
+no "2 tasks" anywhere, and after the rename that "Gym before work" no longer shows beside the edited detail. Test only;
+no app, server or migration change.

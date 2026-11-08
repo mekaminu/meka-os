@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -19,6 +21,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import kotlin.random.Random
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import org.junit.Rule
@@ -38,11 +45,6 @@ import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
-import kotlin.random.Random
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
-import kotlin.test.fail
 
 /**
  * The Tomorrow peek and sheet (Meka 2026-10-26: "I asked the AI to add a task for tomorrow, it did, but on this screen how
@@ -85,13 +87,14 @@ class TomorrowScreensTest {
             gym to school
         }
         compose.mainClock.autoAdvance = false
-        // Read once, outside composition: the peek as Today would draw it.
-        val peek = core.shutdownView.value.peek
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    // Walk-through 2026-11-08 A7: the peek as Today draws it, from the live view (read once, it kept
+                    // "2 tasks" after a move and the old title over an edit).
+                    val peek by core.shutdownView.collectAsState()
                     Column {
-                        peek?.let { TomorrowPeekCard(it, onOpen = {}) }
+                        peek.peek?.let { TomorrowPeekCard(it, onOpen = {}) }
                         TomorrowPane(core, onClose = {})
                     }
                 }
@@ -151,6 +154,10 @@ class TomorrowScreensTest {
         assertTrue(shows(moved), "$name: the move isn't said")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-moved"))
         assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.map { it.id })
+        val afterMove = assertNotNull(core.shutdownView.value.peek).line
+        assertTrue(afterMove.contains("1 task ·") && !afterMove.contains("2 tasks"), afterMove)
+        until { shows(LoneWordGlue.kept(afterMove)) }
+        assertTrue(shows(LoneWordGlue.kept(afterMove)) && !shows("2 tasks"), "$name: the peek still counts the moved task")
 
         // Tomorrow on Today, slice 3: Edit opens the task's full detail over the sheet; an edit shows in it at once,
         // and once the task is no longer tomorrow's (done here) the detail closes.
@@ -161,6 +168,9 @@ class TomorrowScreensTest {
         runBlocking { core.rename(gym, "Gym, legs day") }
         until { shows("Gym, legs day") }
         assertTrue(shows("Gym, legs day"), "$name: the edit isn't shown")
+        // A7: the row and the peek behind the detail say the new name too, never the old one beside it.
+        until { !shows("Gym before work") }
+        assertTrue(!shows("Gym before work"), "$name: the old name is still shown beside the edited detail")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-edit"))
         // Walk-through 2026-11-02 A4: the line under the title is When's own time on the core's clock (it drew 06:40,
         // the phone's zone, while When said 07:40), and on the cover screen the Repeat row stands whole above the pills.

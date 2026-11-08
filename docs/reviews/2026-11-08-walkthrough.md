@@ -34,7 +34,7 @@ Obi pill destination, lone Not now and cut "Send the quote"; Study on the Board;
    'Batch cook…'" with no such card and Saturday at 1h / 12h; the nudge's Move to names no day, "over" alone on a line;
    Boiler service's chips cut to "Ot…", "H…" (`board/inner-dark-unfolded-on-saturday.png`, `inner-dark-folded-again.png`,
    `inner-dark-scrolled.png`, `inner-dark-areas.png`).
-7. **Tomorrow's banner keeps "2 tasks"** after one is moved; "Gym before work" opens a sheet titled "Gym, legs day"
+7. **(Fixed 2026-11-08, slice 5: the shots' fixture.)** **Tomorrow's banner keeps "2 tasks"** after one is moved; "Gym before work" opens a sheet titled "Gym, legs day"
    (`tomorrow/fold-*-moved.png`, `fold-*-edit.png`).
 8. **Counts that differ between screens** (high, mostly the shots' fixtures, some real): habits "1 of 2" on Today vs
    "0 of 1" on Ask; setup "12 steps left" vs "TO SET UP · 10"; the brief's "4 tasks" vs "1 to do today" and the Focus
