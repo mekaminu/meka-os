@@ -818,6 +818,8 @@ class Integrations(
         // Phishing in the body, slice 2: the bodies of new Needs you mail checked for a scam, before the cards.
         stage(a, "bodyScams") { bodyScams(a, m, token, ms) }
         // Phishing in the body, slice 3: a sure scam to the account's Junk, its sender blocked (before the cards).
+        // Phishing in the body, slice 5: the one-off look back over the last 30 days (before the day's moves).
+        stage(a, "scamSweep") { scamSweep(a, m, token, ms) }
         stage(a, "scamJunk") { scamJunk(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         stage(a, "publishMailNeeds") { publishMailNeeds(a, ms) }
@@ -1711,25 +1713,12 @@ class Integrations(
         // An email found a scam and sorted again by its headers since (its headers read again) stays a scam.
         val scams = inbox.filter { (h, s) -> MailScamRules.bodyDue(s) && bodyChecked[bodyKey(a.id, h.id)].orEmpty().isNotEmpty() }
             .associateTo(HashMap<String, MailSorted>()) { (h, _) -> h.id to MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true) }
+        if (scams.isNotEmpty()) ms.setSorts(a.id, scams)
         val due = inbox
             .filter { (h, s) -> h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS && MailScamRules.bodyDue(s) && !bodyChecked.containsKey(bodyKey(a.id, h.id)) }
             .sortedByDescending { it.first.receivedAtMs }
             .take(MailScamRules.BODY_PER_CHECK)
-        if (bodyChecked.size > 20_000) bodyChecked.clear()
-        val own = if (due.isEmpty()) emptySet() else ownAddresses(a)
-        for ((h, _) in due) {
-            val facts = try {
-                m.message(token, h.id)
-            } catch (e: ReconnectRequired) {
-                throw e
-            } catch (e: Exception) {
-                break
-            }
-            val line = facts?.let { MailScamRules.sortedBodyLine(h.fromAddress, h.fromName, h.subject, it, own) }
-            bodyChecked[bodyKey(a.id, h.id)] = line.orEmpty()
-            if (line != null) scams[h.id] = MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true)
-        }
-        if (scams.isNotEmpty()) ms.setSorts(a.id, scams)
+        readBodies(a, m, token, ms, due.map { it.first })
     }
 
     /**
@@ -1742,10 +1731,75 @@ class Integrations(
      * emails and Undo (which also takes the blocks off again). The body is never kept.
      */
     internal fun scamJunk(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        junkSureScams(a, m, token, ms, MailScamJunkRules.PER_CHECK, sweep = false) { true }
+    }
+
+    /**
+     * Phishing in the body, slice 5 (the first-run look back): once per account, the inbox's mail from
+     * [MailScamJunkRules.inSweep] (two to four weeks old, older than each check's body reading) is read whole, at most
+     * [MailScamJunkRules.SWEEP_PER_CHECK] a check, newest first, with the same body check ([MailScamRules.sortedBodyLine];
+     * never his correspondents', his own, public bodies' or security mail). When all of it is read, every sure scam among
+     * it goes to Junk with its sender blocked exactly as [scamJunk] does, into the look back's own batch
+     * ("Looked back 30 days · moved 3 scam emails to Junk · Personal", Put back and Undo as usual). Its batch existing
+     * means the look back is done; a look back that found nothing writes nothing and is only remembered in memory (after a
+     * restart it reads that mail again). Navilife's and Inbox's Pause stop it. The body is never kept.
+     */
+    internal fun scamSweep(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        if (a.id in swept || mailPaused(hh)) return
+        if (reader.entity(hh, EntityTypes.MAIL_TIDY, MailScamJunkRules.sweepBatchId(a.id)) != null) { swept += a.id; return }
+        val nowMs = now()
+        fun due() = ms.inboxSorted(a.id)
+            .filter { (h, s) -> MailScamJunkRules.sweepDue(h.receivedAtMs, h.inInbox, s, bodyChecked.containsKey(bodyKey(a.id, h.id)), nowMs) }
+        val reading = due().sortedByDescending { it.first.receivedAtMs }.take(MailScamJunkRules.SWEEP_PER_CHECK)
+        if (reading.isNotEmpty()) {
+            if (readBodies(a, m, token, ms, reading.map { it.first }) < reading.size) return
+            if (due().isNotEmpty()) return
+        }
+        junkSureScams(a, m, token, ms, MailScamJunkRules.SWEEP_MOVES, sweep = true) { MailScamJunkRules.inSweep(it.receivedAtMs, nowMs) }
+        swept += a.id
+    }
+
+    /** Slice 5: accounts whose look back is done (also when it found nothing, which writes no batch). */
+    private val swept: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Slices 2 and 5: these emails read whole once and checked ([MailScamRules.sortedBodyLine]); a scam is sorted
+     * [MailSortReason.SCAM] (sure). How many were read: a refusal ends the reading early.
+     */
+    private fun readBodies(a: AccountRow, m: MailProvider, token: String, ms: MailStore, headers: List<MailHeader>): Int {
+        if (bodyChecked.size > 20_000) bodyChecked.clear()
+        val own = if (headers.isEmpty()) emptySet() else ownAddresses(a)
+        val scams = HashMap<String, MailSorted>()
+        var read = 0
+        for (h in headers) {
+            val facts = try {
+                m.message(token, h.id)
+            } catch (e: ReconnectRequired) {
+                throw e
+            } catch (e: Exception) {
+                break
+            }
+            val line = facts?.let { MailScamRules.sortedBodyLine(h.fromAddress, h.fromName, h.subject, it, own) }
+            bodyChecked[bodyKey(a.id, h.id)] = line.orEmpty()
+            if (line != null) scams[h.id] = MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true)
+            read++
+        }
+        if (scams.isNotEmpty()) ms.setSorts(a.id, scams)
+        return read
+    }
+
+    /**
+     * Slices 3 and 5: each sure scam still in the inbox that [include] takes goes to the account's Junk, marked read, its
+     * sender blocked, at most [limit]; into the day's batch, or the look back's own one ([sweep]).
+     */
+    private fun junkSureScams(
+        a: AccountRow, m: MailProvider, token: String, ms: MailStore, limit: Int, sweep: Boolean, include: (MailHeader) -> Boolean,
+    ) {
         val hh = a.householdId
         if (mailPaused(hh)) return
         val never = ms.neverTidied(a.id)
-        val inbox = ms.inboxSorted(a.id).filter { (h, s) -> h.inInbox && h.id !in never && s.reason == MailSortReason.SCAM }
+        val inbox = ms.inboxSorted(a.id).filter { (h, s) -> h.inInbox && h.id !in never && s.reason == MailSortReason.SCAM && include(h) }
         if (inbox.isEmpty()) return
         val keep = keepAddresses(hh)
         val senders = runCatching { reader.entities(hh, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
@@ -1757,24 +1811,28 @@ class Integrations(
                     h.fromAddress, h.inInbox, s, keep,
                     replied = h.threadId?.let { it in replied } == true, rule = ruleOf(h),
                 ), h.fromName, bodyChecked[bodyKey(a.id, h.id)])
-        }.map { it.first }.sortedByDescending { it.receivedAtMs }.take(MailScamJunkRules.PER_CHECK)
+        }.map { it.first }.sortedByDescending { it.receivedAtMs }.take(limit)
         if (due.isEmpty()) return
         val nowMs = now()
         val moved = m.tidyKept(token, due.associate { it.id to MailTidy.SCAM_JUNK }).first
         val done = due.filter { it.id in moved }
         if (done.isEmpty()) return
-        // The day's batch (a new round once he put back the day's first).
-        val day = LONDON.epochDayOf(nowMs)
         val batches = reader.entities(hh, EntityTypes.MAIL_TIDY)
-        var round = 1
         var batch: os.meka.core.domain.MailTidyBatch? = null
-        while (true) {
-            val id = MailScamJunkRules.batchId(a.id, day, round)
-            batch = batches[id]?.let { MailAutopilotRules.readBatch(id, it) }
-            if (batch == null || batch.canUndo) break
-            round++
+        val batchId = if (sweep) {
+            MailScamJunkRules.sweepBatchId(a.id).also { id -> batch = batches[id]?.let { MailAutopilotRules.readBatch(id, it) } }
+        } else {
+            // The day's batch (a new round once he put back the day's first).
+            val day = LONDON.epochDayOf(nowMs)
+            var round = 1
+            while (true) {
+                val id = MailScamJunkRules.batchId(a.id, day, round)
+                batch = batches[id]?.let { MailAutopilotRules.readBatch(id, it) }
+                if (batch == null || batch!!.canUndo) break
+                round++
+            }
+            MailScamJunkRules.batchId(a.id, day, round)
         }
-        val batchId = MailScamJunkRules.batchId(a.id, day, round)
         ms.recordTidy(a.id, batchId, done.map { MailMoved(it.id, moved.getValue(it.id), MailTidy.SCAM_JUNK) })
         if (markingRead(hh)) markRead(m, token, done.filter { it.unread }.map { moved.getValue(it.id) }, true)
         done.forEach { h -> ms.put(hh, a.id, h.copy(inInbox = false)) }
@@ -1787,12 +1845,15 @@ class Integrations(
             MailSenderRuleRules.senderFieldsForCard(senders[id], account, h.fromName, address, h.receivedAtMs, nowMs, MailSenderRule.BLOCK)
                 ?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
         }
-        val earlier = batch?.emails.orEmpty()
+        val prior = batch
+        val earlier = prior?.emails.orEmpty()
         val fresh = tidiedEmails(a, ms, done.map { it to MailTidy.SCAM_JUNK })
         val emails = MailTidiedRules.decode((fresh[MailTidyBatchFields.EMAILS] as? FieldValue.Text)?.value)
         val all = (emails + earlier).distinctBy { it.key }
-        writeTidy(a, batchId, MailScamJunkRules.batchFields(batch?.atMs ?: nowMs, account, all.size.coerceAtLeast((batch?.count ?: 0) + done.size)) +
-            MailTidiedRules.fields(all))
+        val count = all.size.coerceAtLeast((prior?.count ?: 0) + done.size)
+        val fields = if (sweep) MailScamJunkRules.sweepFields(prior?.atMs ?: nowMs, account, count)
+            else MailScamJunkRules.batchFields(prior?.atMs ?: nowMs, account, count)
+        writeTidy(a, batchId, fields + MailTidiedRules.fields(all))
     }
 
     /** Phishing in the body, slice 3: the blocks a scam batch set come off after its Undo (or one email's Put back). */

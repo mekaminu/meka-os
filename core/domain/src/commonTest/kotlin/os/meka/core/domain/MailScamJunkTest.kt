@@ -93,4 +93,44 @@ class MailScamJunkTest {
         assertEquals("Scam · Junk, sender blocked", MailTidiedRules.chip(e))
         assertEquals(MailTidy.SCAM_JUNK, MailTidiedRules.decode(MailTidiedRules.encode(listOf(e))).single().tidy)
     }
+
+    // ---- Slice 5: the 30-day look back ----
+
+    @Test
+    fun theLookBackTakesMailFromTwoToFourWeeksAgo() {
+        val day = 86_400_000L
+        val now = 100 * day
+        assertFalse(MailScamJunkRules.inSweep(now - 3 * day, now))
+        assertFalse(MailScamJunkRules.inSweep(now - 14 * day, now))
+        assertTrue(MailScamJunkRules.inSweep(now - 14 * day - 1, now))
+        assertTrue(MailScamJunkRules.inSweep(now - 30 * day, now))
+        assertFalse(MailScamJunkRules.inSweep(now - 30 * day - 1, now))
+    }
+
+    @Test
+    fun theLookBackNeverReadsHisPeoplesOrSecurityMail() {
+        val day = 86_400_000L
+        val now = 100 * day
+        val old = now - 20 * day
+        val unsure = MailSorted(MailSort.NEEDS_YOU, MailSortReason.PERSON, false)
+        assertTrue(MailScamJunkRules.sweepDue(old, true, unsure, false, now))
+        assertFalse(MailScamJunkRules.sweepDue(old, true, unsure, true, now))
+        assertFalse(MailScamJunkRules.sweepDue(old, false, unsure, false, now))
+        assertFalse(MailScamJunkRules.sweepDue(old, true, MailSorted(MailSort.NEEDS_YOU, MailSortReason.KNOWN_PERSON, true), false, now))
+        assertFalse(MailScamJunkRules.sweepDue(old, true, MailSorted(MailSort.NEEDS_YOU, MailSortReason.SECURITY, true), false, now))
+        assertFalse(MailScamJunkRules.sweepDue(now - day, true, unsure, false, now))
+    }
+
+    @Test
+    fun theLookBacksBatchIsOnePerAccountWithItsCount() {
+        assertEquals(MailScamJunkRules.sweepBatchId("a1"), MailScamJunkRules.sweepBatchId("a1"))
+        assertNotEquals(MailScamJunkRules.sweepBatchId("a1"), MailScamJunkRules.sweepBatchId("a2"))
+        assertNotEquals(MailScamJunkRules.sweepBatchId("a1"), MailScamJunkRules.batchId("a1", 20_000))
+        assertEquals("Looked back 30 days · moved 1 scam email to Junk · Personal", MailScamJunkRules.sweepSummary(1, "Personal"))
+        val f = MailScamJunkRules.sweepFields(5L, "Work", 3)
+        assertEquals(os.meka.core.sync.FieldValue.Text("Looked back 30 days · moved 3 scam emails to Junk · Work"), f[MailTidyBatchFields.SUMMARY])
+        val b = MailAutopilotRules.readBatch("x", f)!!
+        assertEquals(3, b.count)
+        assertTrue(MailScamJunkRules.scamBatch(b))
+    }
 }

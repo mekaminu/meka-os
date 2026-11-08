@@ -63,6 +63,43 @@ object MailScamJunkRules {
         MailTidyBatchFields.SCAM_JUNKED to count.toLong().fv(),
     )
 
+    // ---- Slice 5: the one-off look back over the last 30 days ----
+
+    /** The look back covers mail received up to this many days ago. */
+    const val SWEEP_DAYS = 30
+    /** At most this many older emails' bodies read per account per check while the look back runs. */
+    const val SWEEP_PER_CHECK = 25
+    /** At most this many older scams moved by the look back (any beyond go at the next checks, in the day's batch). */
+    const val SWEEP_MOVES = 100
+
+    /**
+     * Whether an email is the look back's: received more than [MailNeedsRules.WINDOW_MS] ago (newer mail is read at each
+     * check, [MailScamRules.bodyDue]) and at most [SWEEP_DAYS] days ago.
+     */
+    fun inSweep(receivedAtMs: Long, nowMs: Long): Boolean {
+        val age = nowMs - receivedAtMs
+        return age > MailNeedsRules.WINDOW_MS && age <= SWEEP_DAYS * 86_400_000L
+    }
+
+    /**
+     * Whether the look back still has to read this email's body: it is the look back's ([inSweep]), still in the inbox,
+     * sorted where a body is read ([MailScamRules.bodyDue]: never his correspondents', his own, public bodies' or
+     * security mail) and not read yet ([checked]).
+     */
+    fun sweepDue(receivedAtMs: Long, inInbox: Boolean, sorted: MailSorted, checked: Boolean, nowMs: Long): Boolean =
+        inInbox && !checked && inSweep(receivedAtMs, nowMs) && MailScamRules.bodyDue(sorted)
+
+    /** The look back's own batch for one account (one per account, ever: once it exists the look back is done). */
+    fun sweepBatchId(accountId: String): String = "mt" + ActivityRules.fnv64("scamsweep:$accountId")
+
+    /** "Looked back 30 days · moved 3 scam emails to Junk · Personal". */
+    fun sweepSummary(count: Int, account: String): String =
+        "Looked back $SWEEP_DAYS days · moved $count scam ${if (count == 1) "email" else "emails"} to Junk · $account"
+
+    /** The look back's batch: as [batchFields], with its own summary. */
+    fun sweepFields(atMs: Long, account: String, count: Int): Map<String, FieldValue> =
+        batchFields(atMs, account, count) + (MailTidyBatchFields.SUMMARY to sweepSummary(count, account).fv())
+
     /** True for a batch of scams moved to Junk (its Undo also takes off the blocks it set). */
     fun scamBatch(b: MailTidyBatch): Boolean = (b.kinds[MailTidy.SCAM_JUNK] ?: 0) > 0
 

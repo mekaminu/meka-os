@@ -19,10 +19,12 @@ import os.meka.backend.integrations.TokenCipher
 import os.meka.backend.integrations.TokenSet
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailAttachmentFacts
+import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailMessageAnswer
 import os.meka.core.domain.MailMessageFacts
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailPerson
+import os.meka.core.domain.MailScamJunkRules
 import os.meka.core.domain.MailTidiedRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.sync.InMemoryServerOpStore
@@ -104,6 +106,16 @@ class MailReaderTest {
         override fun changes(accessToken: String, cursor: String?, sinceMs: Long) = MailChanges(fetch = headers.keys.toList(), cursor = "h1")
         override fun header(accessToken: String, id: String) = headers[id]
         override fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) { if (read) markedRead += ids }
+        val junked = mutableListOf<String>()
+        var moves = false
+        override fun tidy(accessToken: String, items: Map<String, os.meka.core.domain.MailTidy>): Map<String, String> {
+            if (!moves) return emptyMap()
+            items.filterValues { it == os.meka.core.domain.MailTidy.SCAM_JUNK }.keys.forEach { id ->
+                junked += id
+                headers[id]?.let { headers[id] = it.copy(inInbox = false) }
+            }
+            return items.keys.associateWith { it }
+        }
         override fun message(accessToken: String, id: String): MailMessageFacts? {
             fails?.let { throw it }
             read += id
@@ -371,5 +383,69 @@ class MailReaderTest {
         i.syncAccount(acc)
         assertEquals(read, box.read)
         assertEquals(os.meka.core.domain.MailSortReason.SCAM, ms.sortOf(acc, "s1")?.reason)
+    }
+
+    @Test
+    fun theLookBackReadsTwoToFourWeekOldMailOnceAndMovesItsScamsToJunkInOneBatch() {
+        // Phishing in the body, slice 5: the first-run look back over the last 30 days.
+        val box = Mailbox().apply { moves = true }
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val i = world(box, ms, ops)
+        val day = 86_400_000L
+        fun person(id: String, address: String, name: String, subject: String, ago: Long) =
+            MailHeader(id, "t-$id", address, name, subject, now - ago, unread = true, inInbox = true)
+        val scamBody = letter.copy(
+            from = MailPerson("Jamie Reed", "jamie.reed@shop-mail.example"), subject = "Quick note", attachments = emptyList(),
+            html = "<img alt=\"Microsoft\" src=\"https://x.example/logo.png\"><p>Your Microsoft mailbox will be closed. " +
+                "Confirm within 24 hours: <a href=\"https://login.evil.example/ms\">Confirm Account</a></p>",
+        )
+        // Three weeks old, its threat only in the body: the look back finds it.
+        box.headers["old"] = person("old", "jamie.reed@shop-mail.example", "Jamie Reed", "Quick note", 21 * day)
+        box.whole["old"] = scamBody
+        // Three weeks old and ordinary: read, left alone.
+        box.headers["fine"] = person("fine", "robin.hart@club.example", "Robin Hart", "Saturday's match", 20 * day)
+        box.whole["fine"] = letter.copy(subject = "Saturday's match", html = null, text = "Kick-off is at 10, see you there.", attachments = emptyList())
+        // Older than 30 days: never read.
+        box.headers["ancient"] = person("ancient", "sam.lowe@shop-mail.example", "Sam Lowe", "Quick note", 40 * day)
+        box.whole["ancient"] = scamBody
+        val acc = connect(i)
+        i.syncAccount(acc)
+        assertEquals(listOf("old"), box.junked)
+        assertFalse("ancient" in box.read)
+        assertTrue("fine" in box.read)
+        val tidies = os.meka.backend.integrations.EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_TIDY)
+        val f = tidies.getValue(MailScamJunkRules.sweepBatchId(acc))
+        val b = MailAutopilotRules.readBatch(MailScamJunkRules.sweepBatchId(acc), f)!!
+        assertTrue(b.summary.startsWith("Looked back 30 days · moved 1 scam email to Junk"), b.summary)
+        assertEquals(listOf("Quick note"), b.emails.map { it.subject })
+        // Done: a later check reads nothing old again.
+        val read = box.read.toList()
+        now += 60_000
+        i.syncAccount(acc)
+        assertEquals(read, box.read)
+        assertEquals(listOf("old"), box.junked)
+    }
+
+    @Test
+    fun theLookBackReadsAtMostAFewDozenAChecks() {
+        val box = Mailbox().apply { moves = true }
+        val ms = InMemoryMailStore()
+        val i = world(box, ms)
+        val day = 86_400_000L
+        for (n in 0 until 30) {
+            box.headers["m$n"] = MailHeader("m$n", "t-m$n", "robin$n@club.example", "Robin $n", "Match $n", now - 20 * day - n * 60_000L, unread = true, inInbox = true)
+            box.whole["m$n"] = letter.copy(subject = "Match $n", html = null, text = "See you there.", attachments = emptyList())
+        }
+        val acc = connect(i)
+        i.syncAccount(acc)
+        assertEquals(MailScamJunkRules.SWEEP_PER_CHECK, box.read.size)
+        now += 60_000
+        i.syncAccount(acc)
+        assertEquals(30, box.read.size)
+        now += 60_000
+        i.syncAccount(acc)
+        assertEquals(30, box.read.size)
+        assertTrue(box.junked.isEmpty())
     }
 }
