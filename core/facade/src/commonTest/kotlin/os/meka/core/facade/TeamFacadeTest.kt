@@ -51,6 +51,8 @@ class TeamFacadeTest {
         assertEquals("1 heads-up", v.card("money")!!.today)
         assertEquals(1, v.card("obi")!!.log.size)
         assertEquals("2", v.tiles.last().value)
+        assertEquals(TeamStatus.WORKING, v.card("money")!!.status, "a heads-up today is Money at work, never Not set up")
+        assertEquals("2", v.tiles.first().value, "WORKING is the cards that say Working")
         assertEquals(fold.teamView().cards.map { it.today }, v.cards.map { it.today })
     }
 

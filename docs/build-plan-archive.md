@@ -5431,3 +5431,16 @@ the health line, then the setup card, each only while it has something to say, t
 Needs you list. TodayScreensTest's inner shots now fail, unscrolled, unless Up next's buttons (and with one task the
 timeline's work row) end above the bar's fade and the setup card sits outside Today's column. The Mac already has setup
 as one quiet line under the greeting, so no Mac change; core touched, Mac checked nightly. No server change, no migration.
+
+Slice 3 (2026-11-08): **A4** Your team's WORKING tile counted every card that wasn't Not set up or Paused (4 over cards
+that all said Ready), and Money said Not set up beside "TODAY 1 heads-up" (a bill heads-up needs no bank). Core
+`TeamRules`: a helper that did something today is Working (Obi, Inbox, Calls alike; Ready otherwise), Money is Working
+with a heads-up today, Not set up only with no accounts, no ideas and nothing today; `workingCount` = the cards whose
+status is live (Working, Kestrel's Watching), used by the tile and by Ask's team lines. TeamTest (new
+aHeadsUpWithNoBankIsMoneyAtWork; tiles 4/0/3), TeamFacadeTest, TeamScreensTest fails when the tile and the live cards
+differ or Money says Not set up in the busy shot. **A5** Obi is working on said "nothing needs you" over a call card
+saying it needs his tap: `BookingCallRules.rows` counted a draft as needing him only when Call now was open, so a card
+waiting for its number (or for Use this number) didn't count. Now any draft needs him except one whose day has gone,
+which says "Call card · not rung" (`NOT_RUNG`); BookingCallRulesTest (the summary "Holding 1 call card for you · 1 needs
+you", the gone draft), WorkingOnScreensTest's found shot fails on "nothing needs you". Core only, both apps follow (the
+card's status line is lit in accent when it needs him); Mac checked nightly. No server change, no migration.

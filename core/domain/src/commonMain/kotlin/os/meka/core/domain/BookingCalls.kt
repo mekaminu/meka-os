@@ -221,6 +221,8 @@ object BookingCallRules {
     const val PARTY = "Party size"
     const val NO_NUMBER = "No number yet · tap Edit to add theirs"
     const val NEEDS_TAP = "Call card · needs your tap"
+    /** A draft whose day went by before he tapped Call now: nothing more he can do but cancel it or ask again. */
+    const val NOT_RUNG = "Call card · not rung"
     const val WAITING = "Waiting to ring · Obi rings between 09:00 and 20:00; this card changes to On the call"
     const val CALLING = "Obi is on the call"
     const val BOOKED = "Booked"
@@ -478,8 +480,12 @@ object BookingCallRules {
                 val ok = check is NumberCheck.Ok
                 val draft = c.state == BookingCallState.DRAFT
                 val block = if (draft) blocked(c, personal, nowMs, cal) else null
+                // Week 3's walk-through (A5): a draft waits on him whatever it still lacks (Call now, a number to add, or
+                // Use this number for the one Obi found), so it counts in "needs you" exactly when it says it needs his
+                // tap; only a draft whose day has gone doesn't.
+                val waits = draft && block != DAY_GONE
                 val status = when (c.state) {
-                    BookingCallState.DRAFT -> NEEDS_TAP
+                    BookingCallState.DRAFT -> if (waits) NEEDS_TAP else NOT_RUNG
                     BookingCallState.APPROVED -> waitingLine(nowMs, cal)
                     BookingCallState.CALLING -> when {
                         c.hangUp -> BookingLiveRules.HANGING_UP
@@ -508,7 +514,7 @@ object BookingCallRules {
                 val window = windowLabel(c.fromMin, c.toMin)
                 BookingCallRow(
                     id = c.id, business = c.business, numberLine = numberLine, numberOk = ok, status = status,
-                    needsYou = draft && block == null, whenTile = whenTile, windowTile = window,
+                    needsYou = waits, whenTile = whenTile, windowTile = window,
                     peopleTile = c.people?.toString() ?: "—", what = c.what, note = c.note,
                     maySay = maySay(c.people), wont = WONT_LIST, foot = foot, blocked = block, result = c.result,
                     canCall = draft && block == null, canEdit = draft, canChangePeople = draft && c.people != null,

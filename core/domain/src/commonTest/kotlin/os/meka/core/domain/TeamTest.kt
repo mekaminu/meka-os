@@ -75,7 +75,11 @@ class TeamTest {
         assertEquals("No trades asked", kestrel.today)
         assertEquals(listOf("Declined: Buy 0.05 BTC"), kestrel.log.map { it.text })
         assertEquals(listOf("WORKING", "NEED YOU", "DONE TODAY"), v.tiles.map { it.label })
-        assertEquals(listOf("5", "3", "8"), v.tiles.map { it.value })
+        assertEquals(listOf("4", "3", "8"), v.tiles.map { it.value })
+        assertEquals(v.cards.count { it.status.live }.toString(), v.tiles.first().value, "WORKING is the breathing dots below it")
+        assertEquals(TeamStatus.WORKING, obi.status)
+        assertEquals(TeamStatus.WORKING, calls.status)
+        assertEquals(TeamStatus.WORKING, money.status)
         assertTrue(v.tiles[1].lit)
         assertEquals(3, v.needCount)
     }
@@ -85,7 +89,8 @@ class TeamTest {
         assertTrue(v.cards.all { it.today == TeamRules.NOTHING_YET || it.agent == TeamAgent.KESTREL })
         assertTrue(v.cards.none { it.waits })
         assertEquals(TeamStatus.NOT_SET_UP, v.card("money")!!.status)
-        assertEquals(listOf("4", "0", "0"), v.tiles.map { it.value })
+        assertEquals(listOf("0", "0", "0"), v.tiles.map { it.value }, "nobody working while every card says Ready or Not set up")
+        assertTrue(v.cards.none { it.status.live })
         assertFalse(v.tiles[1].lit)
         assertEquals("Nobody needs you", v.tiles[1].spoken)
     }
@@ -102,6 +107,17 @@ class TeamTest {
         assertEquals("Buy 0.05 BTC at market · answer in Needs you", c.waitLine)
         assertEquals(TeamTarget.NEEDS_YOU, c.review)
         assertTrue(c.spoken.startsWith("Kestrel, Trading agent"))
+    }
+
+    /** Week 3's walk-through (A4): Money "Not set up" beside "TODAY 1 heads-up", WORKING 4 over Ready cards. */
+    @Test fun aHeadsUpWithNoBankIsMoneyAtWork() {
+        val bill = item("g", at(9), ActivityKind.REMINDED, "Reminded you: a bill is due", "notice:BILLS")
+        val v = TeamRules.view(TeamInputs(listOf(bill)), now, cal)
+        val money = v.card("money")!!
+        assertEquals("1 heads-up", money.today)
+        assertEquals(TeamStatus.WORKING, money.status)
+        assertEquals("1", v.tiles.first().value)
+        assertEquals(TeamStatus.READY, v.card("obi")!!.status)
     }
 
     @Test fun theLogKeepsTheDaysLastEntries() {
@@ -143,7 +159,7 @@ class TeamTest {
         assertNull(v.card("kestrel")!!.pauseAction)
         assertNull(v.card("calls")!!.pauseAction)
         assertEquals(TeamPauseRules.PAUSE, v.card("obi")!!.pauseAction)
-        assertEquals("4", v.tiles.first().value, "a paused helper isn't working")
+        assertEquals("3", v.tiles.first().value, "a paused helper isn't working")
     }
 
     @Test fun pausedHelpersHeadsUpsWaitForTheDigestButRemindersHeSetStillCome() {
@@ -164,7 +180,7 @@ class TeamTest {
         val v = TeamRules.view(TeamInputs(activity, mailWait = "2 emails need you", paused = setOf(TeamAgent.MONEY)), now, cal)
         val head = TeamAskRules.askLines(v, full = false)
         assertEquals(1, head.size)
-        assertTrue(head.single().startsWith("Your team · 5 helpers · 4 working · 1 needs you · "), head.single())
+        assertTrue(head.single().startsWith("Your team · 5 helpers · 3 working · 1 needs you · "), head.single())
         val full = TeamAskRules.askLines(v, full = true)
         assertEquals(TeamAskRules.ASK_MAX, full.size)
         assertTrue(full.any { it.startsWith("Inbox · Working · today: 1 tidy · 1 unsubscribe · waits on you: 2 emails · may: ") }, full.joinToString("\n"))

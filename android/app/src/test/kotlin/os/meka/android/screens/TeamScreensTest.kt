@@ -42,6 +42,7 @@ import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.TeamPauseRules
 import os.meka.core.domain.TeamAskRules
 import os.meka.core.domain.TeamRules
+import os.meka.core.domain.TeamStatus
 import os.meka.core.domain.TeamTarget
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -164,8 +165,13 @@ class TeamScreensTest {
             Fill.BUSY -> {
                 if (!onScreen("2 reminders")) fail("$name: Obi's reminders aren't counted")
                 if (!onScreen("1 heads-up")) fail("$name: Money's heads-up isn't counted")
+                // Week 3's walk-through (A4): the tiles agree with the cards below them.
+                if (onScreen(TeamStatus.NOT_SET_UP.label)) fail("$name: Money says Not set up beside a heads-up today")
             }
         }
+        val live = v.cards.count { it.status.live }
+        if (v.tiles.first().value != live.toString()) fail("$name: WORKING ${v.tiles.first().value}, but $live cards say Working")
+        if (fill == Fill.QUIET && live != 0) fail("$name: a quiet day has $live helpers working")
         return core
     }
 

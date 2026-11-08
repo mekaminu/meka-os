@@ -85,6 +85,8 @@ class BookingCallRulesTest {
         var rows = BookingCallRules.rows(calls.all(), emptyList(), emptyList(), now, cal)
         assertEquals(BookingCallRules.NO_NUMBER, rows.single().blocked)
         assertFalse(rows.single().canCall)
+        assertTrue(rows.single().needsYou, "a card waiting for its number waits on him (A5)")
+        assertEquals(BookingCallRules.NEEDS_TAP, rows.single().status)
         assertEquals(BookingCallRules.NO_NUMBER, calls.approve(id, emptyList(), cal))
         assertTrue(calls.setPeople(id, 5))
         assertFalse(calls.setPeople(id, 13))
@@ -203,7 +205,15 @@ class BookingCallRulesTest {
         calls.draft(BookingCallRules.proposal("Table for 2 at Rosa's", saturday, 19 * 60, null, today, 0)!!)
         val v = WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today,
             calls = BookingCallRules.rows(calls.all(), emptyList(), emptyList(), now, cal))
-        assertEquals("Holding 1 call card for you · nothing needs you", v.summary)
-        assertEquals(0, v.needCount)
+        // Week 3's walk-through (A5): the card says it needs his tap (its number), so the head says so too.
+        assertEquals("Holding 1 call card for you · 1 needs you", v.summary)
+        assertEquals(1, v.needCount)
+        assertEquals(BookingCallRules.NEEDS_TAP, v.calls.single().status)
+        // Its day goes by untapped: nothing more he can do but cancel it, so it says not rung and needs nobody.
+        val later = cal.toEpochMs(saturday + 1, 9 * 60)
+        val gone = BookingCallRules.rows(calls.all(), emptyList(), emptyList(), later, cal).single()
+        assertFalse(gone.needsYou)
+        assertEquals(BookingCallRules.NOT_RUNG, gone.status)
+        assertEquals(BookingCallRules.DAY_GONE, gone.blocked)
     }
 }

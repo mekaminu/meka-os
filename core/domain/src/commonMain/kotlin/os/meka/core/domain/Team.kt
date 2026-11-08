@@ -177,7 +177,7 @@ object TeamRules {
                 changed.takeIf { it > 0 }?.let { plural(it, "change") },
             ))
             val n = input.requestsWaiting
-            card(a, TeamStatus.READY, today, n.takeIf { it > 0 }?.let { plural(it, "card") + " to tap" },
+            card(a, busy(items(a)), today, n.takeIf { it > 0 }?.let { plural(it, "card") + " to tap" },
                 n.takeIf { it > 0 }?.let { plural(it, "card") + " from your messages in Needs you" }, TeamTarget.NEEDS_YOU, log(a))
         }
         val inbox = run {
@@ -192,7 +192,7 @@ object TeamRules {
             ))
             val wait = input.mailWait?.trim()?.takeIf { it.isNotEmpty() }
             val short = wait?.let { w -> Regex("""^([\d,]+ emails?)\b""").find(w)?.groupValues?.get(1) ?: w }
-            card(a, if (items(a).isNotEmpty()) TeamStatus.WORKING else TeamStatus.READY, today, short, wait, TeamTarget.NEEDS_YOU, log(a))
+            card(a, busy(items(a)), today, short, wait, TeamTarget.NEEDS_YOU, log(a))
         }
         val calls = run {
             val a = TeamAgent.CALLS
@@ -202,7 +202,7 @@ object TeamRules {
                 screened.takeIf { it > 0 }?.let { "$it screened" },
                 messages.takeIf { it > 0 }?.let { plural(it, "message") },
             ))
-            card(a, TeamStatus.READY, today, null, null, null, log(a))
+            card(a, busy(items(a)), today, null, null, null, log(a))
         }
         val money = run {
             val a = TeamAgent.MONEY
@@ -213,7 +213,13 @@ object TeamRules {
                 heads.takeIf { it > 0 }?.let { plural(it, "heads-up", "heads-ups") },
             ))
             val n = input.moneyIdeas
-            val status = if (accounts == 0 && n == 0) TeamStatus.NOT_SET_UP else TeamStatus.IDLE
+            // Week 3's walk-through (A4): a heads-up today (a bill, a card) is Money at work even before a bank is
+            // connected, so it is never "Not set up" beside "1 heads-up".
+            val status = when {
+                heads > 0 -> TeamStatus.WORKING
+                accounts == 0 && n == 0 -> TeamStatus.NOT_SET_UP
+                else -> TeamStatus.IDLE
+            }
             card(a, status, today, n.takeIf { it > 0 }?.let { plural(it, "idea") },
                 n.takeIf { it > 0 }?.let { plural(it, "idea") + " in Obi's money check" }, TeamTarget.MONEY, log(a))
         }
@@ -236,7 +242,7 @@ object TeamRules {
         }
         val need = cards.count { it.waits }
         val done = cards.sumOf { by[it.agent].orEmpty().size }
-        val working = cards.count { it.status != TeamStatus.NOT_SET_UP && it.status != TeamStatus.PAUSED }
+        val working = workingCount(cards)
         val tiles = listOf(
             TeamTile(WORKING.uppercase(), working.toString(), false, "$working of ${cards.size} working"),
             TeamTile(NEED_YOU.uppercase(), need.toString(), need > 0, if (need == 0) "Nobody needs you" else "${plural(need, "helper")} need you"),
@@ -244,6 +250,15 @@ object TeamRules {
         )
         return TeamView(tiles, cards, SUBTITLE, need)
     }
+
+    /** A helper that did something today is Working (a breathing dot); one that hasn't is Ready. */
+    private fun busy(items: List<ActivityItem>) = if (items.isNotEmpty()) TeamStatus.WORKING else TeamStatus.READY
+
+    /**
+     * The WORKING tile: the cards whose status is live (Working, or Kestrel Watching), so the tile is always the number
+     * of breathing dots below it (week 3's walk-through, A4: it said 4 over cards that all said Ready or Not set up).
+     */
+    fun workingCount(cards: List<TeamCard>): Int = cards.count { it.status.live }
 
     private fun card(
         a: TeamAgent, status: TeamStatus, today: String, wait: String?, waitLine: String?, target: TeamTarget?, log: List<TeamLogRow>,
@@ -357,7 +372,7 @@ object TeamAskRules {
      */
     fun askLines(v: TeamView, full: Boolean): List<String> {
         if (v.cards.isEmpty()) return emptyList()
-        val working = v.cards.count { it.status != TeamStatus.NOT_SET_UP && it.status != TeamStatus.PAUSED }
+        val working = TeamRules.workingCount(v.cards)
         val done = v.tiles.lastOrNull()?.value ?: "0"
         val head = "${TeamRules.TITLE} · ${plural(v.cards.size, "helper")} · $working working · " +
             (if (v.needCount == 0) "nobody needs you" else "${v.needCount} need${if (v.needCount == 1) "s" else ""} you") +

@@ -268,6 +268,9 @@ class WorkingOnScreensTest {
                 if (!r.canUseFound || r.canCall) fail("$name: the found number isn't offered, or Call now is open before his tap")
                 if (compose.onAllNodes(hasTestTag("call-use-found"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Use this number")
                 if (!onScreen("Obi found 01632 960111")) fail("$name: the found number isn't shown")
+                // Week 3's walk-through (A5): the head agrees with the card that says it needs his tap.
+                if (!r.needsYou || r.status != BookingCallRules.NEEDS_TAP) fail("$name: the card doesn't wait on him: $r")
+                if ("nothing needs you" in v.summary || onScreen("nothing needs you")) fail("$name: \"nothing needs you\" over a card needing his tap: ${v.summary}")
             }
             Fill.MANY -> {
                 if (cards != 3) fail("$name: $cards cards, not 3")
