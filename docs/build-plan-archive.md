@@ -5552,3 +5552,10 @@ chips, Needs you and Ask's Goals and habits line all count today's habits with `
 "1 of 2" (Read, Stretch done, Run not due on Wed 21 Oct). Ask's fill now adds the same three habits as TodayScreensTest
 and GoalsScreensTest (Stretch done), checks the core's count is 1 of 2 and fails unless the shot shows "1 of 2 habits
 done today". Test only; no core, server or Mac change.
+
+Slice 9 (2026-11-08): **A8, setup steps vs Ask's "To set up"** — real, but not a sum: the two count different things.
+Setup's "12 steps left" counts accounts, devices and choices to connect (`SetupRules.summaryLine`); Ask's "To set up ·
+10" counts Life places with nothing entered yet (bins, school, date night…, `LifeTileRules.toSetUp`). Side by side they
+read as one count disagreeing. The Ask label now names what it counts: `LifeTileRules.setUpLabel` → "Places to set up
+· 10" (drawn in caps on both apps, which read it from the core). LifeTilesTest checks the wording and that it never
+says "step"; AskScreensTest already taps the label by the core's text. Core only; both apps follow; Mac checked nightly.

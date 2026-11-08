@@ -126,7 +126,9 @@ class LifeTilesTest {
         assertTrue(live.containsAll(listOf(LifeTile.LISTS, LifeTile.PEOPLE, LifeTile.TRIPS, LifeTile.ERRANDS, LifeTile.BINS)))
         assertTrue(live.none { it in LifeTileRules.toSetUp(l) })
         assertEquals(LifeTileRules.ORDER.size, live.size + LifeTileRules.toSetUp(l).size)
-        assertEquals("To set up · 12", LifeTileRules.setUpLabel(LifeTileRules.toSetUp(l).size))
+        assertEquals("Places to set up · 12", LifeTileRules.setUpLabel(LifeTileRules.toSetUp(l).size))
+        // Walk-through 2026-11-08 A8: never reads as Setup's own count ("12 steps left").
+        assertTrue("step" !in LifeTileRules.setUpLabel(3))
         // Dinners with favourites but nothing planned is a nudge, not set-up.
         val d = LifeTileRules.lines(LifeTileInputs(mealsSummary = MealRules.NOTHING_PLANNED))
         assertTrue(LifeTile.DINNERS !in LifeTileRules.toSetUp(d))

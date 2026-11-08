@@ -93,7 +93,7 @@ struct AskScreen: View {
         .background(palette.background)
     }
 
-    /// "To set up · N" (Ask polish, slice 1): the tiles still waiting to be set up, under a label that opens and closes
+    /// "Places to set up · N" (Ask polish, slice 1; named so since walk-through 2026-11-08 A8): the tiles still waiting to be set up, under a label that opens and closes
     /// them (remembered on this Mac); a tile leaves as soon as it has something live. The group unfolds on the expand
     /// spring and the chevron turns with it; reduced motion: it fades.
     @ViewBuilder

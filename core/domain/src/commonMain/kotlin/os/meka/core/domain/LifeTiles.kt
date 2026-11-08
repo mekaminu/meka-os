@@ -135,8 +135,12 @@ object LifeTileRules {
     /** The tiles under "To set up", in the usual order; a tile leaves the moment it has something live. */
     fun toSetUp(lines: LifeLines): List<LifeTile> = ORDER.filter { lines.needsSetUp(it) }
 
-    /** The collapsible label over the set-up tiles. */
-    fun setUpLabel(count: Int): String = "To set up · $count"
+    /**
+     * The collapsible label over the set-up tiles. Walk-through 2026-11-08 A8: "To set up · 10" sat beside Setup's
+     * "12 steps left" and read as the same count disagreeing; they count different things (places with nothing in them
+     * vs accounts and devices to connect), so the label names what it counts.
+     */
+    fun setUpLabel(count: Int): String = "Places to set up · $count"
 
     /** First run (nothing at all set up): one line over the open set-up group, not an empty grid. */
     const val WELCOME = "Nothing set up yet · pick one to start; each takes a minute"

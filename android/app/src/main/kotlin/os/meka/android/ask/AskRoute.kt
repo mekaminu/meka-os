@@ -837,7 +837,7 @@ private fun LazyListScope.tileRows(
 }
 
 /**
- * "To set up · 9" (Ask polish, slice 1): a small label that opens and closes the tiles still waiting to be set up; its
+ * "Places to set up · 9" (Ask polish, slice 1; named so since walk-through 2026-11-08 A8): a small label that opens and closes the tiles still waiting to be set up; its
  * chevron turns on the expand spring (reduced motion: at once). TalkBack reads it as a button with its state.
  */
 @Composable
