@@ -63,6 +63,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.core.domain.BookingCallRow
 import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingLiveRules
+import os.meka.core.domain.BookingNumberRules
 import os.meka.core.domain.BookingWordLine
 import os.meka.core.domain.LoneWordGlue
 
@@ -91,7 +92,7 @@ fun BookingCallCard(
     r: BookingCallRow, modifier: Modifier,
     onPeople: (Int) -> Unit, onCall: () -> Unit, onEdit: () -> Unit, onCancel: () -> Unit,
     onHangUp: () -> Unit = {}, onAddToCalendar: () -> Unit = {}, onRead: () -> Unit = {}, onTakeOver: () -> Unit = {},
-    onListen: () -> Unit = {}, onTryAgain: () -> Unit = {},
+    onListen: () -> Unit = {}, onTryAgain: () -> Unit = {}, onUseFound: () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -115,6 +116,11 @@ fun BookingCallCard(
         }
         Text(LoneWordGlue.kept(r.numberLine), style = MekaType.caption,
             color = if (r.numberOk) Meka.colors.textSecondary else Meka.colors.textTertiary, modifier = Modifier.testTag("call-number"))
+        // The number looked up: Obi's find goes on the card only by this tap; Call now still comes after.
+        if (r.canUseFound) {
+            TouchPill(BookingNumberRules.USE, Meka.colors.surface, Meka.colors.accent, spoken = "${BookingNumberRules.USE}: ${r.business}",
+                modifier = Modifier.testTag("call-use-found"), onClick = onUseFound)
+        }
         Text(LoneWordGlue.kept(r.what), style = MekaType.body, color = Meka.colors.textSecondary)
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Tile(BookingCallRules.WHEN, r.whenTile, Modifier.weight(1f))

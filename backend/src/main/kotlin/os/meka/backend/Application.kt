@@ -1381,6 +1381,15 @@ fun main(args: Array<String>) {
                     brain = ai?.provider?.let { ModelErrandBrain(it) }, search = brave, onWritten = { hh -> push?.serverChanged(hh) },
                 ))
             }
+            // Obi on calls, the number looked up: a call card with no number gets the business's number suggested
+            // (the name alone searched through the same Brave key); never rung until his Use this number and Call now.
+            if (brave != null && System.getenv("MEKA_BOOKING_CALLS") != "off") {
+                val devices = PostgresDeviceRegistry(ds)
+                startBookingNumberFinder(BookingNumberFinder(
+                    opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
+                    search = brave, onWritten = { hh -> push?.serverChanged(hh) },
+                ))
+            }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup, ds)
             voice?.let { startRecordingSweep(it.assistant) }
             voice?.let { startCallClipsWarm(it) }

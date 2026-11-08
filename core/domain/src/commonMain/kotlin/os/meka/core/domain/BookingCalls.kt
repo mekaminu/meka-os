@@ -65,6 +65,11 @@ object BookingCallFields {
     const val LISTENING_AT = "listeningAt"
     /** Try again (device): the new card made from this one; the old card keeps its result and loses Try again. */
     const val RETRIED_AS = "retriedAs"
+    /** The number looked up (server, [BookingNumberRules]): found · none · failed, for which name, the number and its site. */
+    const val LOOKUP = "lookup"
+    const val LOOKED_UP_FOR = "lookedUpFor"
+    const val FOUND_NUMBER = "foundNumber"
+    const val FOUND_FROM = "foundFrom"
 }
 
 enum class BookingCallState(val code: String) {
@@ -116,6 +121,11 @@ data class BookingCall(
     val listeningAtMs: Long? = null,
     /** Try again: the id of the new card made from this one, or null. */
     val retriedAs: String? = null,
+    /** The number looked up (server): found · none · failed, the name it was looked up for, the number and its site. */
+    val lookup: String? = null,
+    val lookedUpFor: String? = null,
+    val foundNumber: String? = null,
+    val foundFrom: String? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -181,6 +191,8 @@ data class BookingCallRow(
     val canTryAgain: Boolean = false,
     /** "Tried again · the new card is above" once Try again made a new card. */
     val triedAgainLine: String? = null,
+    /** The number looked up: Use this number puts Obi's found number on the card (he still taps Call now after). */
+    val canUseFound: Boolean = false,
 ) {
     val canRead: Boolean get() = transcript.isNotEmpty()
 }
@@ -328,6 +340,8 @@ object BookingCallRules {
             listen = (f[BookingCallFields.LISTEN] as? FieldValue.Bool)?.value == true,
             listeningAtMs = num(BookingCallFields.LISTENING_AT),
             retriedAs = text(BookingCallFields.RETRIED_AS),
+            lookup = text(BookingCallFields.LOOKUP), lookedUpFor = text(BookingCallFields.LOOKED_UP_FOR),
+            foundNumber = text(BookingCallFields.FOUND_NUMBER), foundFrom = text(BookingCallFields.FOUND_FROM),
         )
     }
 
@@ -406,6 +420,7 @@ object BookingCallRules {
         val today = cal.epochDayOf(nowMs)
         if (c.day < today) return DAY_GONE
         if (c.day == today && c.toMin != null && c.toMin <= cal.minuteOfDay(nowMs)) return DAY_GONE
+        if (c.number == null && BookingNumberRules.usable(c, personal) != null) return BookingNumberRules.PICK
         return (numberCheck(c.number, personal) as? NumberCheck.Refused)?.line
     }
 
@@ -471,7 +486,8 @@ object BookingCallRules {
                     BookingCallState.FAILED -> FAILED
                 }
                 val numberLine = when {
-                    c.number == null -> NO_NUMBER
+                    c.number == null -> if (draft) BookingNumberRules.line(c, personal, nowMs) else NO_NUMBER
+                    check is NumberCheck.Ok && check.e164 == BookingNumberRules.usable(c, personal) -> "${pretty(check.e164)} · Obi found it"
                     check is NumberCheck.Ok -> "${pretty(check.e164)} · you added it"
                     else -> "${c.number} · ${(check as NumberCheck.Refused).line}"
                 }
@@ -491,7 +507,8 @@ object BookingCallRules {
                     canCancel = draft || c.state == BookingCallState.APPROVED,
                     spoken = listOfNotNull("Call card for ${c.business}", c.what, "$whenTile, $window", c.people?.let { "$it people" }, status, block, c.result).joinToString(". "),
                 ).let { BookingLiveRules.withLive(it, c, nowMs, cal, PutThroughRules.dialable(mobile) != null) }
-                    .copy(canTryAgain = canTryAgain(c, nowMs, cal), triedAgainLine = if (c.retriedAs != null) TRIED_AGAIN_LINE else null)
+                    .copy(canTryAgain = canTryAgain(c, nowMs, cal), triedAgainLine = if (c.retriedAs != null) TRIED_AGAIN_LINE else null,
+                        canUseFound = draft && c.number == null && BookingNumberRules.usable(c, personal) != null)
             }
     }
 
@@ -616,6 +633,19 @@ class BookingCalls(private val replica: Replica, private val newId: () -> String
         replica.commitLocal(EntityTypes.BOOKING_CALL, newId, BookingCallRules.retryFields(c, nowMs()))
         replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.RETRIED_AS to newId.fv()))
         return BookingCallRules.TRIED_AGAIN
+    }
+
+    /**
+     * Use this number: the number Obi looked up becomes the card's own (as it will be dialled), only while the card
+     * waits for him and has none; nothing rings until his Call now. Returns the line to show.
+     */
+    fun useFound(id: String, personal: Collection<String?>): String {
+        val c = one(id) ?: return BookingCallRules.GONE
+        if (c.cancelled || c.state != BookingCallState.DRAFT) return BookingCallRules.GONE
+        val e164 = if (c.number == null) BookingNumberRules.usable(c, personal) else null
+        if (e164 == null) return BookingNumberRules.NOTHING_TO_USE
+        replica.commitLocal(EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.NUMBER to e164.fv()))
+        return BookingNumberRules.USED
     }
 
     /** Cancel (or the Ask card's Undo): only before Obi is on the call. */

@@ -383,6 +383,14 @@ struct WorkingOnSheet: View {
         Group {
             Text(LoneWordGlue.shared.kept(line: r.numberLine)).font(MekaType.caption)
                 .foregroundStyle(r.numberOk ? palette.textSecondary : palette.textTertiary)
+            // The number looked up: Obi's find goes on the card only by this click; Call now still comes after.
+            if r.canUseFound {
+                HStack {
+                    pill(BookingNumberRules.shared.USE, ink: palette.accent, fill: palette.surface) { useFound(id) }
+                        .accessibilityLabel("\(BookingNumberRules.shared.USE): \(r.business)")
+                    Spacer(minLength: 0)
+                }
+            }
             Text(LoneWordGlue.shared.kept(line: r.what)).font(MekaType.body).foregroundStyle(palette.textSecondary)
             HStack(spacing: MekaSpace.xs) {
                 tile(BookingCallRules.shared.WHEN, r.whenTile)
@@ -550,6 +558,17 @@ struct WorkingOnSheet: View {
     private func addToCalendar(_ id: String) {
         Task {
             let line = await model.addBookingCallToCalendar(id)
+            let next = await model.workingOnView()
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                callSaid = line
+                if let next { view = next }
+            }
+        }
+    }
+
+    private func useFound(_ id: String) {
+        Task {
+            let line = await model.useFoundBookingNumber(id)
             let next = await model.workingOnView()
             withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
                 callSaid = line

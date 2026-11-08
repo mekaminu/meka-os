@@ -36,6 +36,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.BookingCallFields
 import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingCallState
+import os.meka.core.domain.BookingNumberRules
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.EntityTypes
@@ -82,7 +83,7 @@ class WorkingOnScreensTest {
         const val SETTLE_MS = 3_000L
     }
 
-    private enum class Fill { EMPTY, ONE, MANY, ERRANDS, CALL }
+    private enum class Fill { EMPTY, ONE, MANY, ERRANDS, CALL, FOUND }
 
     private var opened: HelpPlace? = null
 
@@ -125,7 +126,7 @@ class WorkingOnScreensTest {
     private suspend fun fill(core: MekaCore, fill: Fill) {
         val today = core.todayEpochDay()
         when (fill) {
-            Fill.EMPTY, Fill.ERRANDS, Fill.CALL -> Unit
+            Fill.EMPTY, Fill.ERRANDS, Fill.CALL, Fill.FOUND -> Unit
             Fill.ONE -> core.addWaiting("The drill back", "Casey", 0)
             Fill.MANY -> {
                 core.addRenewal("Home insurance", ObligationKind.INSURANCE, today + 15, RenewalRepeat.YEARLY, null, null)
@@ -184,12 +185,26 @@ class WorkingOnScreensTest {
         ))
     }
 
+    /** The number looked up: a draft card with no number of its own and the number Obi found for it (the server's fields). */
+    private fun seedFound(store: ReplicaStore) {
+        var k = 0
+        val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
+        server.commitLocal(EntityTypes.BOOKING_CALL, "call-oak", mapOf(
+            BookingCallFields.BUSINESS to "Oakfield Barbers".fv(), BookingCallFields.WHAT to "A haircut".fv(),
+            BookingCallFields.DAY to (CivilDate.toEpochDay(2026, 10, 24) + 1).fv(),
+            BookingCallFields.STATE to BookingCallState.DRAFT.code.fv(), BookingCallFields.ASKED_AT to (now - 120_000L).fv(),
+            BookingCallFields.LOOKUP to BookingNumberRules.FOUND.fv(), BookingCallFields.LOOKED_UP_FOR to "Oakfield Barbers".fv(),
+            BookingCallFields.FOUND_NUMBER to "+441632960111".fv(), BookingCallFields.FOUND_FROM to "oakfieldbarbers.example".fv(),
+        ))
+    }
+
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
         if (fill == Fill.ERRANDS) seedErrands(store)
         if (fill == Fill.CALL) seedNotBooked(store)
+        if (fill == Fill.FOUND) seedFound(store)
         val core = core(store)
         context.useCoreForScreens(core)
         runBlocking {
@@ -247,6 +262,12 @@ class WorkingOnScreensTest {
                 if (compose.onAllNodes(hasTestTag("call-try-again"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Try again")
                 if (!onScreen("they offered 21:00")) fail("$name: the result isn't shown")
             }
+            Fill.FOUND -> {
+                val r = v.calls.singleOrNull() ?: fail("$name: ${v.calls.size} call cards, not 1")
+                if (!r.canUseFound || r.canCall) fail("$name: the found number isn't offered, or Call now is open before his tap")
+                if (compose.onAllNodes(hasTestTag("call-use-found"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Use this number")
+                if (!onScreen("Obi found 01632 960111")) fail("$name: the found number isn't shown")
+            }
             Fill.MANY -> {
                 if (cards != 3) fail("$name: $cards cards, not 3")
                 if (v.summary != "Keeping an eye on 3 things · 3 need you") fail("$name: the summary reads \"${v.summary}\"")
@@ -271,6 +292,22 @@ class WorkingOnScreensTest {
         if (rows.last().canTryAgain || rows.last().triedAgainLine == null) fail("$name: the old card can still be tried again")
         if (!onScreen(BookingCallRules.TRIED_AGAIN)) fail("$name: Try again didn't say so")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-tried-again"))
+        ScreenShots.assertNoBrokenWords(compose, name)
+    }
+
+    /** Use this number by hand: the found number becomes the card's, Call now opens, nothing rings by itself. */
+    private fun useFoundByHand(core: MekaCore) {
+        val name = "working-on-use-found"
+        val n = compose.onAllNodes(hasContentDescription("${BookingNumberRules.USE}: Oakfield Barbers") and hasClickAction())
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no Use this number")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        fun calls() = runBlocking { core.workingOnView() }.calls
+        until { calls().singleOrNull()?.canCall == true && onScreen(BookingNumberRules.USED) }
+        val r = calls().single()
+        if (!r.canCall || r.canUseFound) fail("$name: Call now isn't open after Use this number: $r")
+        if (r.numberLine != "01632 960111 · Obi found it") fail("$name: the number line reads \"${r.numberLine}\"")
+        if (r.status != BookingCallRules.NEEDS_TAP) fail("$name: the card moved on by itself: ${r.status}")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-used-found"))
         ScreenShots.assertNoBrokenWords(compose, name)
     }
 
@@ -355,6 +392,9 @@ class WorkingOnScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBookedLight() { pane("cover-light-not-booked", Fill.CALL, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerNotBooked() { pane("inner-dark-not-booked", Fill.CALL) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun tryAgainByHand() { tryAgainByHand(pane("cover-dark-try-again", Fill.CALL)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverFound() { pane("cover-dark-found", Fill.FOUND) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverFoundLight() { pane("cover-light-found", Fill.FOUND, ThemeChoice.LIGHT) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun useFoundByHand() { useFoundByHand(pane("cover-dark-use-found", Fill.FOUND)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverOne() { pane("cover-dark-one", Fill.ONE) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverMany() { pane("cover-dark-many", Fill.MANY) }

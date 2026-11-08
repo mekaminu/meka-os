@@ -2132,6 +2132,12 @@ class MekaCore(
      */
     suspend fun tryAgainBookingCall(id: String): String = onCore { bookingCalls.tryAgain(id, ZoneCalendar(timeZone)) }
 
+    /**
+     * Obi on calls, the number looked up: Use this number puts the number Obi found on the card (synced); nothing
+     * rings until Call now. The line to show.
+     */
+    suspend fun useFoundBookingNumber(id: String): String = onCore { bookingCalls.useFound(id, personalNumbers()) }
+
     /** Obi on calls, slice 3: Hang up while Obi is on the call (synced; the server ends it). The line to show. */
     suspend fun hangUpBookingCall(id: String): String = onCore { bookingCalls.hangUp(id) }
 

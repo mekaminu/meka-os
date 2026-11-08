@@ -1820,6 +1820,12 @@ final class CoreModel {
         return (try? await core.tryAgainBookingCall(id: id)) ?? BookingCallRules.shared.GONE
     }
 
+    /// The number looked up: Use this number puts Obi's found number on the card (synced; nothing rings until Call now); the line to show.
+    func useFoundBookingNumber(_ id: String) async -> String {
+        guard let core else { return BookingCallRules.shared.GONE }
+        return (try? await core.useFoundBookingNumber(id: id)) ?? BookingCallRules.shared.GONE
+    }
+
     /// Obi on calls, slice 3: Hang up while Obi is on a booking call (synced; the server ends it); the line to show.
     func hangUpBookingCall(_ id: String) async -> String {
         guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }
