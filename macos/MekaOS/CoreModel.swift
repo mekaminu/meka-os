@@ -1826,6 +1826,18 @@ final class CoreModel {
         return (try? await core.useFoundBookingNumber(id: id)) ?? BookingCallRules.shared.GONE
     }
 
+    /// Obi on calls: the Remind me chip under a call assistant message with a call back agreed; nil = nothing to offer.
+    func callbackChip(_ item: CapturedItem) async -> CallbackChip? {
+        guard let core else { return nil }
+        return try? await core.callbackChip(item: item)
+    }
+
+    /// Obi on calls: Remind me on an agreed call back makes one task with a reminder 10 minutes before; the line to show.
+    func remindCallback(_ item: CapturedItem) async -> String {
+        guard let core else { return CallbackReminderRules.shared.GONE }
+        return (try? await core.remindCallback(item: item)) ?? CallbackReminderRules.shared.GONE
+    }
+
     /// Obi on calls, slice 3: Hang up while Obi is on a booking call (synced; the server ends it); the line to show.
     func hangUpBookingCall(_ id: String) async -> String {
         guard let core else { return BookingLiveRules.shared.NOT_ON_CALL }

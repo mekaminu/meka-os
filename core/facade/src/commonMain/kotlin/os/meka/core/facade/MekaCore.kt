@@ -2138,6 +2138,34 @@ class MekaCore(
      */
     suspend fun useFoundBookingNumber(id: String): String = onCore { bookingCalls.useFound(id, personalNumbers()) }
 
+    /**
+     * Obi on calls: the Remind me chip under a call assistant message with a call back agreed
+     * ([os.meka.core.domain.CallbackReminderRules.chip]); null = nothing to offer.
+     */
+    suspend fun callbackChip(item: os.meka.core.domain.CapturedItem): os.meka.core.domain.CallbackChip? = onCore {
+        val R = os.meka.core.domain.CallbackReminderRules
+        R.chip(item, tasks.get(R.taskId(item.id)), nowMs(), ZoneCalendar(timeZone))
+    }
+
+    /**
+     * Obi on calls: **Remind me** on an agreed call back: one task "Call back <who>" on that day at that time with a
+     * reminder 10 minutes before (synced; one per message, so both apps make one). The line to show.
+     */
+    suspend fun remindCallback(item: os.meka.core.domain.CapturedItem): String = onCore {
+        val R = os.meka.core.domain.CallbackReminderRules
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val existing = tasks.get(R.taskId(item.id))?.takeIf { !it.lifecycle.isTerminal }
+        existing?.remindAtMs?.takeIf { it > now }?.let { return@onCore R.setLine(it, now, cal) }
+        val at = item.callbackAtMs ?: return@onCore R.GONE
+        if (!R.offers(item, now)) return@onCore R.GONE
+        val remind = R.remindAtMs(at, now) ?: return@onCore R.GONE
+        val id = tasks.createWithId(R.taskId(item.id), os.meka.core.domain.NewTask(R.taskTitle(item), notes = R.taskNotes(item)))
+        tasks.setWhen(id, cal.epochDayOf(at), cal.minuteOfDay(at))
+        tasks.setReminder(id, remind)
+        R.setLine(remind, now, cal)
+    }
+
     /** Obi on calls, slice 3: Hang up while Obi is on the call (synced; the server ends it). The line to show. */
     suspend fun hangUpBookingCall(id: String): String = onCore { bookingCalls.hangUp(id) }
 

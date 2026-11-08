@@ -588,6 +588,8 @@ internal fun PersonCard(
                             if (item.hasAudio) {
                                 VoiceMessagePlayer(item.id, audio, autoStart = item.id == autoPlay, onAutoStarted = onAutoPlayed)
                             }
+                            // Obi on calls: Remind me on a call back he agreed with a live caller.
+                            CallbackRemindChip(item)
                         }
                     }
                 }
@@ -796,4 +798,29 @@ internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modif
         }
         Text(LoneWordGlue.kept(ScreenUnknownRules.TRADE_OFF), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
+}
+
+/**
+ * Obi on calls: **Remind me** under a call assistant message with a call back agreed: one task "Call back <who>" at that
+ * time with a reminder 10 minutes before (synced, one per message); then "Reminder set · …", no longer tappable.
+ */
+@Composable
+internal fun CallbackRemindChip(item: os.meka.core.domain.CapturedItem) {
+    val core = (LocalContext.current.applicationContext as MekaApplication).core
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    var chip by remember(item.id, item.callbackAtMs) { mutableStateOf<os.meka.core.domain.CallbackChip?>(null) }
+    LaunchedEffect(item.id, item.callbackAtMs) { chip = runCatching { core.callbackChip(item) }.getOrNull() }
+    val c = chip ?: return
+    Text(
+        c.label, style = MekaType.captionStrong, color = if (c.done) Meka.colors.textSecondary else Meka.colors.accent,
+        modifier = Modifier.testTag("callback-remind-${item.id}").clip(RoundedCornerShape(MekaRadius.pill))
+            .then(if (c.done) Modifier else Modifier.clickable(role = Role.Button) {
+                haptics.light()
+                // Instant taps: the chip says it's set at once; the core's line replaces it.
+                chip = os.meka.core.domain.CallbackChip(os.meka.core.domain.CallbackReminderRules.SET_PREFIX, done = true)
+                scope.launch { chip = os.meka.core.domain.CallbackChip(runCatching { core.remindCallback(item) }.getOrDefault(os.meka.core.domain.CallbackReminderRules.GONE), done = true) }
+            })
+            .minTouch().padding(vertical = MekaSpace.xxs),
+    )
 }

@@ -131,6 +131,8 @@ struct AfterWorkSheet: View {
                                 if item.hasAudio {
                                     VoiceMessagePlayerView(id: item.id, palette: palette)
                                 }
+                                // Obi on calls: Remind me on a call back he agreed with a live caller.
+                                CallbackRemindChipView(item: item, palette: palette)
                             }
                         }
                     }
@@ -296,5 +298,46 @@ struct HeldPreviewView: View {
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+}
+
+/// Obi on calls: **Remind me** under a call assistant message with a call back agreed: one task "Call back <who>" at
+/// that time with a reminder 10 minutes before (synced, one per message); then "Reminder set · …", no longer clickable.
+struct CallbackRemindChipView: View {
+    @Environment(CoreModel.self) private var model
+    let item: CapturedItem
+    let palette: MekaPalette
+    @State private var label: String?
+    @State private var isDone = false
+
+    var body: some View {
+        Group {
+            if let label {
+                if isDone {
+                    Text(label).font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                } else {
+                    Button(label) { remind() }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.captionStrong)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityHint("Adds a task to call them back, with a reminder before")
+                }
+            }
+        }
+        .padding(.top, MekaSpace.xxs)
+        .contentTransition(.opacity)
+        .task(id: item.id) {
+            let chip = await model.callbackChip(item)
+            label = chip?.label
+            isDone = chip?.done ?? false
+        }
+    }
+
+    private func remind() {
+        MekaHaptics.light()
+        // Instant taps: it says set at once; the core's line replaces it.
+        label = CallbackReminderRules.shared.SET_PREFIX
+        isDone = true
+        Task { label = await model.remindCallback(item) }
     }
 }
