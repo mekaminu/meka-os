@@ -189,6 +189,8 @@ internal fun MailNeedsSection(
                             // Junk fix slice 2: Block sender (Bin & block on a possible scam) and Unsubscribe, Undo on the bar.
                             onBlock = { haptics.medium(); gone(row.id, "Block") { core.blockMailItem(row.id) } },
                             onUnsubscribe = { haptics.medium(); gone(row.id, "Unsubscribe") { core.unsubscribeMailItem(row.id) } },
+                            // Slice 4: Not a scam takes the red line off and keeps the sender; Undo on the bar.
+                            onNotScam = { haptics.light(); answer { core.notScamMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSuggestTimes = { core.suggestMeetingTimes(row.id) },
                             // Drafted replies: Not needed puts Navilife's draft away (Undo on the bar); the email stays.
@@ -228,6 +230,8 @@ internal fun MailNeedsRowView(
     /** Junk fix slice 2: Block sender / Bin & block and Unsubscribe (null: not offered here). */
     onBlock: (() -> Unit)? = null,
     onUnsubscribe: (() -> Unit)? = null,
+    /** Phishing in the body, slice 4: Not a scam on a possible scam (null: not offered here). */
+    onNotScam: (() -> Unit)? = null,
     incoming: Pair<Int, String>? = null,
     onEditor: ((String?) -> Unit)? = null,
     /** Scheduling assistant, slice 1: his free times as a reply, for an email that asks to meet (null: not offered here). */
@@ -275,9 +279,17 @@ internal fun MailNeedsRowView(
             // Account-security mail: who it's really from and what to do, above the sender.
             row.security?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-security-${row.id}")) }
             // A possible scam (critical) or a real company's "log in yourself" (brass), above the sender.
-            row.warning?.let {
-                Text(it, style = MekaType.itemMeta, color = if (row.scam) Meka.colors.critical else Meka.colors.accent,
-                    modifier = Modifier.testTag("mail-warning-${row.id}"))
+            // Slice 4: Not a scam fades the line away (reduced motion: the plain fade).
+            val warningLine = row.warning
+            val lastWarning = remember(row.id) { mutableStateOf(warningLine) }
+            if (warningLine != null) lastWarning.value = warningLine
+            val warningScam = remember(row.id) { mutableStateOf(row.scam) }
+            if (warningLine != null) warningScam.value = row.scam
+            AnimatedVisibility(warningLine != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                lastWarning.value?.let {
+                    Text(it, style = MekaType.itemMeta, color = if (warningScam.value) Meka.colors.critical else Meka.colors.accent,
+                        modifier = Modifier.testTag("mail-warning-${row.id}"))
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(row.from, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -423,7 +435,10 @@ internal fun MailNeedsRowView(
         }
         // Junk fix slice 3: every answer wears the accent (Bin & block the critical colour); Reply · Done · Task show and the
         // rest unfold under ⋯ More (expand spring; reduced motion: cross-fade). They wrap on the narrow cover screen.
-        val actions = MailRowActionRules.actions(row, tidy = onAlwaysTidy != null, block = onBlock != null, unsubscribe = onUnsubscribe != null, toDay = onToDay != null)
+        val actions = MailRowActionRules.actions(
+            row, tidy = onAlwaysTidy != null, block = onBlock != null, unsubscribe = onUnsubscribe != null, toDay = onToDay != null,
+            notScam = onNotScam != null,
+        )
         var more by rememberSaveable(row.id) { mutableStateOf(false) }
         // Week board item (5): To a day… unfolds the days under the answers; a tap on one sends it there.
         var choosingDay by rememberSaveable(row.id) { mutableStateOf(false) }
@@ -450,6 +465,7 @@ internal fun MailNeedsRowView(
                 MailRowAction.ALWAYS_TIDY -> onAlwaysTidy?.invoke()
                 MailRowAction.BIN, MailRowAction.BLOCK -> onBlock?.invoke()
                 MailRowAction.TO_DAY -> { haptics.tick(); choosingDay = !choosingDay }
+                MailRowAction.NOT_SCAM -> onNotScam?.invoke()
             }
         }
         fun pillLabel(a: MailRowAction): String =
@@ -498,6 +514,10 @@ internal fun MailNeedsRowView(
                 load = onRead,
                 openAttachment = onAttachment,
                 actions = (actions.shown + actions.more).filter(::offered).map { a ->
+                    MailReaderAction(MailRowActionRules.label(a, row), MailRowActionRules.spoken(a, row), MailRowActionRules.critical(a)) { perform(a) }
+                },
+                // Slice 4: an email the reader opens as a possible scam: Junk it & block, Not a scam, Done.
+                scamActions = MailRowActionRules.readerScam(row, block = onBlock != null, notScam = onNotScam != null).map { a ->
                     MailReaderAction(MailRowActionRules.label(a, row), MailRowActionRules.spoken(a, row), MailRowActionRules.critical(a)) { perform(a) }
                 },
                 onClose = { reading = false },

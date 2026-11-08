@@ -7732,12 +7732,25 @@ final class CoreModel {
         answerMail(id, what: "Always tidy", undo: .mailItem) { try await $0.alwaysTidyMailItem(id: id) }
     }
 
-    /// Block sender (Bin & block on a possible scam) on an email in "From your mail" (junk fix slice 2): Done, and at the
+    /// Block sender (Junk it & block on a possible scam, to Junk) on an email in "From your mail" (junk fix slice 2): Done, and at the
     /// server's next check this email and the sender's later ones go to Trash; Undo on the bar brings it back and takes
     /// the block off. Only the id (a String) crosses.
     func blockMailItem(_ id: String) {
         MekaHaptics.medium()
         answerMail(id, what: "Block", undo: .mailItem) { try await $0.blockMailItem(id: id) }
+    }
+
+    /// Not a scam on a possible scam (Phishing in the body, slice 4): the red line goes on both apps, the email stays,
+    /// and the server keeps the sender at its next check; Undo on the bar takes it back. Only the id (a String) crosses.
+    func notScamMailItem(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.notScamMailItem(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
     }
 
     /// Unsubscribe on an email in "From your mail" (junk fix slice 2): Done, and the server unsubscribes the sender its

@@ -8291,8 +8291,11 @@ class MekaCore(
         val fallback = os.meka.core.domain.MailReaderFallback(
             item?.from ?: "Unknown sender", item?.subject ?: "", item?.preview, item?.receivedAtMs ?: nowMs(), item?.account ?: "your",
         )
-        val view = readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images, item?.warning)
+        val notScam = item != null && os.meka.core.domain.MailNotScamRules.notScam(item)
+        val view = readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images, item?.warning, notScam)
         item ?: return view
+        // Slice 4: the reader found it a scam, so its Junk it & block goes to Junk like the card's.
+        onCore { if (view.scam != null) readerScams.add(id) else readerScams.remove(id) }
         // Slice 3: Open in Gmail/Outlook at the reader's foot, made now from the card and the account list (never kept).
         val facts = lastMailFacts ?: if (item.account == os.meka.core.domain.MailLabel.OUTLOOK.label) emptyList() else try {
             accountsApi?.mailAccounts()?.also { lastMailFacts = it }
@@ -8405,6 +8408,7 @@ class MekaCore(
     private suspend fun readMail(
         request: os.meka.core.wire.MailMessageCodec.Request, fallback: os.meka.core.domain.MailReaderFallback, images: Boolean,
         warning: String? = null,
+        notScam: Boolean = false,
     ): os.meka.core.domain.MailReaderView {
         val source = os.meka.core.domain.MailReaderSource(request.kind, request.id, request.batch)
         val r = try { accountsApi?.mailMessage(request) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
@@ -8419,7 +8423,7 @@ class MekaCore(
         }
         // Slice 3: the server marks it read when Mail's "Mark an email read when I open it" is on; the note says so.
         val marksRead = onCore { mailAutopilotSetting().readerMarksRead }
-        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source, marksRead, warning)
+        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source, marksRead, warning, notScam)
     }
 
     /**
@@ -9170,11 +9174,14 @@ class MekaCore(
      */
     suspend fun blockMailItem(id: String): String = onCore {
         val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
-        val scam = os.meka.core.domain.MailScamRules.scamLine(item.warning)
+        // Phishing in the body, slice 4: on a possible scam (the card's line or the reader's banner) it's Junk it & block:
+        // the email goes to Junk, not Trash.
+        val scam = !os.meka.core.domain.MailNotScamRules.notScam(item) &&
+            (os.meka.core.domain.MailScamRules.scamLine(item.warning) || id in readerScams)
         val group = mailGroup(id)
         replica.commitLocal(
             os.meka.core.domain.EntityTypes.MAIL_ITEM, id,
-            os.meka.core.domain.MailSenderRuleRules.cardFields(nowMs(), os.meka.core.domain.MailSenderRule.BLOCK),
+            os.meka.core.domain.MailSenderRuleRules.cardFields(nowMs(), os.meka.core.domain.MailSenderRule.BLOCK, junk = scam),
         )
         val linked = doneLinked(group)
         mailNeedsUndo = {
@@ -9183,6 +9190,26 @@ class MekaCore(
         }
         mailNeedsChanged()
         if (scam) os.meka.core.domain.MailSenderRuleRules.binLine(item.from) else os.meka.core.domain.MailSenderRuleRules.blockLine(item.from)
+    }
+
+    /** Slice 4: the cards whose email the reader opened as a possible scam this session (Junk it & block goes to Junk). */
+    private val readerScams = mutableSetOf<String>()
+
+    /**
+     * Phishing in the body, slice 4 (Meka, 2026-11-08): **Not a scam** on a possible scam, on its card or in the reader:
+     * the red line and the reader's banner go on both apps and the email stays; at the server's next check the sender
+     * gets Always keep, so Navilife never moves their mail to Junk or Trash. Undo takes the line back (and the keep, while
+     * it's still this tap's). Returns the bar's line.
+     */
+    suspend fun notScamMailItem(id: String): String = onCore {
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNotScamRules.fields(nowMs()))
+        readerScams.remove(id)
+        mailNeedsUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNotScamRules.undoFields(nowMs()))
+        }
+        mailNeedsChanged()
+        os.meka.core.domain.MailNotScamRules.line(item.from)
     }
 
     /**

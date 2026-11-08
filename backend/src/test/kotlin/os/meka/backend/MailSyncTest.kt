@@ -80,6 +80,7 @@ import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.MailTidiedRules
 import os.meka.core.domain.MailSenderFields
 import os.meka.core.domain.MailSenderRuleRules
+import os.meka.core.domain.MailNotScamRules
 import os.meka.core.domain.MailSenderRule
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.MailNeedsRules
@@ -2079,6 +2080,48 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(cursor = "h6") }
         i.syncAccount(id)
         assertEquals(1, posted.size)
+    }
+
+    @Test
+    fun junkItAndBlockGoesToJunkAndNotAScamKeepsTheSender() {
+        // Phishing in the body, slice 4.
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["p0"] = msg("p0", 0, "win@prizes.example").copy(fromName = "Prize Team")
+        gmail.mailbox["u0"] = msg("u0", 0, "sam@club.example").copy(fromName = "Sam")
+        val id = connect(i)
+        i.syncAccount(id)
+        val p0 = MailNeedsRules.itemId(id, "p0")
+        val u0 = MailNeedsRules.itemId(id, "u0")
+        fun senders() = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+
+        // Junk it & block: the email goes to Spam (not Trash) and its sender is blocked.
+        now += 60_000
+        MailSenderRuleRules.cardFields(now, MailSenderRule.BLOCK, junk = true).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, p0, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(MailTidy.SCAM_JUNK, gmail.tidyCalls.first { "p0" in it }["p0"])
+        assertEquals(MailSenderRule.BLOCK, MailSenderRuleRules.read(senders().getValue(MailUnsubscribeRules.senderId(id, "win@prizes.example"))))
+
+        // Not a scam: the email stays and the sender gets Always keep, once.
+        now += 60_000
+        val said = now
+        MailNotScamRules.fields(said).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, u0, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        val sid = MailUnsubscribeRules.senderId(id, "sam@club.example")
+        assertEquals(MailSenderRule.KEEP, MailSenderRuleRules.read(senders().getValue(sid)))
+        assertTrue(gmail.mailbox.getValue("u0").inInbox)
+        assertFalse(MailNotScamRules.keepDue(MailNeedsRules.read(u0, items(ops).getValue(u0))!!))
+
+        // Undo: the keep comes off again.
+        now += 60_000
+        MailNotScamRules.undoFields(now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, u0, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertNull(MailSenderRuleRules.read(senders().getValue(sid)))
+        assertFalse(MailNotScamRules.clearDue(MailNeedsRules.read(u0, items(ops).getValue(u0))!!))
     }
 
     // ---- Slice 5a: Unsubscribe for him ----

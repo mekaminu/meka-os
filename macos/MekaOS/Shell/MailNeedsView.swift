@@ -66,6 +66,7 @@ struct MailNeedsView: View {
                                                  alwaysTidy: { model.alwaysTidyMailItem(row.id) },
                                                  block: { model.blockMailItem(row.id) },
                                                  unsubscribe: { model.unsubscribeMailItem(row.id) },
+                                                 notScam: { model.notScamMailItem(row.id) },
                                                  incoming: incoming[row.id],
                                                  onEditor: { t in texts[row.id] = t },
                                                  suggestTimes: { await model.suggestMeetingTimes(row.id) },
@@ -189,6 +190,8 @@ struct MailNeedsRowView: View {
     /// Junk fix slice 2: Block sender (Bin & block on a possible scam) and Unsubscribe (nil: not offered here).
     var block: (() -> Void)? = nil
     var unsubscribe: (() -> Void)? = nil
+    /// Phishing in the body, slice 4: Not a scam on a possible scam (nil: not offered here).
+    var notScam: (() -> Void)? = nil
     /// Draft replies on the card: a draft to open the editor with (nil: none), and where the open editor's words go
     /// (nil when closed) for Send all.
     var incoming: MailIncomingDraft? = nil
@@ -220,7 +223,8 @@ struct MailNeedsRowView: View {
     @State private var choosingDay = false
 
     private var rowActions: MailRowActions {
-        MailRowActionRules.shared.actions(row: row, tidy: alwaysTidy != nil, block: block != nil, unsubscribe: unsubscribe != nil, toDay: toDay != nil)
+        MailRowActionRules.shared.actions(row: row, tidy: alwaysTidy != nil, block: block != nil, unsubscribe: unsubscribe != nil,
+                                          toDay: toDay != nil, notScam: notScam != nil)
     }
 
     private func offered(_ a: MailRowAction) -> Bool {
@@ -250,6 +254,15 @@ struct MailNeedsRowView: View {
         }
     }
 
+    /// Slice 4: the reader's answers when it opens the email as a possible scam: Junk it & block, Not a scam, Done.
+    private var readerScamActions: [MailReaderAction] {
+        MailRowActionRules.shared.readerScam(row: row, block: block != nil, notScam: notScam != nil).map { a in
+            MailReaderAction(id: MailRowActionRules.shared.label(a: a, row: row), label: MailRowActionRules.shared.label(a: a, row: row),
+                             spoken: MailRowActionRules.shared.spoken(a: a, row: row), critical: MailRowActionRules.shared.critical(a: a),
+                             action: { perform(a) })
+        }
+    }
+
     private func perform(_ a: MailRowAction) {
         if a == MailRowAction.book { book?() }
         else if a == MailRowAction.suggest { askTimes() }
@@ -262,6 +275,7 @@ struct MailNeedsRowView: View {
         else if a == MailRowAction.alwaysTidy { alwaysTidy?() }
         else if a == MailRowAction.bin || a == MailRowAction.block { block?() }
         else if a == MailRowAction.toDay { MekaHaptics.tick(); choosingDay.toggle() }
+        else if a == MailRowAction.notScam { notScam?() }
     }
 
     var body: some View {
@@ -277,7 +291,9 @@ struct MailNeedsRowView: View {
                 }
                 // A possible scam (critical) or a real company's "log in yourself" (brass).
                 if let warning = row.warning {
+                    // Slice 4: Not a scam fades the line away.
                     Text(warning).font(MekaType.itemMeta).foregroundStyle(row.scam ? palette.critical : palette.accent)
+                        .transition(.opacity)
                 }
                 HStack(spacing: MekaSpace.xs) {
                     Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
@@ -322,7 +338,8 @@ struct MailNeedsRowView: View {
             .accessibilityAddTraits(read != nil ? .isButton : [])
             .sheet(isPresented: $reading) {
                 if let read {
-                    MailReaderSheet(palette: palette, load: read, actions: readerActions, attachment: attachment)
+                    MailReaderSheet(palette: palette, load: read, actions: readerActions, attachment: attachment,
+                                    scamActions: readerScamActions)
                 }
             }
             // Drafted replies: Navilife's draft, ready to Send (his click), Edit or put away; it unfolds on the expand

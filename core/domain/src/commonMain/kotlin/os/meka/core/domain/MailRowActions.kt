@@ -70,7 +70,7 @@ object MailNoteRules {
 }
 
 /** The answers an email row in From your mail can offer (both apps draw them from [MailRowActionRules]). */
-enum class MailRowAction { BOOK, SUGGEST, REPLY, DONE, TASK, BIN, WAITING, SNOOZE, UNSUBSCRIBE, ALWAYS_TIDY, BLOCK, TO_DAY }
+enum class MailRowAction { BOOK, SUGGEST, REPLY, DONE, TASK, BIN, WAITING, SNOOZE, UNSUBSCRIBE, ALWAYS_TIDY, BLOCK, TO_DAY, NOT_SCAM }
 
 /** What the row shows straight away, and what waits under ⋯ More. */
 data class MailRowActions(val shown: List<MailRowAction>, val more: List<MailRowAction>)
@@ -90,8 +90,24 @@ object MailRowActionRules {
      * The row's answers. [tidy], [block] and [unsubscribe] say whether this surface offers them at all (the ten-minute
      * inbox and the card do; null callbacks elsewhere). [toDay] (Week board item (5)) puts **To a day…** first under More.
      */
-    fun actions(row: MailNeedsRow, tidy: Boolean = true, block: Boolean = true, unsubscribe: Boolean = true, toDay: Boolean = false): MailRowActions {
+    fun actions(
+        row: MailNeedsRow, tidy: Boolean = true, block: Boolean = true, unsubscribe: Boolean = true, toDay: Boolean = false,
+        notScam: Boolean = false,
+    ): MailRowActions {
         if (row.note != null) return MailRowActions(listOf(MailRowAction.TASK, MailRowAction.DONE), listOfNotNull(MailRowAction.TO_DAY.takeIf { toDay }, MailRowAction.SNOOZE))
+        // Phishing in the body, slice 4: a possible scam leads with Junk it & block and Not a scam; Done stays, Reply and
+        // Task wait under More.
+        if (block && row.canBlock && row.scam) {
+            val shown = listOfNotNull(MailRowAction.BIN, MailRowAction.NOT_SCAM.takeIf { notScam }, MailRowAction.DONE)
+            val more = buildList {
+                add(MailRowAction.REPLY)
+                add(MailRowAction.TASK)
+                if (toDay) add(MailRowAction.TO_DAY)
+                add(MailRowAction.SNOOZE)
+                if (unsubscribe && row.canUnsubscribe) add(MailRowAction.UNSUBSCRIBE)
+            }
+            return MailRowActions(shown, more)
+        }
         val shown = buildList {
             if (row.canBook) add(MailRowAction.BOOK)
             if (row.asksToMeet) add(MailRowAction.SUGGEST)
@@ -125,6 +141,7 @@ object MailRowActionRules {
         MailRowAction.ALWAYS_TIDY -> MailSenderRuleRules.ALWAYS_TIDY
         MailRowAction.BLOCK -> MailSenderRuleRules.BLOCK
         MailRowAction.TO_DAY -> BoardFeedRules.TO_DAY
+        MailRowAction.NOT_SCAM -> MailNotScamRules.NOT_SCAM
     }
 
     /** What a screen reader says for it. */
@@ -134,16 +151,29 @@ object MailRowActionRules {
         MailRowAction.REPLY -> "Reply to ${row.from}"
         MailRowAction.DONE -> "${MailNeedsRules.DONE}: archive ${row.subject}"
         MailRowAction.TASK -> if (row.note != null) "Save ${row.subject} as a task and archive the email" else "Make a task from ${row.subject} and archive the email"
-        MailRowAction.BIN -> "Bin and block ${row.from}: this email and their later ones go to Trash"
+        MailRowAction.BIN -> "Junk it and block ${row.from}: this email goes to Junk and their later ones to Trash"
         MailRowAction.WAITING -> "Waiting for ${row.from} on ${row.subject}, chase in 3 days"
         MailRowAction.SNOOZE -> "${MailNeedsRules.SNOOZE} ${row.subject} till tomorrow 8 o'clock"
         MailRowAction.UNSUBSCRIBE -> "Unsubscribe from ${row.from} and archive this email"
         MailRowAction.ALWAYS_TIDY -> "Archive this, and ${row.from}'s future emails skip your inbox and go to Archive"
         MailRowAction.BLOCK -> "Block ${row.from}: this email and their later ones go to Trash"
         MailRowAction.TO_DAY -> BoardFeedRules.spoken(row.subject)
+        MailRowAction.NOT_SCAM -> MailNotScamRules.spoken(row.from)
     }
 
-    /** Bin & block keeps the critical colour; every other answer wears the accent. */
+    /**
+     * Phishing in the body, slice 4: the reader's answers when it opens an email as a possible scam (its own body check
+     * may find one the card didn't): **Junk it & block** first (unless it's account-security mail or [block] isn't
+     * offered here), **Not a scam** when [notScam] is offered, then Done.
+     */
+    fun readerScam(row: MailNeedsRow, block: Boolean = true, notScam: Boolean = false): List<MailRowAction> =
+        listOfNotNull(
+            MailRowAction.BIN.takeIf { block && row.security == null && row.note == null },
+            MailRowAction.NOT_SCAM.takeIf { notScam },
+            MailRowAction.DONE,
+        )
+
+    /** Junk it & block keeps the critical colour; every other answer wears the accent. */
     fun critical(a: MailRowAction): Boolean = a == MailRowAction.BIN
 
     fun moreSpoken(open: Boolean, row: MailNeedsRow): String =

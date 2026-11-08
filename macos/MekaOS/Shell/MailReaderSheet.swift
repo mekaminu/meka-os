@@ -60,6 +60,8 @@ struct MailReaderSheet: View {
     var openInMail: (() -> Void)? = nil
     /// Slice 2: open one of the attachments (nil: listed only).
     var attachment: (@MainActor (MailReaderView, MailAttachmentRow) async -> MailFileOpened)? = nil
+    /// Phishing in the body, slice 4: the answers when the email opens as a possible scam (nil: `actions`, critical first).
+    var scamActions: [MailReaderAction]? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var view: MailReaderView?
@@ -225,8 +227,8 @@ struct MailReaderSheet: View {
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         }
         HStack(spacing: MekaSpace.xs) {
-            // In a possible scam the card's Bin & block (critical) leads.
-            ForEach(v.scam != nil ? actions.filter { $0.critical } + actions.filter { !$0.critical } : actions) { a in
+            // In a possible scam Junk it & block (critical) leads, then Not a scam.
+            ForEach(v.scam != nil ? (scamActions ?? actions.filter { $0.critical } + actions.filter { !$0.critical }) : actions) { a in
                 MailNeedsPill(label: a.label, palette: palette, critical: a.critical, spoken: a.spoken,
                               action: { MekaHaptics.medium(); dismiss(); a.action() })
             }

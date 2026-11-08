@@ -94,6 +94,8 @@ internal fun MailReaderSheet(
     openLabel: String? = null,
     onOpenInMail: (() -> Unit)? = null,
     openAttachment: (suspend (MailReaderView, Int) -> MailAttachmentOpened)? = null,
+    /** Phishing in the body, slice 4: the answers when the email opens as a possible scam (null: [actions], critical first). */
+    scamActions: List<MailReaderAction>? = null,
     onClose: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -279,8 +281,8 @@ internal fun MailReaderSheet(
                 }
                 // The card's own answers, then Open in Gmail/Outlook as the quieter way out.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    // In a possible scam the card's Bin & block (critical) leads.
-                    (if (v.scam != null) actions.sortedByDescending { it.critical } else actions)
+                    // In a possible scam Junk it & block (critical) leads, then Not a scam.
+                    (if (v.scam != null) scamActions ?: actions.sortedByDescending { it.critical } else actions)
                         .forEach { a -> MailNeedsPill(a.label, spoken = a.spoken, critical = a.critical) { haptics.medium(); act(a) } }
                     if (openLabel != null && onOpenInMail != null) {
                         MailNeedsPill(openLabel, quiet = true, spoken = "$openLabel, ${v.subject}") { haptics.light(); onOpenInMail() }

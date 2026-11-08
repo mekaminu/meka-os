@@ -112,7 +112,7 @@ class MailBlockTest {
         assertEquals("Always tidy · archive their future mail", MailSenderRuleRules.ALWAYS_TIDY)
         assertEquals("Done · Prize Team's emails will skip your inbox and go to Archive · change it in Mail → Your rules", MailSenderRuleRules.cardLine("Prize Team"))
         assertTrue(MailSenderRuleRules.blockLine("Prize Team").startsWith("Blocked Prize Team · "))
-        assertTrue(MailSenderRuleRules.binLine("Prize Team").startsWith("Binned · Prize Team is blocked"))
+        assertTrue(MailSenderRuleRules.binLine("Prize Team").startsWith("Moved to Junk · Prize Team is blocked"))
         assertEquals("Prize Team is blocked · its emails go straight to Trash", MailSenderRuleRules.setLine("Prize Team", MailSenderRule.BLOCK))
     }
 }

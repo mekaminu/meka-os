@@ -90,14 +90,17 @@ object MailSenderRuleRules {
      * never blocks people he writes to, his partner, banks, schools or public bodies; those are only archived).
      */
     const val BLOCK = "Block sender"
-    /** On a possible scam: the same block, said for what it is. */
-    const val BIN = "Bin & block"
+    /**
+     * On a possible scam: the same block, said for what it is; the email goes to that mailbox's Junk (recoverable, and
+     * the provider learns from it), not Trash (Phishing in the body, slice 4).
+     */
+    const val BIN = "Junk it & block"
 
     fun blockLine(from: String): String =
         "Blocked $from · this email and their later ones go to Trash · Undo, or change it in Mail → Your rules"
 
     fun binLine(from: String): String =
-        "Binned · $from is blocked, their later emails go straight to Trash · Undo brings it back"
+        "Moved to Junk · $from is blocked, their later emails go straight to Trash · Undo brings it back"
 
     /** Can Block (or Bin & block on a scam) be offered on [row]? Not on security mail or a real company's own notice. */
     fun canBlock(row: MailNeedsRow): Boolean = row.security == null && (row.warning == null || row.scam)
@@ -106,16 +109,19 @@ object MailSenderRuleRules {
      * What an app writes on the card's `mail_item`: a Done that also asks for the sender's rule ([rule]: TIDY or
      * BLOCK; Always tidy before slice 2 wrote no [MailItemFields.RULE_ASKED], which reads as TIDY).
      */
-    fun cardFields(nowMs: Long, rule: MailSenderRule = MailSenderRule.TIDY): Map<String, FieldValue> =
-        MailNeedsRules.doneFields(nowMs) + (MailItemFields.TIDY_ASKED_AT to nowMs.fv()) + (MailItemFields.RULE_ASKED to rule.name.fv())
+    fun cardFields(nowMs: Long, rule: MailSenderRule = MailSenderRule.TIDY, junk: Boolean = false): Map<String, FieldValue> =
+        MailNeedsRules.doneFields(nowMs) + (MailItemFields.TIDY_ASKED_AT to nowMs.fv()) + (MailItemFields.RULE_ASKED to rule.name.fv()) +
+            (MailItemFields.JUNK_ASKED to FieldValue.Bool(junk && rule == MailSenderRule.BLOCK))
 
     /** The rule a card asked for (TIDY when the card predates Block). */
     fun asked(i: MailItem): MailSenderRule = MailSenderRule.of(i.ruleAsked)?.takeIf { it != MailSenderRule.KEEP } ?: MailSenderRule.TIDY
 
     /** Where the server moves the card's own email once it's Done: Trash for a block of a sender it may block. */
     fun cardTidy(i: MailItem, protected: Boolean): MailTidy =
-        if (i.tidyAskedAtMs != null && MailNeedsRules.done(i) && asked(i) == MailSenderRule.BLOCK && !protected && i.security == null) MailTidy.TRASH
-        else MailTidy.ARCHIVE
+        if (i.tidyAskedAtMs != null && MailNeedsRules.done(i) && asked(i) == MailSenderRule.BLOCK && !protected && i.security == null) {
+            // Slice 4: Junk it & block on a possible scam goes to Junk (recoverable; the provider's filter learns).
+            if (i.junkAsked) MailTidy.SCAM_JUNK else MailTidy.TRASH
+        } else MailTidy.ARCHIVE
 
     /**
      * Junk fix slice 2: the inbox emails from blocked senders to Trash this check — arrived after the block ([ruleAt]
@@ -242,3 +248,43 @@ data class MailRuleRow(
     val action: String = MailSenderRuleRules.CLEAR_ACTION,
     val sets: String = "",
 )
+
+/**
+ * Phishing in the body, slice 4 (Meka, 2026-11-08): **Not a scam** on an email Navilife called a possible scam, on its
+ * card and in the reader. The red line goes from the card and the reader's banner goes (pictures and links work as for
+ * any email), and at the server's next check the sender gets his **Always keep** ([MailSenderRule.KEEP]), so Navilife
+ * never moves their mail to Junk or Trash; the email stays where it is. Undo takes the line back and, while the keep is
+ * still the one this tap set, takes it off again.
+ */
+object MailNotScamRules {
+    const val NOT_SCAM = "Not a scam"
+
+    fun line(from: String): String = "Not a scam · Navilife will keep $from's emails · Undo, or change it in Mail → Your rules"
+
+    fun spoken(from: String): String = "Not a scam: keep ${from}'s emails and take the warning off"
+
+    /** He said this one isn't a scam (and hasn't undone it). */
+    fun notScam(i: MailItem): Boolean {
+        val at = i.notScamAtMs ?: return false
+        return at > (i.notScamUndoAtMs ?: 0L)
+    }
+
+    fun fields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.NOT_SCAM_AT to nowMs.fv())
+    fun undoFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.NOT_SCAM_UNDO_AT to nowMs.fv())
+
+    /** The server should write the sender's Always keep: said, and not yet kept for this tap. */
+    fun keepDue(i: MailItem): Boolean {
+        val at = i.notScamAtMs ?: return false
+        return notScam(i) && (i.notScamKeptAtMs ?: 0L) < at
+    }
+
+    /** The server should take the keep off: it wrote it, then Undo came, and it hasn't taken it off since. */
+    fun clearDue(i: MailItem): Boolean {
+        val kept = i.notScamKeptAtMs ?: return false
+        val undo = i.notScamUndoAtMs ?: return false
+        return !notScam(i) && undo > kept && (i.notScamClearedAtMs ?: 0L) < kept
+    }
+
+    fun keptFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.NOT_SCAM_KEPT_AT to nowMs.fv())
+    fun clearedFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.NOT_SCAM_CLEARED_AT to nowMs.fv())
+}

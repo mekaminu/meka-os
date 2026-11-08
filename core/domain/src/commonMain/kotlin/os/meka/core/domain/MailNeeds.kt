@@ -83,6 +83,17 @@ object MailItemFields {
     /** The server tried it, and what came of it ([UnsubscribeState.note]). */
     const val UNSUB_TRIED_AT = "unsubTriedAtMs"
     const val UNSUB_NOTE = "unsubNote"
+    /**
+     * Phishing in the body, slice 4 (an app): **Junk it & block** on a possible scam asked for Junk, not Trash, with the
+     * block (Bool, written with [TIDY_ASKED_AT] and [RULE_ASKED] BLOCK).
+     */
+    const val JUNK_ASKED = "junkAsked"
+    /** Slice 4 (an app): **Not a scam** on a possible scam, and its Undo ([MailNotScamRules]). */
+    const val NOT_SCAM_AT = "notScamAtMs"
+    const val NOT_SCAM_UNDO_AT = "notScamUndoAtMs"
+    /** Slice 4 (the server): it wrote the sender's Always keep for that Not a scam, and (after an Undo) took it off. */
+    const val NOT_SCAM_KEPT_AT = "notScamKeptAtMs"
+    const val NOT_SCAM_CLEARED_AT = "notScamClearedAtMs"
     /** Scheduling assistant, slice 2 (an app's): Book it's calendar edit ("" once undone) and the start it booked (0). */
     /**
      * Account-security mail ([MailSecurityRules], 2026-10-17): the provider whose security alert this is ("Google"),
@@ -148,6 +159,12 @@ data class MailItem(
     val unsubAskedAtMs: Long? = null,
     val unsubTriedAtMs: Long? = null,
     val unsubNote: String? = null,
+    /** Phishing in the body, slice 4: Junk it & block asked for Junk; Not a scam, its Undo and the server's answers. */
+    val junkAsked: Boolean = false,
+    val notScamAtMs: Long? = null,
+    val notScamUndoAtMs: Long? = null,
+    val notScamKeptAtMs: Long? = null,
+    val notScamClearedAtMs: Long? = null,
     /** Scheduling assistant, slice 2: Book it's calendar edit and the start it booked, or null. */
     val meetingEditId: String? = null,
     val meetingAtMs: Long? = null,
@@ -394,6 +411,11 @@ object MailNeedsRules {
             unsubAskedAtMs = ms(MailItemFields.UNSUB_ASKED_AT),
             unsubTriedAtMs = ms(MailItemFields.UNSUB_TRIED_AT),
             unsubNote = text(MailItemFields.UNSUB_NOTE),
+            junkAsked = (f[MailItemFields.JUNK_ASKED] as? FieldValue.Bool)?.value == true,
+            notScamAtMs = ms(MailItemFields.NOT_SCAM_AT),
+            notScamUndoAtMs = ms(MailItemFields.NOT_SCAM_UNDO_AT),
+            notScamKeptAtMs = ms(MailItemFields.NOT_SCAM_KEPT_AT),
+            notScamClearedAtMs = ms(MailItemFields.NOT_SCAM_CLEARED_AT),
             meetingEditId = text(MailItemFields.MEETING_EDIT_ID),
             meetingAtMs = ms(MailItemFields.MEETING_AT),
             replyNeeded = (f[MailAutoDraftFields.REPLY_NEEDED] as? FieldValue.Bool)?.value == true,
@@ -558,7 +580,8 @@ object MailNeedsRules {
                 ?: MeetingPickRules.declinedLine(i.from).takeIf { declined }
             val meet = !replySent(i) && pick == null && (declined || MeetingRequestRules.asks(i.subject, i.preview))
             val security = i.security?.let(MailSecurityRules::line)
-            val warning = i.warning?.takeIf { it.isNotBlank() }
+            // Slice 4: Not a scam takes the scam line off (a real company's "log in yourself" line stays).
+            val warning = i.warning?.takeIf { it.isNotBlank() && !(MailNotScamRules.notScam(i) && MailScamRules.scamLine(it)) }
             val note = i.note?.let(MailNoteRules::line)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,

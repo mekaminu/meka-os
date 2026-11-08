@@ -71,6 +71,7 @@ struct MailMomentView: View {
                              draft: { await model.draftMailReply(id) },
                              block: { model.blockMailItem(id) },
                              unsubscribe: { model.unsubscribeMailItem(id) },
+                             notScam: { model.notScamMailItem(id) },
                              suggestTimes: { await model.suggestMeetingTimes(id) },
                              book: { model.bookMeetingPick(id) },
                              read: { images in await model.readMailItem(id, images: images) },

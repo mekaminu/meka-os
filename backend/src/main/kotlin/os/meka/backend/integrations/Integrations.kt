@@ -38,6 +38,7 @@ import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailTidyFacts
 import os.meka.core.domain.MailSenderRule
 import os.meka.core.domain.MailSenderRuleRules
+import os.meka.core.domain.MailNotScamRules
 import os.meka.core.domain.MailSenderFields
 import os.meka.core.domain.MailSenderPanelRules
 import os.meka.core.domain.MailTidiedAction
@@ -1495,9 +1496,11 @@ class Integrations(
         val asked = all.filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) || MailNeedsRules.replyDue(it, now()) }
         val rules = all.filter { MailSenderRuleRules.ruleDue(it) || MailSenderRuleRules.clearDue(it) }
         val unsubs = all.filter { MailCardUnsubRules.due(it) }
-        if (asked.isEmpty() && chases.isEmpty() && rules.isEmpty() && unsubs.isEmpty()) return
+        val notScams = all.filter { MailNotScamRules.keepDue(it) || MailNotScamRules.clearDue(it) }
+        if (asked.isEmpty() && chases.isEmpty() && rules.isEmpty() && unsubs.isEmpty() && notScams.isEmpty()) return
         val byItem = ms.messages(a.id).associateBy { MailNeedsRules.itemId(a.id, it.id) }
         if (rules.isNotEmpty()) cardRules(a, rules, byItem)
+        if (notScams.isNotEmpty()) cardNotScams(a, notScams, byItem)
         if (unsubs.isNotEmpty()) cardUnsubscribes(a, m, token, unsubs, byItem)
         val keep by lazy { keepAddresses(hh) }
         for (item in chases) {
@@ -1529,6 +1532,8 @@ class Integrations(
                 val tidy = MailSenderRuleRules.cardTidy(item, MailTidyRules.protectedSender(h.fromAddress, keep))
                 val moved = m.tidyKept(token, mapOf(h.id to tidy)).first[h.id] ?: continue
                 ms.recordTidy(a.id, item.id, listOf(MailMoved(h.id, moved, tidy)))
+                // Phishing in the body, slice 4: Junk it & block's email is marked read in Junk, as the automatic moves are.
+                if (tidy == MailTidy.SCAM_JUNK && h.unread && markingRead(hh)) runCatching { markRead(m, token, listOf(moved), true) }
                 ms.put(hh, a.id, h.copy(inInbox = false))
                 writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
             } else {
@@ -1571,6 +1576,33 @@ class Integrations(
             } else {
                 if (id != null) MailSenderRuleRules.clearFieldsForCard(senders[id], asked, now(), rule)?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
                 writeMail(a, item.id, MailSenderRuleRules.ruleClearedFields(now()), EntityTypes.MAIL_ITEM)
+            }
+        }
+    }
+
+    /**
+     * Phishing in the body, slice 4: **Not a scam** on a card. The sender (by the email's address, which stays here) gets
+     * Always keep on its `mail_sender` entity, stamped with the tap's time, unless he set a rule on it since; after an
+     * Undo the keep comes off again while it's still the tap's. Each once; the email itself doesn't move.
+     */
+    private fun cardNotScams(a: AccountRow, items: List<MailItem>, byItem: Map<String, MailHeader>) {
+        val hh = a.householdId
+        val senders = runCatching { reader.entities(hh, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        for (item in items) {
+            val at = item.notScamAtMs ?: continue
+            val h = byItem[item.id]
+            val address = h?.fromAddress?.lowercase()?.takeIf { it.isNotEmpty() }
+            val id = address?.let { MailUnsubscribeRules.senderId(a.id, it) }
+            if (MailNotScamRules.keepDue(item)) {
+                if (h != null && id != null) {
+                    MailSenderRuleRules.senderFieldsForCard(senders[id], account, h.fromName, address, h.receivedAtMs, at, MailSenderRule.KEEP)
+                        ?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+                }
+                writeMail(a, item.id, MailNotScamRules.keptFields(now()), EntityTypes.MAIL_ITEM)
+            } else {
+                if (id != null) MailSenderRuleRules.clearFieldsForCard(senders[id], at, now(), MailSenderRule.KEEP)?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+                writeMail(a, item.id, MailNotScamRules.clearedFields(now()), EntityTypes.MAIL_ITEM)
             }
         }
     }

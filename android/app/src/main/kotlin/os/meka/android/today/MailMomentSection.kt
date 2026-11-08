@@ -165,6 +165,7 @@ private fun MomentSession(session: MailMomentSession, core: MekaCore, undo: (Str
                     onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
                     onBlock = { haptics.medium(); answer { core.blockMailItem(row.id) } },
                     onUnsubscribe = { haptics.medium(); answer { core.unsubscribeMailItem(row.id) } },
+                    onNotScam = { haptics.light(); answer { core.notScamMailItem(row.id) } },
                     onRead = { images -> core.readMailItem(row.id, images) },
                     onAttachment = { v, i -> core.openMailAttachment(v, i) },
                     onSend = { text, sent ->

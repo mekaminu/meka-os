@@ -34,9 +34,16 @@ class MailRowActionsTest {
     @Test
     fun aPossibleScamShowsBinAndBlockInTheCriticalColour() {
         val r = row(item(warning = "⚠ Possible scam · sent from mail-x.example, not paypal.com"))
-        val a = MailRowActionRules.actions(r)
-        assertEquals(MailRowAction.BIN, a.shown.last())
+        val a = MailRowActionRules.actions(r, notScam = true)
+        // Phishing in the body, slice 4: Junk it & block and Not a scam lead, Done stays; Reply and Task wait under More.
+        assertEquals(listOf(MailRowAction.BIN, MailRowAction.NOT_SCAM, MailRowAction.DONE), a.shown)
+        assertEquals(listOf(MailRowAction.REPLY, MailRowAction.TASK), a.more.take(2))
         assertFalse(MailRowAction.BLOCK in a.more)
+        assertFalse(MailRowAction.ALWAYS_TIDY in a.more)
+        assertEquals("Junk it & block", MailRowActionRules.label(MailRowAction.BIN, r))
+        assertEquals("Not a scam", MailRowActionRules.label(MailRowAction.NOT_SCAM, r))
+        // A surface without Not a scam leaves it out.
+        assertEquals(listOf(MailRowAction.BIN, MailRowAction.DONE), MailRowActionRules.actions(r).shown)
         assertEquals(MailSenderRuleRules.BIN, MailRowActionRules.label(MailRowAction.BIN, r))
         assertTrue(MailRowActionRules.critical(MailRowAction.BIN))
         assertTrue(MailRowAction.entries.filter { it != MailRowAction.BIN }.none(MailRowActionRules::critical))

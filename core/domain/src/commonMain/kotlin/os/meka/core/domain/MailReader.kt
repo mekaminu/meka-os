@@ -564,6 +564,8 @@ object MailReaderRules {
         source: MailReaderSource? = null,
         marksRead: Boolean = false,
         warning: String? = null,
+        /** Slice 4: he said Not a scam on this email: no banner, pictures and links as for any email. */
+        notScam: Boolean = false,
     ): MailReaderView {
         val ok = r?.state == MailMessageAnswer.OK
         val problem = when {
@@ -581,7 +583,7 @@ object MailReaderRules {
         val html = if (ok) r!!.html?.takeIf { it.isNotBlank() } else null
         val rawText = if (ok) r!!.text?.takeIf { it.isNotBlank() } ?: html?.let { MailHtmlSanitizer.text(it) } else fallback.preview
         val text = rawText?.let { MailHtmlSanitizer.tidyText(it) }?.takeIf { it.isNotEmpty() }?.let { if (it.length > MAX_TEXT) it.take(MAX_TEXT) + "…" else it } ?: NO_TEXT
-        val scam = scamLine(r, ok, html, rawText, warning)
+        val scam = if (notScam) null else scamLine(r, ok, html, rawText, warning)
         val shown = images && scam == null
         val blocked = if (ok) r!!.blockedImages else 0
         val attachments = if (ok) attachmentRows(r!!.attachments) else emptyList()

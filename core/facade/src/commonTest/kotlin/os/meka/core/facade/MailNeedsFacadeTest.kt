@@ -17,6 +17,7 @@ import os.meka.core.sync.SyncService
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -119,6 +120,8 @@ class MailNeedsFacadeTest {
         assertEquals(listOf(c), mac.mailNeeds.value?.rows?.map { it.id })
         val ops = serverOps.after("hh", 0, 100_000).map { it.op }
         assertTrue(ops.any { it.entityId == b && it.field == MailItemFields.RULE_ASKED })
+        // Phishing in the body, slice 4: on the possible scam it's Junk it & block, asking for Junk.
+        assertTrue(ops.any { it.entityId == b && it.field == MailItemFields.JUNK_ASKED })
         assertTrue(ops.any { it.entityId == a && it.field == MailItemFields.UNSUB_ASKED_AT })
         // Undo takes back the last one (the unsubscribe): the card is back and it's called off.
         now += 1_000
@@ -127,6 +130,28 @@ class MailNeedsFacadeTest {
         // Unsubscribe on an email without a link says it can't.
         assertEquals(UnsubscribeState.FAILED.note, fold.unsubscribeMailItem(c))
         assertEquals(MailNeedsRules.UNKNOWN, fold.blockMailItem("nothing"))
+    }
+
+    @Test
+    fun notAScamTakesTheLineOffOnBothAppsAndUndoBringsItBack() = runTest {
+        // Phishing in the body, slice 4: Not a scam on a possible scam; the email stays on the card.
+        val b = email("m2", "Outlook Session", "Is Your Account Still Active?", 2 * hour,
+            warning = "⚠ Possible scam · sent from formlab.example, not microsoft.com")
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertTrue(assertNotNull(fold.mailNeeds.value).rows.single().scam)
+        assertEquals(os.meka.core.domain.MailNotScamRules.line("Outlook Session"), fold.notScamMailItem(b))
+        val row = assertNotNull(fold.mailNeeds.value).rows.single()
+        assertEquals(b, row.id)
+        assertFalse(row.scam)
+        assertNull(row.warning)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertFalse(assertNotNull(mac.mailNeeds.value).rows.single().scam)
+        now += 1_000
+        fold.undoMailItem()
+        assertTrue(assertNotNull(fold.mailNeeds.value).rows.single().scam)
+        assertEquals(MailNeedsRules.UNKNOWN, fold.notScamMailItem("nothing"))
     }
 
     @Test
