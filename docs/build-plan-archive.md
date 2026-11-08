@@ -5540,6 +5540,8 @@ Bills tab drew no card, so the two tabs didn't agree. Real fix: `MoneyPayday.vie
 ("Still to go out before payday · Thu 5 Nov", "£0", "no bills found yet", no bar, no rows), so the Bills card always
 shows the Spending tile's figure (both apps draw it unchanged; the list card stays hidden with no rows). Fixture: the
 Money shots' CURRENT statement gains August's council tax, pay and Netflix, so the council tax due 1 Nov is £142 to
-come on both tabs and Netflix shows paid. Tests: MoneyBillsTest (a payday with no bill found keeps the card at £0);
+come on both tabs and Netflix shows paid. With three months in, Plan's forecast shows on the open Fold and the sense check caught its "What if I
+cut…" slider at nothing reading a bare "—" (CI run 42500836807, `inner-dark-columns-plan`): `MoneyPlanMore.CUT_NONE` is
+now "£0 a month", the figure the mockup's {{cutLabel}} holds. Tests: MoneyBillsTest (a payday with no bill found keeps the card at £0);
 MoneyScreensTest fails a full-month shot whose "Bills to come" tile and Bills card differ, or that has nothing to come.
 No server or migration change.

@@ -94,7 +94,8 @@ object MoneyPlanMore {
     const val LEFT = "LEFT OVER"
     val SPANS = listOf(6, 12)
     const val CUT_HEAD = "What if I cut…"
-    const val CUT_NONE = "—"
+    /** The slider at nothing (walk-through 2026-11-08 A8: a bare "—" where a figure belongs). */
+    const val CUT_NONE = "£0 a month"
     const val CUT_HINT = "Slide to see what a cut adds"
     const val CUT_MAX_POUNDS = 600
     const val CUT_STEP_POUNDS = 25
