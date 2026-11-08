@@ -451,7 +451,8 @@ struct WorkingOnSheet: View {
     private func tile(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             label(title)
-            Text(value).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            // One line, whole ("19:00–20:00"), shrinking a little in a narrow sheet rather than splitting.
+            Text(value).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1).minimumScaleFactor(0.7)
         }
         .padding(MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)

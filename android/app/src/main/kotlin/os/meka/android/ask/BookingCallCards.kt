@@ -22,10 +22,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -309,7 +312,11 @@ private fun Tile(label: String, value: String, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        Text(value, style = MekaType.body, color = Meka.colors.textPrimary)
+        // One line, whole ("19:00–20:00", never split at the dash), stepping down on the closed Fold's narrow tiles.
+        BasicText(
+            value, style = MekaType.body.copy(color = Meka.colors.textPrimary), maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.body.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
+        )
     }
 }
 
