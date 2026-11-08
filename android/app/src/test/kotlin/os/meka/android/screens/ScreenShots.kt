@@ -331,6 +331,30 @@ object ScreenShots {
         if (cut.isNotEmpty()) fail("$name draws these cut:\n" + cut.joinToString("\n") { "- \"$it\"" })
     }
 
+    /**
+     * Fails when one of [texts] (matched whole) is drawn in less room than its natural one-line width. For a pill whose
+     * text node is measured for its intrinsics as well as laid out (A6's "Other" chip on a Board card), the text layout
+     * [assertNotCut] reads can be the intrinsic pass's, not the drawn one; the node's laid-out width is what's drawn.
+     */
+    fun assertDrawnWhole(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val cut = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && text in texts && action != null) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.let { r ->
+                    val natural = kotlin.math.ceil(r.multiParagraph.intrinsics.maxIntrinsicWidth).toInt()
+                    if (n.size.width + 1 < natural) cut += "$text (${n.size.width} px for $natural)"
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (cut.isNotEmpty()) fail("$name draws these in too little room:\n" + cut.joinToString("\n") { "- $it" })
+    }
+
     /** Fails when one of [texts] (matched whole, e.g. a field's hint) takes more than a line; ones not on screen are skipped. */
     fun assertEachOneLine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
         val wrapped = texts.filter { t ->

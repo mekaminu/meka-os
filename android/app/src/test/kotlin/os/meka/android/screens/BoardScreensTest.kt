@@ -292,11 +292,14 @@ class BoardScreensTest {
         if (compose.onAllNodesWithTag(AREA_DOT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no area dot on the card")
         ScreenShots.assertShows(compose, "areas", "House")
         // The walk-through 2026-11-08, A6: the lane card's area name no longer shares a cut line with its chips (FitLine),
-        // and its chips ("Other") are drawn whole too (FitLine gives each a hair of the line's spare room).
+        // and its chips ("Other") are drawn in their whole width (A6's last bit: the published shot draws "Other" whole;
+        // the text layout assertNotCut reads for a pill can be its intrinsic pass's, so the chips are checked by the
+        // room they're laid out in).
         val boiler = core.weekBoard.value.find(id)?.card ?: throw AssertionError("no Boiler service card")
         val chips = os.meka.core.domain.BoardPlannerRules.footChips(boiler).map { it.label }
         assertTrue("the Boiler service card carries a chip to check", chips.isNotEmpty())
-        ScreenShots.assertNotCut(compose, "inner-dark-areas", listOfNotNull(os.meka.core.domain.BoardMatchRules.footLabel(boiler)) + chips)
+        ScreenShots.assertNotCut(compose, "inner-dark-areas", listOfNotNull(os.meka.core.domain.BoardMatchRules.footLabel(boiler)))
+        ScreenShots.assertDrawnWhole(compose, "inner-dark-areas", chips)
 
         // The menu's Family row calls this (Robolectric can't reach a card's dropdown popup); the screen must follow.
         runBlocking { core.areaOnBoard(id, os.meka.core.domain.BoardArea.FAMILY) }

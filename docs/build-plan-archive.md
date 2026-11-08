@@ -5523,10 +5523,11 @@ TomorrowScreensTest read `shutdownView.value.peek` once before `setContent`, whi
 no "2 tasks" anywhere, and after the rename that "Gym before work" no longer shows beside the edited detail. Test only;
 no app, server or migration change.
 
-**Slice 6 (2026-11-08, A6's last bit):** the lane card's "Other" chip (and the Board's narrow "To Sat" hint pill, the
-same `FitLine`) measured cut under Robolectric while the area name beside it, also micro type, measured whole: each
-child was laid out at exactly its natural (max intrinsic) width, and a pill's text, its float width rounding past that
-whole pixel, ellipsized its last letters. `FitLine` now gives each child up to 2 dp of the line's spare room past its
-natural width (never past the line; none when the line is exactly full), so a word that fits is drawn whole.
-BoardScreensTest's areas shot checks the card's chips whole again beside its area name. Fold only (the Mac's SwiftUI
-lane card has no such measure); no core, server or migration change.
+**Slice 6 (2026-11-08, A6's last bit):** the lane card's "Other" chip measured cut in the areas shot while the
+published shot (`docs/screens/fold/board/inner-dark-areas.png`) draws it whole, under the tick with "● House" below.
+A first try (5b12939: `FitLine` giving each child 2 dp of spare room) didn't change the check (CI run 42494849778 still
+"Other"), as the card's foot is stacked there, so it was reverted: the check, not the screen, was wrong. `assertNotCut`
+reads the text node's last text layout, which for a pill measured for its intrinsics as well as laid out can be the
+intrinsic pass's. New `ScreenShots.assertDrawnWhole` compares the node's laid-out width with the text's natural one-line
+width (from the layout's intrinsics, which don't depend on the constraint); the areas shot checks the card's chips with
+it and keeps `assertNotCut` on the area name. Test only; no app, core, server or migration change.
