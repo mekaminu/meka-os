@@ -190,8 +190,9 @@ class WorkingOnScreensTest {
         var k = 0
         val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
         server.commitLocal(EntityTypes.BOOKING_CALL, "call-oak", mapOf(
-            BookingCallFields.BUSINESS to "Oakfield Barbers".fv(), BookingCallFields.WHAT to "A haircut".fv(),
-            BookingCallFields.DAY to (CivilDate.toEpochDay(2026, 10, 24) + 1).fv(),
+            BookingCallFields.BUSINESS to "Oakfield Barbers".fv(), BookingCallFields.WHAT to "Two haircuts".fv(),
+            BookingCallFields.DAY to (CivilDate.toEpochDay(2026, 10, 24) + 1).fv(), BookingCallFields.PEOPLE to 2L.fv(),
+            BookingCallFields.FROM to (10L * 60).fv(), BookingCallFields.TO to (12L * 60).fv(),
             BookingCallFields.STATE to BookingCallState.DRAFT.code.fv(), BookingCallFields.ASKED_AT to (now - 120_000L).fv(),
             BookingCallFields.LOOKUP to BookingNumberRules.FOUND.fv(), BookingCallFields.LOOKED_UP_FOR to "Oakfield Barbers".fv(),
             BookingCallFields.FOUND_NUMBER to "+441632960111".fv(), BookingCallFields.FOUND_FROM to "oakfieldbarbers.example".fv(),
