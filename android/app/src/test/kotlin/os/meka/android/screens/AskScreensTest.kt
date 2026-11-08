@@ -94,7 +94,11 @@ class AskScreensTest {
             if (fill == Fill.MANY) {
                 core.addShopping("Bread")
                 core.addShopping("Washing-up liquid")
+                // Walk-through 2026-11-08 A8: the same three habits as Today's and Goals' shots (Stretch done this
+                // morning), so Ask's tile and Today's Day ring count the same "1 of 2", not "0 of 1" beside it.
                 core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
+                core.setHabitDone(core.addHabit("Stretch", 7, HabitTiming.MORNING, 10, null), true)
+                core.addHabit("Run", 3, HabitTiming.EVENING, 40, null)
                 core.addMeal("Fish pie")
                 core.addErrand("Post office: return the parcel")
                 core.addOccasion("Sam's birthday 3 Nov")
@@ -128,6 +132,12 @@ class AskScreensTest {
                 ScreenShots.assertShows(compose, name, "3 to buy")
                 // Slice 8 (the Ask re-shot's findings): the errand counts, and a two-line name keeps its icon on top.
                 ScreenShots.assertShows(compose, name, "1 errand at")
+                // A8: Ask's habits line is the Day ring's count on Today (one rule, DayTileRules), for the same habits.
+                val goals = core.goalsView.value
+                val total = os.meka.core.domain.DayTileRules.habitsToday(goals.habits)
+                val done = os.meka.core.domain.DayTileRules.habitsDone(goals.habits)
+                check(total == 2 && done == 1) { "$name: the shots' habits should be 1 of 2 today, as on Today; got $done of $total" }
+                ScreenShots.assertShows(compose, name, "1 of 2 habits done today")
                 ScreenShots.assertIconOnFirstLine(compose, name, os.meka.android.ask.TILE_ICON_TAG, "Goals and habits")
             }
         }

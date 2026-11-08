@@ -5545,3 +5545,10 @@ cut…" slider at nothing reading a bare "—" (CI run 42500836807, `inner-dark-
 now "£0 a month", the figure the mockup's {{cutLabel}} holds. Tests: MoneyBillsTest (a payday with no bill found keeps the card at £0);
 MoneyScreensTest fails a full-month shot whose "Bills to come" tile and Bills card differ, or that has nothing to come.
 No server or migration change.
+
+Slice 8 (2026-11-08): **A8, habits on Today vs Ask** — the shots' fixture, not the app. Today's Day ring, the habit
+chips, Needs you and Ask's Goals and habits line all count today's habits with `DayTileRules.habitsToday`/`habitsDone`
+(done today, due or behind). AskScreensTest's MANY fill added only "Read 20 pages", so Ask said "0 of 1" beside Today's
+"1 of 2" (Read, Stretch done, Run not due on Wed 21 Oct). Ask's fill now adds the same three habits as TodayScreensTest
+and GoalsScreensTest (Stretch done), checks the core's count is 1 of 2 and fails unless the shot shows "1 of 2 habits
+done today". Test only; no core, server or Mac change.
