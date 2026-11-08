@@ -1032,11 +1032,14 @@ private fun BoardHintRow(hint: os.meka.core.domain.BoardHint, onApply: () -> Uni
         // pill says where), so it no longer takes three lines.
         val dense = LocalBoardDense.current
         Text(if (dense) hint.shownBrief else hint.shown, style = MekaType.micro, color = Meka.colors.accent, maxLines = 3, overflow = TextOverflow.Ellipsis)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            // The walk-through 2026-11-08, A6: "Move to Sat" was cut to "Move to" in a narrow column; there it says "To Sat".
+        // The walk-through 2026-11-08, A6: "Move to Sat" was cut to "Move to" in a narrow column; there it says "To Sat",
+        // and Not now goes under it when the two don't fit side by side whole.
+        val pills: @Composable () -> Unit = {
             TouchPill(if (dense) hint.actionBrief else hint.action, spoken = hint.action, pad = if (dense) MekaSpace.xs else MekaSpace.m, fill = Meka.colors.accent.copy(alpha = 0.16f), ink = Meka.colors.accent, onClick = onApply)
             TouchPill(os.meka.core.domain.BoardHintRules.NOT_NOW, fill = Meka.colors.surfaceRaised, ink = Meka.colors.textSecondary, onClick = onDismiss)
         }
+        if (dense) FitLine(Modifier.fillMaxWidth(), pills)
+        else FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) { pills() }
     }
 }
 
@@ -1919,10 +1922,11 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
             )
             FitLine(Modifier.testTag(CARD_FOOT_TAG)) {
                 if (foot.isNotEmpty()) {
-                    FlowRow(
+                    // A Row, not a flow, so its natural width is exact (a card carries one or two short chips).
+                    Row(
                         Modifier.padding(vertical = MekaSpace.xxs),
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs, Alignment.End),
-                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) { foot.forEach { CardChipPill(it) } }
                 }
                 // Option B slice 3: the area's colour dot and name ("● Family"); a card with no area keeps slice 5's dot
