@@ -245,6 +245,10 @@ private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: (
             }
         }
     }
+    r.calledBackLine?.let {
+        Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.padding(top = MekaSpace.xs).testTag("call-called-back"))
+    }
     r.triedAgainLine?.let {
         Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.xs).testTag("call-tried-again"))

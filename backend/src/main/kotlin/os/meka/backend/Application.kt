@@ -1595,6 +1595,11 @@ fun voiceFromEnv(
                 fields, PostgresLiveCallStore(ds!!), configured = { reader()?.key != null }, gbpPerUsd = { rate.read()?.gbpPerUsdMicros },
                 // Slice 1c: free callback times from the synced events (only the times reach Obi).
                 events = { hh -> liveCallEvents(opStore, hh) },
+                // A business ringing back about a call card is known (only the card's own fields reach Obi).
+                bookings = { hh ->
+                    opStore.latestFieldOps(hh, EntityTypes.BOOKING_CALL)
+                        .mapNotNull { (id, f) -> os.meka.core.domain.BookingCallRules.read(id, f.mapValues { it.value.value }) }
+                },
             ),
             GeminiLiveDial({ reader()?.key }),
         )

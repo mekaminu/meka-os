@@ -14,6 +14,8 @@ import os.meka.core.domain.AboutYouFields
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
+import os.meka.core.domain.BookingCall
+import os.meka.core.domain.BookingCallbackRules
 import os.meka.core.domain.BookingDialRules
 import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.BookingWords
@@ -189,6 +191,9 @@ data class LiveCallTicket(
     val bookingId: String? = null,
     /** Slice 2b: the number the booking call rings (for its cost). */
     val bookingNumber: String? = null,
+    /** A business ringing back about this call card ([BookingCallbackRules.match]): its id and business; null = not one. */
+    val callbackFor: String? = null,
+    val callbackBusiness: String? = null,
 ) {
     val booking: Boolean get() = bookingId != null
     /** How long the ticket may wait for its stream: a booking call rings first. */
@@ -224,6 +229,8 @@ class LiveCallLine(
     /** Slice 1c: the household's synced calendar events, for the free callback times (only the times reach Obi). */
     private val events: (String) -> List<CalendarEvent> = { emptyList() },
     private val calendar: LocalCalendar = LondonCalendar,
+    /** The household's call cards, so a business ringing back is known ([BookingCallbackRules.match]). */
+    private val bookings: (String) -> List<BookingCall> = { emptyList() },
 ) {
     private val tickets = ConcurrentHashMap<String, LiveCallTicket>()
     /** Calls that went live, by call id, until a few minutes after (the stream's end step asks). */
@@ -240,7 +247,12 @@ class LiveCallLine(
 
     /** A one-use ticket for this call when it may go live, else null (the scripted turns answer). Never throws. */
     fun ticket(hh: String, provider: String, callId: String, from: String?, atWork: Boolean, canPutThrough: Boolean = false): String? = runCatching {
-        val on = fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_LIVE) == FieldValue.Bool(true)
+        val liveOn = fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_LIVE) == FieldValue.Bool(true)
+        // A business ringing back about a booking Obi made talks to Obi even with Live conversation off, while
+        // Booking calls is on (absent = on): Meka said yes to businesses' voices going to Google for bookings.
+        val bookingOn = fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_BOOKING) != FieldValue.Bool(false)
+        val card = if (bookingOn) bookingFor(hh, from) else null
+        val on = liveOn || card != null
         if (!on || !configured()) return null
         if (!LiveCallRules.allowed(on, spentPence(), capPence(hh))) return null
         val now = nowMs()
@@ -256,11 +268,18 @@ class LiveCallLine(
         val slots = if (CallsSettingsRules.offersSlots(slotsOn, knows)) callbackSlots(hh, now) else emptyList()
         val labels = slots.map { LiveCallRules.callbackLabel(it, now, calendar) }
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        val instruction = LiveCallRules.instruction(atWork, knows, first, null, null, labels) +
+            (card?.let { "\n" + BookingCallbackRules.instruction(it, first, now, calendar).trimEnd() } ?: "")
         tickets[token] = LiveCallTicket(
-            token, hh, provider, callId, from, atWork, LiveCallRules.instruction(atWork, knows, first, null, null, labels), now, canPutThrough, slots,
+            token, hh, provider, callId, from, atWork, instruction, now, canPutThrough, slots,
+            callbackFor = card?.id, callbackBusiness = card?.business,
         )
         token
     }.getOrNull()
+
+    /** The call card a call from [from] is ringing back about, or null. Never throws. */
+    fun bookingFor(hh: String, from: String?): BookingCall? =
+        runCatching { BookingCallbackRules.match(from, bookings(hh), nowMs(), calendar) }.getOrNull()
 
     /**
      * Slice 2b: a one-use ticket for an outbound booking call on card [cardId] to [e164], with Obi's [instruction]. Its

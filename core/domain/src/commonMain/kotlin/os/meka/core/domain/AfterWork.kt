@@ -75,6 +75,8 @@ data class CapturedItem(
     val callback: String? = null,
     /** When that callback is ([HeldMessageFields.CALLBACK_AT]); null = none agreed. */
     val callbackAtMs: Long? = null,
+    /** A business ringing back about a call card: the card's business ([HeldMessageFields.BOOKING_BUSINESS]); null = not one. */
+    val booking: String? = null,
 ) {
     /** The call assistant ended this call as a likely scam ([CallIntroRules.judge]); never urgent. */
     val endedAsScam: Boolean get() = fromCallAssistant && ended == CallIntroRules.ENDED_SCAM
@@ -109,7 +111,9 @@ data class CapturedItem(
 
     /** " · Call back Tue 10 Nov, 17:30" after a call-assistant message with an agreed callback; else nothing. */
     private val callbackPart: String get() =
-        callback?.takeIf { fromCallAssistant && !endedAsScam }?.let { " \u00b7 " + it.replaceFirstChar { c -> c.uppercaseChar() } } ?: ""
+        (callback?.takeIf { fromCallAssistant && !endedAsScam }?.let { " \u00b7 " + it.replaceFirstChar { c -> c.uppercaseChar() } } ?: "") +
+            // A business ringing back about a call card: which booking it's about (never on a judged scam).
+            (if (fromCallAssistant && !endedAsScam) BookingCallbackRules.messagePart(booking) else "")
 }
 
 /**
@@ -688,6 +692,12 @@ object HeldMessageFields {
      */
     const val CALLBACK_AT = "callbackAtMs"
     const val CALLBACK_LINE = "callbackLine"
+    /**
+     * Obi on calls: a business ringing back about a call card ([BookingCallbackRules.match]): the card's id and its
+     * business (his own words from the card), both written once by the server. Absent = not a call back. Added 2026-11-08.
+     */
+    const val BOOKING_ID = "bookingId"
+    const val BOOKING_BUSINESS = "bookingBusiness"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -800,6 +810,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             putThrough = e[HeldMessageFields.PUT_THROUGH].textOrNull,
             callback = e[HeldMessageFields.CALLBACK_LINE].textOrNull?.trim()?.take(60)?.takeIf { it.startsWith("call back ") },
             callbackAtMs = e[HeldMessageFields.CALLBACK_AT].longOrNull,
+            booking = e[HeldMessageFields.BOOKING_BUSINESS].textOrNull?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
 

@@ -7,6 +7,8 @@ import os.meka.backend.integrations.Integrations
 import os.meka.core.domain.AboutYouFields
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AssistantHangupRules
+import os.meka.core.domain.BookingCallFields
+import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.PutThroughRules
 import os.meka.core.domain.BankHolidayFields
@@ -530,9 +532,15 @@ class CallAssistant(
                 }
                 // A retry finds the message written: it keeps the at-work reading it was taken with.
                 val atWork = if (exists(hh, id)) !away(hh, id) else atWork(hh)
+                // A business ringing back about a call card: the message names the booking, the card says they rang.
+                val card = runCatching { liveLine?.bookingFor(hh, event.from) }.getOrNull()
                 val values = CallAssistantRules.messageFields(event.from, now(), atWork, seconds = event.seconds) +
-                    (intro?.let { mapOf(HeldMessageFields.INTRO to it.fv()) } ?: emptyMap())
-                if (write(hh, id, values)) runCatching { onWritten(hh) }
+                    (intro?.let { mapOf(HeldMessageFields.INTRO to it.fv()) } ?: emptyMap()) +
+                    (card?.let { bookingFields(it.id, it.business) } ?: emptyMap())
+                if (write(hh, id, values)) {
+                    card?.let { linkCard(hh, id, it.id) }
+                    runCatching { onWritten(hh) }
+                }
                 VoiceReply.AskUrgent(atWork)
             }
             is VoiceEvent.Answered -> {
@@ -634,8 +642,11 @@ class CallAssistant(
                     put(HeldMessageFields.CALLBACK_LINE, line.callbackLine(slot).fv())
                 }
             }
+            // A business ringing back about a call card (never kept on a judged scam).
+            if (m?.scam != true) t.callbackFor?.let { putAll(bookingFields(it, t.callbackBusiness)) }
         }
         if (!write(hh, id, values)) return
+        if (m?.scam != true) t.callbackFor?.let { linkCard(hh, id, it) }
         val urgent = m?.urgent == true && m?.scam != true
         if (urgent && write(hh, id, mapOf(HeldMessageFields.URGENT to true.fv(), HeldMessageFields.URGENT_BY to CallNoticeRules.BY_SPEECH.fv()))) {
             runCatching { onUrgent(hh) }
@@ -644,6 +655,21 @@ class CallAssistant(
         }
         val read = listOfNotNull(m?.intro, words).joinToString(". ")
         runCatching { readWords(hh, id, read) }
+    }
+
+    /** The message's link to the call card a business rang back about ([BookingCallbackRules]). */
+    private fun bookingFields(cardId: String, business: String?): Map<String, FieldValue> = buildMap {
+        put(HeldMessageFields.BOOKING_ID, cardId.fv())
+        business?.trim()?.takeIf { it.isNotEmpty() }?.let { put(HeldMessageFields.BOOKING_BUSINESS, it.take(BookingCallRules.MAX_BUSINESS).fv()) }
+    }
+
+    /** The card's side: they rang back, when, and the message it left (once per call). */
+    private fun linkCard(hh: String, heldId: String, cardId: String) = runCatching {
+        write(
+            hh, cardId,
+            mapOf(BookingCallFields.CALLED_BACK_AT to FieldValue.Int64(now()), BookingCallFields.CALLED_BACK_HELD to heldId.fv()),
+            EntityTypes.BOOKING_CALL, opBase = heldId + "bookingcard",
+        )
     }
 
     /**

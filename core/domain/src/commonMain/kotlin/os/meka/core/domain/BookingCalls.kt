@@ -70,6 +70,9 @@ object BookingCallFields {
     const val LOOKED_UP_FOR = "lookedUpFor"
     const val FOUND_NUMBER = "foundNumber"
     const val FOUND_FROM = "foundFrom"
+    /** The business rang back (server, [BookingCallbackRules]): when, and the call assistant message it left. */
+    const val CALLED_BACK_AT = "calledBackAt"
+    const val CALLED_BACK_HELD = "calledBackHeld"
 }
 
 enum class BookingCallState(val code: String) {
@@ -126,6 +129,8 @@ data class BookingCall(
     val lookedUpFor: String? = null,
     val foundNumber: String? = null,
     val foundFrom: String? = null,
+    /** The business rang back on the assistant's number (server): when. */
+    val calledBackAtMs: Long? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -193,6 +198,8 @@ data class BookingCallRow(
     val triedAgainLine: String? = null,
     /** The number looked up: Use this number puts Obi's found number on the card (he still taps Call now after). */
     val canUseFound: Boolean = false,
+    /** "They rang back · Sun 8 Nov, 14:05 · their message is in While you were at work" ([BookingCallbackRules.cardLine]). */
+    val calledBackLine: String? = null,
 ) {
     val canRead: Boolean get() = transcript.isNotEmpty()
 }
@@ -342,6 +349,7 @@ object BookingCallRules {
             retriedAs = text(BookingCallFields.RETRIED_AS),
             lookup = text(BookingCallFields.LOOKUP), lookedUpFor = text(BookingCallFields.LOOKED_UP_FOR),
             foundNumber = text(BookingCallFields.FOUND_NUMBER), foundFrom = text(BookingCallFields.FOUND_FROM),
+            calledBackAtMs = num(BookingCallFields.CALLED_BACK_AT),
         )
     }
 
@@ -508,7 +516,8 @@ object BookingCallRules {
                     spoken = listOfNotNull("Call card for ${c.business}", c.what, "$whenTile, $window", c.people?.let { "$it people" }, status, block, c.result).joinToString(". "),
                 ).let { BookingLiveRules.withLive(it, c, nowMs, cal, PutThroughRules.dialable(mobile) != null) }
                     .copy(canTryAgain = canTryAgain(c, nowMs, cal), triedAgainLine = if (c.retriedAs != null) TRIED_AGAIN_LINE else null,
-                        canUseFound = draft && c.number == null && BookingNumberRules.usable(c, personal) != null)
+                        canUseFound = draft && c.number == null && BookingNumberRules.usable(c, personal) != null,
+                        calledBackLine = BookingCallbackRules.cardLine(c.calledBackAtMs, cal))
             }
     }
 

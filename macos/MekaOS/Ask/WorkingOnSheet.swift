@@ -328,6 +328,10 @@ struct WorkingOnSheet: View {
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
             .padding(.top, MekaSpace.xs)
         }
+        if let back = r.calledBackLine {
+            Text(LoneWordGlue.shared.kept(line: back)).font(MekaType.caption).foregroundStyle(palette.accent)
+                .padding(.top, MekaSpace.xs)
+        }
         if let tried = r.triedAgainLine {
             Text(LoneWordGlue.shared.kept(line: tried)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .padding(.top, MekaSpace.xs)

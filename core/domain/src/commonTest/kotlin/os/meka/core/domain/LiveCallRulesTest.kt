@@ -194,5 +194,8 @@ class LiveCallRulesTest {
         assertTrue(item.displayLine.endsWith(" · Call back Fri 16 Oct, 17:30"), item.displayLine)
         assertTrue(CallNoticeRules.happened(item, cal).endsWith(" · asked you to call back Fri 16 Oct, 17:30"))
         assertFalse("Call back" in item.copy(callback = null).displayLine)
+        // A business ringing back about a call card: the line names the booking.
+        val booking = item.copy(callback = null, booking = "Rosa's Kitchen")
+        assertTrue(booking.displayLine.endsWith(" · About your booking at Rosa's Kitchen"), booking.displayLine)
     }
 }

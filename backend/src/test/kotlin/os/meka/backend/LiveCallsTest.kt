@@ -382,4 +382,45 @@ class LiveCallsTest {
         assertTrue(t4.callbackSlots.isEmpty())
         assertTrue("Never promise a day or time" in t4.instruction)
     }
+
+    @Test
+    fun aBusinessRingingBackAboutABookingTalksToObiWhoKnowsIt() {
+        // Rosa's Kitchen was rung yesterday and booked a table for Saturday at 19:30 under Alex.
+        val sat = LondonCalendar.epochDayOf(nowMs) + 1
+        val card = os.meka.core.domain.BookingCall(
+            id = "bc1", business = "Rosa's Kitchen", number = "01632 960111", what = "Table for 4", day = sat, fromMin = 19 * 60, toMin = 20 * 60,
+            people = 4, note = null, state = os.meka.core.domain.BookingCallState.BOOKED, askedAtMs = nowMs - 2 * 86_400_000L,
+            approvedAtMs = nowMs - 2 * 86_400_000L, result = "Booked", cancelled = false, calledAtMs = nowMs - 86_400_000L,
+            bookedMin = 19 * 60 + 30, bookedName = "Alex",
+        )
+        val withCards = LiveCallLine(FieldReader.scanning(ops), store, configured = { true }, nowMs = { nowMs }, bookings = { listOf(card) })
+        val talker = CallAssistant(ops, FieldReader.scanning(ops), household = { "hh" }, now = { nowMs }, liveLine = withCards)
+        // Live conversation off: the business still talks to Obi, because Booking calls is on (absent = on).
+        set(WorkFields.CALL_ASSISTANT, FieldValue.Bool(true))
+        assertIs<VoiceReply.AskWho>(talker.handle("twilio", VoiceEvent.Incoming("BB0", "+447700900123")))
+        val reply = talker.handle("twilio", VoiceEvent.Incoming("BB1", "+441632960111")) as VoiceReply.LiveStream
+        val t = withCards.claim(reply.ticket, "BB1")!!
+        assertEquals("bc1", t.callbackFor)
+        assertTrue("Rosa's Kitchen" in t.instruction && "booked for Saturday 7 November at 19:30, for 4 people, under the name Alex" in t.instruction, t.instruction)
+        assertTrue("don't agree to anything" in t.instruction)
+        val meter = LiveCallRules.Meter(LiveCallRules.month(nowMs), 4, 1)
+        talker.liveEnded(t, LiveCallEnd(true, 60, 20, LiveCallRules.message(mapOf("who" to "Rosa's Kitchen", "about" to "the booking", "message" to "Can it be 20:00?")), ""), meter)
+        val id = CallAssistantRules.heldId("twilio", "BB1")
+        assertEquals(FieldValue.Text("bc1"), field(id, HeldMessageFields.BOOKING_ID))
+        assertEquals(FieldValue.Text("Rosa's Kitchen"), field(id, HeldMessageFields.BOOKING_BUSINESS))
+        val reader = FieldReader.scanning(ops)
+        assertEquals(FieldValue.Int64(nowMs), reader.latest("hh", EntityTypes.BOOKING_CALL, "bc1", os.meka.core.domain.BookingCallFields.CALLED_BACK_AT))
+        assertEquals(FieldValue.Text(id), reader.latest("hh", EntityTypes.BOOKING_CALL, "bc1", os.meka.core.domain.BookingCallFields.CALLED_BACK_HELD))
+        // A judged scam from that number is never linked.
+        val scam = t.copy(callId = "BB2")
+        talker.liveEnded(scam, LiveCallEnd(true, 60, 20, LiveCallRules.message(mapOf("who" to "Rosa's", "about" to "pay a deposit", "scam" to "true")), ""), meter)
+        assertNull(field(CallAssistantRules.heldId("twilio", "BB2"), HeldMessageFields.BOOKING_ID))
+        // Booking calls off: the business hears the script like anyone else.
+        set(WorkFields.CALL_BOOKING, FieldValue.Bool(false))
+        assertIs<VoiceReply.AskWho>(talker.handle("twilio", VoiceEvent.Incoming("BB3", "+441632960111")))
+        // The scripted message from that number still names the booking.
+        set(WorkFields.CALL_BOOKING, FieldValue.Bool(true))
+        talker.handle("twilio", VoiceEvent.Recorded("BB4", "+441632960111", 12))
+        assertEquals(FieldValue.Text("Rosa's Kitchen"), field(CallAssistantRules.heldId("twilio", "BB4"), HeldMessageFields.BOOKING_BUSINESS))
+    }
 }
