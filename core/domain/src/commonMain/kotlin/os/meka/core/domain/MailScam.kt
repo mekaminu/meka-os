@@ -17,8 +17,29 @@ package os.meka.core.domain
  */
 enum class MailScamKind { SCAM, REAL }
 
-/** What [MailScamRules.check] found: the company named, its real domain and the domain the email came from. */
-data class MailScamFind(val kind: MailScamKind, val brand: String, val realDomain: String, val fromDomain: String?)
+/**
+ * What [MailScamRules.check] (or [MailScamRules.bodyCheck]) found: the company named, its real domain and the domain the
+ * email came from. [why] is set for a scam found in the body ([MailScamRules.BODY_BRAND], [MailScamRules.BODY_GREETING],
+ * [MailScamRules.BODY_AUTH]), which reads "⚠ Possible scam · says Microsoft, sent from formlab.it".
+ */
+data class MailScamFind(
+    val kind: MailScamKind, val brand: String, val realDomain: String, val fromDomain: String?, val why: String? = null,
+)
+
+/**
+ * The body of an email, for [MailScamRules.bodyCheck]: its plain [text], its (sanitised) [html] for the links' real
+ * hosts and logos' alt text, the addresses it was sent to ([ownAddresses], for "Hi alex@hotmail.com,"), and the
+ * `Authentication-Results` header when the server has it.
+ */
+data class MailBodyFacts(
+    val fromAddress: String?,
+    val fromName: String?,
+    val subject: String?,
+    val text: String?,
+    val html: String? = null,
+    val ownAddresses: Collection<String> = emptyList(),
+    val authResults: String? = null,
+)
 
 object MailScamRules {
     /**
@@ -39,6 +60,30 @@ object MailScamRules {
         "refund pending", "you are owed", "tax refund", "parcel is held", "parcel held", "delivery failed", "redelivery fee",
         "customs fee", "subscription has expired", "subscription expired", "membership has expired", "mailbox is full",
         "storage is full", "password expires", "password will expire",
+        // Account checks (Meka, 2026-11-08: "Is Your Account Still Active?" from "Outlook Session" at an unrelated domain).
+        "account still active", "is your account active", "account is still active", "confirm account", "verify account",
+        "keep your account", "reactivate", "deactivation", "account deactivation", "account closure", "account will be deleted",
+        "will be deleted", "session expired", "session has expired", "mailbox will be", "storage quota", "quota exceeded",
+        "sign-in required", "sign in required", "re-validate", "revalidate", "validate your account", "account verification",
+    )
+
+    /**
+     * Subject words about the account itself: a display name naming a company from a domain that isn't the company's
+     * makes a possible scam with one of these even without a threat ("Outlook Session" · "Your mailbox").
+     */
+    val ACCOUNT_WORDS = listOf(
+        "account", "accounts", "password", "mailbox", "sign-in", "sign in", "login", "log in", "verify", "verification",
+        "security", "billing", "payment details", "storage", "session", "suspended", "suspension", "deactivate",
+        "deactivated", "expire", "expired", "expires", "expiring", "subscription",
+    )
+
+    /** Words in an email's body that press for action now (with a company named and its links elsewhere: a scam). */
+    val BODY_URGENCY = listOf(
+        "within 24 hours", "within 48 hours", "within 72 hours", "within 7 days", "within seven days", "within 3 days",
+        "within three days", "within 14 days", "or your account", "your account will", "will be closed", "will be deleted",
+        "will be suspended", "will be deactivated", "will be terminated", "will be permanently", "avoid suspension",
+        "avoid losing", "to avoid interruption", "to keep your account", "to continue using", "failure to", "click below",
+        "click here to", "confirm now", "verify now", "act now", "immediately",
     )
 
     /** Words of a prize draw, lottery or competition email (lower case, in the subject). */
@@ -66,10 +111,30 @@ object MailScamRules {
     private val BRANDS: List<Triple<String, String, List<String>>> by lazy {
         val junk = MailJunkRules.CLAIMED_SENDERS.map { (k, ds) -> Triple(k.trim(), display(k.trim()), ds) }
         val security = MailSecurityRules.SENDERS.filter { it.first.length >= 3 }.map { (n, ds) -> Triple(n.lowercase(), n, ds) }
-        (junk + security).groupBy { it.first }.map { (k, all) ->
-            Triple(k, all.last().second, all.flatMap { it.third }.distinct().filter { it !in FREE_MAIL })
+        val companies = (junk + security).groupBy { it.first }.map { (k, all) ->
+            Triple(k, all.last().second, (all.flatMap { it.third } + EXTRA_DOMAINS[k].orEmpty()).distinct().filter { it !in FREE_MAIL })
         }.filter { it.third.isNotEmpty() }
+        // Products count as their company: "Outlook Session" claims to be Microsoft.
+        val products = PRODUCTS.mapNotNull { (p, k) -> companies.firstOrNull { it.first == k }?.let { Triple(p, it.second, it.third) } }
+        companies + products
     }
+
+    /** Products phishing names instead of the company (lower case), with the company's token in [BRANDS]. */
+    val PRODUCTS: List<Pair<String, String>> = listOf(
+        "outlook" to "microsoft", "hotmail" to "microsoft", "office 365" to "microsoft", "office365" to "microsoft",
+        "microsoft 365" to "microsoft", "onedrive" to "microsoft", "one drive" to "microsoft", "sharepoint" to "microsoft",
+        "microsoft teams" to "microsoft", "windows live" to "microsoft", "msn" to "microsoft",
+        "gmail" to "google", "google drive" to "google", "google account" to "google", "google workspace" to "google",
+        "icloud" to "apple", "apple id" to "apple", "app store" to "apple", "itunes" to "apple",
+        "amazon prime" to "amazon", "prime video" to "amazon",
+    )
+
+    /** Company domains beyond the Junk and security lists (Microsoft's sign-in and Office mail). */
+    private val EXTRA_DOMAINS: Map<String, List<String>> = mapOf(
+        "microsoft" to listOf("microsoftonline.com", "office.com", "office365.com", "sharepointonline.com", "microsoft365.com"),
+        "google" to listOf("googlemail.com"),
+        "apple" to listOf("itunes.com", "apple.co.uk"),
+    )
 
     /** Domains anyone can get a mailbox on: never a company's "real address". */
     val FREE_MAIL = setOf("gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "hotmail.co.uk", "live.com",
@@ -109,15 +174,76 @@ object MailScamRules {
      */
     fun check(fromAddress: String?, fromName: String?, subject: String?): MailScamFind? {
         val text = clean(subject) + " " + clean(fromName)
-        if (!hasPhrase(text, THREATS)) return null
         val domain = MailSortRules.domain(fromAddress)
         val name = clean(fromName)
         val subj = clean(subject)
+        if (!hasPhrase(text, THREATS)) {
+            // A display name claiming a company, from a domain that isn't the company's, about the account: a scam.
+            if (!hasPhrase(subj, ACCOUNT_WORDS)) return null
+            val (_, shown, domains) = BRANDS.firstOrNull { (k, _, _) -> word(name, k) } ?: return null
+            if (domain != null && domains.any { endsWithDomain(domain, it) }) return null
+            return MailScamFind(MailScamKind.SCAM, shown, domains.first(), domain)
+        }
         // The display name's claim wins over one only in the subject ("Notification via PayPal").
         val brand = BRANDS.firstOrNull { (k, _, _) -> word(name, k) } ?: BRANDS.firstOrNull { (k, _, _) -> word(subj, k) } ?: return null
         val (_, shown, domains) = brand
         val real = domain != null && domains.any { endsWithDomain(domain, it) }
         return MailScamFind(if (real) MailScamKind.REAL else MailScamKind.SCAM, shown, domains.first(), domain)
+    }
+
+    const val BODY_BRAND = "brand"
+    const val BODY_GREETING = "greeting"
+    const val BODY_AUTH = "auth"
+
+    private val HREF = Regex("""href\s*=\s*["']?([^"'\s>]+)""", RegexOption.IGNORE_CASE)
+    private val ALT = Regex("""alt\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE)
+    private val BARE = Regex("""https?://[^\s"'<>)]+""", RegexOption.IGNORE_CASE)
+
+    /** The real hosts of the email's web links (href and bare https://…), without "www.", lower case. */
+    fun linkHosts(html: String?, text: String?): List<String> {
+        val urls = HREF.findAll(html.orEmpty()).map { it.groupValues[1] } + BARE.findAll(text.orEmpty()).map { it.value }
+        return urls.mapNotNull { u ->
+            val c = u.trim().lowercase()
+            if (!c.startsWith("http://") && !c.startsWith("https://")) return@mapNotNull null
+            c.substringAfter("//").substringBefore('/').substringBefore('?').substringBefore('#')
+                .substringAfterLast('@').substringBefore(':').removePrefix("www.").takeIf { it.contains('.') }
+        }.distinct().toList()
+    }
+
+    /** True when SPF, DKIM or DMARC failed outright in an `Authentication-Results` header (dmarc=fail, or spf and dkim both). */
+    fun authFailed(results: String?): Boolean {
+        val r = results?.lowercase() ?: return false
+        return "dmarc=fail" in r || ("spf=fail" in r && ("dkim=fail" in r || "dkim=none" in r))
+    }
+
+    /**
+     * Phishing that hides its threat in the body (Meka, 2026-11-08). The headers first ([check]); else a possible scam
+     * when, from a sender that isn't the company's own domain:
+     * - **the company is named** (in the text, the display name or a logo's alt text) **and its links go elsewhere**
+     *   (any web link whose host isn't the company's) **and it presses** ([THREATS] or [BODY_URGENCY]);
+     * - **it greets him by his email address** ("Hi alex@hotmail.com,", "Dear alex@…");
+     * - **the sender check failed** ([authFailed]), even from the company's own domain (a spoof).
+     * Real company mail from its own domain (account-security mail included) is never a body scam unless spoofed.
+     */
+    fun bodyCheck(f: MailBodyFacts): MailScamFind? {
+        check(f.fromAddress, f.fromName, f.subject)?.let { if (it.kind == MailScamKind.SCAM) return it }
+        val domain = MailSortRules.domain(f.fromAddress)
+        val html = f.html.orEmpty()
+        val body = clean(f.text?.takeIf { it.isNotBlank() } ?: MailHtmlSanitizer.text(html)).replace(Regex("\\s+"), " ")
+        val alts = ALT.findAll(html).joinToString(" ") { clean(it.groupValues[1]) }
+        val named = clean(f.fromName) + " " + clean(f.subject) + " " + alts + " " + body
+        val brand = BRANDS.firstOrNull { (k, _, _) -> word(clean(f.fromName), k) } ?: BRANDS.firstOrNull { (k, _, _) -> word(named, k) }
+        val own = brand != null && domain != null && brand.third.any { endsWithDomain(domain, it) }
+        fun find(why: String) = MailScamFind(MailScamKind.SCAM, brand?.second.orEmpty(), brand?.third?.first().orEmpty(), domain, why)
+        if (authFailed(f.authResults)) return find(BODY_AUTH)
+        if (own) return null
+        if (brand != null) {
+            val elsewhere = linkHosts(html, f.text).any { h -> brand.third.none { endsWithDomain(h, it) } }
+            if (elsewhere && (hasPhrase(body, THREATS) || hasPhrase(body, BODY_URGENCY))) return find(BODY_BRAND)
+        }
+        val greeting = Regex("(^|\\s)(hi|hello|dear|hey|attention|attn|greetings)[ ,:]+(\\S+@\\S+)")
+            .find(body.take(400))?.groupValues?.get(3)?.trim(',', '.', ':', '!')
+        return if (greeting != null && f.ownAddresses.any { it.trim().lowercase() == greeting }) find(BODY_GREETING) else null
     }
 
     /** True for a prize draw, lottery or competition subject. */
@@ -127,9 +253,17 @@ object MailScamRules {
     fun digest(subject: String?): Boolean = hasPhrase(clean(subject), DIGEST_WORDS)
 
     /** "⚠ Possible scam · sent from mail-x.com, not paypal.com" / "From PayPal's real address · log in at paypal.com yourself…". */
-    fun line(f: MailScamFind): String = when (f.kind) {
-        MailScamKind.SCAM -> "⚠ Possible scam · sent from ${f.fromDomain ?: "an unknown address"}, not ${f.realDomain}"
-        MailScamKind.REAL -> "From ${f.brand}'s real address · log in at ${f.realDomain} yourself, not through the email's link"
+    fun line(f: MailScamFind): String = when {
+        f.kind == MailScamKind.SCAM && f.why != null -> {
+            val from = "sent from ${f.fromDomain ?: "an unknown address"}"
+            "⚠ Possible scam · " + when (f.why) {
+                BODY_GREETING -> "greets you by your email address, $from"
+                BODY_AUTH -> "failed the sender check" + (if (f.brand.isNotEmpty()) ", says ${f.brand}" else "") + ", $from"
+                else -> "says ${f.brand}, $from"
+            }
+        }
+        f.kind == MailScamKind.SCAM -> "⚠ Possible scam · sent from ${f.fromDomain ?: "an unknown address"}, not ${f.realDomain}"
+        else -> "From ${f.brand}'s real address · log in at ${f.realDomain} yourself, not through the email's link"
     }
 
     /**

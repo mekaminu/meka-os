@@ -34,7 +34,8 @@ class MailSecurityTest {
         assertNull(MailSecurityRules.kind("security@g00gle-alerts.com", "Security alert"))
         assertNull(MailSecurityRules.kind("someone@outlook.com", "Your password was changed"))
         assertNull(MailSecurityRules.kind("someone@gmail.com", "New sign-in"))
-        assertEquals(MailSort.NOTIFICATION, sort("no-reply@alerts-paypal.example", "Security alert").sort)
+        // Named "Google" from a domain that isn't Google's, about security: a possible scam (2026-11-08), never security mail.
+        assertEquals(MailSortReason.SCAM, sort("no-reply@alerts-paypal.example", "Security alert").reason)
         // The provider's ordinary mail is not security mail.
         assertNull(MailSecurityRules.kind("no-reply@accounts.google.com", "Your storage is 80% full"))
         assertEquals(MailSort.NOTIFICATION, sort("noreply@google.com", "Your monthly Maps timeline").sort)

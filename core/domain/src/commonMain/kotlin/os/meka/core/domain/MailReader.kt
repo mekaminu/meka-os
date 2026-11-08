@@ -356,6 +356,8 @@ data class MailLinkCheck(
     val shown: String,
     /** "Open" / "Write an email". */
     val action: String,
+    /** False in a possible scam ([MailReaderLinks.scamCheck]): the panel only says where it goes; there's no Open. */
+    val openable: Boolean = true,
 )
 
 /** Links in an email: only https, http and mailto are ever followed, and each only after he sees where it really goes. */
@@ -383,6 +385,17 @@ object MailReaderLinks {
         val host = authority.substringAfterLast('@').substringBefore(':').lowercase().removePrefix("www.")
         if (host.isEmpty()) return null
         return MailLinkCheck(u, host, "Open $host?", u.take(MAX_SHOWN) + if (u.length > MAX_SHOWN) "…" else "", "Open")
+    }
+
+    const val SCAM_LINK = "Navilife won't open links in a possible scam"
+
+    /**
+     * A link in a possible scam (Meka, 2026-11-08): never opened from Navilife; the panel says where it really goes
+     * ("Goes to formlab-login.example · Navilife won't open links in a possible scam") with Cancel only.
+     */
+    fun scamCheck(url: String): MailLinkCheck? {
+        val c = check(url) ?: return null
+        return c.copy(title = "Goes to ${c.host} · $SCAM_LINK", action = "", openable = false)
     }
 }
 
@@ -428,6 +441,13 @@ data class MailReaderView(
      * can't be told.
      */
     val openLink: MailOpenLink? = null,
+    /**
+     * Phishing that hides its threat in the body (Meka, 2026-11-08): the red "⚠ Possible scam · says Microsoft, sent
+     * from formlab.it" banner on top ([MailScamRules.bodyCheck] over the whole email, or the card's own warning); then
+     * pictures stay hidden ([canShowImages] false), links don't open ([MailReaderLinks.scamCheck]) and the card's
+     * Bin & block leads. Null for an ordinary email.
+     */
+    val scam: String? = null,
 )
 
 /** Navilife's own handle for the email in a reader: a card's id ([MailReaderSource.ITEM]) or a tidy's email ([TIDIED]). */
@@ -538,6 +558,7 @@ object MailReaderRules {
         r: MailMessageAnswer?, fallback: MailReaderFallback, nowMs: Long, cal: LocalCalendar, images: Boolean,
         source: MailReaderSource? = null,
         marksRead: Boolean = false,
+        warning: String? = null,
     ): MailReaderView {
         val ok = r?.state == MailMessageAnswer.OK
         val problem = when {
@@ -555,6 +576,8 @@ object MailReaderRules {
         val html = if (ok) r!!.html?.takeIf { it.isNotBlank() } else null
         val rawText = if (ok) r!!.text?.takeIf { it.isNotBlank() } ?: html?.let { MailHtmlSanitizer.text(it) } else fallback.preview
         val text = rawText?.let { MailHtmlSanitizer.tidyText(it) }?.takeIf { it.isNotEmpty() }?.let { if (it.length > MAX_TEXT) it.take(MAX_TEXT) + "…" else it } ?: NO_TEXT
+        val scam = scamLine(r, ok, html, rawText, warning)
+        val shown = images && scam == null
         val blocked = if (ok) r!!.blockedImages else 0
         val attachments = if (ok) attachmentRows(r!!.attachments) else emptyList()
         val attachmentsLine = when (attachments.size) {
@@ -569,22 +592,34 @@ object MailReaderRules {
         val ccLine = if (ok) people("Cc", r!!.cc) else null
         val whenLine = whenLine(atMs, nowMs, cal)
         val spoken = listOfNotNull(
+            scam,
             "Email from $from" + (address?.let { ", $it" } ?: ""), subject, whenLine, "$account account", toLine, ccLine,
             attachmentsLine, problem,
         ).joinToString(". ")
         return MailReaderView(
             from = from, fromAddress = address, toLine = toLine, ccLine = ccLine, whenLine = whenLine, account = account,
-            subject = subject, page = html?.let { page(it, images) }, text = text, attachments = attachments,
+            subject = subject, page = html?.let { page(it, shown) }, text = text, attachments = attachments,
             attachmentsLine = attachmentsLine,
             imagesLine = when {
-                images && ok && html != null -> null
+                scam != null && blocked > 0 -> SCAM_IMAGES
+                shown && ok && html != null -> null
                 blocked == 1 -> "1 picture hidden to stop tracking"
                 blocked > 1 -> "$blocked pictures hidden to stop tracking"
                 else -> null
             },
-            canShowImages = ok && !images && blocked > 0,
-            note = note, problem = problem, spoken = spoken, source = if (ok) source else null,
+            canShowImages = ok && !shown && blocked > 0 && scam == null,
+            note = note, problem = problem, spoken = spoken, source = if (ok) source else null, scam = scam,
         )
+    }
+
+    const val SCAM_IMAGES = "Pictures stay hidden in a possible scam"
+
+    /** The scam banner: the whole email read ([MailScamRules.bodyCheck]), else the card's own scam warning, else null. */
+    private fun scamLine(r: MailMessageAnswer?, ok: Boolean, html: String?, text: String?, warning: String?): String? {
+        val found = if (ok) MailScamRules.bodyCheck(
+            MailBodyFacts(r!!.from.address, r.from.name, r.subject, text, html, (r.to + r.cc).mapNotNull { it.address }),
+        ) else null
+        return found?.let(MailScamRules::line) ?: warning?.takeIf { MailScamRules.scamLine(it) }
     }
 }
 

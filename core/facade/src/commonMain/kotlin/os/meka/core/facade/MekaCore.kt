@@ -8291,7 +8291,7 @@ class MekaCore(
         val fallback = os.meka.core.domain.MailReaderFallback(
             item?.from ?: "Unknown sender", item?.subject ?: "", item?.preview, item?.receivedAtMs ?: nowMs(), item?.account ?: "your",
         )
-        val view = readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images)
+        val view = readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images, item?.warning)
         item ?: return view
         // Slice 3: Open in Gmail/Outlook at the reader's foot, made now from the card and the account list (never kept).
         val facts = lastMailFacts ?: if (item.account == os.meka.core.domain.MailLabel.OUTLOOK.label) emptyList() else try {
@@ -8404,6 +8404,7 @@ class MekaCore(
 
     private suspend fun readMail(
         request: os.meka.core.wire.MailMessageCodec.Request, fallback: os.meka.core.domain.MailReaderFallback, images: Boolean,
+        warning: String? = null,
     ): os.meka.core.domain.MailReaderView {
         val source = os.meka.core.domain.MailReaderSource(request.kind, request.id, request.batch)
         val r = try { accountsApi?.mailMessage(request) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
@@ -8418,11 +8419,15 @@ class MekaCore(
         }
         // Slice 3: the server marks it read when Mail's "Mark an email read when I open it" is on; the note says so.
         val marksRead = onCore { mailAutopilotSetting().readerMarksRead }
-        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source, marksRead)
+        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source, marksRead, warning)
     }
 
-    /** A link tapped in the reader: where it really goes, for the confirm, or null when Navilife won't open it. */
-    fun mailLink(url: String): os.meka.core.domain.MailLinkCheck? = os.meka.core.domain.MailReaderLinks.check(url)
+    /**
+     * A link tapped in the reader: where it really goes, for the confirm, or null when Navilife won't open it. In a
+     * possible scam ([scam] true: the reader's banner) it only says where it goes; there's no Open.
+     */
+    fun mailLink(url: String, scam: Boolean = false): os.meka.core.domain.MailLinkCheck? =
+        if (scam) os.meka.core.domain.MailReaderLinks.scamCheck(url) else os.meka.core.domain.MailReaderLinks.check(url)
 
     /**
      * "Archived for you" shows which emails, slice 4: **Open in Gmail / Open in Outlook** on an email's preview. The

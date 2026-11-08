@@ -123,6 +123,14 @@ struct MailReaderSheet: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(v.spoken)
+        // A possible scam (2026-11-08): the red banner on top; pictures stay hidden and links don't open.
+        if let scam = v.scam {
+            Text(scam).font(MekaType.metaStrong).foregroundStyle(palette.critical)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.critical.opacity(0.12), in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .accessibilityIdentifier("mail-reader-scam")
+        }
         if let problem = v.problem {
             Text(problem).font(MekaType.itemMeta).foregroundStyle(palette.critical)
         }
@@ -138,7 +146,7 @@ struct MailReaderSheet: View {
             if let page = v.page {
                 MailWebView(page: page) { url in
                     MekaHaptics.tick()
-                    let c = MailReaderLinks.shared.check(url: url)
+                    let c = v.scam != nil ? MailReaderLinks.shared.scamCheck(url: url) : MailReaderLinks.shared.check(url: url)
                     link = c
                     linkLine = c == nil ? MailReaderLinks.shared.NOT_OPENED : nil
                 }
@@ -161,11 +169,13 @@ struct MailReaderSheet: View {
                 Text(l.title).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
                 Text(l.shown).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(4).textSelection(.enabled)
                 HStack(spacing: MekaSpace.xs) {
-                    MailNeedsPill(label: l.action, palette: palette, spoken: "\(l.action): \(l.shown)", action: {
-                        MekaHaptics.light()
-                        if let u = URL(string: l.url) { NSWorkspace.shared.open(u) }
-                        link = nil
-                    })
+                    if l.openable {
+                        MailNeedsPill(label: l.action, palette: palette, spoken: "\(l.action): \(l.shown)", action: {
+                            MekaHaptics.light()
+                            if let u = URL(string: l.url) { NSWorkspace.shared.open(u) }
+                            link = nil
+                        })
+                    }
                     MailNeedsPill(label: MailReaderLinks.shared.CANCEL, palette: palette, quiet: true, spoken: "Don't open the link",
                                   action: { MekaHaptics.tick(); link = nil })
                 }
@@ -215,7 +225,8 @@ struct MailReaderSheet: View {
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         }
         HStack(spacing: MekaSpace.xs) {
-            ForEach(actions) { a in
+            // In a possible scam the card's Bin & block (critical) leads.
+            ForEach(v.scam != nil ? actions.filter { $0.critical } + actions.filter { !$0.critical } : actions) { a in
                 MailNeedsPill(label: a.label, palette: palette, critical: a.critical, spoken: a.spoken,
                               action: { MekaHaptics.medium(); dismiss(); a.action() })
             }

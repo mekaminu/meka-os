@@ -182,6 +182,15 @@ internal fun MailReaderSheet(
                     v.ccLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2) }
                     Text("${v.whenLine} · ${v.account}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 }
+                // A possible scam (2026-11-08): the red banner on top; pictures stay hidden and links don't open.
+                v.scam?.let {
+                    Text(
+                        it, style = MekaType.metaStrong, color = Meka.colors.critical,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                            .background(Meka.colors.critical.copy(alpha = 0.12f))
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("mail-reader-scam"),
+                    )
+                }
                 v.problem?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reader-problem")) }
                 // "2 pictures hidden to stop tracking" with Show images; it folds away once shown.
                 AnimatedVisibility(v.canShowImages, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut()) {
@@ -195,7 +204,7 @@ internal fun MailReaderSheet(
                     if (page != null) {
                         MailWebView(page, images) { url ->
                             haptics.tick()
-                            val c = MailReaderLinks.check(url)
+                            val c = if (v.scam != null) MailReaderLinks.scamCheck(url) else MailReaderLinks.check(url)
                             link = c
                             linkLine = if (c == null) MailReaderLinks.NOT_OPENED else null
                         }
@@ -221,7 +230,7 @@ internal fun MailReaderSheet(
                         Text(l.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary)
                         Text(l.shown, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 4)
                         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            MailNeedsPill(l.action, spoken = "${l.action}: ${l.shown}") {
+                            if (l.openable) MailNeedsPill(l.action, spoken = "${l.action}: ${l.shown}") {
                                 haptics.light()
                                 runCatching { uri.openUri(l.url) }
                                 link = null
@@ -270,7 +279,9 @@ internal fun MailReaderSheet(
                 }
                 // The card's own answers, then Open in Gmail/Outlook as the quieter way out.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    actions.forEach { a -> MailNeedsPill(a.label, spoken = a.spoken, critical = a.critical) { haptics.medium(); act(a) } }
+                    // In a possible scam the card's Bin & block (critical) leads.
+                    (if (v.scam != null) actions.sortedByDescending { it.critical } else actions)
+                        .forEach { a -> MailNeedsPill(a.label, spoken = a.spoken, critical = a.critical) { haptics.medium(); act(a) } }
                     if (openLabel != null && onOpenInMail != null) {
                         MailNeedsPill(openLabel, quiet = true, spoken = "$openLabel, ${v.subject}") { haptics.light(); onOpenInMail() }
                     } else v.openLink?.let { l ->
