@@ -23,6 +23,10 @@ hidden in a possible scam", CSP img-src data: even after Show images), links thr
 signals, a real Microsoft alert and ordinary mail untouched, the reader). Core, Fold, Mac; no server change; Mac checked
 nightly.
 
+### Phishing that hides its threat in the body, slice 3 (2026-11-08)
+
+A sure scam goes to Junk by itself. Core `MailScamJunkRules` (sure: sorted SCAM and `MailScamRules.nameClaim` — the display name claims a company from another domain — or a body-check line; moves: never a thread he wrote in, keep addresses (partner, correspondents), a KEEP rule, protected senders, security mail; the day's batch id per account with rounds past an undone one; summary/detail; `unblockFields` takes off only the block the batch set). New `MailTidy.SCAM_JUNK` ("→ Junk", `scamJunked` count, chip "Scam · Junk, sender blocked", place JUNK). Server: `scamJunk` stage after `bodyScams`, before the cards: Gmail adds SPAM and removes INBOX (Undo the reverse), Outlook moves to junkemail (Undo to inbox); marks read; blocks each sender with no rule of his (`senderFieldsForCard` BLOCK); one `mail_tidy` per account per London day accumulating the emails; batch Undo and a single email's Put back clear the blocks (`scamUnblock`). Tests: MailScamJunkTest (his screenshot's email is sure, subject-only stays unsure, own domain no claim, never known/kept/banks/security, batch lines, unblock window), MailSyncTest (sure scam to Spam with sender blocked, the day's batch grows, Undo brings it back and unblocks; never a kept sender or a replied thread); the prize test now expects the PayPal scam in Spam. Help: two tips in mail.md.
+
 ### Phishing that hides its threat in the body, slice 2 (2026-11-08)
 The server's body check when mail is sorted. `Integrations.bodyScams` (stage before `publishMailNeeds`): each inbox
 email in Needs you within the cards' window that `MailScamRules.bodyDue` allows (not KNOWN_PERSON, OWN, PUBLIC_BODY,

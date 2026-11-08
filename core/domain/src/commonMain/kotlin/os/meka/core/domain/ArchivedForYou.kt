@@ -108,7 +108,7 @@ object ArchivedForYouRules {
         // Slice 3d: the receipts' total when the tidies priced them: "3 receipts and orders £84.20" ("… £84.20 on 2").
         val priced = standing.sumOf { it.receiptsPriced }
         val pence = standing.mapNotNull { it.receiptsPence }.takeIf { it.isNotEmpty() }?.sum()
-        val parts = listOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.TRASH, MailTidy.JUNK_TRASH, MailTidy.RESCUE).mapNotNull { t ->
+        val parts = listOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.TRASH, MailTidy.JUNK_TRASH, MailTidy.RESCUE, MailTidy.SCAM_JUNK).mapNotNull { t ->
             standing.sumOf { it.kinds[t] ?: 0 }.takeIf { it > 0 }?.let { n ->
                 val money = if (t == MailTidy.RECEIPT && pence != null && priced > 0) {
                     " " + MailReceiptRules.format(pence) + if (priced < n) " on $priced" else ""

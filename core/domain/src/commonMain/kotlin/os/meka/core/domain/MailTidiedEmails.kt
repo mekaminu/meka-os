@@ -148,6 +148,7 @@ object MailTidiedRules {
         MailTidy.TRASH -> "Unsubscribed · Trash"
         MailTidy.JUNK_TRASH -> "Junk · Trash"
         MailTidy.RESCUE -> "Rescued from Junk"
+        MailTidy.SCAM_JUNK -> "Scam · Junk, sender blocked"
         MailTidy.KEEP -> "Kept"
     }
 
@@ -170,6 +171,7 @@ object MailTidiedRules {
         MailTidy.TRASH -> "email to Trash" to "emails to Trash"
         MailTidy.JUNK_TRASH -> "junk email" to "junk emails"
         MailTidy.RESCUE -> "email rescued from Junk" to "emails rescued from Junk"
+        MailTidy.SCAM_JUNK -> "scam email" to "scam emails"
         MailTidy.KEEP -> "email" to "emails"
     }
 

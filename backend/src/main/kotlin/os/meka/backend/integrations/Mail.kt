@@ -435,7 +435,8 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
             val label = t.label?.let { listOf(labelId(accessToken, it)) }.orEmpty()
             // Slice 3c: a rescued email leaves Spam for the inbox, starred and labelled; the rest leave the inbox.
             val rescue = t == MailTidy.RESCUE
-            val adding = if (rescue) label + listOf("INBOX", "STARRED") else label
+            // Phishing in the body, slice 3: a sure scam leaves the inbox for Spam (Gmail learns from it; kept 30 days).
+            val adding = if (rescue) label + listOf("INBOX", "STARRED") else if (t == MailTidy.SCAM_JUNK) listOf("SPAM") else label
             for (chunk in ids.chunked(1000)) {
                 val a = http.call("POST", "$API/messages/batchModify", accessToken, buildJsonObject {
                     putJsonArray("ids") { chunk.forEach { add(it) } }
@@ -461,7 +462,12 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
             val rescue = t == MailTidy.RESCUE
             val a = http.call("POST", "$API/messages/${Http.enc(id)}/modify", accessToken, buildJsonObject {
                 putJsonArray("addLabelIds") { add(if (rescue) "SPAM" else "INBOX") }
-                putJsonArray("removeLabelIds") { label?.let { add(it) }; if (rescue) { add("INBOX"); add("STARRED") } }
+                putJsonArray("removeLabelIds") {
+                    label?.let { add(it) }
+                    if (rescue) { add("INBOX"); add("STARRED") }
+                    // Phishing in the body, slice 3: a scam put back leaves Spam for the inbox.
+                    if (t == MailTidy.SCAM_JUNK) add("SPAM")
+                }
             })
             if (a.status in 200..299) done[id] = id
         }
@@ -726,6 +732,8 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             val folder = when (t) {
                 MailTidy.TRASH, MailTidy.JUNK_TRASH -> "deleteditems"
                 MailTidy.RESCUE -> "inbox"
+                // Phishing in the body, slice 3: a sure scam to Junk Email.
+                MailTidy.SCAM_JUNK -> "junkemail"
                 else -> "archive"
             }
             val moved = move(accessToken, id, folder) ?: continue

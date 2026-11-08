@@ -66,6 +66,7 @@ object MailOpenRules {
         return when (e.tidy) {
             MailTidy.TRASH, MailTidy.JUNK_TRASH -> MailPlace.TRASH
             MailTidy.RESCUE, MailTidy.KEEP -> MailPlace.INBOX
+            MailTidy.SCAM_JUNK -> MailPlace.JUNK
             MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE -> MailPlace.ARCHIVE
         }
     }

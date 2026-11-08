@@ -368,7 +368,7 @@ object MailBacklogRules {
             MailTidy.NEWSLETTER -> MailBacklogKind.NEWSLETTER
             MailTidy.RECEIPT -> MailBacklogKind.RECEIPT
             MailTidy.ARCHIVE -> MailBacklogKind.ARCHIVE
-            MailTidy.KEEP, MailTidy.TRASH, MailTidy.JUNK_TRASH, MailTidy.RESCUE -> MailBacklogKind.KEEP
+            MailTidy.KEEP, MailTidy.TRASH, MailTidy.JUNK_TRASH, MailTidy.RESCUE, MailTidy.SCAM_JUNK -> MailBacklogKind.KEEP
         }
     }
 

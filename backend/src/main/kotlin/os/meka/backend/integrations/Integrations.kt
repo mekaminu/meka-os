@@ -11,6 +11,7 @@ import os.meka.core.domain.MailSorted
 import os.meka.core.domain.MailNoteRules
 import os.meka.core.domain.MailSecurityRules
 import os.meka.core.domain.MailScamRules
+import os.meka.core.domain.MailScamJunkRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MoneyBusinessMail
@@ -815,6 +816,8 @@ class Integrations(
         stage(a, "junkClearOut") { junkClearOut(a, m, token, ms) }
         // Phishing in the body, slice 2: the bodies of new Needs you mail checked for a scam, before the cards.
         stage(a, "bodyScams") { bodyScams(a, m, token, ms) }
+        // Phishing in the body, slice 3: a sure scam to the account's Junk, its sender blocked (before the cards).
+        stage(a, "scamJunk") { scamJunk(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         stage(a, "publishMailNeeds") { publishMailNeeds(a, ms) }
         // Drafted replies come to him: a draft on the card of each new email that asks him something (sent only on his tap).
@@ -1698,6 +1701,79 @@ class Integrations(
     }
 
     /**
+     * Phishing that hides its threat in the body, slice 3 (Meka, 2026-11-08: "it should be blocked and deleted"): each
+     * sure scam still in the inbox ([MailScamJunkRules.moves]: sorted a scam with a company-claiming display name or a
+     * body check that found it; never anyone he knows or keeps, banks, schools, public bodies or security mail) goes to
+     * the account's Junk/Spam ([MailTidy.SCAM_JUNK], recoverable), is marked read and its sender blocked
+     * ([MailSenderRule.BLOCK]), at most [MailScamJunkRules.PER_CHECK] a check, whether or not Autopilot is on (his ask is
+     * the permission; Navilife's Pause and Inbox's Pause stop it). The day's moves are one `mail_tidy` batch with the
+     * emails and Undo (which also takes the blocks off again). The body is never kept.
+     */
+    internal fun scamJunk(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        if (mailPaused(hh)) return
+        val never = ms.neverTidied(a.id)
+        val inbox = ms.inboxSorted(a.id).filter { (h, s) -> h.inInbox && h.id !in never && s.reason == MailSortReason.SCAM }
+        if (inbox.isEmpty()) return
+        val keep = keepAddresses(hh)
+        val senders = runCatching { reader.entities(hh, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+        fun ruleOf(h: MailHeader) = h.fromAddress?.let { MailSenderRuleRules.read(senders[MailUnsubscribeRules.senderId(a.id, it.lowercase())]) }
+        val replied by lazy { m.repliedThreads(token, now() - MAIL_WINDOW_MS) }
+        val due = inbox.filter { (h, s) ->
+            MailScamJunkRules.sure(s, h.fromAddress, h.fromName, bodyChecked[bodyKey(a.id, h.id)]) &&
+                MailScamJunkRules.moves(MailTidyFacts(
+                    h.fromAddress, h.inInbox, s, keep,
+                    replied = h.threadId?.let { it in replied } == true, rule = ruleOf(h),
+                ), h.fromName, bodyChecked[bodyKey(a.id, h.id)])
+        }.map { it.first }.sortedByDescending { it.receivedAtMs }.take(MailScamJunkRules.PER_CHECK)
+        if (due.isEmpty()) return
+        val nowMs = now()
+        val moved = m.tidyKept(token, due.associate { it.id to MailTidy.SCAM_JUNK }).first
+        val done = due.filter { it.id in moved }
+        if (done.isEmpty()) return
+        // The day's batch (a new round once he put back the day's first).
+        val day = LONDON.epochDayOf(nowMs)
+        val batches = reader.entities(hh, EntityTypes.MAIL_TIDY)
+        var round = 1
+        var batch: os.meka.core.domain.MailTidyBatch? = null
+        while (true) {
+            val id = MailScamJunkRules.batchId(a.id, day, round)
+            batch = batches[id]?.let { MailAutopilotRules.readBatch(id, it) }
+            if (batch == null || batch.canUndo) break
+            round++
+        }
+        val batchId = MailScamJunkRules.batchId(a.id, day, round)
+        ms.recordTidy(a.id, batchId, done.map { MailMoved(it.id, moved.getValue(it.id), MailTidy.SCAM_JUNK) })
+        if (markingRead(hh)) markRead(m, token, done.filter { it.unread }.map { moved.getValue(it.id) }, true)
+        done.forEach { h -> ms.put(hh, a.id, h.copy(inInbox = false)) }
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        // Each sender blocked (the rule he'd set with Bin & block), unless he set a rule of his own on it.
+        for (h in done.distinctBy { it.fromAddress?.lowercase() }) {
+            val address = h.fromAddress?.lowercase()?.takeIf { it.isNotEmpty() } ?: continue
+            val id = MailUnsubscribeRules.senderId(a.id, address)
+            if (MailSenderRuleRules.read(senders[id]) != null) continue
+            MailSenderRuleRules.senderFieldsForCard(senders[id], account, h.fromName, address, h.receivedAtMs, nowMs, MailSenderRule.BLOCK)
+                ?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+        }
+        val earlier = batch?.emails.orEmpty()
+        val fresh = tidiedEmails(a, ms, done.map { it to MailTidy.SCAM_JUNK })
+        val emails = MailTidiedRules.decode((fresh[MailTidyBatchFields.EMAILS] as? FieldValue.Text)?.value)
+        val all = (emails + earlier).distinctBy { it.key }
+        writeTidy(a, batchId, MailScamJunkRules.batchFields(batch?.atMs ?: nowMs, account, all.size.coerceAtLeast((batch?.count ?: 0) + done.size)) +
+            MailTidiedRules.fields(all))
+    }
+
+    /** Phishing in the body, slice 3: the blocks a scam batch set come off after its Undo (or one email's Put back). */
+    private fun scamUnblock(a: AccountRow, ms: MailStore, b: os.meka.core.domain.MailTidyBatch, items: List<MailMoved>, undoAtMs: Long) {
+        val headers = ms.messages(a.id).associateBy { it.id }
+        val senders = runCatching { reader.entities(a.householdId, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+        items.filter { it.tidy == MailTidy.SCAM_JUNK }.mapNotNull { (headers[it.id] ?: headers[it.movedId])?.fromAddress?.lowercase() }.distinct().forEach { address ->
+            val id = MailUnsubscribeRules.senderId(a.id, address)
+            MailScamJunkRules.unblockFields(senders[id], b.atMs, undoAtMs, now())?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+        }
+    }
+
+    /**
      * Drafted replies come to him ([MailAutoDraftRules]): each email of this account on the cards that needs a reply
      * and has no draft yet gets one from MEKA's AI ([mailDrafter], the `mail.draft` call: the account's label, the
      * sender's name, the subject, the preview and up to three of his own sent replies for his tone), at most
@@ -2179,6 +2255,7 @@ class Integrations(
             // Inbox fixes, slice 1: put back unread, as it came.
             if (markingRead(a.householdId)) markRead(m, token, items.filter { it.tidy.marksRead }.mapNotNull { back[it.movedId] }, false)
             if (interrupted) continue
+            if (MailScamJunkRules.scamBatch(b)) runCatching { scamUnblock(a, ms, b, items, b.undoAskedAtMs ?: now()) }
             writeTidy(a, b.id, mapOf(
                 MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
                 MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(back.size, items.size, if (b.junk) "in Junk" else "in the inbox")),
@@ -2224,6 +2301,7 @@ class Integrations(
                     backId = back[item.movedId]
                     if (putBack) {
                         ms.neverTidy(a.id, listOfNotNull(item.id, item.movedId, backId))
+                        if (item.tidy == MailTidy.SCAM_JUNK) runCatching { scamUnblock(a, ms, b, listOf(item), ask.atMs) }
                         if (markingRead(a.householdId) && item.tidy.marksRead) markRead(m, token, listOfNotNull(backId), false)
                         backKeys += ask.key
                     }

@@ -34,7 +34,13 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
      */
     JUNK_TRASH("junk email", "junk emails", null),
     /** Slice 3c: an email that looks real rescued from Junk to the inbox and flagged (Gmail: starred, labelled); Undo returns it to Junk. */
-    RESCUE("email rescued from Junk", "emails rescued from Junk", "Navilife/Rescued");
+    RESCUE("email rescued from Junk", "emails rescued from Junk", "Navilife/Rescued"),
+    /**
+     * Phishing in the body, slice 3 (Meka, 2026-11-08: "emails like this … should be blocked and deleted"): a sure scam
+     * ([MailScamJunkRules.sure]) moved from the inbox to the account's Junk/Spam (Gmail's SPAM label, Outlook's Junk
+     * Email folder: recoverable, never deleted for good), its sender blocked; Undo puts it back in the inbox.
+     */
+    SCAM_JUNK("scam email", "scam emails", null);
 
     /**
      * Inbox fixes, slice 1 (Meka, 2026-10-15: "I thought it would mark emails as read"): a tidy that takes mail away from
@@ -48,6 +54,7 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
         this == RESCUE -> "→ inbox, flagged"
         label != null -> "→ $label"
         this == TRASH || this == JUNK_TRASH -> "→ Trash"
+        this == SCAM_JUNK -> "→ Junk"
         else -> "archived"
     }
 
@@ -189,6 +196,8 @@ object MailTidyBatchFields {
     /** Slice 3c: the daily Junk review's counts (Int64) and its flag (Bool). */
     const val JUNK_TRASHED = "junkTrashed"
     const val RESCUED = "rescued"
+    /** Phishing in the body, slice 3: sure scams moved to Junk (Int64). */
+    const val SCAM_JUNKED = "scamJunked"
     const val JUNK = "junk"
     /**
      * Slice 3d: what the batch's receipts cost (Int64, pence, the priced ones only), how many were priced (Int64) and
@@ -219,6 +228,7 @@ object MailTidyBatchFields {
         MailTidy.TRASH -> TRASHED
         MailTidy.JUNK_TRASH -> JUNK_TRASHED
         MailTidy.RESCUE -> RESCUED
+        MailTidy.SCAM_JUNK -> SCAM_JUNKED
         MailTidy.KEEP -> null
     }
 }

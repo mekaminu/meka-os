@@ -282,7 +282,7 @@ class MailSyncTest {
             }
             return fromJunk + items.filterKeys { it in mailbox && it !in fromJunk }.mapValues { (id, t) ->
                 val h = mailbox.getValue(id)
-                mailbox[id] = h.copy(inInbox = false, labels = h.labels - "INBOX" + listOfNotNull(t.label))
+                mailbox[id] = h.copy(inInbox = false, labels = h.labels - "INBOX" + listOfNotNull(t.label) + listOfNotNull("SPAM".takeIf { t == MailTidy.SCAM_JUNK }))
                 id
             }
         }
@@ -294,7 +294,7 @@ class MailSyncTest {
                 id to id
             }.toMap() + items.filter { (id, t) -> id in mailbox && t != MailTidy.JUNK_TRASH && t != MailTidy.RESCUE }.mapValues { (id, t) ->
                 val h = mailbox.getValue(id)
-                mailbox[id] = h.copy(inInbox = true, labels = h.labels.filter { it != t.label } + "INBOX")
+                mailbox[id] = h.copy(inInbox = true, labels = h.labels.filter { it != t.label && !(t == MailTidy.SCAM_JUNK && it == "SPAM") } + "INBOX")
                 id
             }
 
@@ -863,15 +863,97 @@ class MailSyncTest {
         assertEquals(MailSorted(MailSort.FYI, MailSortReason.OWN, true), ms.sortOf(id, "n1"))
         assertEquals(MailSortReason.DIGEST, ms.sortOf(id, "d1")!!.reason)
         assertEquals(MailSortReason.SCAM, ms.sortOf(id, "x1")!!.reason)
-        // Needs you holds the scam (with its warning) and Sam's email; slice 3: his own email with a link comes as a
-        // note to self (its site only); nothing else.
+        // Needs you holds Sam's email; slice 3: his own email with a link comes as a note to self (its site only); the
+        // scam ("Notification via PayPal" from another domain, a sure one) went to Spam (phishing in the body, slice 3).
         val shown = items(ops).values.filter { (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L }
-        assertEquals(setOf("Your account will be closed", "Are you free Saturday?", "https://example.com/article"), shown.map { (it[MailItemFields.SUBJECT] as FieldValue.Text).value }.toSet())
+        assertEquals(setOf("Are you free Saturday?", "https://example.com/article"), shown.map { (it[MailItemFields.SUBJECT] as FieldValue.Text).value }.toSet())
         assertEquals(FieldValue.Text("example.com"), shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("https://example.com/article") }[MailItemFields.NOTE])
         assertTrue(shown.filter { it[MailItemFields.SUBJECT] != FieldValue.Text("https://example.com/article") }.none { it.containsKey(MailItemFields.NOTE) })
-        val scam = shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("Your account will be closed") }
-        assertEquals(FieldValue.Text("⚠ Possible scam · sent from mail-notify.example, not paypal.com"), scam[MailItemFields.WARNING])
+        assertTrue("SPAM" in gmail.mailbox.getValue("x1").labels)
+        assertEquals(FieldValue.Text("⚠ Possible scam · sent from mail-notify.example, not paypal.com"),
+            FieldValue.Text(os.meka.core.domain.MailScamRules.itemWarning(MailSortReason.SCAM, "service@mail-notify.example", "Notification via PayPal", "Your account will be closed")))
         assertNull(shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("Are you free Saturday?") }[MailItemFields.WARNING])
+    }
+
+    @Test
+    fun aSureScamGoesToSpamWithItsSenderBlockedAndUndoBringsItBack() {
+        // Phishing in the body, slice 3 (Meka, 2026-11-08): his screenshot's email, a subject-only "PayPal" one that
+        // stays an unsure warning, and a real Microsoft security alert that is never touched.
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        gmail.mailbox["o1"] = msg("o1", 0, "formazione@formlab.example").copy(fromName = "Outlook Session", subject = "Is Your Account Still Active?")
+        gmail.mailbox["u1"] = msg("u1", 0, "news@deals-mail.example").copy(fromName = "Deals Desk", subject = "Your PayPal account will be suspended")
+        gmail.mailbox["m1"] = msg("m1", 0, "account-security-noreply@accountprotection.microsoft.com")
+            .copy(fromName = "Microsoft account team", subject = "Microsoft account security alert")
+        gmail.nextRound = { MailChanges(fetch = listOf("o1", "u1", "m1"), cursor = "h2") }
+        now += 60_000
+        i.syncAccount(id)
+        assertEquals(MailSortReason.SCAM, ms.sortOf(id, "o1")!!.reason)
+        assertEquals(MailSortReason.SCAM, ms.sortOf(id, "u1")!!.reason)
+        // The sure one is in Spam, out of the inbox; the unsure one and the security alert stay.
+        assertTrue("SPAM" in gmail.mailbox.getValue("o1").labels)
+        assertFalse(gmail.mailbox.getValue("o1").inInbox)
+        assertTrue(gmail.mailbox.getValue("u1").inInbox)
+        assertTrue(gmail.mailbox.getValue("m1").inInbox)
+        val shown = items(ops).values.filter { (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L }
+            .map { (it[MailItemFields.SUBJECT] as FieldValue.Text).value }.toSet()
+        assertFalse("Is Your Account Still Active?" in shown)
+        assertTrue("Your PayPal account will be suspended" in shown)
+        // Its sender is blocked; the day's batch says so, with the email in it.
+        val sender = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+            .getValue(MailUnsubscribeRules.senderId(id, "formazione@formlab.example"))
+        assertEquals(MailSenderRule.BLOCK, MailSenderRuleRules.read(sender))
+        val (batchId, f) = tidies(ops).entries.single()
+        assertEquals(FieldValue.Text("Moved 1 scam email to Junk · Personal"), f[MailTidyBatchFields.SUMMARY])
+        assertEquals(FieldValue.Int64(1), f[MailTidyBatchFields.SCAM_JUNKED])
+        val b = MailAutopilotRules.readBatch(batchId, f)!!
+        assertEquals(listOf("Is Your Account Still Active?"), b.emails.map { it.subject })
+        assertEquals(MailTidy.SCAM_JUNK, b.emails.single().tidy)
+        // A second scam later the same day joins the day's batch.
+        gmail.mailbox["o2"] = msg("o2", 0, "help@desk-mail.example").copy(fromName = "Office 365 Team", subject = "Confirm account to keep your mailbox")
+        gmail.nextRound = { MailChanges(fetch = listOf("o2"), cursor = "h3") }
+        now += 60_000
+        i.syncAccount(id)
+        assertEquals(FieldValue.Text("Moved 2 scam emails to Junk · Personal"), tidies(ops).getValue(batchId)[MailTidyBatchFields.SUMMARY])
+        assertEquals(1, tidies(ops).size)
+        // Undo: both back in the inbox, out of Spam, never moved again, and the blocks it set come off.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("o1").inInbox)
+        assertFalse("SPAM" in gmail.mailbox.getValue("o1").labels)
+        assertTrue("o1" in ms.neverTidied(id))
+        val after = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+        assertNull(MailSenderRuleRules.read(after[MailUnsubscribeRules.senderId(id, "formazione@formlab.example")]))
+        now += 60_000
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("o1").inInbox)
+    }
+
+    @Test
+    fun aScamFromSomeoneHeWritesToOrKeepsIsNeverMoved() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        gmail.mailbox["o1"] = msg("o1", 0, "formazione@formlab.example").copy(fromName = "Outlook Session", subject = "Is Your Account Still Active?")
+        // He set Always keep on this sender.
+        device(ops, EntityTypes.MAIL_SENDER, MailUnsubscribeRules.senderId(id, "formazione@formlab.example"), os.meka.core.domain.MailSenderFields.RULE, FieldValue.Text("KEEP"))
+        device(ops, EntityTypes.MAIL_SENDER, MailUnsubscribeRules.senderId(id, "formazione@formlab.example"), os.meka.core.domain.MailSenderFields.RULE_AT, FieldValue.Int64(now))
+        // In a thread he wrote in.
+        gmail.mailbox["o2"] = msg("o2", 0, "it@helpdesk-mail.example").copy(fromName = "Outlook Support", subject = "Your account will be closed")
+        gmail.sentThreads += "t-o2"
+        gmail.nextRound = { MailChanges(fetch = listOf("o1", "o2"), cursor = "h2") }
+        now += 60_000
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("o1").inInbox)
+        assertTrue(gmail.mailbox.getValue("o2").inInbox)
+        assertTrue(gmail.tidyCalls.none { c -> MailTidy.SCAM_JUNK in c.values })
     }
 
     @Test

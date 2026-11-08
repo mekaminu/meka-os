@@ -191,6 +191,17 @@ object MailScamRules {
         return MailScamFind(if (real) MailScamKind.REAL else MailScamKind.SCAM, shown, domains.first(), domain)
     }
 
+    /**
+     * Phishing in the body, slice 3: the display name itself claims a company ("Outlook Session", "PayPal Service")
+     * and the email isn't sent from that company's domain (or a subdomain of it).
+     */
+    fun nameClaim(fromAddress: String?, fromName: String?): Boolean {
+        val name = clean(fromName)
+        val (_, _, domains) = BRANDS.firstOrNull { (k, _, _) -> word(name, k) } ?: return false
+        val domain = MailSortRules.domain(fromAddress) ?: return true
+        return domains.none { endsWithDomain(domain, it) }
+    }
+
     const val BODY_BRAND = "brand"
     const val BODY_GREETING = "greeting"
     const val BODY_AUTH = "auth"

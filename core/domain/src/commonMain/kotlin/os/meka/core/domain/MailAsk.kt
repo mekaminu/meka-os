@@ -199,6 +199,7 @@ object MailAskRules {
     private fun whereNow(h: MailTidiedHit): String = when {
         h.putBack || h.email.tidy == MailTidy.RESCUE -> "back in the inbox"
         h.email.tidy == MailTidy.TRASH || h.email.tidy == MailTidy.JUNK_TRASH -> "in Trash"
+        h.email.tidy == MailTidy.SCAM_JUNK -> "in Junk"
         else -> "in the archive"
     }
 
