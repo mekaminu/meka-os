@@ -40,6 +40,11 @@ data class MailMessageFacts(
     /** The plain-text body as sent, or null. */
     val text: String?,
     val attachments: List<MailAttachmentFacts>,
+    /**
+     * Phishing in the body, slice 2: the email's `Authentication-Results` header as the provider gave it (SPF, DKIM,
+     * DMARC), for [MailScamRules.bodyCheck] on the server; never sent to the apps.
+     */
+    val authResults: String? = null,
 )
 
 /** [MailHtmlSanitizer.clean]'s answer: safe HTML, and how many remote pictures were held back. */

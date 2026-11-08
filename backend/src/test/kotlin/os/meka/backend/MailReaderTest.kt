@@ -153,6 +153,7 @@ class MailReaderTest {
         i.syncAccount(acc)
         val item = MailNeedsRules.itemId(acc, "p0")
         assertTrue(item in os.meka.backend.integrations.EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_ITEM).keys, "the card was published")
+        box.read.clear()
 
         val r = i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.ITEM, item))
         assertEquals(MailMessageAnswer.OK, r.state)
@@ -310,6 +311,7 @@ class MailReaderTest {
         box.whole["r1"] = letter.copy(from = MailPerson("Streamly", "billing@streamly.example"), subject = "Your membership renews soon")
         val acc = connect(i)
         i.syncAccount(acc)
+        box.read.clear()
         val finds = os.meka.backend.integrations.EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
         val (id, fields) = finds.entries.single { os.meka.core.domain.MailRenewalRules.read(it.key, it.value)?.kind == "RENEWAL" }
         val f = os.meka.core.domain.MailRenewalRules.read(id, fields)!!
@@ -326,5 +328,48 @@ class MailReaderTest {
         // Gone from the mailbox: said so.
         box.whole.remove("r1")
         assertEquals(MailMessageAnswer.GONE, i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.FIND, id)).state)
+    }
+    @Test
+    fun aScamWhoseThreatIsOnlyInTheBodyIsCaughtWhenTheMailIsSorted() {
+        // Phishing in the body, slice 2 (Meka, 2026-11-08): headers that look like a person, the threat only in the body.
+        val box = Mailbox()
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val i = world(box, ms, ops)
+        fun person(id: String, address: String, name: String, subject: String) =
+            MailHeader(id, "t-$id", address, name, subject, now - 60_000, unread = true, inInbox = true)
+        box.headers["s1"] = person("s1", "jamie.reed@shop-mail.example", "Jamie Reed", "Quick note")
+        box.whole["s1"] = letter.copy(
+            from = MailPerson("Jamie Reed", "jamie.reed@shop-mail.example"), subject = "Quick note", attachments = emptyList(),
+            html = "<img alt=\"Microsoft\" src=\"https://x.example/logo.png\"><p>Your Microsoft mailbox will be closed. " +
+                "Confirm within 24 hours: <a href=\"https://login.evil.example/ms\">Confirm Account</a></p>",
+        )
+        // Greets him by his address.
+        box.headers["s2"] = person("s2", "pat.lee@mailer.example", "Pat Lee", "Hello")
+        box.whole["s2"] = letter.copy(subject = "Hello", html = null, text = "Hi alex@example.com, please see the document attached.", attachments = emptyList())
+        // Failed the receiving server's sender check.
+        box.headers["s3"] = person("s3", "chris.day@lookalike.example", "Chris Day", "Catch up")
+        box.whole["s3"] = letter.copy(subject = "Catch up", html = null, text = "Are you free next week?", attachments = emptyList(),
+            authResults = "mx.example; spf=fail smtp.mailfrom=lookalike.example; dkim=none; dmarc=fail header.from=lookalike.example")
+        // An ordinary email from a stranger stays ordinary.
+        box.headers["ok"] = person("ok", "robin.hart@club.example", "Robin Hart", "Saturday's match")
+        box.whole["ok"] = letter.copy(subject = "Saturday's match", html = null, text = "Kick-off is at 10, see you there.", attachments = emptyList())
+        val acc = connect(i)
+        i.syncAccount(acc)
+        val items = os.meka.backend.integrations.EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_ITEM)
+        fun warning(id: String) = MailNeedsRules.read(MailNeedsRules.itemId(acc, id), items.getValue(MailNeedsRules.itemId(acc, id)))?.warning.orEmpty()
+        assertEquals("⚠ Possible scam · says Microsoft, sent from shop-mail.example", warning("s1"))
+        assertEquals("⚠ Possible scam · greets you by your email address, sent from mailer.example", warning("s2"))
+        assertTrue(warning("s3").startsWith("⚠ Possible scam · failed the sender check"), warning("s3"))
+        assertEquals("", warning("ok"))
+        assertEquals(os.meka.core.domain.MailSortReason.SCAM, ms.sortOf(acc, "s1")?.reason)
+        assertEquals(os.meka.core.domain.MailSortReason.SCAM, ms.sortOf(acc, "s3")?.reason)
+        assertTrue(ms.sortOf(acc, "ok")?.reason != os.meka.core.domain.MailSortReason.SCAM)
+        // Each body is read once: the next check reads none again, and the scams stay scams.
+        val read = box.read.toList()
+        assertEquals(setOf("s1", "s2", "s3", "ok"), read.toSet())
+        i.syncAccount(acc)
+        assertEquals(read, box.read)
+        assertEquals(os.meka.core.domain.MailSortReason.SCAM, ms.sortOf(acc, "s1")?.reason)
     }
 }

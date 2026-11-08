@@ -118,4 +118,34 @@ class MailScamBodyTest {
         assertNull(plain.scam)
         assertTrue(plain.canShowImages)
     }
+    @Test
+    fun theServersBodyCheckGivesTheCardItsLineAndLeavesHisPeopleAlone() {
+        // Slice 2: the server reads the body of new Needs you mail; a person-looking sender whose body is the scam.
+        val facts = MailMessageFacts(
+            from = MailPerson("Jamie Reed", "jamie.reed@shop-mail.example"), to = listOf(MailPerson(null, "alex@hotmail.com")),
+            cc = emptyList(), atMs = 0, subject = "Quick note", html = html, text = null, attachments = emptyList(),
+        )
+        val line = MailScamRules.sortedBodyLine("jamie.reed@shop-mail.example", "Jamie Reed", "Quick note", facts, emptyList())
+        assertEquals("⚠ Possible scam · says Microsoft, sent from shop-mail.example", line)
+        // The card: the body's line; after a restart (no line kept) a plain warning; a header scam keeps its own line.
+        assertEquals(line, MailScamRules.itemWarning(MailSortReason.SCAM, "jamie.reed@shop-mail.example", "Jamie Reed", "Quick note", line))
+        assertEquals("⚠ Possible scam · sent from shop-mail.example",
+            MailScamRules.itemWarning(MailSortReason.SCAM, "jamie.reed@shop-mail.example", "Jamie Reed", "Quick note"))
+        assertEquals("⚠ Possible scam · sent from formlab.it, not microsoft.com", MailScamRules.itemWarning(MailSortReason.SCAM, from, name, subject, line))
+        assertEquals("", MailScamRules.itemWarning(MailSortReason.PERSON, "jamie.reed@shop-mail.example", "Jamie Reed", "Quick note", line))
+        // A spoof from the company's own domain: the sender check's line, not "From Microsoft's real address".
+        val spoof = facts.copy(html = "<p>Your sign-in details</p>", authResults = "mx; spf=fail; dkim=fail; dmarc=fail")
+        val spoofLine = MailScamRules.sortedBodyLine("account-security@microsoft.com", "Microsoft account team", "Unusual sign-in activity", spoof, emptyList())!!
+        assertTrue(spoofLine.startsWith("⚠ Possible scam · failed the sender check"), spoofLine)
+        assertEquals(spoofLine, MailScamRules.itemWarning(MailSortReason.SCAM, "account-security@microsoft.com", "Microsoft account team", "Unusual sign-in activity", spoofLine))
+        // Ordinary mail from a stranger isn't one; the household's own address counts for the greeting.
+        val plainFacts = facts.copy(to = emptyList(), html = null, text = "Hi alex@hotmail.com, the tickets are attached.")
+        assertNull(MailScamRules.sortedBodyLine("sam@club.example", "Sam", "Tickets", plainFacts.copy(text = "Tickets attached, see you Saturday."), emptyList()))
+        assertTrue(MailScamRules.sortedBodyLine("sam@club.example", "Sam", "Tickets", plainFacts, listOf("Alex@Hotmail.com".lowercase()))!!.contains("greets you"))
+        // Which sorted mail is read: Needs you only, never his correspondents', his own, public bodies', security mail or a header scam.
+        assertTrue(MailScamRules.bodyDue(MailSorted(MailSort.NEEDS_YOU, MailSortReason.PERSON, false)))
+        for (r in listOf(MailSortReason.KNOWN_PERSON, MailSortReason.OWN, MailSortReason.PUBLIC_BODY, MailSortReason.SECURITY, MailSortReason.SECURITY_CODE, MailSortReason.SCAM))
+            assertFalse(MailScamRules.bodyDue(MailSorted(MailSort.NEEDS_YOU, r, true)), r.name)
+        assertFalse(MailScamRules.bodyDue(MailSorted(MailSort.PROMO, MailSortReason.PERSON, true)))
+    }
 }

@@ -23,6 +23,8 @@ private fun JsonElement?.l(): Long? = (this as? JsonPrimitive)?.let { it.longOrN
 internal object GmailMessageBody {
     /** How deep the MIME tree is followed (forwarded mail nests). */
     private const val MAX_DEPTH = 12
+    /** The longest `Authentication-Results` kept for the body check. */
+    const val MAX_AUTH = 4_000
 
     private fun headers(part: JsonObject): Map<String, String> =
         (part["headers"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
@@ -80,6 +82,8 @@ internal object GmailMessageBody {
             atMs = m["internalDate"].l() ?: 0L,
             subject = hs["subject"]?.take(MailAddress.MAX_SUBJECT),
             html = html, text = text, attachments = files,
+            // Phishing in the body, slice 2: the receiving server's sender check, for the server's body check only.
+            authResults = hs["authentication-results"]?.take(MAX_AUTH),
         ) to refs
     }
 }
@@ -100,7 +104,7 @@ internal fun <T> pickAttachment(listed: List<T>, index: Int, name: String, nameO
 
 /** Graph's `GET /me/messages/{id}` with its body and attachments (names, sizes, types; inline pictures left out). */
 internal object GraphMessageBody {
-    const val SELECT = "subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments"
+    const val SELECT = "subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,internetMessageHeaders"
     const val EXPAND = "attachments(\$select=name,size,contentType,isInline)"
     /** Slice 2: the same list (same filter, same order) with each one's id, to fetch one by its place. */
     const val LIST_SELECT = "id,name,size,contentType,isInline"
@@ -135,6 +139,10 @@ internal object GraphMessageBody {
             html = if (type == "html") content else null,
             text = if (type != "html") content else null,
             attachments = files,
+            // Phishing in the body, slice 2: Outlook's own sender check, from the internet headers.
+            authResults = (m["internetMessageHeaders"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                .firstOrNull { it["name"].s()?.equals("Authentication-Results", ignoreCase = true) == true }
+                ?.get("value").s()?.take(GmailMessageBody.MAX_AUTH),
         )
     }
 }

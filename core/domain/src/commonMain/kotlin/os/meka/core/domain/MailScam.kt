@@ -270,10 +270,42 @@ object MailScamRules {
      * What the server writes on the card's `mail_item` ([MailItemFields.WARNING]): the line for a scam or a real company's
      * warning sorted by these rules, else "".
      */
-    fun itemWarning(reason: MailSortReason?, fromAddress: String?, fromName: String?, subject: String?): String {
+    fun itemWarning(reason: MailSortReason?, fromAddress: String?, fromName: String?, subject: String?, bodyLine: String? = null): String {
         // A real company's line only where the sort kept it as one (its marketing sorts as usual).
         if (reason != MailSortReason.SCAM && reason != MailSortReason.BRAND_NOTICE) return ""
-        return check(fromAddress, fromName, subject)?.let(::line).orEmpty()
+        val headers = check(fromAddress, fromName, subject)
+        if (reason == MailSortReason.BRAND_NOTICE) return headers?.let(::line).orEmpty()
+        // A scam: the headers' line, else what the server's body check said ([sortedBodyLine]), else a plain warning
+        // (a scam found in the body before a restart, its line not kept).
+        if (headers?.kind == MailScamKind.SCAM) return line(headers)
+        return bodyLine?.takeIf { scamLine(it) } ?: "⚠ Possible scam · sent from ${MailSortRules.domain(fromAddress) ?: "an unknown address"}"
+    }
+
+    /** How many emails' bodies the server reads per account per check for [sortedBodyLine] (newest first). */
+    const val BODY_PER_CHECK = 10
+
+    /**
+     * Phishing in the body, slice 2: whether the server reads this sorted email's body when it sorts mail. Only mail in
+     * Needs you, and never his correspondents' ([MailSortReason.KNOWN_PERSON]), his own, public bodies', account
+     * security mail or one already a scam by its headers.
+     */
+    fun bodyDue(s: MailSorted): Boolean = s.sort == MailSort.NEEDS_YOU && s.reason !in BODY_SKIPS
+
+    private val BODY_SKIPS = setOf(
+        MailSortReason.KNOWN_PERSON, MailSortReason.OWN, MailSortReason.PUBLIC_BODY, MailSortReason.SECURITY,
+        MailSortReason.SECURITY_CODE, MailSortReason.SCAM,
+    )
+
+    /**
+     * Phishing in the body, slice 2: the server's body check of one sorted email ([bodyDue]) read whole from the
+     * provider: [bodyCheck] over its text, HTML and `Authentication-Results`, with the addresses it was sent to and the
+     * household's own ([own]) for the greeting. The scam's line ("⚠ Possible scam · says Microsoft, sent from
+     * formlab.it"), or null when it isn't one. The body is never kept.
+     */
+    fun sortedBodyLine(fromAddress: String?, fromName: String?, subject: String?, facts: MailMessageFacts, own: Collection<String>): String? {
+        val sentTo = (facts.to + facts.cc).mapNotNull { it.address }
+        val f = bodyCheck(MailBodyFacts(fromAddress, fromName, subject, facts.text, facts.html, (sentTo + own).distinct(), facts.authResults))
+        return f?.takeIf { it.kind == MailScamKind.SCAM }?.let(::line)
     }
 
     /** True for a warning line that is a possible scam (shown in the critical colour). */

@@ -706,6 +706,13 @@ class Integrations(
     private val mailChecks = java.util.concurrent.ConcurrentHashMap<String, MailCheckState>()
 
     /**
+     * Phishing in the body, slice 2: emails whose bodies were checked ("account\u0000id" → the scam's line, "" for none),
+     * so each is read once. Memory only, never the body; after a restart an email is checked again.
+     */
+    private val bodyChecked = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun bodyKey(accountId: String, id: String) = accountId + "\u0000" + id
+
+    /**
      * Whether Inbox autopilot holds off acting on its own this check: Navilife paused (What Navilife may do), or Inbox
      * paused for today on Your team (slice 2, [TeamPauseRules], till the midnight the app wrote).
      */
@@ -806,6 +813,8 @@ class Integrations(
         stage(a, "markInboxRead") { markInboxRead(a, m, token, ms) }
         // Inbox fixes, slice 3: "Empty Junk" (counted for its card; cleared out only after his Approve).
         stage(a, "junkClearOut") { junkClearOut(a, m, token, ms) }
+        // Phishing in the body, slice 2: the bodies of new Needs you mail checked for a scam, before the cards.
+        stage(a, "bodyScams") { bodyScams(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         stage(a, "publishMailNeeds") { publishMailNeeds(a, ms) }
         // Drafted replies come to him: a draft on the card of each new email that asks him something (sent only on his tap).
@@ -1643,13 +1652,49 @@ class Integrations(
                 account, h.fromName, h.fromAddress, h.subject, preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
                 threadKey = MailNeedsRules.threadKey(a.id, h.threadId ?: h.id),
                 security = MailSecurityRules.itemProvider(reasons[h.id], h.fromAddress),
-                warning = MailScamRules.itemWarning(reasons[h.id], h.fromAddress, h.fromName, h.subject),
+                warning = MailScamRules.itemWarning(reasons[h.id], h.fromAddress, h.fromName, h.subject, bodyChecked[bodyKey(a.id, h.id)]),
                 // Junk fix slice 2: Unsubscribe on the card when the email says how (never the link itself).
                 canUnsubscribe = MailUnsubscribeRules.plan(h.listUnsubscribe, h.oneClickUnsubscribe).method != UnsubscribeMethod.NONE,
                 note = notes[h.id] ?: "",
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
+    }
+
+    /**
+     * Phishing that hides its threat in the body (Meka, 2026-11-08), slice 2: each new email in Needs you that the
+     * headers didn't catch ([MailScamRules.bodyDue]: never his correspondents', his own, public bodies' or account
+     * security mail) is read whole once from the provider, newest first, at most [MailScamRules.BODY_PER_CHECK] a check,
+     * and checked ([MailScamRules.sortedBodyLine]: the company named with links elsewhere and pressing words, a greeting
+     * with his address, a failed SPF/DKIM/DMARC in `Authentication-Results`). A scam is sorted
+     * [MailSortReason.SCAM] (sure, so it's never drafted a reply or tidied away) and its card carries the red line. The
+     * body is never kept, logged or given to the AI; nothing in the mailbox moves. A refusal ends this check's reading.
+     */
+    internal fun bodyScams(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val nowMs = now()
+        val inbox = ms.inboxSorted(a.id)
+        // An email found a scam and sorted again by its headers since (its headers read again) stays a scam.
+        val scams = inbox.filter { (h, s) -> MailScamRules.bodyDue(s) && bodyChecked[bodyKey(a.id, h.id)].orEmpty().isNotEmpty() }
+            .associateTo(HashMap<String, MailSorted>()) { (h, _) -> h.id to MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true) }
+        val due = inbox
+            .filter { (h, s) -> h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS && MailScamRules.bodyDue(s) && bodyKey(a.id, h.id) !in bodyChecked }
+            .sortedByDescending { it.first.receivedAtMs }
+            .take(MailScamRules.BODY_PER_CHECK)
+        if (bodyChecked.size > 20_000) bodyChecked.clear()
+        val own = if (due.isEmpty()) emptySet() else ownAddresses(a)
+        for ((h, _) in due) {
+            val facts = try {
+                m.message(token, h.id)
+            } catch (e: ReconnectRequired) {
+                throw e
+            } catch (e: Exception) {
+                break
+            }
+            val line = facts?.let { MailScamRules.sortedBodyLine(h.fromAddress, h.fromName, h.subject, it, own) }
+            bodyChecked[bodyKey(a.id, h.id)] = line.orEmpty()
+            if (line != null) scams[h.id] = MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true)
+        }
+        if (scams.isNotEmpty()) ms.setSorts(a.id, scams)
     }
 
     /**
