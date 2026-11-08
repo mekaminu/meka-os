@@ -73,7 +73,12 @@ class MoneyScreensTest {
             "03/10/2026,COSTA COFFEE,-3.20\n" +
             "05/10/2026,SALARY OAKFIELD LTD,2500.00\n"
 
+        // Walk-through 2026-11-08 A8: three months of the council tax and Netflix, so they're found as regular bills and
+        // Spending's "Bills to come" and the Bills tab show the same council tax due 1 Nov (it was £0 and no card).
         const val CURRENT = "Date,Description,Amount\n" +
+            "01/08/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
+            "05/08/2026,SALARY OAKFIELD LTD,2500.00\n" +
+            "15/08/2026,NETFLIX.COM,-10.99\n" +
             "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
             "04/09/2026,TESCO STORES 2041,-62.40\n" +
             "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
@@ -187,6 +192,15 @@ class MoneyScreensTest {
         // (A lazy list only lays out what's on screen, so Import is only required on Accounts with nothing above it.)
         if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")
         if (!importShown && tab == MoneyTab.ACCOUNTS && fill == Fill.EMPTY) fail("$name: Import a statement is missing from Accounts")
+        // Walk-through 2026-11-08 A8: Spending's "Bills to come" tile and the Bills tab's card say the same figure, and the
+        // full month's fixture has a bill to come (it showed £0 beside a £142 council tax and no Bills card).
+        if (fill == Fill.MANY) {
+            val toCome = v.month?.spending?.tiles?.firstOrNull { it.label == "Bills to come" }?.value
+                ?: fail("$name: no Bills to come tile with a payday found")
+            val card = v.bills?.amount ?: fail("$name: no Bills card while Spending says $toCome to come")
+            if (toCome != card) fail("$name: Spending says $toCome to come, the Bills tab $card")
+            if (toCome == "£0") fail("$name: the full month's fixture has nothing to come")
+        }
         if (tab != MoneyTab.SPENDING) {
             if (compose.onAllNodesWithText("WHERE IT WENT").fetchSemanticsNodes().isNotEmpty()) fail("$name: Spending's categories show on ${tab.label}")
             MoneyTabs.empty(tab, v)?.let { ScreenShots.assertShows(compose, name, it) }

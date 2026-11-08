@@ -5531,3 +5531,15 @@ reads the text node's last text layout, which for a pill measured for its intrin
 intrinsic pass's. New `ScreenShots.assertDrawnWhole` compares the node's laid-out width with the text's natural one-line
 width (from the layout's intrinsics, which don't depend on the constraint); the areas shot checks the card's chips with
 it and keeps `assertNotCut` on the area name. Test only; no app, core, server or migration change.
+
+**Slice 7 (2026-11-08, A8, Money's pair):** Spending's "Bills to come £0" beside a £142 Bills category and a Bills tab
+with no card (`money/inner-dark-columns-spending.png`, `inner-dark-columns-bills.png`). Read: the £142 was October's
+council tax, already paid; the fixture held only two months, and a regular payment needs three, so no bill was found.
+£0 to come was the screen's own sum, but with a payday found and nothing found `MoneyBills.view` returned null and the
+Bills tab drew no card, so the two tabs didn't agree. Real fix: `MoneyPayday.view` falls back to `MoneyBills.noneFound`
+("Still to go out before payday · Thu 5 Nov", "£0", "no bills found yet", no bar, no rows), so the Bills card always
+shows the Spending tile's figure (both apps draw it unchanged; the list card stays hidden with no rows). Fixture: the
+Money shots' CURRENT statement gains August's council tax, pay and Netflix, so the council tax due 1 Nov is £142 to
+come on both tabs and Netflix shows paid. Tests: MoneyBillsTest (a payday with no bill found keeps the card at £0);
+MoneyScreensTest fails a full-month shot whose "Bills to come" tile and Bills card differ, or that has nothing to come.
+No server or migration change.

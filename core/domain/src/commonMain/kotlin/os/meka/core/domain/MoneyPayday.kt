@@ -212,6 +212,7 @@ object MoneyPayday {
                     if (b.title in cardTitles) MoneyBillKind.CARD else MoneyBillKind.RENEWAL)
             }
         val billsView = MoneyBills.view(due, MoneyBills.paidThisMonth(allRegular, today), CivilDate.shortLabel(payday), today)
+            ?: MoneyBills.noneFound(CivilDate.shortLabel(payday))
         val goingOut = if (sorted.isEmpty()) "Nothing regular left to go out before payday" else
             "Still to go out before payday · about ${fmt(pounds(total))} · ${sorted.size} payment${if (sorted.size == 1) "" else "s"}"
 

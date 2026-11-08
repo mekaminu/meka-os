@@ -81,6 +81,20 @@ class MoneyBillsTest {
     }
 
     @Test
+    fun aPaydayWithNoBillFoundStillShowsTheCardAtTheSpendingTilesFigure() {
+        // Walk-through 2026-11-08 A8: Spending said "Bills to come £0" while the Bills tab showed no card at all.
+        val p = MoneyPayday.view(pay + listOf(line(d(10, 2), -12_000, "TESCO STORES 2041")), today, names, emptyMap(),
+            emptyList(), HolidayCalendar())
+        val b = p.bills!!
+        assertEquals(0L, p.toGoPence)
+        assertEquals("£0", b.amount)
+        assertEquals(MoneyBills.NONE_FOUND, b.count)
+        assertEquals("Still to go out before payday · Fri 30 Oct", b.head)
+        assertNull(b.paidLine)
+        assertTrue(b.rows.isEmpty())
+    }
+
+    @Test
     fun withoutAPaydayTheMonthsBillsOnEveryAccountUntilItEnds() {
         val lines = regulars.map { MoneyLine(it.day, it.pence, it.merchant, it.category) }
         val v = MoneyBills.forMonth(MoneyTips.regular(lines, today), listOf(water, card, MoneyBill("Insurance", d(11, 2), 9_000)),

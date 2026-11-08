@@ -35,6 +35,8 @@ data class MoneyBillsView(
 object MoneyBills {
     const val FOOT = "Found from payments that repeat each month, Lists → Renewals and your cards' due dates · not financial advice"
     const val NOTHING = "nothing left"
+    /** Payday found but no bill found yet (walk-through 2026-11-08 A8): the card still says £0, as Spending's tile does. */
+    const val NONE_FOUND = "no bills found yet"
     /** At most this many rows (to come first); the rest are rare. */
     const val SHOWN = 12
     /** Layout rule (d): the Bills card lists this many bills, then "See all N ›". */
@@ -116,6 +118,15 @@ object MoneyBills {
             head, fmt(pounds(toGo)), count, if (all > 0) (paidPence.toFloat() / all).coerceIn(0f, 1f) else 0f, paidLine,
             rows, FOOT, spoken,
         )
+    }
+
+    /**
+     * Walk-through 2026-11-08 A8: with a payday found, Spending's "Bills to come" tile shows £0 even when no bill is found
+     * yet, so the Bills tab says the same in its card ("£0 · no bills found yet") instead of showing no card at all.
+     */
+    fun noneFound(untilLabel: String): MoneyBillsView {
+        val head = "Still to go out before payday · $untilLabel"
+        return MoneyBillsView(head, fmt(0), NONE_FOUND, 0f, null, emptyList(), FOOT, "$head, ${fmt(0)}, $NONE_FOUND")
     }
 
     /**
