@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Needs you</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .28s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1400px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative">
+
+<div style="display:flex;justify-content:space-between;align-items:flex-end">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:26px;font-weight:700">Needs you</span><span style="font-size:13px;color:#8f897f">{{subtitle}}</span></div>
+<button type="button" onClick="{{clearFyi}}" style="border:0;background:#151517;color:#d8d2c6;border-radius:999px;height:36px;padding:0 14px;font-size:13px">Clear FYI</button>
+</div>
+
+<div style="display:flex;gap:6px;overflow-x:auto">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="5"><button type="button" onClick="{{f.go}}" style="{{f.style}}">{{f.name}}</button></sc-for>
+</div>
+
+<sc-if value="{{showDecide}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">TO DECIDE · {{decideCount}}</span>
+<sc-for list="{{decide}}" as="d" hint-placeholder-count="2">
+<div class="in" style="background:#121214;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:10px;align-items:center">
+<span style="{{d.icon}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{d.path}}"></path></svg></span>
+<span style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:15px;font-weight:600">{{d.what}}</span><span style="font-size:12px;color:#8f897f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{d.from}}</span></span>
+</div>
+<div style="display:flex;gap:8px">
+<button type="button" onClick="{{d.yes}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font-size:13px;font-weight:600">{{d.yesLabel}}</button>
+<button type="button" onClick="{{d.edit}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:36px;padding:0 14px;font-size:13px">Change</button>
+<button type="button" onClick="{{d.no}}" style="border:0;background:transparent;color:#8f897f;border-radius:999px;height:36px;padding:0 10px;font-size:13px">No</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{showReply}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">MESSAGES · {{replyCount}}</span>
+<div style="background:#121214;border-radius:16px;overflow:hidden">
+<sc-for list="{{people}}" as="p" hint-placeholder-count="5">
+<div style="border-bottom:1px solid #1a1a1d">
+<button type="button" onClick="{{p.toggle}}" style="width:100%;border:0;background:transparent;color:#ededed;padding:12px 14px;display:flex;gap:12px;align-items:center;text-align:left">
+<span style="{{p.avatar}}">{{p.init}}</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+<span style="display:flex;justify-content:space-between;gap:8px"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{p.name}}</span><span style="font-size:11.5px;color:#8f897f;flex-shrink:0">{{p.time}}</span></span>
+<span style="font-size:13px;color:#a8a29a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{p.line}}</span>
+</span>
+<span style="{{p.badge}}">{{p.badgeText}}</span>
+</button>
+<sc-if value="{{p.open}}" hint-placeholder-val="{{false}}">
+<div class="in" style="padding:0 14px 12px 62px;display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{p.msgs}}" as="m" hint-placeholder-count="2"><span style="font-size:13.5px;color:#d8d2c6;line-height:1.35">{{m}}</span></sc-for>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<button type="button" onClick="{{p.reply}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:34px;padding:0 14px;font-size:12.5px;font-weight:600">Reply</button>
+<button type="button" onClick="{{p.done}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:34px;padding:0 12px;font-size:12.5px">Done</button>
+<button type="button" onClick="{{p.later}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:34px;padding:0 12px;font-size:12.5px">Later</button>
+<button type="button" onClick="{{p.task}}" style="border:0;background:#1d1d20;color:#ededed;border-radius:999px;height:34px;padding:0 12px;font-size:12.5px">Task</button>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+<span style="font-size:12px;color:#6f6a62">Tap a person to see their messages · swipe right for Done</span>
+</div>
+</sc-if>
+
+<sc-if value="{{showFyi}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">FYI · NO REPLY NEEDED · {{fyiCount}}</span>
+<div style="background:#0e0e10;border-radius:16px;padding:4px 14px">
+<sc-for list="{{fyi}}" as="f" hint-placeholder-count="3">
+<div style="display:flex;gap:10px;align-items:center;min-height:44px;border-bottom:1px solid #161618">
+<span style="font-size:13px;font-weight:600;width:84px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{f.who}}</span>
+<span style="flex:1;font-size:13px;color:#a8a29a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{f.what}}</span>
+<button type="button" onClick="{{f.seen}}" aria-label="Seen" style="width:32px;height:32px;border-radius:16px;border:0;background:#1a1a1d;color:#8f897f;font-size:13px">✓</button>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{showMail}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:.14em;color:#a8a29a">MAIL NAVILIFE TIDIED TODAY</span>
+<div style="background:#121214;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<sc-for list="{{tidy}}" as="t" hint-placeholder-count="4"><div style="background:#1a1a1d;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:2px"><span style="{{t.numStyle}}">{{t.n}}</span><span style="font-size:11px;color:#8f897f">{{t.k}}</span></div></sc-for>
+</div>
+<div style="display:flex;gap:10px;align-items:center;background:#1a1a1d;border-radius:12px;padding:10px 12px">
+<span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13.5px;font-weight:500">Unsubscribe from a kids’ club newsletter?</span><span style="font-size:11.5px;color:#8f897f">5 emails · none opened in 30 days</span></span>
+<button type="button" onClick="{{unsub}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:32px;padding:0 12px;font-size:12px;font-weight:600">{{unsubLabel}}</button>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#8f897f">Still in Gmail and Outlook · Put back from the list</span><button type="button" onClick="{{seeTidy}}" style="border:0;background:transparent;color:#c9b37e;font-size:13px">See all ›</button></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 12px;font-size:13px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1400}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={filter:'All',open:'w',gone:{},toast:'',unsub:false};}
+renderVals(){
+var s=this.state,self=this;
+var gone=function(k){return !!s.gone[k];};
+var hide=function(k,msg){var g=Object.assign({},s.gone);g[k]=1;self.setState({gone:g,toast:msg+' · Undo'});};
+var D=[
+{k:'d1',what:'Work from home · Wed 16 Dec',from:'Your wife · “the Christmas show is that day”',yesLabel:'Add',path:'M3 11l9-7 9 7v9H3zM9 20v-6h6v6',col:'#7fb3a8'},
+{k:'d2',what:'Task: check the algorithm · today',from:'Game testing group · a friend asked you',yesLabel:'Add',path:'M5 12l5 5 9-10',col:'#c9b37e'}
+].filter(function(d){return !gone(d.k);});
+var P=[
+{k:'w',init:'W',name:'Your wife',time:'19:07',line:'All is well, homework and activities done',badge:'1 request',hot:true,msgs:['All is well; homework and activities are done.','The Christmas show is Wed 16 Dec, maybe work from home.'],col:'#d38aa5'},
+{k:'g',init:'GT',name:'Game testing group',time:'13:36',line:'Two people asked you to fix the group and post the time',badge:'2 to reply',hot:true,msgs:['A friend asks you to put the time in the group.','Another says she isn’t in the group and asks you to fix it.'],col:'#9fb3d9'},
+{k:'e',init:'E',name:'A friend',time:'12:51',line:'Asks about sending money to someone',badge:'1 to reply',hot:true,msgs:['Sent “KGB 20” with no context.','Says someone would then send money on.'],col:'#d9a35b'},
+{k:'h',init:'H',name:'A colleague',time:'08:23',line:'Did you see my missed call and voice note?',badge:'1 to reply',hot:true,msgs:['Asks if you saw his missed call and voice message.'],col:'#8fbf8f'},
+{k:'n',init:'N',name:'A friend',time:'12:31',line:'Will call you back in about five minutes',badge:'3 new',hot:false,msgs:['Jokes the boys have eaten his money.','Will call you back in about five minutes.'],col:'#b48ad1'}
+].filter(function(p){return !gone(p.k);});
+var F=[{k:'f1',who:'A relative',what:'Thanked you, regards to the footballers'},{k:'f2',who:'A contact',what:'Reacted with a thumbs up, said thanks'},{k:'f3',who:'A friend',what:'Thanked you again · no reply needed'},{k:'f4',who:'You',what:'Asked if it’s the same tables (sent 12:15)'}].filter(function(f){return !gone(f.k);});
+var fl=s.filter;
+var chip=function(on){return 'border:0;border-radius:999px;height:34px;padding:0 14px;font-size:13px;white-space:nowrap;'+(on?'background:#c9b37e;color:#111;font-weight:600':'background:#151517;color:#d8d2c6');};
+var replyN=P.filter(function(p){return p.hot;}).length;
+return {
+subtitle:D.length+' to decide · '+replyN+' to reply · '+F.length+' FYI',
+filters:[['All',''],['Decide',D.length],['Reply',replyN],['FYI',F.length],['Mail','138']].map(function(f){return {name:f[0]+(f[1]!==''?' '+f[1]:''),go:function(){self.setState({filter:f[0]});},style:chip(fl===f[0])};}),
+showDecide:(fl==='All'||fl==='Decide')&&D.length>0,showReply:(fl==='All'||fl==='Reply')&&P.length>0,showFyi:(fl==='All'||fl==='FYI')&&F.length>0,showMail:fl==='All'||fl==='Mail',
+decideCount:D.length,replyCount:P.length,fyiCount:F.length,
+decide:D.map(function(d){return {what:d.what,from:d.from,yesLabel:d.yesLabel,path:d.path,icon:'width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#1d1d20;color:'+d.col,
+ yes:function(){hide(d.k,'Added');},edit:function(){self.setState({toast:'Opens it to change first'});},no:function(){hide(d.k,'Dismissed');}};}),
+people:P.map(function(p){var open=s.open===p.k;return {init:p.init,name:p.name,time:p.time,line:p.line,badgeText:p.badge,msgs:p.msgs,open:open,
+ avatar:'width:38px;height:38px;border-radius:19px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:700;background:#1d1d20;color:'+p.col,
+ badge:'font-size:11px;border-radius:999px;padding:4px 8px;flex-shrink:0;white-space:nowrap;'+(p.hot?'background:#33281a;color:#d9a35b':'background:#1d1d20;color:#a8a29a'),
+ toggle:function(){self.setState({open:open?null:p.k,toast:''});},
+ reply:function(){self.setState({toast:'Opens their chat with a reply ready'});},
+ done:function(){hide(p.k,p.name+' done');},later:function(){hide(p.k,p.name+' back at 08:00');},task:function(){self.setState({toast:'Turned into a task'});}};}),
+fyi:F.map(function(f){return {who:f.who,what:f.what,seen:function(){hide(f.k,'Seen');}};}),
+clearFyi:function(){var g=Object.assign({},s.gone);['f1','f2','f3','f4'].forEach(function(k){g[k]=1;});self.setState({gone:g,toast:'FYI cleared · Undo'});},
+tidy:[['138','tidied',''],['33','newsletters',''],['71','promos',''],['33','junk & scams','color:#e3a9a0']].map(function(t){return {n:t[0],k:t[1],numStyle:'font-size:17px;font-weight:600;'+t[2]};}),
+unsubLabel:s.unsub?'Done':'Unsubscribe',unsub:function(){self.setState({unsub:true,toast:'Unsubscribing at the next check'});},
+seeTidy:function(){self.setState({toast:'Opens all tidied mail, with Put back'});},
+toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
