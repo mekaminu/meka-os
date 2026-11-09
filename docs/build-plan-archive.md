@@ -5628,3 +5628,10 @@ For Meka's 08:09 point (d). Today's news moved from the drifting `NewsTickerStri
 
 ### Slice 2b-2b-2b-4: Schedule as one compact card (2026-11-09, Android)
 For Meka's 08:09 point (e). Core `ScheduleCardRules` (core/domain ScheduleCard.kt): `rows` drops the GAP rows, `time` shows a range's start ("09:30", "–10:00" for one begun before today), `until` gives "until 10:00" for the event's line, `allDayTime` puts "All day" in the first all-day row's time column, `count`/`edge` (`CardEdge`) say which row rounds which corner. Android: TimelineViews gains `LocalScheduleCard` (rows take a 60 dp time column and the start-only time inside the card; the Calendar keeps TIME_COLUMN 92 dp), `Modifier.scheduleSegment(edge)` (surface fill, corners only on the first/last rows, an inset hairline under the rest, 14 dp inset) and `AllDayRow(timeLabel)`; TodayRoute's TIMELINE slot draws every schedule row as a segment of the card, the separate "All day" label line is gone and the Schedule heading rides the first row. Test: core ScheduleCardTest. The Mac's Today keeps its old order until 2d.
+
+
+### Today rebuild · slice 2b-2b-2b-5 (2026-11-09): gold only on things to tap (Meka's 08:09 point i)
+- Core `TodayInk` / `TodayInkRules` (TodayInk.kt, TodayInkTest): TAP and NOW_MARK are the only gold inks; LIVE (what's on now) is the secondary grey, ATTENTION (late, carried, a clash with work) amber (`calendar3`, the mockup's "waiting" badge), QUIET the tertiary grey.
+- Android: `TodayInk.color()` (today/TodayInkColors.kt); TimelineViews: an event's running line, a session's running detail, the work band's and commute's "Now · …" detail and the now line's words no longer use the accent (the bars, the now line's time, dot and hairline still do); clash lines amber; TaskRow's late and carried lines amber (conflict/overdue stay red).
+- Test: GoldForTapsTest (Robolectric) reads the drawn colours of a running event's line, a clash and the now line.
+- Mac: follows with the Mac's Today in slice 2d (core rules shared).

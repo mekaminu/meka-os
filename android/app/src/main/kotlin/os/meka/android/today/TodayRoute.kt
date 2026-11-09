@@ -1594,9 +1594,9 @@ internal fun TaskRow(
     t: Task, actions: TodayActions, reason: NeedsYouReason? = null, motion: RowMotion = RowMotion(), modifier: Modifier = Modifier,
     /** On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title. */
     time: String? = null, timelineLine: String? = null,
-    /** A planned task whose time has gone by: its line ("Since 09:15 · 30 min") is lit in the accent colour. */
+    /** A planned task whose time has gone by: its line ("Since 09:15 · 30 min") is lit in amber. */
     late: Boolean = false,
-    /** Roll-over: a "From yesterday" row's line ("Carried 2 days"), lit in the accent colour. */
+    /** Roll-over: a "From yesterday" row's line ("Carried 2 days"), lit in amber. */
     carriedLine: String? = null,
 ) {
     // The Sunsama tick (Week board by hand, slice 6): ticked, the row keeps its place struck through for a moment.
@@ -1630,12 +1630,10 @@ internal fun TaskRow(
                 null -> carriedLine ?: if (time != null) timelineLine else meta(t, actions.whenOf(t))
             }
             line?.let {
-                val color = when {
-                    reason == NeedsYouReason.CONFLICT || reason == NeedsYouReason.OVERDUE -> Meka.colors.critical
-                    carriedLine != null && reason == null -> Meka.colors.accent
-                    late && reason == null && time != null -> Meka.colors.accent
-                    else -> Meka.colors.textSecondary
-                }
+                // Gold is for taps (the Today rebuild, point i): a late or carried line is amber, conflicts and overdue red.
+                val flagged = reason == NeedsYouReason.CONFLICT || reason == NeedsYouReason.OVERDUE
+                val color = os.meka.core.domain.TodayInkRules.taskLine(late = late && reason == null && time != null, carried = carriedLine != null && reason == null, flagged = flagged)
+                    ?.color() ?: Meka.colors.critical
                 // The calmer scale: a row's line in the 13 sp caption, as the day's times (was 15 sp beside a 16 sp title).
                 Text(it, style = MekaType.caption, color = color)
             }

@@ -39,7 +39,7 @@ import os.meka.core.domain.RollOverRules
 
 /**
  * One "From yesterday" row (Week board and roll-over, slice 1; [RollOverRules]): the task as Today draws it, its line
- * "Carried 2 days" in the accent, and from three carries the one-time prompt under it — Break it down · Someday · Drop ·
+ * "Carried 2 days" in amber, and from three carries the one-time prompt under it — Break it down · Someday · Drop ·
  * Keep — which folds away once answered (reduced motion: fades).
  */
 @OptIn(ExperimentalLayoutApi::class)

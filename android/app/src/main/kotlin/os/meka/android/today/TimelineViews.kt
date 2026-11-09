@@ -63,6 +63,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AllDayItem
 import os.meka.core.domain.CardEdge
 import os.meka.core.domain.ScheduleCardRules
+import os.meka.core.domain.TodayInkRules
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.TimelineRow
 import os.meka.core.domain.UpNextEvent
@@ -135,17 +136,17 @@ internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier 
             val until = if (LocalScheduleCard.current) ScheduleCardRules.until(r.time) else null
             val line = listOfNotNull(if (r.running) "Now" else null, until, r.detail).joinToString(" · ")
             if (line.isNotEmpty()) {
-                Text(line, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary)
+                Text(line, style = MekaType.caption, color = TodayInkRules.detail(r.running).color())
             }
-            // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in the accent.
-            r.clash?.let { Text(it, style = MekaType.caption, color = if (past) Meka.colors.textTertiary else Meka.colors.accent) }
+            // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in amber (gold is for taps).
+            r.clash?.let { Text(it, style = MekaType.caption, color = TodayInkRules.clash(past).color()) }
         }
     }
 }
 
 /**
  * A booked session (the Gym): time on the left, "Gym · Push" in the body weight like a task row (Fold review
- * 2026-10-08: only Up next's title is bold), "Leave by 17:30" under it, or "Now · until 18:45" in the accent colour while it's on. Today's session card above
+ * 2026-10-08: only Up next's title is bold), "Leave by 17:30" under it, or "Now · until 18:45" a step brighter while it's on (gold is for taps). Today's session card above
  * answers it, so the row has no taps of its own.
  */
 @Composable
@@ -158,14 +159,14 @@ internal fun SessionTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
         TimeColumn(r.time, past = false)
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
-            r.detail?.let { Text(it, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary) }
+            r.detail?.let { Text(it, style = MekaType.caption, color = TodayInkRules.detail(r.running).color()) }
         }
     }
 }
 
 /**
  * Work hours (Fold review 2026-10-08): a quiet band, not an event. Time on the left, then a hairline-bordered band with
- * a thin bar and "Work"; while at work the bar is lit and "Now · until 17:30" sits beside it in the accent colour.
+ * a thin bar and "Work"; while at work the bar is lit and "Now · until 17:30" sits beside it a step brighter (gold is for taps).
  * No taps. Motion: it glides with the other rows and leaves once work is over (animateItem); reduced motion cross-fades.
  */
 @Composable
@@ -188,11 +189,11 @@ internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier
             .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(2.dp).height(14.dp).clip(RoundedCornerShape(1.dp)).background(if (running) Meka.colors.accent else Meka.colors.textTertiary))
+        Box(Modifier.width(2.dp).height(14.dp).clip(RoundedCornerShape(1.dp)).background(TodayInkRules.bar(running).color()))
         Spacer(Modifier.width(MekaSpace.xs))
         Text(title, style = MekaType.caption, color = Meka.colors.textSecondary)
         detail?.let {
-            Text(" · $it", style = MekaType.caption, color = if (running) Meka.colors.accent else Meka.colors.textTertiary)
+            Text(" · $it", style = MekaType.caption, color = TodayInkRules.detail(running).color())
         }
     }
 }
@@ -200,7 +201,7 @@ internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier
 /**
  * The commute on an office day (the commute counts everywhere, slice 2): thinner than the work band — no box, just a
  * short bar and "Commute" / "Commute home · Home about 18:50" in the caption style; while on the way the bar is lit and
- * "Now · home about 18:50" sits in the accent colour. Not an event: no taps. Motion as the work row (it glides with the
+ * "Now · home about 18:50" sits a step brighter (gold is for taps). Not an event: no taps. Motion as the work row (it glides with the
  * other rows and leaves once over; reduced motion cross-fades).
  */
 @Composable
@@ -216,7 +217,7 @@ internal fun CommuteTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(MekaSpace.xs))
         // One text, so "Commute home · Home about 18:50" wraps onto a second line on the cover screen instead of its
         // second half being cut to " · Home about…" (the quality gate's Today shots, 2026-10-22).
-        val detailColor = if (r.running) Meka.colors.accent else Meka.colors.textTertiary
+        val detailColor = TodayInkRules.detail(r.running).color()
         Text(
             buildAnnotatedString {
                 append(r.title)
@@ -261,7 +262,7 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
             // the width by weight cut "5 anytime tasks" to half the row on the cover screen); a long line wraps to two.
             Crossfade(free, animationSpec = MekaMotion.appear(reduced), label = "now-free") { line ->
                 Text(
-                    line, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    line, style = MekaType.caption, color = TodayInkRules.nowWords.color(), maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = MekaSpace.xs),
                 )
             }
