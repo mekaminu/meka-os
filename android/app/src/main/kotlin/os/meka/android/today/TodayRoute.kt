@@ -126,11 +126,12 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import os.meka.android.news.NewsPane
-import os.meka.android.news.NewsTickerStrip
+import os.meka.android.news.TodayNewsRow
 import os.meka.android.news.rememberTickerMode
 import os.meka.core.domain.NewsTicker
 import os.meka.core.domain.TickerMode
 import os.meka.core.domain.TickerRules
+import os.meka.core.domain.TodayNewsRules
 import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.footFade
@@ -1186,11 +1187,11 @@ private fun TodayPane(
                     )
                 }
             }
-            // News (news ticker, slice 2) below Also today, as the approved mockup has it (Meka 2026-11-09 08:09 (d)):
-            // one line of cards; calm by default (two loops, then it rests). Off in Appearance hides it.
-            if (core != null && TickerRules.shown(tickerMode, ticker)) {
+            // News below Also today, as the approved mockup has it (Meka 2026-11-09 08:09 (d)): NEWS · swipe ›, a row of
+            // picture cards you swipe yourself, starting at the first card (slice 2b-2b-2b-3). Off in Appearance hides it.
+            if (core != null && TodayNewsRules.shown(tickerMode, ticker)) {
                 item(key = "news") {
-                    NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
+                    TodayNewsRow(core, ticker, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         openStory = openStory, openMatch = openMatch)
                 }
             }
