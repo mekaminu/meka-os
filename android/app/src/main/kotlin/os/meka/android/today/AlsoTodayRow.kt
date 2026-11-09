@@ -157,7 +157,7 @@ internal fun PressureDetail(p: DayPressure, onFix: (PressureFix) -> Unit) {
 
 @Composable
 private fun dotColour(tile: AlsoTile): Color = if (tile.lit) Meka.colors.accent else when (tile.kind) {
-    AlsoKind.STUDY, AlsoKind.REFLECTION, AlsoKind.GOALS, AlsoKind.PREP -> Meka.colors.calendar1
+    AlsoKind.STUDY, AlsoKind.STUDY_WEEK, AlsoKind.REFLECTION, AlsoKind.REVIEW, AlsoKind.GOALS, AlsoKind.PREP -> Meka.colors.calendar1
     AlsoKind.RENEWAL, AlsoKind.PARCELS, AlsoKind.CLASH, AlsoKind.PRESSURE -> Meka.colors.calendar3
     AlsoKind.WEEK_AHEAD, AlsoKind.TRIP, AlsoKind.LIFE_ADMIN, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE -> Meka.colors.calendar2
     AlsoKind.BINS, AlsoKind.DINNER, AlsoKind.SCHOOL -> Meka.colors.calendar4
