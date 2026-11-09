@@ -32,6 +32,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -58,6 +61,8 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AllDayItem
+import os.meka.core.domain.CardEdge
+import os.meka.core.domain.ScheduleCardRules
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.TimelineRow
 import os.meka.core.domain.UpNextEvent
@@ -71,14 +76,53 @@ import os.meka.core.domain.UpNextEvent
  */
 internal val TIME_COLUMN = 92.dp
 
+/**
+ * The Today rebuild, point (e): inside Today's Schedule card the rows take the card's narrow time column and show a
+ * range's start only (core [ScheduleCardRules]); everywhere else (the Calendar's agenda) they keep [TIME_COLUMN].
+ */
+internal val LocalScheduleCard = staticCompositionLocalOf { false }
+
+internal val timeColumnWidth: Dp
+    @Composable get() = if (LocalScheduleCard.current) ScheduleCardRules.TIME_DP.dp else TIME_COLUMN
+
 @Composable
 internal fun TimeColumn(time: String, past: Boolean) {
+    val card = LocalScheduleCard.current
     Text(
-        time, style = MekaType.caption,
+        if (card) ScheduleCardRules.time(time) else time, style = MekaType.caption,
         color = if (past) Meka.colors.textTertiary else Meka.colors.textSecondary,
-        modifier = Modifier.width(TIME_COLUMN),
+        maxLines = if (card) 1 else Int.MAX_VALUE,
+        modifier = Modifier.width(timeColumnWidth),
     )
 }
+
+/**
+ * One row of Today's Schedule card (the mockup's one compact card): the surface fill, the corners rounded only on the
+ * card's first and last rows, a hairline under every row but the last, and the card's 14 dp inset. The rows inside keep
+ * their own motion (they glide with animateItem, so the card grows and shrinks as rows come and go).
+ */
+@Composable
+internal fun Modifier.scheduleSegment(edge: CardEdge): Modifier {
+    val r = MekaRadius.m
+    val shape = RoundedCornerShape(
+        topStart = if (edge.roundsTop) r else 0.dp, topEnd = if (edge.roundsTop) r else 0.dp,
+        bottomStart = if (edge.roundsBottom) r else 0.dp, bottomEnd = if (edge.roundsBottom) r else 0.dp,
+    )
+    val hair = Meka.colors.hairline
+    val inset = SCHEDULE_INSET
+    return this.fillMaxWidth().clip(shape).background(Meka.colors.surface)
+        .drawBehind {
+            if (!edge.roundsBottom) {
+                val x = inset.toPx()
+                drawLine(hair, Offset(x, size.height - 0.5f), Offset(size.width - x, size.height - 0.5f), strokeWidth = 1f)
+            }
+        }
+        .padding(horizontal = inset)
+        .padding(top = if (edge.roundsTop) MekaSpace.xxs else 0.dp, bottom = if (edge.roundsBottom) MekaSpace.xxs else 0.dp)
+}
+
+/** The Schedule card's side inset (the mockup's 14 px). */
+internal val SCHEDULE_INSET = 14.dp
 
 /** An event: time on the left, title and where/which calendar under it. A running one is marked "Now". */
 @Composable
@@ -87,7 +131,9 @@ internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier 
         TimeColumn(r.time, past)
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.eventTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
-            val line = listOfNotNull(if (r.running) "Now" else null, r.detail).joinToString(" · ")
+            // In Today's Schedule card the time column shows the start only, so the end leads the line ("until 10:00").
+            val until = if (LocalScheduleCard.current) ScheduleCardRules.until(r.time) else null
+            val line = listOfNotNull(if (r.running) "Now" else null, until, r.detail).joinToString(" · ")
             if (line.isNotEmpty()) {
                 Text(line, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary)
             }
@@ -208,7 +254,7 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
             .semantics { contentDescription = listOfNotNull("Now, ${r.time}", r.detail).joinToString(", ") },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(r.time, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.width(TIME_COLUMN))
+        Text(r.time, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, modifier = Modifier.width(timeColumnWidth))
         Box(Modifier.size(8.dp).alpha(dotAlpha).clip(CircleShape).background(Meka.colors.accent))
         r.detail?.let { free ->
             // The words come first and the hairline takes what is left (the quality gate's Today shots, 2026-10-22: sharing
@@ -251,6 +297,8 @@ internal fun AllDayRow(
     modifier: Modifier = Modifier,
     onEvent: ((CalendarEvent) -> Unit)? = null,
     handlers: EventActionHandlers? = null,
+    /** In Today's Schedule card: "All day" in the time column of the first row (the label line goes); null leaves it blank. */
+    timeLabel: String? = null,
 ) {
     val haptics = rememberMekaHaptics()
     var menu by remember(item.event.id) { mutableStateOf(false) }
@@ -273,7 +321,7 @@ internal fun AllDayRow(
                 .padding(vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Spacer(Modifier.width(TIME_COLUMN))
+            if (timeLabel != null) TimeColumn(timeLabel, past = false) else Spacer(Modifier.width(timeColumnWidth))
             Column(Modifier.weight(1f)) {
                 Text(item.event.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
                 item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
@@ -316,7 +364,7 @@ internal fun AllDayMore(label: String, onOpen: () -> Unit, modifier: Modifier = 
             .then(if (touch) Modifier.minTouch() else Modifier.padding(vertical = MekaSpace.xxs)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(Modifier.width(TIME_COLUMN))
+        Spacer(Modifier.width(timeColumnWidth))
         Text(label, style = MekaType.caption, color = Meka.colors.accent)
     }
 }
@@ -329,7 +377,7 @@ internal fun EarlierToggle(label: String, open: Boolean, onToggle: () -> Unit, m
         modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onToggle() }.padding(vertical = MekaSpace.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(Modifier.width(TIME_COLUMN))
+        Spacer(Modifier.width(timeColumnWidth))
         Text(label, style = MekaType.caption, color = Meka.colors.textTertiary)
         Spacer(Modifier.width(MekaSpace.xxs))
         Text("›", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))

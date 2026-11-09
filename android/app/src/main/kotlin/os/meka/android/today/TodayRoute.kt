@@ -167,6 +167,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.TimelineKind
+import os.meka.core.domain.ScheduleCardRules
 import os.meka.core.domain.AllDayRules
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.RepeatChoice
@@ -1350,36 +1351,50 @@ private fun TodayPane(
             // events folded, events and planned tasks in time order with the now line and free gaps.
             // The label says what the section holds ("Today · Work 09:00–17:30 · 2 events") and rides with the first
             // thing under it (Fold review 2026-10-09 07:26, item 6), so it never stands alone over the capture bar.
+            // The Today rebuild, point (e): the whole schedule is the mockup's one compact card (core ScheduleCardRules):
+            // "All day" in the narrow time column of the first all-day row, the earlier fold, then the rows without the
+            // free gaps; each row draws its slice of the card, so rows still glide in and out on their own.
             if (head != null) {
-                if (head == DayHead.ALL_DAY) item(key = "allday-label") {
-                    Headed(EveningCardRules.scheduleLabel(tl.sectionLabel), Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
-                        // In the title column over its rows, as the Calendar draws it (Meka 2026-11-08 22:09: "All day ·
-                        // Todoist" sat far left of its task with a wide gap).
-                        AllDayLabel(tl.allDayLabel, m.padding(start = TIME_COLUMN))
+                val scheduleLabel = EveningCardRules.scheduleLabel(tl.sectionLabel)
+                val allShown = AllDayRules.shown(tl.allDayItems, allDayOpen)
+                val allMore = AllDayRules.moreLabel(tl.allDayItems, allDayOpen)
+                val cardRows = ScheduleCardRules.rows(tl.rows)
+                val earlierShown = if (earlierOpen) tl.earlier else emptyList()
+                val cardCount = ScheduleCardRules.count(allShown.size, allMore != null, tl.earlierLabel != null, earlierShown.size, cardRows.size)
+                val moreAt = allShown.size
+                val earlierAt = moreAt + (if (allMore != null) 1 else 0)
+                val rowsAt = earlierAt + (if (tl.earlierLabel != null) 1 + earlierShown.size else 0)
+                fun edge(i: Int) = ScheduleCardRules.edge(i, cardCount)
+                itemsIndexed(allShown, key = { _, a -> "a-" + a.event.id }) { i, a ->
+                    Headed(scheduleLabel.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
+                        InScheduleCard {
+                            AllDayRow(a, m.scheduleSegment(edge(i)), openEvent, eventHandlers, timeLabel = ScheduleCardRules.allDayTime(i))
+                        }
                     }
                 }
-                items(AllDayRules.shown(tl.allDayItems, allDayOpen), key = { "a-" + it.event.id }) { a ->
-                    AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(dayStep, play)), openEvent, eventHandlers)
-                }
-                AllDayRules.moreLabel(tl.allDayItems, allDayOpen)?.let { more ->
+                allMore?.let { more ->
                     item(key = "allday-more") {
-                        AllDayMore(more, { allDayOpen = true }, Modifier.animateItem().appear(rememberAppearance(dayStep, play)))
+                        InScheduleCard {
+                            AllDayMore(more, { allDayOpen = true }, Modifier.animateItem().appear(rememberAppearance(dayStep, play)).scheduleSegment(edge(moreAt)))
+                        }
                     }
                 }
                 tl.earlierLabel?.let { label ->
                     item(key = "earlier") {
-                        Headed(EveningCardRules.scheduleLabel(tl.sectionLabel).takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
-                            EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, m)
+                        Headed(scheduleLabel.takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
+                            InScheduleCard { EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, m.scheduleSegment(edge(earlierAt))) }
                         }
                     }
-                    if (earlierOpen) {
-                        items(tl.earlier, key = { "x-" + it.id }) { r ->
-                            TimelineEventRow(r, past = true, modifier = Modifier.animateItem().opensEvent(r.event, openEvent))
+                    itemsIndexed(earlierShown, key = { _, r -> "x-" + r.id }) { i, r ->
+                        InScheduleCard {
+                            TimelineEventRow(r, past = true, modifier = Modifier.animateItem().scheduleSegment(edge(earlierAt + 1 + i)).opensEvent(r.event, openEvent))
                         }
                     }
                 }
-                itemsIndexed(tl.rows, key = { _, r -> "r-" + r.id }) { i, r ->
-                    Headed(EveningCardRules.scheduleLabel(tl.sectionLabel).takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(rowsStep, play))) { m ->
+                itemsIndexed(cardRows, key = { _, r -> "r-" + r.id }) { i, r ->
+                    Headed(scheduleLabel.takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(rowsStep, play))) { m0 ->
+                        val m = m0.scheduleSegment(edge(rowsAt + i))
+                        InScheduleCard {
                         when (r.kind) {
                             TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
                                 TimelineEventRow(r, past = false, modifier = sm)
@@ -1394,6 +1409,7 @@ private fun TodayPane(
                             TimelineKind.SESSION -> SessionTimelineRow(r, m)
                             TimelineKind.WORK -> WorkTimelineRow(r, m)
                             TimelineKind.COMMUTE -> CommuteTimelineRow(r, m)
+                        }
                         }
                     }
                 }
@@ -1563,6 +1579,10 @@ internal fun Headed(
         content(Modifier)
     }
 }
+
+/** Today's Schedule card: the rows inside take its narrow time column (TimelineViews' [LocalScheduleCard]). */
+@Composable
+private fun InScheduleCard(content: @Composable () -> Unit) = CompositionLocalProvider(LocalScheduleCard provides true, content = content)
 
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
