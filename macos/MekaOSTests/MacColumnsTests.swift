@@ -24,6 +24,20 @@ final class MacColumnsTests: XCTestCase {
         XCTAssertGreaterThan(w[0], w[2])
     }
 
+    // The Today rebuild, slice 2d: Today is two columns from 600 pt; an open task keeps about a third beside it.
+    func testTodaySplitsAndAnOpenTaskKeepsAColumnBeside() {
+        let cols = TodayColumnsRules.shared
+        XCTAssertFalse(cols.macSplits(contentWidthPt: 599))
+        XCTAssertTrue(cols.macSplits(contentWidthPt: 1000))
+        XCTAssertEqual(cols.macWidths(contentWidthPt: 1000, taskOpen: false).map { CGFloat($0.floatValue) }, [1000])
+        let open = cols.macWidths(contentWidthPt: 1440, taskOpen: true).map { CGFloat($0.floatValue) }
+        XCTAssertEqual(open, [922, 518])
+        XCTAssertTrue(cols.macTodaySplits(todayWidthPt: Float(open[0])))
+        XCTAssertFalse(cols.macTodaySplits(todayWidthPt: 480))
+        XCTAssertEqual(TodayView.leftColumnID, "column-today-left")
+        XCTAssertEqual(TodayView.rightColumnID, "column-today-right")
+    }
+
     func testFadesOnlyWhereThereIsMore() {
         let top = rules.edgeFades(offsetPt: 0, contentHeightPt: 1200, viewportHeightPt: 600)
         XCTAssertFalse(top.top)

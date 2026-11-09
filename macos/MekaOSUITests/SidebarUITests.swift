@@ -64,21 +64,27 @@ final class SidebarUITests: XCTestCase {
     }
 
     @MainActor
-    func testTodayAt1440x900ShowsThreeColumnsInsideTheWindow() {
+    func testTodayAt1440x900IsTwoColumnsInsideTheWindow() {
+        // The Today rebuild, slice 2d (core TodayColumnsRules): Today is two columns across the window, under the header.
         let app = launch(size: "1440x900")
         let window = app.windows.firstMatch
         let today = app.descendants(matching: .any)["column-today"]
         XCTAssertTrue(today.waitForExistence(timeout: 30), "Today's column didn't appear")
-        // Let the opening stagger and the columns' entrance finish before measuring and photographing.
+        // Let the opening stagger finish before measuring and photographing.
         sleep(3)
-        for id in ["column-today", "column-needs_you", "column-coming_up"] {
+        var frames: [CGRect] = []
+        for id in ["column-today", "column-today-left", "column-today-right"] {
             let column = app.descendants(matching: .any)[id]
             XCTAssertTrue(column.waitForExistence(timeout: 10), "\(id) isn't showing at 1440×900")
             let f = column.frame, w = window.frame
-            XCTAssertGreaterThan(f.width, 200, "\(id) is too narrow: \(f.width)")
+            XCTAssertGreaterThan(f.width, 300, "\(id) is too narrow: \(f.width)")
             XCTAssertGreaterThanOrEqual(f.minX, w.minX - 1, "\(id) starts left of the window")
             XCTAssertLessThanOrEqual(f.maxX, w.maxX + 1, "\(id) runs past the window's right edge")
+            frames.append(f)
         }
+        XCTAssertLessThanOrEqual(frames[1].maxX, frames[2].minX + 1, "Today's two columns overlap")
+        XCTAssertFalse(app.descendants(matching: .any)["column-needs_you"].exists, "Needs you still has a column beside Today")
+        XCTAssertFalse(app.descendants(matching: .any)["column-coming_up"].exists, "Coming up still has a column beside Today")
         keep(window.screenshot(), named: "Today 1440x900")
     }
 
@@ -89,9 +95,10 @@ final class SidebarUITests: XCTestCase {
         let window = app.windows.firstMatch
         XCTAssertTrue(app.descendants(matching: .any)["column-today"].waitForExistence(timeout: 30))
         sleep(3)
-        XCTAssertTrue(app.descendants(matching: .any)["column-needs_you"].waitForExistence(timeout: 10),
-                      "Needs you isn't beside Today at 1000 pt")
-        XCTAssertFalse(app.descendants(matching: .any)["column-coming_up"].exists, "Coming up has its own column at 1000 pt")
+        XCTAssertTrue(app.descendants(matching: .any)["column-today-left"].waitForExistence(timeout: 10),
+                      "Today isn't two columns at 1000 pt")
+        XCTAssertTrue(app.descendants(matching: .any)["column-today-right"].exists, "Today's right-hand column is missing at 1000 pt")
+        XCTAssertFalse(app.descendants(matching: .any)["column-needs_you"].exists, "Needs you still has a column beside Today")
         keep(window.screenshot(), named: "Today 1000 wide")
     }
 

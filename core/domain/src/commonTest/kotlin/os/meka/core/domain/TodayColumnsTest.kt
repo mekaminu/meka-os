@@ -36,4 +36,30 @@ class TodayColumnsTest {
         assertEquals(0.5f, TodayColumnsRules.LEFT_SHARE)
         assertTrue(TodayColumnsRules.HEADER_MAX_SHARE < 0.5f)
     }
+
+    @Test
+    fun theMacSplitsFromItsOwnBreakpointAndAnOpenTaskKeepsAColumnBeside() {
+        val r = TodayColumnsRules
+        assertFalse(r.macSplits(599f))
+        assertTrue(r.macSplits(600f))
+        assertTrue(r.macSplits(1440f))
+        // No task open: Today is the whole width.
+        assertEquals(listOf(1440f), r.macWidths(1440f, taskOpen = false))
+        // A task open: about a third for it, the rest for Today, adding up to the window.
+        val wide = r.macWidths(1440f, taskOpen = true)
+        assertEquals(2, wide.size)
+        assertEquals(1440f, wide.sum())
+        assertEquals(518f, wide[1])
+        assertTrue(r.macTodaySplits(wide[0]))
+        // Narrower: the task's column keeps its minimum and Today goes back to one list beside it.
+        val mid = r.macWidths(800f, taskOpen = true)
+        assertEquals(listOf(480f, 320f), mid)
+        assertFalse(r.macTodaySplits(mid[0]))
+        // Below the split width nothing changes.
+        assertEquals(listOf(500f), r.macWidths(500f, taskOpen = true))
+        // Today never squeezed under its minimum.
+        val tight = r.macWidths(610f, taskOpen = true)
+        assertEquals(300f, tight[0])
+        assertEquals(610f, tight.sum())
+    }
 }
