@@ -114,6 +114,9 @@ struct ComingUpColumnView: View {
     /// Mac presentation pass, slice 1: in a two-column window Coming up and News follow Today's day inside Today's own
     /// column (no scroll view or sticky heading of their own).
     var embedded: Bool = false
+    /// The Today rebuild, slice 2d-2e: Today's own NEWS row (picture cards below Also today) has the stories now, so
+    /// Coming up no longer lists them under its days unless asked.
+    var showsNews: Bool = false
 
     var body: some View {
         if embedded {
@@ -158,7 +161,7 @@ struct ComingUpColumnView: View {
                 .padding(.top, MekaSpace.xs)
                 .staggeredAppear(1 + c.days.count)
         }
-        if let place = model.newsPlace,
+        if showsNews, let place = model.newsPlace,
            let g = CommandCentreRules.shared.newsGlance(
                place: place,
                maxItems: shared ? CommandCentreRules.shared.NEWS_SHARED : CommandCentreRules.shared.NEWS_ALONE

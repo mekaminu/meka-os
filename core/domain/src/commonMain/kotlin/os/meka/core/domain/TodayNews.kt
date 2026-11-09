@@ -5,8 +5,9 @@ package os.meka.core.domain
  * mockup's row of picture cards that you swipe yourself, not the drifting ticker. A small-caps NEWS label with a quiet
  * "swipe ›" when there is more than one card, then today's match first (only with Barça chosen) and the stories, each a
  * picture, a two-line headline and "BBC News · 49 min ago". It always starts at the first card, never mid-card, and
- * never moves on its own, so reduced motion needs nothing different. Off (Appearance → News) still hides it.
- * The drifting ticker stays for the bedside clock and the Mac's floating strip.
+ * glides on a card at a time on its own ([driftSteps]; still with reduced motion). Off (Appearance → News) still hides
+ * it. The Fold and the Mac (slice 2d-2e) both read these rules; the drifting ticker stays for the bedside clock and the
+ * Mac's floating strip.
  *
  * Headlines are untrusted content (ADR-006): only ever shown as text; a tap opens MEKA's own News detail.
  */

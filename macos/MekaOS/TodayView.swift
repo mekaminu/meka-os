@@ -146,15 +146,8 @@ struct TodayView: View {
                 try? await Task.sleep(for: .seconds(MotionMath.staggerSpan(count: Self.sections, reduced: false, expressive: true) + 0.3))
                 introPlayed = true
             }
-            // News ticker (news ticker, slice 2): the drifting strip at the foot of Today; Appearance → News ticker.
-            // Mac presentation pass, slice 2 (item 5): only when Today stands alone; beside or under it the News list
-            // already has the same stories.
-            if width > 0, MacHeaderRules.shared.tickerInToday(layout: MacCommandCentreRules.shared.layout(contentWidthPt: Float(width))) {
-                NewsTickerStrip(palette: palette)
-                    .padding(.horizontal, MekaSpace.m)
-                    .padding(.top, MekaSpace.m)
-                    .transition(.opacity)
-            }
+            // The Today rebuild, slice 2d-2e: the floating ticker strip at Today's foot gave way to NEWS, the picture cards
+            // below Also today (MacTodayNewsRow); the drifting strip stays for the floating ticker.
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
         }
@@ -170,6 +163,7 @@ struct TodayView: View {
                     nowBlock
                     scheduleBlock
                     alsoBlock
+                    newsBlock
                     momentCards
                     eveningBlock
                     receiptBlock
@@ -211,6 +205,7 @@ struct TodayView: View {
                 splitList(TodayView.rightColumnID, leading: MekaSpace.gutterWide / 2, trailing: MekaSpace.gutterWide) {
                     scheduleBlock
                     alsoBlock
+                    newsBlock
                     momentCards
                     ComingUpColumnView(shared: true, palette: palette, embedded: true)
                         .environment(\.mekaStaggerPlays, play)
@@ -496,6 +491,13 @@ struct TodayView: View {
                 Spacer().frame(height: MekaSpace.l)
             }
         }
+    }
+
+    /// The Today rebuild, slice 2d-2e: NEWS below Also today, the mockup's row of picture cards that drifts on to the
+    /// next card on its own (core TodayNewsRules, as the Fold's); Appearance → News ticker's Off still hides it.
+    private var newsBlock: some View {
+        MacTodayNewsRow(palette: palette)
+            .staggeredAppear(step(.cards), play: play)
     }
 
     /// The Today rebuild, slice 2d-2b: ALSO TODAY below the schedule (core AlsoTodayRules), with the trains from the

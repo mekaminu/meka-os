@@ -9,47 +9,8 @@ enum NewsTickerChoice {
     static func mode(_ id: String) -> TickerMode { TickerRules.shared.mode(id: id) }
 }
 
-/// The news ticker at the foot of Today (build plan M1, news ticker slice 2): picture-and-headline cards drifting right
-/// to left at a slow constant speed in a seamless loop, today's match first in Barça's colour. Hovering holds it;
-/// clicking a story opens the News sheet on it, the match opens its detail. Calm (the default) drifts twice each time
-/// Today appears and then rests, with ▸ to set it going again (tick haptic); "Always moving" never rests; "Off" hides it.
-/// It only moves while it is on screen. Reduce Motion: no drift, one still card with ‹ › paging. Headlines are
-/// untrusted (ADR-006): text only.
-struct NewsTickerStrip: View {
-    @Environment(CoreModel.self) private var model
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-    @AppStorage(NewsTickerChoice.key) private var modeId = "calm"
-    let palette: MekaPalette
-
-    var body: some View {
-        if let place = model.newsPlace {
-            let ticker = TickerRules.shared.ticker(place: place)
-            let mode = NewsTickerChoice.mode(modeId)
-            if TickerRules.shared.shown(mode: mode, ticker: ticker) {
-                let cards = TickerCardItem.cards(ticker)
-                Group {
-                    if reduceMotion {
-                        StillTicker(cards: cards, palette: palette, open: open)
-                    } else {
-                        DriftingTicker(cards: cards, mode: mode, palette: palette, open: open)
-                    }
-                }
-                .frame(height: 56)
-                .transition(.opacity)
-            }
-        }
-    }
-
-    private func open(_ c: TickerCardItem) {
-        MekaHaptics.tick()
-        switch c {
-        case .match(let m): model.openEvent = m.event
-        case .story(let s):
-            model.newsStoryId = s.id
-            model.showNews = true
-        }
-    }
-}
+// The Today rebuild, slice 2d-2e: the strip that sat at the foot of Today (NewsTickerStrip) gave way to Today's NEWS
+// picture cards (MacTodayNewsRow). The drifting and still tickers below stay for the floating ticker (FloatingTicker).
 
 /// A card on the strip: today's match or a story.
 enum TickerCardItem: Identifiable {
