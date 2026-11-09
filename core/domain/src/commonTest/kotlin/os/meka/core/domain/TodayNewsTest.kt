@@ -60,4 +60,17 @@ class TodayNewsTest {
         val c = TodayNewsRules.cards(NewsTicker(null, listOf(item("a", "barca")))).single()
         assertTrue(c.spoken.endsWith(": Headline a"))
     }
+
+    @Test
+    fun theRowDriftsAcrossOnItsOwnAndAwipePausesIt() {
+        assertEquals(0, TodayNewsRules.driftSteps(TickerMode.CALM, 4, reduced = true))
+        assertEquals(0, TodayNewsRules.driftSteps(TickerMode.CALM, 1, reduced = false))
+        assertEquals(8, TodayNewsRules.driftSteps(TickerMode.CALM, 4, reduced = false))
+        assertEquals(Int.MAX_VALUE, TodayNewsRules.driftSteps(TickerMode.MOVING, 4, reduced = false))
+        assertEquals(1, TodayNewsRules.nextIndex(0, 4))
+        assertEquals(0, TodayNewsRules.nextIndex(3, 4))
+        kotlin.test.assertTrue(TodayNewsRules.mayDrift(null, 0L))
+        kotlin.test.assertFalse(TodayNewsRules.mayDrift(10_000L, 12_000L))
+        kotlin.test.assertTrue(TodayNewsRules.mayDrift(10_000L, 10_000L + TodayNewsRules.RESUME_AFTER_MS))
+    }
 }

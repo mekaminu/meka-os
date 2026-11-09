@@ -1206,7 +1206,7 @@ private fun TodayPane(
             if (core != null && TodayNewsRules.shown(tickerMode, ticker)) {
                 item(key = "news") {
                     TodayNewsRow(core, ticker, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
-                        openStory = openStory, openMatch = openMatch)
+                        openStory = openStory, openMatch = openMatch, mode = tickerMode)
                 }
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.

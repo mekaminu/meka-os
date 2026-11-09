@@ -42,6 +42,29 @@ object TodayNewsRules {
 
     fun shown(mode: TickerMode, ticker: NewsTicker): Boolean = TickerRules.shown(mode, ticker)
 
+    /**
+     * The row drifts across on its own again (Meka 2026-11-09 19:20: "why are my news not scrolling across? That's what
+     * I enjoyed"): every [DRIFT_STEP_MS] it glides to the next card, back to the first after the last. Calm goes round
+     * [CALM_LOOPS] times then rests; Always moving keeps going; reduced motion never drifts. A swipe of his own pauses it
+     * for [RESUME_AFTER_MS].
+     */
+    const val DRIFT_STEP_MS = 3_500L
+    const val RESUME_AFTER_MS = 6_000L
+    const val CALM_LOOPS = 2
+
+    /** How many glides the row makes on its own for [count] cards: none with one card or reduced motion. */
+    fun driftSteps(mode: TickerMode, count: Int, reduced: Boolean): Int = when {
+        reduced || count < 2 || mode == TickerMode.OFF -> 0
+        mode == TickerMode.MOVING -> Int.MAX_VALUE
+        else -> CALM_LOOPS * count
+    }
+
+    /** The card the row glides to after [index]: the next, or the first after the last. */
+    fun nextIndex(index: Int, count: Int): Int = if (count <= 0) 0 else (index + 1) % count
+
+    /** Whether the row may glide at [nowMs] after his own last swipe at [touchedAtMs] (null: never touched). */
+    fun mayDrift(touchedAtMs: Long?, nowMs: Long): Boolean = touchedAtMs == null || nowMs - touchedAtMs >= RESUME_AFTER_MS
+
     /** The cards in order: the match first, then the stories, at most [MAX_CARDS]. */
     fun cards(ticker: NewsTicker): List<TodayNewsCard> {
         val match = ticker.matchday?.let { m ->

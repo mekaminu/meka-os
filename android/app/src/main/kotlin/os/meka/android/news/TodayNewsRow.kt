@@ -1,5 +1,11 @@
 package os.meka.android.news
 
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,15 +56,16 @@ internal const val TODAY_NEWS_TAG = "today-news"
 
 /**
  * The Today rebuild, slice 2b-2b-2b-3 (Meka 2026-11-09 08:09 (d)): NEWS as the approved mockup's row of picture cards
- * you swipe yourself (core [TodayNewsRules]), in place of the drifting ticker on Today. It starts at the first card,
- * whole, and a fling settles on a card's start (snap), so a card is never left half off the left edge. Nothing moves
- * on its own, so reduced motion is the same row. A tap presses the card in with a light haptic and opens the story
+ * (core [TodayNewsRules]), in place of the drifting ticker on Today. It starts at the first card, whole, glides on to
+ * the next card every few seconds on its own (as the ticker drifted), and a swipe of his settles on a card's start
+ * (snap), so a card is never left half off the left edge. Reduced motion: it stays still. A tap presses the card in with a light haptic and opens the story
  * (or the match). The picture cross-fades in over its lettered tile ([NewsThumb]).
  */
 @Composable
 fun TodayNewsRow(
     core: MekaCore, ticker: NewsTicker, modifier: Modifier = Modifier,
     openStory: (String) -> Unit, openMatch: (CalendarEvent) -> Unit,
+    mode: os.meka.core.domain.TickerMode = os.meka.core.domain.TickerMode.CALM,
 ) {
     val cards = remember(ticker) { TodayNewsRules.cards(ticker) }
     if (cards.isEmpty()) return
@@ -66,6 +73,25 @@ fun TodayNewsRow(
     val state = rememberLazyListState(initialFirstVisibleItemIndex = TodayNewsRules.START_INDEX)
     val snap = rememberSnapFlingBehavior(state, SnapPosition.Start)
     val byId = remember(ticker) { ticker.items.associateBy { it.id } }
+    // It drifts across on its own again (Meka 2026-11-09 19:20): a glide to the next card every few seconds, round
+    // twice when calm, on and on when Always moving; his own swipe pauses it a few seconds; reduced motion stays still.
+    val reduced = Meka.reducedMotion
+    var touchedAt by remember { mutableStateOf<Long?>(null) }
+    var gliding by remember { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        snapshotFlow { state.isScrollInProgress }.collect { moving -> if (moving && !gliding) touchedAt = System.currentTimeMillis() }
+    }
+    LaunchedEffect(cards.size, mode, reduced) {
+        var left = TodayNewsRules.driftSteps(mode, cards.size, reduced)
+        while (left > 0) {
+            delay(TodayNewsRules.DRIFT_STEP_MS)
+            if (!TodayNewsRules.mayDrift(touchedAt, System.currentTimeMillis()) || state.isScrollInProgress) continue
+            val next = TodayNewsRules.nextIndex(state.firstVisibleItemIndex, cards.size)
+            gliding = true
+            try { state.animateScrollToItem(next) } finally { gliding = false }
+            if (left != Int.MAX_VALUE) left--
+        }
+    }
     Column(modifier.fillMaxWidth().testTag(TODAY_NEWS_TAG), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(TodayNewsRules.LABEL, style = MekaType.cardLabel, color = Meka.colors.textSecondary, maxLines = 1,
