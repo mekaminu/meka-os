@@ -17,17 +17,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import os.meka.android.designsystem.MekaTheme
-import os.meka.core.domain.DayRingHeader
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.HabitChip
 import os.meka.core.domain.HabitDot
 import os.meka.core.domain.HabitDotRules
 import os.meka.core.domain.WatchFace
+import os.meka.core.domain.WatchFaceRules
 
 /**
- * Calm Today, slice 2: today's habits sit on the watch face as dots on the closed Fold's compact face; a tap on a dot
- * ticks that habit, a tap anywhere else opens the whole day, and a screen reader gets one action per habit. Runs on
- * the Fold or an emulator; CI compiles it.
+ * Calm Today, slice 2: today's habits sit on the watch face as dots; a tap on a dot ticks that habit, a tap anywhere
+ * else opens the whole day, and a screen reader gets one action per habit. Since the Today rebuild (slice 2b-2b-2b-2)
+ * only the open Fold's wide face carries the dots ([WatchFaceRules.carriesDots]; the folded phone's 40 dp clock has
+ * none, its habits are chips), so the test draws the wide face. Runs on the Fold or an emulator; CI runs it.
  */
 class HabitDotsFaceTest {
     @get:Rule
@@ -46,7 +47,7 @@ class HabitDotsFaceTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.width(412.dp)) {
-                    TodayHeaderRow(WatchFace.EMPTY, compact = true, DayRingPlay.STILL, played = {}, onOpenFace = { opened++ },
+                    TodayHeaderRow(WatchFace.EMPTY, compact = false, DayRingPlay.STILL, played = {}, onOpenFace = { opened++ },
                         dots = list, onTick = { ticked += it.id }) { Text("Good morning, Meka") }
                 }
             }
@@ -57,7 +58,7 @@ class HabitDotsFaceTest {
     @Test
     fun aTapOnADotTicksItsHabit() {
         face()
-        val place = HabitDotRules.place(dots.first(), DayRingHeader.COMPACT_DP)
+        val place = HabitDotRules.place(dots.first(), WatchFaceRules.headerDp(cover = false))
         compose.onNodeWithTag(WATCH_FACE_TAG, useUnmergedTree = true).performTouchInput {
             val px = density
             click(Offset(center.x + place.xDp * px, center.y + place.yDp * px))
