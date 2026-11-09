@@ -384,7 +384,7 @@ class TodayScreensTest {
         if (compose.onAllNodesWithTag(os.meka.android.today.HEADER_TILES_TAG).fetchSemanticsNodes().isEmpty()) fail("tiles: no header tiles")
         val tiles = os.meka.core.domain.TodayHeaderRules.tiles(today.timeline, today.doneToday, today.mailUnread)
         tiles.forEach { t ->
-            val node = compose.onNodeWithTag("header-tile-${t.kind.name.lowercase()}").fetchSemanticsNode()
+            val node = compose.onNodeWithTag("header-tile-${t.kind.name.lowercase()}", useUnmergedTree = true).fetchSemanticsNode("tiles: no ${t.kind} tile")
             val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
             if (said != t.spoken) fail("tiles: ${t.kind} said \"$said\", wanted \"${t.spoken}\"")
         }

@@ -46,12 +46,12 @@ internal fun HeaderTilesRow(tiles: List<HeaderTile>, onOpen: (HeaderTileKind) ->
         tiles.forEach { tile ->
             Column(
                 Modifier.weight(1f)
+                    .testTag("header-tile-${tile.kind.name.lowercase()}")
                     .clip(RoundedCornerShape(MekaRadius.m))
                     .background(Meka.colors.surface)
                     .clickable(role = Role.Button, onClickLabel = openLabel(tile.kind)) { haptics.light(); onOpen(tile.kind) }
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs)
-                    .clearAndSetSemantics { contentDescription = tile.spoken; role = Role.Button }
-                    .testTag("header-tile-${tile.kind.name.lowercase()}"),
+                    .clearAndSetSemantics { contentDescription = tile.spoken; role = Role.Button },
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
             ) {
                 Text(tile.key, style = MekaType.cardLabel, color = Meka.colors.textSecondary, maxLines = 1)
@@ -79,7 +79,7 @@ internal fun WeatherChip(text: String, spoken: String, modifier: Modifier = Modi
             t, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
                 .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs)
-                .semantics { contentDescription = spoken }.testTag(WEATHER_CHIP_TAG),
+                .testTag(WEATHER_CHIP_TAG).semantics { contentDescription = spoken },
         )
     }
 }
