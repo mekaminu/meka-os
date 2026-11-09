@@ -467,28 +467,32 @@ struct TodayView: View {
             let tl = today.timeline
             // The label says what the section holds ("Today · Work 09:00–17:30 · 2 events"; Fold review
             // 2026-10-09 07:26, item 6), as on the Fold.
+            // The Today rebuild, slice 2d-2d (the Fold's point (e)): the whole schedule is the mockup's one compact card
+            // (core ScheduleCardRules), headed SCHEDULE: "All day" in the narrow time column of the first all-day row, the
+            // earlier fold, then the rows without the free gaps (the now line still says what's free from now).
             if tl.head != nil {
-                SectionLabel(tl.sectionLabel, palette).staggeredAppear(step(.timeline), play: play)
-                if !tl.allDayItems.isEmpty {
-                    AllDayLabel(label: tl.allDayLabel, palette: palette).staggeredAppear(step(.timeline), play: play)
-                }
-                ForEach(AllDayRules.shared.shown(items: tl.allDayItems, open: allDayOpen), id: \.event.id) { a in
-                    AllDayRow(item: a, palette: palette)
-                        .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
-                        .staggeredAppear(step(.timeline), play: play)
-                }
-                if let more = AllDayRules.shared.moreLabel(items: tl.allDayItems, open: allDayOpen) {
-                    AllDayMore(label: more, open: $allDayOpen, palette: palette).staggeredAppear(step(.timeline), play: play)
-                }
-                if let label = tl.earlierLabel {
-                    EarlierToggle(label: label, open: $earlierOpen, palette: palette).staggeredAppear(step(.timeline), play: play)
-                    if earlierOpen {
-                        ForEach(tl.earlier, id: \.id) { r in TimelineEventRow(row: r, past: true, palette: palette).transition(.opacity) }
+                SectionLabel(EveningCardRules.shared.scheduleLabel(sectionLabel: tl.sectionLabel), palette)
+                    .staggeredAppear(step(.timeline), play: play)
+                ScheduleCard(palette: palette) {
+                    let shown = AllDayRules.shared.shown(items: tl.allDayItems, open: allDayOpen)
+                    ForEach(Array(shown.enumerated()), id: \.element.event.id) { i, a in
+                        AllDayRow(item: a, palette: palette, timeLabel: ScheduleCardRules.shared.allDayTime(index: Int32(i)))
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
+                    }
+                    if let more = AllDayRules.shared.moreLabel(items: tl.allDayItems, open: allDayOpen) {
+                        AllDayMore(label: more, open: $allDayOpen, palette: palette)
+                    }
+                    if let label = tl.earlierLabel {
+                        EarlierToggle(label: label, open: $earlierOpen, palette: palette)
+                        if earlierOpen {
+                            ForEach(tl.earlier, id: \.id) { r in TimelineEventRow(row: r, past: true, palette: palette).transition(.opacity) }
+                        }
+                    }
+                    ForEach(ScheduleCardRules.shared.rows(rows: tl.rows), id: \.id) { r in
+                        timelineRow(r)
                     }
                 }
-                ForEach(tl.rows, id: \.id) { r in
-                    timelineRow(r).staggeredAppear(Int(TodayOrderRules.shared.TIMELINE_ROWS_STEP), play: play)
-                }
+                .staggeredAppear(step(.timeline), play: play)
                 Spacer().frame(height: MekaSpace.l)
             }
         }
@@ -831,6 +835,7 @@ struct SectionLabel: View {
 
 struct TaskRow: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.scheduleCard) private var card
     @Environment(\.selectionNamespace) private var selectionNamespace
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
@@ -863,8 +868,9 @@ struct TaskRow: View {
     var body: some View {
         HStack(spacing: MekaSpace.m) {
             if let time {
-                Text(time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
-                    .frame(width: TimelineMetrics.timeColumn - MekaSpace.m, alignment: .leading)
+                Text(TimelineMetrics.shown(time, card: card)).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
+                    .lineLimit(card ? 1 : nil)
+                    .frame(width: TimelineMetrics.column(card: card) - MekaSpace.m, alignment: .leading)
             }
             CompleteButton(id: task.id, title: task.title, palette: palette, settle: true) { ticking = true }
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -876,7 +882,10 @@ struct TaskRow: View {
                 if let line = subtitle {
                     // The calmer scale (beside the mockup, 2026-10-29): a row's line in the caption, as the day's times.
                     Text(line).font(MekaType.caption)
-                        .foregroundStyle(isAlert ? palette.critical : ((late && reason == nil && time != nil) || (carriedLine != nil && reason == nil) ? palette.accent : palette.textSecondary))
+                        // Gold is for clicks (the Today rebuild's point (i)): a late or carried line is amber (core TodayInkRules).
+                        .foregroundStyle(TodayInkRules.shared.taskLine(
+                            late: late && reason == nil && time != nil, carried: carriedLine != nil && reason == nil, flagged: isAlert
+                        )?.color(palette) ?? palette.critical)
                 }
             }
             Spacer()

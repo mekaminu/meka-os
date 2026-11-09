@@ -7,6 +7,57 @@ import SwiftUI
 /// Reduce Motion: cross-fades only and a steady dot.
 enum TimelineMetrics {
     static let timeColumn: CGFloat = 96
+    /// The Today rebuild, slice 2d-2d (the Fold's point (e)): inside Today's Schedule card the rows take the card's narrow
+    /// time column (core ScheduleCardRules.TIME_DP) and show a range's start only; elsewhere (Calendar) they keep 96 pt.
+    static func column(card: Bool) -> CGFloat { card ? CGFloat(ScheduleCardRules.shared.TIME_DP) : timeColumn }
+    static func shown(_ time: String, card: Bool) -> String { card ? ScheduleCardRules.shared.time(t: time) : time }
+    /// The Schedule card's side inset (the mockup's 14 px).
+    static let cardInset: CGFloat = 14
+}
+
+/// True inside Today's Schedule card (set by the card, read by its rows).
+private struct ScheduleCardKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var scheduleCard: Bool {
+        get { self[ScheduleCardKey.self] }
+        set { self[ScheduleCardKey.self] = newValue }
+    }
+}
+
+/// Today's inks (core TodayInkRules, the Today rebuild's point (i)): gold only for taps and the now mark; what's on now a
+/// step-brighter grey; a line wanting a look (late, carried, a clash) amber; the rest the quiet grey.
+extension TodayInk {
+    func color(_ p: MekaPalette) -> Color {
+        switch self {
+        case .tap, .nowMark: p.accent
+        case .live: p.textSecondary
+        case .attention: p.calendar3
+        default: p.textTertiary
+        }
+    }
+}
+
+/// Today's Schedule as the mockup's one compact card (core ScheduleCardRules): the surface fill with rounded corners,
+/// the 14 pt inset and a hairline between rows (drawn by the card, so rows still glide in and out on their own).
+struct ScheduleCard<Content: View>: View {
+    let palette: MekaPalette
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Group(subviews: content()) { rows in
+                ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
+                    if i > 0 { Rectangle().fill(palette.hairline).frame(height: 1) }
+                    row
+                }
+            }
+        }
+        .padding(.horizontal, TimelineMetrics.cardInset - MekaSpace.xs)
+        .padding(.vertical, MekaSpace.xxs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .environment(\.scheduleCard, true)
+    }
 }
 
 /// Clicking an event (a row, an all-day chip, Up next's event line) opens its detail sheet (calendar redesign, slice 3).
@@ -168,6 +219,7 @@ struct EventUndoBar: View {
 /// An event: time on the left, title and where/which calendar under it. A running one is marked "Now".
 struct TimelineEventRow: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.scheduleCard) private var card
     let row: TimelineRow
     let past: Bool
     let palette: MekaPalette
@@ -179,9 +231,10 @@ struct TimelineEventRow: View {
         let asking = !past && row.event != nil && club.asking(detail: row.detail)
         let detail = asking ? club.withoutAsk(detail: row.detail) : row.detail
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(row.time).font(MekaType.itemMeta).monospacedDigit()
+            Text(TimelineMetrics.shown(row.time, card: card)).font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
-                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+                .lineLimit(card ? 1 : nil)
+                .frame(width: TimelineMetrics.column(card: card), alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.eventTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 if asking, let event = row.event {
@@ -200,13 +253,15 @@ struct TimelineEventRow: View {
                     .fixedSize()
                     .help("Choose whose session this is; every one in the series follows")
                 }
-                let line = [row.running ? "Now" : nil, detail].compactMap { $0 }.joined(separator: " · ")
+                // In Today's Schedule card the time column shows the start only, so the end leads the line ("until 10:00").
+                let until = card ? ScheduleCardRules.shared.until(t: row.time) : nil
+                let line = [row.running ? "Now" : nil, until, detail].compactMap { $0 }.joined(separator: " · ")
                 if !line.isEmpty {
-                    Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
+                    Text(line).font(MekaType.caption).foregroundStyle(TodayInkRules.shared.detail(running: row.running).color(palette))
                 }
-                // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in the accent.
+                // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in amber (gold is for clicks).
                 if let clash = row.clash {
-                    Text(clash).font(MekaType.caption).foregroundStyle(past ? palette.textTertiary : palette.accent)
+                    Text(clash).font(MekaType.caption).foregroundStyle(TodayInkRules.shared.clash(past: past).color(palette))
                 }
             }
             Spacer()
@@ -221,18 +276,20 @@ struct TimelineEventRow: View {
 /// 2026-10-08: only Up next's title is bold), "Leave by 17:30" under it, or "Now · until 18:45" in the accent colour while it's on. Today's session card above
 /// answers it, so the row has no clicks of its own.
 struct SessionTimelineRow: View {
+    @Environment(\.scheduleCard) private var card
     let row: TimelineRow
     let palette: MekaPalette
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(row.time).font(MekaType.itemMeta).monospacedDigit()
+            Text(TimelineMetrics.shown(row.time, card: card)).font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(palette.textSecondary)
-                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+                .lineLimit(card ? 1 : nil)
+                .frame(width: TimelineMetrics.column(card: card), alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
                 if let line = row.detail {
-                    Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
+                    Text(line).font(MekaType.caption).foregroundStyle(TodayInkRules.shared.detail(running: row.running).color(palette))
                 }
             }
             Spacer()
@@ -264,13 +321,15 @@ struct GapRow: View {
 /// thin bar and "Work"; while at work the bar is lit and "Now · until 17:30" sits beside it in the accent colour. No
 /// clicks. It glides with the other rows and leaves once work is over; reduced motion cross-fades.
 struct WorkTimelineRow: View {
+    @Environment(\.scheduleCard) private var card
     let row: TimelineRow
     let palette: MekaPalette
 
     var body: some View {
         HStack(spacing: 0) {
-            Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
-                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            Text(TimelineMetrics.shown(row.time, card: card)).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
+                .lineLimit(card ? 1 : nil)
+                .frame(width: TimelineMetrics.column(card: card), alignment: .leading)
             WorkBand(title: row.title, detail: row.detail, running: row.running, palette: palette)
             Spacer(minLength: 0)
         }
@@ -285,6 +344,7 @@ struct WorkTimelineRow: View {
 /// bar and "Commute" / "Commute home · Home about 18:50" in the caption style; on the way, the bar is lit and "Now · home
 /// about 18:50" sits in the accent colour. Not an event: no clicks. It glides and leaves like the work row.
 struct CommuteTimelineRow: View {
+    @Environment(\.scheduleCard) private var card
     let row: TimelineRow
     let palette: MekaPalette
 
@@ -295,16 +355,17 @@ struct CommuteTimelineRow: View {
         guard let detail = row.detail else { return title }
         // "about" kept with its time, so a wrap never leaves it alone at a line's end (re-shot, 2026-10-22).
         var rest = AttributedString(" · \(CommuteRules.shared.shown(line: detail))")
-        rest.foregroundColor = row.running ? palette.accent : palette.textTertiary
+        rest.foregroundColor = TodayInkRules.shared.detail(running: row.running).color(palette)
         return title + rest
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
-                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            Text(TimelineMetrics.shown(row.time, card: card)).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
+                .lineLimit(card ? 1 : nil)
+                .frame(width: TimelineMetrics.column(card: card), alignment: .leading)
             HStack(spacing: MekaSpace.xs) {
-                RoundedRectangle(cornerRadius: 1).fill(row.running ? palette.accent : palette.hairline).frame(width: 2, height: 10)
+                RoundedRectangle(cornerRadius: 1).fill(row.running ? TodayInk.nowMark.color(palette) : palette.hairline).frame(width: 2, height: 10)
                 // One text, so "Commute home · Home about 18:50" wraps in a narrow window instead of cutting its second
                 // half (the quality gate's Today shots on the Fold, 2026-10-22).
                 Text(line).font(MekaType.caption).fixedSize(horizontal: false, vertical: true)
@@ -328,11 +389,11 @@ struct WorkBand: View {
 
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
-            RoundedRectangle(cornerRadius: 1).fill(running ? palette.accent : palette.textTertiary).frame(width: 2, height: 12)
+            RoundedRectangle(cornerRadius: 1).fill(TodayInkRules.shared.bar(running: running).color(palette)).frame(width: 2, height: 12)
             HStack(spacing: 0) {
                 Text(title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 if let detail {
-                    Text(" · \(detail)").font(MekaType.caption).foregroundStyle(running ? palette.accent : palette.textTertiary)
+                    Text(" · \(detail)").font(MekaType.caption).foregroundStyle(TodayInkRules.shared.detail(running: running).color(palette))
                 }
             }
         }
@@ -348,6 +409,7 @@ struct WorkBand: View {
 /// sit on the line ("07:57 ● 1 h free until Work", Fold review 2026-10-08) and cross-fade as they change.
 struct NowLine: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.scheduleCard) private var card
     let row: TimelineRow
     let palette: MekaPalette
     @State private var dim = false
@@ -355,11 +417,12 @@ struct NowLine: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(row.time).font(MekaType.caption).monospacedDigit().foregroundStyle(palette.accent)
-                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: TimelineMetrics.column(card: card), alignment: .leading)
             Circle().fill(palette.accent).frame(width: 8, height: 8)
                 .opacity(reduceMotion ? 1 : (dim ? 0.45 : 1))
             if let free = row.detail {
-                Text(free).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2).truncationMode(.tail).layoutPriority(1)
+                Text(free).font(MekaType.caption).foregroundStyle(TodayInkRules.shared.nowWords.color(palette)).lineLimit(2).truncationMode(.tail).layoutPriority(1)
                     .padding(.horizontal, MekaSpace.xs)
                     .id(free)
                     .transition(.opacity)
@@ -397,13 +460,18 @@ struct AllDayLabel: View {
 /// like a to-do also shows a small, quiet "Make it a task".
 struct AllDayRow: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.scheduleCard) private var card
     let item: AllDayItem
     let palette: MekaPalette
+    /// In Today's Schedule card: "All day" in the time column of the first all-day row (core ScheduleCardRules.allDayTime).
+    var timeLabel: String? = nil
 
     var body: some View {
         let hideLabel = "Hide \(item.calendarLabel) from Today"
-        HStack(alignment: .center, spacing: 0) {
-            Spacer().frame(width: TimelineMetrics.timeColumn)
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(timeLabel ?? "").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                .lineLimit(1)
+                .frame(width: TimelineMetrics.column(card: card), alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.event.title).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
@@ -435,6 +503,7 @@ struct AllDayRow: View {
 
 /// "+2 more" under the all-day rows: unfolds the rest with a spring.
 struct AllDayMore: View {
+    @Environment(\.scheduleCard) private var card
     let label: String
     @Binding var open: Bool
     let palette: MekaPalette
@@ -442,7 +511,7 @@ struct AllDayMore: View {
     var body: some View {
         Button { open = true } label: {
             Text(label).font(MekaType.caption).foregroundStyle(palette.accent)
-                .padding(.leading, TimelineMetrics.timeColumn)
+                .padding(.leading, TimelineMetrics.column(card: card))
                 .padding(.vertical, MekaSpace.xxs)
                 .contentShape(Rectangle())
         }
@@ -452,6 +521,7 @@ struct AllDayMore: View {
 
 /// "3 earlier ›": unfolds the events that have finished.
 struct EarlierToggle: View {
+    @Environment(\.scheduleCard) private var card
     let label: String
     @Binding var open: Bool
     let palette: MekaPalette
@@ -464,7 +534,7 @@ struct EarlierToggle: View {
                     .rotationEffect(.degrees(open ? 90 : 0))
             }
             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
+            .padding(.leading, TimelineMetrics.column(card: card) + MekaSpace.xs)
             .padding(.vertical, MekaSpace.xxs)
             .contentShape(Rectangle())
         }
