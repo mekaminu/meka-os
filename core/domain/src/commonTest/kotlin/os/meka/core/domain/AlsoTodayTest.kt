@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -101,6 +102,39 @@ class AlsoTodayTest {
         assertEquals(listOf(AlsoKind.TRAIN_QUEUE, AlsoKind.REPLIES, AlsoKind.TRAINS, AlsoKind.SCHOOL, AlsoKind.TRADING, AlsoKind.GOALS), more.map { it.kind })
         assertEquals(more, AlsoTodayRules.withHeader(more, RouteLine("x", lit = true, spoken = "x"), "This week: 1 of 3 goals moving"))
         assertEquals(tiles, AlsoTodayRules.withHeader(tiles, null, null))
+    }
+
+    @Test
+    fun meetingPrepAndAStackingDayAreTilesThatUnfold() {
+        val prep = MeetingPrep(
+            eventId = "e1", startAtMs = 0L, headline = "Prep · Quote review at 14:00 · in 12 min",
+            whoLine = "With Sam Taylor and Alex Green", people = emptyList(), lines = listOf("Sam · Last email Tue 13:02"),
+            spoken = "Prep. Quote review at 14:00. In 12 min. With Sam Taylor and Alex Green.",
+        )
+        val p = AlsoTodayRules.prep(prep)
+        assertEquals("PREP", p.key)
+        assertEquals("Quote review at 14:00", p.value)
+        assertEquals("in 12 min · with Sam Taylor and Alex Green", p.line)
+        assertEquals("e1", p.targetId)
+        assertTrue(p.lit)
+        assertTrue(p.spoken.endsWith(AlsoTodayRules.UNFOLD_PREP))
+        val fix = PressureFix("t1", "Gym", day + 2, "Move “Gym” to Sat", earlier = false)
+        val stacking = DayPressure(day + 1, "Tomorrow", evening = false, items = emptyList(),
+            line = "Tomorrow is stacking up: Trip form, Council tax and Gym", short = "s",
+            spoken = "Tomorrow is stacking up: Trip form, Council tax and Gym.", fixes = listOf(fix))
+        val s = AlsoTodayRules.pressure(stacking)
+        assertEquals("STACKING UP", s.key)
+        assertEquals("Tomorrow", s.value)
+        assertEquals("Trip form, Council tax and Gym", s.line)
+        assertTrue(s.lit)
+        assertFalse(AlsoTodayRules.pressure(stacking.copy(fixes = emptyList())).lit)
+        assertEquals("This evening", AlsoTodayRules.pressure(stacking.copy(dayName = "This evening", evening = true)).value)
+        assertTrue(AlsoTodayRules.unfolds(AlsoKind.PREP) && AlsoTodayRules.unfolds(AlsoKind.PRESSURE))
+        assertFalse(AlsoTodayRules.unfolds(AlsoKind.BINS))
+        // Both lit: prep first (minutes away), then the clash, then the stacking day, then the rest.
+        val clash = AlsoTodayRules.clash("Training at 16:55 while you're at work — who's taking Alex?")
+        val all = AlsoTodayRules.withHeader(listOf(clash), null, null, prep = prep, pressure = stacking)
+        assertEquals(listOf(AlsoKind.PREP, AlsoKind.CLASH, AlsoKind.PRESSURE), all.map { it.kind })
     }
 
     @Test

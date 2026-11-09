@@ -45,6 +45,9 @@ import os.meka.android.today.DoneFoldLine
 import os.meka.core.domain.DoneTodayRules
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import os.meka.core.domain.HabitTiming
@@ -486,6 +489,57 @@ class TodayScreensTest {
         compose.onNodeWithTag(os.meka.android.today.DAILY_RECEIPT_TAG).performClick()
         compose.waitForIdle()
         if (opened != 1) fail("receipt: a tap didn't open Activity")
+    }
+
+    /**
+     * The Today rebuild, slice 2b-2b-2: meeting prep and a day stacking up are Also today tiles; a tap on the prep tile
+     * unfolds who's coming under the row and a second tap folds it; the stacking-up tile's fix is tapped from its detail.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun prepAndStackingUpUnfoldUnderTheRow() {
+        val prep = os.meka.core.domain.MeetingPrep(
+            eventId = "e1", startAtMs = 0L, headline = "Prep · Quote review at 14:00 · in 12 min",
+            whoLine = "With Sam Taylor and Alex Green", people = emptyList(), lines = listOf("Sam Taylor · Last email Tue 13:02"),
+            spoken = "Prep. Quote review at 14:00. In 12 min.",
+        )
+        val fix = os.meka.core.domain.PressureFix("t1", "Gym", 20_402L, "Move “Gym” to Sat", earlier = false)
+        val pressure = os.meka.core.domain.DayPressure(20_401L, "Tomorrow", evening = false, items = emptyList(),
+            line = "Tomorrow is stacking up: Trip form, Council tax and Gym", short = "s", spoken = "Tomorrow is stacking up.", fixes = listOf(fix))
+        val tiles = os.meka.core.domain.AlsoTodayRules.withHeader(emptyList(), null, null, prep = prep, pressure = pressure)
+        val fixed = mutableListOf<String>()
+        compose.setContent {
+            MekaTheme {
+                var unfolded by remember { mutableStateOf<os.meka.core.domain.AlsoKind?>(null) }
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.AlsoTodayRow(
+                        tiles, onOpen = { t -> unfolded = if (unfolded == t.kind) null else t.kind }, opens = { true },
+                        unfolded = unfolded,
+                        detail = { k ->
+                            when (k) {
+                                os.meka.core.domain.AlsoKind.PREP -> os.meka.android.today.PrepDetail(prep)
+                                os.meka.core.domain.AlsoKind.PRESSURE -> os.meka.android.today.PressureDetail(pressure) { fixed += it.taskId }
+                                else -> Unit
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        ScreenShots.assertShows(compose, "also", "Quote review at 14:00")
+        ScreenShots.assertShows(compose, "also", "Tomorrow")
+        if (shownText("Sam Taylor · Last email Tue 13:02")) fail("prep: detail showed before a tap")
+        compose.onNodeWithTag("also-tile-prep").performClick()
+        compose.waitForIdle()
+        ScreenShots.assertShows(compose, "prep", "Sam Taylor · Last email Tue 13:02")
+        compose.onNodeWithTag("also-tile-prep").performClick()
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(os.meka.android.today.ALSO_DETAIL_TAG).fetchSemanticsNodes().isNotEmpty()) fail("prep: a second tap didn't fold it")
+        compose.onNodeWithTag("also-tile-pressure").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("also-fix-t1").performClick()
+        compose.waitForIdle()
+        if (fixed != listOf("t1")) fail("pressure: the fix wasn't tapped ($fixed)")
     }
 
     /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */

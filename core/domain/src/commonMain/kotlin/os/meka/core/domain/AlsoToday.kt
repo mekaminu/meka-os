@@ -5,6 +5,8 @@ enum class AlsoKind {
     RENEWAL, STUDY, WEEK_AHEAD, BINS, GIFTS, TRIP, PARCELS, DINNER, DATE_NIGHT, LIFE_ADMIN, REFLECTION,
     // Slice 2b-2b: the header's remaining one-line notes, folded into the row.
     CLASH, TRAINS, TRAIN_QUEUE, SCHOOL, REPLIES, TRADING, GOALS,
+    // Slice 2b-2b-2: meeting prep and a day stacking up, the header's last two notes; a tap unfolds their detail.
+    PREP, PRESSURE,
 }
 
 /**
@@ -42,7 +44,7 @@ object AlsoTodayRules {
     const val MAX = 12
 
     val ORDER: List<AlsoKind> = listOf(
-        AlsoKind.CLASH, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE, AlsoKind.SCHOOL,
+        AlsoKind.PREP, AlsoKind.CLASH, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE, AlsoKind.SCHOOL, AlsoKind.PRESSURE,
         AlsoKind.STUDY, AlsoKind.RENEWAL, AlsoKind.WEEK_AHEAD, AlsoKind.BINS, AlsoKind.TRIP, AlsoKind.GIFTS,
         AlsoKind.PARCELS, AlsoKind.DINNER, AlsoKind.DATE_NIGHT, AlsoKind.LIFE_ADMIN, AlsoKind.REFLECTION,
         AlsoKind.REPLIES, AlsoKind.TRADING, AlsoKind.GOALS,
@@ -67,7 +69,16 @@ object AlsoTodayRules {
         AlsoKind.REPLIES -> "REPLIES"
         AlsoKind.TRADING -> "TRADING"
         AlsoKind.GOALS -> "GOALS"
+        AlsoKind.PREP -> "PREP"
+        AlsoKind.PRESSURE -> "STACKING UP"
     }
+
+    /** What a tap on a [AlsoKind.PREP] or [AlsoKind.PRESSURE] tile does: it unfolds the detail under the row. */
+    const val UNFOLD_PREP = "Shows who's coming and what's open between you."
+    const val UNFOLD_PRESSURE = "Shows ways to ease it."
+
+    /** The kinds whose tap unfolds a detail card under the row rather than opening a place. */
+    fun unfolds(kind: AlsoKind): Boolean = kind == AlsoKind.PREP || kind == AlsoKind.PRESSURE
 
     /** The tiles for [today]; [renewals] are the renewals needing him (overdue, cancel-by, due soon), first first. */
     fun tiles(today: Today, renewals: List<RenewalItem>, todayDay: Long): List<AlsoTile> {
@@ -96,13 +107,41 @@ object AlsoTodayRules {
      * [tiles] with the notes Today itself doesn't carry: the trains on an office day's commute ([route], from the
      * weather) and this week's goals ([goalsLine], "This week: 2 of 3 goals moving"). A kind already there isn't added twice.
      */
-    fun withHeader(tiles: List<AlsoTile>, route: RouteLine?, goalsLine: String?, goalsSpoken: String = goalsLine?.let { "$it." }.orEmpty()): List<AlsoTile> {
+    fun withHeader(
+        tiles: List<AlsoTile>, route: RouteLine?, goalsLine: String?, goalsSpoken: String = goalsLine?.let { "$it." }.orEmpty(),
+        prep: MeetingPrep? = null, pressure: DayPressure? = null,
+    ): List<AlsoTile> {
         val have = tiles.map { it.kind }.toSet()
         val extra = listOfNotNull(
             route?.takeIf { AlsoKind.TRAINS !in have }?.let { split(AlsoKind.TRAINS, it.text, it.spoken, it.lit) },
             goalsLine?.takeIf { AlsoKind.GOALS !in have }?.let { colon(AlsoKind.GOALS, it, goalsSpoken, lit = false) },
+            prep?.takeIf { AlsoKind.PREP !in have }?.let { prep(it) },
+            pressure?.takeIf { AlsoKind.PRESSURE !in have }?.let { pressure(it) },
         )
         return if (extra.isEmpty()) tiles else sorted(tiles + extra)
+    }
+
+    /**
+     * Slice 2b-2b-2: "Prep · Quote review at 14:00 · in 12 min" with "With Sam Taylor and Alex Green" → "Quote review at
+     * 14:00" · "in 12 min · with Sam Taylor and Alex Green" (lit: it's minutes away). [AlsoTile.targetId] is the event.
+     */
+    fun prep(p: MeetingPrep): AlsoTile {
+        val base = split(AlsoKind.PREP, p.headline, p.spoken, lit = true, drop = "Prep", id = p.eventId)
+        val who = p.whoLine.trim().replaceFirstChar { it.lowercase() }
+        val line = listOf(base.line, who).filter { it.isNotEmpty() }.joinToString(" · ")
+        return base.copy(line = line, spoken = p.spoken.trimEnd() + " " + UNFOLD_PREP)
+    }
+
+    /**
+     * "Friday is stacking up: Trip form, Council tax and Gym" → "Friday" · "Trip form, Council tax and Gym"; lit when
+     * there's a one-tap fix to ease it (then the tap unfolds them), the amber dot otherwise.
+     */
+    fun pressure(p: DayPressure): AlsoTile {
+        val value = p.dayName
+        val line = p.line.substringAfter(": ", "").trim()
+        val lit = p.fixes.isNotEmpty()
+        val spoken = p.spoken.trimEnd() + if (lit) " $UNFOLD_PRESSURE" else ""
+        return AlsoTile(AlsoKind.PRESSURE, key(AlsoKind.PRESSURE), value, line, spoken, lit)
     }
 
     private fun sorted(tiles: List<AlsoTile>): List<AlsoTile> =

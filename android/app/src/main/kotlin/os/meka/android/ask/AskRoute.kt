@@ -227,6 +227,11 @@ fun AskRoute(
     LaunchedEffect(openMail) {
         if (openMail) { pane = MoreItem.MAIL; healthApp?.openMail?.value = false }
     }
+    // An Also today tile on Today (the Today rebuild, slice 2b-2b-2) → that tile's pane (bins, trips, gifts, dinners…).
+    val openPaneAsked by remember(healthApp) { healthApp?.openPane ?: kotlinx.coroutines.flow.MutableStateFlow<MoreItem?>(null) }.collectAsState()
+    LaunchedEffect(openPaneAsked) {
+        openPaneAsked?.let { pane = it; healthApp?.openPane?.value = null }
+    }
     val openWeekAhead by remember(healthApp) { healthApp?.openWeekAhead ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openWeekAhead) {
         if (openWeekAhead) { pane = MoreItem.WEEK_AHEAD; healthApp?.openWeekAhead?.value = false }

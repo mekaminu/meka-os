@@ -857,6 +857,8 @@ private fun TodayPane(
     val signIn by signInFlow.collectAsState()
     // Roll-over's prompt: Break it down opens the task with its steps ready; Someday and Drop leave with Undo on the bar.
     val carryScope = rememberCoroutineScope()
+    // The Today rebuild, slice 2b-2b-2: which Also today tile has its detail unfolded under the row (prep, stacking up).
+    var alsoUnfolded by remember { mutableStateOf<os.meka.core.domain.AlsoKind?>(null) }
     // Study plan, slice 2b rest: the nudge card's taps, shown at once (Start → Done; Done and Not now fold it away).
     val nudgeStarted = remember { mutableStateListOf<String>() }
     val nudgeGone = remember { mutableStateListOf<String>() }
@@ -978,48 +980,8 @@ private fun TodayPane(
                     // The Today rebuild, slice 2b-2b: the trains, the school's note, a clash with work, this week's goals,
                     // For the train, trading and the replies waiting are Also today's tiles now (core AlsoTodayRules), so
                     // the header is the date, greeting and weather, as the mockup.
-                    // Meeting prep, slice 1: from 15 min before a meeting with other people, "Prep · Quote review at 14:00 ·
-                    // in 12 min" lit in the accent, who's coming, then each guest's last email and what's open between you
-                    // (at most four lines). Cross-fades as it comes, counts down and goes ten minutes after the start.
-                    today.meetingPrep?.let { prep ->
-                        Crossfade(prep, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "meeting-prep") { p ->
-                            Column(Modifier.padding(top = MekaSpace.xs).semantics(mergeDescendants = true) { contentDescription = p.spoken }) {
-                                Text(p.headline, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis)
-                                Text(p.whoLine, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
-                                p.lines.forEach { line ->
-                                    Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
-                                }
-                            }
-                        }
-                    }
-                    // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
-                    // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
-                    today.pressure?.let { pressure ->
-                        Crossfade(pressure, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "pressure-line") { p ->
-                            Column(Modifier.padding(top = MekaSpace.xxs)) {
-                                Text(p.line, style = MekaType.caption, color = Meka.colors.calendar3, maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { contentDescription = p.spoken })
-                                if (core != null && p.fixes.isNotEmpty()) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                                        p.fixes.forEach { fix ->
-                                            Text(
-                                                fix.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                                modifier = Modifier.wordsTap {
-                                                    carryScope.launch {
-                                                        val line = runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()
-                                                        if (line != null) undo?.show(line) { core.undoBoardMove() }
-                                                    }
-                                                }.padding(vertical = MekaSpace.xxs),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // Slice 2b-2b-2: meeting prep and a day stacking up are Also today's tiles now too; a tap unfolds
+                    // their detail (who's coming and what's open; the one-tap fixes) under the row.
                     SyncLine(sync)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
@@ -1159,16 +1121,35 @@ private fun TodayPane(
             TodaySlot.CARDS -> {
             // The Today rebuild, slice 2b-2: ALSO TODAY's side-swiping tiles below the schedule, before the moment cards.
             // Slice 2b-2b: with the trains (from the weather) and this week's goals, the header's last notes.
-            val alsoTiles = os.meka.core.domain.AlsoTodayRules.withHeader(today.alsoToday, weather.route, goalsNow.week.line, goalsNow.week.spoken)
+            val alsoTiles = os.meka.core.domain.AlsoTodayRules.withHeader(
+                today.alsoToday, weather.route, goalsNow.week.line, goalsNow.week.spoken,
+                prep = today.meetingPrep, pressure = today.pressure,
+            )
             if (alsoTiles.isNotEmpty()) {
                 item(key = "also-today") {
+                    val alsoApp = LocalContext.current.applicationContext as? MekaApplication
+                    val paneFor = { k: os.meka.core.domain.AlsoKind ->
+                        when (k) {
+                            os.meka.core.domain.AlsoKind.BINS -> os.meka.android.shell.MoreItem.BINS
+                            os.meka.core.domain.AlsoKind.TRIP -> os.meka.android.shell.MoreItem.TRIPS
+                            os.meka.core.domain.AlsoKind.GIFTS -> os.meka.android.shell.MoreItem.GIFTS
+                            os.meka.core.domain.AlsoKind.DINNER -> os.meka.android.shell.MoreItem.DINNERS
+                            os.meka.core.domain.AlsoKind.DATE_NIGHT -> os.meka.android.shell.MoreItem.DATE_NIGHT
+                            os.meka.core.domain.AlsoKind.LIFE_ADMIN -> os.meka.android.shell.MoreItem.LIFE_ADMIN
+                            os.meka.core.domain.AlsoKind.SCHOOL -> os.meka.android.shell.MoreItem.SCHOOL
+                            os.meka.core.domain.AlsoKind.REPLIES -> os.meka.android.shell.MoreItem.MAIL
+                            else -> null
+                        }
+                    }
                     AlsoTodayRow(
                         alsoTiles,
                         opens = { t ->
                             when (t.kind) {
                                 os.meka.core.domain.AlsoKind.STUDY, os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId != null
                                 os.meka.core.domain.AlsoKind.WEEK_AHEAD, os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> true
-                                else -> false
+                                os.meka.core.domain.AlsoKind.PREP -> true
+                                os.meka.core.domain.AlsoKind.PRESSURE -> core != null && today.pressure?.fixes?.isNotEmpty() == true
+                                else -> alsoApp != null && paneFor(t.kind) != null
                             }
                         },
                         onOpen = { t ->
@@ -1177,6 +1158,28 @@ private fun TodayPane(
                                 os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId?.let(openRenewal)
                                 os.meka.core.domain.AlsoKind.WEEK_AHEAD -> openWeekAhead()
                                 os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> openQueue()
+                                os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.PRESSURE ->
+                                    alsoUnfolded = if (alsoUnfolded == t.kind) null else t.kind
+                                else -> paneFor(t.kind)?.let { item ->
+                                    alsoApp?.let { app ->
+                                        app.openPane.value = item
+                                        app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
+                                    }
+                                }
+                            }
+                        },
+                        unfolded = alsoUnfolded,
+                        detail = { kind ->
+                            when (kind) {
+                                os.meka.core.domain.AlsoKind.PREP -> today.meetingPrep?.let { p -> PrepDetail(p) }
+                                os.meka.core.domain.AlsoKind.PRESSURE -> today.pressure?.let { p ->
+                                    PressureDetail(p) { fix ->
+                                        if (core != null) carryScope.launch {
+                                            val line = runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()
+                                            if (line != null) { alsoUnfolded = null; undo?.show(line) { core.undoBoardMove() } }
+                                        }
+                                    }
+                                }
                                 else -> Unit
                             }
                         },

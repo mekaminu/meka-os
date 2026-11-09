@@ -103,6 +103,8 @@ open class MekaApplication : Application() {
     val openLeave = MutableStateFlow(false)
     /** Sunday's week-ahead heads-up → Ask → More → Week ahead (Sunday week ahead, slice 1). */
     val openWeekAhead = MutableStateFlow(false)
+    /** The Today rebuild, slice 2b-2b-2: an Also today tile (bins, a trip, gifts, dinner…) → Ask with that pane up; Ask clears it. */
+    val openPane = MutableStateFlow<os.meka.android.shell.MoreItem?>(null)
     /** The size-check heads-up (kids' admin, slice 6): Ask with the Kids pane up. */
     val openKids = MutableStateFlow(false)
     /** Routines, slice 3b: a routine's "has started" notice was tapped: Ask with Routines up. */
