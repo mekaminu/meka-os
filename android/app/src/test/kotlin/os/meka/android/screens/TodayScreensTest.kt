@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -649,6 +650,28 @@ class TodayScreensTest {
         compose.onNodeWithTag("${os.meka.android.today.HEADER_MORE_TAG}-search").performClick()
         compose.waitForIdle()
         if (searched != 1) fail("more: Search wasn't opened")
+    }
+
+    /**
+     * Meka 2026-11-09 19:16: the app closed when he tapped "Day list ›" on Today in the evening. Today on the Fold
+     * (folded and open), with the evening card up and tasks under it: Day list › opens the Day list without a crash, and
+     * so does "+ Add for today".
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun dayListOpensFromTodayFolded() = opensDayList()
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun dayListOpensFromTodayOpen() = opensDayList()
+
+    private fun opensDayList() {
+        show(Fill.MANY)
+        val link = os.meka.core.domain.DayListRules.LINK
+        scrollUntilShown(link, 400f)
+        val taps = compose.onAllNodes(hasText(link, substring = true) and hasClickAction(), useUnmergedTree = true)
+        if (taps.fetchSemanticsNodes().isEmpty()) fail("Today: no Day list › to tap")
+        taps[0].performSemanticsAction(SemanticsActions.OnClick)
+        repeat(5) { settle() }
+        if (!shownText(os.meka.core.domain.DayListRules.PASTE)) fail("Day list ›: the Day list didn't open")
     }
 
     /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */
