@@ -35,17 +35,8 @@ struct TodayView: View {
     /// The split's header height (its content's) and the whole of Today's height, so the header takes at most its share.
     @State private var splitHeaderHeight: CGFloat = 0
     @State private var splitHeight: CGFloat = 0
-    /// Watch face item, part 2: how far Today has scrolled, and the header's height (the glide's range).
-    @State private var scrollY: CGFloat = 0
-    @State private var headerHeight: CGFloat = 0
+    /// Today's scroll position (the compact header has nothing to collapse: the Today rebuild, slice 2d-2a).
     @State private var scrollPosition = ScrollPosition(edge: .top)
-    /// How far the header has collapsed (Reduce Motion: one state or the other).
-    private var collapse: Float {
-        let rules = HeaderCollapseRules.shared
-        return rules.shown(progress: rules.progress(firstIndex: 0, offsetPx: Float(scrollY),
-                                                    rangePx: rules.rangePx(headerPx: Float(headerHeight), barPx: Float(CollapsingHeaderView.barHeight))),
-                           reduced: reduceMotion)
-    }
 
     var body: some View {
         @Bindable var model = model
@@ -182,16 +173,11 @@ struct TodayView: View {
                 .padding(.vertical, MekaSpace.xl)
             )
         }
-        // Watch face item, part 2: how far Today has scrolled drives the header's collapse.
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
-            scrollY = y
-        }
         .scrollPosition($scrollPosition)
         // The foot fades into the ticker and capture field rather than cutting a row in half (Fold review item
         // 4); the xl bottom padding is more than the fade, so the last row still scrolls fully clear.
         .footFade()
         .scrollIndicators(.never)
-        .overlay(alignment: .top) { faceOverlay(shown: collapse) }
     }
 
     /// The Today rebuild, slice 2d (Meka approved 2026-11-08 22:58; as the open Fold's slice 2c): the header runs across
@@ -209,7 +195,6 @@ struct TodayView: View {
             }
             .scrollIndicators(.never)
             .frame(height: min(splitHeaderHeight, splitHeight * CGFloat(TodayColumnsRules.shared.HEADER_MAX_SHARE)))
-            .overlay(alignment: .top) { faceOverlay(shown: 1) }
             HStack(alignment: .top, spacing: 0) {
                 splitList(TodayView.leftColumnID, leading: MekaSpace.gutterWide, trailing: MekaSpace.gutterWide / 2) {
                     nowBlock
@@ -268,58 +253,64 @@ struct TodayView: View {
             .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.allDayItems.map(\.event.id))
     }
 
-    /// The watch face over the header's slot (CollapsingHeaderView): `shown` 1 is the whole face, 0 the small clock.
-    @ViewBuilder
-    private func faceOverlay(shown: Float) -> some View {
-        if let today = model.today, !today.timeline.dateLabel.isEmpty {
-            CollapsingHeaderView(
-                shown: shown, face: today.watchFace, greeting: greeting,
-                line: HeaderCollapseRules.shared.compactLine(dateLabel: today.timeline.dateLabel, weatherLine: model.weather?.nowLine),
-                palette: palette, play: ringPlay ?? .still, played: { ringPlay = .still },
-                onOpen: { showDayRing = true },
-                // Today's habits as dots on the face (Calm Today, slice 2); a click on one ticks it.
-                dots: HabitDotRules.shared.dots(chips: HabitChipRules.shared.build(goals: model.goals)),
-                onTick: { model.tickHabitDot($0) },
-                night: model.shutdown?.night ?? false,
-                // This week's goals on the outer ring (Goals, properly, slice 7).
-                week: model.goals?.week,
-                onTop: {
-                    if reduceMotion { scrollPosition.scrollTo(edge: .top) }
-                    else { withAnimation(MekaMotion.expand(reduced: false)) { scrollPosition.scrollTo(edge: .top) } }
-                })
-        }
-    }
-
     /// The greeting, date, header lines and links, the watch face's slot, the habit chips, the ring's tiles and a
     /// running fast.
     @ViewBuilder
     private var headerBlock: some View {
-        // The Day ring sits in the header, beside the greeting (Fold review 2026-10-09, item 1): greeting,
-        // date and links on the left, a 150 pt ring on the right; its live tiles a slim row underneath.
+        // The Today rebuild, slice 2d-2a (mockup TodayNew.dc.html; as the Fold's 2b-2b-2b-2): the compact header. The
+        // date over the compact greeting on the left; the weather chip, ⋯ (Search, Plan my day) and a small 40 pt clock
+        // on the right (a click: the whole day); TASKS · NEXT · MAIL across the page under them.
         HStack(alignment: .top, spacing: MekaSpace.m) {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-        // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
-        GreetingText(text: greeting, play: ringPlay ?? .still, palette: palette)
-            .staggeredAppear(0, play: play)
-        if let date = model.today?.timeline.dateLabel, !date.isEmpty {
-            // Click the date: tomorrow, any time of day (Meka 2026-10-26).
-            Button { model.openTomorrow() } label: {
-                Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                if let date = model.today?.timeline.dateLabel, !date.isEmpty {
+                    // Click the date: tomorrow, any time of day (Meka 2026-10-26).
+                    Button { model.openTomorrow() } label: {
+                        Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .help("See tomorrow")
+                    .accessibilityHint("Opens tomorrow")
+                }
+                // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
+                GreetingText(text: greeting, play: ringPlay ?? .still, palette: palette, compact: true)
             }
-            .buttonStyle(MekaPressStyle())
-            .help("See tomorrow")
-            .accessibilityHint("Opens tomorrow")
-            .staggeredAppear(0, play: play)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .center, spacing: MekaSpace.xs) {
+                // The weather as a small chip ("14° light rain"); VoiceOver hears the whole line.
+                if let chip = TodayHeaderRules.shared.weatherChip(nowLine: model.weather?.nowLine) {
+                    MacWeatherChip(text: chip,
+                                   spoken: "Weather: " + (model.weather?.nowSpoken ?? model.weather?.nowLine ?? chip),
+                                   palette: palette)
+                }
+                MacHeaderMoreMenu(palette: palette,
+                                  openSearch: { model.showSearch = true },
+                                  openPlan: { model.showPlan = true })
+                if let today = model.today, !today.timeline.dateLabel.isEmpty {
+                    MacSmallClock(face: today.watchFace, play: ringPlay ?? .still, played: { ringPlay = .still },
+                                  palette: palette, night: model.shutdown?.night ?? false,
+                                  onOpen: { showDayRing = true })
+                }
+            }
         }
-        // Weather for home: "14° · light rain from 16:00", cross-fading as the day moves on; on an office day
-        // both places (Places item 2), so it may take a second line.
-        if let line = model.weather?.nowLine {
-            Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
-                .accessibilityLabel("Weather: " + (model.weather?.nowSpoken ?? line))
+        .staggeredAppear(0, play: play)
+        // TASKS · NEXT · MAIL (core TodayHeaderRules), in place of the unread-mail lines and the countdown tile: TASKS
+        // opens the Day list, NEXT its event, MAIL the inbox.
+        if let today = model.today, !today.timeline.dateLabel.isEmpty {
+            MacHeaderTilesRow(
+                tiles: TodayHeaderRules.shared.tiles(timeline: today.timeline, done: today.doneToday, mail: today.mailUnread),
+                palette: palette,
+                onOpen: { kind in
+                    switch kind {
+                    case .tasks: model.openDayList()
+                    case .next:
+                        if let e = TodayHeaderRules.shared.nextRow(timeline: today.timeline)?.event { model.openEvent = e }
+                    default: model.showMail = true
+                    }
+                })
+                .padding(.top, MekaSpace.xs)
                 .staggeredAppear(0, play: play)
         }
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
         // Mac presentation pass, slice 2 (item 4): what's left to set up and anything Health needs, as one
         // quiet line under the greeting ("Finish setting up · 4 steps · notifications are off · Open Setup ›").
         MacSetupLineView(palette: palette)
@@ -451,30 +442,7 @@ struct TodayView: View {
                 .accessibilityLabel(trading.spoken)
                 .staggeredAppear(0, play: play)
         }
-        // Inbox fixes, slice 7: "Personal · 412 unread" (several accounts: "Unread mail · Gmail 1,048 ·
-        // Outlook 154 · Business 28", the provider when two share a label); quiet, cross-fades. Under it
-        // (Reconnect clears at once, (2)) "Tidy 1,048 newsletters, promos and receipts ›" in the accent:
-        // a click opens Mail, where each account's clean-up lists what goes where and its Approve.
-        if let unread = model.today?.mailUnread {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(unread.text).font(MekaType.caption)
-                    .foregroundStyle(unread.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                    .accessibilityLabel(unread.spoken)
-                if let tidy = unread.tidy {
-                    Button {
-                        MekaHaptics.tick()
-                        model.showMail = true
-                    } label: {
-                        Text(tidy).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens Mail's clean-up")
-                }
-            }
-            .contentTransition(.opacity)
-            .animation(MekaMotion.appear(reduced: reduceMotion), value: unread.text + (unread.tidy ?? ""))
-            .staggeredAppear(0, play: play)
-        }
+        // The unread mail and Tidy lines are the MAIL tile now (the Today rebuild, slice 2d-2a).
         // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
         // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
         if let replies = model.today?.mailReplies {
@@ -584,40 +552,24 @@ struct TodayView: View {
                 .font(MekaType.caption)
                 .foregroundStyle(palette.accent)
         }
+        // Search and Plan my day are in the header's ⋯ now (the Today rebuild, slice 2d-2a); the sync ring stays.
         HStack(spacing: MekaSpace.l) {
-            Button("Search") { model.showSearch = true }
-            Button("Plan my day") { model.showPlan = true }
-            // Work mode, the brief, the shutdown and the theme live in Ask's More now (Today clarity, slice 2).
             if model.syncRingShowing {
                 SyncRingView(palette: palette)
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.syncRingShowing)
-        .buttonStyle(MekaPressStyle())
-        .font(MekaType.caption)
-        .foregroundStyle(palette.accent)
-        .staggeredAppear(0, play: play)
         if let line = model.syncLine {
             Text(line).font(MekaType.caption).foregroundStyle(palette.offline)
                 .transition(.opacity)
         }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The watch face (Fold review 2026-10-09 07:26, item 2) is drawn by CollapsingHeaderView over this
-        // slot (watch face item, part 2): pinned, it shrinks into a small clock as Today scrolls.
-        if let today = model.today, !today.timeline.dateLabel.isEmpty {
-            Color.clear
-                .frame(width: CGFloat(DayRingHeader.shared.WIDE_DP), height: CGFloat(DayRingHeader.shared.WIDE_DP))
-                .accessibilityHidden(true)
-        }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-        // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3), only when the watch face
-        // can't carry them as dots (Calm Today, slice 2: no day yet, or more than fit); none, no row.
+        // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3): the small clock carries no dots
+        // (core WatchFaceRules.carriesDots), so they are always the chips; none, no row.
         let habitChips = HabitChipRules.shared.build(goals: model.goals)
-        let faceShown = !(model.today?.timeline.dateLabel.isEmpty ?? true)
-        if HabitDotRules.shared.chipsShown(faceShown: faceShown, chips: habitChips) {
+        if HabitDotRules.shared.chipsShown(faceShown: false, chips: habitChips) {
             HabitChipsRow(chips: habitChips, palette: palette, play: play)
                 .padding(.top, MekaSpace.xs)
         }
@@ -627,8 +579,10 @@ struct TodayView: View {
             // Fasting rebuild slice 4: while a fast runs it has its own card below, so the strip drops its tile.
             let fastCard = model.fasting?.current == nil ? nil
                 : model.fastingScreen(atMs: Int64(Date().timeIntervalSince1970 * 1000))?.todayCard
+            // The Today rebuild, slice 2d-2a: the countdown is the NEXT tile now.
             let stripTiles = FastingScreenRules.shared.stripTiles(
                 tiles: HabitChipRules.shared.stripTiles(tiles: today.dayTiles), card: fastCard)
+                .filter { $0.kind != DayTileKind.nextEvent }
             if !stripTiles.isEmpty {
                 DayTilesStrip(tiles: stripTiles, play: ringPlay ?? .still, arcs: today.watchFace.arcs.count, palette: palette)
                     .padding(.top, MekaSpace.xs)

@@ -380,6 +380,8 @@ struct GreetingText: View {
     let text: String
     let play: DayRingPlayback
     let palette: MekaPalette
+    /// The Today rebuild, slice 2d-2a: Today's compact header takes MekaType.greetingCompact (20, bold).
+    var compact: Bool = false
     @State private var began = Date()
 
     var body: some View {
@@ -409,7 +411,8 @@ struct GreetingText: View {
                 let f = MotionMath.greetingLetter(elapsed: elapsed, index: item.offset, play: play)
                 return line + Text(String(item.element)).foregroundStyle(palette.textPrimary.opacity(f))
             }
-            .font(Font.system(size: MekaTextScale.size(26) * scale, weight: .semibold)).tracking(MekaType.greetingTracking * scale) // type: ok, MekaType.greeting (26, semibold) shrunk to fit one line
+            .font(Font.system(size: MekaTextScale.size(compact ? 20 : 26) * scale, weight: compact ? .bold : .semibold)) // type: ok, MekaType.greeting (26, semibold) or greetingCompact (20, bold) shrunk to fit one line
+            .tracking((compact ? MekaType.greetingCompactTracking : MekaType.greetingTracking) * scale)
             .offset(y: (1 - lead) * MotionMath.greetingLetterRise)
         }
     }

@@ -1019,8 +1019,7 @@ private fun TodayPane(
                         HeaderTilesRow(headerTiles, onOpen = { kind ->
                             when (kind) {
                                 HeaderTileKind.TASKS -> openDayList()
-                                HeaderTileKind.NEXT -> today.timeline.rows.firstOrNull { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
-                                    ?.event?.let(openEvent)
+                                HeaderTileKind.NEXT -> TodayHeaderRules.nextRow(today.timeline)?.event?.let(openEvent)
                                 HeaderTileKind.MAIL -> tilesApp?.let { app ->
                                     app.openMail.value = true
                                     app.openDestination.value = os.meka.android.shell.ShellDestination.ASK

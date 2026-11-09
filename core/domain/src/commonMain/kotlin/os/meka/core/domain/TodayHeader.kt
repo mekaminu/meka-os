@@ -42,8 +42,15 @@ object TodayHeaderRules {
         }
     }
 
+    /**
+     * The row the NEXT tile names and opens: the first timed event or booked session still on the timeline (not a
+     * planned task, work or the commute); null when nothing else is on today. Both apps open its event from the tile.
+     */
+    fun nextRow(timeline: DayTimeline): TimelineRow? =
+        timeline.rows.firstOrNull { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
+
     fun nextTile(timeline: DayTimeline): HeaderTile {
-        val row = timeline.rows.firstOrNull { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
+        val row = nextRow(timeline)
             ?: return HeaderTile(HeaderTileKind.NEXT, NEXT, FREE, NOTHING_ELSE, "Next: nothing else today.")
         val title = row.title.trim().ifEmpty { "Your next event" }
         if (row.running) return HeaderTile(HeaderTileKind.NEXT, NEXT, NOW, title, "Now: $title.")

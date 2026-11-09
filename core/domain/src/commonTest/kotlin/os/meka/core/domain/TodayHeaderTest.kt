@@ -45,6 +45,9 @@ class TodayHeaderTest {
         assertEquals("16:55", t.value)
         assertEquals("Training", t.line)
         assertEquals("Next: Training at 16:55.", t.spoken)
+        // The tile opens the row it names, on both apps.
+        assertEquals("r-Training", TodayHeaderRules.nextRow(tl)?.id)
+        assertNull(TodayHeaderRules.nextRow(DayTimeline.EMPTY.copy(rows = listOf(row(TimelineKind.TASK, "15:00", "Pay")))))
         val on = TodayHeaderRules.nextTile(DayTimeline.EMPTY.copy(rows = listOf(row(TimelineKind.SESSION, "Until 18:45", "Gym", running = true))))
         assertEquals("Now", on.value)
         assertEquals("Gym", on.line)
