@@ -34,6 +34,7 @@ import os.meka.android.fold.NOW_CARD_TAG
 import os.meka.android.today.TASK_ROW_TAG
 import os.meka.android.today.CAPTURE_BAR_TAG
 import os.meka.android.today.TODAY_LIST_TAG
+import os.meka.android.today.TODAY_RIGHT_LIST_TAG
 import os.meka.android.designsystem.MotionMath
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
@@ -180,11 +181,31 @@ class TodayScreensTest {
             // A16: the full day has the Calendar's coming days, so Coming up never says there's nothing ahead.
             val ahead = CommandCentreRules.comingUp(core.calendarView.value, CommandCentreRules.DAYS_SHARED, CommandCentreRules.LINES_SHARED)
             if (ahead.days.isEmpty()) fail("$name: Coming up has no days though the Calendar has events this week")
-            if (name.startsWith("inner")) {
-                if (shownText(CommandCentreRules.NOTHING_AHEAD)) fail("$name: Coming up says \"${CommandCentreRules.NOTHING_AHEAD}\" beside a week of events")
-                ScreenShots.assertShows(compose, name, COMING_TITLES[1])
-            }
         }
+        if (name.startsWith("inner")) assertTwoColumnsInner(name, scheduled = core.today.value.timeline.head != null)
+    }
+
+    /**
+     * The Today rebuild, slice 2c (approved 2026-11-08 22:58): on the open Fold Today is two columns under the header,
+     * so the day fits on one screen: Now in the left list, SCHEDULE heading the right one, beside it and starting above
+     * the capture bar before any scroll; the old Coming up column beside Today is gone.
+     */
+    private fun assertTwoColumnsInner(name: String, scheduled: Boolean) {
+        val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+        val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val clearBy = bar.top - MotionMath.FOOT_FADE_DP * density
+        val left = compose.onNodeWithTag(TODAY_LIST_TAG).fetchSemanticsNode("$name: no left list").boundsInRoot
+        val right = compose.onNodeWithTag(TODAY_RIGHT_LIST_TAG).fetchSemanticsNode("$name: no right list on the open Fold").boundsInRoot
+        if (right.left < left.right - 0.5f) fail("$name: the two lists overlap")
+        val w = (left.width + right.width)
+        if (left.width < w * 0.4f || right.width < w * 0.4f) fail("$name: the columns aren't about even (${left.width / density} | ${right.width / density} dp)")
+        if (scheduled) {
+            val schedule = compose.onAllNodes(hasText(EveningCardRules.SCHEDULE.uppercase(), substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().filter { it.boundsInRoot.center.x > right.left }
+            if (schedule.isEmpty()) fail("$name: SCHEDULE isn't in the right column")
+            if (schedule.minOf { it.boundsInRoot.top } > clearBy + 0.5f) fail("$name: the schedule starts under the capture bar")
+        }
+        if (shownText(CommandCentreRules.NOTHING_AHEAD)) fail("$name: the old Coming up column is still beside Today")
     }
 
     /**
@@ -196,6 +217,10 @@ class TodayScreensTest {
     private fun shootEnd(name: String, fill: Fill, lastTitle: String) {
         show(fill)
         compose.onNodeWithTag(TODAY_LIST_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        // Slice 2c: on the open Fold the right list (Schedule, Also today, News) scrolls on its own; both go to their end.
+        compose.onAllNodesWithTag(TODAY_RIGHT_LIST_TAG).fetchSemanticsNodes().forEach { _ ->
+            compose.onNodeWithTag(TODAY_RIGHT_LIST_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        }
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
@@ -227,7 +252,9 @@ class TodayScreensTest {
         val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
         val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val clearBy = bar.top - MotionMath.FOOT_FADE_DP * density
-        fun inToday(n: androidx.compose.ui.semantics.SemanticsNode) = n.boundsInRoot.center.x in bar.left..bar.right
+        // Slice 2c: Today's left list (Now, This evening, Today's tasks); the right one holds the schedule and the setup card.
+        val left = compose.onNodeWithTag(TODAY_LIST_TAG).fetchSemanticsNode().boundsInRoot
+        fun inToday(n: androidx.compose.ui.semantics.SemanticsNode) = n.boundsInRoot.center.x in left.left..left.right
         val chips = compose.onAllNodesWithTag(NOW_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes().filter(::inToday)
         if (chips.isEmpty()) fail("$name: Up next's buttons aren't in Today's column")
         chips.forEach { n ->

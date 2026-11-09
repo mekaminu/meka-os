@@ -17,6 +17,8 @@ import os.meka.core.domain.NowKind
 import os.meka.core.domain.NowView
 import os.meka.core.domain.EveningCardRules
 import os.meka.core.domain.TodayOrderRules
+import os.meka.core.domain.TodayColumn
+import os.meka.core.domain.TodayColumnsRules
 import os.meka.core.domain.TodaySlot
 import os.meka.android.fold.NowCard
 import os.meka.android.fold.NowHandlers
@@ -70,6 +72,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import os.meka.core.domain.HeaderCollapseRules
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.derivedStateOf
@@ -198,7 +202,8 @@ import os.meka.core.domain.DayRingHeader
 import java.time.LocalDate
 
 /**
- * TODAY (brief §4). Closed Fold: one calm column. Open Fold / wide windows (≥ 600dp): Today | selected item.
+ * TODAY (brief §4). Closed Fold: one calm column. Open Fold / wide windows (≥ 600dp): Today in two columns under a
+ * header across the top (the Today rebuild, slice 2c; core TodayColumnsRules); an open task springs up over it.
  * State survives fold/unfold because selection is saveable and everything else comes from MekaCore flows.
  *
  * Motion (App shell): opening the Fold grows the detail pane out beside the list; on the closed Fold a task's title
@@ -401,22 +406,27 @@ private fun TodayRouteContent(
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
             val layout = CommandCentreRules.layout(maxWidth.value)
             val twoPane = layout != CommandLayout.SINGLE
+            // The Today rebuild, slice 2c: on the open Fold Today itself is two columns across the whole width (core
+            // TodayColumnsRules), in place of Today | Needs you over Coming up; an open task springs up over it as on the
+            // closed Fold. Needs you keeps its tab in the rail.
+            val split = TodayColumnsRules.splits(layout)
+            val sideBySide = twoPane && !split
             val all = (today.needsYou.map { it.task } + today.fromYesterday.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
             // A reminder under Coming up in the command centre opens its task too (rememberOpenTask).
             val selected = rememberOpenTask(core, selectedId, all, today)
             val columns = CommandCentreRules.columns(layout, taskOpen = selected != null)
             // In the command centre an open task stands in for Needs you; back (or Close) brings Needs you back.
-            BackHandler(enabled = twoPane && selected != null) { selectedId = null }
+            BackHandler(enabled = sideBySide && selected != null) { selectedId = null }
             val rowMotion: (String) -> RowMotion = { id ->
                 RowMotion(
                     shareTitle = true,
-                    titleVisible = SharedMotion.rowTitleVisible(id, selectedId, !twoPane, showPlan, landing),
+                    titleVisible = SharedMotion.rowTitleVisible(id, selectedId, !sideBySide, showPlan, landing),
                     landed = SharedMotion.highlightLanded(id, showPlan, landing),
                 )
             }
             TwoPaneMorph(
-                twoPane,
-                detailShare = if (twoPane) CommandCentreRules.sideShare(layout) else CommandCentreRules.SIDE_SHARE_TWO,
+                sideBySide,
+                detailShare = if (sideBySide) CommandCentreRules.sideShare(layout) else CommandCentreRules.SIDE_SHARE_TWO,
                 list = { m ->
                     // Swipe left across Today for Tomorrow, any time of day (Meka 2026-10-26); right on the sheet comes back.
                     key(openings) { TodayPane(today, sync, actions, m.swipePages(toTomorrow = true) { pageHaptics.tick(); showTomorrow = true }, connect, openPlan, !introPlayed, rowMotion,
@@ -430,8 +440,9 @@ private fun TodayRouteContent(
                         openTomorrow = { showTomorrow = true },
                         openDayList = { pageHaptics.tick(); showDayList = true },
                         openActivity = { showActivity = true },
-                        listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
+                        listsNeedsYou = split || CommandCentreRules.todayListsNeedsYou(layout),
                         carriesSetup = CommandCentreRules.todayCarriesSetup(layout),
+                        split = split,
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
@@ -473,7 +484,7 @@ private fun TodayRouteContent(
             // Closed Fold: detail springs up over Today. The last task is kept so it stays visible while leaving.
             var shown by remember { mutableStateOf<Task?>(null) }
             if (selected != null) shown = selected
-            MekaPane(visible = selected != null && !twoPane, origin = { origins[shown?.id] }) {
+            MekaPane(visible = selected != null && !sideBySide, origin = { origins[shown?.id] }) {
                 shown?.let { s ->
                     DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
@@ -825,6 +836,8 @@ private fun TodayPane(
     onTalk: (() -> Unit)? = null,
     /** The screen's undo bar: a habit ticked on the watch face says which one, with Undo. */
     undo: EventUndo? = null,
+    /** The Today rebuild, slice 2c: the open Fold's two columns under a header across the top ([TodayColumnsRules]). */
+    split: Boolean = false,
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -898,8 +911,10 @@ private fun TodayPane(
     // Calm Today, slice 2: they sit on the watch face as dots; the chips only when the face is hidden or they don't fit.
     // The Today rebuild (Meka 2026-11-09 08:09 (a)): the folded phone's small 40 dp clock carries no dots, so its habits
     // are the chips; the open Fold's face keeps them.
-    val faceShown = today.timeline.dateLabel.isNotEmpty() && WatchFaceRules.carriesDots(cover = now != null)
-    val faceWeek = if (WatchFaceRules.carriesDots(cover = now != null)) goalsNow.week else os.meka.core.domain.WeekGoals.EMPTY
+    // Slice 2c: the open Fold's header across the top is the same compact one, so its clock is small and carries no dots.
+    val smallClock = now != null || split
+    val faceShown = today.timeline.dateLabel.isNotEmpty() && WatchFaceRules.carriesDots(cover = smallClock)
+    val faceWeek = if (WatchFaceRules.carriesDots(cover = smallClock)) goalsNow.week else os.meka.core.domain.WeekGoals.EMPTY
     val habitDots = remember(habitChips, faceShown) { if (faceShown) HabitDotRules.dots(habitChips) else emptyList() }
     val chipsShown = HabitDotRules.chipsShown(faceShown, habitChips)
     // Fasting rebuild slice 4: a running fast has its own card on Today, so the strip drops its fast tile meanwhile.
@@ -954,20 +969,16 @@ private fun TodayPane(
         val todayHead = remember(today.timeline.anytime, today.doneToday) { EveningCardRules.head(today.timeline.anytime, today.doneToday) }
         // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().footFade().testTag(TODAY_LIST_TAG),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-        ) {
-            item(key = "greeting") {
+        // The Today rebuild, slice 2c: the header and the parts under it are built once and laid out either as one
+        // list (the closed Fold) or as the header across the top over two lists (the open Fold; core TodayColumnsRules).
+        val headerBlock: @Composable () -> Unit = {
                 Column(Modifier.padding(bottom = MekaSpace.l).onSizeChanged { headerPx = it.height }
                     .appear(rememberAppearance(0, play))) {
                     // The Today rebuild, the compact header (Meka 2026-11-09 08:09 (a), mockup TodayNew.dc.html): a 13 sp
                     // date over a 24 sp greeting on the left; the weather chip, ⋯ (Search, Plan my day) and the clock on
                     // the right: 40 dp folded, 150 dp on the open Fold. Tap the clock: the full 24-hour Day ring.
                     TodayHeaderRow(
-                        face = headerFace, compact = now != null, slotOnly = collapses,
+                        face = headerFace, compact = smallClock, slotOnly = collapses,
                         play = ringPlay, played = ringPlayed,
                         onOpenFace = openDayRing,
                         night = shutdown.night,
@@ -1090,7 +1101,8 @@ private fun TodayPane(
                         }
                     }
                 }
-            }
+        }
+        val slotItems: LazyListScope.((TodaySlot) -> Boolean) -> Unit = { holds ->
             // Calm Today, slice 3: Up next and the timeline lead, the moment cards follow them (core TodayOrderRules), and
             // the opening stagger arrives in the same order.
             val nowCard = now?.takeIf { it.kind != NowKind.CLEAR }
@@ -1101,7 +1113,7 @@ private fun TodayPane(
             val nextStep = TodayOrderRules.stagger(TodaySlot.UP_NEXT)
             val dayStep = TodayOrderRules.stagger(TodaySlot.TIMELINE)
             val rowsStep = TodayOrderRules.TIMELINE_ROWS_STEP
-            for (slot in TodayOrderRules.ORDER) when (slot) {
+            for (slot in TodayOrderRules.ORDER) if (holds(slot)) when (slot) {
             TodaySlot.CARDS -> {
             // The Today rebuild, slice 2b-2: ALSO TODAY's side-swiping tiles below the schedule, before the moment cards.
             // Slice 2b-2b: with the trains (from the weather) and this week's goals, the header's last notes.
@@ -1483,6 +1495,21 @@ private fun TodayPane(
             }
             }
         }
+        if (!split) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().footFade().testTag(TODAY_LIST_TAG),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            item(key = "greeting") { headerBlock() }
+            slotItems { true }
+        }
+        } else {
+            SplitToday(listState, headerBlock, housekeeping = core?.takeIf { !carriesSetup },
+                left = { slotItems { TodayColumnsRules.column(it) == TodayColumn.LEFT } },
+                right = { slotItems { TodayColumnsRules.column(it) == TodayColumn.RIGHT } })
+        }
         if (collapses && headerFace != null) {
             CollapsingHeader(
                 shown = collapse, face = headerFace, fullDp = WatchFaceRules.headerDp(cover = true),
@@ -1498,6 +1525,58 @@ private fun TodayPane(
         QuickCapture(actions.add, onTalk)
     }
 }
+
+/**
+ * The Today rebuild, slice 2c (Meka approved 2026-11-08 22:58): the open Fold's Today. The header and tiles run across
+ * the top (at most [TodayColumnsRules.HEADER_MAX_SHARE] of the height, scrolling beyond); under them two lists side by
+ * side, each scrolling on its own: what to do on the left, the shape of the day on the right, headed by the health line
+ * and the setup card while there is something to set up (walk-through week 3, A1: they never push Now down).
+ */
+@Composable
+private fun SplitToday(
+    leftState: LazyListState,
+    header: @Composable () -> Unit,
+    housekeeping: MekaCore?,
+    left: LazyListScope.() -> Unit,
+    right: LazyListScope.() -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val headerMax = maxHeight * TodayColumnsRules.HEADER_MAX_SHARE
+        Column(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxWidth().heightIn(max = headerMax).verticalScroll(rememberScrollState())
+                    .padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl),
+            ) { header() }
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                val half = MekaSpace.gutter / 2
+                LazyColumn(
+                    state = leftState,
+                    modifier = Modifier.weight(TodayColumnsRules.LEFT_SHARE).fillMaxHeight().footFade().testTag(TODAY_LIST_TAG),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(start = MekaSpace.gutter, end = half, bottom = MekaSpace.xl),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                    content = left,
+                )
+                LazyColumn(
+                    state = rememberLazyListState(),
+                    modifier = Modifier.weight(1f - TodayColumnsRules.LEFT_SHARE).fillMaxHeight().footFade().testTag(TODAY_RIGHT_LIST_TAG),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(start = half, end = MekaSpace.gutter, bottom = MekaSpace.xl),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    if (housekeeping != null) item(key = "housekeeping") {
+                        Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).testTag(SIDE_HOUSEKEEPING_TAG)) {
+                            os.meka.android.ask.HealthTodayLine(housekeeping, Modifier)
+                            os.meka.android.ask.SetupTodayCard(housekeeping, Modifier.padding(top = MekaSpace.xs))
+                        }
+                    }
+                    right()
+                }
+            }
+        }
+    }
+}
+
+/** The open Fold's right-hand list (slice 2c): Schedule, Also today, News. The left one keeps [TODAY_LIST_TAG]. */
+internal const val TODAY_RIGHT_LIST_TAG = "today-list-right"
 
 /** The header's test tag for ⋯ (Search, Plan my day). */
 const val HEADER_MORE_TAG = "today-header-more"
