@@ -3796,6 +3796,16 @@ class MekaCore(
     }
 
     /**
+     * "Say them" in the Day list: the words heard (the Fold's speech, the Mac's Dictation) split into tasks by
+     * [os.meka.core.domain.DayListSpoken] ("then" between, "half an hour", "at 3", "for work" read) and added in the
+     * order said, like a pasted list. Null when no task was heard.
+     */
+    suspend fun sayToDayList(words: String, day: Long): os.meka.core.domain.DayListAdded? {
+        val list = os.meka.core.domain.DayListSpoken.asList(words) ?: return null
+        return addToDayList(list, day)
+    }
+
+    /**
      * Drag to reorder in the Day list (slice 1c): [taskId] dropped at row [toRow] among [day]'s open rows as drawn with
      * [timesOn] ([os.meka.core.domain.DayListRules.boardIndex]). It moves on the Week board, so Today, the board and
      * Fit times follow the new order on both apps. Returns the undo bar's line ("Moved “Book MOT” up"), or null when

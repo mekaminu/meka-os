@@ -91,10 +91,21 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.testTag
 import os.meka.android.goals.Grip
 import os.meka.android.goals.GripHandle
 import os.meka.core.domain.ChecklistRules
 import os.meka.core.domain.StudyRules
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import os.meka.android.ask.MicGlyph
+import os.meka.android.capture.CaptureListener
+import os.meka.android.capture.VoiceNoteRecorder
+import os.meka.core.domain.DayListSpoken
+import os.meka.core.domain.TalkProblem
 
 /**
  * The Day list (approved 2026-11-08, `docs/design/day-list/Main.dc.html`): one screen for one day where a long list of
@@ -108,6 +119,7 @@ import os.meka.core.domain.StudyRules
  * glide; the bar fills on the appear spring; the sheet springs up over a dimmed list; the line under the bar
  * cross-fades. Reduced motion: cross-fades only.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ Today", forDay: Long? = null) {
     val board by core.weekBoard.collectAsState()
@@ -148,6 +160,44 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
         }
     }
     val tick: (String) -> Unit = { id -> scope.launch { runCatching { core.complete(id) } } }
+
+    // Say them: listening stays on — each stretch he says lands as tasks in the order said, then it listens for the
+    // next — until he taps Stop or goes quiet. His words show under the bar as he speaks; nothing is recorded or kept.
+    var saying by remember { mutableStateOf(false) }
+    var heardAny by remember { mutableStateOf(false) }
+    val sayDay by rememberUpdatedState(day)
+    lateinit var listener: CaptureListener
+    listener = remember {
+        CaptureListener(
+            context, scope,
+            onHeard = { words, _, _ ->
+                scope.launch {
+                    val added = runCatching { core.sayToDayList(words, sayDay) }.getOrNull()
+                    if (added != null) { heardAny = true; haptics.light(); said = added.line }
+                    else if (!heardAny) said = DayListSpoken.HEARD_NOTHING
+                    if (saying) listener.start()
+                }
+            },
+            onNothing = { line ->
+                saying = false
+                if (line != null) said = line else if (!heardAny) said = DayListSpoken.HEARD_NOTHING
+            },
+        )
+    }
+    DisposableEffect(Unit) { onDispose { listener.release() } }
+    LaunchedEffect(listener.partial) { if (listener.listening && listener.partial.isNotBlank()) said = "“${listener.partial}”" }
+    val startSaying: () -> Unit = { saying = true; heardAny = false; said = DayListSpoken.LISTENING; listener.start() }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startSaying() else said = TalkProblem.NO_PERMISSION.line
+    }
+    val sayThem: () -> Unit = {
+        haptics.tick()
+        when {
+            saying -> { saying = false; listener.finishNow() }
+            !VoiceNoteRecorder.micAllowed(context) -> askMic.launch(Manifest.permission.RECORD_AUDIO)
+            else -> startSaying()
+        }
+    }
 
     Box(Modifier.fillMaxSize().imePadding()) {
         Column(Modifier.fillMaxSize()) {
@@ -255,7 +305,8 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                             .minTouch().clip(CircleShape).background(Meka.colors.accent).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SayChip(saying, listener.level, sayThem)
                     DayChip(DayListRules.PASTE) {
                         val primary = context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip
                         val text = primary?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
@@ -387,6 +438,35 @@ private fun DayChip(label: String, selected: Boolean = false, onClick: () -> Uni
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
+
+/**
+ * Say them: the mic and its name; while listening it reads Stop on the accent edge and the mic breathes with his voice
+ * (scale on the level, none with reduced motion).
+ */
+@Composable
+private fun SayChip(on: Boolean, level: Float, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val breathe by animateFloatAsState(if (on && !reduced) 1f + 0.25f * level.coerceIn(0f, 1f) else 1f, MekaMotion.appear(reduced), label = "day-say-breathe")
+    Row(
+        Modifier.testTagSay().clip(RoundedCornerShape(MekaRadius.pill))
+            .clickable(role = Role.Button, onClickLabel = if (on) DayListSpoken.STOP else DayListSpoken.SAY) { onClick() }.minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .then(if (on) Modifier.border(1.dp, Meka.colors.accent, RoundedCornerShape(MekaRadius.pill)) else Modifier)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .semantics { contentDescription = if (on) "${DayListSpoken.STOP} listening" else DayListSpoken.SAY },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        MicGlyph(Meka.colors.accent, Modifier.graphicsLayer { scaleX = breathe; scaleY = breathe })
+        Text(if (on) DayListSpoken.STOP else DayListSpoken.SAY, style = MekaType.caption, maxLines = 1,
+            color = if (on) Meka.colors.textPrimary else Meka.colors.textSecondary)
+    }
+}
+
+private fun Modifier.testTagSay(): Modifier = this.then(Modifier.testTag(DAY_LIST_SAY_TAG))
+
+/** The Say them chip, for screen tests. */
+const val DAY_LIST_SAY_TAG = "day-list-say"
 
 /**
  * A task's sheet (the approved `Sheet.dc.html`, slice 1): LENGTH 15m · 30m · 1h · 2h, AREA, MOVE TO Tomorrow · the

@@ -4000,6 +4000,26 @@ final class CoreModel {
         }
     }
 
+    /// Say them: the words Dictation typed, split into tasks by the core ("then" between, "half an hour", "at 3",
+    /// "for work" read) and added in the order said.
+    func sayToDayList(_ words: String) {
+        guard let core, let board else { return }
+        guard !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            dayListSaid = DayListSpoken.shared.HEARD_NOTHING
+            return
+        }
+        let day = dayListDay ?? board.todayEpochDay
+        MekaHaptics.light()
+        Task {
+            do {
+                let added = try await core.sayToDayList(words: words, day: day)
+                dayListSaid = added?.line ?? DayListSpoken.shared.HEARD_NOTHING
+            } catch {
+                dayListSaid = InstantTapRules.shared.failedLine(what: "Add", reason: error.localizedDescription)
+            }
+        }
+    }
+
     /// Paste a list: the pasteboard's text, one task per line.
     func pasteIntoDayList() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""

@@ -94,4 +94,21 @@ class DayListFacadeTest {
         assertTrue(fold.undoBoardMove())
         assertEquals(listOf("Complete feedbacks", "Email Sam", "Pay the nursery", "Dentist"), titles(true))
     }
+
+    @Test
+    fun saidTasksLandInTheOrderSaid() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        fold.tick()
+        val day = fold.weekBoard.value.todayEpochDay + 2
+        val added = fold.sayToDayList("call the garage then half an hour of email for work then pick up the boys at half past three", day)!!
+        assertEquals("Added 3 tasks · 30m", added.line)
+        assertNull(fold.sayToDayList("um then", day))
+        val v = fold.dayList(fold.weekBoard.value, day, timesOn = true)!!
+        assertEquals(listOf("Call the garage", "Email", "Pick up the boys"), v.rows.map { it.title })
+        assertEquals(listOf("09:00", "09:30", "15:30"), v.rows.map { it.time })
+        assertEquals(listOf(false, false, true), v.rows.map { it.timeIsSet })
+        assertEquals(BoardArea.WORK, v.rows[1].area)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(v.rows.map { it.id }, mac.dayList(mac.weekBoard.value, day, true)!!.rows.map { it.id })
+    }
 }

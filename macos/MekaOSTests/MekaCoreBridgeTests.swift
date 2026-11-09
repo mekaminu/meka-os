@@ -1695,6 +1695,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Drag to reorder (slice 1c): the grip's spoken moves.
         XCTAssertEqual(StudyRules.shared.MOVE_UP, "Move up")
         XCTAssertEqual(StudyRules.shared.gripLabel(name: "Milk"), "Drag to reorder Milk")
+        // Say them: what Dictation typed becomes one task per thing said.
+        XCTAssertEqual(DayListSpoken.shared.SAY, "Say them")
+        XCTAssertEqual(DayListSpoken.shared.lines(said: "call the garage then email Sam for work"), ["Call the garage", "Email Sam #work"])
     }
 
     /// Week board, slice 2: the Board's words reach Swift.

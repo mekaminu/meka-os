@@ -127,6 +127,7 @@ class DayListScreensTest {
         assertTrue(shows("1h"), "$name: the day's total isn't shown")
         assertTrue(shows("Work") && shows("Family"), "$name: the areas aren't shown")
         assertTrue(shows("Paste a list") && shows("Fit times from"), "$name: Paste a list or Fit times is missing")
+        assertTrue(shows("Say them"), "$name: Say them is missing")
         assertTouchTargets(name)
 
         // Rapid add: Enter adds the line with its length and area, and the bar clears for the next.

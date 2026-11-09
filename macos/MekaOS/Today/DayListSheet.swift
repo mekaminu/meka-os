@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import MekaKit
 import SwiftUI
 
@@ -17,6 +18,8 @@ struct DayListSheet: View {
     let palette: MekaPalette
     @AppStorage("dayList.timesOn") private var timesOn = true
     @State private var draft = ""
+    /// Say them: Dictation is listening into the field; Return adds what was said as tasks.
+    @State private var saying = false
     @State private var openID: String?
     @State private var editingID: String?
     @FocusState private var fieldFocused: Bool
@@ -114,6 +117,8 @@ struct DayListSheet: View {
             }
             addField
             HStack(spacing: MekaSpace.xs) {
+                DayListChip(label: saying ? DayListSpoken.shared.STOP : DayListSpoken.shared.SAY, selected: saying, palette: palette) { sayThem() }
+                    .accessibilityLabel(saying ? "\(DayListSpoken.shared.STOP) saying tasks" : DayListSpoken.shared.SAY)
                 DayListChip(label: DayListRules.shared.PASTE, palette: palette) { model.pasteIntoDayList() }
                     .keyboardShortcut("v", modifiers: [.command, .shift])
                 if !v.openIds.isEmpty {
@@ -128,7 +133,7 @@ struct DayListSheet: View {
 
     private var addField: some View {
         HStack(spacing: MekaSpace.xs) {
-            TextField(DayListRules.shared.PLACEHOLDER, text: $draft)
+            TextField(saying ? DayListSpoken.shared.MAC_PLACEHOLDER : DayListRules.shared.PLACEHOLDER, text: $draft)
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
                 .focused($fieldFocused)
@@ -155,8 +160,30 @@ struct DayListSheet: View {
     private func add() {
         let text = draft
         draft = ""
-        model.addToDayList(text)
+        if saying {
+            saying = false
+            model.sayToDayList(text)
+        } else {
+            model.addToDayList(text)
+        }
         fieldFocused = true
+    }
+
+    /// Say them: the field takes focus and macOS Dictation listens into it; Return adds what was said as tasks, in the
+    /// order said. A second click adds what is there and stops. Dictation is the Mac's own; nothing is recorded here.
+    private func sayThem() {
+        MekaHaptics.tick()
+        if saying {
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { saying = false } else { add() }
+            return
+        }
+        saying = true
+        model.dayListSaid = DayListSpoken.shared.LISTENING
+        fieldFocused = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            NSApp.sendAction(Selector(("startDictation:")), to: nil, from: nil)
+        }
     }
 
     /// "Mon 9 Nov · Today" → "Mon 9 Nov" / "Today".
