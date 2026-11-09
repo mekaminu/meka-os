@@ -104,6 +104,7 @@ val MekaLightColors = MekaColors(
 
 object MekaType {
     val greeting = TextStyle(fontSize = 34.sp, fontWeight = FontWeight(600), lineHeight = 39.1.sp, letterSpacing = -0.02.em)
+    val greetingCompact = TextStyle(fontSize = 24.sp, fontWeight = FontWeight(700), lineHeight = 28.8.sp, letterSpacing = -0.015.em)
     val sectionLabel = TextStyle(fontSize = 12.sp, fontWeight = FontWeight(600), lineHeight = 15.6.sp, letterSpacing = 0.08.em)
     val cardLabel = TextStyle(fontSize = 12.sp, fontWeight = FontWeight(400), lineHeight = 15.6.sp, letterSpacing = 0.14.em)
     val itemTitle = TextStyle(fontSize = 19.sp, fontWeight = FontWeight(500), lineHeight = 24.7.sp, letterSpacing = -0.005.em)

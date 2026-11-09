@@ -51,6 +51,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import os.meka.android.designsystem.mekaMenuBorder
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -743,6 +745,8 @@ internal fun TodayHeaderRow(
      * the row keeps only an empty slot its size (the lines wrap exactly as before).
      */
     slotOnly: Boolean = false,
+    /** The Today rebuild: the weather chip and ⋯ between the greeting and the clock, as the mockup's header. */
+    trailing: @Composable () -> Unit = {},
     left: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -753,6 +757,11 @@ internal fun TodayHeaderRow(
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) { left() }
+        Row(
+            Modifier.padding(start = MekaSpace.xs).heightIn(min = minOf(WatchFaceRules.headerDp(cover = compact), HeaderCollapseRules.COMPACT_DP).dp),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { trailing() }
         if (face != null && slotOnly) {
             androidx.compose.foundation.layout.Spacer(Modifier.padding(start = MekaSpace.m)
                 .size(WatchFaceRules.headerDp(cover = compact).dp))
@@ -885,7 +894,10 @@ private fun TodayPane(
     val goalsNow = os.meka.android.goals.shownGoals(actions.goals)
     val habitChips = remember(goalsNow) { HabitChipRules.build(goalsNow) }
     // Calm Today, slice 2: they sit on the watch face as dots; the chips only when the face is hidden or they don't fit.
-    val faceShown = today.timeline.dateLabel.isNotEmpty()
+    // The Today rebuild (Meka 2026-11-09 08:09 (a)): the folded phone's small 40 dp clock carries no dots, so its habits
+    // are the chips; the open Fold's face keeps them.
+    val faceShown = today.timeline.dateLabel.isNotEmpty() && WatchFaceRules.carriesDots(cover = now != null)
+    val faceWeek = if (WatchFaceRules.carriesDots(cover = now != null)) goalsNow.week else os.meka.core.domain.WeekGoals.EMPTY
     val habitDots = remember(habitChips, faceShown) { if (faceShown) HabitDotRules.dots(habitChips) else emptyList() }
     val chipsShown = HabitDotRules.chipsShown(faceShown, habitChips)
     // Fasting rebuild slice 4: a running fast has its own card on Today, so the strip drops its fast tile meanwhile.
@@ -949,50 +961,40 @@ private fun TodayPane(
             item(key = "greeting") {
                 Column(Modifier.padding(bottom = MekaSpace.l).onSizeChanged { headerPx = it.height }
                     .appear(rememberAppearance(0, play))) {
-                    // The watch face sits in the header, beside the greeting (Fold reviews 2026-10-09, 00:10 item 1
-                    // and 07:26 item 2): greeting, date and links on the left, the 12-hour face on the right — 150 dp
-                    // on the open Fold, a smaller 78 dp on the closed one. The first-open moment draws it in place.
+                    // The Today rebuild, the compact header (Meka 2026-11-09 08:09 (a), mockup TodayNew.dc.html): a 13 sp
+                    // date over a 24 sp greeting on the left; the weather chip, ⋯ (Search, Plan my day) and the clock on
+                    // the right: 40 dp folded, 150 dp on the open Fold. Tap the clock: the full 24-hour Day ring.
                     TodayHeaderRow(
                         face = headerFace, compact = now != null, slotOnly = collapses,
                         play = ringPlay, played = ringPlayed,
-                        // Tap the face: the full 24-hour Day ring as a sheet, its arcs opening their events and tasks.
                         onOpenFace = openDayRing,
                         night = shutdown.night,
-                        week = goalsNow.week,
+                        week = faceWeek,
                         dots = if (core != null) habitDots else emptyList(),
                         onTick = habitTick,
+                        trailing = {
+                            // The weather as a small chip ("14° light rain"); a screen reader hears the whole line.
+                            TodayHeaderRules.weatherChip(weather.nowLine)?.let { chip ->
+                                WeatherChip(chip, "Weather: " + (weather.nowSpoken ?: weather.nowLine.orEmpty()))
+                            }
+                            HeaderMoreMenu(openSearch = openSearch, openPlan = openPlan)
+                        },
                     ) {
-                    // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
-                    GreetingText(greeting(core, callName), if (now == null) ringPlay else DayRingPlay.STILL)
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         // Tap the date: tomorrow, any time of day (Meka 2026-10-26).
-                        Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                            modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap(onClickLabel = "See tomorrow") { openTomorrow() })
+                        Text(today.timeline.dateLabel, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.wordsTap(onClickLabel = "See tomorrow") { openTomorrow() })
                     }
-                    // The Today rebuild, slice 2b: the weather as a small chip ("14° light rain") in place of its line; the
-                    // whole line ("14° · light rain from 16:00", both places on an office day) is what a screen reader hears.
-                    TodayHeaderRules.weatherChip(weather.nowLine)?.let { chip ->
-                        WeatherChip(chip, "Weather: " + (weather.nowSpoken ?: weather.nowLine.orEmpty()), Modifier.padding(top = MekaSpace.xxs))
-                    }
+                    // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
+                    GreetingText(greeting(core, callName), if (now == null) ringPlay else DayRingPlay.STILL,
+                        Modifier.padding(top = MekaSpace.xxs), base = MekaType.greetingCompact)
                     // The Today rebuild, slice 2b-2b: the trains, the school's note, a clash with work, this week's goals,
                     // For the train, trading and the replies waiting are Also today's tiles now (core AlsoTodayRules), so
                     // the header is the date, greeting and weather, as the mockup.
                     // Slice 2b-2b-2: meeting prep and a day stacking up are Also today's tiles now too; a tap unfolds
                     // their detail (who's coming and what's open; the one-tap fixes) under the row.
                     SyncLine(sync)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
-                        modifier = Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()),
-                    ) {
-                        Text(
-                            "Search", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.wordsTap { openSearch() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.wordsTap { openPlan() }.padding(vertical = MekaSpace.xxs),
-                        )
-                    }
                     }
                     // The Today rebuild, slice 2b: TASKS · NEXT · MAIL across the page under the greeting, in place of the
                     // unread-mail lines and the countdown tile. TASKS opens the Day list, NEXT its event, MAIL the inbox.
@@ -1470,13 +1472,48 @@ private fun TodayPane(
                 greeting = greeting(core, callName),
                 line = HeaderCollapseRules.compactLine(today.timeline.dateLabel, weather.nowLine),
                 play = ringPlay, played = ringPlayed, onOpenFace = openDayRing,
-                night = shutdown.night, week = goalsNow.week,
+                night = shutdown.night, week = faceWeek,
                 dots = if (core != null) habitDots else emptyList(), onTick = habitTick,
                 onTop = { collapseScope.launch { if (reducedCollapse) listState.scrollToItem(0) else listState.animateScrollToItem(0) } },
             )
         }
         }
         QuickCapture(actions.add, onTalk)
+    }
+}
+
+/** The header's test tag for ⋯ (Search, Plan my day). */
+const val HEADER_MORE_TAG = "today-header-more"
+
+/**
+ * The Today rebuild (Meka 2026-11-09 08:09 (a)): Search and Plan my day leave the header's loose gold links for one quiet
+ * ⋯ beside the weather chip; a tap opens them as a menu.
+ */
+@Composable
+internal fun HeaderMoreMenu(openSearch: () -> Unit, openPlan: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button, onClickLabel = "Search or plan my day") { open = true }
+                .testTag(HEADER_MORE_TAG).semantics { contentDescription = "More: Search, Plan my day" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("⋯", style = MekaType.metaStrong, color = Meka.colors.textSecondary)
+        }
+        androidx.compose.material3.DropdownMenu(
+            expanded = open, onDismissRequest = { open = false },
+            containerColor = Meka.colors.surfaceRaised, border = mekaMenuBorder(Meka.colors),
+        ) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Search", style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
+                onClick = { open = false; openSearch() }, modifier = Modifier.testTag("$HEADER_MORE_TAG-search"),
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Plan my day", style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
+                onClick = { open = false; openPlan() }, modifier = Modifier.testTag("$HEADER_MORE_TAG-plan"),
+            )
+        }
     }
 }
 

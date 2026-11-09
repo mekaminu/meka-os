@@ -182,8 +182,22 @@ object WatchFaceRules {
      * ([cover]) about a fifth smaller than before ([COVER_DP], was [DayRingHeader.COMPACT_DP]) so the greeting, weather
      * and train lines wrap less and Up next sits higher; the open Fold and the Mac keep [DayRingHeader.WIDE_DP].
      */
-    fun headerDp(cover: Boolean): Int = if (cover) COVER_DP else DayRingHeader.WIDE_DP
+    fun headerDp(cover: Boolean): Int = if (cover) CLOCK_DP else DayRingHeader.WIDE_DP
     const val COVER_DP = 78
+
+    /**
+     * The Today rebuild (Meka 2026-11-09 08:09 (a), mockup `TodayNew.dc.html`): the folded phone's header is compact, a
+     * 13 sp date over a 24 sp greeting beside the weather chip and a small 40 dp clock (the size the collapsing header
+     * already shrank the face to), in place of the 78 dp face. The open Fold keeps [DayRingHeader.WIDE_DP] until its
+     * two columns.
+     */
+    const val CLOCK_DP = HeaderCollapseRules.COMPACT_DP
+
+    /**
+     * Whether the header's face carries the habit dots and the week's goal arcs: not the folded phone's small clock (its
+     * habits are the chips under the tiles, its goals Also today's GOALS tile).
+     */
+    fun carriesDots(cover: Boolean): Boolean = !cover
 
     /** "Training", "Training - 3G", "U12 training": something to stand out on the rim. */
     fun isTraining(title: String): Boolean = Regex("\\btraining\\b", RegexOption.IGNORE_CASE).containsMatchIn(title)

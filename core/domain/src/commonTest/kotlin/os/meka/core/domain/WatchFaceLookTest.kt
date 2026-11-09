@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -13,13 +14,16 @@ class WatchFaceLookTest {
         assertTrue(kotlin.math.abs(expected - actual) < 0.01f, "expected $expected, was $actual")
 
     @Test
-    fun theCoverScreenFaceIsAboutAFifthSmallerAndTheOpenFoldKeepsItsSize() {
-        val cover = WatchFaceRules.headerDp(cover = true)
-        assertEquals(WatchFaceRules.COVER_DP, cover)
-        val shrink = 1f - cover.toFloat() / DayRingHeader.COMPACT_DP
-        assertTrue(shrink in 0.15f..0.25f, "shrink $shrink")
+    fun theFoldedHeaderHasTheMockupsSmallClockAndTheOpenFoldKeepsItsFace() {
+        // The Today rebuild (Meka 2026-11-09 08:09 (a)): a 40 dp clock beside the weather chip, as the mockup.
+        assertEquals(40, WatchFaceRules.headerDp(cover = true))
+        assertEquals(HeaderCollapseRules.COMPACT_DP, WatchFaceRules.CLOCK_DP)
         assertEquals(DayRingHeader.WIDE_DP, WatchFaceRules.headerDp(cover = false))
-        // Habit dots still fit inside the markers on the smaller face.
+        // The small clock carries no habit dots or goal arcs (the chips and the GOALS tile do); the open Fold's face does.
+        assertFalse(WatchFaceRules.carriesDots(cover = true))
+        assertTrue(WatchFaceRules.carriesDots(cover = false))
+        // Habit dots still fit inside the markers on the old cover face where it's still drawn (the bedside, the Mac).
+        val cover = WatchFaceRules.COVER_DP
         assertTrue(HabitDotRules.ringRadiusDp(cover) > HabitDotRules.dotDp(cover))
     }
 

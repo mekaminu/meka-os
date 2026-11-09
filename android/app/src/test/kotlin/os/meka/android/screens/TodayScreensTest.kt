@@ -595,6 +595,35 @@ class TodayScreensTest {
         if (reviewed != 1) fail("review: a tap didn't open Review")
     }
 
+    /**
+     * Meka 2026-11-09 08:09 (a): Search and Plan my day leave the header's gold links for one ⋯ beside the weather chip,
+     * which opens them as a menu.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun searchAndPlanMyDayAreUnderTheHeadersMore() {
+        var searched = 0
+        var planned = 0
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.HeaderMoreMenu(openSearch = { searched++ }, openPlan = { planned++ })
+                }
+            }
+        }
+        compose.waitForIdle()
+        if (shownText("Plan my day")) fail("more: the menu showed before a tap")
+        compose.onNodeWithTag(os.meka.android.today.HEADER_MORE_TAG).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("${os.meka.android.today.HEADER_MORE_TAG}-plan").performClick()
+        compose.waitForIdle()
+        if (planned != 1) fail("more: Plan my day wasn't opened")
+        compose.onNodeWithTag(os.meka.android.today.HEADER_MORE_TAG).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("${os.meka.android.today.HEADER_MORE_TAG}-search").performClick()
+        compose.waitForIdle()
+        if (searched != 1) fail("more: Search wasn't opened")
+    }
+
     /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */
     private fun scrollUntilShown(text: String, stepPx: Float) {
         repeat(40) {

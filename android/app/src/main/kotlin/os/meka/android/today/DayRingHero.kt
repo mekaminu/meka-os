@@ -430,12 +430,11 @@ private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier =
  * fade-up still plays). Screen readers hear the plain words.
  */
 @Composable
-fun GreetingText(text: String, play: DayRingPlay, modifier: Modifier = Modifier) {
+fun GreetingText(text: String, play: DayRingPlay, modifier: Modifier = Modifier, base: androidx.compose.ui.text.TextStyle = MekaType.greeting) {
     // One line where it can (quality gate, 2026-10-22: "Good afternoon" wrapped beside the cover screen's watch face):
     // the greeting's own size, else a step or two smaller (GreetingFitRules); only a long name still wraps.
     androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
         val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-        val base = MekaType.greeting
         val oneLine = remember(text, base, measurer) {
             measurer.measure(text, base, maxLines = 1, softWrap = false).size.width.toFloat()
         }

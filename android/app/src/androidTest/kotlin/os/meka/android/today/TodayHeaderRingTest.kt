@@ -61,7 +61,7 @@ class TodayHeaderRingTest {
     fun todayOnA412DpWideScreenShowsTheDayRing() {
         header(412, compact = true)
         val dial = compose.onNodeWithTag(WATCH_FACE_TAG, useUnmergedTree = true)
-        dial.assertIsDisplayed().assertWidthIsEqualTo(WatchFaceRules.COVER_DP.dp)
+        dial.assertIsDisplayed().assertWidthIsEqualTo(WatchFaceRules.headerDp(cover = true).dp)
         val greeting = compose.onNodeWithText("Good morning, Meka").assertIsDisplayed().getUnclippedBoundsInRoot()
         assertTrue("the ring sits to the right of the greeting", dial.getUnclippedBoundsInRoot().left >= greeting.right)
     }
