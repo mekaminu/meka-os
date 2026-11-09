@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -92,8 +93,10 @@ private fun EveningStepRow(index: Int, step: EveningStep, onOpen: () -> Unit) {
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(step.title, style = MekaType.body, color = if (step.done) Meka.colors.textSecondary else Meka.colors.textPrimary, maxLines = 1)
-            Text(step.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1)
+            Text(step.title, style = MekaType.body, color = if (step.done) Meka.colors.textSecondary else Meka.colors.textPrimary, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            Text(step.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
         }
         Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
     }

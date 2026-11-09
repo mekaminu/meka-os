@@ -8,7 +8,13 @@ import os.meka.core.sync.fv
  * Navilife's rules would tidy some, a tap opening Mail, where each account's clean-up lists what goes where and its
  * Approve (Meka 2026-10-24 14:47: say what "1,048 Navilife can tidy" means, with a tap to start the clean-up).
  */
-data class MailUnreadLine(val text: String, val spoken: String, val lit: Boolean, val tidy: String? = null)
+data class MailUnreadLine(
+    val text: String, val spoken: String, val lit: Boolean, val tidy: String? = null,
+    /** Unread across the accounts counted (Today's MAIL tile, the Today rebuild slice 2b); null when none is counted yet. */
+    val unread: Int? = null,
+    /** How many of them Navilife can tidy (newsletters, promos and receipts). */
+    val tidyCount: Int = 0,
+)
 
 /**
  * Inbox fixes, slice 7 (build plan item (4), Meka 2026-10-15: "hundreds of unread messages"): **how much unread mail
@@ -106,8 +112,8 @@ object MailUnreadRules {
         }
         val total = counted.sumOf { it.unread }
         if (total == 0) {
-            return if (missing == null) MailUnreadLine(NONE_UNREAD, "Nothing unread in your mail.", false)
-            else MailUnreadLine("Mail · nothing unread in ${counted.joinToString(", ") { it.full }}$missingPart", "Nothing unread in the mail Navilife reads.$missingSpoken", false)
+            return if (missing == null) MailUnreadLine(NONE_UNREAD, "Nothing unread in your mail.", false, unread = 0)
+            else MailUnreadLine("Mail · nothing unread in ${counted.joinToString(", ") { it.full }}$missingPart", "Nothing unread in the mail Navilife reads.$missingSpoken", false, unread = 0)
         }
         val tidy = counted.sumOf { it.tidy }
         val tidyLine = tidyLine(tidy)
@@ -119,14 +125,14 @@ object MailUnreadRules {
             return MailUnreadLine(
                 "${b.full} · ${n(u)} unread$missingPart",
                 "${n(u)} unread ${if (u == 1) "email" else "emails"} in ${b.full}.$spokenTidy$missingSpoken",
-                false, tidyLine,
+                false, tidyLine, unread = total, tidyCount = tidy,
             )
         }
         val names = shortNames(unreadOnes.map { Triple(it.label, it.provider, it.full) })
         val each = unreadOnes.zip(names).joinToString(" · ") { (c, name) -> "$name ${n(c.unread)}" }
         val spokenEach = unreadOnes.map { b -> "${n(b.unread)} in ${b.full}" }
         val spokenList = spokenEach.dropLast(1).joinToString(", ") + " and " + spokenEach.last()
-        return MailUnreadLine("Unread mail · $each$missingPart", "Unread mail: $spokenList.$spokenTidy$missingSpoken", false, tidyLine)
+        return MailUnreadLine("Unread mail · $each$missingPart", "Unread mail: $spokenList.$spokenTidy$missingSpoken", false, tidyLine, unread = total, tidyCount = tidy)
     }
 
     /** "Tidy 1,048 newsletters, promos and receipts ›" (a tap opens Mail's clean-up); null with nothing to tidy. */

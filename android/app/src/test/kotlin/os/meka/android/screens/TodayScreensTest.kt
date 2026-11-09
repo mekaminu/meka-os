@@ -376,6 +376,20 @@ class TodayScreensTest {
         ScreenShots.assertShows(compose, "evening", EveningCardRules.PLAN_TOMORROW)
     }
 
+    /** The Today rebuild, slice 2b: TASKS · NEXT · MAIL under the greeting, with what the core says (no mail counted yet: two). */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theHeaderTilesSayTheDayAtAGlance() {
+        val core = show(Fill.MANY)
+        val today = core.today.value
+        if (compose.onAllNodesWithTag(os.meka.android.today.HEADER_TILES_TAG).fetchSemanticsNodes().isEmpty()) fail("tiles: no header tiles")
+        val tiles = os.meka.core.domain.TodayHeaderRules.tiles(today.timeline, today.doneToday, today.mailUnread)
+        tiles.forEach { t ->
+            val node = compose.onNodeWithTag("header-tile-${t.kind.name.lowercase()}").fetchSemanticsNode()
+            val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
+            if (said != t.spoken) fail("tiles: ${t.kind} said \"$said\", wanted \"${t.spoken}\"")
+        }
+    }
+
     /** Works by hand (quality gate 3): the card opens the Fasting screen and back leaves it; End ends the fast with Undo. */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun fastingCardOpensTheScreenAndEndEndsTheFast() {

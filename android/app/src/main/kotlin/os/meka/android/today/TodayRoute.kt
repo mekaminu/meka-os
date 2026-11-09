@@ -10,6 +10,8 @@ import os.meka.android.designsystem.wordsTap
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import os.meka.android.work.AfterWorkHost
+import os.meka.core.domain.HeaderTileKind
+import os.meka.core.domain.TodayHeaderRules
 import os.meka.core.domain.CommandCentreRules
 import os.meka.core.domain.NowKind
 import os.meka.core.domain.NowView
@@ -889,6 +891,7 @@ private fun TodayPane(
     val endFast = core?.let { os.meka.android.goals.rememberFastingTodayEnd(it, undo) }
     val stripTiles = remember(today.dayTiles, fastCard == null) {
         os.meka.core.domain.FastingScreenRules.stripTiles(HabitChipRules.stripTiles(today.dayTiles), fastCard)
+            .filter { it.kind != os.meka.core.domain.DayTileKind.NEXT_EVENT }
     }
     val chipHaptics = rememberMekaHaptics()
     val chipScope = rememberCoroutineScope()
@@ -963,15 +966,10 @@ private fun TodayPane(
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap(onClickLabel = "See tomorrow") { openTomorrow() })
                     }
-                    // "14° · light rain from 16:00": cross-fades as the day moves on; nothing until a forecast arrives. On
-                    // an office day it says both places (Places item 2), so it may take a second line.
-                    if (weather.nowLine != null) {
-                        val spoken = "Weather: " + (weather.nowSpoken ?: weather.nowLine)
-                        Crossfade(weather.nowLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "weather-line") { line ->
-                            Text(line.orEmpty(), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
-                        }
+                    // The Today rebuild, slice 2b: the weather as a small chip ("14° light rain") in place of its line; the
+                    // whole line ("14° · light rain from 16:00", both places on an office day) is what a screen reader hears.
+                    TodayHeaderRules.weatherChip(weather.nowLine)?.let { chip ->
+                        WeatherChip(chip, "Weather: " + (weather.nowSpoken ?: weather.nowLine.orEmpty()), Modifier.padding(top = MekaSpace.xxs))
                     }
                     // The trains on an office day's commute (Places item 4, TfL line status): "South Rail · Metro
                     // line · good service", lit in the accent when a line isn't running well; cross-fades as it changes.
@@ -1090,32 +1088,6 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
-                    // Inbox fixes, slice 7: "Personal · 412 unread" (several accounts: "Unread mail · Gmail 1,048 · Outlook
-                    // 154 · Business 28", the provider when two share a label); quiet, cross-fades as it changes. Under it
-                    // (Reconnect clears at once, (2)) "Tidy 1,048 newsletters, promos and receipts ›" in the accent: a tap
-                    // opens Mail, where each account's clean-up lists what goes where and its Approve.
-                    today.mailUnread?.let { unread ->
-                        val mailApp = LocalContext.current.applicationContext as? MekaApplication
-                        val mailHaptics = rememberMekaHaptics()
-                        Crossfade(unread, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-unread-line") { l ->
-                            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = l.spoken }) {
-                                Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
-                                l.tidy?.let { tidy ->
-                                    Text(tidy, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.testTag("mail-unread-tidy")
-                                            .clickable(role = Role.Button) {
-                                                mailHaptics.light()
-                                                mailApp?.let { app ->
-                                                    app.openMail.value = true
-                                                    app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
-                                                }
-                                            }
-                                            .padding(vertical = MekaSpace.xxs))
-                                }
-                            }
-                        }
-                    }
                     // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
                     // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
                     today.mailReplies?.let { replies ->
@@ -1207,6 +1179,25 @@ private fun TodayPane(
                             modifier = Modifier.wordsTap { openPlan() }.padding(vertical = MekaSpace.xxs),
                         )
                     }
+                    }
+                    // The Today rebuild, slice 2b: TASKS · NEXT · MAIL across the page under the greeting, in place of the
+                    // unread-mail lines and the countdown tile. TASKS opens the Day list, NEXT its event, MAIL the inbox.
+                    if (today.timeline.dateLabel.isNotEmpty()) {
+                        val headerTiles = remember(today.timeline, today.doneToday, today.mailUnread) {
+                            TodayHeaderRules.tiles(today.timeline, today.doneToday, today.mailUnread)
+                        }
+                        val tilesApp = LocalContext.current.applicationContext as? MekaApplication
+                        HeaderTilesRow(headerTiles, onOpen = { kind ->
+                            when (kind) {
+                                HeaderTileKind.TASKS -> openDayList()
+                                HeaderTileKind.NEXT -> today.timeline.rows.firstOrNull { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
+                                    ?.event?.let(openEvent)
+                                HeaderTileKind.MAIL -> tilesApp?.let { app ->
+                                    app.openMail.value = true
+                                    app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
+                                }
+                            }
+                        }, modifier = Modifier.padding(top = MekaSpace.m))
                     }
                     // The study cards run the page's full width under the header, not beside the face (Meka 2026-11-08 22:09:
                     // the study week card ended at about 80% of the width, narrower than every other card).
