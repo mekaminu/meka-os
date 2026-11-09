@@ -266,8 +266,10 @@ class WatchHealthScreensTest {
         // The core's clock and zone, like every other time on screen: 17:15 in London, whatever the test machine's zone.
         if (v.checkedLine != "Checked 17:15") fail("$name: the check reads \"${v.checkedLine}\" at 17:15 in London")
         // CI run 1561: the screen can still be on "Checking…" (walk-through A14 keeps the two apart) when the core has
-        // checked; wait for it by turns rather than fail on a frame that hasn't caught up.
-        ScreenShots.awaitShows(compose, name, v.checkedLine)
+        // checked; wait for it by turns rather than fail on a frame that hasn't caught up. CI run 42685826065: the
+        // pane's own on-resume check (the updater, then the health refresh) outlasted 80 turns on a slow runner, so
+        // this one waits longer; a screen that never settles still fails.
+        ScreenShots.awaitShows(compose, name, v.checkedLine, turns = 320)
         ScreenShots.assertEachOneLine(compose, name, v.rows.mapNotNull { it.fixLabel })
         ScreenShots.assertNoLoneWords(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertNoDotStartingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
