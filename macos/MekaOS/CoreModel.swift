@@ -3959,6 +3959,75 @@ final class CoreModel {
         }
     }
 
+    // MARK: The Day list (approved 2026-11-08), slice 1b: the Mac
+
+    /// The Day list sheet, from Today's "Day list ›" and ⌘N (File → New Tasks for Today). nil day: today's.
+    var showDayList = false
+    private(set) var dayListDay: Int64?
+    /// The line under the add field ("Added 3 · about 1 h 30m"), cross-faded as it changes.
+    var dayListSaid: String?
+
+    func openDayList(day: Int64? = nil) {
+        dayListDay = day
+        dayListSaid = nil
+        showDayList = true
+    }
+
+    /// The Day list as drawn, from the board on screen (its taps included). The Kotlin board is read on the main actor
+    /// and never sent anywhere.
+    func dayList(timesOn: Bool) -> DayListView? {
+        guard let core, let board else { return nil }
+        return core.dayList(board: board, day: dayListDay ?? board.todayEpochDay, timesOn: timesOn)
+    }
+
+    /// The add field's Enter, or Paste a list: each line becomes a task on the list's day. Only the text (a String) and
+    /// the day (an Int64) cross to the core.
+    func addToDayList(_ text: String) {
+        guard let core, let board else { return }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            dayListSaid = DayListRules.shared.TYPE_FIRST
+            return
+        }
+        let day = dayListDay ?? board.todayEpochDay
+        MekaHaptics.light()
+        Task {
+            do {
+                let added = try await core.addToDayList(text: text, day: day)
+                dayListSaid = added?.line ?? DayListRules.shared.TYPE_FIRST
+            } catch {
+                dayListSaid = InstantTapRules.shared.failedLine(what: "Add", reason: error.localizedDescription)
+            }
+        }
+    }
+
+    /// Paste a list: the pasteboard's text, one task per line.
+    func pasteIntoDayList() {
+        let text = NSPasteboard.general.string(forType: .string) ?? ""
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            dayListSaid = DayListRules.shared.COPY_FIRST
+        } else {
+            addToDayList(text)
+        }
+    }
+
+    /// Where Fit times starts for the list on screen (today from now, never before 9:00; another day 9:00).
+    func dayListFitFrom(isToday: Bool) -> Int32 {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        return DayListRules.shared.fitFrom(isToday: isToday, nowMinute: Int32((c.hour ?? 0) * 60 + (c.minute ?? 0)))
+    }
+
+    /// Fit times: the open tasks get starts one after another; the undo bar says so and Undo puts every time back. The
+    /// fit the core returns is sent back to it once, by the Undo.
+    func fitDayList(from minute: Int32) {
+        guard let core, let board else { return }
+        let day = dayListDay ?? board.todayEpochDay
+        MekaHaptics.tick()
+        Task {
+            guard let fit = try? await core.fitDayList(day: day, fromMinute: minute) else { return }
+            offerEventUndo(fit.line, .dayListFit(fit))
+        }
+    }
+
     // MARK: Week board, slice 2: the Board view
 
     /// A drop on the Board: the card goes to that day (today or later, keeping its time) at that place; the undo bar
@@ -4796,6 +4865,7 @@ final class CoreModel {
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .carried(let id): run { _ = try await $0.undoCarried(taskId: id) }
         case .boardMove: run { _ = try await $0.undoBoardMove() }
+        case .dayListFit(let fit): run { _ = try await $0.undoFitDayList(fit: fit) }
         case .estimate: run { _ = try await $0.undoEstimate() }
         case .boardHint: run { _ = try await $0.undoBoardHint() }
         case .boardHintAway: run { _ = try await $0.undoHintDismiss() }
@@ -8558,6 +8628,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case planBlocks([String])
         /// "Move to later": Undo puts the task back at its old time.
         case later(LaterMove)
+        /// Fit times on the Day list: every task back to the time it had (or none).
+        case dayListFit(DayListFit)
         /// An Ask card (V1 AI layer, slice 3b): what it did is taken back; the Int is the card's place in the answer.
         case ask(AskDone, Int)
         /// A spoken yes (Talk to MEKA): everything it did is taken back, newest first; the Ints are the cards' places.

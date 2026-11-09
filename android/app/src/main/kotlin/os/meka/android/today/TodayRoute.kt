@@ -1593,8 +1593,8 @@ private fun SyncLine(sync: SyncStatus) {
 
 /** The label over Today's tasks with no time. */
 internal const val ANYTIME_LABEL = "Anytime today"
-internal const val DAY_LIST_LINK = "Day list ›"
-internal const val DAY_LIST_EMPTY_LINK = "Plan today’s tasks · Day list ›"
+internal const val DAY_LIST_LINK = os.meka.core.domain.DayListRules.LINK
+internal const val DAY_LIST_EMPTY_LINK = os.meka.core.domain.DayListRules.EMPTY_LINK
 
 /**
  * A section's label riding with the first thing under it, in one list item (Fold review 2026-10-09 07:26, item 6), so

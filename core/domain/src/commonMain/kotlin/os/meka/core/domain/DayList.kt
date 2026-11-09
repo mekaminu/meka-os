@@ -75,6 +75,11 @@ object DayListRules {
     const val PLACEHOLDER = "New task"
     const val PASTE = "Paste a list"
     const val EMPTY = "Nothing planned yet. Type a task and press Enter, then the next."
+    /** The way in beside Today's "Anytime today" heading, and under Today when nothing is unplanned (both apps). */
+    const val LINK = "Day list ›"
+    const val EMPTY_LINK = "Plan today’s tasks · Day list ›"
+    const val TYPE_FIRST = "Type a task first"
+    const val COPY_FIRST = "Copy a list first, one task per line"
 
     private val LENGTH = Regex("""(?i)(?<![\w:])(\d{1,2}(?:\.5)?)\s*h(?:rs?|ours?)?\s*(\d{1,2})?\s*(?:m(?:ins?)?)?(?![\w:])|(?<![\w:])(\d{1,3})\s*m(?:ins?|inutes?)?(?![\w:])""")
     private val TIME = Regex("""(?<![\w:])([01]?\d|2[0-3])[:.]([0-5]\d)(?![\w:])""")
@@ -147,6 +152,12 @@ object DayListRules {
     /** The clock a day's open tasks run from: now (to the next 5 minutes) on today, else [DAY_START]. */
     fun startOf(isToday: Boolean, nowMinute: Int): Int =
         if (isToday) ((nowMinute + 4) / 5 * 5).coerceAtMost(24 * 60 - 5) else DAY_START
+
+    /** Where "Fit times" starts: today from now (to the next 5 minutes, never before [DAY_START]); another day [DAY_START]. */
+    fun fitFrom(isToday: Boolean, nowMinute: Int): Int = if (isToday) maxOf(DAY_START, startOf(true, nowMinute)) else DAY_START
+
+    /** "Fit times from 9:00". */
+    fun fitLabel(fromMinute: Int): String = "Fit times from ${TaskWhenRules.timeLabel(fromMinute)}"
 
     /**
      * The day's plan from [fromMinute]: open tasks with their own time at or after [holdFrom] hold it; the rest, in

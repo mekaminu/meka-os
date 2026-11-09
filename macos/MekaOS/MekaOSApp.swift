@@ -75,8 +75,11 @@ struct MekaOSApp: App {
             // View → Show/Hide Sidebar (⌃⌘S), which the UI checks use too.
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
-                Button("Capture") { model.focusCapture.toggle() }
+                // The Day list (approved 2026-11-08): ⌘N opens today's, to type a day's tasks one after another.
+                Button("Day List…") { model.openDayList() }
                     .keyboardShortcut("n", modifiers: .command)
+                Button("Capture") { model.focusCapture.toggle() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
                 Divider()
                 Button("Publish Fold Update…") { model.prepareFoldUpdate(path: nil) }
                 Button("Export All Data…") { model.showYourData = true }

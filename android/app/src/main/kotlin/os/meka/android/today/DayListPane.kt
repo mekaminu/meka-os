@@ -121,7 +121,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
         haptics.light()
         scope.launch {
             val added = runCatching { core.addToDayList(text, day) }.getOrNull()
-            said = added?.line ?: "Type a task first"
+            said = added?.line ?: DayListRules.TYPE_FIRST
         }
     }
     val tick: (String) -> Unit = { id -> scope.launch { runCatching { core.complete(id) } } }
@@ -209,13 +209,12 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                     DayChip(DayListRules.PASTE) {
                         val primary = context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip
                         val text = primary?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                        if (text.isBlank()) said = "Copy a list first, one task per line" else add(text)
+                        if (text.isBlank()) said = DayListRules.COPY_FIRST else add(text)
                     }
                     if (v != null && v.openIds.isNotEmpty()) {
                         // Today fits from now (never before 9:00); another day from 9:00.
-                        val from = if (!v.isToday) DayListRules.DAY_START
-                        else maxOf(DayListRules.DAY_START, DayListRules.startOf(true, java.time.LocalTime.now().let { it.hour * 60 + it.minute }))
-                        DayChip("Fit times from ${os.meka.core.domain.TaskWhenRules.timeLabel(from)}") {
+                        val from = DayListRules.fitFrom(v.isToday, java.time.LocalTime.now().let { it.hour * 60 + it.minute })
+                        DayChip(DayListRules.fitLabel(from)) {
                             haptics.tick()
                             scope.launch {
                                 val fit = runCatching { core.fitDayList(day, from) }.getOrNull() ?: return@launch

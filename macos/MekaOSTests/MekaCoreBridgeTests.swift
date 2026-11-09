@@ -1679,6 +1679,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(hint.spoken, "Obi suggests: From an email, give it 15m for the reply?")
     }
 
+    /// The Day list, slice 1b: the rules the Mac's sheet draws from reach Swift.
+    func testDayListReachesSwift() {
+        let rules = DayListRules.shared
+        XCTAssertEqual(rules.LINK, "Day list ›")
+        XCTAssertEqual(rules.PASTE, "Paste a list")
+        let e = rules.parse(text: "Call the school 15m #family 14:00")
+        XCTAssertEqual(e?.title, "Call the school")
+        XCTAssertEqual(e?.minutes?.intValue, 15)
+        XCTAssertEqual(e?.startMinute?.intValue, 14 * 60)
+        XCTAssertEqual(e?.area, BoardArea.family)
+        XCTAssertEqual(rules.pasted(text: "- Milk\n- Bread\n\n- Eggs").map(\.title), ["Milk", "Bread", "Eggs"])
+        XCTAssertEqual(rules.fitFrom(isToday: false, nowMinute: 14 * 60), rules.DAY_START)
+        XCTAssertEqual(rules.fitLabel(fromMinute: rules.DAY_START), "Fit times from 09:00")
+    }
+
     /// Week board, slice 2: the Board's words reach Swift.
     func testWeekBoardWordsReachSwift() {
         XCTAssertEqual(WeekBoardRules.shared.VIEW_BOARD, "Board")

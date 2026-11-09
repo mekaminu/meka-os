@@ -628,11 +628,22 @@ struct TodayView: View {
                             }
                             Spacer().frame(height: MekaSpace.l)
                         }
+                        if tl.anytime.isEmpty {
+                            // Nothing unplanned today: the Day list is still one click away, to type a day's tasks fast.
+                            DayListLink(label: DayListRules.shared.EMPTY_LINK, palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .staggeredAppear(step(.anytime), play: play)
+                        }
                         if !tl.anytime.isEmpty {
                             // Beside the calmer mockup (2026-10-29): the label counts the open tasks and a hairline
                             // sits between rows (never under the last), as on the Fold.
                             let anytime = tl.anytime
-                            SectionLabel(TodayBesideRules.shared.anytimeLabel(openCount: Int32(anytime.count)), palette).staggeredAppear(step(.anytime), play: play)
+                            HStack(alignment: .firstTextBaseline) {
+                                SectionLabel(TodayBesideRules.shared.anytimeLabel(openCount: Int32(anytime.count)), palette)
+                                Spacer(minLength: MekaSpace.xs)
+                                DayListLink(label: DayListRules.shared.LINK, palette: palette)
+                            }
+                            .staggeredAppear(step(.anytime), play: play)
                             ForEach(Array(anytime.enumerated()), id: \.element.id) { i, t in
                                 TaskRow(task: t, reason: nil, palette: palette)
                                     .overlay(alignment: .bottom) {
@@ -795,6 +806,22 @@ struct TodayView: View {
     /// One name everywhere (2026-10-21): About you's name, as the orb's hello and the brief say it; none, no name.
     private var greeting: String {
         model.todayGreeting(callName: model.aboutYou?.callName)
+    }
+}
+
+/// "Day list ›" beside Anytime today (or "Plan today’s tasks · Day list ›" when nothing is unplanned): opens the Day list.
+struct DayListLink: View {
+    @Environment(CoreModel.self) private var model
+    let label: String
+    let palette: MekaPalette
+
+    var body: some View {
+        Button { MekaHaptics.tick(); model.openDayList() } label: {
+            Text(label).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+        }
+        .buttonStyle(MekaPressStyle())
+        .help("Type today's tasks one after another (⌘N)")
+        .accessibilityLabel("Open the Day list")
     }
 }
 

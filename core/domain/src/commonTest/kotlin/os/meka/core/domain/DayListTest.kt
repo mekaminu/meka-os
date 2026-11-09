@@ -111,4 +111,12 @@ class DayListTest {
         val v = DayListRules.view(day(listOf(card(task("a", "Long", 120)), card(task("b", "Too late", 60)))), 0, timesOn = true)
         assertEquals(listOf("a" to 22 * 60), DayListRules.fit(v, 22 * 60))
     }
+
+    @Test
+    fun fitStartsFromNowTodayButNeverBeforeNineAndFromNineOnAnotherDay() {
+        assertEquals(DayListRules.DAY_START, DayListRules.fitFrom(isToday = true, nowMinute = 7 * 60 + 12))
+        assertEquals(14 * 60 + 15, DayListRules.fitFrom(isToday = true, nowMinute = 14 * 60 + 11))
+        assertEquals(DayListRules.DAY_START, DayListRules.fitFrom(isToday = false, nowMinute = 14 * 60 + 11))
+        assertEquals("Fit times from 09:00", DayListRules.fitLabel(DayListRules.DAY_START))
+    }
 }

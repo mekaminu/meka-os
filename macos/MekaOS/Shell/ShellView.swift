@@ -308,6 +308,8 @@ private struct ShellSheetsB: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showShutdown }, set: { model.showShutdown = $0 })) { ShutdownSheet(palette: palette) }
             // The Tomorrow sheet (Meka 2026-10-26): from Today's Tomorrow peek or the date under the greeting.
             .sheet(isPresented: Binding(get: { model.showTomorrow }, set: { model.showTomorrow = $0 })) { TomorrowSheet(palette: palette) }
+            // The Day list (approved 2026-11-08): from Today's "Day list ›" and ⌘N.
+            .sheet(isPresented: Binding(get: { model.showDayList }, set: { model.showDayList = $0 })) { DayListSheet(palette: palette) }
             // Plan your week (Week board item (6)): from the Board, Sunday's Needs you card and "plan my week".
             .sheet(isPresented: Binding(get: { model.showPlanWeek }, set: { model.showPlanWeek = $0 })) { PlanWeekSheet(palette: palette) }
             // School (Ask → More): Theo's and Finn's days off, dates and weekly things.
