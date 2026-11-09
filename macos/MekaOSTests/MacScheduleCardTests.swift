@@ -5,6 +5,7 @@ import XCTest
 /// The Today rebuild, slice 2d-2d: the Mac's Schedule is one compact card (core ScheduleCardRules) and gold is only for
 /// clicks and the now mark (core TodayInkRules).
 final class MacScheduleCardTests: XCTestCase {
+    @MainActor
     func testTheCardShowsTheStartAndPutsTheEndOnTheLine() {
         XCTAssertEqual(TimelineMetrics.shown("09:30–10:00", card: true), "09:30")
         XCTAssertEqual(TimelineMetrics.shown("09:30–10:00", card: false), "09:30–10:00")
@@ -17,6 +18,7 @@ final class MacScheduleCardTests: XCTestCase {
         XCTAssertEqual(TimelineMetrics.column(card: false), TimelineMetrics.timeColumn)
     }
 
+    @MainActor
     func testGoldIsOnlyForClicksAndTheNowMark() {
         let p = MekaPalette.dark
         XCTAssertEqual(TodayInk.tap.color(p), p.accent)

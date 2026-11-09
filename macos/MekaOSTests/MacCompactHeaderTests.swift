@@ -4,6 +4,7 @@ import XCTest
 
 /// The Today rebuild, slice 2d-2a: the Mac's compact header reads core TodayHeaderRules and WatchFaceRules.
 final class MacCompactHeaderTests: XCTestCase {
+    @MainActor
     func testTheTilesSayTasksNextAndMailAndEachOpensItsPlace() {
         let tiles = TodayHeaderRules.shared.tiles(timeline: DayTimeline.companion.EMPTY, done: [], mail: nil)
         XCTAssertEqual(tiles.map(\.key), ["TASKS", "NEXT"])

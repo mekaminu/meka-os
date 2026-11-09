@@ -25,6 +25,7 @@ final class MacColumnsTests: XCTestCase {
     }
 
     // The Today rebuild, slice 2d: Today is two columns from 600 pt; an open task keeps about a third beside it.
+    @MainActor
     func testTodaySplitsAndAnOpenTaskKeepsAColumnBeside() {
         let cols = TodayColumnsRules.shared
         XCTAssertFalse(cols.macSplits(contentWidthPt: 599))

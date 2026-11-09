@@ -5673,3 +5673,6 @@ For Meka's 08:09 point (e). Core `ScheduleCardRules` (core/domain ScheduleCard.k
 ### CI flake (2026-11-09 21:30): Health's "Checked 17:15" on the light cover screen
 - Push run 42685826065 (the news drift, 0423345) failed only `WatchHealthScreensTest.healthCoverManyLight`: the pane's own on-resume check (updater, then the health refresh) was still showing "Checking now · last checked 17:15" after awaitShows' 80 turns on a slow runner. The failed job re-run passed unchanged (flake, not the news change).
 - Hardened: that await now allows 320 turns; a screen that never settles still fails. Verified by the nightly dispatched ci run on this commit.
+
+### Nightly Mac check (2026-11-09 22:25): main-actor test methods
+- Dispatched run 42703237438: macOS test build failed (exit 65) in MacScheduleCardTests (TimelineMetrics.shown/column/timeColumn, MekaPalette.dark), with MacColumnsTests (TodayView.leftColumnID/rightColumnID) and MacCompactHeaderTests (MacHeaderTilesRow.hint) carrying the same pattern: app-target symbols are MainActor by default, the test target is nonisolated. Each such test method is now `@MainActor`. Mac checked nightly.
