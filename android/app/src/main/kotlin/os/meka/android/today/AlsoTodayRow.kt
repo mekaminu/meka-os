@@ -68,7 +68,7 @@ internal fun AlsoTodayRow(tiles: List<AlsoTile>, onOpen: (AlsoTile) -> Unit, ope
                         .clip(RoundedCornerShape(MekaRadius.m))
                         .background(Meka.colors.surface)
                         .then(if (tappable) Modifier.clickable(role = Role.Button) { haptics.light(); onOpen(tile) } else Modifier)
-                        .padding(MekaSpace.s)
+                        .padding(MekaSpace.xs)
                         .clearAndSetSemantics { contentDescription = tile.spoken; if (tappable) role = Role.Button },
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                 ) {
