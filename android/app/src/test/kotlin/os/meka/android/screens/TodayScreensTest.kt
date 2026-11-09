@@ -674,6 +674,34 @@ class TodayScreensTest {
         if (!shownText(os.meka.core.domain.DayListRules.PASTE)) fail("Day list ›: the Day list didn't open")
     }
 
+    /**
+     * After Navilife closes on its own, the next open shows "Navilife closed unexpectedly at …" with "Copy what went
+     * wrong": a tap puts the error on the clipboard and clears the note; Dismiss clears it too.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun aCrashLeavesALineToCopy() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        os.meka.android.today.CrashNote.write(context, "main", IllegalArgumentException("Key \"r-t1\" was already used"), System.currentTimeMillis())
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.CrashNoteLine()
+                }
+            }
+        }
+        compose.waitForIdle()
+        if (!shownText("Navilife closed unexpectedly at")) fail("crash: no line")
+        compose.onNodeWithTag("${os.meka.android.today.CRASH_NOTE_TAG}-copy").performClick()
+        compose.waitForIdle()
+        val clip = context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+        if (!clip.contains("was already used") || !clip.contains("IllegalArgumentException")) fail("crash: the copy was \"$clip\"")
+        if (os.meka.android.today.CrashNote.read(context) != null) fail("crash: Copy didn't clear the note")
+        if (!shownText(os.meka.android.today.CrashNote.COPIED)) fail("crash: Copy didn't say it copied")
+        compose.onNodeWithTag("${os.meka.android.today.CRASH_NOTE_TAG}-dismiss").performClick()
+        compose.waitForIdle()
+        if (shownText("Navilife closed unexpectedly")) fail("crash: Dismiss didn't fold the line away")
+    }
+
     /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */
     private fun scrollUntilShown(text: String, stepPx: Float) {
         repeat(40) {

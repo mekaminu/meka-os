@@ -1008,6 +1008,8 @@ private fun TodayPane(
                     // Slice 2b-2b-2: meeting prep and a day stacking up are Also today's tiles now too; a tap unfolds
                     // their detail (who's coming and what's open; the one-tap fixes) under the row.
                     SyncLine(sync)
+                    // Meka 2026-11-09 19:16: after Navilife closes on its own, one line to copy what went wrong.
+                    CrashNoteLine(Modifier.padding(top = MekaSpace.xxs))
                     }
                     // The Today rebuild, slice 2b: TASKS · NEXT · MAIL across the page under the greeting, in place of the
                     // unread-mail lines and the countdown tile. TASKS opens the Day list, NEXT its event, MAIL the inbox.

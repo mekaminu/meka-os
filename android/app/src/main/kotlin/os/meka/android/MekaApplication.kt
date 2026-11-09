@@ -180,6 +180,8 @@ open class MekaApplication : Application() {
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
+        // What went wrong if the app closes on its own, kept on this phone for Today's "Copy what went wrong" line.
+        os.meka.android.today.CrashNote.install(this)
         identity = DeviceIdentityStore(this)
         val key = DatabaseKeyStore(this).getOrCreateKey()
         val driver = AndroidDatabase.open(this, key) // the driver keeps its own copy
