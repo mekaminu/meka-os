@@ -1448,12 +1448,21 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// stagger arrives in the same order.
     func testTodayOrderReachesSwift() {
         let rules = TodayOrderRules.shared
-        XCTAssertEqual(rules.ORDER, [TodaySlot.clear, .fromYesterday, .upNext, .timeline, .cards, .needsYou, .anytime, .done])
+        // The Today rebuild, slice 2a: the day's tasks under Now and the evening card, the schedule under them.
+        XCTAssertEqual(rules.ORDER, [TodaySlot.clear, .fromYesterday, .upNext, .evening, .needsYou, .anytime, .done, .timeline, .cards])
         XCTAssertTrue(rules.leads(slot: .timeline))
         XCTAssertFalse(rules.leads(slot: .cards))
         XCTAssertLessThan(rules.stagger(slot: .upNext), rules.stagger(slot: .cards))
         XCTAssertLessThan(rules.TIMELINE_ROWS_STEP, rules.stagger(slot: .cards))
         XCTAssertEqual(rules.SECTIONS, 7)
+    }
+
+    /// The Today rebuild, slice 2a: one evening card's steps and Today's head reach Swift for the Mac's slice.
+    func testEveningCardReachesSwift() {
+        let none = EveningCardRules.shared.evening(shutdown: ShutdownView.companion.EMPTY, review: ReviewCard.companion.NONE)
+        XCTAssertNil(none)
+        XCTAssertEqual(EveningCardRules.shared.LATER_UNTIL_MIN, 21 * 60)
+        XCTAssertEqual(EveningCardRules.shared.head(open: [], done: []).label, "Today")
     }
 
     /// A hand-made gym habit is offered booking instead of a second "Add Gym" (Fold review 2026-10-09 13:45, item 2).

@@ -13,6 +13,7 @@ import os.meka.android.work.AfterWorkHost
 import os.meka.core.domain.CommandCentreRules
 import os.meka.core.domain.NowKind
 import os.meka.core.domain.NowView
+import os.meka.core.domain.EveningCardRules
 import os.meka.core.domain.TodayOrderRules
 import os.meka.core.domain.TodaySlot
 import os.meka.android.fold.NowCard
@@ -923,6 +924,14 @@ private fun TodayPane(
             os.meka.android.goals.HabitTaps.tick(chipScope, core, dot.id, !was) { line -> undo?.show(line, null) }
             undo?.show(HabitDotRules.tickedLine(dot, !was)) { os.meka.android.goals.HabitTaps.tick(chipScope, core, dot.id, was) }
         }
+        // The Today rebuild, slice 2a: one "This evening · 1 of 3" card under Now from 17:00, in place of the review,
+        // shutdown and tomorrow cards; Later puts it away until 21:00 (this phone only).
+        val eveningCard = remember(shutdown, reviewCard) { EveningCardRules.evening(shutdown, reviewCard) }
+        var eveningLaterDay by rememberSaveable { mutableStateOf<Long?>(null) }
+        val clockDay = java.time.LocalDate.now().toEpochDay()
+        val clockMinute = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+        val eveningShown = eveningCard?.takeIf { !EveningCardRules.away(eveningLaterDay, clockDay, clockMinute) }
+        val todayHead = remember(today.timeline.anytime, today.doneToday) { EveningCardRules.head(today.timeline.anytime, today.doneToday) }
         // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
         LazyColumn(
@@ -1329,7 +1338,7 @@ private fun TodayPane(
                 }
             }
             // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
-            if (reviewCard.offered) {
+            if (reviewCard.offered && eveningCard == null) {
                 item(key = "review") {
                     // Its title travels across the shell into the Review tab's.
                     ReviewCardTile(reviewCard, openReviewCard, onLater = laterReviewCard, modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
@@ -1337,7 +1346,9 @@ private fun TodayPane(
                 }
             }
             // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
-            if (shutdown.offered) {
+            if (eveningCard != null) {
+                // The evening card under Now carries the shutdown and tomorrow (the Today rebuild, slice 2a).
+            } else if (shutdown.offered) {
                 item(key = "shutdown") {
                     ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.SHUTDOWN), !shutdownOpen), onLater = laterShutdownCard)
@@ -1354,7 +1365,7 @@ private fun TodayPane(
             }
             // The Tomorrow peek (Meka 2026-10-26): from 17:00 or once shut down, "Tomorrow · Tue 27 Oct · 2 tasks ·
             // first 07:40 Gym ›", opening the Tomorrow sheet.
-            shutdown.peek?.let { peek ->
+            shutdown.peek?.takeIf { eveningCard == null }?.let { peek ->
                 item(key = "tomorrow-peek") {
                     TomorrowPeekCard(peek, openTomorrow, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
@@ -1449,6 +1460,25 @@ private fun TodayPane(
                 QuickAlarmRows(core, Modifier.animateItem().appear(rememberAppearance(nextStep, play)))
             }
             }
+            TodaySlot.EVENING -> {
+            if (eveningShown != null) {
+                item(key = "evening") {
+                    EveningCardView(
+                        eveningShown,
+                        onStep = { kind ->
+                            when (kind) {
+                                os.meka.core.domain.EveningStepKind.REVIEW -> openReviewCard()
+                                os.meka.core.domain.EveningStepKind.SHUT_DOWN -> openShutdown()
+                                os.meka.core.domain.EveningStepKind.PLAN_TOMORROW -> openTomorrow()
+                            }
+                        },
+                        onLater = if (EveningCardRules.laterOffered(clockMinute)) ({ eveningLaterDay = clockDay }) else null,
+                        modifier = Modifier.padding(bottom = MekaSpace.l).testTag(EVENING_CARD_TAG).animateItem()
+                            .appear(rememberAppearance(TodayOrderRules.stagger(TodaySlot.EVENING), play)),
+                    )
+                }
+            }
+            }
             TodaySlot.TIMELINE -> {
             // One timeline under "Today": the "All day" group first (one row each, at most 3 then "+2 more"), finished
             // events folded, events and planned tasks in time order with the now line and free gaps.
@@ -1456,7 +1486,7 @@ private fun TodayPane(
             // thing under it (Fold review 2026-10-09 07:26, item 6), so it never stands alone over the capture bar.
             if (head != null) {
                 if (head == DayHead.ALL_DAY) item(key = "allday-label") {
-                    Headed(tl.sectionLabel, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
+                    Headed(EveningCardRules.scheduleLabel(tl.sectionLabel), Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
                         // In the title column over its rows, as the Calendar draws it (Meka 2026-11-08 22:09: "All day ·
                         // Todoist" sat far left of its task with a wide gap).
                         AllDayLabel(tl.allDayLabel, m.padding(start = TIME_COLUMN))
@@ -1472,7 +1502,7 @@ private fun TodayPane(
                 }
                 tl.earlierLabel?.let { label ->
                     item(key = "earlier") {
-                        Headed(tl.sectionLabel.takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
+                        Headed(EveningCardRules.scheduleLabel(tl.sectionLabel).takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
                             EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, m)
                         }
                     }
@@ -1483,7 +1513,7 @@ private fun TodayPane(
                     }
                 }
                 itemsIndexed(tl.rows, key = { _, r -> "r-" + r.id }) { i, r ->
-                    Headed(tl.sectionLabel.takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(rowsStep, play))) { m ->
+                    Headed(EveningCardRules.scheduleLabel(tl.sectionLabel).takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(rowsStep, play))) { m ->
                         when (r.kind) {
                             TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
                                 TimelineEventRow(r, past = false, modifier = sm)
@@ -1518,12 +1548,21 @@ private fun TodayPane(
                 val anyStep = TodayOrderRules.stagger(TodaySlot.ANYTIME)
                 // Beside the calmer mockup (2026-10-29): the label counts the open tasks, each row is the 48 dp target
                 // with a hairline in the list's gap under it (never under the last).
-                val anyLabel = os.meka.core.domain.TodayBesideRules.anytimeLabel(tl.anytime.size)
+                // The Today rebuild, slice 2a: "Today · 2 left · 40m" with the gold done bar, right under Now.
                 itemsIndexed(tl.anytime, key = { _, t -> "d-" + t.id }) { i, t ->
-                    Headed(anyLabel.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play)), link = DAY_LIST_LINK, onLink = openDayList) { m ->
+                    Headed(todayHead.label.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play)),
+                        link = DAY_LIST_LINK, onLink = openDayList, progress = todayHead.progress) { m ->
                         val rule = os.meka.core.domain.TodayBesideRules.dividerAfter(i, tl.anytime.size)
                         TaskRow(t, actions, motion = rowMotion(t.id), modifier = if (rule) m.hairlineInGapBelow() else m)
                     }
+                }
+                // "+ Add for today · Enter for the next" opens the Day list, where Enter adds one after another.
+                item(key = "today-add") {
+                    Text(
+                        EveningCardRules.ADD_LINE, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                        modifier = Modifier.animateItem().appear(rememberAppearance(anyStep, play))
+                            .wordsTap(onClickLabel = "Add tasks for today") { openDayList() }.minTouch(),
+                    )
                 }
                 if (today.doneToday.isNotEmpty() && doneChoice.show != os.meka.core.domain.DoneShow.HIDDEN) item(key = "s-anytime") { Spacer(Modifier.height(MekaSpace.l)) }
             }
@@ -1606,6 +1645,8 @@ internal fun Headed(
     label: String?, modifier: Modifier = Modifier,
     /** A link on the heading's right ("Day list ›"), tapped for [onLink]; null for none. */
     link: String? = null, onLink: () -> Unit = {},
+    /** The Today rebuild: the gold done bar under the heading (Today's own tasks); null for none. */
+    progress: Float? = null,
     content: @Composable (Modifier) -> Unit,
 ) {
     if (label == null) { content(modifier); return }
@@ -1616,6 +1657,7 @@ internal fun Headed(
             Text(link, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.wordsTap(onClickLabel = "Open the Day list") { onLink() })
         }
+        if (progress != null) TodayDoneBar(progress, Modifier.padding(top = MekaSpace.xxs))
         Spacer(Modifier.height(MekaSpace.xs))
         content(Modifier)
     }

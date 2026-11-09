@@ -10,6 +10,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import os.meka.core.domain.EveningCardRules
+import os.meka.android.today.EVENING_CARD_TAG
 import org.junit.Assert.fail
 import os.meka.android.goals.FASTING_TODAY_TAG
 import os.meka.core.domain.FastingScreenRules
@@ -193,19 +196,25 @@ class TodayScreensTest {
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
-        ScreenShots.assertShows(compose, name, lastTitle)
         val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
         val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val clearBy = bar.top - MotionMath.FOOT_FADE_DP * density
         val rows = compose.onAllNodesWithTag(TASK_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes() +
             compose.onAllNodesWithTag(NOW_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes()
-        if (rows.isEmpty()) fail("$name: no task rows or Up next buttons at the list's end")
+        // The Today rebuild, slice 2a: the day's tasks sit under Now and the schedule under them, so the list's end may
+        // hold no task row; any that is there clears the bar.
         // Today's own column only (on the open Fold Needs you and Coming up sit beside it, with no capture bar under them).
         rows.filter { it.boundsInRoot.bottom > 0f && it.boundsInRoot.center.x in bar.left..bar.right }.forEach { node ->
             if (node.boundsInRoot.bottom > clearBy + 0.5f) {
                 fail("$name: a row ends at ${node.boundsInRoot.bottom / density} dp, under the capture bar's fade (${clearBy / density} dp)")
             }
         }
+        // The last of Today's tasks is still in the list, reached by scrolling to it.
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(hasText(lastTitle, substring = true))
+        compose.mainClock.autoAdvance = false
+        settle()
+        ScreenShots.assertShows(compose, name, lastTitle)
     }
 
     /**
@@ -227,9 +236,10 @@ class TodayScreensTest {
             }
         }
         if (timeline) {
-            val work = compose.onAllNodes(hasText("09:00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().filter(::inToday)
-            if (work.isEmpty()) fail("$name: the timeline's work row isn't in Today's column")
-            if (work.minOf { it.boundsInRoot.bottom } > clearBy + 0.5f) fail("$name: the timeline's work row is under the capture bar")
+            // The Today rebuild, slice 2a: Today's own tasks follow Now (and the evening card), above the schedule.
+            val head = compose.onAllNodes(hasText("TODAY · ", substring = true), useUnmergedTree = true).fetchSemanticsNodes().filter(::inToday)
+            if (head.isEmpty()) fail("$name: Today's tasks aren't in Today's column")
+            if (head.minOf { it.boundsInRoot.bottom } > clearBy + 0.5f) fail("$name: Today's tasks start under the capture bar")
         }
         compose.onAllNodes(hasText(SETUP_LABEL), useUnmergedTree = true).fetchSemanticsNodes().forEach { n ->
             if (inToday(n)) fail("$name: the setup card is in Today's column, not beside it")
@@ -348,9 +358,25 @@ class TodayScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun theNowLineCountsWhatAnytimeTodayLists() {
         val core = show(Fill.MANY)
-        val listed = core.today.value.timeline.anytime.size
-        ScreenShots.assertShows(compose, "many", TodayBesideRules.anytimeLabel(listed).uppercase())
+        val today = core.today.value
+        val listed = today.timeline.anytime.size
+        // The Today rebuild, slice 2a: the head counts what's left ("TODAY · 5 LEFT · 4h"), the now line the same tasks.
+        ScreenShots.assertShows(compose, "many", EveningCardRules.head(today.timeline.anytime, today.doneToday).label.uppercase())
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(hasText("$listed more anytime task", substring = true))
+        compose.mainClock.autoAdvance = false
+        settle()
         ScreenShots.assertShows(compose, "many", "$listed more anytime task")
+    }
+
+    /** The Today rebuild, slice 2a: at 17:15 one evening card sits under Now (shut down, plan tomorrow), not three. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theEveningIsOneCardUnderNow() {
+        show(Fill.ONE)
+        if (compose.onAllNodesWithTag(EVENING_CARD_TAG).fetchSemanticsNodes().isEmpty()) fail("evening: no evening card at 17:15")
+        ScreenShots.assertShows(compose, "evening", EveningCardRules.LABEL.uppercase())
+        ScreenShots.assertShows(compose, "evening", EveningCardRules.SHUT_DOWN)
+        ScreenShots.assertShows(compose, "evening", EveningCardRules.PLAN_TOMORROW)
     }
 
     /** Works by hand (quality gate 3): the card opens the Fasting screen and back leaves it; End ends the fast with Undo. */

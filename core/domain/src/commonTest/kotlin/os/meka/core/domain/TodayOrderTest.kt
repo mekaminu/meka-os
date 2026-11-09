@@ -7,17 +7,22 @@ import kotlin.test.assertTrue
 
 class TodayOrderTest {
     @Test
-    fun calmTodayUpNextAndTheTimelineLeadWithTheCardsAfterThem() {
+    fun theTasksSitUnderNowAndTheEveningWithTheScheduleUnderThemAndTheCardsLast() {
         val order = TodayOrderRules.ORDER
         assertEquals(TodaySlot.entries.size, order.size)
         assertEquals(order.toSet().size, order.size)
         assertTrue(order.indexOf(TodaySlot.UP_NEXT) < order.indexOf(TodaySlot.TIMELINE))
         assertTrue(order.indexOf(TodaySlot.TIMELINE) < order.indexOf(TodaySlot.CARDS))
-        assertEquals(TodaySlot.DONE, order.last())
+        assertEquals(TodaySlot.CARDS, order.last())
+        // The Today rebuild: the day's tasks under Now and the evening card, the schedule under them.
+        assertTrue(order.indexOf(TodaySlot.UP_NEXT) < order.indexOf(TodaySlot.EVENING))
+        assertTrue(order.indexOf(TodaySlot.EVENING) < order.indexOf(TodaySlot.ANYTIME))
+        assertTrue(order.indexOf(TodaySlot.ANYTIME) < order.indexOf(TodaySlot.DONE))
+        assertTrue(order.indexOf(TodaySlot.DONE) < order.indexOf(TodaySlot.TIMELINE))
         assertTrue(TodayOrderRules.leads(TodaySlot.UP_NEXT))
         assertTrue(TodayOrderRules.leads(TodaySlot.TIMELINE))
         assertFalse(TodayOrderRules.leads(TodaySlot.CARDS))
-        assertFalse(TodayOrderRules.leads(TodaySlot.ANYTIME))
+        assertTrue(TodayOrderRules.leads(TodaySlot.ANYTIME))
     }
 
     @Test
