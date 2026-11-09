@@ -58,7 +58,7 @@ class TodayNewsRowTest {
         compose.onNodeWithText("NEWS").assertExists()
         compose.onNodeWithText("swipe ›").assertExists()
         val row = compose.onNodeWithTag(TODAY_NEWS_TAG).fetchSemanticsNode().boundsInRoot
-        val first = compose.onAllNodesWithTag("today-news-card").fetchAllSemanticsNodes().first().boundsInRoot
+        val first = compose.onAllNodesWithTag("today-news-card").fetchSemanticsNodes().first().boundsInRoot
         assertEquals("the first card starts at the row's left edge", row.left, first.left, 0.5f)
         assertTrue("the first card is whole", first.right <= row.right)
         compose.onAllNodesWithTag("today-news-card")[0].performClick()
