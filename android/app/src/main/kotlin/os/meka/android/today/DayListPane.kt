@@ -31,7 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -83,6 +83,18 @@ import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.TaskEstimateRules
 import os.meka.core.domain.WeekBoardRules
 import os.meka.core.facade.MekaCore
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import os.meka.android.goals.Grip
+import os.meka.android.goals.GripHandle
+import os.meka.core.domain.ChecklistRules
+import os.meka.core.domain.StudyRules
 
 /**
  * The Day list (approved 2026-11-08, `docs/design/day-list/Main.dc.html`): one screen for one day where a long list of
@@ -114,6 +126,17 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val context = LocalContext.current
+    // Drag to reorder (slice 1c): the held row follows the finger by its grip; the open rows it passes make room.
+    var dragId by remember { mutableStateOf<String?>(null) }
+    var dragDy by remember { mutableFloatStateOf(0f) }
+    var rowPx by remember { mutableFloatStateOf(0f) }
+    val gapPx = with(LocalDensity.current) { MekaSpace.xxs.toPx() }
+    fun reorder(id: String, toRow: Int) {
+        scope.launch {
+            runCatching { core.reorderDayList(day, id, toRow, timesOn) }.getOrNull()
+                ?.let { l -> haptics.light(); undo.show(l) { core.undoBoardMove() } }
+        }
+    }
 
     fun add(text: String) {
         if (text.isBlank()) return
@@ -158,9 +181,36 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                             modifier = Modifier.padding(vertical = MekaSpace.m).animateItem().appear(rememberAppearance(2)))
                     }
                 }
-                items(v.rows, key = { "r-" + it.id }) { r ->
+                val openRows = v.rows.count { !it.done }
+                val dragFrom = v.rows.indexOfFirst { it.id == dragId }
+                val dragTo = if (dragFrom < 0) -1 else ChecklistRules.dropIndex(dragFrom, dragDy, rowPx, openRows)
+                itemsIndexed(v.rows, key = { _, r -> "r-" + r.id }) { i, r ->
+                    val held = dragId == r.id
+                    val shift = when {
+                        dragFrom < 0 || held -> 0f
+                        dragFrom < dragTo && i in (dragFrom + 1)..dragTo -> -rowPx
+                        dragTo < dragFrom && i in dragTo until dragFrom -> rowPx
+                        else -> 0f
+                    }
+                    val slide = remember { Animatable(0f) }
+                    LaunchedEffect(shift, dragId == null) { if (dragId == null) slide.snapTo(0f) else slide.animateTo(shift, MekaMotion.replan(reduced)) }
+                    val grip = if (DayListRules.canDrag(r, v.timesOn) && openRows > 1) Grip(
+                        label = StudyRules.gripLabel(r.title),
+                        dy = if (held) dragDy else 0f, lifted = held,
+                        onStart = { haptics.light(); sheetId = null; dragDy = 0f; dragId = r.id },
+                        onDrag = { dragDy += it },
+                        onEnd = {
+                            val to = ChecklistRules.dropIndex(i, dragDy, rowPx, openRows)
+                            if (to != i) reorder(r.id, to)
+                            dragId = null; dragDy = 0f
+                        },
+                        onUp = DayListRules.stepTo(v, r.id, up = true)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
+                        onDown = DayListRules.stepTo(v, r.id, up = false)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
+                    ) else null
                     DayListRowView(r, v.timesOn, tick, onOpen = { haptics.tick(); sheetId = r.id },
-                        modifier = Modifier.animateItem().appear(rememberAppearance(2)))
+                        modifier = Modifier.then(if (dragId != null) Modifier else Modifier.animateItem()).appear(rememberAppearance(2))
+                            .graphicsLayer { translationY = if (held) 0f else slide.value },
+                        grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
                 }
                 item(key = "hint") {
                     Text(DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
@@ -271,9 +321,18 @@ private fun DayProgressBar(progress: Float, line: String, modifier: Modifier) {
 
 /** A slim row: tick · time · title · area dot and name · length chip. Tapping the row opens its sheet. */
 @Composable
-private fun DayListRowView(r: DayListRow, timesOn: Boolean, tick: (String) -> Unit, onOpen: () -> Unit, modifier: Modifier) {
+private fun DayListRowView(
+    r: DayListRow, timesOn: Boolean, tick: (String) -> Unit, onOpen: () -> Unit, modifier: Modifier,
+    grip: Grip? = null, onMeasured: (Float) -> Unit = {},
+) {
+    val reduced = Meka.reducedMotion
+    // Drag to reorder: the held row lifts onto the raised surface (scale 1.02 on the approve spring), as in Study.
+    val lift by animateFloatAsState(if (grip?.lifted == true && !reduced) 1f else 0f, MekaMotion.approve(reduced), label = "day-list-lift")
+    val bg by animateColorAsState(if (grip?.lifted == true) Meka.colors.surfaceRaised else Meka.colors.background, MekaMotion.appear(reduced), label = "day-list-held")
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button, onClickLabel = "Options") { onOpen() }
+        modifier.fillMaxWidth().zIndex(if (grip?.lifted == true) 1f else 0f).onSizeChanged { onMeasured(it.height.toFloat()) }
+            .graphicsLayer { translationY = grip?.dy ?: 0f; scaleX = 1f + 0.02f * lift; scaleY = 1f + 0.02f * lift }
+            .clip(RoundedCornerShape(MekaRadius.s)).background(bg).clickable(role = Role.Button, onClickLabel = "Options") { onOpen() }
             .padding(vertical = MekaSpace.xxs).semantics { contentDescription = r.spoken },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -312,6 +371,7 @@ private fun DayListRowView(r: DayListRow, timesOn: Boolean, tick: (String) -> Un
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
             )
         }
+        grip?.let { GripHandle(it, "day-list-grip-${r.id}") }
     }
 }
 

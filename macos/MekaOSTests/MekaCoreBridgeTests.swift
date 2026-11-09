@@ -1692,6 +1692,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.pasted(text: "- Milk\n- Bread\n\n- Eggs").map(\.title), ["Milk", "Bread", "Eggs"])
         XCTAssertEqual(rules.fitFrom(isToday: false, nowMinute: 14 * 60), rules.DAY_START)
         XCTAssertEqual(rules.fitLabel(fromMinute: rules.DAY_START), "Fit times from 09:00")
+        // Drag to reorder (slice 1c): the grip's spoken moves.
+        XCTAssertEqual(StudyRules.shared.MOVE_UP, "Move up")
+        XCTAssertEqual(StudyRules.shared.gripLabel(name: "Milk"), "Drag to reorder Milk")
     }
 
     /// Week board, slice 2: the Board's words reach Swift.

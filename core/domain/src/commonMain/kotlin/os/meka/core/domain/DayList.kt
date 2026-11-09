@@ -239,6 +239,42 @@ object DayListRules {
         }
     }
 
+    /**
+     * Drag to reorder (slice 1c): whether [r] has a grip. Open rows only; with Times on a row with its own time is placed
+     * by that time (a 14:00 dentist stays at 14:00), so only the rest drag. With Times off every open row drags.
+     */
+    fun canDrag(r: DayListRow, timesOn: Boolean): Boolean = !r.done && !(timesOn && r.timeIsSet)
+
+    /** The open rows' indexes a screen reader's Move up / Move down step to: the nearest draggable row above or below. */
+    fun stepTo(view: DayListView, taskId: String, up: Boolean): Int? {
+        val open = view.rows.filter { !it.done }
+        val from = open.indexOfFirst { it.id == taskId }
+        if (from < 0 || !canDrag(open[from], view.timesOn)) return null
+        val range = if (up) (from - 1 downTo 0) else (from + 1 until open.size)
+        return range.firstOrNull { canDrag(open[it], view.timesOn) }
+    }
+
+    /**
+     * Drag to reorder: [taskId] dropped at row [toRow] among the view's open rows (0 = top). Returns its place among the
+     * day's other open cards in the board's order ([openOrder], the Week board's `openCards`) for
+     * `WeekBoardRules.move`, or null when it can't move or nothing changes. Times on, the open rows read as the day runs,
+     * so the task goes right after the nearest draggable row above where it lands (or before the first draggable one):
+     * the untimed tasks then run in the order he dropped them, and the timed ones keep their times.
+     */
+    fun boardIndex(view: DayListView, openOrder: List<String>, taskId: String, toRow: Int): Int? {
+        val open = view.rows.filter { !it.done }
+        val from = open.indexOfFirst { it.id == taskId }
+        if (from < 0 || !canDrag(open[from], view.timesOn)) return null
+        val to = toRow.coerceIn(0, open.size - 1)
+        if (to == from) return null
+        val moved = open.map { it.id }.toMutableList().apply { removeAt(from); add(to, taskId) }
+        val free = open.filter { canDrag(it, view.timesOn) }.map { it.id }.toSet()
+        val others = openOrder.filter { it != taskId }
+        val before = moved.subList(0, to).lastOrNull { it in free && it in others }
+        return if (before != null) others.indexOf(before) + 1
+        else others.indexOfFirst { it in free }.let { if (it < 0) others.size else it }
+    }
+
     /** "Fitted 4 tasks from 09:00 · ends about 11:15"; "Times already fit" when nothing changes. */
     fun fitLine(view: DayListView, fromMinute: Int, changed: Int): String {
         if (changed == 0) return "Times already fit"

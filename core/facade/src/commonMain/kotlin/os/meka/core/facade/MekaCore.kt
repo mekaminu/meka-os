@@ -3784,8 +3784,8 @@ class MekaCore(
         return onCore {
             val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
             val target = maxOf(day, today)
-            val ids = entries.map { e ->
-                val id = tasks.create(NewTask(e.title))
+            val made = tasks.createInOrder(entries.map { NewTask(it.title) })
+            val ids = entries.zip(made).map { (e, id) ->
                 if (target > today || e.startMinute != null) tasks.setWhen(id, target, e.startMinute)
                 e.minutes?.let { tasks.setEstimate(id, it) }
                 e.area?.let { tasks.setArea(id, os.meka.core.domain.BoardAreaRules.raw(it)) }
@@ -3793,6 +3793,22 @@ class MekaCore(
             }
             os.meka.core.domain.DayListAdded(ids, os.meka.core.domain.DayListRules.addedLine(entries))
         }
+    }
+
+    /**
+     * Drag to reorder in the Day list (slice 1c): [taskId] dropped at row [toRow] among [day]'s open rows as drawn with
+     * [timesOn] ([os.meka.core.domain.DayListRules.boardIndex]). It moves on the Week board, so Today, the board and
+     * Fit times follow the new order on both apps. Returns the undo bar's line ("Moved “Book MOT” up"), or null when
+     * nothing moved; Undo is [undoBoardMove].
+     */
+    suspend fun reorderDayList(day: Long, taskId: String, toRow: Int, timesOn: Boolean): String? = onCore {
+        val board = _board.value
+        val d = board.day(day) ?: return@onCore null
+        val view = dayList(board, day, timesOn) ?: return@onCore null
+        val index = os.meka.core.domain.DayListRules.boardIndex(view, d.openCards.map { it.id }, taskId, toRow) ?: return@onCore null
+        val cal = ZoneCalendar(timeZone)
+        val move = os.meka.core.domain.WeekBoardRules.move(board, taskId, day, index, cal.epochDayOf(nowMs()), cal) ?: return@onCore null
+        placeOnBoard(board, move)
     }
 
     /**

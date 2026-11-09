@@ -4028,6 +4028,19 @@ final class CoreModel {
         }
     }
 
+    /// Drag to reorder in the Day list (slice 1c): the task takes row [toRow] among the open rows as drawn; it moves
+    /// on the Week board, so Today, the board and Fit times follow, and the undo bar says "Moved “…” up" with Undo.
+    func reorderDayList(_ id: String, toRow: Int, timesOn: Bool) {
+        guard let core, let board else { return }
+        let day = dayListDay ?? board.todayEpochDay
+        let row = Int32(clamping: toRow)
+        Task {
+            guard let line = try? await core.reorderDayList(day: day, taskId: id, toRow: row, timesOn: timesOn) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardMove)
+        }
+    }
+
     // MARK: Week board, slice 2: the Board view
 
     /// A drop on the Board: the card goes to that day (today or later, keeping its time) at that place; the undo bar

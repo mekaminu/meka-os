@@ -1120,7 +1120,7 @@ internal class Grip(
 
 /** The ≡ handle (48 dp): drag it up or down; a screen reader offers Move up and Move down. */
 @Composable
-private fun GripHandle(grip: Grip, tag: String) {
+internal fun GripHandle(grip: Grip, tag: String) {
     // The gesture outlives recompositions: always call the newest callbacks.
     val start by rememberUpdatedState(grip.onStart)
     val drag by rememberUpdatedState(grip.onDrag)

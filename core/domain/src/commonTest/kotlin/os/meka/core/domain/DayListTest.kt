@@ -119,4 +119,38 @@ class DayListTest {
         assertEquals(DayListRules.DAY_START, DayListRules.fitFrom(isToday = false, nowMinute = 14 * 60 + 11))
         assertEquals("Fit times from 09:00", DayListRules.fitLabel(DayListRules.DAY_START))
     }
+
+    @Test
+    fun dragToReorderPlacesTheTaskAfterTheNearestUntimedRowAboveAndTimedRowsKeepTheirPlace() {
+        // Board order: the 10:00 meeting first (placed), then A and B; Times on reads A 9:00, B 9:30, Meeting 10:00.
+        val cards = listOf(
+            card(task("m", "Meeting", 60), time = "10:00"),
+            card(task("a", "A", 30)), card(task("b", "B", 30)),
+            card(task("d", "Done one", 15, done = true)),
+        )
+        val board = listOf("m", "a", "b")
+        val on = DayListRules.view(day(cards), 8 * 60, timesOn = true)
+        assertEquals(listOf("a", "b", "m", "d"), on.rows.map { it.id })
+        assertEquals(listOf(true, true, false, false), on.rows.map { DayListRules.canDrag(it, true) })
+        // A dropped under the meeting: after B (the nearest untimed row above), so B now runs first.
+        assertEquals(2, DayListRules.boardIndex(on, board, "a", 2))
+        // B to the top: before A.
+        assertEquals(1, DayListRules.boardIndex(on, board, "b", 0))
+        // Nothing moves: the same place, a timed row, a done row, an unknown one.
+        assertNull(DayListRules.boardIndex(on, board, "a", 0))
+        assertNull(DayListRules.boardIndex(on, board, "m", 0))
+        assertNull(DayListRules.boardIndex(on, board, "d", 0))
+        assertNull(DayListRules.boardIndex(on, board, "x", 0))
+        // Move up / down step over the timed row to the next untimed one.
+        assertEquals(1, DayListRules.stepTo(on, "a", up = false))
+        assertNull(DayListRules.stepTo(on, "b", up = false))
+        assertNull(DayListRules.stepTo(on, "m", up = true))
+
+        // Times off: the board's order, and every open row drags (the meeting keeps its 10:00 either way).
+        val off = DayListRules.view(day(cards), 8 * 60, timesOn = false)
+        assertEquals(listOf("m", "a", "b", "d"), off.rows.map { it.id })
+        assertTrue(off.rows.take(3).all { DayListRules.canDrag(it, false) })
+        assertEquals(2, DayListRules.boardIndex(off, board, "m", 2))
+        assertEquals(0, DayListRules.boardIndex(off, board, "b", 0))
+    }
 }

@@ -162,6 +162,15 @@ class Tasks(
     fun create(draft: NewTask): String = createWithId(ids(), draft)
 
     /**
+     * Several tasks made at once in the order given (the Day list's pasted list): each is stamped a millisecond after
+     * the one before, so a list made within the same millisecond still reads in its typed order everywhere it sorts as added.
+     */
+    fun createInOrder(drafts: List<NewTask>): List<String> {
+        val base = nowMs()
+        return drafts.mapIndexed { i, d -> createWithId(ids(), d, mapOf(ActionableFields.CREATED_AT to (base + i).fv())) }
+    }
+
+    /**
      * Creates (or, if [id] was deleted or finished, brings back) a task under a chosen id, so two devices making
      * the same thing offline converge on one task. [extra] adds fields such as [TaskFields.EVENT_ID].
      */

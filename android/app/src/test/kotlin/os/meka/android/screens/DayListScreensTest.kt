@@ -156,6 +156,27 @@ class DayListScreensTest {
         assertEquals(60, core.weekBoard.value.day(day.epochDay)!!.cards.single { it.id == id }.task.estimateMinutes)
     }
 
+    /**
+     * Drag to reorder (slice 1c): each open row has a ≡ grip a screen reader can move; Move down on the first row's
+     * grip puts it second on the board (Today, the board and Fit times follow), and the done row has no grip.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun dragGripsReorderTheDay() {
+        val core = setUp(ThemeChoice.DARK)
+        val rows = core.dayList(core.weekBoard.value, core.weekBoard.value.todayEpochDay, timesOn = true)!!.rows
+        val (first, second) = rows[0].title to rows[1].title
+        val grip = compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Drag to reorder $first")), useUnmergedTree = true)
+        grip.assertExists()
+        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Drag to reorder Book the MOT")), useUnmergedTree = true)
+            .fetchSemanticsNodes().let { assertTrue(it.isEmpty(), "the done row has a grip") }
+        val down = grip.fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == "Move down" }
+        compose.runOnIdle { down.action() }
+        fun open() = core.weekBoard.value.day(core.weekBoard.value.todayEpochDay)!!.openCards.map { it.title }
+        until { open().firstOrNull() == second }
+        assertEquals(listOf(second, first), open())
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("day-list", "fold-dark-moved"))
+    }
+
     @Test @Config(qualifiers = ScreenShots.COVER) fun dayListDark() = run(ThemeChoice.DARK, "fold-dark")
     @Test @Config(qualifiers = ScreenShots.COVER) fun dayListLight() = run(ThemeChoice.LIGHT, "fold-light")
 }

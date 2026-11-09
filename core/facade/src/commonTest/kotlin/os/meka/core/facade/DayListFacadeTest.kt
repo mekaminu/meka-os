@@ -69,4 +69,29 @@ class DayListFacadeTest {
         assertEquals(BoardAreaRules.raw(BoardArea.WORK), fold.weekBoard.value.day(day)!!.cards.single { it.id == one.ids.single() }.task.area)
         assertEquals(1, two.ids.size)
     }
+
+    @Test
+    fun dragToReorderMovesOnTheBoardUndoesAndTheMacSeesTheOrder() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        fold.tick()
+        val day = fold.weekBoard.value.todayEpochDay + 2
+        fold.addToDayList("Complete feedbacks 30m\nEmail Sam 15m\nPay the nursery 30m\nDentist 14:00 1h", day)!!
+        fun titles(timesOn: Boolean) = fold.dayList(fold.weekBoard.value, day, timesOn)!!.rows.map { it.title }
+        assertEquals(listOf("Complete feedbacks", "Email Sam", "Pay the nursery", "Dentist"), titles(true))
+        val pay = fold.dayList(fold.weekBoard.value, day, true)!!.rows[2].id
+
+        assertEquals("Moved “Pay the nursery” up", fold.reorderDayList(day, pay, 0, timesOn = true))
+        val v = fold.dayList(fold.weekBoard.value, day, true)!!
+        assertEquals(listOf("Pay the nursery", "Complete feedbacks", "Email Sam", "Dentist"), v.rows.map { it.title })
+        assertEquals(listOf("09:00", "09:30", "10:00", "14:00"), v.rows.map { it.time })
+
+        // The dentist keeps its time: with Times on it doesn't drag.
+        assertNull(fold.reorderDayList(day, v.rows[3].id, 0, timesOn = true))
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals(v.rows.map { it.id }, mac.dayList(mac.weekBoard.value, day, true)!!.rows.map { it.id })
+
+        assertTrue(fold.undoBoardMove())
+        assertEquals(listOf("Complete feedbacks", "Email Sam", "Pay the nursery", "Dentist"), titles(true))
+    }
 }

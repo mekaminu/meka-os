@@ -20,6 +20,7 @@ struct DayListSheet: View {
     @State private var openID: String?
     @State private var editingID: String?
     @FocusState private var fieldFocused: Bool
+    @State private var dropOver: String?
 
     var body: some View {
         let v = model.dayList(timesOn: timesOn)
@@ -81,12 +82,13 @@ struct DayListSheet: View {
                         Text(DayListRules.shared.EMPTY).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                             .padding(.vertical, MekaSpace.m)
                     }
-                    ForEach(v.rows, id: \.id) { r in
+                    ForEach(Array(v.rows.enumerated()), id: \.element.id) { index, r in
                         VStack(alignment: .leading, spacing: 0) {
                             DayListRowView(row: r, timesOn: v.timesOn, open: openID == r.id, palette: palette) {
                                 MekaHaptics.tick()
                                 openID = openID == r.id ? nil : r.id
                             }
+                            .modifier(DayListDrag(row: r, index: index, view: v, palette: palette, over: $dropOver))
                             if openID == r.id {
                                 DayListOptions(row: r, day: v.epochDay, palette: palette,
                                                onEdit: { openID = nil; editingID = r.id },
@@ -185,6 +187,47 @@ private struct DayListBar: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(line)
+    }
+}
+
+/// Drag to reorder (slice 1c): an open row drags onto another and takes its place (with Times on, a task with its own
+/// time stays at it, so it doesn't drag); the row it's over shows a gold line above it. VoiceOver's Move
+/// up / Move down do the same without a drag. Only the id and the row's place cross to the core.
+private struct DayListDrag: ViewModifier {
+    @Environment(CoreModel.self) private var model
+    let row: DayListRow
+    let index: Int
+    let view: DayListView
+    let palette: MekaPalette
+    @Binding var over: String?
+
+    func body(content: Content) -> some View {
+        let rules = DayListRules.shared
+        let canDrag = rules.canDrag(r: row, timesOn: view.timesOn)
+        let up = rules.stepTo(view: view, taskId: row.id, up: true)?.intValue
+        let down = rules.stepTo(view: view, taskId: row.id, up: false)?.intValue
+        let dropped = content
+            .overlay(alignment: .top) {
+                if over == row.id {
+                    Capsule().fill(palette.accent).frame(height: 2).offset(y: -1)
+                }
+            }
+            .dropDestination(for: String.self) { ids, _ in
+                guard let id = ids.first, id != row.id, view.rows.contains(where: { $0.id == id }) else { return false }
+                model.reorderDayList(id, toRow: index, timesOn: view.timesOn)
+                return true
+            } isTargeted: { on in
+                if on { over = row.id } else if over == row.id { over = nil }
+            }
+            .accessibilityActions {
+                if let up { Button(StudyRules.shared.MOVE_UP) { model.reorderDayList(row.id, toRow: up, timesOn: view.timesOn) } }
+                if let down { Button(StudyRules.shared.MOVE_DOWN) { model.reorderDayList(row.id, toRow: down, timesOn: view.timesOn) } }
+            }
+        if canDrag {
+            dropped.draggable(row.id)
+        } else {
+            dropped
+        }
     }
 }
 
