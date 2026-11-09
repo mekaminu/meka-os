@@ -13929,7 +13929,10 @@ class MekaCore(
                 meetingPrep = todayPrep,
                 // Trading tracker, slice 6: up or down today and how many positions are open, never an amount.
                 trading = os.meka.core.domain.TradingTodayRules.todayLine(trading.wallets(), tradingAlertSetting(), nowMs()),
-            )
+            ).let { t ->
+                // The Today rebuild, slice 2b-2: the one-line notes and the first renewal needing him as Also today's tiles.
+                t.copy(alsoToday = os.meka.core.domain.AlsoTodayRules.tiles(t, listsNow.renewals.attention, todayDay))
+            }
         } }
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(

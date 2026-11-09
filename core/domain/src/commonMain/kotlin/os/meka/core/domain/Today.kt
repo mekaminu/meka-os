@@ -82,6 +82,11 @@ data class Today(
     val fromYesterday: List<CarriedTask> = emptyList(),
     /** Week board item (10): the first day stacking up within two days ("Thursday is stacking up: …") with its fixes. */
     val pressure: DayPressure? = null,
+    /**
+     * The Today rebuild, slice 2b-2: ALSO TODAY's side-swiping tiles (study, a renewal with its cancel-by date, the week
+     * ahead, bins and the other one-line notes), built from the fields above ([AlsoTodayRules]); set by the facade.
+     */
+    val alsoToday: List<AlsoTile> = emptyList(),
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

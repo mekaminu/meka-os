@@ -390,6 +390,26 @@ class TodayScreensTest {
         }
     }
 
+    /** The Today rebuild, slice 2b-2: a renewal due soon is a named tile under ALSO TODAY with its cancel-by day, not a bare figure. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun alsoTodayNamesTheRenewal() {
+        val core = show(Fill.ONE)
+        runBlocking {
+            val day = core.weekBoard.value.todayEpochDay
+            core.addRenewal("Streaming app", os.meka.core.domain.ObligationKind.SUBSCRIPTION, day + 3, os.meka.core.domain.RenewalRepeat.MONTHLY, null, 2)
+            core.tick()
+        }
+        settle()
+        val tile = core.today.value.alsoToday.firstOrNull { it.kind == os.meka.core.domain.AlsoKind.RENEWAL }
+            ?: throw AssertionError("also: no renewal tile in the core's Today")
+        if (tile.value != "Streaming app") fail("also: renewal tile says \"${tile.value}\"")
+        scrollUntilShown(os.meka.core.domain.AlsoTodayRules.LABEL, 400f)
+        ScreenShots.assertShows(compose, "also", os.meka.core.domain.AlsoTodayRules.LABEL)
+        val node = compose.onNodeWithTag("also-tile-renewal", useUnmergedTree = true).fetchSemanticsNode("also: no renewal tile")
+        val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
+        if (said != tile.spoken) fail("also: renewal said \"$said\", wanted \"${tile.spoken}\"")
+    }
+
     /** Works by hand (quality gate 3): the card opens the Fasting screen and back leaves it; End ends the fast with Undo. */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun fastingCardOpensTheScreenAndEndEndsTheFast() {

@@ -423,6 +423,7 @@ private fun TodayRouteContent(
                         openFasting = { showFasting = true },
                         openStudy = { id -> studyOpen = id },
                         openWeekAhead = { showWeekAhead = true },
+                        openRenewal = { id -> openItem(OpenItem(os.meka.core.domain.SearchTarget.LISTS_RENEWALS, id)) },
                         openTomorrow = { showTomorrow = true },
                         openDayList = { pageHaptics.tick(); showDayList = true },
                         openActivity = { showActivity = true },
@@ -807,6 +808,8 @@ private fun TodayPane(
     openStudy: (String) -> Unit = {},
     /** Tapping "Your week ahead · …" (Sunday from 18:00) opens the week ahead. */
     openWeekAhead: () -> Unit = {},
+    /** The Today rebuild, slice 2b-2: Also today's renewal tile opens Renewals at that one. */
+    openRenewal: (String) -> Unit = {},
     openActivity: () -> Unit = {},
     /** The capture bar's mic (Talk): Ask, already listening. Null: no mic. */
     onTalk: (() -> Unit)? = null,
@@ -891,7 +894,8 @@ private fun TodayPane(
     val endFast = core?.let { os.meka.android.goals.rememberFastingTodayEnd(it, undo) }
     val stripTiles = remember(today.dayTiles, fastCard == null) {
         os.meka.core.domain.FastingScreenRules.stripTiles(HabitChipRules.stripTiles(today.dayTiles), fastCard)
-            .filter { it.kind != os.meka.core.domain.DayTileKind.NEXT_EVENT }
+            // The Today rebuild: the countdown is the NEXT tile and the renewals figure is Also today's renewal tile.
+            .filter { it.kind != os.meka.core.domain.DayTileKind.NEXT_EVENT && it.kind != os.meka.core.domain.DayTileKind.RENEWALS }
     }
     val chipHaptics = rememberMekaHaptics()
     val chipScope = rememberCoroutineScope()
@@ -1005,14 +1009,6 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
                         }
                     }
-                    // Meal plan, slice 1: tonight's dinner from 15:00 to 21:00, "Dinner tonight: Chilli"; cross-fades.
-                    today.dinner?.let { dinner ->
-                        Crossfade(dinner, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "dinner-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
                     // Train-time queue, slice 1: on an office day's commute, "For the train · 2 articles · 1 podcast" in the
                     // accent; tapping it springs the queue up over Today. Cross-fades as it changes. On the train (2026-10-18)
                     // it leads with the minutes to the change and ends with the book on the go, so it may take two lines.
@@ -1022,61 +1018,6 @@ private fun TodayPane(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap { openQueue() }
                                     .semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Sunday week ahead, slice 1: on Sunday from 18:00, "Your week ahead · 4 office days · 2 matches" in the
-                    // accent; tapping it springs the week ahead up over Today. Cross-fades as it changes.
-                    today.weekAhead?.let { week ->
-                        Crossfade(week, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "week-ahead-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap { openWeekAhead() }
-                                    .semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Bin days, slice 1: "Black bin and food caddy out tonight" the evening before from 16:00; lit in the
-                    // accent (something to do tonight), cross-fades as it comes and changes.
-                    today.bins?.let { bins ->
-                        Crossfade(bins, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "bins-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Gift planner, slice 1: "Mum's birthday today · turns 60" (quiet), "Order Mum's gift today · birthday
-                    // Sat 31 Oct" (lit in the accent: something to do); cross-fades as it comes and changes.
-                    today.gifts?.let { gifts ->
-                        Crossfade(gifts, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "gifts-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Travel mode, slice 1: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · …"
-                    // (lit when something is booked later today or the trip starts tomorrow); cross-fades.
-                    today.trip?.let { trip ->
-                        Crossfade(trip, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "trip-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Plan a lesson for a day: "Study today · 3 lessons · about 1 h 30 · next: Pivot tables" (lit in the
-                    // accent when one rolled over from an earlier day); cross-fades as lessons are ticked.
-                    today.study?.let { study ->
-                        Crossfade(study, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "study-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken }.testTag("today-study"))
-                        }
-                    }
-                    // Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from the shipping emails (lit in
-                    // the accent while one is out for delivery); a delivered parcel drops off; cross-fades as it changes.
-                    today.parcels?.let { parcels ->
-                        Crossfade(parcels, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "parcels-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
                     // Trading tracker, slice 6: "Trading · up today · 2 positions open", never an amount (lit near
@@ -1114,15 +1055,6 @@ private fun TodayPane(
                             }
                         }
                     }
-                    // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
-                    // (lit in the accent on Monday); cross-fades as it comes and changes.
-                    today.reflection?.let { thing ->
-                        Crossfade(thing, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflection-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
                     // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
                     // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
                     today.pressure?.let { pressure ->
@@ -1146,23 +1078,6 @@ private fun TodayPane(
                                     }
                                 }
                             }
-                        }
-                    }
-                    // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
-                    today.dateNight?.let { night ->
-                        Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day; lit in the
-                    // accent, cross-fades as it comes and changes.
-                    today.lifeAdmin?.let { admin ->
-                        Crossfade(admin, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "life-admin-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
                     SyncLine(sync)
@@ -1302,6 +1217,30 @@ private fun TodayPane(
             val rowsStep = TodayOrderRules.TIMELINE_ROWS_STEP
             for (slot in TodayOrderRules.ORDER) when (slot) {
             TodaySlot.CARDS -> {
+            // The Today rebuild, slice 2b-2: ALSO TODAY's side-swiping tiles below the schedule, before the moment cards.
+            if (today.alsoToday.isNotEmpty()) {
+                item(key = "also-today") {
+                    AlsoTodayRow(
+                        today.alsoToday,
+                        opens = { t ->
+                            when (t.kind) {
+                                os.meka.core.domain.AlsoKind.STUDY, os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId != null
+                                os.meka.core.domain.AlsoKind.WEEK_AHEAD -> true
+                                else -> false
+                            }
+                        },
+                        onOpen = { t ->
+                            when (t.kind) {
+                                os.meka.core.domain.AlsoKind.STUDY -> t.targetId?.let(openStudy)
+                                os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId?.let(openRenewal)
+                                os.meka.core.domain.AlsoKind.WEEK_AHEAD -> openWeekAhead()
+                                else -> Unit
+                            }
+                        },
+                        modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
+                    )
+                }
+            }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->
                 item(key = "motion") {
