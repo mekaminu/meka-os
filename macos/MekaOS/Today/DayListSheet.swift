@@ -228,7 +228,7 @@ private struct DayListRowView: View {
                     if let len = row.length {
                         Text(len).font(MekaType.micro).monospacedDigit()
                             .foregroundStyle(row.lengthGuessed ? palette.textTertiary : palette.textPrimary)
-                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, 2)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                             .background(Capsule().fill(palette.surfaceRaised))
                     }
                 }
@@ -302,7 +302,7 @@ private struct DayListOptions: View {
             }
             .padding(.top, MekaSpace.xxs)
         }
-        .padding(MekaSpace.s)
+        .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised.opacity(0.5)))
         .padding(.bottom, MekaSpace.xs)
@@ -347,7 +347,7 @@ struct DayListChip: View {
         Button(action: action) {
             Text(label).font(MekaType.caption).lineLimit(1)
                 .foregroundStyle(selected ? palette.textPrimary : palette.textSecondary)
-                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs + 2)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
                 .background(Capsule().fill(palette.surfaceRaised))
                 .overlay(Capsule().strokeBorder(selected ? palette.accent : Color.clear, lineWidth: 1))
         }
