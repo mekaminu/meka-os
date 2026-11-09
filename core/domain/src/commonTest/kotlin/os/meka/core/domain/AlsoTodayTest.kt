@@ -190,4 +190,28 @@ class AlsoTodayTest {
         val row = AlsoTodayRules.withHeader(emptyList(), null, "This week: 2 of 3 goals moving", review = card)
         assertEquals(listOf(AlsoKind.REVIEW, AlsoKind.GOALS), row.map { it.kind })
     }
+
+    @Test
+    fun eachTileSaysWhereItsTapGoes() {
+        val tile = { k: AlsoKind, lit: Boolean, id: String? -> AlsoTile(k, AlsoTodayRules.key(k), "v", "l", "s.", lit, id) }
+        assertEquals(AlsoPlace.RENEWALS, AlsoTodayRules.place(tile(AlsoKind.RENEWAL, true, "r1")))
+        assertEquals(AlsoPlace.INFO, AlsoTodayRules.place(tile(AlsoKind.STUDY, false, null)))
+        assertEquals(AlsoPlace.STUDY, AlsoTodayRules.place(tile(AlsoKind.STUDY, false, "c1")))
+        assertEquals(AlsoPlace.BINS, AlsoTodayRules.place(tile(AlsoKind.BINS, true, null)))
+        assertEquals(AlsoPlace.MAIL, AlsoTodayRules.place(tile(AlsoKind.REPLIES, true, null)))
+        assertEquals(AlsoPlace.UNFOLD, AlsoTodayRules.place(tile(AlsoKind.PREP, true, "e1")))
+        assertEquals(AlsoPlace.UNFOLD, AlsoTodayRules.place(tile(AlsoKind.STUDY_WEEK, true, null)))
+        // A day stacking up with no fix to offer only tells.
+        assertEquals(AlsoPlace.INFO, AlsoTodayRules.place(tile(AlsoKind.PRESSURE, false, null)))
+        assertEquals(AlsoPlace.UNFOLD, AlsoTodayRules.place(tile(AlsoKind.PRESSURE, true, null)))
+        assertEquals(AlsoPlace.INFO, AlsoTodayRules.place(tile(AlsoKind.TRADING, true, null)))
+        assertEquals("Opens Renewals", AlsoTodayRules.hint(tile(AlsoKind.RENEWAL, true, "r1")))
+        assertEquals("Shows the check-in", AlsoTodayRules.hint(tile(AlsoKind.STUDY_WEEK, true, null)))
+        assertEquals("", AlsoTodayRules.hint(tile(AlsoKind.GOALS, false, null)))
+        // Every kind has a place (the when is exhaustive) and every tappable one a hint.
+        AlsoKind.entries.forEach { k ->
+            val t = tile(k, true, "x")
+            assertEquals(AlsoTodayRules.place(t) == AlsoPlace.INFO, AlsoTodayRules.hint(t).isEmpty(), k.name)
+        }
+    }
 }

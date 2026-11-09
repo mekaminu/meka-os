@@ -11,6 +11,12 @@ enum class AlsoKind {
     STUDY_WEEK, REVIEW,
 }
 
+/** Where an Also today tile's tap goes ([AlsoTodayRules.place]). */
+enum class AlsoPlace {
+    STUDY, RENEWALS, WEEK_AHEAD, TRAIN_QUEUE, BINS, TRIPS, GIFTS, DINNERS, DATE_NIGHT, LIFE_ADMIN, SCHOOL, MAIL, REVIEW,
+    UNFOLD, INFO,
+}
+
 /**
  * One Also today tile: a small caps [key] ("BINS"), the [value] in the heavier weight ("Black bin and food caddy") and
  * the quieter [line] under it ("out tonight"), said whole by [spoken]. [lit] marks something to do today (gold dot).
@@ -85,6 +91,54 @@ object AlsoTodayRules {
 
     /** The kinds whose tap unfolds a detail card under the row rather than opening a place. */
     fun unfolds(kind: AlsoKind): Boolean = kind == AlsoKind.PREP || kind == AlsoKind.PRESSURE || kind == AlsoKind.STUDY_WEEK
+
+    /**
+     * The Today rebuild, slice 2d-2b (the Mac's Also today): where a tile's tap goes, so both apps agree. [AlsoPlace.UNFOLD]
+     * unfolds the detail under the row ([unfolds]); [AlsoPlace.INFO] is a tile that only tells (parcels, trading, goals,
+     * the trains, this week's one thing, a clash). A study or renewal tile with no [AlsoTile.targetId] goes nowhere.
+     */
+    fun place(tile: AlsoTile): AlsoPlace = when (tile.kind) {
+        AlsoKind.STUDY -> if (tile.targetId != null) AlsoPlace.STUDY else AlsoPlace.INFO
+        AlsoKind.RENEWAL -> if (tile.targetId != null) AlsoPlace.RENEWALS else AlsoPlace.INFO
+        AlsoKind.WEEK_AHEAD -> AlsoPlace.WEEK_AHEAD
+        AlsoKind.TRAIN_QUEUE -> AlsoPlace.TRAIN_QUEUE
+        AlsoKind.BINS -> AlsoPlace.BINS
+        AlsoKind.TRIP -> AlsoPlace.TRIPS
+        AlsoKind.GIFTS -> AlsoPlace.GIFTS
+        AlsoKind.DINNER -> AlsoPlace.DINNERS
+        AlsoKind.DATE_NIGHT -> AlsoPlace.DATE_NIGHT
+        AlsoKind.LIFE_ADMIN -> AlsoPlace.LIFE_ADMIN
+        AlsoKind.SCHOOL -> AlsoPlace.SCHOOL
+        AlsoKind.REPLIES -> AlsoPlace.MAIL
+        AlsoKind.REVIEW -> AlsoPlace.REVIEW
+        AlsoKind.PREP, AlsoKind.STUDY_WEEK -> AlsoPlace.UNFOLD
+        // A day stacking up unfolds only when there's a fix to offer (its tile is lit then).
+        AlsoKind.PRESSURE -> if (tile.lit) AlsoPlace.UNFOLD else AlsoPlace.INFO
+        AlsoKind.PARCELS, AlsoKind.TRADING, AlsoKind.GOALS, AlsoKind.TRAINS, AlsoKind.REFLECTION, AlsoKind.CLASH -> AlsoPlace.INFO
+    }
+
+    /** What a screen reader hears after the tile: "Opens Renewals", "Shows the check-in"; empty for a tile that only tells. */
+    fun hint(tile: AlsoTile): String = when (place(tile)) {
+        AlsoPlace.STUDY -> "Opens the course"
+        AlsoPlace.RENEWALS -> "Opens Renewals"
+        AlsoPlace.WEEK_AHEAD -> "Opens the week ahead"
+        AlsoPlace.TRAIN_QUEUE -> "Opens For the train"
+        AlsoPlace.BINS -> "Opens Bins"
+        AlsoPlace.TRIPS -> "Opens Trips"
+        AlsoPlace.GIFTS -> "Opens Gifts"
+        AlsoPlace.DINNERS -> "Opens Dinners"
+        AlsoPlace.DATE_NIGHT -> "Opens Date night"
+        AlsoPlace.LIFE_ADMIN -> "Opens Life admin"
+        AlsoPlace.SCHOOL -> "Opens School"
+        AlsoPlace.MAIL -> "Opens mail"
+        AlsoPlace.REVIEW -> "Opens Review"
+        AlsoPlace.UNFOLD -> when (tile.kind) {
+            AlsoKind.PREP -> UNFOLD_PREP.removeSuffix(".")
+            AlsoKind.PRESSURE -> UNFOLD_PRESSURE.removeSuffix(".")
+            else -> UNFOLD_STUDY_WEEK.removeSuffix(".")
+        }
+        AlsoPlace.INFO -> ""
+    }
 
     /** The tiles for [today]; [renewals] are the renewals needing him (overdue, cancel-by, due soon), first first. */
     fun tiles(today: Today, renewals: List<RenewalItem>, todayDay: Long): List<AlsoTile> {

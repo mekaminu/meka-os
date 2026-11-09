@@ -37,6 +37,10 @@ struct TodayView: View {
     @State private var splitHeight: CGFloat = 0
     /// Today's scroll position (the compact header has nothing to collapse: the Today rebuild, slice 2d-2a).
     @State private var scrollPosition = ScrollPosition(edge: .top)
+    /// The Also today tile unfolded under the row (prep, the study check-in, a day stacking up), or nil.
+    @State private var alsoUnfolded: AlsoKind?
+    /// The course a STUDY tile opened, shown as its sheet.
+    @State private var alsoCourse: String?
 
     var body: some View {
         @Bindable var model = model
@@ -163,6 +167,7 @@ struct TodayView: View {
                     headerBlock
                     nowBlock
                     scheduleBlock
+                    alsoBlock
                     momentCards
                     eveningBlock
                     receiptBlock
@@ -203,6 +208,7 @@ struct TodayView: View {
                 }
                 splitList(TodayView.rightColumnID, leading: MekaSpace.gutterWide / 2, trailing: MekaSpace.gutterWide) {
                     scheduleBlock
+                    alsoBlock
                     momentCards
                     ComingUpColumnView(shared: true, palette: palette, embedded: true)
                         .environment(\.mekaStaggerPlays, play)
@@ -315,218 +321,14 @@ struct TodayView: View {
         // quiet line under the greeting ("Finish setting up · 4 steps · notifications are off · Open Setup ›").
         MacSetupLineView(palette: palette)
             .staggeredAppear(0, play: play)
-        // The trains on an office day's commute (Places item 4, TfL line status), lit in the accent when a
-        // line isn't running well; cross-fades as it changes.
-        if let route = model.weather?.route {
-            Text(route.text).font(MekaType.caption)
-                .foregroundStyle(route.lit ? palette.accent : palette.textSecondary).lineLimit(2)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: route.text)
-                .accessibilityLabel(route.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // School rhythm, slice 2: what the school says about today, "Theo: PE today"; cross-fades as it changes.
-        if let school = model.today?.school {
-            Text(school.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: school.text)
-                .accessibilityLabel(school.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Fold review 2026-10-12, bug 4: the first event still to come during work, in the accent:
-        // "Training at 16:55 while you're at work — who's taking Theo?"; cross-fades as it changes.
-        if let clash = model.today?.timeline.clashLine {
-            Text(clash).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: clash)
-                .staggeredAppear(0, play: play)
-        }
-        // Goals, properly, slice 7: "This week: 2 of 3 goals moving"; cross-fades as it changes.
-        if let week = model.goals?.week, let line = week.line {
-            Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
-                .accessibilityLabel(week.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Meal plan, slice 1: tonight's dinner from 15:00 to 21:00, "Dinner tonight: Chilli"; cross-fades.
-        if let dinner = model.today?.dinner {
-            Text(dinner.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: dinner.text)
-                .accessibilityLabel(dinner.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Train-time queue, slice 1: on an office day's commute, "For the train · 2 articles · 1 podcast" in the
-        // accent; clicking it opens the queue. Cross-fades as it changes.
-        if let queue = model.today?.trainQueue {
-            Button { model.showTrainQueue = true } label: {
-                // On the train (2026-10-18): the minutes to the change and the book on the go, up to two lines.
-                Text(queue.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-            .buttonStyle(MekaPressStyle())
-            .contentTransition(.opacity)
-            .animation(MekaMotion.appear(reduced: reduceMotion), value: queue.text)
-            .accessibilityLabel(queue.spoken)
-            .staggeredAppear(0, play: play)
-        }
-        // Sunday week ahead, slice 1: on Sunday from 18:00, "Your week ahead · 4 office days · 2 matches" in the
-        // accent; clicking it opens the week ahead. Cross-fades as it changes.
-        if let week = model.today?.weekAhead {
-            Button { model.showWeekAhead = true } label: {
-                Text(week.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-            }
-            .buttonStyle(MekaPressStyle())
-            .contentTransition(.opacity)
-            .animation(MekaMotion.appear(reduced: reduceMotion), value: week.text)
-            .accessibilityLabel(week.spoken)
-            .staggeredAppear(0, play: play)
-        }
-        // Bin days, slice 1: "Black bin and food caddy out tonight" the evening before from 16:00; lit in the
-        // accent, cross-fades.
-        if let bins = model.today?.bins {
-            Text(bins.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: bins.text)
-                .accessibilityLabel(bins.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Gift planner, slice 1: "Mum's birthday today · turns 60" (quiet), "Order Mum's gift today · …" (lit in
-        // the accent); cross-fades.
-        if let gifts = model.today?.gifts {
-            Text(gifts.text).font(MekaType.caption)
-                .foregroundStyle(gifts.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: gifts.text)
-                .accessibilityLabel(gifts.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Plan a lesson for a day: "Study today · 3 lessons · about 1 h 30 · next: Pivot tables" (lit in the
-        // accent when one rolled over from an earlier day); cross-fades as lessons are ticked.
-        if let study = model.today?.study {
-            Text(study.text).font(MekaType.caption)
-                .foregroundStyle(study.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: study.text)
-                .accessibilityLabel(study.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Travel mode, slice 1: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · …"
-        // (lit when something is booked later today or the trip starts tomorrow); cross-fades.
-        if let trip = model.today?.trip {
-            Text(trip.text).font(MekaType.caption)
-                .foregroundStyle(trip.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: trip.text)
-                .accessibilityLabel(trip.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from the shipping emails (lit in
-        // the accent while one is out for delivery); a delivered parcel drops off; cross-fades.
-        if let parcels = model.today?.parcels {
-            Text(parcels.text).font(MekaType.caption)
-                .foregroundStyle(parcels.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: parcels.text)
-                .accessibilityLabel(parcels.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Trading tracker, slice 6: "Trading · up today · 2 positions open", never an amount (lit near
-        // liquidation or at his drop level); cross-fades.
-        if let trading = model.today?.trading {
-            Text(trading.text).font(MekaType.caption)
-                .foregroundStyle(trading.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: trading.text)
-                .accessibilityLabel(trading.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // The unread mail and Tidy lines are the MAIL tile now (the Today rebuild, slice 2d-2a).
-        // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
-        // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
-        if let replies = model.today?.mailReplies {
-            Text(replies.text).font(MekaType.caption)
-                .foregroundStyle(replies.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: replies.text)
-                .accessibilityLabel(replies.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Meeting prep, slice 1: from 15 min before a meeting with other people, the countdown lit in the
-        // accent, who's coming, then each guest's last email and what's open between you; cross-fades.
-        if let prep = model.today?.meetingPrep {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(prep.headline).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-                Text(prep.whoLine).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
-                ForEach(Array(prep.lines.enumerated()), id: \.offset) { _, line in
-                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
-                }
-            }
-            .padding(.top, MekaSpace.xs)
-            .contentTransition(.opacity)
-            .animation(MekaMotion.appear(reduced: reduceMotion), value: prep.headline)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(prep.spoken)
-            .staggeredAppear(0, play: play)
-        }
+        // The Today rebuild, slice 2d-2b: the trains, school, clash, goals, dinner, For the train, week ahead, bins, gifts,
+        // study, trip, parcels, trading, replies, meeting prep, the study check-in, the week's one thing, a day stacking up,
+        // date night and life admin are ALSO TODAY's tiles below the schedule now (core AlsoTodayRules).
         // Study plan, slice 2b rest: from 10 min before a study session, Obi's quiet card with Start, then
         // Done and Not now; folds away.
         StudyNudgeCard(nudge: model.today?.studyNudge, palette: palette)
             .padding(.top, model.today?.studyNudge == nil ? 0 : MekaSpace.xs)
             .staggeredAppear(0, play: play)
-        // Study plan, slice 2b rest: Sunday 17:00 to Monday 12:00, how the study week went and next week's
-        // sessions; Looks good folds it away on both devices, Change plan opens the course.
-        StudyCheckinCard(checkin: model.today?.studyCheckin, palette: palette)
-            .padding(.top, model.today?.studyCheckin == nil ? 0 : MekaSpace.xs)
-            .staggeredAppear(0, play: play)
-        // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
-        // (lit on Monday); cross-fades.
-        if let thing = model.today?.reflection {
-            Text(thing.text).font(MekaType.caption)
-                .foregroundStyle(thing.lit ? palette.accent : palette.textSecondary).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: thing.text)
-                .accessibilityLabel(thing.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
-        // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
-        if let pressure = model.today?.pressure {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(pressure.line).font(MekaType.caption).foregroundStyle(palette.calendar3).lineLimit(2)
-                    .accessibilityLabel(pressure.spoken)
-                if !pressure.fixes.isEmpty {
-                    HStack(spacing: MekaSpace.m) {
-                        ForEach(pressure.fixes, id: \.label) { fix in
-                            Button { model.easePressure(taskId: fix.taskId, toDay: fix.toDay) } label: {
-                                Text(fix.label).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-                            }
-                            .buttonStyle(MekaPressStyle())
-                        }
-                    }
-                }
-            }
-            .contentTransition(.opacity)
-            .animation(MekaMotion.appear(reduced: reduceMotion), value: pressure.line)
-            .staggeredAppear(0, play: play)
-        }
-        // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
-        if let night = model.today?.dateNight {
-            Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: night.text)
-                .accessibilityLabel(night.spoken)
-                .staggeredAppear(0, play: play)
-        }
-        // Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day; lit in the accent, cross-fades.
-        if let admin = model.today?.lifeAdmin {
-            Text(admin.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: admin.text)
-                .accessibilityLabel(admin.spoken)
-                .staggeredAppear(0, play: play)
-        }
         // A calendar sign-in about to end or expired (Reliability first, item 2): one line, Reconnect.
         if let line = model.signInLines.first {
             SignInLineView(line: line, palette: palette)
@@ -687,6 +489,70 @@ struct TodayView: View {
                 }
                 Spacer().frame(height: MekaSpace.l)
             }
+        }
+    }
+
+    /// The Today rebuild, slice 2d-2b: ALSO TODAY below the schedule (core AlsoTodayRules), with the trains from the
+    /// weather, this week's goals, meeting prep, a day stacking up and the Sunday study check-in folded in. A tile opens
+    /// its place (AlsoTodayRules.place); prep, the check-in and a day stacking up unfold under the row.
+    @ViewBuilder
+    private var alsoBlock: some View {
+        if let today = model.today {
+            // The check-in's Looks good puts it away in the core, so the tile goes with it.
+            let checkin = today.studyCheckin
+            let tiles = AlsoTodayRules.shared.withHeader(
+                tiles: today.alsoToday, route: model.weather?.route,
+                goalsLine: model.goals?.week.line, goalsSpoken: model.goals?.week.spoken ?? "",
+                prep: today.meetingPrep, pressure: today.pressure, checkin: checkin, review: nil)
+            if !tiles.isEmpty {
+                MacAlsoTodayRow(tiles: tiles, palette: palette, unfolded: alsoUnfolded, onOpen: openAlso) { kind in
+                    alsoDetail(kind, today: today, checkin: checkin)
+                }
+                .padding(.bottom, MekaSpace.l)
+                .staggeredAppear(step(.cards), play: play)
+                .sheet(isPresented: Binding(get: { alsoCourse != nil }, set: { if !$0 { alsoCourse = nil } })) {
+                    if let id = alsoCourse {
+                        StudySheet(courseId: id, palette: palette, onClose: { alsoCourse = nil }, onRemoved: { _ in alsoCourse = nil })
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func alsoDetail(_ kind: AlsoKind, today: Today, checkin: StudyCheckin?) -> some View {
+        if kind == AlsoKind.prep, let p = today.meetingPrep {
+            MacPrepDetail(prep: p, palette: palette)
+        } else if kind == AlsoKind.pressure, let p = today.pressure {
+            MacPressureDetail(pressure: p, palette: palette) { fix in
+                alsoUnfolded = nil
+                model.easePressure(taskId: fix.taskId, toDay: fix.toDay)
+            }
+        } else if kind == AlsoKind.studyWeek, let c = checkin {
+            StudyCheckinCard(checkin: c, palette: palette)
+        }
+    }
+
+    /// Where an Also today tile's click goes (core AlsoTodayRules.place), as on the Fold.
+    private func openAlso(_ tile: AlsoTile) {
+        let place = AlsoTodayRules.shared.place(tile: tile)
+        switch place {
+        case .unfold:
+            let kind = tile.kind
+            alsoUnfolded = alsoUnfolded == kind ? nil : kind
+        case .study: if let id = tile.targetId { alsoCourse = id }
+        case .renewals: model.go(to: .lists, reduced: reduceMotion)
+        case .weekAhead: model.showWeekAhead = true
+        case .trainQueue: model.showTrainQueue = true
+        case .bins: model.showBins = true
+        case .trips: model.showTrips = true
+        case .gifts: model.showGifts = true
+        case .dinners: model.showMeals = true
+        case .dateNight: model.showDateNight = true
+        case .lifeAdmin: model.showLifeAdmin = true
+        case .school: model.showSchool = true
+        case .mail: model.showMail = true
+        default: break
         }
     }
 
