@@ -975,69 +975,9 @@ private fun TodayPane(
                     TodayHeaderRules.weatherChip(weather.nowLine)?.let { chip ->
                         WeatherChip(chip, "Weather: " + (weather.nowSpoken ?: weather.nowLine.orEmpty()), Modifier.padding(top = MekaSpace.xxs))
                     }
-                    // The trains on an office day's commute (Places item 4, TfL line status): "South Rail · Metro
-                    // line · good service", lit in the accent when a line isn't running well; cross-fades as it changes.
-                    weather.route?.let { route ->
-                        Crossfade(route, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "route-line") { r ->
-                            Text(r.text, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = r.spoken })
-                        }
-                    }
-                    // School rhythm, slice 2: what the school says about today, "Theo: PE today"; cross-fades as it changes.
-                    today.school?.let { school ->
-                        Crossfade(school, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "school-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Fold review 2026-10-12, bug 4: the first event still to come during work, in the accent:
-                    // "Training at 16:55 while you're at work — who's taking Theo?"; cross-fades as it changes.
-                    today.timeline.clashLine?.let { clash ->
-                        Crossfade(clash, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "clash-line") { l ->
-                            Text(l, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2,
-                                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
-                        }
-                    }
-                    // Goals, properly, slice 7: "This week: 2 of 3 goals moving"; cross-fades as it changes.
-                    goalsNow.week.line?.let { line ->
-                        val spoken = goalsNow.week.spoken
-                        Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "week-goals-line") { l ->
-                            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
-                        }
-                    }
-                    // Train-time queue, slice 1: on an office day's commute, "For the train · 2 articles · 1 podcast" in the
-                    // accent; tapping it springs the queue up over Today. Cross-fades as it changes. On the train (2026-10-18)
-                    // it leads with the minutes to the change and ends with the book on the go, so it may take two lines.
-                    today.trainQueue?.let { queue ->
-                        Crossfade(queue, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "train-queue-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).wordsTap { openQueue() }
-                                    .semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Trading tracker, slice 6: "Trading · up today · 2 positions open", never an amount (lit near
-                    // liquidation or at his drop level); cross-fades as it changes.
-                    today.trading?.let { trading ->
-                        Crossfade(trading, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "trading-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
-                    // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
-                    // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
-                    today.mailReplies?.let { replies ->
-                        Crossfade(replies, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-replies-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
-                        }
-                    }
+                    // The Today rebuild, slice 2b-2b: the trains, the school's note, a clash with work, this week's goals,
+                    // For the train, trading and the replies waiting are Also today's tiles now (core AlsoTodayRules), so
+                    // the header is the date, greeting and weather, as the mockup.
                     // Meeting prep, slice 1: from 15 min before a meeting with other people, "Prep · Quote review at 14:00 ·
                     // in 12 min" lit in the accent, who's coming, then each guest's last email and what's open between you
                     // (at most four lines). Cross-fades as it comes, counts down and goes ten minutes after the start.
@@ -1218,14 +1158,16 @@ private fun TodayPane(
             for (slot in TodayOrderRules.ORDER) when (slot) {
             TodaySlot.CARDS -> {
             // The Today rebuild, slice 2b-2: ALSO TODAY's side-swiping tiles below the schedule, before the moment cards.
-            if (today.alsoToday.isNotEmpty()) {
+            // Slice 2b-2b: with the trains (from the weather) and this week's goals, the header's last notes.
+            val alsoTiles = os.meka.core.domain.AlsoTodayRules.withHeader(today.alsoToday, weather.route, goalsNow.week.line, goalsNow.week.spoken)
+            if (alsoTiles.isNotEmpty()) {
                 item(key = "also-today") {
                     AlsoTodayRow(
-                        today.alsoToday,
+                        alsoTiles,
                         opens = { t ->
                             when (t.kind) {
                                 os.meka.core.domain.AlsoKind.STUDY, os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId != null
-                                os.meka.core.domain.AlsoKind.WEEK_AHEAD -> true
+                                os.meka.core.domain.AlsoKind.WEEK_AHEAD, os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> true
                                 else -> false
                             }
                         },
@@ -1234,6 +1176,7 @@ private fun TodayPane(
                                 os.meka.core.domain.AlsoKind.STUDY -> t.targetId?.let(openStudy)
                                 os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId?.let(openRenewal)
                                 os.meka.core.domain.AlsoKind.WEEK_AHEAD -> openWeekAhead()
+                                os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> openQueue()
                                 else -> Unit
                             }
                         },

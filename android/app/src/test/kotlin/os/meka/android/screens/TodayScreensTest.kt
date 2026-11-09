@@ -466,6 +466,28 @@ class TodayScreensTest {
         ScreenShots.assertShows(compose, "closed", "1 done today ›")
     }
 
+    /** The Today rebuild, slice 2b-2b: the daily receipt is one quiet grey line that says the detail and opens Activity. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theReceiptIsOneQuietLine() {
+        val receipt = os.meka.core.domain.DailyReceipt("Navilife handled 63 things today", "52 changes · 9 reminders · 2 digests", 63)
+        var opened = 0
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.DailyReceiptLine(receipt, { opened++ })
+                }
+            }
+        }
+        compose.waitForIdle()
+        val node = compose.onNodeWithTag(os.meka.android.today.DAILY_RECEIPT_TAG, useUnmergedTree = true).fetchSemanticsNode("receipt: no line")
+        val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
+        if (said != receipt.spoken) fail("receipt said \"$said\", wanted \"${receipt.spoken}\"")
+        if (shownText("Navilife handled 63 things today")) fail("receipt: the old line still shows")
+        compose.onNodeWithTag(os.meka.android.today.DAILY_RECEIPT_TAG).performClick()
+        compose.waitForIdle()
+        if (opened != 1) fail("receipt: a tap didn't open Activity")
+    }
+
     /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */
     private fun scrollUntilShown(text: String, stepPx: Float) {
         repeat(40) {

@@ -1,7 +1,11 @@
 package os.meka.core.domain
 
 /** What an Also today tile is about ([AlsoTodayRules]); its place decides what a tap opens and the dot's colour. */
-enum class AlsoKind { RENEWAL, STUDY, WEEK_AHEAD, BINS, GIFTS, TRIP, PARCELS, DINNER, DATE_NIGHT, LIFE_ADMIN, REFLECTION }
+enum class AlsoKind {
+    RENEWAL, STUDY, WEEK_AHEAD, BINS, GIFTS, TRIP, PARCELS, DINNER, DATE_NIGHT, LIFE_ADMIN, REFLECTION,
+    // Slice 2b-2b: the header's remaining one-line notes, folded into the row.
+    CLASH, TRAINS, TRAIN_QUEUE, SCHOOL, REPLIES, TRADING, GOALS,
+}
 
 /**
  * One Also today tile: a small caps [key] ("BINS"), the [value] in the heavier weight ("Black bin and food caddy") and
@@ -27,14 +31,21 @@ data class AlsoTile(
  *
  * Order: lit tiles first (something to do today), then the mockup's order (study, renewal, week ahead, bins, then the
  * rest); at most [MAX] tiles.
+ *
+ * Slice 2b-2b: the header's other one-line notes fold in too, so the header is only the date, greeting and weather (as
+ * the mockup): a clash with work ("HEADS UP", lit), the trains on an office day (lit when a line isn't running well),
+ * For the train (lit; opens the queue), the school's note, the replies waiting on him, trading (never an amount) and
+ * this week's goals. Each tile's spoken line is the note's own, so a screen reader hears what the header said.
  */
 object AlsoTodayRules {
     const val LABEL = "ALSO TODAY"
-    const val MAX = 8
+    const val MAX = 12
 
     val ORDER: List<AlsoKind> = listOf(
+        AlsoKind.CLASH, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE, AlsoKind.SCHOOL,
         AlsoKind.STUDY, AlsoKind.RENEWAL, AlsoKind.WEEK_AHEAD, AlsoKind.BINS, AlsoKind.TRIP, AlsoKind.GIFTS,
         AlsoKind.PARCELS, AlsoKind.DINNER, AlsoKind.DATE_NIGHT, AlsoKind.LIFE_ADMIN, AlsoKind.REFLECTION,
+        AlsoKind.REPLIES, AlsoKind.TRADING, AlsoKind.GOALS,
     )
 
     fun key(kind: AlsoKind): String = when (kind) {
@@ -49,6 +60,13 @@ object AlsoTodayRules {
         AlsoKind.DATE_NIGHT -> "DATE NIGHT"
         AlsoKind.LIFE_ADMIN -> "LIFE ADMIN"
         AlsoKind.REFLECTION -> "THIS WEEK"
+        AlsoKind.CLASH -> "HEADS UP"
+        AlsoKind.TRAINS -> "TRAINS"
+        AlsoKind.TRAIN_QUEUE -> "FOR THE TRAIN"
+        AlsoKind.SCHOOL -> "SCHOOL"
+        AlsoKind.REPLIES -> "REPLIES"
+        AlsoKind.TRADING -> "TRADING"
+        AlsoKind.GOALS -> "GOALS"
     }
 
     /** The tiles for [today]; [renewals] are the renewals needing him (overdue, cancel-by, due soon), first first. */
@@ -65,8 +83,49 @@ object AlsoTodayRules {
             today.dateNight?.let { split(AlsoKind.DATE_NIGHT, it.text, it.spoken, lit = true, drop = "Date night") },
             today.lifeAdmin?.let { split(AlsoKind.LIFE_ADMIN, it.text, it.spoken, lit = !it.text.startsWith("✓"), drop = "Life admin hour") },
             today.reflection?.let { reflection(it) },
+            today.timeline.clashLine?.let { clash(it) },
+            today.trainQueue?.let { split(AlsoKind.TRAIN_QUEUE, it.text, it.spoken, lit = true, drop = QueueRules.ACTION) },
+            today.school?.let { colon(AlsoKind.SCHOOL, it.text, it.spoken, lit = false) },
+            today.mailReplies?.let { split(AlsoKind.REPLIES, it.text, it.spoken, it.lit) },
+            today.trading?.let { split(AlsoKind.TRADING, it.text, it.spoken, it.lit, drop = "Trading") },
         )
-        return found.sortedWith(compareBy<AlsoTile>({ !it.lit }, { ORDER.indexOf(it.kind) })).take(MAX)
+        return sorted(found)
+    }
+
+    /**
+     * [tiles] with the notes Today itself doesn't carry: the trains on an office day's commute ([route], from the
+     * weather) and this week's goals ([goalsLine], "This week: 2 of 3 goals moving"). A kind already there isn't added twice.
+     */
+    fun withHeader(tiles: List<AlsoTile>, route: RouteLine?, goalsLine: String?, goalsSpoken: String = goalsLine?.let { "$it." }.orEmpty()): List<AlsoTile> {
+        val have = tiles.map { it.kind }.toSet()
+        val extra = listOfNotNull(
+            route?.takeIf { AlsoKind.TRAINS !in have }?.let { split(AlsoKind.TRAINS, it.text, it.spoken, it.lit) },
+            goalsLine?.takeIf { AlsoKind.GOALS !in have }?.let { colon(AlsoKind.GOALS, it, goalsSpoken, lit = false) },
+        )
+        return if (extra.isEmpty()) tiles else sorted(tiles + extra)
+    }
+
+    private fun sorted(tiles: List<AlsoTile>): List<AlsoTile> =
+        tiles.sortedWith(compareBy<AlsoTile>({ !it.lit }, { ORDER.indexOf(it.kind) })).take(MAX)
+
+    /** "Training at 16:55 while you're at work — who's taking Alex?" → that first part · "who's taking Alex?" (lit). */
+    fun clash(text: String): AlsoTile {
+        val value = text.substringBefore(" — ").trim()
+        val line = text.substringAfter(" — ", "").trim()
+        val spoken = if (line.isEmpty()) "$value." else "$value. ${line.replaceFirstChar { it.uppercase() }}"
+        return AlsoTile(AlsoKind.CLASH, key(AlsoKind.CLASH), value, line, spoken, lit = true)
+    }
+
+    /**
+     * "Alex: PE today" → "PE today" · "Alex"; "This week: 2 of 3 goals moving" → "2 of 3 goals moving" · "this week".
+     * A note with no single lead before ": " is [split] as usual.
+     */
+    fun colon(kind: AlsoKind, text: String, spoken: String, lit: Boolean): AlsoTile {
+        val head = text.substringBefore(": ", "").trim()
+        val rest = text.substringAfter(": ", "").trim()
+        if (head.isEmpty() || rest.isEmpty() || head.contains(" · ")) return split(kind, text, spoken, lit)
+        val line = if (head.equals("This week", ignoreCase = true)) "this week" else head
+        return AlsoTile(kind, key(kind), rest, line, spoken, lit)
     }
 
     /**

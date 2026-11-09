@@ -72,4 +72,42 @@ class AlsoTodayTest {
         assertEquals("4 office days", tiles[3].value)
         assertEquals(emptyList(), AlsoTodayRules.tiles(empty, emptyList(), day))
     }
+
+    @Test
+    fun theHeadersOtherNotesFoldIntoTiles() {
+        val clash = AlsoTodayRules.clash("Training at 16:55 while you're at work — who's taking Alex?")
+        assertEquals("HEADS UP", clash.key)
+        assertEquals("Training at 16:55 while you're at work", clash.value)
+        assertEquals("who's taking Alex?", clash.line)
+        assertTrue(clash.lit)
+        val school = AlsoTodayRules.colon(AlsoKind.SCHOOL, "Alex: PE today", "Alex has PE today.", lit = false)
+        assertEquals("PE today", school.value)
+        assertEquals("Alex", school.line)
+        val goals = AlsoTodayRules.colon(AlsoKind.GOALS, "This week: 2 of 3 goals moving", "g", lit = false)
+        assertEquals("2 of 3 goals moving", goals.value)
+        assertEquals("this week", goals.line)
+        val today = empty.copy(
+            trainQueue = QueueLine("For the train · 2 articles · 1 podcast", "q"),
+            trading = TradingTodayLine("Trading · up today · 2 positions open", "t", lit = false),
+            mailReplies = MailRepliesLine("3 emails need a reply · 2 drafted", "r", lit = true),
+            school = SchoolLine("Alex: PE today", "s"),
+        )
+        val tiles = AlsoTodayRules.tiles(today, emptyList(), day)
+        assertEquals(listOf(AlsoKind.TRAIN_QUEUE, AlsoKind.REPLIES, AlsoKind.SCHOOL, AlsoKind.TRADING), tiles.map { it.kind })
+        assertEquals("2 articles", tiles[0].value)
+        assertEquals("up today", tiles[3].value)
+        assertEquals("q", tiles[0].spoken)
+        val more = AlsoTodayRules.withHeader(tiles, RouteLine("South Rail · good service", lit = false, spoken = "Trains: good service."), "This week: 2 of 3 goals moving")
+        assertEquals(listOf(AlsoKind.TRAIN_QUEUE, AlsoKind.REPLIES, AlsoKind.TRAINS, AlsoKind.SCHOOL, AlsoKind.TRADING, AlsoKind.GOALS), more.map { it.kind })
+        assertEquals(more, AlsoTodayRules.withHeader(more, RouteLine("x", lit = true, spoken = "x"), "This week: 1 of 3 goals moving"))
+        assertEquals(tiles, AlsoTodayRules.withHeader(tiles, null, null))
+    }
+
+    @Test
+    fun theReceiptIsOneQuietLine() {
+        val r = DailyReceipt("Navilife handled 63 things today", "52 changes · 9 reminders · 2 digests", 63)
+        assertEquals("Navilife sorted 63 things for you today", r.sortedLine)
+        assertEquals("Navilife sorted 63 things for you today: 52 changes, 9 reminders, 2 digests. Opens Activity.", r.spoken)
+        assertEquals("Navilife sorted 1 thing for you today. Opens Activity.", DailyReceipt("x", "", 1).spoken)
+    }
 }

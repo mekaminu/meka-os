@@ -48,7 +48,7 @@ private val TILE_WIDTH = 150.dp
 /**
  * The Today rebuild, slice 2b-2: ALSO TODAY, one side-swiping row of small tiles below the schedule (core
  * [AlsoTodayRules]): a coloured dot and small caps key, the value, the quieter line under it. A tile with somewhere to
- * go (study, the week ahead, a renewal) presses in with a light haptic and opens it; a value that changes cross-fades.
+ * go (study, the week ahead, a renewal, For the train) presses in with a light haptic and opens it; a value that changes cross-fades.
  * The dot is gold only for something to do today, so gold still means "act here".
  */
 @Composable
@@ -90,9 +90,9 @@ internal fun AlsoTodayRow(tiles: List<AlsoTile>, onOpen: (AlsoTile) -> Unit, ope
 
 @Composable
 private fun dotColour(tile: AlsoTile): Color = if (tile.lit) Meka.colors.accent else when (tile.kind) {
-    AlsoKind.STUDY, AlsoKind.REFLECTION -> Meka.colors.calendar1
-    AlsoKind.RENEWAL, AlsoKind.PARCELS -> Meka.colors.calendar3
-    AlsoKind.WEEK_AHEAD, AlsoKind.TRIP, AlsoKind.LIFE_ADMIN -> Meka.colors.calendar2
-    AlsoKind.BINS, AlsoKind.DINNER -> Meka.colors.calendar4
-    AlsoKind.GIFTS, AlsoKind.DATE_NIGHT -> Meka.colors.calendar5
+    AlsoKind.STUDY, AlsoKind.REFLECTION, AlsoKind.GOALS -> Meka.colors.calendar1
+    AlsoKind.RENEWAL, AlsoKind.PARCELS, AlsoKind.CLASH -> Meka.colors.calendar3
+    AlsoKind.WEEK_AHEAD, AlsoKind.TRIP, AlsoKind.LIFE_ADMIN, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE -> Meka.colors.calendar2
+    AlsoKind.BINS, AlsoKind.DINNER, AlsoKind.SCHOOL -> Meka.colors.calendar4
+    AlsoKind.GIFTS, AlsoKind.DATE_NIGHT, AlsoKind.REPLIES, AlsoKind.TRADING -> Meka.colors.calendar5
 }

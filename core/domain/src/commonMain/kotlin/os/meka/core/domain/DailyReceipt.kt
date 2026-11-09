@@ -14,7 +14,16 @@ data class DailyReceipt(
     /** The biggest parts, at most [ReceiptRules.PARTS_SHOWN]: "5 reminders · 3 calls stopped · 2 digests". */
     val detail: String,
     val count: Int,
-)
+) {
+    /**
+     * The Today rebuild, slice 2b-2b: the one quiet grey line at the foot of Today (mockup `TodayNew.dc.html`),
+     * "Navilife sorted 63 things for you today", in place of the line and its detail; the detail is still heard.
+     */
+    val sortedLine: String get() = "Navilife sorted ${if (count == 1) "1 thing" else "$count things"} for you today"
+
+    /** What a screen reader hears for [sortedLine]: the line, the detail and where a tap goes. */
+    val spoken: String get() = sortedLine + (if (detail.isNotEmpty()) ": ${detail.replace(" · ", ", ")}" else "") + ". Opens Activity."
+}
 
 object ReceiptRules {
     /** How many kinds the detail names (the rest are still in the count). */

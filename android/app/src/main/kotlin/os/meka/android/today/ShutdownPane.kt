@@ -42,6 +42,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import os.meka.android.designsystem.wordsTap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -433,26 +438,27 @@ internal fun TomorrowGlance(doneLine: String?, glance: String?, onOpen: () -> Un
  */
 @Composable
 internal fun DailyReceiptLine(r: DailyReceipt, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    // The Today rebuild, slice 2b-2b: one quiet grey line, "Navilife sorted 63 things for you today · Activity ›"
+    // (mockup TodayNew.dc.html): no gold (it isn't something to act on), the detail is still heard; a new count fades in.
     val reduced = Meka.reducedMotion
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }
-            .padding(vertical = MekaSpace.xxs),
+        modifier.fillMaxWidth().testTag(DAILY_RECEIPT_TAG).wordsTap(onClickLabel = "Open Activity") { onOpen() }
+            .clearAndSetSemantics { contentDescription = r.spoken; role = Role.Button },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AnimatedContent(
-            targetState = r,
+            targetState = r.sortedLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "daily-receipt",
-            modifier = Modifier.weight(1f),
-        ) { v ->
-            Column {
-                Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1)
-                if (v.detail.isNotEmpty()) Text(v.detail, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
-            }
+            modifier = Modifier.weight(1f, fill = false),
+        ) { line ->
+            Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text("Activity ›", style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.padding(start = MekaSpace.xs))
+        Text(" · Activity ›", style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
     }
 }
+
+internal const val DAILY_RECEIPT_TAG = "today-receipt"
 
 /**
  * "How are you feeling?" (Week board, item (11)): Good · Tired · Stretched, kept on this phone only for a week. Tired
