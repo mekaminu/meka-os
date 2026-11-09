@@ -144,4 +144,50 @@ class AlsoTodayTest {
         assertEquals("Navilife sorted 63 things for you today: 52 changes, 9 reminders, 2 digests. Opens Activity.", r.spoken)
         assertEquals("Navilife sorted 1 thing for you today. Opens Activity.", DailyReceipt("x", "", 1).spoken)
     }
+
+    private fun checkinRow(id: String, week: String, next: String) =
+        StudyCheckinRow(id, "Course $id", week, status = null, behind = false, next = next, spoken = "Course $id.")
+
+    @Test
+    fun theStudyCheckInIsATileThatUnfolds() {
+        val c = StudyCheckin(
+            key = StudyCheckinRules.key(day), headline = StudyCheckinRules.HEADLINE, sub = "", obi = "", spoken = "",
+            rows = listOf(
+                checkinRow("a", "This week · " + StudyCheckinRules.NOTHING_TICKED, "Next week · " + StudyCheckinRules.NO_SESSIONS),
+                checkinRow("b", "This week · 2 lessons · about 1 h", "Next week · 2 sessions · Mon, Wed · 3 lessons"),
+            ),
+        )
+        val t = AlsoTodayRules.checkin(c)!!
+        assertEquals(AlsoKind.STUDY_WEEK, t.kind)
+        assertEquals("STUDY WEEK", t.key)
+        assertEquals("1 of 2 courses", t.value)
+        assertEquals("this week · plan next", t.line)
+        assertTrue(t.lit)
+        assertTrue(AlsoTodayRules.unfolds(AlsoKind.STUDY_WEEK))
+        assertTrue(t.spoken.endsWith(AlsoTodayRules.UNFOLD_STUDY_WEEK))
+        val set = AlsoTodayRules.checkin(c.copy(rows = c.rows.drop(1)))!!
+        assertEquals("1 of 1 course", set.value)
+        assertEquals("this week · next week set", set.line)
+        assertNull(AlsoTodayRules.checkin(c.copy(rows = emptyList())))
+        // In the row it comes with the other lit tiles, never twice.
+        val row = AlsoTodayRules.withHeader(AlsoTodayRules.withHeader(emptyList(), null, null, checkin = c), null, null, checkin = c)
+        assertEquals(listOf(AlsoKind.STUDY_WEEK), row.map { it.kind })
+    }
+
+    @Test
+    fun mondaysReviewIsATileThatOpensReview() {
+        val card = ReviewCard(offered = true, weekStart = day - 7, offset = -1, reviewed = false,
+            title = "Review last week", line = "12 done · 2 still open")
+        val t = AlsoTodayRules.review(card)!!
+        assertEquals("REVIEW", t.key)
+        assertEquals("Review last week", t.value)
+        assertEquals("12 done · 2 still open", t.line)
+        assertTrue(t.lit)
+        assertFalse(AlsoTodayRules.unfolds(AlsoKind.REVIEW))
+        assertEquals("Review last week: 12 done, 2 still open. Opens Review.", t.spoken)
+        assertNull(AlsoTodayRules.review(card.copy(offered = false)))
+        assertNull(AlsoTodayRules.review(ReviewCard.NONE))
+        val row = AlsoTodayRules.withHeader(emptyList(), null, "This week: 2 of 3 goals moving", review = card)
+        assertEquals(listOf(AlsoKind.REVIEW, AlsoKind.GOALS), row.map { it.kind })
+    }
 }

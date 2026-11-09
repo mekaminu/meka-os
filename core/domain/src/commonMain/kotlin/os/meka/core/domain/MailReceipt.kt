@@ -31,6 +31,11 @@ object MailReceiptRules {
         "notifications", "notification", "info", "hello", "support", "customer service", "customer services", "team",
         "accounts", "billing", "payments", "shop", "store", "mail", "email", "news",
     )
+    /** Words that only say which team wrote: dropped from a sender's name, so the company (or the domain) is left. */
+    private val GENERIC_WORDS = setOf(
+        "no", "reply", "do", "not", "customer", "customers", "service", "services", "care", "help", "helpdesk",
+        "subscription", "subscriptions", "membership",
+    )
     private val SLD = setOf("co", "com", "org", "net", "ac", "gov", "ltd", "plc", "me")
 
     /** The receipt as the server reads it at tidy time. */
@@ -88,7 +93,8 @@ object MailReceiptRules {
         if ('@' in s) return null
         s = s.replace(Regex("""\.(co\.uk|com|co|uk|org|net|io)\b""", RegexOption.IGNORE_CASE), "")
         val words = s.split(Regex("""\s*[|·•\-–—:]\s*|\s+""")).filter { it.isNotBlank() }
-        val kept = words.filterNot { w -> w.lowercase() in GENERIC_NAMES || w.lowercase() in setOf("no", "reply", "do", "not") }
+        // Meka 2026-11-09 08:09 (g): "Customer Services" named a renewal; a team's words alone never name the company.
+        val kept = words.filterNot { w -> w.lowercase() in GENERIC_NAMES || w.lowercase() in GENERIC_WORDS }
         val out = kept.joinToString(" ").trim()
         return out.takeIf { it.length >= 2 && out.any { it.isLetter() } }?.take(40)
     }

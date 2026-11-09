@@ -542,6 +542,59 @@ class TodayScreensTest {
         if (fixed != listOf("t1")) fail("pressure: the fix wasn't tapped ($fixed)")
     }
 
+    /**
+     * Meka 2026-11-09 08:09 (b, f): the Sunday study check-in is Also today's STUDY WEEK tile, which unfolds the
+     * check-in under the row (Looks good folds it away); Monday's review is a REVIEW tile that opens Review.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun studyWeekAndReviewAreTiles() {
+        val c = os.meka.core.domain.StudyCheckin(
+            key = os.meka.core.domain.StudyCheckinRules.key(20_400L), headline = os.meka.core.domain.StudyCheckinRules.HEADLINE,
+            sub = "Mon 2 Nov – Sun 8 Nov", obi = "Pick when you can study next week.", spoken = "Your study week.",
+            rows = listOf(os.meka.core.domain.StudyCheckinRow("c1", "Data analytics", "This week · nothing ticked", null, false,
+                "Next week · no sessions yet · pick when you can study", "Data analytics.")),
+        )
+        val review = os.meka.core.domain.ReviewCard(offered = true, weekStart = 20_393L, offset = -1, reviewed = false,
+            title = "Review last week", line = "12 done · 2 still open")
+        val tiles = os.meka.core.domain.AlsoTodayRules.withHeader(emptyList(), null, null, checkin = c, review = review)
+        var seen = 0
+        var reviewed = 0
+        compose.setContent {
+            MekaTheme {
+                var unfolded by remember { mutableStateOf<os.meka.core.domain.AlsoKind?>(null) }
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.AlsoTodayRow(
+                        tiles, opens = { true },
+                        onOpen = { t ->
+                            if (t.kind == os.meka.core.domain.AlsoKind.REVIEW) reviewed++
+                            else unfolded = if (unfolded == t.kind) null else t.kind
+                        },
+                        unfolded = unfolded,
+                        detail = { k ->
+                            if (k == os.meka.core.domain.AlsoKind.STUDY_WEEK) {
+                                os.meka.android.today.StudyCheckinCard(c, Modifier, onLooksGood = { seen++; unfolded = null }, onChange = {})
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        ScreenShots.assertShows(compose, "also", "0 of 1 course")
+        ScreenShots.assertShows(compose, "also", "Review last week")
+        if (shownText("Data analytics")) fail("study week: the check-in showed before a tap")
+        compose.onNodeWithTag("also-tile-study_week").performClick()
+        compose.waitForIdle()
+        ScreenShots.assertShows(compose, "checkin", "Data analytics")
+        compose.onNodeWithTag("today-study-checkin-ok").performClick()
+        compose.waitForIdle()
+        if (seen != 1) fail("study week: Looks good wasn't tapped")
+        if (compose.onAllNodesWithTag(os.meka.android.today.ALSO_DETAIL_TAG).fetchSemanticsNodes().isNotEmpty()) fail("study week: Looks good didn't fold it")
+        compose.onNodeWithTag("also-tile-review").performClick()
+        compose.waitForIdle()
+        if (reviewed != 1) fail("review: a tap didn't open Review")
+    }
+
     /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */
     private fun scrollUntilShown(text: String, stepPx: Float) {
         repeat(40) {

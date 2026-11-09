@@ -37,6 +37,9 @@ class MailReceiptTest {
         assertEquals("Tesco Groceries", MailReceiptRules.merchant("Tesco Groceries", "no-reply@tesco.com"))
         assertEquals("Oakfield", MailReceiptRules.merchant("Orders | Oakfield", "orders@oakfield.example"))
         assertEquals("Trainline", MailReceiptRules.merchant("no-reply", "auto@email.trainline.com"))
+        // A team's name alone ("Customer Services") gives way to the domain; a company's own team keeps the company.
+        assertEquals("Listapp", MailReceiptRules.merchant("Customer Services", "support@listapp.example"))
+        assertEquals("British Gas", MailReceiptRules.merchant("British Gas Customer Service", "help@britishgas.co.uk"))
         assertEquals("Shopco", MailReceiptRules.merchant(null, "orders@shopco.co.uk"))
         assertEquals("Shop", MailReceiptRules.merchant(null, "auto-confirm@shop.example"))
         assertNull(MailReceiptRules.merchant(null, null))

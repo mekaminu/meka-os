@@ -7,6 +7,8 @@ enum class AlsoKind {
     CLASH, TRAINS, TRAIN_QUEUE, SCHOOL, REPLIES, TRADING, GOALS,
     // Slice 2b-2b-2: meeting prep and a day stacking up, the header's last two notes; a tap unfolds their detail.
     PREP, PRESSURE,
+    // Meka 2026-11-09 08:09: the Sunday study check-in and Monday's "Review last week" were big cards; now tiles.
+    STUDY_WEEK, REVIEW,
 }
 
 /**
@@ -45,7 +47,7 @@ object AlsoTodayRules {
 
     val ORDER: List<AlsoKind> = listOf(
         AlsoKind.PREP, AlsoKind.CLASH, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE, AlsoKind.SCHOOL, AlsoKind.PRESSURE,
-        AlsoKind.STUDY, AlsoKind.RENEWAL, AlsoKind.WEEK_AHEAD, AlsoKind.BINS, AlsoKind.TRIP, AlsoKind.GIFTS,
+        AlsoKind.REVIEW, AlsoKind.STUDY_WEEK, AlsoKind.STUDY, AlsoKind.RENEWAL, AlsoKind.WEEK_AHEAD, AlsoKind.BINS, AlsoKind.TRIP, AlsoKind.GIFTS,
         AlsoKind.PARCELS, AlsoKind.DINNER, AlsoKind.DATE_NIGHT, AlsoKind.LIFE_ADMIN, AlsoKind.REFLECTION,
         AlsoKind.REPLIES, AlsoKind.TRADING, AlsoKind.GOALS,
     )
@@ -71,14 +73,18 @@ object AlsoTodayRules {
         AlsoKind.GOALS -> "GOALS"
         AlsoKind.PREP -> "PREP"
         AlsoKind.PRESSURE -> "STACKING UP"
+        AlsoKind.STUDY_WEEK -> "STUDY WEEK"
+        AlsoKind.REVIEW -> "REVIEW"
     }
 
     /** What a tap on a [AlsoKind.PREP] or [AlsoKind.PRESSURE] tile does: it unfolds the detail under the row. */
     const val UNFOLD_PREP = "Shows who's coming and what's open between you."
     const val UNFOLD_PRESSURE = "Shows ways to ease it."
+    const val UNFOLD_STUDY_WEEK = "Shows the check-in."
+    const val OPENS_REVIEW = "Opens Review."
 
     /** The kinds whose tap unfolds a detail card under the row rather than opening a place. */
-    fun unfolds(kind: AlsoKind): Boolean = kind == AlsoKind.PREP || kind == AlsoKind.PRESSURE
+    fun unfolds(kind: AlsoKind): Boolean = kind == AlsoKind.PREP || kind == AlsoKind.PRESSURE || kind == AlsoKind.STUDY_WEEK
 
     /** The tiles for [today]; [renewals] are the renewals needing him (overdue, cancel-by, due soon), first first. */
     fun tiles(today: Today, renewals: List<RenewalItem>, todayDay: Long): List<AlsoTile> {
@@ -110,6 +116,7 @@ object AlsoTodayRules {
     fun withHeader(
         tiles: List<AlsoTile>, route: RouteLine?, goalsLine: String?, goalsSpoken: String = goalsLine?.let { "$it." }.orEmpty(),
         prep: MeetingPrep? = null, pressure: DayPressure? = null,
+        checkin: StudyCheckin? = null, review: ReviewCard? = null,
     ): List<AlsoTile> {
         val have = tiles.map { it.kind }.toSet()
         val extra = listOfNotNull(
@@ -117,6 +124,8 @@ object AlsoTodayRules {
             goalsLine?.takeIf { AlsoKind.GOALS !in have }?.let { colon(AlsoKind.GOALS, it, goalsSpoken, lit = false) },
             prep?.takeIf { AlsoKind.PREP !in have }?.let { prep(it) },
             pressure?.takeIf { AlsoKind.PRESSURE !in have }?.let { pressure(it) },
+            checkin?.takeIf { AlsoKind.STUDY_WEEK !in have }?.let { checkin(it) },
+            review?.takeIf { AlsoKind.REVIEW !in have }?.let { review(it) },
         )
         return if (extra.isEmpty()) tiles else sorted(tiles + extra)
     }
@@ -142,6 +151,34 @@ object AlsoTodayRules {
         val lit = p.fixes.isNotEmpty()
         val spoken = p.spoken.trimEnd() + if (lit) " $UNFOLD_PRESSURE" else ""
         return AlsoTile(AlsoKind.PRESSURE, key(AlsoKind.PRESSURE), value, line, spoken, lit)
+    }
+
+    /**
+     * Meka 2026-11-09 08:09 (b): the Sunday study check-in is a tile, not the first block on Today: "0 of 2 courses" ·
+     * "this week · plan next" (a course with no sessions next week) or "this week · next week set"; lit (it's a look to
+     * take today). A tap unfolds the check-in itself (Looks good, Change plan) under the row. Null with no courses in it.
+     */
+    fun checkin(c: StudyCheckin): AlsoTile? {
+        if (c.rows.isEmpty()) return null
+        val moved = c.rows.count { !it.week.contains(StudyCheckinRules.NOTHING_TICKED) }
+        val total = c.rows.size
+        val value = "$moved of $total ${if (total == 1) "course" else "courses"}"
+        val plan = if (c.rows.any { it.next.contains(StudyCheckinRules.NO_SESSIONS) }) "plan next" else "next week set"
+        val line = "this week · $plan"
+        val spoken = "Study week: $moved of $total ${if (total == 1) "course" else "courses"} moved this week, " +
+            (if (plan == "plan next") "next week needs planning." else "next week is set.") + " $UNFOLD_STUDY_WEEK"
+        return AlsoTile(AlsoKind.STUDY_WEEK, key(AlsoKind.STUDY_WEEK), value, line, spoken, lit = true)
+    }
+
+    /**
+     * Meka 2026-11-09 08:09 (f): Monday's "Review last week" card is a tile: "Review last week" · "12 done · 2 still
+     * open" (lit; a tap opens Review on that week). Null when the card isn't offered. Sunday's review rides on the
+     * evening card ([EveningCardRules]), so Today passes only the card it would otherwise have drawn.
+     */
+    fun review(r: ReviewCard): AlsoTile? {
+        if (!r.offered || r.title.isEmpty()) return null
+        val spoken = r.title + (if (r.line.isNotEmpty()) ": ${r.line.replace(" · ", ", ")}" else "") + ". $OPENS_REVIEW"
+        return AlsoTile(AlsoKind.REVIEW, key(AlsoKind.REVIEW), r.title, r.line, spoken, lit = true)
     }
 
     private fun sorted(tiles: List<AlsoTile>): List<AlsoTile> =

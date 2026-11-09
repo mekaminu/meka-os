@@ -178,7 +178,6 @@ import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
 import os.meka.core.facade.MekaCore
 import os.meka.core.domain.ReviewCard
-import os.meka.android.review.ReviewCardTile
 import os.meka.core.domain.GoalsView
 import os.meka.core.domain.HabitChipRules
 import os.meka.core.domain.HabitDot
@@ -865,8 +864,6 @@ private fun TodayPane(
     var nudgeLast by remember { mutableStateOf<os.meka.core.domain.StudyNudge?>(null) }
     // Slice 2b rest: the Sunday check-in, folded away in the same frame as Looks good.
     val checkinGone = remember { mutableStateListOf<String>() }
-    var checkinLast by remember { mutableStateOf<os.meka.core.domain.StudyCheckin?>(null) }
-    LaunchedEffect(today.studyCheckin) { today.studyCheckin?.let { checkinLast = it } }
     LaunchedEffect(today.studyNudge) {
         today.studyNudge?.let { nudgeLast = it }
         // Once the core says it's on, the tap's no longer needed.
@@ -1044,20 +1041,7 @@ private fun TodayPane(
                             },
                         )
                     }
-                    // Study plan, slice 2b rest: Sunday 17:00 to Monday 12:00, how the study week went and next week's
-                    // sessions; Looks good folds it away (both devices), Change plan opens the course.
-                    val checkin = today.studyCheckin?.takeIf { it.key !in checkinGone }
-                    AnimatedVisibility(checkin != null, enter = studyUnfold(), exit = studyFold()) {
-                        val c = checkin ?: checkinLast
-                        if (c != null) StudyCheckinCard(
-                            c, modifier = Modifier.padding(top = MekaSpace.xs),
-                            onLooksGood = {
-                                checkinGone.add(c.key)
-                                if (core != null) carryScope.launch { if (runCatching { core.seeStudyCheckin(c.key) }.getOrNull() == null) checkinGone.remove(c.key) }
-                            },
-                            onChange = { id -> openStudy(id) },
-                        )
-                    }
+                    // The Sunday study check-in is Also today's STUDY WEEK tile now (Meka 2026-11-09 08:09 (b)); a tap unfolds it.
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs), recover = connect.recover, waiting = connect.waiting)
                     if (battery.line != null) {
                         BatteryCareLine(battery, onDismiss = {
@@ -1072,11 +1056,7 @@ private fun TodayPane(
                     if (core != null && now == null && carriesSetup) os.meka.android.ask.HealthTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
                     // Setup checklist: a card while something is left to set up ("Not today" folds it away until tomorrow).
                     if (core != null && now == null && carriesSetup) os.meka.android.ask.SetupTodayCard(core, Modifier.padding(top = MekaSpace.xs))
-                    // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
-                    // (two loops, then it rests). Off in Appearance hides it.
-                    if (core != null && TickerRules.shown(tickerMode, ticker)) {
-                        NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.m), openStory = openStory, openMatch = openMatch)
-                    }
+                    // The news moved below Also today (Meka 2026-11-09 08:09 (d)): it was above Now.
                     // Today's habits: compact chips to tick, only when the face can't carry them as dots.
                     if (core != null && chipsShown) {
                         HabitChipsRow(
@@ -1124,6 +1104,9 @@ private fun TodayPane(
             val alsoTiles = os.meka.core.domain.AlsoTodayRules.withHeader(
                 today.alsoToday, weather.route, goalsNow.week.line, goalsNow.week.spoken,
                 prep = today.meetingPrep, pressure = today.pressure,
+                // Meka 2026-11-09 08:09 (b, f): the study check-in and Monday's review are tiles, not big cards.
+                checkin = today.studyCheckin?.takeIf { it.key !in checkinGone },
+                review = reviewCard.takeIf { eveningCard == null },
             )
             if (alsoTiles.isNotEmpty()) {
                 item(key = "also-today") {
@@ -1147,7 +1130,8 @@ private fun TodayPane(
                             when (t.kind) {
                                 os.meka.core.domain.AlsoKind.STUDY, os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId != null
                                 os.meka.core.domain.AlsoKind.WEEK_AHEAD, os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> true
-                                os.meka.core.domain.AlsoKind.PREP -> true
+                                os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.STUDY_WEEK,
+                                os.meka.core.domain.AlsoKind.REVIEW -> true
                                 os.meka.core.domain.AlsoKind.PRESSURE -> core != null && today.pressure?.fixes?.isNotEmpty() == true
                                 else -> alsoApp != null && paneFor(t.kind) != null
                             }
@@ -1158,7 +1142,9 @@ private fun TodayPane(
                                 os.meka.core.domain.AlsoKind.RENEWAL -> t.targetId?.let(openRenewal)
                                 os.meka.core.domain.AlsoKind.WEEK_AHEAD -> openWeekAhead()
                                 os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> openQueue()
-                                os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.PRESSURE ->
+                                os.meka.core.domain.AlsoKind.REVIEW -> openReviewCard()
+                                os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.PRESSURE,
+                                os.meka.core.domain.AlsoKind.STUDY_WEEK ->
                                     alsoUnfolded = if (alsoUnfolded == t.kind) null else t.kind
                                 else -> paneFor(t.kind)?.let { item ->
                                     alsoApp?.let { app ->
@@ -1180,11 +1166,30 @@ private fun TodayPane(
                                         }
                                     }
                                 }
+                                os.meka.core.domain.AlsoKind.STUDY_WEEK -> today.studyCheckin?.takeIf { it.key !in checkinGone }?.let { c ->
+                                    StudyCheckinCard(
+                                        c, modifier = Modifier,
+                                        onLooksGood = {
+                                            checkinGone.add(c.key)
+                                            alsoUnfolded = null
+                                            if (core != null) carryScope.launch { if (runCatching { core.seeStudyCheckin(c.key) }.getOrNull() == null) checkinGone.remove(c.key) }
+                                        },
+                                        onChange = { id -> openStudy(id) },
+                                    )
+                                }
                                 else -> Unit
                             }
                         },
                         modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                     )
+                }
+            }
+            // News (news ticker, slice 2) below Also today, as the approved mockup has it (Meka 2026-11-09 08:09 (d)):
+            // one line of cards; calm by default (two loops, then it rests). Off in Appearance hides it.
+            if (core != null && TickerRules.shown(tickerMode, ticker)) {
+                item(key = "news") {
+                    NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
+                        openStory = openStory, openMatch = openMatch)
                 }
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
@@ -1199,28 +1204,9 @@ private fun TodayPane(
                     UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
-            // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or the
-            // pane open long enough to read: Calm Today); it folds away with the list's item motion as the rows glide up.
-            if (brief.offered) {
-                item(key = "brief") {
-                    // Its title travels into the brief pane's (Four tabs, slice 3).
-                    BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
-                        titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.BRIEF), !briefOpen))
-                }
-            } else if (brief.readElsewhereLine != null) {
-                // Read on the Mac this morning: a slim line in the card's place until noon (Fold review 2026-10-08).
-                item(key = "brief-read") {
-                    BriefReadLine(brief.readElsewhereLine!!, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
-                }
-            }
-            // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
-            if (reviewCard.offered && eveningCard == null) {
-                item(key = "review") {
-                    // Its title travels across the shell into the Review tab's.
-                    ReviewCardTile(reviewCard, openReviewCard, onLater = laterReviewCard, modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
-                        titleModifier = Modifier.sharedPlace(SharedMotion.placeKey(ShellDestination.REVIEW, PlaceVia.CARD)))
-                }
-            }
+            // The Morning brief card is gone from Today (Meka 2026-11-09 08:09 (f): its weather is the chip, its tasks the
+            // tiles, its focus Now); the brief still opens from the wake alarm, Talk and Plan my day. Monday's "Review last
+            // week" is Also today's REVIEW tile, and Sunday's review rides on the evening card.
             // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
             if (eveningCard != null) {
                 // The evening card under Now carries the shutdown and tomorrow (the Today rebuild, slice 2a).
@@ -1247,7 +1233,8 @@ private fun TodayPane(
                 }
             }
             // Daily receipt: in the evening, what MEKA handled today; tapping opens Activity over Today.
-            val receipt = shutdown.receipt.takeIf { shutdown.evening }
+            // Meka 2026-11-09 08:09 (h): the one grey line ends Today all day, not only in the evening.
+            val receipt = shutdown.receipt?.takeIf { it.count > 0 }
             if (receipt != null) {
                 item(key = "receipt") {
                     DailyReceiptLine(receipt, openActivity,
@@ -1906,7 +1893,7 @@ private fun StudyNudgeCard(
  * next week's sessions; Obi's one line; Looks good and Change plan. Rows come in with the card's unfold.
  */
 @Composable
-private fun StudyCheckinCard(
+internal fun StudyCheckinCard(
     c: os.meka.core.domain.StudyCheckin, modifier: Modifier, onLooksGood: () -> Unit, onChange: (String) -> Unit,
 ) {
     Column(
