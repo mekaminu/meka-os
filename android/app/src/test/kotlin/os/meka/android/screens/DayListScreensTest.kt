@@ -40,6 +40,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.DayListPane
 import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 
@@ -131,8 +132,10 @@ class DayListScreensTest {
         // Rapid add: Enter adds the line with its length and area, and the bar clears for the next.
         compose.onNode(hasSetTextAction()).performTextInput("Pay the nursery 15m #money")
         compose.onNode(hasSetTextAction()).performImeAction()
-        until { shows("Added “Pay the nursery” · 15m") }
-        assertTrue(shows("Added “Pay the nursery” · 15m"), "$name: the add isn't said")
+        // The line is drawn through LoneWordGlue (the last words held together), so look for it as drawn.
+        val addedLine = LoneWordGlue.kept("Added “Pay the nursery” · 15m")
+        until { shows(addedLine) }
+        assertTrue(shows(addedLine), "$name: the add isn't said")
         val day = core.weekBoard.value.day(core.weekBoard.value.todayEpochDay)!!
         val added = day.cards.single { it.title == "Pay the nursery" }
         assertEquals(15, added.task.estimateMinutes)

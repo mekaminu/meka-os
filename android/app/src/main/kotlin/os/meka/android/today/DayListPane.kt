@@ -146,7 +146,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(v.title.substringBefore(" · "), style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                             DayChip(if (timesOn) "Times on" else "Times off", selected = timesOn) { haptics.tick(); timesOn = !timesOn }
-                            Text(v.total, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.padding(start = MekaSpace.s))
+                            Text(v.total, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.padding(start = MekaSpace.xs))
                         }
                         if (v.isToday) Text(v.title.substringAfter(" · "), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
@@ -164,7 +164,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                 }
                 item(key = "hint") {
                     Text(DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
-                        modifier = Modifier.padding(top = MekaSpace.s).animateItem())
+                        modifier = Modifier.padding(top = MekaSpace.xs).animateItem())
                 }
             }
 
@@ -183,7 +183,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                         .padding(start = MekaSpace.l, end = MekaSpace.xxs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.weight(1f).padding(vertical = MekaSpace.s)) {
+                    Box(Modifier.weight(1f).padding(vertical = MekaSpace.m)) {
                         if (draft.isEmpty()) Text(DayListRules.PLACEHOLDER, style = MekaType.body, color = Meka.colors.textTertiary)
                         BasicTextField(
                             value = draft,
@@ -202,7 +202,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                     Text(
                         "+", style = MekaType.itemTitle, color = Meka.colors.onAccent,
                         modifier = Modifier.clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Add") { add(draft); runCatching { focus.requestFocus() } }
-                            .minTouch().clip(CircleShape).background(Meka.colors.accent).padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+                            .minTouch().clip(CircleShape).background(Meka.colors.accent).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -226,7 +226,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                 }
             }
         }
-        EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp))
+        EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l))
 
         // A task's sheet springs up over the dimmed list.
         val open = v?.rows?.firstOrNull { it.id == sheetId }
@@ -262,7 +262,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
 private fun DayProgressBar(progress: Float, line: String, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     val shown by animateFloatAsState(progress.coerceIn(0f, 1f), MekaMotion.appear(reduced), label = "day-list-bar")
-    Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs, bottom = MekaSpace.s)) {
+    Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs, bottom = MekaSpace.xs)) {
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
             Box(Modifier.fillMaxWidth(shown).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
         }
@@ -310,7 +310,7 @@ private fun DayListRowView(r: DayListRow, timesOn: Boolean, tick: (String) -> Un
                 len, style = MekaType.micro, maxLines = 1,
                 color = if (r.lengthGuessed) Meka.colors.textTertiary else Meka.colors.textPrimary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.xs, vertical = 2.dp),
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
             )
         }
     }
@@ -325,7 +325,7 @@ private fun DayChip(label: String, selected: Boolean = false, onClick: () -> Uni
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClick() }.minTouch()
             .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .then(if (selected) Modifier.border(1.dp, Meka.colors.accent, RoundedCornerShape(MekaRadius.pill)) else Modifier)
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
 
