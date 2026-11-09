@@ -131,6 +131,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/date-night/inner-dark-empty.png](docs/screens/fold/date-night/inner-dark-empty.png)
 - [fold/date-night/inner-dark-many.png](docs/screens/fold/date-night/inner-dark-many.png)
 - [fold/day-list/fold-dark-added.png](docs/screens/fold/day-list/fold-dark-added.png)
+- [fold/day-list/fold-dark-moved.png](docs/screens/fold/day-list/fold-dark-moved.png)
 - [fold/day-list/fold-dark-sheet.png](docs/screens/fold/day-list/fold-dark-sheet.png)
 - [fold/day-list/fold-dark.png](docs/screens/fold/day-list/fold-dark.png)
 - [fold/day-list/fold-light-added.png](docs/screens/fold/day-list/fold-light-added.png)
