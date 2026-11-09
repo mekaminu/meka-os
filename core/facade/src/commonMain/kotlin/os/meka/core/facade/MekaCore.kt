@@ -3761,6 +3761,62 @@ class MekaCore(
         }
     }
 
+    // ---- The Day list (approved 2026-11-08), slice 1 ----
+
+    /**
+     * The Day list for local [day] on [board] (the board the screen is drawing): its rows in the Board's order, the
+     * total, "2 of 5 done" and "ends about 11:15"; null for a day not on the board. [timesOn] shows projected starts.
+     */
+    fun dayList(board: os.meka.core.domain.WeekBoard, day: Long, timesOn: Boolean): os.meka.core.domain.DayListView? {
+        val d = board.day(day) ?: return null
+        val cal = ZoneCalendar(timeZone)
+        return os.meka.core.domain.DayListRules.view(d, cal.minuteOfDay(nowMs()), timesOn)
+    }
+
+    /**
+     * The Day list's add bar: [text] is one line ("Call the school 15m #family 14:00") or a pasted list (one task per
+     * line). Each becomes a task on local [day], last in that day, with the length, time and area read from its text.
+     * Returns the tasks made and the line under the bar, or null when nothing could be added.
+     */
+    suspend fun addToDayList(text: String, day: Long): os.meka.core.domain.DayListAdded? {
+        val entries = os.meka.core.domain.DayListRules.pasted(text)
+        if (entries.isEmpty()) return null
+        return onCore {
+            val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+            val target = maxOf(day, today)
+            val ids = entries.map { e ->
+                val id = tasks.create(NewTask(e.title))
+                if (target > today || e.startMinute != null) tasks.setWhen(id, target, e.startMinute)
+                e.minutes?.let { tasks.setEstimate(id, it) }
+                e.area?.let { tasks.setArea(id, os.meka.core.domain.BoardAreaRules.raw(it)) }
+                id
+            }
+            os.meka.core.domain.DayListAdded(ids, os.meka.core.domain.DayListRules.addedLine(entries))
+        }
+    }
+
+    /**
+     * Fit times from [fromMinute] on local [day]: the open tasks get start times one after another in the list's order
+     * (a later fixed time holds). Returns the line and what [undoFitDayList] puts back, or null for a day not shown.
+     */
+    suspend fun fitDayList(day: Long, fromMinute: Int): os.meka.core.domain.DayListFit? = onCore {
+        val view = dayList(_board.value, day, true) ?: return@onCore null
+        val fit = os.meka.core.domain.DayListRules.fit(view, fromMinute)
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val before = fit.map { (id, _) -> id to tasks.get(id)?.let { os.meka.core.domain.TaskWhenRules.minuteOf(it, today, cal) } }
+        fit.forEach { (id, at) -> tasks.setWhen(id, day, at) }
+        os.meka.core.domain.DayListFit(os.meka.core.domain.DayListRules.fitLine(view, fromMinute, fit.size), before, day)
+    }
+
+    /** Undo for [fitDayList]: each task back to the time it had (or none). */
+    suspend fun undoFitDayList(fit: os.meka.core.domain.DayListFit): Boolean = onCore {
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        if (fit.day < today) return@onCore false
+        fit.before.forEach { (id, minute) -> if (tasks.get(id) != null) tasks.setWhen(id, fit.day, minute) }
+        true
+    }
+
     suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId); followBlocks(listOf(taskId)); Unit }
     /** Moves just this occurrence (or a one-off task) out of Today for [days] days. */
     suspend fun snooze(taskId: String, days: Int = 1) = onCore { tasks.snoozeOccurrence(taskId, days); followBlocks(listOf(taskId)); Unit }

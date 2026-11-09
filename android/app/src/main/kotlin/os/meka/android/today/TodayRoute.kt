@@ -240,6 +240,8 @@ private fun TodayRouteContent(
     var showWeekAhead by rememberSaveable { mutableStateOf(false) }
     // The Tomorrow sheet: from the Tomorrow peek (17:00 on) or the date under the greeting (any time).
     var showTomorrow by rememberSaveable { mutableStateOf(false) }
+    // The Day list (approved 2026-11-08): today's, from the Anytime today heading's "Day list ›".
+    var showDayList by rememberSaveable { mutableStateOf(false) }
     val pageHaptics = rememberMekaHaptics()
     /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
     var showActivity by rememberSaveable { mutableStateOf(false) }
@@ -419,6 +421,7 @@ private fun TodayRouteContent(
                         openStudy = { id -> studyOpen = id },
                         openWeekAhead = { showWeekAhead = true },
                         openTomorrow = { showTomorrow = true },
+                        openDayList = { pageHaptics.tick(); showDayList = true },
                         openActivity = { showActivity = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         carriesSetup = CommandCentreRules.todayCarriesSetup(layout),
@@ -514,6 +517,8 @@ private fun TodayRouteContent(
             MekaPane(visible = showWeekAhead) { WeekAheadPane(core, onClose = { showWeekAhead = false }, closeLabel = "‹ Today") }
             BackHandler(enabled = showTomorrow) { showTomorrow = false }
             MekaPane(visible = showTomorrow) { TomorrowPane(core, onClose = { showTomorrow = false }) }
+            BackHandler(enabled = showDayList) { showDayList = false }
+            MekaPane(visible = showDayList) { DayListPane(core, onClose = { showDayList = false }) }
             MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {
@@ -791,6 +796,8 @@ private fun TodayPane(
     openQueue: () -> Unit = {},
     /** The Tomorrow peek and the date under the greeting open the Tomorrow sheet. */
     openTomorrow: () -> Unit = {},
+    /** The Day list: "Day list ›" beside the Anytime today heading (or under Today when nothing is unplanned). */
+    openDayList: () -> Unit = {},
     /** Tapping the live Fasting card opens the Fasting screen. */
     openFasting: () -> Unit = {},
     /** Study plan, slice 2b rest: Change plan on the Sunday check-in opens the course. */
@@ -1498,13 +1505,22 @@ private fun TodayPane(
             }
             }
             TodaySlot.ANYTIME -> {
+            if (tl.anytime.isEmpty()) {
+                // Nothing unplanned today: the Day list is still one tap away, to type a day's tasks fast.
+                item(key = "day-list-way-in") {
+                    Text(
+                        DAY_LIST_EMPTY_LINK, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.animateItem().wordsTap(onClickLabel = "Open the Day list") { openDayList() }.padding(bottom = MekaSpace.l),
+                    )
+                }
+            }
             if (tl.anytime.isNotEmpty()) {
                 val anyStep = TodayOrderRules.stagger(TodaySlot.ANYTIME)
                 // Beside the calmer mockup (2026-10-29): the label counts the open tasks, each row is the 48 dp target
                 // with a hairline in the list's gap under it (never under the last).
                 val anyLabel = os.meka.core.domain.TodayBesideRules.anytimeLabel(tl.anytime.size)
                 itemsIndexed(tl.anytime, key = { _, t -> "d-" + t.id }) { i, t ->
-                    Headed(anyLabel.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play))) { m ->
+                    Headed(anyLabel.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play)), link = DAY_LIST_LINK, onLink = openDayList) { m ->
                         val rule = os.meka.core.domain.TodayBesideRules.dividerAfter(i, tl.anytime.size)
                         TaskRow(t, actions, motion = rowMotion(t.id), modifier = if (rule) m.hairlineInGapBelow() else m)
                     }
@@ -1577,6 +1593,8 @@ private fun SyncLine(sync: SyncStatus) {
 
 /** The label over Today's tasks with no time. */
 internal const val ANYTIME_LABEL = "Anytime today"
+internal const val DAY_LIST_LINK = "Day list ›"
+internal const val DAY_LIST_EMPTY_LINK = "Plan today’s tasks · Day list ›"
 
 /**
  * A section's label riding with the first thing under it, in one list item (Fold review 2026-10-09 07:26, item 6), so
@@ -1584,10 +1602,20 @@ internal const val ANYTIME_LABEL = "Anytime today"
  * The gap under the label is the list's own spacing, so the section looks as it did with the label as its own item.
  */
 @Composable
-internal fun Headed(label: String?, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
+internal fun Headed(
+    label: String?, modifier: Modifier = Modifier,
+    /** A link on the heading's right ("Day list ›"), tapped for [onLink]; null for none. */
+    link: String? = null, onLink: () -> Unit = {},
+    content: @Composable (Modifier) -> Unit,
+) {
     if (label == null) { content(modifier); return }
     Column(modifier) {
-        SectionLabel(label)
+        if (link == null) SectionLabel(label)
+        else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(label, Modifier.weight(1f))
+            Text(link, style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.wordsTap(onClickLabel = "Open the Day list") { onLink() })
+        }
         Spacer(Modifier.height(MekaSpace.xs))
         content(Modifier)
     }
