@@ -66,6 +66,16 @@ object EveningCardRules {
     /** The card is away: Later was tapped today and 21:00 hasn't come. */
     fun away(laterDay: Long?, today: Long, minute: Int): Boolean = laterDay == today && minute < LATER_UNTIL_MIN
 
+    /** The card as drawn: [card] unless Later put it away ([away]). Slice 2d-2c: the Mac's one call, as the Fold's. */
+    fun shown(card: EveningCard?, laterDay: Long?, today: Long, minute: Int): EveningCard? =
+        card?.takeIf { !away(laterDay, today, minute) }
+
+    /**
+     * The weekly review for Also today's REVIEW tile: only while there's no evening card (Monday's "Review last week";
+     * Sunday's review rides on the evening card as its first step). Null keeps the tile out.
+     */
+    fun reviewForTile(review: ReviewCard?, card: EveningCard?): ReviewCard? = review?.takeIf { card == null }
+
     /** Today's head over its own tasks: [open] the ones still to do, [done] those ticked today. */
     fun head(open: List<Task>, done: List<Task>): TodayListHead {
         val len = { t: Task -> t.estimateMinutes ?: DayListRules.DEFAULT_MINUTES }

@@ -55,6 +55,25 @@ class TodayNewTest {
     }
 
     @Test
+    fun shownHidesTheCardWhileLaterHolds() {
+        val c = EveningCardRules.evening(evening, ReviewCard.NONE)
+        assertEquals(c, EveningCardRules.shown(c, laterDay = null, today = 100, minute = 18 * 60))
+        assertNull(EveningCardRules.shown(c, laterDay = 100, today = 100, minute = 18 * 60))
+        assertEquals(c, EveningCardRules.shown(c, laterDay = 100, today = 100, minute = 21 * 60))
+        assertNull(EveningCardRules.shown(null, laterDay = null, today = 100, minute = 18 * 60))
+    }
+
+    @Test
+    fun theReviewTileOnlyWithoutAnEveningCard() {
+        val c = EveningCardRules.evening(evening, sunday)
+        // Sunday evening: the review is the card's first step, not a tile.
+        assertNull(EveningCardRules.reviewForTile(sunday, c))
+        // Monday morning: no evening card, so "Review last week" is a tile.
+        assertEquals(sunday, EveningCardRules.reviewForTile(sunday, null))
+        assertNull(EveningCardRules.reviewForTile(null, null))
+    }
+
+    @Test
     fun laterPutsTheCardAwayUntilNine() {
         assertTrue(EveningCardRules.laterOffered(20 * 60 + 45))
         assertFalse(EveningCardRules.laterOffered(20 * 60 + 50))

@@ -1463,6 +1463,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(none)
         XCTAssertEqual(EveningCardRules.shared.LATER_UNTIL_MIN, 21 * 60)
         XCTAssertEqual(EveningCardRules.shared.head(open: [], done: []).label, "Today")
+        // Slice 2d-2c: the Mac's Later and Monday's REVIEW tile go through the core, as on the Fold.
+        XCTAssertNil(EveningCardRules.shared.shown(card: nil, laterDay: KotlinLong(value: 100), today: 100, minute: 18 * 60))
+        XCTAssertNil(EveningCardRules.shared.reviewForTile(review: nil, card: nil))
+        XCTAssertEqual(EveningCardRules.shared.ADD_LINE, "+ Add for today · Enter for the next")
     }
 
     /// A hand-made gym habit is offered booking instead of a second "Add Gym" (Fold review 2026-10-09 13:45, item 2).

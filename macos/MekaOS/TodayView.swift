@@ -41,6 +41,8 @@ struct TodayView: View {
     @State private var alsoUnfolded: AlsoKind?
     /// The course a STUDY tile opened, shown as its sheet.
     @State private var alsoCourse: String?
+    /// The day Later put the evening card away on (until 21:00), or nil (the Today rebuild, slice 2d-2c).
+    @State private var eveningLaterDay: Int64?
 
     var body: some View {
         @Bindable var model = model
@@ -503,7 +505,8 @@ struct TodayView: View {
             let tiles = AlsoTodayRules.shared.withHeader(
                 tiles: today.alsoToday, route: model.weather?.route,
                 goalsLine: model.goals?.week.line, goalsSpoken: model.goals?.week.spoken ?? "",
-                prep: today.meetingPrep, pressure: today.pressure, checkin: checkin, review: nil)
+                prep: today.meetingPrep, pressure: today.pressure, checkin: checkin,
+                review: EveningCardRules.shared.reviewForTile(review: model.review?.card, card: eveningCard))
             if !tiles.isEmpty {
                 MacAlsoTodayRow(tiles: tiles, palette: palette, unfolded: alsoUnfolded, onOpen: openAlso) { kind in
                     alsoDetail(kind, today: today, checkin: checkin)
@@ -552,6 +555,7 @@ struct TodayView: View {
         case .lifeAdmin: model.showLifeAdmin = true
         case .school: model.showSchool = true
         case .mail: model.showMail = true
+        case .review: model.openReviewCard(reduced: reduceMotion)
         default: break
         }
     }
@@ -582,20 +586,55 @@ struct TodayView: View {
                 .staggeredAppear(step(.cards), play: play)
         }
 
-        // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
-        if let c = model.review?.card, c.offered {
-            ReviewCardView(card: c, palette: palette)
-                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
-                .padding(.bottom, MekaSpace.l)
-                .staggeredAppear(step(.cards), play: play)
-        }
+        // The Today rebuild, slice 2d-2c: the weekly review is no longer a card of its own; Sunday's rides on the
+        // evening card as its first step, Monday's "Review last week" is Also today's REVIEW tile.
     }
 
-    /// The evening: the shutdown card, Tomorrow at a glance, the Tomorrow peek.
+    /// "This evening · 1 of 3" (core EveningCardRules), or nil before the evening or with the card switched off.
+    private var eveningCard: EveningCard? {
+        guard let s = model.shutdown else { return nil }
+        return EveningCardRules.shared.evening(shutdown: s, review: model.review?.card ?? ReviewCard.companion.NONE)
+    }
+
+    /// Later on the evening card, while 21:00 is at least a quarter of an hour away.
+    private func laterAction(today: Int64, minute: Int32) -> (() -> Void)? {
+        guard EveningCardRules.shared.laterOffered(minute: minute) else { return nil }
+        let reduced = reduceMotion
+        return { withAnimation(MekaMotion.appear(reduced: reduced)) { eveningLaterDay = today } }
+    }
+
+    /// The minute of the day now, for Later's 21:00.
+    private var clockMinute: Int32 {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        return Int32((c.hour ?? 0) * 60 + (c.minute ?? 0))
+    }
+
+    /// The evening: from 17:00 one "This evening" card under Now (the Today rebuild, slice 2d-2c; as the Fold's 2a) with
+    /// the review, the shutdown and tomorrow as its steps; without it (switched off) the shutdown card, Tomorrow at a
+    /// glance and the Tomorrow peek as before.
     @ViewBuilder
     private var eveningBlock: some View {
-        // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
-        if let s = model.shutdown {
+        let today = model.todayEpochDay
+        let minute = clockMinute
+        if let card = eveningCard {
+            if let shown = EveningCardRules.shared.shown(card: card, laterDay: eveningLaterDay.map { KotlinLong(value: $0) },
+                                                         today: today, minute: minute) {
+                MacEveningCard(
+                    card: shown, palette: palette,
+                    onStep: { kind in
+                        switch kind {
+                        case .review: model.openReviewCard(reduced: reduceMotion)
+                        case .shutDown: model.showShutdown = true
+                        default: model.openTomorrow()
+                        }
+                    },
+                    onLater: laterAction(today: today, minute: minute))
+                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                .padding(.bottom, MekaSpace.l)
+                .staggeredAppear(step(.evening), play: play)
+            }
+        } else if let s = model.shutdown {
+            // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
             if s.offered {
                 ShutdownCard(shutdown: s, palette: palette)
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
@@ -652,11 +691,18 @@ struct TodayView: View {
             if !tl.anytime.isEmpty {
                 // Beside the calmer mockup (2026-10-29): the label counts the open tasks and a hairline
                 // sits between rows (never under the last), as on the Fold.
+                // The Today rebuild, slice 2d-2c (as the Fold's 2a): "Today · 2 left · 40m" with the gold done bar.
                 let anytime = tl.anytime
-                HStack(alignment: .firstTextBaseline) {
-                    SectionLabel(TodayBesideRules.shared.anytimeLabel(openCount: Int32(anytime.count)), palette)
-                    Spacer(minLength: MekaSpace.xs)
-                    DayListLink(label: DayListRules.shared.LINK, palette: palette)
+                let head = EveningCardRules.shared.head(open: anytime, done: today.doneToday)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    HStack(alignment: .firstTextBaseline) {
+                        SectionLabel(head.label, palette)
+                            .contentTransition(.opacity)
+                        Spacer(minLength: MekaSpace.xs)
+                        DayListLink(label: DayListRules.shared.LINK, palette: palette)
+                    }
+                    MacTodayDoneBar(progress: head.progress, palette: palette)
+                        .padding(.bottom, MekaSpace.xxs)
                 }
                 .staggeredAppear(step(.anytime), play: play)
                 ForEach(Array(anytime.enumerated()), id: \.element.id) { i, t in
@@ -668,6 +714,15 @@ struct TodayView: View {
                         }
                         .staggeredAppear(step(.anytime), play: play)
                 }
+                // "+ Add for today · Enter for the next" opens the Day list, where Enter adds one after another.
+                Button { MekaHaptics.tick(); model.openDayList() } label: {
+                    Text(EveningCardRules.shared.ADD_LINE).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                }
+                .buttonStyle(MekaPressStyle())
+                .help("Type today's tasks one after another (⌘N)")
+                .accessibilityLabel("Add tasks for today")
+                .padding(.vertical, MekaSpace.xxs)
+                .staggeredAppear(step(.anytime), play: play)
             }
             let doneChoice = model.doneTodayShown
             if !today.doneToday.isEmpty && doneChoice.show != .hidden {

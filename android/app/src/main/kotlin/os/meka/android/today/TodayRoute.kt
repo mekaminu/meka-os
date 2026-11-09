@@ -965,7 +965,7 @@ private fun TodayPane(
         var eveningLaterDay by rememberSaveable { mutableStateOf<Long?>(null) }
         val clockDay = java.time.LocalDate.now().toEpochDay()
         val clockMinute = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
-        val eveningShown = eveningCard?.takeIf { !EveningCardRules.away(eveningLaterDay, clockDay, clockMinute) }
+        val eveningShown = EveningCardRules.shown(eveningCard, eveningLaterDay, clockDay, clockMinute)
         val todayHead = remember(today.timeline.anytime, today.doneToday) { EveningCardRules.head(today.timeline.anytime, today.doneToday) }
         // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
@@ -1121,7 +1121,7 @@ private fun TodayPane(
                 prep = today.meetingPrep, pressure = today.pressure,
                 // Meka 2026-11-09 08:09 (b, f): the study check-in and Monday's review are tiles, not big cards.
                 checkin = today.studyCheckin?.takeIf { it.key !in checkinGone },
-                review = reviewCard.takeIf { eveningCard == null },
+                review = EveningCardRules.reviewForTile(reviewCard, eveningCard),
             )
             if (alsoTiles.isNotEmpty()) {
                 item(key = "also-today") {
