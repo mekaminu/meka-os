@@ -122,7 +122,7 @@ internal fun AlsoTodayRow(
             lastKind?.let { k ->
                 Column(
                     Modifier.fillMaxWidth().testTag(ALSO_DETAIL_TAG).clip(RoundedCornerShape(MekaRadius.m))
-                        .background(Meka.colors.surface).padding(MekaSpace.s),
+                        .background(Meka.colors.surface).padding(MekaSpace.xs),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                 ) { detail(k) }
             }
