@@ -10,7 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
+import os.meka.core.domain.DayListRules
 import os.meka.core.domain.EveningCardRules
 import os.meka.android.today.EVENING_CARD_TAG
 import org.junit.Assert.fail
@@ -210,10 +210,7 @@ class TodayScreensTest {
             }
         }
         // The last of Today's tasks is still in the list, reached by scrolling to it.
-        compose.mainClock.autoAdvance = true
-        compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(hasText(lastTitle, substring = true))
-        compose.mainClock.autoAdvance = false
-        settle()
+        scrollUntilShown(lastTitle, -400f)
         ScreenShots.assertShows(compose, name, lastTitle)
     }
 
@@ -237,9 +234,12 @@ class TodayScreensTest {
         }
         if (timeline) {
             // The Today rebuild, slice 2a: Today's own tasks follow Now (and the evening card), above the schedule.
-            val head = compose.onAllNodes(hasText("TODAY · ", substring = true), useUnmergedTree = true).fetchSemanticsNodes().filter(::inToday)
-            if (head.isEmpty()) fail("$name: Today's tasks aren't in Today's column")
-            if (head.minOf { it.boundsInRoot.bottom } > clearBy + 0.5f) fail("$name: Today's tasks start under the capture bar")
+            // What follows Now (the evening card, or Today's tasks or their Day list way in) starts above the bar.
+            val next = (compose.onAllNodesWithTag(EVENING_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes() +
+                compose.onAllNodes(hasText("TODAY · ", substring = true) or hasText(DayListRules.EMPTY_LINK, substring = true), useUnmergedTree = true)
+                    .fetchSemanticsNodes()).filter(::inToday)
+            if (next.isEmpty()) fail("$name: nothing follows Now in Today's column")
+            if (next.minOf { it.boundsInRoot.top } > clearBy + 0.5f) fail("$name: what follows Now starts under the capture bar")
         }
         compose.onAllNodes(hasText(SETUP_LABEL), useUnmergedTree = true).fetchSemanticsNodes().forEach { n ->
             if (inToday(n)) fail("$name: the setup card is in Today's column, not beside it")
@@ -362,10 +362,7 @@ class TodayScreensTest {
         val listed = today.timeline.anytime.size
         // The Today rebuild, slice 2a: the head counts what's left ("TODAY · 5 LEFT · 4h"), the now line the same tasks.
         ScreenShots.assertShows(compose, "many", EveningCardRules.head(today.timeline.anytime, today.doneToday).label.uppercase())
-        compose.mainClock.autoAdvance = true
-        compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(hasText("$listed more anytime task", substring = true))
-        compose.mainClock.autoAdvance = false
-        settle()
+        scrollUntilShown("$listed more anytime task", 400f)
         ScreenShots.assertShows(compose, "many", "$listed more anytime task")
     }
 
@@ -433,6 +430,15 @@ class TodayScreensTest {
         compose.onNodeWithTag("done-fold").performClick()
         awaitCore("Close") { !core.doneTodayChoice.value.openToday }
         ScreenShots.assertShows(compose, "closed", "1 done today ›")
+    }
+
+    /** Scrolls Today's list by [stepPx] at a time (the clock driven by hand: the orb's animations never idle) until [text] shows. */
+    private fun scrollUntilShown(text: String, stepPx: Float) {
+        repeat(40) {
+            if (shownText(text)) return
+            compose.onNodeWithTag(TODAY_LIST_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, stepPx) }
+            settle()
+        }
     }
 
     private fun settle() {
