@@ -11,6 +11,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -276,7 +278,7 @@ fun DayListPane(
                         onUp = DayListRules.stepTo(v, r.id, up = true)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
                         onDown = DayListRules.stepTo(v, r.id, up = false)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
                     ) else null
-                    DayListRowView(r, v.timesOn, tick, onOpen = { haptics.tick(); sheetId = r.id },
+                    DayListRowView(r, v.timesOn, tick, onOpen = { haptics.tick(); sheetId = r.id }, stacked = inBoard?.narrow == true,
                         modifier = Modifier.then(if (dragId != null) Modifier else Modifier.animateItem()).appear(rememberAppearance(2))
                             .graphicsLayer { translationY = if (held) 0f else slide.value },
                         grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
@@ -324,7 +326,11 @@ fun DayListPane(
                             .minTouch().clip(CircleShape).background(Meka.colors.accent).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                     )
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                // In a narrow column the chips keep to one line (sliding sideways) so every column's add bar sits level.
+                FlowRow(
+                    if (inBoard?.narrow == true) Modifier.horizontalScroll(rememberScrollState()) else Modifier,
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
                     SayChip(saying, listener.level, sayThem)
                     DayChip(DayListRules.PASTE) {
                         val primary = context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip
@@ -376,8 +382,12 @@ fun DayListPane(
     }
 }
 
-/** What the folded Week board puts on a day's list: its line, the add bar's prompt and the line under the rows. */
-data class DayListInBoard(val title: String, val placeholder: String, val hint: String)
+/** What the Week board (folded or a column of the open spread) puts on a day's list: its line, the add bar's prompt and the line under the rows. */
+data class DayListInBoard(
+    val title: String, val placeholder: String, val hint: String,
+    /** A column of the open Fold's spread: rows stack time · title · area, and the chips stay on one sliding line. */
+    val narrow: Boolean = false,
+)
 
 /** The gold bar that fills as the day's planned minutes are done, with "2 of 5 done · ends about 11:15" under it. */
 @Composable
@@ -397,6 +407,8 @@ private fun DayProgressBar(progress: Float, line: String, modifier: Modifier) {
 private fun DayListRowView(
     r: DayListRow, timesOn: Boolean, tick: (String) -> Unit, onOpen: () -> Unit, modifier: Modifier,
     grip: Grip? = null, onMeasured: (Float) -> Unit = {},
+    /** A narrow column (`OpenSpread.dc.html`): the time over the title and the area under it, so the title has the width. */
+    stacked: Boolean = false,
 ) {
     val reduced = Meka.reducedMotion
     // Drag to reorder: the held row lifts onto the raised surface (scale 1.02 on the approve spring), as in Study.
@@ -407,45 +419,71 @@ private fun DayListRowView(
             .graphicsLayer { translationY = grip?.dy ?: 0f; scaleX = 1f + 0.02f * lift; scaleY = 1f + 0.02f * lift }
             .clip(RoundedCornerShape(MekaRadius.s)).background(bg).clickable(role = Role.Button, onClickLabel = "Options") { onOpen() }
             .padding(vertical = MekaSpace.xxs).semantics { contentDescription = r.spoken },
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (stacked) Alignment.Top else Alignment.CenterVertically,
     ) {
         if (r.done) Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.size(22.dp).clip(CircleShape).background(Meka.colors.accent), contentAlignment = Alignment.Center) {
                 Text("✓", style = MekaType.micro, color = Meka.colors.onAccent)
             }
         } else CompleteButton(r.id, r.title, tick, size = 22.dp, settle = true, touch = 48.dp)
-        if (timesOn) {
-            Text(
-                r.time ?: "", style = MekaType.caption, maxLines = 1,
-                color = if (r.timeIsSet) Meka.colors.textSecondary else Meka.colors.textTertiary,
-                modifier = Modifier.width(44.dp),
-            )
-        }
-        Column(Modifier.weight(1f).padding(end = MekaSpace.xs)) {
-            Text(
-                r.title, style = MekaType.taskTitle, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                color = if (r.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
-                textDecoration = if (r.done) TextDecoration.LineThrough else null,
-            )
-            if (!timesOn && r.time != null) Text(r.time!!, style = MekaType.micro, color = Meka.colors.textSecondary)
-        }
-        r.area?.let { a ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = MekaSpace.xs)) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(Meka.colors.areaTone(a)))
-                Text(r.areaLabel.orEmpty(), style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
-                    modifier = Modifier.padding(start = MekaSpace.xxs).widthIn(max = 72.dp))
+        if (stacked) {
+            Column(Modifier.weight(1f).padding(end = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                r.time?.let { t ->
+                    Text(t, style = MekaType.caption, maxLines = 1, color = if (r.timeIsSet) Meka.colors.textSecondary else Meka.colors.textTertiary)
+                }
+                Text(
+                    r.title, style = MekaType.taskTitle, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    color = if (r.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
+                    textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                )
+                r.area?.let { a ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(7.dp).clip(CircleShape).background(Meka.colors.areaTone(a)))
+                        Text(r.areaLabel.orEmpty(), style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
+                            modifier = Modifier.padding(start = MekaSpace.xxs))
+                    }
+                }
             }
+            r.length?.let { len -> LengthChip(len, r.lengthGuessed) }
+            grip?.let { GripHandle(it, "day-list-grip-${r.id}") }
+        } else {
+            if (timesOn) {
+                Text(
+                    r.time ?: "", style = MekaType.caption, maxLines = 1,
+                    color = if (r.timeIsSet) Meka.colors.textSecondary else Meka.colors.textTertiary,
+                    modifier = Modifier.width(44.dp),
+                )
+            }
+            Column(Modifier.weight(1f).padding(end = MekaSpace.xs)) {
+                Text(
+                    r.title, style = MekaType.taskTitle, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    color = if (r.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
+                    textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                )
+                if (!timesOn && r.time != null) Text(r.time!!, style = MekaType.micro, color = Meka.colors.textSecondary)
+            }
+            r.area?.let { a ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = MekaSpace.xs)) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(Meka.colors.areaTone(a)))
+                    Text(r.areaLabel.orEmpty(), style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
+                        modifier = Modifier.padding(start = MekaSpace.xxs).widthIn(max = 72.dp))
+                }
+            }
+            r.length?.let { len -> LengthChip(len, r.lengthGuessed) }
+            grip?.let { GripHandle(it, "day-list-grip-${r.id}") }
         }
-        r.length?.let { len ->
-            Text(
-                len, style = MekaType.micro, maxLines = 1,
-                color = if (r.lengthGuessed) Meka.colors.textTertiary else Meka.colors.textPrimary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
-            )
-        }
-        grip?.let { GripHandle(it, "day-list-grip-${r.id}") }
     }
+}
+
+/** A row's length ("30m"), faint while it's only a guess. */
+@Composable
+private fun LengthChip(len: String, guessed: Boolean) {
+    Text(
+        len, style = MekaType.micro, maxLines = 1,
+        color = if (guessed) Meka.colors.textTertiary else Meka.colors.textPrimary,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+    )
 }
 
 /** A chip: Times on, Paste a list, Fit times, and the sheet's choices; [selected] wears the accent edge. */

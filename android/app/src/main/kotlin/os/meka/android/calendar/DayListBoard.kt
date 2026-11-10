@@ -238,7 +238,7 @@ fun DayListSpread(
                         Box(Modifier.weight(1f).fillMaxSize().testTag(DAY_LIST_COLUMN_TAG)) {
                             DayListPane(
                                 core, onClose = {}, closeLabel = null, forDay = c.epochDay,
-                                inBoard = DayListInBoard(c.title, c.placeholder, DayListBoardRules.HINT),
+                                inBoard = DayListInBoard(c.title, c.placeholder, DayListBoardRules.HINT, narrow = true),
                                 sidePadding = MekaSpace.xs,
                             )
                         }
