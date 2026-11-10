@@ -21,6 +21,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import os.meka.core.domain.NeedsYouFilter
+import os.meka.core.domain.NeedsYouLayoutRules
+import os.meka.core.domain.NeedsYouSection
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -535,12 +538,22 @@ internal fun NeedsYouColumn(
         summaryApp.openMail.value = true
         summaryApp.openDestination.value = os.meka.android.shell.ShellDestination.ASK
     }
+    // The approved Needs you look (2026-11-09): the chosen chip and the one chat open in place, on this screen only.
+    var filter by rememberSaveable { mutableStateOf(NeedsYouFilter.ALL) }
+    var openChat by rememberSaveable { mutableStateOf<String?>(null) }
+    val messageChats = remember(chats) { NeedsYouLayoutRules.messages(chats) }
+    val fyiChats = remember(chats) { NeedsYouLayoutRules.fyi(chats) }
+    val replyCount = NeedsYouLayoutRules.replyCount(chats)
+    val decideCount = approvals.size + looseRequests.size + asks + cards.size
+    val mailCount = mailNeeds?.rows?.size ?: 0
+    fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section)
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
         modifier.footFade().testTag(NEEDS_YOU_LIST_TAG),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
+        if (compact) {
         item(key = "title") {
             if (compact) {
                 SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
@@ -753,6 +766,278 @@ internal fun NeedsYouColumn(
             workingItems(stack.working, play, index = 2, open = openMail)
             // Under the stack, the next reminders (the gate's Needs you re-shot: the page below the stack was blank).
             meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
+        }
+        } else {
+        item(key = "title") {
+            if (compact) {
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
+            } else {
+                Column(Modifier.padding(bottom = MekaSpace.s).appear(rememberAppearance(0, play))) {
+                    NeedsYouHeader(NeedsYouLayoutRules.subtitle(decideCount, replyCount, fyiChats.size), fyiChats.isNotEmpty(), onClear = {
+                        fyiChats.forEach { moves.onTriageChat(it, ChatFinishTap.DONE) }
+                    })
+                    NeedsYouChips(NeedsYouLayoutRules.chips(decideCount, replyCount, fyiChats.size, mailCount), filter, { filter = it },
+                        Modifier.padding(top = MekaSpace.s))
+                }
+            }
+        }
+        if (show(NeedsYouSection.DECIDE) && decideCount > 0) {
+            item(key = "decide-head") {
+                NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.DECIDE_HEAD, decideCount), Modifier.animateItem())
+            }
+        }
+        if (show(NeedsYouSection.DECIDE)) {
+        // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
+        approvals.forEachIndexed { i, card ->
+            item(key = "approval-${card.id}") {
+                ApprovalCardView(card, core, { line -> moves.undoLine(line, null) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)))
+            }
+        }
+        }
+        if (show(NeedsYouSection.DECIDE)) {
+        // School days off on office days, a week ahead (school rhythm, slice 1): soonest first, above the requests.
+        covers.forEachIndexed { i, card ->
+            item(key = "school-cover-${card.id}") {
+                SchoolCoverCardView(card, { home -> moves.onSchoolCover(card, home) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + i, play)))
+            }
+        }
+        nudge?.let { card ->
+            item(key = "date-night-${card.day}") {
+                DateNightCardView(card, onBooked = {
+                    scope.launch {
+                        runCatching { core.bookDateNight(card.day, true) }.getOrNull()
+                            ?.let { line -> moves.undoLine(line) { core.bookDateNight(card.day, false) } }
+                    }
+                }, onSkip = {
+                    scope.launch {
+                        runCatching { core.skipDateNight(card.day, true) }.getOrNull()
+                            ?.let { line -> moves.undoLine(line) { core.skipDateNight(card.day, false) } }
+                    }
+                }, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size, play)))
+            }
+        }
+        due.forEachIndexed { i, card ->
+            item(key = "appointment-${card.id}") {
+                AppointmentCardView(card, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                    scope.launch {
+                        val r = runCatching { core.bookAppointment(card.id, typed) }.getOrNull() ?: return@launch
+                        if (r.refused) bookRefused = card.id to r.line
+                        else { bookRefused = null; moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, onWent = {
+                    scope.launch {
+                        runCatching { core.appointmentWent(card.id) }.getOrNull()
+                            ?.let { r -> moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, onNotYet = {
+                    scope.launch {
+                        runCatching { core.appointmentNotYet(card.id) }.getOrNull()
+                            ?.let { r -> moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, onCall = {
+                    scope.launch {
+                        runCatching { core.appointmentCallToBook(card.id) }.getOrNull()
+                            ?.let { c -> moves.undoLine(c.line) { core.undoAppointmentCall(c) } }
+                    }
+                }, onEmail = {
+                    scope.launch {
+                        // Slice 2b: the email goes on the clipboard; nothing was sent or changed, so no Undo.
+                        runCatching { core.appointmentBookingEmail(card.id) }.getOrNull()?.let { text ->
+                            os.meka.android.work.LiveReplies.copyText(appContext, text)
+                            moves.undoLine(os.meka.core.domain.AppointmentRules.EMAIL_COPIED, null)
+                        }
+                    }
+                }, modifier = Modifier.animateItem().padding(bottom = MekaSpace.m)
+                    .appear(rememberAppearance(2 + triage.size + covers.size + (if (nudge != null) 1 else 0) + i, play)))
+            }
+        }
+        // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
+        // after the after-work card and folds away with the list's item motion once answered.
+        looseRequests.forEachIndexed { i, card ->
+            item(key = "request-${card.id}") {
+                RequestCardView(card, { moves.onRequest(card, it) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + i, play)))
+            }
+        }
+        }
+        if (show(NeedsYouSection.DECIDE)) {
+        if (cards.isNotEmpty()) {
+            item(key = "stack") {
+                DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
+                    toDays = { core.needsYouFeedDays() }, onToDay = moves.onToDay)
+            }
+            workingItems(stack.working, play, index = 2, open = openMail)
+            // Under the stack, the next reminders (the gate's Needs you re-shot: the page below the stack was blank).
+            meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
+        }
+        }
+        if (show(NeedsYouSection.MESSAGES)) {
+        item(key = "after-work") {
+            AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1, play)), moves.undoLine) { openAfterWork() }
+        }
+        digest?.takeIf { it.due }?.let { d ->
+            item(key = "group-digest") {
+                GroupDigestSection(d, captures, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        }
+        if (show(NeedsYouSection.MESSAGES)) {
+        // Messages that need a reply (with MEKA's draft), then FYIs (V1, messages slice 3), above the requests: "Send all"
+        // first when two or more short replies can go; each card staggers in after the after-work card and folds away
+        // with the list's item motion once answered.
+        sendAll?.let { all ->
+            item(key = "triage-send-all") {
+                TriageSendAllRow(all, {
+                    val chosen = triage.filter { it.id in all.ids }.sortedBy { it.atMs }
+                    moves.onSendAll(chosen.map { c -> edits[c.id]?.let { e -> c.copy(draft = e) } ?: c })
+                },
+                    Modifier.animateItem().appear(rememberAppearance(2, play)))
+            }
+        }
+        }
+        // MESSAGES (the approved look): one row per person or group; a tap opens the chat's own card under it.
+        if (show(NeedsYouSection.MESSAGES) && messageChats.isNotEmpty()) {
+            item(key = "messages-head") {
+                NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.MESSAGES_HEAD, messageChats.size), Modifier.animateItem())
+            }
+        }
+        if (show(NeedsYouSection.MESSAGES)) messageChats.forEachIndexed { i, chat ->
+            item(key = "triage-chat-${chat.key}") {
+                NeedsYouMessageRowView(NeedsYouLayoutRules.row(chat), openChat == chat.key, { openChat = if (openChat == chat.key) null else chat.key },
+                    Modifier.animateItem().appear(rememberAppearance(2 + i, play))) {
+                    val m = Modifier
+                val cardFor: @Composable (TriageCard, Modifier) -> Unit = { card, m ->
+                    TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it, false) }, m)
+                }
+                val chatMarkable = ChatShadeRules.markable(chat, markable)
+                if (chat.single) {
+                    // One message (slice 2b): its own Mark read while the notification offers it; Send and Seen clear it.
+                    val card = chat.cards.single()
+                    TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it },
+                        { moves.onTriage(card, it, true) }, m,
+                        markLabel = ChatShadeRules.singleMarkButton(chat.app, chatMarkable),
+                        onMark = { moves.onTriageChat(chat, ChatFinishTap.MARK_READ) })
+                } else {
+                    val arrival = if (ChatShadeRules.canClearOnArrival(chat, peopleLists)) chat.key in triageSettings.clearOnArrival else null
+                    TriageChatView(chat, chatMarkable, { tap -> moves.onTriageChat(chat, tap) }, cardFor, m,
+                        requestFor = { card, rm -> RequestCardView(card, { moves.onRequest(card, it) }, rm) },
+                        chatter = chat.groupKey?.takeIf { chat.chatter > 0 }?.let { k -> { digestNow.thread(k) } },
+                        arrival = arrival, onArrival = { on -> moves.onChatArrival(chat, on) },
+                        onReadToEnd = { moves.onChatReadToEnd(chat) })
+                }
+                }
+            }
+        }
+        if (show(NeedsYouSection.MESSAGES) && messageChats.isNotEmpty()) {
+            item(key = "messages-hint") {
+                Text(NeedsYouLayoutRules.MESSAGES_HINT, style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.animateItem().padding(start = MekaSpace.xxs))
+            }
+        }
+        // FYI · no reply needed: thin rows, each ✓ is the chat's Done (Undo on the bar).
+        if (show(NeedsYouSection.FYI) && fyiChats.isNotEmpty()) {
+            item(key = "fyi-head") {
+                NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.FYI_HEAD, fyiChats.size), Modifier.animateItem())
+            }
+            fyiChats.forEach { chat ->
+                item(key = "fyi-${chat.key}") {
+                    NeedsYouFyiRowView(NeedsYouLayoutRules.fyiRow(chat), { moves.onTriageChat(chat, ChatFinishTap.DONE) }, Modifier.animateItem())
+                }
+            }
+        }
+        if (show(NeedsYouSection.MESSAGES)) {
+        // Between digests, groups with news are one quiet line under the cards that Meka can open on demand.
+        digest?.takeIf { !it.due }?.let { d ->
+            item(key = "group-digest") {
+                GroupDigestSection(d, captures, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + requests.size, play)))
+            }
+        }
+        }
+        if (show(NeedsYouSection.MESSAGES)) {
+        // Discord channel watch, slice 1: one card per channel he follows, its posts since he last looked, Done.
+        discord?.let { d ->
+            item(key = "discord") {
+                DiscordSection(d, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        }
+        if (show(NeedsYouSection.MAIL) && (mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || mailMoment != null || mailMomentSession != null)) {
+            item(key = "mail-head") { NeedsYouHead(NeedsYouLayoutRules.MAIL_HEAD, Modifier.animateItem()) }
+        }
+        if (show(NeedsYouSection.MAIL)) {
+        // Inbox autopilot, slice 7: the ten-minute inbox — from the moment, Start goes through the emails one by one.
+        if (mailMoment != null || mailMomentSession != null) {
+            item(key = "mail-moment") {
+                MailMomentSection(mailMoment, mailMomentSession, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 6a: the emails that need Meka, newest first, each with Done and Snooze.
+        // While the ten-minute inbox runs, it shows them one at a time instead.
+        mailNeeds?.takeIf { mailMomentSession == null }?.let { n ->
+            item(key = "mail-needs") {
+                MailNeedsSection(n, core, moves.undoLine, mailTaps,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 6b-3: Waiting for items from email whose chase is due, a chase drafted for each.
+        mailChases?.let { c ->
+            item(key = "mail-chases") {
+                MailChaseSection(c, core, moves.undoLine, mailTaps,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Promises, receipts and renewals, slice 1: renewals read from his mail, each added to Renewals only on his tap.
+        mailFinds?.let { f ->
+            item(key = "mail-finds") {
+                MailFindSection(f, core, moves.undoLine, mailTaps,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        }
+        if (show(NeedsYouSection.MAIL)) {
+        // Inbox autopilot, slice 4: what Autopilot archived, with the digests (12:30, 18:30) until Got it.
+        archived?.let { a ->
+            item(key = "archived-for-you") {
+                ArchivedForYouSection(a, core, moves.undoLine, mailTaps,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
+                    openAll = { moves.archivedAll.value = true })
+            }
+        }
+        // Inbox autopilot, slice 5c: the weekly "Not opened in 30 days", from Saturday 09:00 until answered.
+        unopened?.let { u ->
+            item(key = "mail-unopened") {
+                UnopenedOfferSection(u, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        }
+        if (filter == NeedsYouFilter.ALL) {
+        if (cards.isEmpty() && approvals.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
+            item(key = "clear") {
+                // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
+                // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);
+                // the caption saying what lands here only on the full page.
+                Row(Modifier.animateItem().appear(rememberAppearance(1, play)).semantics(mergeDescendants = true) { },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
+                    Column {
+                        Text(NeedsYouStackRules.emptyLine(afterWork.toCatchUp), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                    }
+                }
+            }
+            // Approve must land: what Navilife is doing with his mail since his Approve, counting up.
+            workingItems(stack.working, play, index = 2, open = openMail)
+            // Then what's coming for Meka instead of a blank page: today's habits (ticked inline), Waiting on and the
+            // next renewals (NeedsYouMeanwhile; Fold reviews 2026-10-09, 00:10 item 6 and 07:26 item 10).
+            meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
+        }
+        }
         }
     }
 }
