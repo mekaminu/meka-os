@@ -17,12 +17,12 @@ struct NeedsYouDecideCardView: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: card.details.isEmpty ? .center : .top, spacing: MekaSpace.xs) {
                 Image(systemName: Self.symbol(card.icon))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(MekaType.itemMeta)
                     .foregroundStyle(Self.ink(card.icon, palette))
                     .frame(width: 34, height: 34)
                     .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(card.what).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
                     Text(card.from).font(MekaType.caption)
                         .foregroundStyle(card.urgent ? palette.critical : palette.textSecondary)
