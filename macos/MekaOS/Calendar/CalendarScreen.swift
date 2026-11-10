@@ -103,14 +103,12 @@ struct CalendarScreen: View {
                     .staggeredAppear(1)
             }
             if model.calendarShowsBoard, let board = model.board, !board.weeks.isEmpty {
-                ScrollView {
-                    WeekBoardScreen(board: board, palette: palette)
-                        .padding(.bottom, MekaSpace.xl)
-                }
-                // The alignment list (8): once scrolled, what passes the top fades out rather than leaving a sliver.
-                .edgeFades()
-                .staggeredAppear(2)
-                .transition(.opacity)
+                // The Day list item's slice 5 (2026-11-10): the Board is Day lists side by side, 3 · 5 · 7 days (each
+                // column scrolls on its own); the old WeekBoardScreen is no longer shown.
+                DayListSpreadScreen(board: board, palette: palette)
+                    .padding(.bottom, MekaSpace.l)
+                    .staggeredAppear(2)
+                    .transition(.opacity)
             } else {
                 agenda(v, lit: lit)
             }

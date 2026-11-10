@@ -113,11 +113,29 @@ object DayListSpreadRules {
 
     fun countOrDefault(count: Int?): Int = count?.takeIf { it in COUNTS } ?: DEFAULT_COUNT
 
+    /**
+     * The Mac's spread (slice 5; Meka 2026-11-08: "the Mac offers 3 · 5 · 7 days, default 5"): a wide window has room
+     * for the working week or the whole week side by side. Each Mac remembers its own count.
+     */
+    val MAC_COUNTS = listOf(3, 5, 7)
+    const val MAC_DEFAULT_COUNT = 5
+
+    fun macCountOrDefault(count: Int?): Int = count?.takeIf { it in MAC_COUNTS } ?: MAC_DEFAULT_COUNT
+
     /** The [count] days of [week] in view, starting at [chosen] and held inside the week. */
-    fun inView(week: BoardWeek, chosen: Long, count: Int): List<BoardDay> {
+    fun inView(week: BoardWeek, chosen: Long, count: Int): List<BoardDay> = slice(week, chosen, countOrDefault(count))
+
+    /** The Mac's days in view: 3, 5 or 7 from [chosen], held inside the week (7 is the whole week, Monday first). */
+    fun macInView(week: BoardWeek, chosen: Long, count: Int): List<BoardDay> = slice(week, chosen, macCountOrDefault(count))
+
+    /** The Mac's columns: three or more across are narrow, so each says "Mon 9 · today" and "Add · Enter for next". */
+    fun macColumns(week: BoardWeek, chosen: Long, count: Int): List<DayListColumn> =
+        macInView(week, chosen, count).map { column(it, 3) }
+
+    private fun slice(week: BoardWeek, chosen: Long, count: Int): List<BoardDay> {
         val days = week.days
         if (days.isEmpty()) return emptyList()
-        val k = countOrDefault(count).coerceAtMost(days.size)
+        val k = count.coerceIn(1, days.size)
         val at = days.indexOfFirst { it.epochDay == chosen }.coerceAtLeast(0)
         val start = at.coerceAtMost(days.size - k)
         return days.subList(start, start + k)

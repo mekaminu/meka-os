@@ -3966,6 +3966,8 @@ final class CoreModel {
     private(set) var dayListDay: Int64?
     /// The line under the add field ("Added 3 · about 1 h 30m"), cross-faded as it changes.
     var dayListSaid: String?
+    /// The day whose add field [dayListSaid] answers (the Board's spread shows it under that day's column only).
+    private(set) var dayListSaidDay: Int64?
 
     func openDayList(day: Int64? = nil) {
         dayListDay = day
@@ -3975,20 +3977,21 @@ final class CoreModel {
 
     /// The Day list as drawn, from the board on screen (its taps included). The Kotlin board is read on the main actor
     /// and never sent anywhere.
-    func dayList(timesOn: Bool) -> DayListView? {
+    func dayList(timesOn: Bool, day: Int64? = nil) -> DayListView? {
         guard let core, let board else { return nil }
-        return core.dayList(board: board, day: dayListDay ?? board.todayEpochDay, timesOn: timesOn)
+        return core.dayList(board: board, day: day ?? dayListDay ?? board.todayEpochDay, timesOn: timesOn)
     }
 
     /// The add field's Enter, or Paste a list: each line becomes a task on the list's day. Only the text (a String) and
     /// the day (an Int64) cross to the core.
-    func addToDayList(_ text: String) {
+    func addToDayList(_ text: String, day forDay: Int64? = nil) {
         guard let core, let board else { return }
+        dayListSaidDay = forDay ?? dayListDay ?? board.todayEpochDay
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             dayListSaid = DayListRules.shared.TYPE_FIRST
             return
         }
-        let day = dayListDay ?? board.todayEpochDay
+        let day = forDay ?? dayListDay ?? board.todayEpochDay
         MekaHaptics.light()
         Task {
             do {
@@ -4002,13 +4005,14 @@ final class CoreModel {
 
     /// Say them: the words Dictation typed, split into tasks by the core ("then" between, "half an hour", "at 3",
     /// "for work" read) and added in the order said.
-    func sayToDayList(_ words: String) {
+    func sayToDayList(_ words: String, day forDay: Int64? = nil) {
         guard let core, let board else { return }
+        dayListSaidDay = forDay ?? dayListDay ?? board.todayEpochDay
         guard !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             dayListSaid = DayListSpoken.shared.HEARD_NOTHING
             return
         }
-        let day = dayListDay ?? board.todayEpochDay
+        let day = forDay ?? dayListDay ?? board.todayEpochDay
         MekaHaptics.light()
         Task {
             do {
@@ -4021,12 +4025,13 @@ final class CoreModel {
     }
 
     /// Paste a list: the pasteboard's text, one task per line.
-    func pasteIntoDayList() {
+    func pasteIntoDayList(day forDay: Int64? = nil) {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            dayListSaidDay = forDay ?? dayListDay ?? board?.todayEpochDay
             dayListSaid = DayListRules.shared.COPY_FIRST
         } else {
-            addToDayList(text)
+            addToDayList(text, day: forDay)
         }
     }
 
@@ -4038,9 +4043,9 @@ final class CoreModel {
 
     /// Fit times: the open tasks get starts one after another; the undo bar says so and Undo puts every time back. The
     /// fit the core returns is sent back to it once, by the Undo.
-    func fitDayList(from minute: Int32) {
+    func fitDayList(from minute: Int32, day forDay: Int64? = nil) {
         guard let core, let board else { return }
-        let day = dayListDay ?? board.todayEpochDay
+        let day = forDay ?? dayListDay ?? board.todayEpochDay
         MekaHaptics.tick()
         Task {
             guard let fit = try? await core.fitDayList(day: day, fromMinute: minute) else { return }
@@ -4050,9 +4055,9 @@ final class CoreModel {
 
     /// Drag to reorder in the Day list (slice 1c): the task takes row [toRow] among the open rows as drawn; it moves
     /// on the Week board, so Today, the board and Fit times follow, and the undo bar says "Moved “…” up" with Undo.
-    func reorderDayList(_ id: String, toRow: Int, timesOn: Bool) {
+    func reorderDayList(_ id: String, toRow: Int, timesOn: Bool, day forDay: Int64? = nil) {
         guard let core, let board else { return }
-        let day = dayListDay ?? board.todayEpochDay
+        let day = forDay ?? dayListDay ?? board.todayEpochDay
         let row = Int32(clamping: toRow)
         Task {
             guard let line = try? await core.reorderDayList(day: day, taskId: id, toRow: row, timesOn: timesOn) else { return }

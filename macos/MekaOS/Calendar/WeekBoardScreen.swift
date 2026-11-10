@@ -1175,7 +1175,7 @@ private struct DayProgressBar: View {
 
 /// ‹ or › in the Board's header. Match slice 4: the mockup's round outlined button, a 40 pt circle on the card surface
 /// edged in the hairline.
-private struct RoundStep: View {
+struct RoundStep: View {
     let systemName: String
     let palette: MekaPalette
 

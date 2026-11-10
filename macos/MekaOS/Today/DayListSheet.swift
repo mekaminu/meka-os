@@ -194,7 +194,7 @@ struct DayListSheet: View {
 }
 
 /// The gold bar that fills as the day's planned minutes are done, with its line under it.
-private struct DayListBar: View {
+struct DayListBar: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let progress: Double
     let line: String
@@ -220,13 +220,17 @@ private struct DayListBar: View {
 /// Drag to reorder (slice 1c): an open row drags onto another and takes its place (with Times on, a task with its own
 /// time stays at it, so it doesn't drag); the row it's over shows a gold line above it. VoiceOver's Move
 /// up / Move down do the same without a drag. Only the id and the row's place cross to the core.
-private struct DayListDrag: ViewModifier {
+struct DayListDrag: ViewModifier {
     @Environment(CoreModel.self) private var model
     let row: DayListRow
     let index: Int
     let view: DayListView
     let palette: MekaPalette
     @Binding var over: String?
+    /// The Board's spread (slice 5): the column's day, so a reorder lands on that day's list.
+    var day: Int64?
+    /// The Board's spread: a task dropped here from another day's column moves to this day (true when it was taken).
+    var onAcross: ((String) -> Bool)?
 
     func body(content: Content) -> some View {
         let rules = DayListRules.shared
@@ -240,15 +244,16 @@ private struct DayListDrag: ViewModifier {
                 }
             }
             .dropDestination(for: String.self) { ids, _ in
-                guard let id = ids.first, id != row.id, view.rows.contains(where: { $0.id == id }) else { return false }
-                model.reorderDayList(id, toRow: index, timesOn: view.timesOn)
+                guard let id = ids.first, id != row.id else { return false }
+                guard view.rows.contains(where: { $0.id == id }) else { return onAcross?(id) ?? false }
+                model.reorderDayList(id, toRow: index, timesOn: view.timesOn, day: day)
                 return true
             } isTargeted: { on in
                 if on { over = row.id } else if over == row.id { over = nil }
             }
             .accessibilityActions {
-                if let up { Button(StudyRules.shared.MOVE_UP) { model.reorderDayList(row.id, toRow: up, timesOn: view.timesOn) } }
-                if let down { Button(StudyRules.shared.MOVE_DOWN) { model.reorderDayList(row.id, toRow: down, timesOn: view.timesOn) } }
+                if let up { Button(StudyRules.shared.MOVE_UP) { model.reorderDayList(row.id, toRow: up, timesOn: view.timesOn, day: day) } }
+                if let down { Button(StudyRules.shared.MOVE_DOWN) { model.reorderDayList(row.id, toRow: down, timesOn: view.timesOn, day: day) } }
             }
         if canDrag {
             dropped.draggable(row.id)
@@ -259,22 +264,25 @@ private struct DayListDrag: ViewModifier {
 }
 
 /// A slim row: tick · time · title · area dot and name · length. Clicking it opens its options under it.
-private struct DayListRowView: View {
+struct DayListRowView: View {
     let row: DayListRow
     let timesOn: Bool
     let open: Bool
     let palette: MekaPalette
+    /// A narrow column on the Board's spread (as on the open Fold): time, title and area stack so the title keeps the
+    /// column's width; the length stays on the right.
+    var stacked = false
     let onOpen: () -> Void
 
     var body: some View {
-        HStack(spacing: MekaSpace.xs) {
+        HStack(alignment: stacked ? .top : .center, spacing: MekaSpace.xs) {
             if row.done {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(palette.accent).frame(width: 22, height: 22)
             } else {
                 CompleteButton(id: row.id, title: row.title, palette: palette, settle: true)
             }
             Button(action: onOpen) {
-                HStack(spacing: MekaSpace.xs) {
+                if stacked { stackedLine } else { HStack(spacing: MekaSpace.xs) {
                     if timesOn {
                         Text(row.time ?? "").font(MekaType.caption).monospacedDigit()
                             .foregroundStyle(row.timeIsSet ? palette.textSecondary : palette.textTertiary)
@@ -302,7 +310,7 @@ private struct DayListRowView: View {
                             .background(Capsule().fill(palette.surfaceRaised))
                     }
                 }
-                .contentShape(Rectangle())
+                .contentShape(Rectangle()) }
             }
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel(row.spoken)
@@ -313,11 +321,42 @@ private struct DayListRowView: View {
         .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(open ? palette.surfaceRaised : Color.clear))
         .mekaHoverLift()
     }
+
+    /// Time over the title over the area, the length chip on the right (the spread's narrow columns).
+    private var stackedLine: some View {
+        HStack(alignment: .top, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: 0) {
+                if let t = row.time {
+                    Text(t).font(MekaType.micro).monospacedDigit()
+                        .foregroundStyle(row.timeIsSet ? palette.textSecondary : palette.textTertiary)
+                }
+                Text(row.title).font(MekaType.taskTitle).lineLimit(3)
+                    .foregroundStyle(row.done ? palette.textTertiary : palette.textPrimary)
+                    .strikethrough(row.done)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let a = row.area {
+                    HStack(spacing: MekaSpace.xxs) {
+                        Circle().fill(palette.areaTone(a)).frame(width: 7, height: 7)
+                        Text(row.areaLabel ?? "").font(MekaType.micro).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let len = row.length {
+                Text(len).font(MekaType.micro).monospacedDigit().lineLimit(1)
+                    .foregroundStyle(row.lengthGuessed ? palette.textTertiary : palette.textPrimary)
+                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                    .background(Capsule().fill(palette.surfaceRaised))
+                    .fixedSize()
+            }
+        }
+        .contentShape(Rectangle())
+    }
 }
 
 /// A row's options (the approved `Sheet.dc.html`): LENGTH, AREA, MOVE TO (the week's days · Next week · Someday), then
 /// Edit… and Done. Every change offers Undo on the bar. Only ids, minutes, area names and days cross to the core.
-private struct DayListOptions: View {
+struct DayListOptions: View {
     @Environment(CoreModel.self) private var model
     let row: DayListRow
     let day: Int64
@@ -401,7 +440,7 @@ private struct DayListOptions: View {
 }
 
 /// A Move to choice: the day and its name ("Tomorrow", "Wed 11").
-private struct DayListMoveDay: Identifiable {
+struct DayListMoveDay: Identifiable {
     let id: Int64
     let name: String
 }

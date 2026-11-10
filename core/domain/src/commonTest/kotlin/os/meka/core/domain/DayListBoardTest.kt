@@ -96,6 +96,28 @@ class DayListBoardTest {
     }
 
     @Test
+    fun theMacShowsThreeFiveOrSevenDaysFiveByDefault() {
+        val today = mon + 2
+        val w = week(mon, today)
+        assertEquals(5, DayListSpreadRules.macCountOrDefault(null))
+        assertEquals(5, DayListSpreadRules.macCountOrDefault(2))
+        assertEquals(7, DayListSpreadRules.macCountOrDefault(7))
+        // Five from Wednesday held inside the week: Wed · Thu · Fri · Sat · Sun.
+        assertEquals((2L..6L).map { mon + it }, DayListSpreadRules.macInView(w, today, 5).map { it.epochDay })
+        // Five from Monday: the working week.
+        assertEquals((0L..4L).map { mon + it }, DayListSpreadRules.macInView(w, mon, 5).map { it.epochDay })
+        // Seven is the whole week whichever day is chosen.
+        assertEquals((0L..6L).map { mon + it }, DayListSpreadRules.macInView(w, mon + 5, 7).map { it.epochDay })
+        assertEquals(listOf(mon + 4, mon + 5, mon + 6), DayListSpreadRules.macInView(w, mon + 6, 3).map { it.epochDay })
+        // Narrow headings at every Mac count.
+        val cs = DayListSpreadRules.macColumns(w, mon, 7)
+        assertEquals(7, cs.size)
+        assertEquals(true, cs[2].title.endsWith(" · today"))
+        assertEquals("Add · Enter for next", cs[3].placeholder)
+        assertEquals("Add to today · Enter", cs[0].placeholder)
+    }
+
+    @Test
     fun narrowColumnsShortenTheirHeadingAndPrompt() {
         val d = board.weeks[0].days
         val three = DayListSpreadRules.column(d[1], 3)

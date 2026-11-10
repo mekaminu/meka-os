@@ -1692,6 +1692,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(hint.spoken, "Obi suggests: From an email, give it 15m for the reply?")
     }
 
+    /// The Week board as Day lists, slice 5: the Mac's 3 · 5 · 7 days switch (5 by default) reaches Swift.
+    func testMacSpreadCountsReachSwift() {
+        let spread = DayListSpreadRules.shared
+        XCTAssertEqual(spread.MAC_COUNTS.map(\.int32Value), [3, 5, 7])
+        XCTAssertEqual(spread.MAC_DEFAULT_COUNT, 5)
+        XCTAssertEqual(spread.macCountOrDefault(count: nil), 5)
+        XCTAssertEqual(spread.macCountOrDefault(count: KotlinInt(value: 2)), 5)
+        XCTAssertEqual(spread.macCountOrDefault(count: KotlinInt(value: 7)), 7)
+        XCTAssertEqual(spread.countLabel(count: 5), "5 days")
+        XCTAssertEqual(spread.HINT, "Drag a task's ≡ to another day")
+    }
+
     /// The Day list, slice 1b: the rules the Mac's sheet draws from reach Swift.
     func testDayListReachesSwift() {
         let rules = DayListRules.shared
