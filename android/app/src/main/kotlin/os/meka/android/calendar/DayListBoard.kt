@@ -323,7 +323,7 @@ fun DayListSpread(
                     .widthIn(max = 220.dp).shadow(8.dp, RoundedCornerShape(MekaRadius.m)).clip(RoundedCornerShape(MekaRadius.m))
                     .background(Meka.colors.surfaceRaised)
                     .border(1.dp, if (g.target != null) Meka.colors.accent else Meka.colors.hairline, RoundedCornerShape(MekaRadius.m))
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
                     .testTag(DAY_LIST_GHOST_TAG),
             )
         }
