@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Needs you grouped</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+@keyframes slide{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.pg{animation:slide .24s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+.chev{transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.in,.pg{animation:none}.chev{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1500px;box-sizing:border-box;padding:16px 16px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<div style="display:flex;justify-content:space-between;align-items:flex-end">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:26px;font-weight:700">Needs you</span><span style="font-size:13px;color:#8f897f">1 to decide · 4 to reply · 5 FYI · 14 mail</span></div>
+<button type="button" onClick="{{collapseAll}}" style="border:0;background:#151517;color:#d8d2c6;border-radius:999px;height:34px;padding:0 13px;font-size:12.5px">{{collapseLabel}}</button>
+</div>
+
+<div style="display:flex;gap:6px">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="5"><button type="button" onClick="{{f.go}}" style="{{f.style}}">{{f.name}}</button></sc-for>
+</div>
+
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="6">
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<button type="button" onClick="{{g.toggle}}" aria-expanded="{{g.open}}" style="width:100%;border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:12px;padding:13px 14px;text-align:left">
+<span style="{{g.iconStyle}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{g.path}}"></path></svg></span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;gap:8px;align-items:center"><span style="font-size:15px;font-weight:600">{{g.title}}</span><span style="{{g.badgeStyle}}">{{g.count}}</span></span>
+<span style="font-size:12px;color:#8f897f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{g.peek}}</span>
+</span>
+<span class="chev" style="{{g.chev}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a8a29a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+</button>
+
+<sc-if value="{{g.open}}" hint-placeholder-val="{{true}}">
+<div class="in" style="display:flex;flex-direction:column;padding:0 14px 12px;gap:8px">
+
+<sc-if value="{{g.lead}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;background:#18181b;border-radius:12px;padding:10px 12px">
+<span style="font-size:13px;color:#d8d2c6">{{g.lead}}</span>
+<button type="button" onClick="{{g.leadGo}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:32px;padding:0 14px;font-size:12.5px;font-weight:600;flex-shrink:0">{{g.leadBtn}}</button>
+</div>
+</sc-if>
+
+<div class="pg" key="{{g.pageKey}}" style="display:flex;flex-direction:column">
+<sc-for list="{{g.rows}}" as="r" hint-placeholder-count="4">
+<div style="border-top:1px solid #1a1a1d">
+<button type="button" onClick="{{r.tap}}" style="width:100%;border:0;background:transparent;color:#ededed;display:flex;gap:10px;align-items:center;padding:10px 0;text-align:left;min-height:52px">
+<sc-if value="{{r.initials}}" hint-placeholder-val="{{true}}"><span style="width:34px;height:34px;border-radius:17px;background:#1d1d20;color:#c9b37e;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0">{{r.initials}}</span></sc-if>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;gap:8px;align-items:baseline"><span style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.name}}</span><span style="font-size:11.5px;color:#6f6a62;flex-shrink:0">{{r.time}}</span></span>
+<span style="font-size:12.5px;color:#a8a29a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.line}}</span>
+</span>
+<sc-if value="{{r.badge}}" hint-placeholder-val="{{false}}"><span style="font-size:11.5px;color:#9db4e0;background:#141b28;border-radius:999px;padding:4px 9px;flex-shrink:0">{{r.badge}}</span></sc-if>
+<sc-if value="{{r.tick}}" hint-placeholder-val="{{false}}"><span onClick="{{r.tick}}" role="button" aria-label="Seen" style="width:34px;height:34px;border-radius:17px;display:flex;align-items:center;justify-content:center;color:#c9b37e;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L19 7"></path></svg></span></sc-if>
+</button>
+<sc-if value="{{r.actions}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;gap:6px;padding:0 0 10px">
+<sc-for list="{{r.actions}}" as="a" hint-placeholder-count="4"><button type="button" onClick="{{a.go}}" style="{{a.style}}">{{a.name}}</button></sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{g.tiles}}" hint-placeholder-val="{{false}}">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<sc-for list="{{g.tiles}}" as="t" hint-placeholder-count="4"><div style="background:#18181b;border-radius:10px;padding:8px 9px;display:flex;flex-direction:column;gap:1px"><span style="{{t.numStyle}}">{{t.n}}</span><span style="font-size:10.5px;color:#8f897f">{{t.l}}</span></div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{g.pager}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">
+<span style="font-size:12px;color:#8f897f">{{g.pager}}</span>
+<span style="display:flex;gap:6px;align-items:center">
+<sc-for list="{{g.dots}}" as="d" hint-placeholder-count="3"><span style="{{d}}"></span></sc-for>
+<button type="button" onClick="{{g.prev}}" aria-label="Previous page" style="{{g.prevStyle}}">‹</button>
+<button type="button" onClick="{{g.next}}" aria-label="Next page" style="{{g.nextStyle}}">›</button>
+</span>
+</div>
+</sc-if>
+
+<sc-if value="{{g.foot}}" hint-placeholder-val="{{false}}"><button type="button" onClick="{{g.footGo}}" style="border:0;background:transparent;color:#c9b37e;font-size:12.5px;text-align:left;padding:4px 0">{{g.foot}}</button></sc-if>
+</div>
+</sc-if>
+</div>
+</sc-for>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:4px 2px">Tap a heading to open or close it · up to 5 in a page, ‹ › for the next · Navilife remembers which groups you left open</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;align-self:center;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={open:{decide:true,msgs:true,fyi:false,chats:false,mail:false,renew:false,tidy:false},page:{fyi:0,mail:0},filter:'All',mailOpen:-1,gone:{},toast:''};}
+renderVals(){
+var s=this.state,self=this,PG=5;
+var say=function(t){return function(){self.setState({toast:t});};};
+var set=function(k){return function(){var o=Object.assign({},s.open);o[k]=!o[k];self.setState({open:o,toast:''});};};
+var pill=function(gold){return 'border:0;border-radius:999px;height:32px;padding:0 13px;font-size:12.5px;'+(gold?'background:#1d1d20;color:#c9b37e':'background:#1d1d20;color:#d8d2c6');};
+var msgs=[
+ {i:'E',n:'Efe',t:'12:51',l:'Sent “KGB 20” with no context',b:'1 to reply'},
+ {i:'CG',n:'Card game testing',t:'13:36',l:'Mentioned you: put the time in the group',b:'2 to reply'},
+ {i:'H',n:'Hamid',t:'08:23',l:'Asks if you saw his missed call and voice note',b:'1 to reply'},
+ {i:'J',n:'Jess',t:'12:22',l:'Work approved the show in Birmingham, 25–26 Nov',b:'1 request'}];
+var fyi=[
+ {n:'A friend',l:'Thanks you; discharged, still waiting on a driver'},
+ {n:'Nnamdi',l:'Jokes that “these boys” have eaten his money'},
+ {n:'Aunty Pat',l:'Sends warm regards to the footballers'},
+ {n:'Victor',l:'Sent you a message'},
+ {n:'Coach',l:'Training moved indoors on Thursday'},
+ {n:'Tobi',l:'Shared a photo from Saturday'}];
+var mail=[
+ {n:'Samsung Care+',l:'Your subscription has been renewed',t:'02:08'},
+ {n:'PayPal',l:'Update your card details',t:'Yest 23:10'},
+ {n:'Eskimo Jo Events',l:'Fwd: Santa’s Grotto tickets',t:'Yest 21:14'},
+ {n:'School',l:'Children in Need · Fri 13 Nov',t:'Yest 15:32'},
+ {n:'School',l:'Church service · Mon 30 Nov',t:'Yest 15:14'},
+ {n:'Council',l:'Bin collection changes over Christmas',t:'Mon'},
+ {n:'Dentist',l:'Reminder: check-up next Tuesday',t:'Mon'},
+ {n:'Octopus Energy',l:'Your November statement',t:'Mon'},
+ {n:'Club',l:'Christmas party sign-up',t:'Sun'},
+ {n:'Amazon',l:'Your parcel is on its way',t:'Sun'},
+ {n:'HMRC',l:'Your tax account has a new message',t:'Sun'},
+ {n:'Gym',l:'Class times for December',t:'Sat'},
+ {n:'Insurer',l:'Renewal quote ready',t:'Sat'},
+ {n:'Nursery',l:'Photo day forms',t:'Fri'}];
+var live=function(arr,k){return arr.filter(function(x,i){return !s.gone[k+i];}).map(function(x){return x;});};
+var fyiLive=fyi.map(function(x,i){x.k='f'+i;return x;}).filter(function(x){return !s.gone[x.k];});
+var mailLive=mail.map(function(x,i){x.k='m'+i;return x;}).filter(function(x){return !s.gone[x.k];});
+var drop=function(k,line){return function(e){if(e&&e.stopPropagation)e.stopPropagation();var g=Object.assign({},s.gone);g[k]=1;self.setState({gone:g,mailOpen:-1,toast:line});};};
+var paged=function(key,arr){var pages=Math.max(1,Math.ceil(arr.length/PG));var p=Math.min(s.page[key]||0,pages-1);
+ var go=function(d){return function(){var pg=Object.assign({},s.page);pg[key]=Math.max(0,Math.min(pages-1,p+d));self.setState({page:pg,mailOpen:-1});};};
+ var btn=function(on){return 'width:32px;height:32px;border-radius:16px;border:0;background:#1d1d20;font-size:16px;color:'+(on?'#c9b37e':'#4a4744');};
+ return {rows:arr.slice(p*PG,p*PG+PG),pages:pages,p:p,
+  pager:arr.length>PG?(p*PG+1)+'–'+Math.min(arr.length,p*PG+PG)+' of '+arr.length:'',
+  dots:pages>1?Array.from({length:pages},function(_,i){return 'width:'+(i===p?'14px':'5px')+';height:5px;border-radius:3px;background:'+(i===p?'#c9b37e':'#3a3833')+';transition:width .2s';}):[],
+  prev:go(-1),next:go(1),prevStyle:btn(p>0),nextStyle:btn(p<pages-1),pageKey:key+p};};
+var icon=function(c){return 'width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:'+c[0]+';color:'+c[1];};
+var badge=function(c){return 'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:'+c[0]+';color:'+c[1];};
+var F=s.filter;
+var show=function(k){return F==='All'||({Decide:['decide'],Reply:['msgs'],FYI:['fyi','chats'],Mail:['mail','renew','tidy']})[F].indexOf(k)>=0;};
+var G=[];
+if(show('decide'))G.push({k:'decide',title:'To decide',count:'1',c:['#2a2418','#e0b860'],path:'M12 8v5M12 16.5v.5M12 3l9 16H3z',peek:'1 renewal due from your lists',
+ lead:'1 renewal due · from your lists',leadBtn:'Go through',leadGo:say('Opens the renewal to decide'),
+ rows:[],foot:'At work until 17:30 · 37 held for later ›',footGo:say('Opens what is held until after work')});
+if(show('msgs'))G.push({k:'msgs',title:'Messages',count:'4',c:['#141b28','#9db4e0'],path:'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z',peek:'Efe, Card game testing, Hamid, Jess',
+ rows:msgs.map(function(m){return {initials:m.i,name:m.n,time:m.t,line:m.l,badge:m.b,tap:say('Opens '+m.n+'’s messages')};})});
+if(show('fyi')){var pf=paged('fyi',fyiLive);G.push({k:'fyi',title:'FYI',count:String(fyiLive.length),c:['#18181b','#a8a29a'],path:'M12 16v-4M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',peek:'No reply needed · '+fyiLive.slice(0,3).map(function(x){return x.n;}).join(', '),
+ lead:fyiLive.length?'Nothing here needs a reply':'',leadBtn:'Clear all',leadGo:function(){var g=Object.assign({},s.gone);fyi.forEach(function(x,i){g['f'+i]=1;});self.setState({gone:g,toast:'FYI cleared · Undo'});},
+ rows:pf.rows.map(function(x){return {name:x.n,line:x.l,tick:drop(x.k,x.n+' marked seen · Undo'),tap:say('Opens '+x.n+'’s chat')};}),pager:pf.pager,dots:pf.dots,prev:pf.prev,next:pf.next,prevStyle:pf.prevStyle,nextStyle:pf.nextStyle,pageKey:pf.pageKey});}
+if(show('chats'))G.push({k:'chats',title:'Group chats',count:'1',c:['#18181b','#a8a29a'],path:'M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM21 20v-2a4 4 0 0 0-3-3.9',peek:'1 group · 3 messages · digest at 12:30',
+ rows:[{initials:'FP',name:'Football parents',time:'12:30',line:'3 messages · kit collection moved to Friday',tap:say('Opens the digest')}]});
+if(show('mail')){var pm=paged('mail',mailLive);G.push({k:'mail',title:'Mail to answer',count:String(mailLive.length),c:['#1b1a14','#c9b37e'],path:'M4 6h16v12H4zM4 7l8 6 8-6',peek:'Ten-minute inbox · about 2 min each',
+ lead:'Ten-minute inbox · one at a time',leadBtn:'Start',leadGo:say('Starts the ten-minute inbox'),
+ rows:pm.rows.map(function(x){var open=s.mailOpen===x.k;return {name:x.n,time:x.t,line:x.l,tap:function(){self.setState({mailOpen:open?-1:x.k});},
+  actions:open?[{name:'Reply',go:say('Drafts a reply to '+x.n),style:pill(true)},{name:'Done',go:drop(x.k,x.n+' done · Undo'),style:pill(true)},{name:'Task',go:say('Makes it a task'),style:pill(true)},{name:'More',go:say('Snooze · Open in Gmail · Not junk'),style:pill(true)}]:''};}),
+ pager:pm.pager,dots:pm.dots,prev:pm.prev,next:pm.next,prevStyle:pm.prevStyle,nextStyle:pm.nextStyle,pageKey:pm.pageKey,foot:'Draft replies to 5 ›',footGo:say('Drafts five replies for you to check')});}
+if(show('renew'))G.push({k:'renew',title:'Renewals found in mail',count:'2',c:['#1a1420','#c9a0e0'],path:'M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5',peek:'Google Play · Amazon Music · nothing added until you tap Add',
+ rows:[{name:'Google Play',time:'Fri 4 Dec',line:'Subscription',tap:function(){self.setState({mailOpen:self.state.mailOpen==='r0'?-1:'r0'});},actions:s.mailOpen==='r0'?[{name:'Add',go:say('Added to Renewals'),style:pill(true)},{name:'Not needed',go:say('Dismissed'),style:pill(true)}]:''},
+       {name:'Amazon Music',time:'Mon 8 Feb',line:'£21.99 a month · Subscription',tap:function(){self.setState({mailOpen:self.state.mailOpen==='r1'?-1:'r1'});},actions:s.mailOpen==='r1'?[{name:'Add',go:say('Added to Renewals'),style:pill(true)},{name:'Not needed',go:say('Dismissed'),style:pill(true)}]:''}]});
+if(show('tidy'))G.push({k:'tidy',title:'Mail tidied today',count:'82',c:['#14201d','#7fb3a8'],path:'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',peek:'41 tidied · 12 newsletters · 24 promos · 5 junk & scams',
+ tiles:[{n:'41',l:'tidied',numStyle:'font-size:17px;font-weight:600'},{n:'12',l:'newsletters',numStyle:'font-size:17px;font-weight:600'},{n:'24',l:'promos',numStyle:'font-size:17px;font-weight:600'},{n:'5',l:'junk & scams',numStyle:'font-size:17px;font-weight:600;color:#e07a6a'}],
+ lead:'Unsubscribe from a club newsletter? 5 unopened',leadBtn:'Unsubscribe',leadGo:say('Unsubscribed · Undo'),rows:[],foot:'Still in Gmail and Outlook · See all ›',footGo:say('Opens all tidied mail')});
+var anyOpen=G.some(function(g){return s.open[g.k];});
+return {
+ filters:['All','Decide','Reply','FYI','Mail'].map(function(n){var on=F===n;return {name:n,go:function(){var o=Object.assign({},s.open);if(n!=='All'){Object.keys(o).forEach(function(k){o[k]=true;});}self.setState({filter:n,open:o});},style:'border:0;border-radius:999px;height:34px;padding:0 13px;font-size:13px;'+(on?'background:#c9b37e;color:#111;font-weight:600':'background:#151517;color:#d8d2c6')};}),
+ collapseLabel:anyOpen?'Close all':'Open all',
+ collapseAll:function(){var o={};Object.keys(s.open).forEach(function(k){o[k]=!anyOpen;});self.setState({open:o});},
+ groups:G.map(function(g){var o=!!s.open[g.k];return {title:g.title,count:g.count,peek:o?(g.k==='fyi'||g.k==='mail'?(g.pager||g.count+' in all'):''):g.peek,path:g.path,iconStyle:icon(g.c),badgeStyle:badge(g.c),
+  open:o,toggle:set(g.k),chev:'display:flex;transform:rotate('+(o?180:0)+'deg)',
+  lead:g.lead||'',leadBtn:g.leadBtn||'',leadGo:g.leadGo||function(){},rows:g.rows||[],tiles:g.tiles||'',
+  pager:g.pager||'',dots:g.dots||[],prev:g.prev||function(){},next:g.next||function(){},prevStyle:g.prevStyle||'',nextStyle:g.nextStyle||'',pageKey:g.pageKey||g.k,
+  foot:g.foot||'',footGo:g.footGo||function(){}};}),
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
