@@ -250,6 +250,19 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/fast_widget_info" />
         </receiver>
+        <!-- The Day list widget (the Day list, slice 6): today's open tasks with a tick each and + Add tasks. -->
+        <receiver
+            android:name=".widgets.DayListWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_day_list_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/day_list_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.DayListWidgetTickReceiver"
+            android:exported="false" />
         <!-- Talk widget (Talk without tapping the mic, slice 2): a tap opens Ask already listening. No data, no refresh. -->
         <receiver
             android:name=".ask.TalkWidgetProvider"

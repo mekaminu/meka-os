@@ -283,6 +283,11 @@ private fun TodayRouteContent(
     LaunchedEffect(iconDayList) {
         if (iconDayList) { showBrief = false; showPlan = false; dayListReady = true; showDayList = true; widgetApp?.openDayList?.value = false }
     }
+    // The Day list widget's header or a task (the Day list, slice 6): today's Day list to look at, keyboard down.
+    val widgetDayList = widgetApp?.openDayListToLook?.collectAsState()?.value ?: false
+    LaunchedEffect(widgetDayList) {
+        if (widgetDayList) { showBrief = false; showPlan = false; dayListReady = false; showDayList = true; widgetApp?.openDayListToLook?.value = false }
+    }
     // Done for the day, completeness 2: "shut down the day" said to Talk opens the shutdown pane over Today.
     val talkShutdown = widgetApp?.openShutdown?.collectAsState()?.value ?: false
     LaunchedEffect(talkShutdown) {

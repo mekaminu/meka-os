@@ -8137,6 +8137,18 @@ class MekaCore(
     }
 
     /**
+     * The Day list's home-screen widget (the Day list, slice 6): today's open tasks from the current Week board, the
+     * done line and the gold bar. Pure and cheap; it changes when the board does (and at midnight, with the board).
+     */
+    fun dayListWidget(): os.meka.core.domain.WidgetDayList {
+        val board = _board.value
+        return os.meka.core.domain.DayListWidgetRules.view(dayList(board, board.todayEpochDay, timesOn = false))
+    }
+
+    /** The Day list widget's tick: marks [taskId] done, the same as ticking it in the Day list. */
+    suspend fun completeFromWidget(taskId: String) = complete(taskId)
+
+    /**
      * The Fold's News home-screen widget (news ticker slice 3a): Today's ticker as flipping cards, read from the current
      * News place. Pure and cheap; [os.meka.core.domain.NewsWidgetView.nextChangeMs] says when to look again.
      */

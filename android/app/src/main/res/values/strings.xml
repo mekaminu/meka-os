@@ -28,4 +28,9 @@
     <string name="widget_news_preview">News</string>
     <string name="widget_preview_next">Your next event or task</string>
     <string name="widget_preview_fast">No fast running</string>
+    <string name="widget_day_list_label">Day list</string>
+    <string name="widget_day_list_description">Today\'s tasks with a tick each, and Add tasks one after another</string>
+    <string name="widget_day_list_title">Today</string>
+    <string name="widget_day_list_empty">Nothing planned yet</string>
+    <string name="widget_day_list_add">+ Add tasks</string>
 </resources>

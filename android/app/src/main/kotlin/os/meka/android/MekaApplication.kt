@@ -88,6 +88,8 @@ open class MekaApplication : Application() {
     val openShutdown = MutableStateFlow(false)
     /** Add tasks on the app icon (the Day list, slice 2): Today opens today's Day list ready to type, then clears it. */
     val openDayList = MutableStateFlow(false)
+    /** The Day list widget's header or a task on it (the Day list, slice 6): Today opens today's Day list to look at. */
+    val openDayListToLook = MutableStateFlow(false)
     /**
      * Week board item (6) part 2: "plan my week" said to Obi, or Plan now on Sunday's Needs you card: Calendar opens on
      * the Board with Plan your week up, then clears it.
@@ -314,6 +316,12 @@ open class MekaApplication : Application() {
                 .map { WidgetRouting.signature(core.homeWidgets()) }
                 .distinctUntilChanged()
                 .collect { runCatching { widgets.run() } }
+        }
+        // The Day list widget (the Day list, slice 6) follows the Week board, redrawn only when what it lists changes.
+        appScope.launch {
+            core.weekBoard.map { core.dayListWidget() }
+                .distinctUntilChanged()
+                .collect { runCatching { os.meka.android.widgets.DayListWidget.update(this@MekaApplication, it) } }
         }
         // Errands by location, slice 2: Android watches the saved places with errands waiting (only with the near-me
         // switch on and location allowed), re-armed when that set changes and at every process start (after a reboot).
