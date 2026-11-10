@@ -99,4 +99,28 @@ class MailUnopenedFacadeTest {
         assertEquals(MailUnopenedRules.NONE_LEFT, core("android").unsubscribeUnopened())
         assertEquals(os.meka.core.domain.MailSenderPanelRules.UNKNOWN, mac.keepMailSender("nothing"))
     }
+
+    @Test
+    fun needsYousOneQuestionUnsubscribesOneSenderAtATimeWithUndo() = runTest {
+        val digest = sender("news@digest.example", "Weekly Digest", 6)
+        val club = sender("hello@club.example", "Club News", 4)
+        val fold = core("android")
+        assertTrue(fold.syncNow())
+        val q = assertNotNull(fold.needsYouMail.value?.question)
+        assertEquals(digest, q.senderId)
+        assertEquals("Unsubscribe from Weekly Digest?", q.question)
+        assertEquals("1 of 2", q.more)
+        assertEquals(true, fold.needsYouMail.value?.tiles?.isEmpty())
+
+        assertEquals("Unsubscribing from 1 sender at the next check", fold.unsubscribeUnopenedSender(digest))
+        assertEquals(club, fold.needsYouMail.value?.question?.senderId)
+        assertNull(fold.needsYouMail.value?.question?.more)
+        assertTrue(fold.syncNow())
+        val asked = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.field == MailSenderFields.ASKED_AT && it.value != FieldValue.Int64(0) }.map { it.entityId }.toSet()
+        assertEquals(setOf(digest), asked)
+
+        fold.undoUnopened()
+        assertEquals(digest, fold.needsYouMail.value?.question?.senderId)
+        assertEquals(os.meka.core.domain.MailSenderPanelRules.UNKNOWN, fold.unsubscribeUnopenedSender("nothing"))
+    }
 }

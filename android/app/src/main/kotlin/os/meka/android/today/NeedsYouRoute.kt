@@ -495,6 +495,8 @@ internal fun NeedsYouColumn(
     val digest = digestNow.view
     val allArchived by core.archivedForYou.collectAsState()
     val unopened by core.mailUnopened.collectAsState()
+    // The approved look, slice 2: MAIL NAVILIFE TIDIED TODAY as four tiles and the one unsubscribe question.
+    val needsMail by core.needsYouMail.collectAsState()
     val allMailNeeds by core.mailNeeds.collectAsState()
     val allMailChases by core.mailChases.collectAsState()
     val allMailFinds by core.mailFinds.collectAsState()
@@ -965,7 +967,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        if (show(NeedsYouSection.MAIL) && (mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || mailMoment != null || mailMomentSession != null)) {
+        if (show(NeedsYouSection.MAIL) && (mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null)) {
             item(key = "mail-head") { NeedsYouHead(NeedsYouLayoutRules.MAIL_HEAD, Modifier.animateItem()) }
         }
         if (show(NeedsYouSection.MAIL)) {
@@ -1000,8 +1002,28 @@ internal fun NeedsYouColumn(
         }
         }
         if (show(NeedsYouSection.MAIL)) {
-        // Inbox autopilot, slice 4: what Autopilot archived, with the digests (12:30, 18:30) until Got it.
-        archived?.let { a ->
+        // The approved look, slice 2: today's tidies as four tiles, the one unsubscribe question and See all › (All
+        // tidied mail keeps every Put back), in place of the long log and the weekly offer's card.
+        needsMail?.let { m ->
+            item(key = "needs-you-mail") {
+                NeedsYouMailCard(m,
+                    onUnsubscribe = { q -> mailScope.launch {
+                        runCatching { core.unsubscribeUnopenedSender(q.senderId) }.getOrNull()?.let { said ->
+                            moves.undoLine(said) { runCatching { core.undoUnopened() } }
+                        }
+                    } },
+                    onKeep = { q -> mailScope.launch {
+                        runCatching { core.keepMailSender(q.senderId) }.getOrNull()?.let { said ->
+                            moves.undoLine(said) { runCatching { core.undoUnopened() } }
+                        }
+                    } },
+                    onSeeAll = { moves.archivedAll.value = true },
+                    modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 4: what Autopilot archived, with the digests (12:30, 18:30) until Got it; in the
+        // approved look only while nothing was tidied today (yesterday evening's tidies), as the tiles stand for today.
+        archived?.takeIf { needsMail?.tiles.isNullOrEmpty() }?.let { a ->
             item(key = "archived-for-you") {
                 ArchivedForYouSection(a, core, moves.undoLine, mailTaps,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
@@ -1009,7 +1031,7 @@ internal fun NeedsYouColumn(
             }
         }
         // Inbox autopilot, slice 5c: the weekly "Not opened in 30 days", from Saturday 09:00 until answered.
-        unopened?.let { u ->
+        unopened?.takeIf { needsMail?.question == null }?.let { u ->
             item(key = "mail-unopened") {
                 UnopenedOfferSection(u, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))

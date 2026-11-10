@@ -1,17 +1,22 @@
 package os.meka.android.today
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +53,9 @@ import os.meka.core.domain.NeedsYouChip
 import os.meka.core.domain.NeedsYouFilter
 import os.meka.core.domain.NeedsYouFyiRow
 import os.meka.core.domain.NeedsYouLayoutRules
+import os.meka.core.domain.NeedsYouMailRules
+import os.meka.core.domain.NeedsYouMailSummary
+import os.meka.core.domain.NeedsYouUnsubQuestion
 import os.meka.core.domain.NeedsYouMessageRow
 
 /*
@@ -59,6 +67,8 @@ import os.meka.core.domain.NeedsYouMessageRow
 internal const val NEEDS_YOU_CHIPS_TAG = "needs-you-chips"
 internal const val NEEDS_YOU_ROW_TAG = "needs-you-row"
 internal const val NEEDS_YOU_FYI_TAG = "needs-you-fyi"
+internal const val NEEDS_YOU_MAIL_TAG = "needs-you-mail"
+internal const val NEEDS_YOU_TILE_TAG = "needs-you-mail-tile"
 
 /** "Needs you" over "2 to decide · 4 to reply · 4 FYI", with Clear FYI on the right while there is FYI. */
 @Composable
@@ -172,5 +182,84 @@ internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifie
             Modifier.minTouch().clip(CircleShape).clickable(onClickLabel = NeedsYouLayoutRules.SEEN) { haptics.light(); onSeen() },
             contentAlignment = Alignment.Center,
         ) { Text("✓", style = MekaType.captionStrong, color = Meka.colors.textTertiary) }
+    }
+}
+
+/**
+ * MAIL NAVILIFE TIDIED TODAY (slice 2): four number tiles (tidied · newsletters · promos · junk & scams), the one
+ * unsubscribe question with Unsubscribe and Keep (the next sender cross-fades in; Undo on the bar), and the quiet foot
+ * with See all ›, which opens All tidied mail where every tidy keeps its Put back.
+ */
+@Composable
+internal fun NeedsYouMailCard(
+    summary: NeedsYouMailSummary, onUnsubscribe: (NeedsYouUnsubQuestion) -> Unit, onKeep: (NeedsYouUnsubQuestion) -> Unit,
+    onSeeAll: () -> Unit, modifier: Modifier = Modifier,
+) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(MekaSpace.m).testTag(NEEDS_YOU_MAIL_TAG),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        if (summary.tiles.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().height(IntrinsicSize.Min).semantics(mergeDescendants = true) { contentDescription = summary.spoken },
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                summary.tiles.forEach { t ->
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
+                            .padding(MekaSpace.xs).testTag(NEEDS_YOU_TILE_TAG),
+                    ) {
+                        Text(t.number, style = MekaType.upNextCardTitle, maxLines = 1,
+                            color = if (t.warn) Meka.colors.critical else Meka.colors.textPrimary)
+                        // On the cover screen a quarter leaves ~48 dp for words: "junk & scams" takes two lines, never cut.
+                        Text(t.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 2)
+                    }
+                }
+            }
+        }
+        summary.question?.let { first ->
+            AnimatedContent(
+                first, label = "ny-unsub",
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                contentKey = { it.senderId },
+            ) { q ->
+                // The question over its line, Keep and Unsubscribe under it on the right: on the cover screen a sender's
+                // name beside the buttons would be cut to a few letters.
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                ) {
+                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = q.spoken }) {
+                        Text(q.question, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull(q.line, q.more).joinToString(" · "), style = MekaType.micro, color = Meka.colors.textTertiary,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        NeedsYouMailRules.KEEP, style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.padding(start = MekaSpace.xs).minTouch().wordsTap { haptics.light(); onKeep(q) },
+                    )
+                    Box(
+                        Modifier.padding(start = MekaSpace.xxs).heightIn(min = 32.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                            .background(Meka.colors.accent).clickable(role = Role.Button) { haptics.light(); onUnsubscribe(q) }
+                            .padding(horizontal = MekaSpace.m),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(NeedsYouMailRules.UNSUBSCRIBE, style = MekaType.captionStrong, color = Meka.colors.onAccent, maxLines = 1) }
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(summary.foot, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+            Text(
+                NeedsYouMailRules.SEE_ALL, style = MekaType.captionStrong, color = Meka.colors.accent,
+                modifier = Modifier.padding(start = MekaSpace.xs).minTouch().wordsTap { haptics.tick(); onSeeAll() },
+            )
+        }
     }
 }

@@ -2423,6 +2423,21 @@ class MekaCore(
      */
     val mailUnopened: StateFlow<os.meka.core.domain.MailUnopenedCard?> = _mailUnopened.asStateFlow()
 
+    private val _needsYouMail = MutableStateFlow<os.meka.core.domain.NeedsYouMailSummary?>(null)
+    /**
+     * The approved Needs you look, slice 2: MAIL NAVILIFE TIDIED TODAY — four tiles over today's standing tidies and the
+     * one unsubscribe question from the weekly offer; null while there's neither. Follows sync and the minute tick.
+     */
+    val needsYouMail: StateFlow<os.meka.core.domain.NeedsYouMailSummary?> = _needsYouMail.asStateFlow()
+
+    private fun needsYouMailChanged() {
+        val tidies = activity.mailTidyBatches()
+        val offer = _mailUnopened.value
+        _needsYouMail.value = viewMemo.keep("Needs you mail", listOf(tidies, offer, minuteNow(), timeZone())) {
+            os.meka.core.domain.NeedsYouMailRules.summary(tidies, offer, nowMs(), ZoneCalendar(timeZone))
+        }
+    }
+
     /** Puts back the offer's last answer on this device (Unsubscribe from all, Not now or Keep); null after an Undo. */
     private var unopenedUndo: (() -> Unit)? = null
 
@@ -8273,6 +8288,8 @@ class MekaCore(
         _archivedForYou.value = viewMemo.keep("Archived for you", listOf(tidies, seen, minuteNow(), timeZone())) {
             os.meka.core.domain.ArchivedForYouRules.card(tidies, seen, nowMs(), ZoneCalendar(timeZone))
         }
+}
+        needsYouMailChanged()
     }
 
     /** How many times [part] was really built (tests). */
@@ -8580,6 +8597,8 @@ class MekaCore(
         _mailUnopened.value = viewMemo.keep("Not opened", listOf(senders, seen, minuteNow(), timeZone())) {
             os.meka.core.domain.MailUnopenedRules.card(senders, seen, nowMs(), ZoneCalendar(timeZone))
         }
+}
+        needsYouMailChanged()
     }
 
     private fun writeUnopenedSeen(atMs: Long) = replica.commitLocal(
@@ -8614,6 +8633,24 @@ class MekaCore(
         activityChanged()
         unopenedChanged()
         os.meka.core.domain.MailUnopenedRules.askedLine(asked.size)
+    }
+
+    /**
+     * Needs you's one unsubscribe question (slice 2 of the approved look): Unsubscribe on that one sender asks the server
+     * to unsubscribe at its next check, as Mail's own Unsubscribe does; the next busiest sender takes the question.
+     * Undo (before the server's check) takes the ask back, so nothing is sent. Returns the line to show.
+     */
+    suspend fun unsubscribeUnopenedSender(id: String): String = onCore {
+        val s = activity.mailSenders().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailSenderPanelRules.UNKNOWN
+        val ask = os.meka.core.domain.MailSenderPanelRules.ask(s, nowMs()) ?: return@onCore os.meka.core.domain.MailUnopenedRules.NONE_LEFT
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_SENDER, id, ask)
+        unopenedUndo = {
+            os.meka.core.domain.MailUnopenedRules.undoAsk(activity.mailSenders().firstOrNull { it.id == id })
+                ?.let { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_SENDER, id, it) }
+        }
+        activityChanged()
+        unopenedChanged()
+        os.meka.core.domain.MailUnopenedRules.askedLine(1)
     }
 
     /** Not now on the weekly offer: folded away on both apps until next Saturday (with Undo). */
