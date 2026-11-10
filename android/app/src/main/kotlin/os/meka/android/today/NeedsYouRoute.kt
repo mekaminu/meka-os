@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import os.meka.core.domain.NeedsYouFilter
 import os.meka.core.domain.NeedsYouLayoutRules
+import os.meka.core.domain.NeedsYouDecideRules
 import os.meka.core.domain.NeedsYouSection
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -857,10 +858,16 @@ internal fun NeedsYouColumn(
         }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
         // after the after-work card and folds away with the list's item motion once answered.
+        // The approved look: a request is one compact card (icon, what, from whom, Add · Change · No); a drafted reply
+        // keeps its full card so the draft shows whole.
         looseRequests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
-                RequestCardView(card, { moves.onRequest(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + i, play)))
+                val m = Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + asks + i, play))
+                if (NeedsYouDecideRules.compact(card)) {
+                    NeedsYouDecideCardView(remember(card) { NeedsYouDecideRules.card(card) }, { moves.onRequest(card, it) }, m)
+                } else {
+                    RequestCardView(card, { moves.onRequest(card, it) }, m)
+                }
             }
         }
         }
