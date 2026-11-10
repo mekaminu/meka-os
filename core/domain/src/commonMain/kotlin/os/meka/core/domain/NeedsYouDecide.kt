@@ -19,6 +19,12 @@ enum class NeedsYouDecideIcon(
     TRIP("M2 16l20-7-3-2-7 2-5-4-2 1 3 5-4 1-2-1-1 1z"),
     IDEA("M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 0 0-4-10"),
     REPLY("M4 5h16v11H8l-4 4z"),
+    /** A school day off on an office day. */
+    SCHOOL("M2 9l10-5 10 5-10 5zM6 11v5c3 2.5 9 2.5 12 0v-5"),
+    /** Date night. */
+    NIGHT("M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"),
+    /** An appointment that has come due (dentist, eye test, haircut). */
+    APPOINTMENT("M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"),
 }
 
 /** One TO DECIDE card in the new look. */
@@ -37,6 +43,8 @@ data class NeedsYouDecideCard(
     val noLabel: String,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
+    /** A second, quieter row of taps under the three (an appointment's Call to book · Copy email); usually none. */
+    val more: List<String> = emptyList(),
 )
 
 object NeedsYouDecideRules {
@@ -85,5 +93,53 @@ object NeedsYouDecideRules {
             noLabel = NO,
             spoken = card.spoken + " " + listOfNotNull(card.addLabel, card.changeLabel, card.declineLabel).joinToString(", ") + ".",
         )
+    }
+
+    /**
+     * Slice 4: the other TO DECIDE cards in the same compact form. The words are the cards' own (nothing new is said),
+     * the line under "what" joins their when and their question: "INSET day · in 5 days · You're in the office that
+     * day. Who's covering?". Their taps keep their own labels and do what they did.
+     */
+    fun school(card: SchoolCover): NeedsYouDecideCard = NeedsYouDecideCard(
+        key = "school-cover-" + card.id,
+        icon = NeedsYouDecideIcon.SCHOOL,
+        what = card.title,
+        from = joined(card.line, card.question),
+        yesLabel = card.homeLabel,
+        changeLabel = null,
+        noLabel = card.coveredLabel,
+        spoken = spoken(card.spoken, card.homeLabel, card.coveredLabel),
+    )
+
+    fun dateNight(card: DateNightNudge): NeedsYouDecideCard = NeedsYouDecideCard(
+        key = "date-night-" + card.day,
+        icon = NeedsYouDecideIcon.NIGHT,
+        what = card.title,
+        from = joined(card.line, card.question),
+        yesLabel = card.bookedLabel,
+        changeLabel = null,
+        noLabel = card.skipLabel,
+        spoken = spoken(card.spoken, card.bookedLabel, card.skipLabel),
+    )
+
+    /** "Dentist" over "Due Mon 2 Nov · every 6 months · Last went …"; Booked… · Went · Not yet, then Call to book · Copy email. */
+    fun appointment(card: AppointmentNudge): NeedsYouDecideCard = NeedsYouDecideCard(
+        key = "appointment-" + card.id,
+        icon = NeedsYouDecideIcon.APPOINTMENT,
+        what = card.title,
+        from = joined(card.line, card.question),
+        yesLabel = card.bookedLabel,
+        changeLabel = card.wentLabel,
+        noLabel = card.laterLabel,
+        spoken = spoken(card.spoken, card.bookedLabel, card.wentLabel, card.laterLabel, card.callLabel, card.emailLabel),
+        more = listOf(card.callLabel, card.emailLabel),
+    )
+
+    private fun joined(vararg parts: String): String = parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ")
+
+    private fun spoken(said: String, vararg labels: String): String {
+        val s = said.trim()
+        val stop = if (s.isEmpty() || s.last() in ".?!") "" else "."
+        return (s + stop + " " + labels.joinToString(", ") + ".").trim()
     }
 }

@@ -65,4 +65,48 @@ class NeedsYouDecideTest {
     fun everyIconHasAPath() {
         RequestKind.entries.forEach { assertTrue(NeedsYouDecideRules.icon(it).path.startsWith("M")) }
     }
+
+    @Test
+    fun aSchoolDayOffIsOneCompactCard() {
+        val cover = SchoolCover(
+            id = "inset-1", title = "Alex and Sam are off Mon 21 Dec", line = "INSET day · in 7 days",
+            question = "You're in the office that day. Who's covering?", detail = "Mon 21 Dec shows as work from home",
+            days = listOf(day + 7), spoken = "Alex and Sam are off Monday 21 December.",
+        )
+        val c = NeedsYouDecideRules.school(cover)
+        assertEquals(NeedsYouDecideIcon.SCHOOL, c.icon)
+        assertEquals("Alex and Sam are off Mon 21 Dec", c.what)
+        assertEquals("INSET day · in 7 days · You're in the office that day. Who's covering?", c.from)
+        assertEquals(SchoolRules.HOME_LABEL, c.yesLabel)
+        assertNull(c.changeLabel)
+        assertEquals(SchoolRules.COVERED_LABEL, c.noLabel)
+        assertTrue(c.more.isEmpty())
+        assertEquals("Alex and Sam are off Monday 21 December. I'll work from home, Covered.", c.spoken)
+    }
+
+    @Test
+    fun dateNightKeepsItsOwnTwoTaps() {
+        val nudge = DateNightNudge(day + 7, "In 7 days · from 19:00", "Date night · Mon 21 Dec", "Book somewhere and arrange cover",
+            "Booked takes this off Needs you.", "Date night in 7 days")
+        val c = NeedsYouDecideRules.dateNight(nudge)
+        assertEquals(NeedsYouDecideIcon.NIGHT, c.icon)
+        assertEquals("Date night · Mon 21 Dec", c.what)
+        assertEquals("In 7 days · from 19:00 · Book somewhere and arrange cover", c.from)
+        assertEquals(DateNightRules.BOOKED_LABEL, c.yesLabel)
+        assertEquals(DateNightRules.SKIP_LABEL, c.noLabel)
+        assertEquals("Date night in 7 days. ${DateNightRules.BOOKED_LABEL}, ${DateNightRules.SKIP_LABEL}.", c.spoken)
+        assertTrue(c.key != NeedsYouDecideRules.dateNight(nudge.copy(day = day + 21)).key)
+    }
+
+    @Test
+    fun anAppointmentHasThreeTapsAndAQuietSecondRow() {
+        val a = AppointmentNudge("dentist", "Due Mon 14 Dec · every 6 months", "Dentist", "Last went Sun 14 Jun. Booked the next one?", "", "Dentist due today.")
+        val c = NeedsYouDecideRules.appointment(a)
+        assertEquals(NeedsYouDecideIcon.APPOINTMENT, c.icon)
+        assertEquals("Dentist", c.what)
+        assertEquals("Due Mon 14 Dec · every 6 months · Last went Sun 14 Jun. Booked the next one?", c.from)
+        assertEquals(listOf("Booked…", "Went", "Not yet"), listOf(c.yesLabel, c.changeLabel, c.noLabel))
+        assertEquals(listOf("Call to book", "Copy email"), c.more)
+        assertTrue(c.spoken.endsWith("Booked…, Went, Not yet, Call to book, Copy email."))
+    }
 }

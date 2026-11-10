@@ -800,15 +800,16 @@ internal fun NeedsYouColumn(
         }
         if (show(NeedsYouSection.DECIDE)) {
         // School days off on office days, a week ahead (school rhythm, slice 1): soonest first, above the requests.
+        // The approved look (slice 4): school, date night and appointments are compact cards like the requests.
         covers.forEachIndexed { i, card ->
             item(key = "school-cover-${card.id}") {
-                SchoolCoverCardView(card, { home -> moves.onSchoolCover(card, home) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + i, play)))
+                SchoolCoverDecideView(card, { home -> moves.onSchoolCover(card, home) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + i, play)))
             }
         }
         nudge?.let { card ->
             item(key = "date-night-${card.day}") {
-                DateNightCardView(card, onBooked = {
+                DateNightDecideView(card, onBooked = {
                     scope.launch {
                         runCatching { core.bookDateNight(card.day, true) }.getOrNull()
                             ?.let { line -> moves.undoLine(line) { core.bookDateNight(card.day, false) } }
@@ -818,12 +819,12 @@ internal fun NeedsYouColumn(
                         runCatching { core.skipDateNight(card.day, true) }.getOrNull()
                             ?.let { line -> moves.undoLine(line) { core.skipDateNight(card.day, false) } }
                     }
-                }, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size, play)))
+                }, Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + covers.size, play)))
             }
         }
         due.forEachIndexed { i, card ->
             item(key = "appointment-${card.id}") {
-                AppointmentCardView(card, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                AppointmentDecideView(card, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
                     scope.launch {
                         val r = runCatching { core.bookAppointment(card.id, typed) }.getOrNull() ?: return@launch
                         if (r.refused) bookRefused = card.id to r.line
@@ -852,7 +853,7 @@ internal fun NeedsYouColumn(
                             moves.undoLine(os.meka.core.domain.AppointmentRules.EMAIL_COPIED, null)
                         }
                     }
-                }, modifier = Modifier.animateItem().padding(bottom = MekaSpace.m)
+                }, modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs)
                     .appear(rememberAppearance(2 + triage.size + covers.size + (if (nudge != null) 1 else 0) + i, play)))
             }
         }

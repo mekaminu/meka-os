@@ -49,6 +49,26 @@ internal const val NEEDS_YOU_DECIDE_TAG = "needs-you-decide"
  */
 @Composable
 internal fun NeedsYouDecideCardView(card: NeedsYouDecideCard, onChoice: (RequestChoice) -> Unit, modifier: Modifier = Modifier) {
+    NeedsYouDecideShell(card, onYes = { onChoice(RequestChoice.ADD) }, onChange = { onChoice(RequestChoice.CHANGE) },
+        onNo = { onChoice(RequestChoice.DECLINE) }, modifier = modifier)
+}
+
+/**
+ * The compact card itself, for any TO DECIDE card (slice 4: school days off, date night and appointments as well as
+ * requests): the icon tile, what over the one line under it, an optional [middle] (an appointment's When? field), then
+ * the yes · change · no pills and, when the card has any, its quieter [NeedsYouDecideCard.more] row. Yes and change
+ * press in with a light haptic, no and the quieter taps with a tick.
+ */
+@Composable
+internal fun NeedsYouDecideShell(
+    card: NeedsYouDecideCard,
+    onYes: () -> Unit,
+    onNo: () -> Unit,
+    modifier: Modifier = Modifier,
+    onChange: () -> Unit = {},
+    onMore: (Int) -> Unit = {},
+    middle: @Composable () -> Unit = {},
+) {
     val haptics = rememberMekaHaptics()
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
@@ -62,12 +82,20 @@ internal fun NeedsYouDecideCardView(card: NeedsYouDecideCard, onChoice: (Request
                 Text(card.from, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        middle()
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-            DecidePill(card.yesLabel, DecideTone.FILLED, "${card.yesLabel}: ${card.what}") { haptics.light(); onChoice(RequestChoice.ADD) }
+            DecidePill(card.yesLabel, DecideTone.FILLED, "${card.yesLabel}: ${card.what}") { haptics.light(); onYes() }
             card.changeLabel?.let { label ->
-                DecidePill(label, DecideTone.PLAIN, "$label ${card.what}") { haptics.light(); onChoice(RequestChoice.CHANGE) }
+                DecidePill(label, DecideTone.PLAIN, "$label ${card.what}") { haptics.light(); onChange() }
             }
-            DecidePill(card.noLabel, DecideTone.QUIET, "${card.noLabel}: ${card.what}") { haptics.tick(); onChoice(RequestChoice.DECLINE) }
+            DecidePill(card.noLabel, DecideTone.QUIET, "${card.noLabel}: ${card.what}") { haptics.tick(); onNo() }
+        }
+        if (card.more.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                card.more.forEachIndexed { i, label ->
+                    DecidePill(label, DecideTone.QUIET, "$label: ${card.what}") { haptics.tick(); onMore(i) }
+                }
+            }
         }
     }
 }
@@ -95,6 +123,9 @@ private fun DecideIcon(icon: NeedsYouDecideIcon) {
         NeedsYouDecideIcon.EVENT, NeedsYouDecideIcon.TRIP -> Meka.colors.calendar1
         NeedsYouDecideIcon.REMINDER, NeedsYouDecideIcon.RENEWAL -> Meka.colors.approval
         NeedsYouDecideIcon.REPLY -> Meka.colors.textSecondary
+        NeedsYouDecideIcon.SCHOOL -> Meka.colors.success
+        NeedsYouDecideIcon.NIGHT -> Meka.colors.accent
+        NeedsYouDecideIcon.APPOINTMENT -> Meka.colors.calendar1
     }
     val path = remember(icon) { PathParser().parsePathString(icon.path).toPath() }
     Box(
