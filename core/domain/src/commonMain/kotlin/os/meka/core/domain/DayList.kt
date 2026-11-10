@@ -147,7 +147,10 @@ object DayListRules {
 
     private fun minuteOf(time: String?): Int? = time?.let { TIME.matchEntire(it) }?.let { it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() }
 
-    private fun lengthOf(card: BoardCard): Int = card.task.estimateMinutes ?: card.suggestedMinutes ?: DEFAULT_MINUTES
+    /** A task's minutes on the Day list: its estimate, else the suggested length, else [DEFAULT_MINUTES]. */
+    fun minutesOf(card: BoardCard): Int = card.task.estimateMinutes ?: card.suggestedMinutes ?: DEFAULT_MINUTES
+
+    private fun lengthOf(card: BoardCard): Int = minutesOf(card)
 
     /** The clock a day's open tasks run from: now (to the next 5 minutes) on today, else [DAY_START]. */
     fun startOf(isToday: Boolean, nowMinute: Int): Int =

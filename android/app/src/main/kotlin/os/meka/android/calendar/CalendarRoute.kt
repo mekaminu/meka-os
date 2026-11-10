@@ -269,12 +269,21 @@ private fun Agenda(
             // The folded Week board mockup (approved 2026-10-27): no second "Calendar" header; the Board's own row is the
             // only one, and Agenda view and New event are in its ⋯ menu.
             EditLines(add.lines, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.xs))
-            WeekBoardView(
-                core, undo, onEvent, Modifier.weight(1f), onPlanWeek,
-                onAgenda = { onBoard(false) },
-                onPlanSteps = onPlanSteps,
-                onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
-            )
+            // The Week board as Day lists (approved 2026-11-08; Meka 2026-11-09 22:27): folded, the day strip over the
+            // chosen day's Day list (BoardFolded.dc.html); the open Fold keeps the week until its spread lands.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                if (os.meka.core.domain.BoardFoldRules.wide(maxWidth.value)) WeekBoardView(
+                    core, undo, onEvent, Modifier.fillMaxSize(), onPlanWeek,
+                    onAgenda = { onBoard(false) },
+                    onPlanSteps = onPlanSteps,
+                    onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
+                ) else DayListBoard(
+                    core, Modifier.fillMaxSize(),
+                    onAgenda = { onBoard(false) },
+                    onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
+                    onPlanWeek = onPlanWeek,
+                )
+            }
             return@Column
         }
         Column(Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl)) {

@@ -121,7 +121,15 @@ import os.meka.core.domain.TalkProblem
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ Today", forDay: Long? = null) {
+fun DayListPane(
+    core: MekaCore, onClose: () -> Unit, closeLabel: String? = "‹ Today", forDay: Long? = null,
+    /**
+     * Inside the folded Week board (`BoardFolded.dc.html`): the day's line ("Mon 9 November · today") in place of the
+     * big date, the total as a pill, no Times switch; the add bar's prompt ("Add to Mon · Enter for the next") and the
+     * line under the rows. Null: the Day list's own screen.
+     */
+    inBoard: DayListInBoard? = null,
+) {
     val board by core.weekBoard.collectAsState()
     // Null: today's list (it follows the board's today past midnight).
     val day = forDay ?: board.todayEpochDay
@@ -206,7 +214,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                 contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.l),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
             ) {
-                item(key = "close") {
+                if (closeLabel != null) item(key = "close") {
                     Text(closeLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
                 }
@@ -214,7 +222,16 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                     item(key = "gone") { Text("This day isn't on the board any more.", style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                     return@LazyColumn
                 }
-                item(key = "head") {
+                if (inBoard != null) item(key = "head") {
+                    Row(Modifier.appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
+                        Text(inBoard.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                        Text(
+                            v.total, style = MekaType.metaStrong, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.accent.copy(alpha = 0.14f))
+                                .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+                        )
+                    }
+                } else item(key = "head") {
                     Column(Modifier.appear(rememberAppearance(0))) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(v.title.substringBefore(" · "), style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
@@ -263,7 +280,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                         grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
                 }
                 item(key = "hint") {
-                    Text(DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
+                    Text(inBoard?.hint ?: DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
                         modifier = Modifier.padding(top = MekaSpace.xs).animateItem())
                 }
             }
@@ -284,7 +301,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f).padding(vertical = MekaSpace.m)) {
-                        if (draft.isEmpty()) Text(DayListRules.PLACEHOLDER, style = MekaType.body, color = Meka.colors.textTertiary)
+                        if (draft.isEmpty()) Text(inBoard?.placeholder ?: DayListRules.PLACEHOLDER, style = MekaType.body, color = Meka.colors.textTertiary)
                         BasicTextField(
                             value = draft,
                             onValueChange = { next ->
@@ -296,7 +313,7 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
                             cursorBrush = SolidColor(Meka.colors.accent),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = { add(draft) }),
-                            modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = DayListRules.PLACEHOLDER },
+                            modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = inBoard?.placeholder ?: DayListRules.PLACEHOLDER },
                         )
                     }
                     Text(
@@ -356,6 +373,9 @@ fun DayListPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ T
         }
     }
 }
+
+/** What the folded Week board puts on a day's list: its line, the add bar's prompt and the line under the rows. */
+data class DayListInBoard(val title: String, val placeholder: String, val hint: String)
 
 /** The gold bar that fills as the day's planned minutes are done, with "2 of 5 done · ends about 11:15" under it. */
 @Composable
