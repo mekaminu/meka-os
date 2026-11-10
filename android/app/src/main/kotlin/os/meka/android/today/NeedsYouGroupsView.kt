@@ -118,7 +118,7 @@ internal fun NeedsYouGroupHeadView(head: NeedsYouGroupHead, onToggle: () -> Unit
     val chevInk = Meka.colors.textSecondary
     Row(
         modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = MekaRadius.m, topEnd = MekaRadius.m, bottomStart = foot, bottomEnd = foot))
+            .clip(RoundedCornerShape(topStart = MekaRadius.m, topEnd = MekaRadius.m, bottomStart = foot.coerceAtLeast(0.dp), bottomEnd = foot.coerceAtLeast(0.dp)))
             .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClickLabel = if (head.open) "Close" else "Open") { haptics.light(); onToggle() }
             .semantics(mergeDescendants = true) {

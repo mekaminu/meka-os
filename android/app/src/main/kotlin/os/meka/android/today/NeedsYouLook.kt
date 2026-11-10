@@ -111,7 +111,7 @@ internal fun NeedsYouHeader(
         if (showClear) {
             Text(
                 actionLabel, style = MekaType.captionStrong, color = Meka.colors.textSecondary,
-                modifier = Modifier.minTouch().wordsTap(onClick = onClear),
+                modifier = Modifier.wordsTap(onClick = onClear).minTouch(),
             )
         }
     }
