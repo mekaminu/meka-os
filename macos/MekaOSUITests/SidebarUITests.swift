@@ -9,11 +9,15 @@ final class SidebarUITests: XCTestCase {
     private static let rows = ["today", "needsYou", "calendar", "ask", "lists", "goals", "review", "vault"]
 
     @MainActor
-    private func launch(size: String) -> XCUIApplication {
+    private func launch(size: String, still: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         // LaunchWindowSize: this launch's window size; no restored windows from an earlier launch.
         app.launchArguments += ["-MekaWindowSize", size, "-ApplePersistenceIgnoreState", "YES"]
+        // Nightly run 2026-11-10: Today's news now drifts for as long as Today shows, so the column checks launch with
+        // Appearance → Motion → Off for this launch only (the argument domain; the stored choice is untouched): the
+        // page stands still to be measured and photographed.
+        if still { app.launchArguments += ["-meka.motion", "off"] }
         app.launch()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 30), "Navilife's window didn't open")
         return app
@@ -66,10 +70,14 @@ final class SidebarUITests: XCTestCase {
     @MainActor
     func testTodayAt1440x900IsTwoColumnsInsideTheWindow() {
         // The Today rebuild, slice 2d (core TodayColumnsRules): Today is two columns across the window, under the header.
-        let app = launch(size: "1440x900")
+        let app = launch(size: "1440x900", still: true)
         let window = app.windows.firstMatch
         let today = app.descendants(matching: .any)["column-today"]
-        XCTAssertTrue(today.waitForExistence(timeout: 30), "Today's column didn't appear")
+        if !today.waitForExistence(timeout: 30) {
+            let shows = whatShows(app)
+            XCTFail("Today's column didn't appear; " + shows)
+            return
+        }
         // Let the opening stagger finish before measuring and photographing.
         sleep(3)
         var frames: [CGRect] = []
@@ -91,15 +99,33 @@ final class SidebarUITests: XCTestCase {
     @MainActor
     func testTodayAt1000WideIsTwoColumns() {
         // The runner's screen may be shorter than 1100 pt: macOS keeps the window inside it; the width is what counts.
-        let app = launch(size: "1000x1100")
+        let app = launch(size: "1000x1100", still: true)
         let window = app.windows.firstMatch
-        XCTAssertTrue(app.descendants(matching: .any)["column-today"].waitForExistence(timeout: 30))
+        if !app.descendants(matching: .any)["column-today"].waitForExistence(timeout: 30) {
+            let shows = whatShows(app)
+            XCTFail("Today's column didn't appear at 1000 pt; " + shows)
+            return
+        }
         sleep(3)
         XCTAssertTrue(app.descendants(matching: .any)["column-today-left"].waitForExistence(timeout: 10),
                       "Today isn't two columns at 1000 pt")
         XCTAssertTrue(app.descendants(matching: .any)["column-today-right"].exists, "Today's right-hand column is missing at 1000 pt")
         XCTAssertFalse(app.descendants(matching: .any)["column-needs_you"].exists, "Needs you still has a column beside Today")
         keep(window.screenshot(), named: "Today 1000 wide")
+    }
+
+    /// What the window holds when a column is missing, on one line for the annotation: the screen and column ids
+    /// showing and the first texts, with a screenshot kept beside it (nightly run 2026-11-10).
+    @MainActor
+    private func whatShows(_ app: XCUIApplication) -> String {
+        if app.state == .notRunning { return "Navilife quit" }
+        keep(app.screenshot(), named: "no-column-today")
+        let ids = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'screen-' OR identifier BEGINSWITH 'column-'"))
+            .allElementsBoundByIndex.map(\.identifier)
+        let texts = app.windows.firstMatch.staticTexts.allElementsBoundByIndex.prefix(30)
+            .map { $0.label.isEmpty ? $0.identifier : $0.label }.filter { !$0.isEmpty }
+        return "ids: \(ids); texts: \(texts.joined(separator: " | "))"
     }
 
     @MainActor
