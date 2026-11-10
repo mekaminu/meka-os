@@ -626,7 +626,7 @@ internal fun NeedsYouColumn(
     // Needs you grouped and folding (APPROVED 2026-11-10 21:51, needs-you-grouped.dc.html), slice 1: on the folded Fold
     // every section is a box that opens and closes; what he left open is kept on this phone. The open Fold's two columns
     // and the command centre keep their look until their slices.
-    val grouped = !compact && part == NeedsYouPart.ALL
+    val boxed = !compact && part == NeedsYouPart.ALL
     var openGroups by rememberOpenGroups()
     var msgPage by rememberSaveable { mutableIntStateOf(0) }
     var fyiPage by rememberSaveable { mutableIntStateOf(0) }
@@ -636,10 +636,10 @@ internal fun NeedsYouColumn(
         NeedsYouGroup.FYI -> NeedsYouSection.FYI
         NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED -> NeedsYouSection.MAIL
     }
-    /** Whether [g]'s chip shows it (grouped), else the section's as before. */
-    fun showG(g: NeedsYouGroup): Boolean = if (grouped) NeedsYouGroupRules.shows(filter, g) else show(sectionOf(g))
-    /** Whether [g]'s contents draw: shown, and open while grouped. */
-    fun inG(g: NeedsYouGroup): Boolean = showG(g) && (!grouped || g in openGroups)
+    /** Whether [g]'s chip shows it (boxed), else the section's as before. */
+    fun showG(g: NeedsYouGroup): Boolean = if (boxed) NeedsYouGroupRules.shows(filter, g) else show(sectionOf(g))
+    /** Whether [g]'s contents draw: shown, and open while boxed. */
+    fun inG(g: NeedsYouGroup): Boolean = showG(g) && (!boxed || g in openGroups)
     val chatsCount = (digest?.cards?.size ?: 0) + (discord?.cards?.size ?: 0)
     val mailAnswerAny = mailMoment != null || mailMomentSession != null || mailNeeds != null || mailChases != null
     val tidiedAny = needsMail != null || archived != null || unopened != null
@@ -768,7 +768,7 @@ internal fun NeedsYouColumn(
                     Modifier.animateItem().appear(rememberAppearance(2, play)))
             }
         }
-        // One card per conversation (messages grouped per chat, slice 1): a chat with one message shows its card as
+        // One card per conversation (messages boxed per chat, slice 1): a chat with one message shows its card as
         // before; two or more show the chat's card, with every message's own card under Show all.
         chats.forEachIndexed { i, chat ->
             item(key = "triage-chat-${chat.key}") {
@@ -912,7 +912,7 @@ internal fun NeedsYouColumn(
                 SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Column(Modifier.onSizeChanged { headerHeight?.value = it.height }.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
-                    if (grouped) {
+                    if (boxed) {
                         NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount), present.isNotEmpty(),
                             onClear = { openGroups = NeedsYouGroupRules.all(openGroups, present) },
                             actionLabel = NeedsYouGroupRules.allLabel(openGroups, present))
@@ -923,18 +923,18 @@ internal fun NeedsYouColumn(
                     }
                     NeedsYouChips(NeedsYouLayoutRules.chips(decideCount, replyCount, fyiChats.size, mailCount), filter, {
                         filter = it
-                        if (grouped) openGroups = NeedsYouGroupRules.pick(openGroups, it)
+                        if (boxed) openGroups = NeedsYouGroupRules.pick(openGroups, it)
                     }, Modifier.padding(top = MekaSpace.m))
                 }
             }
         }
         }
-        if (show(NeedsYouSection.DECIDE) && decideCount > 0 && !grouped) {
+        if (show(NeedsYouSection.DECIDE) && decideCount > 0 && !boxed) {
             item(key = "decide-head") {
                 NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.DECIDE_HEAD, decideCount), Modifier.animateItem())
             }
         }
-        groupHead(grouped && NeedsYouGroup.DECIDE in present, NeedsYouGroup.DECIDE, ::headOf, toggleGroup, play)
+        groupHead(boxed && NeedsYouGroup.DECIDE in present, NeedsYouGroup.DECIDE, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.DECIDE)) {
         // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
         approvals.forEachIndexed { i, card ->
@@ -1029,14 +1029,14 @@ internal fun NeedsYouColumn(
             meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         }
         }
-        groupHead(grouped && NeedsYouGroup.MESSAGES in present, NeedsYouGroup.MESSAGES, ::headOf, toggleGroup, play)
+        groupHead(boxed && NeedsYouGroup.MESSAGES in present, NeedsYouGroup.MESSAGES, ::headOf, toggleGroup, play)
         // While you were at work sits in Messages; with no messages there is no box, so it stands on its own.
-        if (showG(NeedsYouGroup.MESSAGES) && (!grouped || !msgsAny || NeedsYouGroup.MESSAGES in openGroups)) {
+        if (showG(NeedsYouGroup.MESSAGES) && (!boxed || !msgsAny || NeedsYouGroup.MESSAGES in openGroups)) {
         item(key = "after-work") {
             AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1, play)), moves.undoLine) { openAfterWork() }
         }
         }
-        if (show(NeedsYouSection.MESSAGES) && !grouped) {
+        if (show(NeedsYouSection.MESSAGES) && !boxed) {
         digest?.takeIf { it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
@@ -1059,12 +1059,12 @@ internal fun NeedsYouColumn(
         }
         }
         // MESSAGES (the approved look): one row per person or group; a tap opens the chat's own card under it.
-        if (show(NeedsYouSection.MESSAGES) && messageChats.isNotEmpty() && !grouped) {
+        if (show(NeedsYouSection.MESSAGES) && messageChats.isNotEmpty() && !boxed) {
             item(key = "messages-head") {
                 NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.MESSAGES_HEAD, messageChats.size), Modifier.animateItem())
             }
         }
-        if (inG(NeedsYouGroup.MESSAGES)) (if (grouped) msgPg.of(messageChats) else messageChats).forEachIndexed { i, chat ->
+        if (inG(NeedsYouGroup.MESSAGES)) (if (boxed) msgPg.of(messageChats) else messageChats).forEachIndexed { i, chat ->
             item(key = "triage-chat-${chat.key}") {
                 NeedsYouMessageRowView(NeedsYouLayoutRules.row(chat), openChat == chat.key, { openChat = if (openChat == chat.key) null else chat.key },
                     Modifier.animateItem().appear(rememberAppearance(2 + i, play)),
@@ -1104,7 +1104,7 @@ internal fun NeedsYouColumn(
                 }
             }
         }
-        if (inG(NeedsYouGroup.MESSAGES) && grouped && msgPg.pages > 1) {
+        if (inG(NeedsYouGroup.MESSAGES) && boxed && msgPg.pages > 1) {
             item(key = "messages-pager") { NeedsYouPager(msgPg, { msgPage = it }, Modifier.animateItem()) }
         }
         if (inG(NeedsYouGroup.MESSAGES) && messageChats.isNotEmpty()) {
@@ -1113,8 +1113,8 @@ internal fun NeedsYouColumn(
             }
         }
         // FYI · no reply needed: thin rows, each ✓ is the chat's Done (Undo on the bar).
-        groupHead(grouped && NeedsYouGroup.FYI in present, NeedsYouGroup.FYI, ::headOf, toggleGroup, play)
-        if (grouped && inG(NeedsYouGroup.FYI) && fyiChats.isNotEmpty()) {
+        groupHead(boxed && NeedsYouGroup.FYI in present, NeedsYouGroup.FYI, ::headOf, toggleGroup, play)
+        if (boxed && inG(NeedsYouGroup.FYI) && fyiChats.isNotEmpty()) {
             // Clear all leads the group (it was Clear FYI at the top); five a page, ‹ › for the next.
             item(key = "fyi-lead") {
                 NeedsYouGroupLead(NeedsYouGroupRules.FYI_LEAD, NeedsYouGroupRules.CLEAR_ALL, {
@@ -1128,7 +1128,7 @@ internal fun NeedsYouColumn(
             }
             if (fyiPg.pages > 1) item(key = "fyi-pager") { NeedsYouPager(fyiPg, { fyiPage = it }, Modifier.animateItem()) }
         }
-        if (show(NeedsYouSection.FYI) && fyiChats.isNotEmpty() && !grouped) {
+        if (show(NeedsYouSection.FYI) && fyiChats.isNotEmpty() && !boxed) {
             item(key = "fyi-head") {
                 NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.FYI_HEAD, fyiChats.size), Modifier.animateItem())
             }
@@ -1138,11 +1138,11 @@ internal fun NeedsYouColumn(
                 }
             }
         }
-        groupHead(grouped && NeedsYouGroup.CHATS in present, NeedsYouGroup.CHATS, ::headOf, toggleGroup, play)
+        groupHead(boxed && NeedsYouGroup.CHATS in present, NeedsYouGroup.CHATS, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.CHATS)) {
-        // Between digests, groups with news are one quiet line under the cards that Meka can open on demand; grouped, the
+        // Between digests, groups with news are one quiet line under the cards that Meka can open on demand; boxed, the
         // digest (due or not) is the Group chats box.
-        digest?.takeIf { grouped || !it.due }?.let { d ->
+        digest?.takeIf { boxed || !it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + requests.size, play)))
@@ -1158,10 +1158,10 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        if (show(NeedsYouSection.MAIL) && mailAny && !grouped) {
+        if (show(NeedsYouSection.MAIL) && mailAny && !boxed) {
             item(key = "mail-head") { NeedsYouHead(NeedsYouLayoutRules.MAIL_HEAD, Modifier.animateItem()) }
         }
-        groupHead(grouped && NeedsYouGroup.MAIL in present, NeedsYouGroup.MAIL, ::headOf, toggleGroup, play)
+        groupHead(boxed && NeedsYouGroup.MAIL in present, NeedsYouGroup.MAIL, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.MAIL)) {
         // Inbox autopilot, slice 7: the ten-minute inbox — from the moment, Start goes through the emails one by one.
         if (mailMoment != null || mailMomentSession != null) {
@@ -1186,7 +1186,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        groupHead(grouped && NeedsYouGroup.RENEWALS in present, NeedsYouGroup.RENEWALS, ::headOf, toggleGroup, play)
+        groupHead(boxed && NeedsYouGroup.RENEWALS in present, NeedsYouGroup.RENEWALS, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.RENEWALS)) {
         // Promises, receipts and renewals, slice 1: renewals read from his mail, each added to Renewals only on his tap.
         mailFinds?.let { f ->
@@ -1196,7 +1196,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        groupHead(grouped && NeedsYouGroup.TIDIED in present, NeedsYouGroup.TIDIED, ::headOf, toggleGroup, play)
+        groupHead(boxed && NeedsYouGroup.TIDIED in present, NeedsYouGroup.TIDIED, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.TIDIED)) {
         // The approved look, slice 2: today's tidies as four tiles, the one unsubscribe question and See all › (All
         // tidied mail keeps every Put back), in place of the long log and the weekly offer's card.
@@ -1234,7 +1234,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        if (grouped && present.isNotEmpty()) {
+        if (boxed && present.isNotEmpty()) {
             item(key = "groups-hint") {
                 Text(NeedsYouGroupRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.xxs, start = MekaSpace.xxs))

@@ -125,11 +125,11 @@ internal fun NeedsYouGroupHeadView(head: NeedsYouGroupHead, onToggle: () -> Unit
                 contentDescription = head.spoken; stateDescription = if (head.open) "Open" else "Closed"
             }
             .testTag(NEEDS_YOU_GROUP_TAG)
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         GroupIcon(head.group, ink)
-        Spacer(Modifier.width(MekaSpace.s))
+        Spacer(Modifier.width(MekaSpace.xs))
         Column(Modifier.weight(1f).animateContentSize(MekaMotion.expand(reduced))) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(head.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1,
@@ -138,13 +138,13 @@ internal fun NeedsYouGroupHeadView(head: NeedsYouGroupHead, onToggle: () -> Unit
                     Text(
                         head.count, style = MekaType.captionStrong, color = ink, maxLines = 1,
                         modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
-                            .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.xs, vertical = 1.dp),
+                            .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.xs),
                     )
                 }
             }
             if (head.peek.isNotEmpty()) {
                 Text(head.peek, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp))
+                    modifier = Modifier.padding(top = MekaSpace.xxs))
             }
         }
         Spacer(Modifier.width(MekaSpace.xs))
@@ -180,7 +180,7 @@ internal fun NeedsYouGroupLead(line: String, button: String, onClick: () -> Unit
     val haptics = rememberMekaHaptics()
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
-            .padding(start = MekaSpace.s, end = MekaSpace.xs, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
+            .padding(start = MekaSpace.m, end = MekaSpace.xs, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
