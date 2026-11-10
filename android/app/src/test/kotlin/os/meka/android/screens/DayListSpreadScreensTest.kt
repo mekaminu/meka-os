@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlin.random.Random
@@ -40,6 +42,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.calendar.DAY_LIST_COLUMN_TAG
+import os.meka.android.calendar.DAY_LIST_GHOST_TAG
 import os.meka.android.calendar.DAY_LIST_SPREAD_TAG
 import os.meka.android.calendar.DayListSpread
 import os.meka.core.domain.DayListBoardRules
@@ -53,7 +56,7 @@ import os.meka.core.sync.InMemoryReplicaStore
  * The Week board on the open Fold as Day lists side by side (approved 2026-11-08, `docs/design/day-list/OpenSpread.dc.html`),
  * on the inner screen at 19:10 on a Wednesday: the header "Week 43 · … planned", the 1 · 2 · 3 days switch and the strip,
  * then three Day lists across (Wed · Thu · Fri); 2 days widens them, Sunday's pill brings Sat · Sun (held inside the week),
- * and Enter in Sunday's bar adds to Sunday. Every button answers a 48 dp touch. Dark and Light; saved under `day-list/`
+ * a task's ≡ dragged into Thursday's list lands there, and Enter in Sunday's bar adds to Sunday. Every button answers a 48 dp touch. Dark and Light; saved under `day-list/`
  * beside the mockup. Invented data.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -151,6 +154,24 @@ class DayListSpreadScreensTest {
         val title = compose.onAllNodes(hasText("Complete feedbacks"), useUnmergedTree = true).fetchSemanticsNodes().first()
         assertTrue(title.size.width / compose.density.density > 80f, "$name: a task's title is squeezed (${title.size.width / compose.density.density} dp)")
         assertTouchTargets(name)
+
+        // Drag across days (slice 4b): hold "Call the school"'s ≡ and drag it into Thursday's list: a card follows the
+        // finger once it leaves Wednesday, Thursday wears a gold ring, and on letting go the task lands on Thursday.
+        val call = board.day(board.todayEpochDay)!!.cards.single { it.title.startsWith("Call the school") }.id
+        val grip = compose.onNodeWithTag("day-list-grip-$call", useUnmergedTree = true)
+        val from = grip.fetchSemanticsNode().boundsInRoot.center
+        val thu = compose.onAllNodesWithTag(DAY_LIST_COLUMN_TAG)[1].fetchSemanticsNode().boundsInRoot.center
+        grip.performTouchInput {
+            down(center)
+            repeat(12) { moveBy(Offset((thu.x - from.x) / 12f, (thu.y - from.y) / 12f)) }
+        }
+        turns(600)
+        assertTrue(compose.onAllNodesWithTag(DAY_LIST_GHOST_TAG).fetchSemanticsNodes().isNotEmpty(), "$name: no card under the finger while dragging across")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("day-list", "$name-drag"))
+        grip.performTouchInput { up() }
+        until { core.weekBoard.value.day(board.todayEpochDay + 1)?.cards?.any { it.id == call } == true }
+        assertTrue(core.weekBoard.value.day(board.todayEpochDay + 1)!!.cards.any { it.id == call }, "$name: the dragged task didn't land on Thursday")
+        assertTrue(compose.onAllNodesWithTag(DAY_LIST_GHOST_TAG).fetchSemanticsNodes().isEmpty(), "$name: the card stayed after letting go")
 
         // Two days: wider headings; a tap on Sunday's pill holds the spread inside the week (Sat · Sun).
         compose.onNode(hasText("2 days") and hasClickAction(), useUnmergedTree = true).performClick()

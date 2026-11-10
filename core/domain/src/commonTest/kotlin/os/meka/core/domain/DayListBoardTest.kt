@@ -107,4 +107,27 @@ class DayListBoardTest {
         assertEquals("Add to today · Enter for the next", DayListSpreadRules.column(d[0], 1).placeholder)
         assertEquals("Add to today · Enter", DayListSpreadRules.column(d[0], 3).placeholder)
     }
+
+    @Test
+    fun aHeldTaskLandsOnTheDayUnderTheFingerTodayOrLater() {
+        // Pills along the top (40 px tall), three columns under them (Tue · Wed · Thu, 100 px wide).
+        val pills = (0 until 7).map { k -> DayDropZone(mon + k, 10f + 40f * k, 0f, 48f + 40f * k, 40f, isColumn = false) }
+        val cols = (0 until 3).map { k -> DayDropZone(today + k, 100f * k, 60f, 100f * k + 96f, 500f, isColumn = true) }
+        val zones = pills + cols
+        // Across into Wednesday's column, or onto Friday's pill.
+        assertEquals(today + 1, DayListSpreadRules.dropDay(zones, 150f, 200f, board, today))
+        assertEquals(mon + 4, DayListSpreadRules.dropDay(zones, 10f + 40f * 4 + 5f, 20f, board, today))
+        // Its own column, Monday (past), the gap between columns or off the board: back where it was.
+        assertNull(DayListSpreadRules.dropDay(zones, 50f, 200f, board, today))
+        assertNull(DayListSpreadRules.dropDay(zones, 15f, 20f, board, today))
+        assertNull(DayListSpreadRules.dropDay(zones, 98f, 200f, board, today))
+        assertNull(DayListSpreadRules.dropDay(zones, 50f, 900f, board, today))
+        // Next week's days are on the board; a day past it isn't.
+        assertEquals(true, DayListSpreadRules.canDropOn(board, today, mon + 13))
+        assertEquals(false, DayListSpreadRules.canDropOn(board, today, mon + 14))
+        // The card under the finger shows once it leaves its own column.
+        assertEquals(false, DayListSpreadRules.leftColumn(zones, 50f, 200f, today))
+        assertEquals(true, DayListSpreadRules.leftColumn(zones, 150f, 200f, today))
+        assertEquals(true, DayListSpreadRules.leftColumn(zones, 50f, 20f, today))
+    }
 }

@@ -142,4 +142,32 @@ object DayListSpreadRules {
 
     fun columns(week: BoardWeek, chosen: Long, count: Int): List<DayListColumn> =
         inView(week, chosen, count).map { column(it, count) }
+
+    /** The line under each column's rows: a task's ≡ drags it up or down, or across to another day's list or pill. */
+    const val HINT = "Drag a task's ≡ to another day"
+
+    /**
+     * Drag across days (slice 4b): a held task can land on [to] when it's another day on the board, today or later
+     * (a past day's list only holds what was left there; the sheet's Move to offers the same days).
+     */
+    fun canDropOn(board: WeekBoard, from: Long, to: Long): Boolean =
+        to != from && to >= board.todayEpochDay && board.day(to) != null
+
+    /**
+     * The day a held task dropped at ([x], [y]) lands on: the first of [zones] (the day pills, then the columns, in one
+     * coordinate space) under the finger that [canDropOn] allows, else null (it goes back where it was).
+     */
+    fun dropDay(zones: List<DayDropZone>, x: Float, y: Float, board: WeekBoard, from: Long): Long? =
+        zones.firstOrNull { it.contains(x, y) }?.epochDay?.takeIf { canDropOn(board, from, it) }
+
+    /** Whether ([x], [y]) has left the column of [from] (the held task shows as a card under the finger from then). */
+    fun leftColumn(zones: List<DayDropZone>, x: Float, y: Float, from: Long): Boolean =
+        zones.filter { it.epochDay == from && it.isColumn }.none { it.contains(x, y) }
+}
+
+/** Where a held task can land on the open Fold's spread: a day's pill or column, by its bounds on the screen. */
+data class DayDropZone(
+    val epochDay: Long, val left: Float, val top: Float, val right: Float, val bottom: Float, val isColumn: Boolean,
+) {
+    fun contains(x: Float, y: Float): Boolean = x >= left && x <= right && y >= top && y <= bottom
 }

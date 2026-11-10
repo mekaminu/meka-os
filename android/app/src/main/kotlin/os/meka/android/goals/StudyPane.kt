@@ -22,6 +22,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1116,6 +1118,11 @@ internal class Grip(
     val label: String, val dy: Float, val lifted: Boolean,
     val onStart: () -> Unit, val onDrag: (Float) -> Unit, val onEnd: () -> Unit,
     val onUp: (() -> Unit)?, val onDown: (() -> Unit)?,
+    /**
+     * Drag across (the open Fold's Week board, slice 4b): when set the grip follows the finger both ways and reports
+     * where it is on the screen (window coordinates); [onDrag] still gets the vertical part for reordering.
+     */
+    val onAt: ((Offset) -> Unit)? = null,
 )
 
 /** The ≡ handle (48 dp): drag it up or down; a screen reader offers Move up and Move down. */
@@ -1125,6 +1132,10 @@ internal fun GripHandle(grip: Grip, tag: String) {
     val start by rememberUpdatedState(grip.onStart)
     val drag by rememberUpdatedState(grip.onDrag)
     val end by rememberUpdatedState(grip.onEnd)
+    val at by rememberUpdatedState(grip.onAt)
+    val across = grip.onAt != null
+    // Where the grip is on the screen, kept without recomposing (it moves with the held row).
+    val place = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val muted = if (grip.lifted) Meka.colors.accent else Meka.colors.textTertiary
     Canvas(
         Modifier.size(48.dp)
@@ -1138,8 +1149,15 @@ internal fun GripHandle(grip: Grip, tag: String) {
             }
             // A tap or a hold on the grip does nothing (never ticks the lesson or opens its sheet).
             .pointerInput(tag) { detectTapGestures(onLongPress = {}) {} }
-            .pointerInput(tag) {
-                detectVerticalDragGestures(
+            .onGloballyPositioned { place[0] = it }
+            .pointerInput(tag, across) {
+                fun report(local: Offset) { place[0]?.takeIf { it.isAttached }?.let { c -> at?.invoke(c.localToWindow(local)) } }
+                if (across) detectDragGestures(
+                    onDragStart = { o -> start(); report(o) },
+                    onDragEnd = { end() },
+                    onDragCancel = { end() },
+                    onDrag = { change, d -> change.consume(); drag(d.y); report(change.position) },
+                ) else detectVerticalDragGestures(
                     onDragStart = { start() },
                     onDragEnd = { end() },
                     onDragCancel = { end() },

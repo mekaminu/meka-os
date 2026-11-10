@@ -133,6 +133,8 @@ fun DayListPane(
     inBoard: DayListInBoard? = null,
     /** The list's and the add bar's side inset: the gutter, less in a column of the open Fold's spread. */
     sidePadding: androidx.compose.ui.unit.Dp = MekaSpace.gutter,
+    /** A column of the open Fold's spread: a held task can be dragged out to another day's list or pill. */
+    across: DayListAcross? = null,
 ) {
     val board by core.weekBoard.collectAsState()
     // Null: today's list (it follows the board's today past midnight).
@@ -154,6 +156,9 @@ fun DayListPane(
     var dragId by remember { mutableStateOf<String?>(null) }
     var dragDy by remember { mutableFloatStateOf(0f) }
     var rowPx by remember { mutableFloatStateOf(0f) }
+    // Dragged out of this column (the spread shows it as a card under the finger): the rows here stop making room.
+    var crossing by remember { mutableStateOf(false) }
+    val lastAt = remember { arrayOfNulls<androidx.compose.ui.geometry.Offset>(1) }
     val gapPx = with(LocalDensity.current) { MekaSpace.xxs.toPx() }
     fun reorder(id: String, toRow: Int) {
         scope.launch {
@@ -254,7 +259,7 @@ fun DayListPane(
                 }
                 val openRows = v.rows.count { !it.done }
                 val dragFrom = v.rows.indexOfFirst { it.id == dragId }
-                val dragTo = if (dragFrom < 0) -1 else ChecklistRules.dropIndex(dragFrom, dragDy, rowPx, openRows)
+                val dragTo = if (dragFrom < 0 || crossing) dragFrom else ChecklistRules.dropIndex(dragFrom, dragDy, rowPx, openRows)
                 itemsIndexed(v.rows, key = { _, r -> "r-" + r.id }) { i, r ->
                     val held = dragId == r.id
                     val shift = when {
@@ -265,16 +270,21 @@ fun DayListPane(
                     }
                     val slide = remember { Animatable(0f) }
                     LaunchedEffect(shift, dragId == null) { if (dragId == null) slide.snapTo(0f) else slide.animateTo(shift, MekaMotion.replan(reduced)) }
-                    val grip = if (DayListRules.canDrag(r, v.timesOn) && openRows > 1) Grip(
+                    // In the spread a lone task can still be dragged, to another day.
+                    val grip = if (DayListRules.canDrag(r, v.timesOn) && (openRows > 1 || across != null)) Grip(
                         label = StudyRules.gripLabel(r.title),
-                        dy = if (held) dragDy else 0f, lifted = held,
-                        onStart = { haptics.light(); sheetId = null; dragDy = 0f; dragId = r.id },
+                        dy = if (held && !crossing) dragDy else 0f, lifted = held,
+                        onStart = { haptics.light(); sheetId = null; dragDy = 0f; crossing = false; lastAt[0] = null; dragId = r.id },
                         onDrag = { dragDy += it },
                         onEnd = {
-                            val to = ChecklistRules.dropIndex(i, dragDy, rowPx, openRows)
-                            if (to != i) reorder(r.id, to)
-                            dragId = null; dragDy = 0f
+                            val moved = across?.onEnd?.invoke(r.id, lastAt[0]) == true
+                            if (!moved) {
+                                val to = ChecklistRules.dropIndex(i, dragDy, rowPx, openRows)
+                                if (to != i && openRows > 1) reorder(r.id, to)
+                            }
+                            dragId = null; dragDy = 0f; crossing = false; lastAt[0] = null
                         },
+                        onAt = across?.let { a -> { p: androidx.compose.ui.geometry.Offset -> lastAt[0] = p; crossing = a.onMove(r.id, r.title, p) } },
                         onUp = DayListRules.stepTo(v, r.id, up = true)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
                         onDown = DayListRules.stepTo(v, r.id, up = false)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
                     ) else null
@@ -284,7 +294,7 @@ fun DayListPane(
                         grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
                 }
                 item(key = "hint") {
-                    Text(inBoard?.hint ?: DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
+                    Text(if (across != null) os.meka.core.domain.DayListSpreadRules.HINT else inBoard?.hint ?: DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
                         modifier = Modifier.padding(top = MekaSpace.xs).animateItem())
                 }
             }
@@ -381,6 +391,16 @@ fun DayListPane(
         }
     }
 }
+
+/**
+ * Drag across days on the open Fold's spread (slice 4b). [onMove] gets the held task and the finger's place on the
+ * screen and says whether it has left this column; [onEnd] gets the last place (null if it never moved) and says whether
+ * the task went to another day (else it reorders here as before).
+ */
+class DayListAcross(
+    val onMove: (id: String, title: String, at: androidx.compose.ui.geometry.Offset) -> Boolean,
+    val onEnd: (id: String, at: androidx.compose.ui.geometry.Offset?) -> Boolean,
+)
 
 /** What the Week board (folded or a column of the open spread) puts on a day's list: its line, the add bar's prompt and the line under the rows. */
 data class DayListInBoard(

@@ -1,6 +1,24 @@
 package os.meka.android.calendar
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import os.meka.android.today.DayListAcross
+import os.meka.core.domain.DayDropZone
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -132,7 +150,10 @@ fun DayListBoard(
  */
 @Composable
 private fun DayPills(
-    pills: List<DayListPill>, inView: Set<Long>, modifier: Modifier, pillWidth: androidx.compose.ui.unit.Dp? = null, onTap: (Long) -> Unit,
+    pills: List<DayListPill>, inView: Set<Long>, modifier: Modifier, pillWidth: androidx.compose.ui.unit.Dp? = null,
+    /** Drag across (open Fold): the pill a held task would land on wears a gold ring; each pill reports its place. */
+    target: Long? = null, onBounds: ((Long, Rect) -> Unit)? = null,
+    onTap: (Long) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     Row(modifier.testTag(DAY_LIST_STRIP_TAG), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -149,9 +170,12 @@ private fun DayPills(
                     },
                     MekaMotion.appear(reduced), label = "day-pill-ink",
                 )
+                val ring by animateFloatAsState(if (p.epochDay == target) 1f else 0f, MekaMotion.appear(reduced), label = "day-pill-ring")
                 Column(
                     (if (pillWidth != null) Modifier.width(pillWidth) else Modifier.weight(1f)).height(DayListBoardRules.PILL_HEIGHT.dp)
+                        .then(if (onBounds != null) Modifier.onGloballyPositioned { onBounds(p.epochDay, it.boundsInWindow()) } else Modifier)
                         .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
+                        .border(2.dp, Meka.colors.accent.copy(alpha = ring), RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Tab) { onTap(p.epochDay) }
                         .clearAndSetSemantics { contentDescription = p.spoken; selected = lit },
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -191,6 +215,33 @@ fun DayListSpread(
     val head = remember(week) { DayListBoardRules.head(week) }
     val strip = remember(week) { DayListBoardRules.strip(week) }
     val columns = remember(week, day, count) { DayListSpreadRules.columns(week, day, count) }
+    // Drag across days (slice 4b): where each lit column and each pill is on the screen, and the held task's card.
+    val scope = rememberCoroutineScope()
+    val undo = rememberEventUndo()
+    val places = remember { HashMap<String, DayDropZone>() }
+    var ghost by remember { mutableStateOf<SpreadGhost?>(null) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    fun zones(): List<DayDropZone> =
+        strip.mapNotNull { places["pill-${it.epochDay}"] } + columns.mapNotNull { places["col-${it.epochDay}"] }
+    fun acrossFrom(from: Long) = DayListAcross(
+        onMove = { _, title, at ->
+            val zs = zones()
+            val out = DayListSpreadRules.leftColumn(zs, at.x, at.y, from)
+            val to = if (out) DayListSpreadRules.dropDay(zs, at.x, at.y, board, from) else null
+            if (to != null && to != ghost?.target) haptics.tick()
+            ghost = if (out) SpreadGhost(title, at, to) else null
+            out
+        },
+        onEnd = { id, at ->
+            ghost = null
+            val to = at?.let { DayListSpreadRules.dropDay(zones(), it.x, it.y, board, from) }
+            if (to == null) false else {
+                haptics.light()
+                scope.launch { runCatching { core.moveOnBoard(id, to, Int.MAX_VALUE) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } }
+                true
+            }
+        },
+    )
     val menu = remember(onAgenda, onAddEvent, onPlanWeek) {
         buildList {
             if (onAgenda != null) add(FoldedMenuItem(FoldedMenuKind.AGENDA, "Agenda view", ""))
@@ -199,7 +250,8 @@ fun DayListSpread(
         }
     }
 
-    Column(modifier.fillMaxSize().background(Meka.colors.background).testTag(DAY_LIST_SPREAD_TAG)) {
+    Box(modifier.fillMaxSize().background(Meka.colors.background).onGloballyPositioned { origin = it.positionInWindow() }) {
+    Column(Modifier.fillMaxSize().testTag(DAY_LIST_SPREAD_TAG)) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = MekaSpace.gutterWide).padding(top = MekaSpace.l),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
@@ -222,7 +274,10 @@ fun DayListSpread(
             )
             Row(Modifier.fillMaxWidth().appear(rememberAppearance(1)), verticalAlignment = Alignment.CenterVertically) {
                 CountSwitch(count, Modifier.weight(1f)) { k -> haptics.tick(); count = k }
-                DayPills(strip, columns.map { it.epochDay }.toSet(), Modifier, pillWidth = SPREAD_PILL_DP.dp) { e -> haptics.tick(); chosen = e }
+                DayPills(
+                    strip, columns.map { it.epochDay }.toSet(), Modifier, pillWidth = SPREAD_PILL_DP.dp, target = ghost?.target,
+                    onBounds = { d, r -> places["pill-$d"] = r.zone(d, isColumn = false) },
+                ) { e -> haptics.tick(); chosen = e }
             }
         }
         AnimatedContent(
@@ -235,11 +290,17 @@ fun DayListSpread(
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 cs.forEach { c ->
                     key(c.epochDay) {
-                        Box(Modifier.weight(1f).fillMaxSize().testTag(DAY_LIST_COLUMN_TAG)) {
+                        val ring by animateFloatAsState(if (ghost?.target == c.epochDay) 1f else 0f, MekaMotion.appear(reduced), label = "day-column-ring")
+                        Box(
+                            Modifier.weight(1f).fillMaxSize().testTag(DAY_LIST_COLUMN_TAG)
+                                .onGloballyPositioned { places["col-${c.epochDay}"] = it.boundsInWindow().zone(c.epochDay, isColumn = true) }
+                                .border(2.dp, Meka.colors.accent.copy(alpha = ring), RoundedCornerShape(MekaRadius.m)),
+                        ) {
                             DayListPane(
                                 core, onClose = {}, closeLabel = null, forDay = c.epochDay,
                                 inBoard = DayListInBoard(c.title, c.placeholder, DayListBoardRules.HINT, narrow = true),
                                 sidePadding = MekaSpace.xs,
+                                across = acrossFrom(c.epochDay),
                             )
                         }
                     }
@@ -247,7 +308,34 @@ fun DayListSpread(
             }
         }
     }
+    // The held task as a card under the finger once it leaves its column (fades in and out on the appear token).
+    var shown by remember { mutableStateOf<SpreadGhost?>(null) }
+    ghost?.let { shown = it }
+    AnimatedVisibility(
+        visible = ghost != null,
+        enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced)),
+    ) {
+        shown?.let { g ->
+            Text(
+                g.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .offset { IntOffset((g.at.x - origin.x).roundToInt() - 24.dp.roundToPx(), (g.at.y - origin.y).roundToInt() - 32.dp.roundToPx()) }
+                    .widthIn(max = 220.dp).shadow(8.dp, RoundedCornerShape(MekaRadius.m)).clip(RoundedCornerShape(MekaRadius.m))
+                    .background(Meka.colors.surfaceRaised)
+                    .border(1.dp, if (g.target != null) Meka.colors.accent else Meka.colors.hairline, RoundedCornerShape(MekaRadius.m))
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+                    .testTag(DAY_LIST_GHOST_TAG),
+            )
+        }
+    }
+    EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l))
+    }
 }
+
+/** The held task's card on the spread: its title, the finger's place on the screen, and the day it would land on. */
+private data class SpreadGhost(val title: String, val at: Offset, val target: Long?)
+
+private fun Rect.zone(day: Long, isColumn: Boolean) = DayDropZone(day, left, top, right, bottom, isColumn)
 
 /** 1 day · 2 days · 3 days: a pill of three choices, the one in use raised. */
 @Composable
@@ -284,6 +372,7 @@ private const val SPREAD_PILL_DP = 54
 const val DAY_LIST_SPREAD_TAG = "day-list-spread"
 const val DAY_LIST_COLUMN_TAG = "day-list-column"
 const val DAY_LIST_COUNT_TAG = "day-list-count"
+const val DAY_LIST_GHOST_TAG = "day-list-ghost"
 
 /** The folded Week board as Day lists, and its strip (screen tests). */
 const val DAY_LIST_BOARD_TAG = "day-list-board"
