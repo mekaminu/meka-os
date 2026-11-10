@@ -79,4 +79,32 @@ class DayListBoardTest {
         assertNull(DayListBoardRules.stepWeek(board, mon + 9, 1))
         assertNull(DayListBoardRules.stepWeek(board, today, -1))
     }
+
+    @Test
+    fun theSpreadShowsThreeDaysFromTheChosenOneHeldInsideTheWeek() {
+        val w = board.weeks[0]
+        assertEquals(3, DayListSpreadRules.countOrDefault(null))
+        assertEquals(3, DayListSpreadRules.countOrDefault(5))
+        assertEquals(listOf(today, today + 1, today + 2), DayListSpreadRules.inView(w, today, 3).map { it.epochDay })
+        // Sunday with three across shows Fri · Sat · Sun.
+        assertEquals(listOf(mon + 4, mon + 5, mon + 6), DayListSpreadRules.inView(w, mon + 6, 3).map { it.epochDay })
+        assertEquals(listOf(mon + 5, mon + 6), DayListSpreadRules.inView(w, mon + 6, 2).map { it.epochDay })
+        assertEquals(listOf(mon + 2), DayListSpreadRules.inView(w, mon + 2, 1).map { it.epochDay })
+        // A day off the week starts at its Monday.
+        assertEquals(mon, DayListSpreadRules.inView(w, mon + 30, 3).first().epochDay)
+        assertEquals(listOf("1 day", "2 days", "3 days"), DayListSpreadRules.COUNTS.map(DayListSpreadRules::countLabel))
+    }
+
+    @Test
+    fun narrowColumnsShortenTheirHeadingAndPrompt() {
+        val d = board.weeks[0].days
+        val three = DayListSpreadRules.column(d[1], 3)
+        assertEquals("Tue 10 · today", three.title)
+        assertEquals("Add · Enter for next", three.placeholder)
+        val two = DayListSpreadRules.column(d[2], 2)
+        assertEquals("Wednesday 11", two.title)
+        assertEquals("Add to Wednesday · Enter for the next", two.placeholder)
+        assertEquals("Add to today · Enter for the next", DayListSpreadRules.column(d[0], 1).placeholder)
+        assertEquals("Add to today · Enter", DayListSpreadRules.column(d[0], 3).placeholder)
+    }
 }

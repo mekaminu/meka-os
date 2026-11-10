@@ -270,13 +270,14 @@ private fun Agenda(
             // only one, and Agenda view and New event are in its ⋯ menu.
             EditLines(add.lines, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.xs))
             // The Week board as Day lists (approved 2026-11-08; Meka 2026-11-09 22:27): folded, the day strip over the
-            // chosen day's Day list (BoardFolded.dc.html); the open Fold keeps the week until its spread lands.
+            // chosen day's Day list (BoardFolded.dc.html); open, the spread of 1 · 2 · 3 Day lists (OpenSpread.dc.html).
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                if (os.meka.core.domain.BoardFoldRules.wide(maxWidth.value)) WeekBoardView(
-                    core, undo, onEvent, Modifier.fillMaxSize(), onPlanWeek,
+                // The open Fold: Day lists side by side, 1 · 2 · 3 days (OpenSpread.dc.html, slice 4).
+                if (os.meka.core.domain.BoardFoldRules.wide(maxWidth.value)) DayListSpread(
+                    core, Modifier.fillMaxSize(),
                     onAgenda = { onBoard(false) },
-                    onPlanSteps = onPlanSteps,
                     onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
+                    onPlanWeek = onPlanWeek,
                 ) else DayListBoard(
                     core, Modifier.fillMaxSize(),
                     onAgenda = { onBoard(false) },

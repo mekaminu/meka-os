@@ -93,3 +93,53 @@ object DayListBoardRules {
 
     fun canStep(board: WeekBoard, day: Long, delta: Int): Boolean = stepWeek(board, day, delta) != null
 }
+
+/** One column of the open Fold's spread: the day's heading ("Mon 9 · today"), its add bar's prompt, and whether it's today. */
+data class DayListColumn(val epochDay: Long, val title: String, val placeholder: String, val isToday: Boolean)
+
+/**
+ * The Week board on the open Fold as Day lists side by side (approved 2026-11-08, `docs/design/day-list/OpenSpread.dc.html`;
+ * Meka 2026-11-09 22:27: the open Fold's old board "looks awful"): the month and week line with ‹ › ⋯, a 1 · 2 · 3 days
+ * switch (3 by default), the week's seven pills with the days in view lit, and that many Day lists across, each with its
+ * own heading, total, done bar, rows and add bar. The days in view start at the chosen day, held inside the week (the
+ * chosen Sunday with 3 days shows Fri · Sat · Sun). Non-AI and pure.
+ */
+object DayListSpreadRules {
+    val COUNTS = listOf(1, 2, 3)
+    const val DEFAULT_COUNT = 3
+
+    /** "1 day" · "2 days" · "3 days". */
+    fun countLabel(count: Int): String = if (count == 1) "1 day" else "$count days"
+
+    fun countOrDefault(count: Int?): Int = count?.takeIf { it in COUNTS } ?: DEFAULT_COUNT
+
+    /** The [count] days of [week] in view, starting at [chosen] and held inside the week. */
+    fun inView(week: BoardWeek, chosen: Long, count: Int): List<BoardDay> {
+        val days = week.days
+        if (days.isEmpty()) return emptyList()
+        val k = countOrDefault(count).coerceAtMost(days.size)
+        val at = days.indexOfFirst { it.epochDay == chosen }.coerceAtLeast(0)
+        val start = at.coerceAtMost(days.size - k)
+        return days.subList(start, start + k)
+    }
+
+    /**
+     * A column's heading and prompt. Three across are narrow, so "Mon 9" and "Add · Enter for next"; one or two across
+     * have room for "Monday 9" and "Add to Monday · Enter for the next". A past day's adds land on today, so it says so.
+     */
+    fun column(day: BoardDay, count: Int): DayListColumn {
+        val n = CivilDate.fromEpochDay(day.epochDay).day
+        val long = CivilDate.DAY_LONG[CivilDate.isoDayOfWeek(day.epochDay) - 1]
+        val narrow = countOrDefault(count) == 3
+        val title = (if (narrow) "${day.weekday} $n" else "$long $n") + if (day.isToday) " · today" else ""
+        val placeholder = when {
+            day.isPast -> if (narrow) "Add to today · Enter" else "Add to today · Enter for the next"
+            narrow -> "Add · Enter for next"
+            else -> "Add to $long · Enter for the next"
+        }
+        return DayListColumn(day.epochDay, title, placeholder, day.isToday)
+    }
+
+    fun columns(week: BoardWeek, chosen: Long, count: Int): List<DayListColumn> =
+        inView(week, chosen, count).map { column(it, count) }
+}

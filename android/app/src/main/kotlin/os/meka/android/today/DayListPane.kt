@@ -129,6 +129,8 @@ fun DayListPane(
      * line under the rows. Null: the Day list's own screen.
      */
     inBoard: DayListInBoard? = null,
+    /** The list's and the add bar's side inset: the gutter, less in a column of the open Fold's spread. */
+    sidePadding: androidx.compose.ui.unit.Dp = MekaSpace.gutter,
 ) {
     val board by core.weekBoard.collectAsState()
     // Null: today's list (it follows the board's today past midnight).
@@ -211,7 +213,7 @@ fun DayListPane(
         Column(Modifier.fillMaxSize()) {
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.l),
+                contentPadding = PaddingValues(horizontal = sidePadding, vertical = MekaSpace.l),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
             ) {
                 if (closeLabel != null) item(key = "close") {
@@ -287,7 +289,7 @@ fun DayListPane(
 
             // The add bar stays open at the foot, over the keyboard: Enter adds and clears for the next.
             Column(
-                Modifier.fillMaxWidth().background(Meka.colors.background).padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xs),
+                Modifier.fillMaxWidth().background(Meka.colors.background).padding(horizontal = sidePadding, vertical = MekaSpace.xs),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 AnimatedContent(

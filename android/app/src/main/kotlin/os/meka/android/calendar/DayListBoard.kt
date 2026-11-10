@@ -8,12 +8,14 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +34,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -41,10 +44,12 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.android.today.DayListInBoard
 import os.meka.android.today.DayListPane
 import os.meka.core.domain.DayListBoardRules
 import os.meka.core.domain.DayListPill
+import os.meka.core.domain.DayListSpreadRules
 import os.meka.core.domain.FoldedMenuItem
 import os.meka.core.domain.FoldedMenuKind
 import os.meka.core.facade.MekaCore
@@ -102,7 +107,7 @@ fun DayListBoard(
                 },
                 modifier = Modifier.appear(rememberAppearance(0)),
             )
-            DayPills(strip, day, Modifier.appear(rememberAppearance(1))) { e -> haptics.tick(); chosen = e }
+            DayPills(strip, setOf(day), Modifier.fillMaxWidth().appear(rememberAppearance(1))) { e -> haptics.tick(); chosen = e }
         }
         AnimatedContent(
             targetState = day,
@@ -126,12 +131,14 @@ fun DayListBoard(
  * today's number is gold otherwise, past days are quieter. Tap one to bring its list into view.
  */
 @Composable
-private fun DayPills(pills: List<DayListPill>, inView: Long, modifier: Modifier, onTap: (Long) -> Unit) {
+private fun DayPills(
+    pills: List<DayListPill>, inView: Set<Long>, modifier: Modifier, pillWidth: androidx.compose.ui.unit.Dp? = null, onTap: (Long) -> Unit,
+) {
     val reduced = Meka.reducedMotion
-    Row(modifier.fillMaxWidth().testTag(DAY_LIST_STRIP_TAG), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+    Row(modifier.testTag(DAY_LIST_STRIP_TAG), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         pills.forEach { p ->
             key(p.epochDay) {
-                val lit = p.epochDay == inView
+                val lit = p.epochDay in inView
                 val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surface, MekaMotion.appear(reduced), label = "day-pill-fill")
                 val ink by animateColorAsState(
                     when {
@@ -143,7 +150,7 @@ private fun DayPills(pills: List<DayListPill>, inView: Long, modifier: Modifier,
                     MekaMotion.appear(reduced), label = "day-pill-ink",
                 )
                 Column(
-                    Modifier.weight(1f).height(DayListBoardRules.PILL_HEIGHT.dp)
+                    (if (pillWidth != null) Modifier.width(pillWidth) else Modifier.weight(1f)).height(DayListBoardRules.PILL_HEIGHT.dp)
                         .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
                         .clickable(role = Role.Tab) { onTap(p.epochDay) }
                         .clearAndSetSemantics { contentDescription = p.spoken; selected = lit },
@@ -158,6 +165,125 @@ private fun DayPills(pills: List<DayListPill>, inView: Long, modifier: Modifier,
         }
     }
 }
+
+/**
+ * The Week board on the open Fold as Day lists side by side (approved 2026-11-08, `docs/design/day-list/OpenSpread.dc.html`;
+ * Meka 2026-11-09 22:27: "It looks awful"): "November · Week 46 · 6h 15m planned" with ‹ › ⋯; under it the 1 · 2 · 3 days
+ * switch (3 by default, kept across a fold) and the week's seven pills with the days in view lit; then that many Day lists
+ * across, each with its heading and total, the done bar, the slim rows and its own add bar (Enter for the next). Tap a pill
+ * to start the spread there; it stays inside the week (Sunday with three across shows Fri · Sat · Sun).
+ *
+ * Motion: the header and the switch row appear on the stagger; the lit pills' fill and ink cross-fade; the columns
+ * cross-fade to the next set of days (each Day list's own row motion inside). Reduced motion: cross-fades only.
+ */
+@Composable
+fun DayListSpread(
+    core: MekaCore, modifier: Modifier = Modifier,
+    onAgenda: (() -> Unit)? = null, onAddEvent: (() -> Unit)? = null, onPlanWeek: (() -> Unit)? = null,
+) {
+    val board by core.weekBoard.collectAsState()
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    var chosen by rememberSaveable { mutableStateOf<Long?>(null) }
+    var count by rememberSaveable { mutableStateOf(DayListSpreadRules.DEFAULT_COUNT) }
+    val day = DayListBoardRules.shownDay(board, chosen) ?: return
+    val week = DayListBoardRules.weekOf(board, day) ?: return
+    val head = remember(week) { DayListBoardRules.head(week) }
+    val strip = remember(week) { DayListBoardRules.strip(week) }
+    val columns = remember(week, day, count) { DayListSpreadRules.columns(week, day, count) }
+    val menu = remember(onAgenda, onAddEvent, onPlanWeek) {
+        buildList {
+            if (onAgenda != null) add(FoldedMenuItem(FoldedMenuKind.AGENDA, "Agenda view", ""))
+            if (onAddEvent != null) add(FoldedMenuItem(FoldedMenuKind.NEW_EVENT, "New event", ""))
+            if (onPlanWeek != null) add(FoldedMenuItem(FoldedMenuKind.PLAN_WEEK, os.meka.core.domain.PlanWeekRules.OPEN, "Obi helps"))
+        }
+    }
+
+    Column(modifier.fillMaxSize().background(Meka.colors.background).testTag(DAY_LIST_SPREAD_TAG)) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = MekaSpace.gutterWide).padding(top = MekaSpace.l),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
+        ) {
+            FoldedHeader(
+                month = head.month, week = head.weekLine, spoken = head.spoken,
+                canBack = DayListBoardRules.canStep(board, day, -1), canForward = DayListBoardRules.canStep(board, day, 1),
+                onBack = { DayListBoardRules.stepWeek(board, day, -1)?.let { chosen = it } },
+                onForward = { DayListBoardRules.stepWeek(board, day, 1)?.let { chosen = it } },
+                menu = menu,
+                onMenu = { item ->
+                    when (item.kind) {
+                        FoldedMenuKind.AGENDA -> onAgenda?.invoke()
+                        FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
+                        FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
+                        else -> Unit
+                    }
+                },
+                modifier = Modifier.appear(rememberAppearance(0)),
+            )
+            Row(Modifier.fillMaxWidth().appear(rememberAppearance(1)), verticalAlignment = Alignment.CenterVertically) {
+                CountSwitch(count, Modifier.weight(1f)) { k -> haptics.tick(); count = k }
+                DayPills(strip, columns.map { it.epochDay }.toSet(), Modifier, pillWidth = SPREAD_PILL_DP.dp) { e -> haptics.tick(); chosen = e }
+            }
+        }
+        AnimatedContent(
+            targetState = columns,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            contentKey = { cs -> cs.map { it.epochDay } },
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = MekaSpace.gutterWide - MekaSpace.xs),
+            label = "day-list-spread-days",
+        ) { cs ->
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                cs.forEach { c ->
+                    key(c.epochDay) {
+                        Box(Modifier.weight(1f).fillMaxSize().testTag(DAY_LIST_COLUMN_TAG)) {
+                            DayListPane(
+                                core, onClose = {}, closeLabel = null, forDay = c.epochDay,
+                                inBoard = DayListInBoard(c.title, c.placeholder, DayListBoardRules.HINT),
+                                sidePadding = MekaSpace.xs,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 1 day · 2 days · 3 days: a pill of three choices, the one in use raised. */
+@Composable
+private fun CountSwitch(count: Int, modifier: Modifier, onPick: (Int) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Box(modifier) {
+        Row(
+            Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(MekaSpace.xxs)
+                .testTag(DAY_LIST_COUNT_TAG),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            DayListSpreadRules.COUNTS.forEach { k ->
+                val on = k == count
+                val fill by animateColorAsState(if (on) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "count-fill")
+                Text(
+                    DayListSpreadRules.countLabel(k),
+                    style = if (on) MekaType.metaStrong else MekaType.itemMeta,
+                    color = if (on) Meka.colors.textPrimary else Meka.colors.textSecondary,
+                    maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                        .clickable(role = Role.Tab) { onPick(k) }
+                        .semantics { selected = on }
+                        .minTouch().padding(horizontal = MekaSpace.s),
+                )
+            }
+        }
+    }
+}
+
+/** A pill in the open Fold's strip, dp wide (the mockup's 54). */
+private const val SPREAD_PILL_DP = 54
+
+/** The open Fold's spread, its columns and its 1 · 2 · 3 days switch (screen tests). */
+const val DAY_LIST_SPREAD_TAG = "day-list-spread"
+const val DAY_LIST_COLUMN_TAG = "day-list-column"
+const val DAY_LIST_COUNT_TAG = "day-list-count"
 
 /** The folded Week board as Day lists, and its strip (screen tests). */
 const val DAY_LIST_BOARD_TAG = "day-list-board"
