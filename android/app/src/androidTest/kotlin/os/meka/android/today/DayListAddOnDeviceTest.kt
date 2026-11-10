@@ -88,13 +88,14 @@ class DayListAddOnDeviceTest {
         compose.onNode(hasSetTextAction()).performImeAction()
 
         fun added() = core.weekBoard.value.day(today)?.cards?.firstOrNull { it.title == "Call Sam" }
-        until { added() != null && shows("Call Sam") }
+        val at = now + (14 * 60 + 30 - (9 * 60 + 10)) * 60_000L // 14:30 the same day: now is 09:10
+        // The row can show a frame before its length and time are written (the core writes them one by one).
+        until { added()?.task?.let { it.estimateMinutes == 30 && it.scheduledAtMs == at } == true && shows("Call Sam") }
         assertNotNull("\"Call Sam 14:30 30m\" wasn't added", added())
         assertTrue("the new row isn't shown", shows("Call Sam"))
         val task = added()!!.task
         assertEquals(30, task.estimateMinutes)
-        // 14:30 the same day: now is 09:10, so 5 h 20 min on.
-        assertEquals(now + (14 * 60 + 30 - (9 * 60 + 10)) * 60_000L, task.scheduledAtMs)
+        assertEquals(at, task.scheduledAtMs)
     }
 
     /** Up to 10 s: frames on the test's clock while the core's coroutines run on their own threads. */
