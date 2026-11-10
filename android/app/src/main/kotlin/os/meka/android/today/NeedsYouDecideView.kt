@@ -79,7 +79,14 @@ internal fun NeedsYouDecideShell(
             DecideIcon(card.icon)
             Column(Modifier.weight(1f).padding(start = MekaSpace.xs)) {
                 Text(card.what, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(card.from, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(card.from, style = MekaType.caption, color = if (card.urgent) Meka.colors.critical else Meka.colors.textSecondary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        // An approval's detail lines (what would happen) stay whole, beside the icon's column.
+        if (card.details.isNotEmpty()) {
+            Column(Modifier.padding(start = 34.dp + MekaSpace.xs).clearAndSetSemantics { }) {
+                card.details.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
         }
         middle()
@@ -97,6 +104,7 @@ internal fun NeedsYouDecideShell(
                 }
             }
         }
+        card.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 

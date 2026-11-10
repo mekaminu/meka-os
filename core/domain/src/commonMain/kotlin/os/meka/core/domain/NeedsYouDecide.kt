@@ -25,6 +25,12 @@ enum class NeedsYouDecideIcon(
     NIGHT("M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"),
     /** An appointment that has come due (dentist, eye test, haircut). */
     APPOINTMENT("M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"),
+    /** An approval to trade (slice 5). */
+    TRADE("M3 17l6-6 4 4 8-8M15 7h6v6"),
+    /** An approval to pay. */
+    PAYMENT("M3 6h18v12H3zM3 10h18M7 15h4"),
+    /** An approval to share a document. */
+    SHARE("M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6"),
 }
 
 /** One TO DECIDE card in the new look. */
@@ -45,6 +51,12 @@ data class NeedsYouDecideCard(
     val spoken: String,
     /** A second, quieter row of taps under the three (an appointment's Call to book · Copy email); usually none. */
     val more: List<String> = emptyList(),
+    /** Slice 5: an approval's detail lines (what would happen), shown whole under the one line: never cut away. */
+    val details: List<String> = emptyList(),
+    /** The one line is lit in the critical colour (an approval in its last 15 minutes). */
+    val urgent: Boolean = false,
+    /** A quiet note under the taps ("Approving needs your fingerprint"); null for none. */
+    val note: String? = null,
 )
 
 object NeedsYouDecideRules {
@@ -134,6 +146,37 @@ object NeedsYouDecideRules {
         spoken = spoken(card.spoken, card.bookedLabel, card.wentLabel, card.laterLabel, card.callLabel, card.emailLabel),
         more = listOf(card.callLabel, card.emailLabel),
     )
+
+    fun icon(kind: ApprovalKind): NeedsYouDecideIcon = when (kind) {
+        ApprovalKind.TRADE -> NeedsYouDecideIcon.TRADE
+        ApprovalKind.PAYMENT -> NeedsYouDecideIcon.PAYMENT
+        ApprovalKind.SHARE -> NeedsYouDecideIcon.SHARE
+    }
+
+    /**
+     * Slice 5: an approval (trade, pay, share) in the same compact form. Its title over "Trade · Kestrel · Asked 21:40 ·
+     * expires in 14 min" (the label read in sentence case, lit when [ApprovalCard.urgent]); its detail lines stay whole
+     * under it, as what would happen must never be cut; Approve · Decline (no Change: the one who asked sets the terms);
+     * the fingerprint (or Touch ID) note under the taps. The taps are the approval's own: Approve still asks for the
+     * fingerprint every time, and only that signed yes reaches the core.
+     */
+    fun approval(card: ApprovalCard, lock: String = ApprovalRules.LOCK_FOLD): NeedsYouDecideCard = NeedsYouDecideCard(
+        key = "approval-" + card.id,
+        icon = icon(card.kind),
+        what = card.title,
+        from = joined(sentence(card.label), card.why),
+        yesLabel = card.approveLabel,
+        changeLabel = null,
+        noLabel = card.declineLabel,
+        spoken = spoken(card.spoken, card.approveLabel + " with your fingerprint", card.declineLabel),
+        details = card.lines.map { it.trim() }.filter { it.isNotEmpty() },
+        urgent = card.urgent,
+        note = lock,
+    )
+
+    /** "TRADE · KESTREL" → "Trade · Kestrel"; a label already in mixed case is left as it is. */
+    fun sentence(label: String): String = if (label != label.uppercase()) label.trim() else
+        label.split(" · ").joinToString(" · ") { part -> part.trim().lowercase().replaceFirstChar { it.uppercase() } }
 
     private fun joined(vararg parts: String): String = parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ")
 

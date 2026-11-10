@@ -109,4 +109,31 @@ class NeedsYouDecideTest {
         assertEquals(listOf("Call to book", "Copy email"), c.more)
         assertTrue(c.spoken.endsWith("Booked…, Went, Not yet, Call to book, Copy email."))
     }
+
+    @Test
+    fun anApprovalKeepsWhatWouldHappenWholeAndItsFingerprintNote() {
+        val a = ApprovalCard(
+            id = "a1", kind = ApprovalKind.TRADE, label = "TRADE · KESTREL", title = "Buy 0.05 BTC",
+            lines = listOf("At market, about £2,100", " ", "Stop at £39,000"), why = "Asked 21:40 · expires in 14 min",
+            biometric = true, urgent = true, approveLabel = ApprovalRules.APPROVE, declineLabel = ApprovalRules.DECLINE,
+            spoken = "Kestrel asks: Trade. Buy 0.05 BTC. At market, about £2,100. Asked 21:40 · expires in 14 min",
+        )
+        val c = NeedsYouDecideRules.approval(a)
+        assertEquals("approval-a1", c.key)
+        assertEquals(NeedsYouDecideIcon.TRADE, c.icon)
+        assertEquals("Buy 0.05 BTC", c.what)
+        assertEquals("Trade · Kestrel · Asked 21:40 · expires in 14 min", c.from)
+        assertEquals(listOf("At market, about £2,100", "Stop at £39,000"), c.details)
+        assertEquals(ApprovalRules.APPROVE, c.yesLabel)
+        assertEquals(null, c.changeLabel)
+        assertEquals(ApprovalRules.DECLINE, c.noLabel)
+        assertTrue(c.urgent)
+        assertEquals(ApprovalRules.LOCK_FOLD, c.note)
+        assertEquals(ApprovalRules.LOCK_MAC, NeedsYouDecideRules.approval(a, ApprovalRules.LOCK_MAC).note)
+        assertTrue(c.spoken.endsWith("expires in 14 min. ${ApprovalRules.APPROVE} with your fingerprint, ${ApprovalRules.DECLINE}."))
+        assertEquals(NeedsYouDecideIcon.PAYMENT, NeedsYouDecideRules.approval(a.copy(kind = ApprovalKind.PAYMENT)).icon)
+        assertEquals(NeedsYouDecideIcon.SHARE, NeedsYouDecideRules.approval(a.copy(kind = ApprovalKind.SHARE)).icon)
+        assertEquals("Payment · Bank app", NeedsYouDecideRules.sentence("PAYMENT · BANK APP"))
+        assertEquals("Share · Drive", NeedsYouDecideRules.sentence("Share · Drive"))
+    }
 }

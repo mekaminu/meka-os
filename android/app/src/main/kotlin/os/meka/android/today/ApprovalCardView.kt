@@ -1,35 +1,20 @@
 package os.meka.android.today
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import os.meka.android.designsystem.Meka
-import os.meka.android.designsystem.MekaRadius
-import os.meka.android.designsystem.MekaSpace
-import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.security.FoldApprovalKey
 import os.meka.android.security.FoldBiometric
 import os.meka.core.domain.ApprovalCard
 import os.meka.core.domain.ApprovalRules
+import os.meka.core.domain.NeedsYouDecideRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -84,34 +69,11 @@ internal fun ApprovalCardView(card: ApprovalCard, core: MekaCore, say: (String) 
         scope.launch { runCatching { core.declineApproval(card.id) }.getOrNull()?.let { say(it.line) } }
         Unit
     }
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-            .padding(MekaSpace.m).testTag("approval-${card.id}"),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-    ) {
-        Text(card.label, style = MekaType.caption, color = Meka.colors.textSecondary,
-            modifier = Modifier.semantics { contentDescription = card.spoken })
-        Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        card.lines.forEach { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
-        Text(card.why, style = MekaType.itemMeta, color = if (card.urgent) Meka.colors.critical else Meka.colors.textTertiary,
-            modifier = Modifier.padding(top = MekaSpace.xxs))
-        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            ApprovalPill(card.approveLabel, filled = true, spoken = "${card.approveLabel} ${card.title}, with your fingerprint", onClick = approve)
-            ApprovalPill(card.declineLabel, filled = false, spoken = "${card.declineLabel} ${card.title}", onClick = decline)
-        }
-        Text(ApprovalRules.LOCK_FOLD, style = MekaType.caption, color = Meka.colors.textTertiary)
-    }
-}
-
-@Composable
-private fun ApprovalPill(label: String, filled: Boolean, spoken: String, onClick: () -> Unit) {
-    Text(
-        label, style = MekaType.itemMeta,
-        color = if (filled) Meka.colors.onAccent else Meka.colors.textSecondary,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-            .background(if (filled) Meka.colors.accent else Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = spoken }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    // The approved Needs you look, slice 5: the compact TO DECIDE card (icon, title over "Trade · Kestrel · Asked 21:40 ·
+    // expires in 14 min", lit when urgent; what would happen kept whole; Approve · Decline; the fingerprint note).
+    NeedsYouDecideShell(
+        remember(card) { NeedsYouDecideRules.approval(card, ApprovalRules.LOCK_FOLD) },
+        onYes = approve, onNo = decline,
+        modifier = modifier.testTag("approval-${card.id}"),
     )
 }
