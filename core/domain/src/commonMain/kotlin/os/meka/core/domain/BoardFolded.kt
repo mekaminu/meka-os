@@ -44,7 +44,7 @@ data class FoldedMoveChip(val label: String, val epochDay: Long?, val lit: Boole
 data class FoldedMoveSheet(val taskId: String, val title: String, val chips: List<FoldedMoveChip>)
 
 /** What the folded Board's ⋯ menu holds: everything that used to crowd the cover screen's header. */
-enum class FoldedMenuKind { AGENDA, TIMELINE, NEW_EVENT, PLAN_WEEK, REPLAN_DAY, REVIEW, GOALS, NO_DAY, SOMEDAY }
+enum class FoldedMenuKind { AGENDA, TIMELINE, NEW_EVENT, PLAN_WEEK, REPLAN_DAY, REVIEW, GOALS, NO_DAY, SOMEDAY, WEEK }
 
 /** One row of the ⋯ menu: what it does on the left, a quiet detail on the right ("Obi helps", "3"). */
 data class FoldedMenuItem(val kind: FoldedMenuKind, val label: String, val detail: String)

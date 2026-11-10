@@ -3039,6 +3039,16 @@ class MekaCore(
         return os.meka.core.domain.BoardTimelineRules.of(day, src.events, src.work, cal.epochDayOf(now), now, cal, src.toneOf)
     }
 
+    /**
+     * Calendar → Week, Option A (approved 2026-11-10): the calm time grid of [count] days from local [start]: the
+     * calendar's events as the Board reads them (duplicates folded, hidden calendars out), [board]'s open tasks in each
+     * day's strip, the work band and clashes from his hours ([os.meka.core.domain.CalendarWeekRules]).
+     */
+    fun calendarWeek(board: os.meka.core.domain.WeekBoard?, start: Long, count: Int): os.meka.core.domain.WeekGrid {
+        val src = timelineSource
+        return os.meka.core.domain.CalendarWeekRules.build(start, count, src.events, board, src.work, nowMs(), ZoneCalendar(timeZone), src.toneOf)
+    }
+
     /** What the Board's timeline reads (set with the board itself, read from the screen's thread). */
     private class TimelineSource(
         val events: List<os.meka.core.domain.CalendarEvent>,

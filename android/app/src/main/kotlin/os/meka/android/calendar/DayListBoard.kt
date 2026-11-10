@@ -86,6 +86,8 @@ import os.meka.core.facade.MekaCore
 fun DayListBoard(
     core: MekaCore, modifier: Modifier = Modifier,
     onAgenda: (() -> Unit)? = null, onAddEvent: (() -> Unit)? = null, onPlanWeek: (() -> Unit)? = null,
+    /** Calendar → Week (2026-11-10): ⋯ → Week view. */
+    onWeek: (() -> Unit)? = null,
 ) {
     val board by core.weekBoard.collectAsState()
     val haptics = rememberMekaHaptics()
@@ -96,8 +98,9 @@ fun DayListBoard(
     val week = DayListBoardRules.weekOf(board, day) ?: return
     val head = remember(week) { DayListBoardRules.head(week) }
     val strip = remember(week) { DayListBoardRules.strip(week) }
-    val menu = remember(onAgenda, onAddEvent, onPlanWeek) {
+    val menu = remember(onAgenda, onAddEvent, onPlanWeek, onWeek) {
         buildList {
+            if (onWeek != null) add(FoldedMenuItem(FoldedMenuKind.WEEK, "Week view", ""))
             if (onAgenda != null) add(FoldedMenuItem(FoldedMenuKind.AGENDA, "Agenda view", ""))
             if (onAddEvent != null) add(FoldedMenuItem(FoldedMenuKind.NEW_EVENT, "New event", ""))
             if (onPlanWeek != null) add(FoldedMenuItem(FoldedMenuKind.PLAN_WEEK, os.meka.core.domain.PlanWeekRules.OPEN, "Obi helps"))
@@ -118,6 +121,7 @@ fun DayListBoard(
                 onMenu = { item ->
                     when (item.kind) {
                         FoldedMenuKind.AGENDA -> onAgenda?.invoke()
+                        FoldedMenuKind.WEEK -> onWeek?.invoke()
                         FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
                         FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
                         else -> Unit
@@ -204,6 +208,8 @@ private fun DayPills(
 fun DayListSpread(
     core: MekaCore, modifier: Modifier = Modifier,
     onAgenda: (() -> Unit)? = null, onAddEvent: (() -> Unit)? = null, onPlanWeek: (() -> Unit)? = null,
+    /** Calendar → Week (2026-11-10): ⋯ → Week view. */
+    onWeek: (() -> Unit)? = null,
 ) {
     val board by core.weekBoard.collectAsState()
     val haptics = rememberMekaHaptics()
@@ -242,8 +248,9 @@ fun DayListSpread(
             }
         },
     )
-    val menu = remember(onAgenda, onAddEvent, onPlanWeek) {
+    val menu = remember(onAgenda, onAddEvent, onPlanWeek, onWeek) {
         buildList {
+            if (onWeek != null) add(FoldedMenuItem(FoldedMenuKind.WEEK, "Week view", ""))
             if (onAgenda != null) add(FoldedMenuItem(FoldedMenuKind.AGENDA, "Agenda view", ""))
             if (onAddEvent != null) add(FoldedMenuItem(FoldedMenuKind.NEW_EVENT, "New event", ""))
             if (onPlanWeek != null) add(FoldedMenuItem(FoldedMenuKind.PLAN_WEEK, os.meka.core.domain.PlanWeekRules.OPEN, "Obi helps"))
@@ -265,6 +272,7 @@ fun DayListSpread(
                 onMenu = { item ->
                     when (item.kind) {
                         FoldedMenuKind.AGENDA -> onAgenda?.invoke()
+                        FoldedMenuKind.WEEK -> onWeek?.invoke()
                         FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
                         FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
                         else -> Unit

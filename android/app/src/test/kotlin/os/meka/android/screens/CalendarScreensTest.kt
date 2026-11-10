@@ -114,7 +114,10 @@ class CalendarScreensTest {
         event("ev9", "Bin day", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
     }
 
-    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, hand: Boolean = false): MekaCore {
+    private fun shoot(
+        name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, hand: Boolean = false,
+        mode: os.meka.core.domain.CalendarMode = os.meka.core.domain.CalendarMode.AGENDA,
+    ): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
@@ -142,7 +145,8 @@ class CalendarScreensTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    CalendarRoute(core)
+                    // The Agenda's shots: Week is Calendar's first view since 2026-11-10 (CalendarWeekScreensTest).
+                    CalendarRoute(core, initialMode = mode)
                 }
             }
         }
@@ -151,6 +155,7 @@ class CalendarScreensTest {
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("calendar", name))
         ScreenShots.assertSensible(compose, name)
+        if (mode == os.meka.core.domain.CalendarMode.WEEK) return core
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Calendar")
@@ -313,4 +318,65 @@ class CalendarScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerManyLight() { shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+
+    // ---- Calendar → Week, Option A (approved 2026-11-10): the calm time grid, Calendar's first view ----
+
+    private fun block(title: String) = hasContentDescription(title, substring = true) and androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_BLOCK_TAG)
+
+    private fun assertWeek(name: String, open: Boolean) {
+        val grid = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_GRID_TAG)
+        until { shows(grid) }
+        if (!shows(grid)) fail("$name: no Week grid")
+        if (shows(androidx.compose.ui.test.hasTestTag(AGENDA_LIST_TAG))) fail("$name: Week opened on the Agenda")
+        ScreenShots.assertShows(compose, name, if (open) "October 2026" else "October")
+        ScreenShots.assertShows(compose, name, "Week 43")
+        listOf("Week", "Board", "Agenda").forEach { if (!shows(hasText(it) and hasClickAction())) fail("$name: no $it in the switch") }
+        // Wednesday's swimming lesson is a block on the grid (18:30, inside 08:00–21:00).
+        until { shows(block("Swimming lesson")) }
+        if (!shows(block("Swimming lesson"))) fail("$name: no Swimming lesson block")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun weekCover() {
+        shoot("week-cover-dark-many", Fill.MANY, mode = os.meka.core.domain.CalendarMode.WEEK)
+        assertWeek("week-cover-dark-many", open = false)
+        // Folded: three days from today (Wed, Thu, Fri).
+        if (!shows(hasContentDescription("Wednesday 21 October, today", substring = true))) fail("week-cover: today isn't first")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun weekInner() {
+        shoot("week-inner-dark-many", Fill.MANY, mode = os.meka.core.domain.CalendarMode.WEEK)
+        assertWeek("week-inner-dark-many", open = true)
+        ScreenShots.assertShows(compose, "week-inner-dark-many", "Booked this week")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun weekInnerLight() {
+        shoot("week-inner-light-many", Fill.MANY, ThemeChoice.LIGHT, mode = os.meka.core.domain.CalendarMode.WEEK)
+        assertWeek("week-inner-light-many", open = true)
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun weekByHand() {
+        val name = "week-by-hand"
+        shoot(name, Fill.MANY, mode = os.meka.core.domain.CalendarMode.WEEK)
+        assertWeek(name, open = true)
+        // 7 days shows the weekend too: Saturday's football training.
+        compose.onAllNodes(hasText("7 days") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { shows(block("Football training")) }
+        if (!shows(block("Football training"))) fail("$name: 7 days didn't show Saturday")
+        // An event opens its detail; Close shuts it.
+        compose.onAllNodes(block("Swimming lesson"))[0].performSemanticsAction(SemanticsActions.OnClick)
+        val close = hasText("Close") and hasClickAction()
+        until { shows(close) }
+        if (!shows(close)) fail("$name: tapping Swimming lesson opened nothing")
+        compose.onAllNodes(close)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !shows(close) }
+        // Agenda in the switch opens the Agenda.
+        compose.onAllNodes(hasText("Agenda") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        val agenda = androidx.compose.ui.test.hasTestTag(AGENDA_LIST_TAG)
+        until { shows(agenda) }
+        if (!shows(agenda)) fail("$name: Agenda didn't open")
+    }
 }

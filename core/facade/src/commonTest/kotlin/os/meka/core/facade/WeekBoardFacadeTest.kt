@@ -687,4 +687,21 @@ class WeekBoardFacadeTest {
         assertTrue(fold.boardTimeline(fold.weekBoard.value, today + 1)!!.blocks.none { it.kind == os.meka.core.domain.DayBlockKind.TASK })
         assertNull(fold.boardTimeline(fold.weekBoard.value, today - 400))
     }
+
+    @Test
+    fun calendarsWeekGridHoldsTodaysOpenTasksInItsStripOnBothApps() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val t = fold.addTask("Cancel a subscription")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        fold.setWhen(t, today, 19 * 60)
+        val g = fold.calendarWeek(fold.weekBoard.value, os.meka.core.domain.CalendarWeekRules.start(today, 5), 5)
+        assertEquals(5, g.days.size)
+        val day = g.days.first { it.epochDay == today }
+        assertTrue(day.isToday)
+        assertTrue(day.chips.any { it.text == "19:00 Cancel a subscription" && it.kind == os.meka.core.domain.WeekChipKind.TASK })
+        fold.syncNow(); mac.syncNow(); mac.tick()
+        val onMac = mac.calendarWeek(mac.weekBoard.value, os.meka.core.domain.CalendarWeekRules.start(today, 3), 3)
+        assertEquals(listOf("19:00 Cancel a subscription"), onMac.days[0].chips.map { it.text })
+    }
 }

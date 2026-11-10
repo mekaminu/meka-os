@@ -105,7 +105,7 @@ import os.meka.core.facade.MekaCore
  * motion: jumps and week changes happen at once, cross-fades only, a steady dot.
  */
 @Composable
-fun CalendarRoute(core: MekaCore) {
+fun CalendarRoute(core: MekaCore, initialMode: os.meka.core.domain.CalendarMode = os.meka.core.domain.CalendarMode.WEEK) {
     val v by core.calendarView.collectAsState()
     if (v.sections.isEmpty()) {
         Box(Modifier.fillMaxSize().background(Meka.colors.background))
@@ -129,8 +129,12 @@ fun CalendarRoute(core: MekaCore) {
     var addShown by remember { mutableLongStateOf(-1L) }
     addingOn?.let { addShown = it }
     val addHeader = AddHeader(editAccounts.isNotEmpty(), editLines) { day -> addingOn = day }
-    // Week board, slice 2: Agenda · Board under the summary; the choice is kept while the app runs.
-    var board by rememberSaveable { mutableStateOf(false) }
+    // Calendar → Week (Option A, approved 2026-11-10) is the first view, beside Board and Agenda; the choice is kept
+    // while the app runs.
+    var modeId by rememberSaveable { mutableStateOf(initialMode.id) }
+    val mode = os.meka.core.domain.CalendarMode.of(modeId)
+    val board = mode == os.meka.core.domain.CalendarMode.BOARD
+    val setMode: (os.meka.core.domain.CalendarMode) -> Unit = { modeId = it.id }
     // Week board item (6): Plan your week, from the Board's header.
     var planning by remember { mutableStateOf(false) }
     // Item (6) part 2: "plan my week" said to Obi, or Plan now on Sunday's Needs you card, lands here with the pane up.
@@ -146,16 +150,21 @@ fun CalendarRoute(core: MekaCore) {
         }
     }
     LaunchedEffect(askedToPlan) {
-        if (askedToPlan) { board = true; planApp?.openPlanWeek?.value = false; draftWeek() }
+        if (askedToPlan) { setMode(os.meka.core.domain.CalendarMode.BOARD); planApp?.openPlanWeek?.value = false; draftWeek() }
     }
     // Part 1, slice 3: after "I lost the afternoon, re-plan", the Board as it is (the re-plan is already drawn on it).
     val askedForBoard = planApp?.openBoard?.collectAsState()?.value ?: false
     LaunchedEffect(askedForBoard) {
-        if (askedForBoard) { board = true; planApp?.openBoard?.value = false }
+        if (askedForBoard) { setMode(os.meka.core.domain.CalendarMode.BOARD); planApp?.openBoard?.value = false }
     }
     Box(Modifier.fillMaxSize()) {
-        Agenda(
-            core, v, handlers, showAgain, addHeader, board, { board = it }, undo, onPlanWeek = draftWeek,
+        if (mode == os.meka.core.domain.CalendarMode.WEEK) {
+            CalendarWeekView(
+                core, Modifier.fillMaxSize(), onMode = setMode, onEvent = { openEvent = it },
+                onAddOn = if (addHeader.canAdd) ({ day -> addingOn = day }) else null,
+            )
+        } else Agenda(
+            core, v, handlers, showAgain, addHeader, mode, setMode, undo, onPlanWeek = draftWeek,
             onPlanSteps = { plan -> planFrom = plan; planning = true },
         ) { openEvent = it }
         MekaPane(visible = planning) {
@@ -225,7 +234,7 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
 @Composable
 private fun Agenda(
     core: MekaCore, v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, add: AddHeader,
-    board: Boolean, onBoard: (Boolean) -> Unit, undo: EventUndo, onPlanWeek: () -> Unit,
+    mode: os.meka.core.domain.CalendarMode, onMode: (os.meka.core.domain.CalendarMode) -> Unit, undo: EventUndo, onPlanWeek: () -> Unit,
     onPlanSteps: (os.meka.core.domain.WeekPlan?) -> Unit, onEvent: (CalendarEvent) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -264,6 +273,8 @@ private fun Agenda(
     // Agenda · Board on one row, the summary and the calendars' key left to the Agenda.
     // The alignment list (1): on the open Fold too, the Board's own header row is the only one ("Calendar" and the
     // Agenda · Board switch above it left a big gap); Agenda view and New event are in its ⋯.
+    val board = mode == os.meka.core.domain.CalendarMode.BOARD
+    val onBoard: (Boolean) -> Unit = { b -> onMode(if (b) os.meka.core.domain.CalendarMode.BOARD else os.meka.core.domain.CalendarMode.AGENDA) }
     Column(Modifier.fillMaxSize().background(Meka.colors.background)) {
         if (board) {
             // The folded Week board mockup (approved 2026-10-27): no second "Calendar" header; the Board's own row is the
@@ -278,9 +289,11 @@ private fun Agenda(
                     onAgenda = { onBoard(false) },
                     onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
                     onPlanWeek = onPlanWeek,
+                    onWeek = { onMode(os.meka.core.domain.CalendarMode.WEEK) },
                 ) else DayListBoard(
                     core, Modifier.fillMaxSize(),
                     onAgenda = { onBoard(false) },
+                    onWeek = { onMode(os.meka.core.domain.CalendarMode.WEEK) },
                     onAddEvent = if (add.canAdd) ({ add.onAdd(lit) }) else null,
                     onPlanWeek = onPlanWeek,
                 )
@@ -298,7 +311,8 @@ private fun Agenda(
             if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
             // The switch's 48 dp touch reaches 8 dp above and below its drawn track, so the gaps around it are 8 dp
             // less and the track sits where it did.
-            CalendarViewSwitch(board, Modifier.appear(rememberAppearance(1)), onBoard)
+            // Week · Board · Agenda (Calendar → Week, 2026-11-10); the 48 dp touch keeps the gaps as they were.
+            CalendarModeSwitch(mode, Modifier.appear(rememberAppearance(1)), onMode)
             Spacer(Modifier.height(MekaSpace.xs))
             WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
         }

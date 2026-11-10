@@ -646,6 +646,7 @@ fun WeekBoardView(
                     onMenu = { item ->
                         when (item.kind) {
                             FoldedMenuKind.AGENDA -> onAgenda?.invoke()
+                            FoldedMenuKind.WEEK -> Unit
                             FoldedMenuKind.TIMELINE -> foldTimeline = !foldTimeline
                             FoldedMenuKind.NEW_EVENT -> onAddEvent?.invoke()
                             FoldedMenuKind.PLAN_WEEK -> onPlanWeek?.invoke()
