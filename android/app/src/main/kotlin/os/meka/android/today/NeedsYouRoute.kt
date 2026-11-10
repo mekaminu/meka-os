@@ -772,12 +772,12 @@ internal fun NeedsYouColumn(
             if (compact) {
                 SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
-                Column(Modifier.padding(bottom = MekaSpace.s).appear(rememberAppearance(0, play))) {
+                Column(Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
                     NeedsYouHeader(NeedsYouLayoutRules.subtitle(decideCount, replyCount, fyiChats.size), fyiChats.isNotEmpty(), onClear = {
                         fyiChats.forEach { moves.onTriageChat(it, ChatFinishTap.DONE) }
                     })
                     NeedsYouChips(NeedsYouLayoutRules.chips(decideCount, replyCount, fyiChats.size, mailCount), filter, { filter = it },
-                        Modifier.padding(top = MekaSpace.s))
+                        Modifier.padding(top = MekaSpace.m))
                 }
             }
         }

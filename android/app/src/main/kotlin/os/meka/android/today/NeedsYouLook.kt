@@ -93,7 +93,7 @@ internal fun NeedsYouChips(chips: List<NeedsYouChip>, chosen: NeedsYouFilter, on
                 Modifier.heightIn(min = 34.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
                     .clickable(role = Role.RadioButton) { if (!on) { haptics.light(); onPick(c.filter) } }
                     .semantics { selected = on }
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = MekaSpace.m),
                 contentAlignment = Alignment.Center,
             ) { Text(c.label, style = if (on) MekaType.captionStrong else MekaType.caption, color = fg, maxLines = 1) }
         }
@@ -103,7 +103,7 @@ internal fun NeedsYouChips(chips: List<NeedsYouChip>, chosen: NeedsYouFilter, on
 /** A section's quiet label: "MESSAGES · 4". */
 @Composable
 internal fun NeedsYouHead(text: String, modifier: Modifier = Modifier) {
-    Text(text, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = modifier.padding(top = MekaSpace.s, bottom = MekaSpace.xxs))
+    Text(text, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = modifier.padding(top = MekaSpace.xs, bottom = MekaSpace.xxs))
 }
 
 /**
@@ -121,13 +121,13 @@ internal fun NeedsYouMessageRowView(
             Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Close" else "Open") { haptics.light(); onToggle() }
                 .semantics(mergeDescendants = true) { contentDescription = row.spoken; stateDescription = if (open) "Open" else "Closed" }
                 .testTag(NEEDS_YOU_ROW_TAG)
-                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s),
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(38.dp).clip(CircleShape).background(Meka.colors.surfaceRaised), contentAlignment = Alignment.Center) {
                 Text(row.initials, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1)
             }
-            Spacer(Modifier.width(MekaSpace.s))
+            Spacer(Modifier.width(MekaSpace.xs))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(row.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 1,
