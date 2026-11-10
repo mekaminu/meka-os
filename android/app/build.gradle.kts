@@ -126,5 +126,6 @@ dependencies {
     testImplementation(libs.kotlinx.datetime)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.kotlinx.datetime) // DayListAddOnDeviceTest builds a core on London time
     debugImplementation(libs.compose.ui.test.manifest)
 }

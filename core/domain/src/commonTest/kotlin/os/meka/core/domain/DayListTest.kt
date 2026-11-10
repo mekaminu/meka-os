@@ -22,6 +22,16 @@ class DayListTest {
         chips = emptyList(), moreChips = 0, cards = cards, countLine = "", accessibilityLabel = "",
     )
 
+    /** The lines the on-device test (DayListAddOnDeviceTest, ICU) types, read the same on the JVM. */
+    @Test
+    fun theOnDeviceLinesParseHereToo() {
+        assertEquals(DayListEntry("Call Sam", 30, 14 * 60 + 30, null), DayListRules.parse("Call Sam 14:30 30m"))
+        assertEquals(DayListEntry("Clear the gutters", 90, 9 * 60 + 15, BoardArea.HOUSE), DayListRules.parse("Clear the gutters 9.15 1h30 #house"))
+        val list = DayListRules.pasted("- Book the MOT 15m\n2) Pay the nursery #money\n[x] Email Alex 10:00")
+        assertEquals(listOf("Book the MOT", "Pay the nursery", "Email Alex"), list.map { it.title })
+        assertEquals(10 * 60, list.last().startMinute)
+    }
+
     @Test
     fun aTypedLineGivesUpItsLengthTimeAndArea() {
         assertEquals(DayListEntry("Complete feedbacks", 30, null, BoardArea.WORK), DayListRules.parse("Complete feedbacks 30m #work"))
