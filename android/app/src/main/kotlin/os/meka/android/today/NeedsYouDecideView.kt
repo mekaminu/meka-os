@@ -58,7 +58,7 @@ internal fun NeedsYouDecideCardView(card: NeedsYouDecideCard, onChoice: (Request
         Row(Modifier.semantics(mergeDescendants = true) { contentDescription = card.spoken }, verticalAlignment = Alignment.CenterVertically) {
             DecideIcon(card.icon)
             Column(Modifier.weight(1f).padding(start = MekaSpace.xs)) {
-                Text(card.what, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(card.what, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(card.from, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }

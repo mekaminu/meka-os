@@ -96,18 +96,20 @@ class NeedsYouDecideScreensTest {
 
     private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
 
-    private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
+    /** On the narrow cover a long "what" may take its second line (the card allows two); on the inner screen it's one. */
+    private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK, wide: Boolean = false) {
         draw(theme)
         listOf("TO DECIDE · 2", "Work from home · Wed 16 Dec", "Task: Check the algorithm · Today", "Alex · “the Christmas show",
             "Add", "Change", "No").forEach { if (!onScreen(it)) fail("$name: $it is missing") }
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 2) fail("$name: not two cards")
-        ScreenShots.assertEachOneLine(compose, name, listOf("Work from home · Wed 16 Dec", "Task: Check the algorithm · Today", "Add", "Change", "No"))
+        ScreenShots.assertEachOneLine(compose, name, listOf("Add", "Change", "No") +
+            (if (wide) listOf("Work from home · Wed 16 Dec", "Task: Check the algorithm · Today") else emptyList()))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun decideCoverDark() = shoot("decide-cover-dark")
     @Test @Config(qualifiers = ScreenShots.COVER) fun decideCoverLight() = shoot("decide-cover-light", ThemeChoice.LIGHT)
-    @Test @Config(qualifiers = ScreenShots.INNER) fun decideInnerDark() = shoot("decide-inner-dark")
+    @Test @Config(qualifiers = ScreenShots.INNER) fun decideInnerDark() = shoot("decide-inner-dark", wide = true)
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun theButtonsAnswerWithTheRequestsOwnChoices() {
