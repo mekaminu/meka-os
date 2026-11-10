@@ -41,7 +41,7 @@ object DayListSpoken {
     private val MINUTES = Regex("""\b$FOR($NUM)\s+(?:minutes?|mins?)\b$OF""", O)
     private val PAST_TO = Regex("""\b(?:at\s+)?(half|quarter)\s+(past|to)\s+($HOUR)(?:\s*(a\.?\s?m\.?|p\.?\s?m\.?)(?!\w))?""", O)
     private val AM_PM = Regex("""\b(?:at\s+)?($HOUR)(?:(?:[:.]|\s+)($MINS))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)(?!\w)""", O)
-    private val AT = Regex("""\bat\s+(noon|midday|$HOUR)(?:(?:[:.]|\s+)($MINS))?(?:\s+o'?\s?clock)?(?![\w:])""", O)
+    private val AT = Regex("""\bat\s+(noon|midday|$HOUR)(?:(?:[:.]|\s+)($MINS))?(?:\s+o'?\s?clock)?(?![A-Za-z0-9_:])""", O)
     private val OCLOCK = Regex("""\b($HOUR)\s+o'?\s?clock\b""", O)
     private val AT_24H = Regex("""\bat\s+((?:1[3-9]|2[0-3]):[0-5]\d)\b""", O)
 
