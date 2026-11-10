@@ -147,9 +147,9 @@ class DayListSpreadScreensTest {
         assertTrue(shows("Wed 21 · today") && shows("Thu 22") && shows("Fri 23"), "$name: the three days' headings aren't shown")
         assertTrue(shows("Complete feedbacks") && shows("1 of 3 done") && shows("Study module 6"), "$name: the days' lists aren't side by side")
         assertTrue(shows("Add · Enter for next"), "$name: the narrow add bar's prompt isn't shown")
-        // A narrow column stacks time · title · area, so the title keeps the width (it was squeezed to "C …").
+        // A narrow column stacks time · title · area, so the title keeps the width (it was squeezed to "C …", ~10 dp; whole it is ~100 dp).
         val title = compose.onAllNodes(hasText("Complete feedbacks"), useUnmergedTree = true).fetchSemanticsNodes().first()
-        assertTrue(title.size.width / compose.density.density > 120f, "$name: a task's title is squeezed (${title.size.width / compose.density.density} dp)")
+        assertTrue(title.size.width / compose.density.density > 80f, "$name: a task's title is squeezed (${title.size.width / compose.density.density} dp)")
         assertTouchTargets(name)
 
         // Two days: wider headings; a tap on Sunday's pill holds the spread inside the week (Sat · Sun).
