@@ -270,7 +270,7 @@ private fun CountSwitch(count: Int, modifier: Modifier, onPick: (Int) -> Unit) {
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
                         .clickable(role = Role.Tab) { onPick(k) }
                         .semantics { selected = on }
-                        .minTouch().padding(horizontal = MekaSpace.s),
+                        .minTouch().padding(horizontal = MekaSpace.m),
                 )
             }
         }
