@@ -7690,6 +7690,25 @@ final class CoreModel {
         }
     }
 
+    /// Clear FYI in Needs you's header (the approved look): every chat that needs nothing from Meka is Done at once,
+    /// here and on the Fold, as its ✓ would, in one write; the bar says "FYI cleared · 4 chats". Only the ids and group
+    /// keys (Strings) cross to the core.
+    func clearFyiChats(_ chats: [TriageChat]) {
+        guard let core, !chats.isEmpty else { return }
+        MekaHaptics.light()
+        let ids = chats.flatMap(\.ids)
+        let line = NeedsYouLayoutRules.shared.clearedLine(n: Int32(chats.count))
+        let groupKeys = chats.flatMap { TriageChatRules.shared.gistsInside(chat: $0, gists: groupGists).map(\.groupKey) }
+        hideDecided(ids)
+        Task {
+            do {
+                let seen = try await core.seenTriageChat(messageIds: ids).int32Value
+                if !groupKeys.isEmpty { _ = try await core.catchUpGroupDigest(groupKeys: groupKeys) }
+                if seen > 0 { offerEventUndo(line, nil) }
+            } catch { restoreDecided(ids, what: NeedsYouLayoutRules.shared.CLEAR_FYI, error: error) }
+        }
+    }
+
     /// Later on a chat's open row in Needs you (the approved look): its messages stay out of Needs you on both devices
     /// until the next 08:00, then come back as they were; Undo brings them back now. Nothing is sent or marked read.
     /// Only the title and ids (Strings) cross to the core.

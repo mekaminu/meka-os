@@ -160,86 +160,51 @@ struct TabIconView: View {
     }
 }
 
-/// NEEDS YOU on the Mac: a stack of decisions beside the detail (four tabs, slice 2): conflicts, overdue, due today
-/// but unscheduled, then "From your lists". → yes/do, ← later, ↑ open (keys, buttons or a drag). Approvals join in V1.
+/// NEEDS YOU on the Mac, in the approved look (`docs/design/needs-you/needs-you.dc.html`, Mac slice 5): "Needs you" over
+/// "2 to decide · 4 to reply · 4 FYI" with Clear FYI, the chips All · Decide · Reply · FYI · Mail (each shows only its
+/// section), then TO DECIDE (approvals, school days off, date night, appointments, requests, the stack), MESSAGES (the
+/// after-work card, one row per chat, the group digest, Discord), FYI · NO REPLY NEEDED as thin rows with a ✓, and the
+/// mail Navilife tidied. The detail sits beside it.
 struct NeedsYouView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var filter: NeedsYouFilter = .all
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
+    private var decideCount: Int {
+        model.approvals.count + model.looseRequests.count + model.needsYouAsks + model.needsYouCards.count
+    }
+
+    private func show(_ section: NeedsYouSection) -> Bool { NeedsYouHeaderCounts.shows(filter, section) }
+
     var body: some View {
+        let chats = model.triageChats
+        let counts = NeedsYouHeaderCounts(decide: decideCount, chats: chats, mail: Int(model.mailNeeds?.count ?? 0))
         HSplitView {
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    Text("Needs you")
-                        .font(MekaType.greeting).tracking(MekaType.greetingTracking)
-                        .foregroundStyle(palette.textPrimary)
-                        .padding(.bottom, MekaSpace.l)
-                        .staggeredAppear(0)
-                    // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
-                    ApprovalCardsView(palette: palette, firstIndex: 1)
-                        .padding(.bottom, model.approvals.isEmpty ? 0 : MekaSpace.m)
-                    // What the Fold held at work (synced): the card after work, a quiet count during it.
-                    AfterWorkCard(palette: palette)
-                        .padding(.bottom, MekaSpace.m)
-                        .staggeredAppear(1)
-                    // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches
-                    // (V1, requests slice 4), above the stack.
-                    TriageCardsView(palette: palette, rows: true)
-                        .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
-                    // School days off on office days, a week ahead (school rhythm, slice 1), above the requests.
-                    SchoolCoversView(palette: palette, firstIndex: 2 + model.triage.count)
-                        .padding(.bottom, model.needsYouAsks == 0 ? 0 : MekaSpace.m)
-                    RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks)
-                        .padding(.bottom, model.looseRequests.isEmpty ? 0 : MekaSpace.m)
-                    // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
-                    GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.digestGists.isEmpty ? 0 : MekaSpace.m)
-                    // The ten-minute inbox (Inbox autopilot, slice 7): from the moment, one email at a time.
-                    MailMomentView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.mailMoment == nil && model.mailMomentSession == nil ? 0 : MekaSpace.m)
-                    // The emails that need Meka (Inbox autopilot, slice 6a), each with Done and Snooze.
-                    MailNeedsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.mailNeeds == nil || model.mailMomentSession != nil ? 0 : MekaSpace.m)
-                    // Waiting for items from email whose chase is due (Inbox autopilot, slice 6b-3), each drafted.
-                    MailChaseView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.mailChases == nil ? 0 : MekaSpace.m)
-                    // Renewals read from his mail (Promises, receipts and renewals, slice 1), added only on his tap.
-                    MailFindView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.mailFinds == nil ? 0 : MekaSpace.m)
-                    // The channels he follows on Discord (Discord channel watch, slice 1), each with Done.
-                    DiscordCardsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.discord == nil ? 0 : MekaSpace.m)
-                    // The approved look's mail (the Fold's slice 2): today's tidies as four tiles, the one unsubscribe
-                    // question and See all ›, in place of the long log and the weekly offer's card.
-                    NeedsYouMailGroup(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {
-                        // The breathing check ring beside a light line and what lands here (catalogue "Empty
-                        // states"; Fold review 2026-10-08, item 7); Off: still.
-                        HStack(spacing: MekaSpace.m) {
-                            BreathingRingView(palette: palette, check: true)
-                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
-                                    .font(MekaType.body).foregroundStyle(palette.textPrimary)
-                                Text(NeedsYouStackRules.shared.EMPTY_CAPTION)
-                                    .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                            }
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        NeedsYouHeaderView(palette: palette, counts: counts) {
+                            model.clearFyiChats(NeedsYouLayoutRules.shared.fyi(chats: chats))
                         }
-                        .accessibilityElement(children: .combine)
-                        .staggeredAppear(1)
-                        // Approve must land: what Navilife is doing with his mail since his Approve.
-                        MailWorkingView(palette: palette)
-                        // Then what's coming: today's habits, Waiting on, the next renewals.
-                        NeedsYouMeanwhileView(palette: palette)
-                    } else if !model.needsYouCards.isEmpty {
-                        NeedsYouStackView(palette: palette).staggeredAppear(1)
-                        MailWorkingView(palette: palette)
-                        // Under the stack, the next reminders (the gate's Needs you re-shot).
-                        NeedsYouMeanwhileView(palette: palette, underStack: true)
+                        NeedsYouChipsView(palette: palette, chips: counts.chips, chosen: $filter)
                     }
+                    .padding(.bottom, MekaSpace.m)
+                    .staggeredAppear(0)
+                    if show(.decide) { decideSection(counts) }
+                    if show(.messages) { messagesSection }
+                    if show(.fyi) {
+                        NeedsYouFyiRowsView(palette: palette, chats: NeedsYouLayoutRules.shared.fyi(chats: chats),
+                                            firstIndex: 3 + model.triage.count)
+                            .padding(.bottom, counts.fyi == 0 ? 0 : MekaSpace.m)
+                    }
+                    if show(.mail) { mailSection }
+                    if filter == .all { emptyState }
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
-                    ScamTextsView(palette: palette)
+                    if show(.messages) { ScamTextsView(palette: palette) }
                 }
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: filter)
                 .padding(.horizontal, MekaSpace.gutterWide)
                 .padding(.vertical, MekaSpace.xl)
             }
@@ -248,6 +213,77 @@ struct NeedsYouView: View {
                 .frame(minWidth: 280, idealWidth: 360)
         }
         .background(palette.background)
+    }
+
+    /// TO DECIDE · n: the approvals inbox first (time-limited, nothing happens until Meka answers), school days off on
+    /// office days, date night and appointments, requests from people he watches, then the stack.
+    @ViewBuilder private func decideSection(_ counts: NeedsYouHeaderCounts) -> some View {
+        if counts.decide > 0 {
+            NeedsYouSectionHead(palette: palette, text: NeedsYouLayoutRules.shared.head(
+                title: NeedsYouLayoutRules.shared.DECIDE_HEAD, count: Int32(counts.decide)))
+                .staggeredAppear(1)
+        }
+        ApprovalCardsView(palette: palette, firstIndex: 1)
+            .padding(.bottom, model.approvals.isEmpty ? 0 : MekaSpace.m)
+        SchoolCoversView(palette: palette, firstIndex: 2)
+            .padding(.bottom, model.needsYouAsks == 0 ? 0 : MekaSpace.m)
+        RequestCardsView(palette: palette, firstIndex: 2 + model.needsYouAsks)
+            .padding(.bottom, model.looseRequests.isEmpty ? 0 : MekaSpace.m)
+        if !model.needsYouCards.isEmpty {
+            NeedsYouStackView(palette: palette).staggeredAppear(1)
+            MailWorkingView(palette: palette)
+            // Under the stack, the next reminders (the gate's Needs you re-shot).
+            NeedsYouMeanwhileView(palette: palette, underStack: true)
+        }
+    }
+
+    /// MESSAGES: what the Fold held at work (the card after work, a quiet count during it), one row per chat the Fold
+    /// triaged, the group digest (gists, never the messages) and the Discord channels he follows.
+    @ViewBuilder private var messagesSection: some View {
+        AfterWorkCard(palette: palette)
+            .padding(.bottom, MekaSpace.m)
+            .staggeredAppear(2)
+        TriageCardsView(palette: palette, firstIndex: 2 + model.needsYouAsks + model.requests.count, rows: true)
+            .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
+        GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+            .padding(.bottom, model.digestGists.isEmpty ? 0 : MekaSpace.m)
+        DiscordCardsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
+            .padding(.bottom, model.discord == nil ? 0 : MekaSpace.m)
+    }
+
+    /// The mail: the ten-minute inbox, the emails that need him, chases due, renewals read from his mail, then MAIL
+    /// NAVILIFE TIDIED TODAY as four tiles with the one unsubscribe question and See all ›.
+    @ViewBuilder private var mailSection: some View {
+        let first = 3 + model.triage.count + model.needsYouAsks + model.requests.count
+        MailMomentView(palette: palette, firstIndex: first)
+            .padding(.bottom, model.mailMoment == nil && model.mailMomentSession == nil ? 0 : MekaSpace.m)
+        MailNeedsView(palette: palette, firstIndex: first)
+            .padding(.bottom, model.mailNeeds == nil || model.mailMomentSession != nil ? 0 : MekaSpace.m)
+        MailChaseView(palette: palette, firstIndex: first)
+            .padding(.bottom, model.mailChases == nil ? 0 : MekaSpace.m)
+        MailFindView(palette: palette, firstIndex: first)
+            .padding(.bottom, model.mailFinds == nil ? 0 : MekaSpace.m)
+        NeedsYouMailGroup(palette: palette, firstIndex: first)
+    }
+
+    /// Nothing to decide or answer: the breathing check ring beside a light line and what lands here (catalogue
+    /// "Empty states"), what Navilife is doing with his mail, then what's coming (habits, Waiting on, renewals).
+    @ViewBuilder private var emptyState: some View {
+        if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {
+            HStack(spacing: MekaSpace.m) {
+                BreathingRingView(palette: palette, check: true)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
+                        .font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(NeedsYouStackRules.shared.EMPTY_CAPTION)
+                        .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .staggeredAppear(1)
+            MailWorkingView(palette: palette)
+            NeedsYouMeanwhileView(palette: palette)
+        }
     }
 }
 

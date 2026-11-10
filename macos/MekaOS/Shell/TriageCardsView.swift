@@ -26,7 +26,8 @@ struct TriageCardsView: View {
     /// place to its messages as lines with Reply · Done · Later · Task, a second click closes it. A chat carrying
     /// requests opens to its full card, so every request keeps its own answers. Hint line under them.
     private var messageRows: some View {
-        let chats = model.triageChats
+        // Chats needing nothing from Meka sit under FYI as thin rows (NeedsYouFyiRowsView), not here.
+        let chats = NeedsYouLayoutRules.shared.messages(chats: model.triageChats)
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if !chats.isEmpty {
                 Text(NeedsYouLayoutRules.shared.head(title: NeedsYouLayoutRules.shared.MESSAGES_HEAD, count: Int32(chats.count)))
