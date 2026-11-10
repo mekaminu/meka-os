@@ -22,6 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import os.meka.core.domain.NeedsYouFilter
+import os.meka.core.domain.NeedsYouPart
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import os.meka.core.domain.NeedsYouLayoutRules
 import os.meka.core.domain.NeedsYouDecideRules
 import os.meka.core.domain.NeedsYouSection
@@ -109,12 +115,29 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
       CompositionLocalProvider(LocalContainerOrigins provides origins) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
             val twoPane = maxWidth >= 600.dp
+            // The approved look on the open Fold: two columns (To decide + Messages | FYI + Mail) while no task is open;
+            // a task opened from the stack takes the right side as its detail and the list is one column beside it.
+            val columns = NeedsYouLayoutRules.twoColumns(maxWidth.value.toInt(), taskOpen = selected != null)
+            // Shared by both columns, so the chips, the open chat and the header's height hold across them.
+            val filter = rememberSaveable { mutableStateOf(NeedsYouFilter.ALL) }
+            val openChat = rememberSaveable { mutableStateOf<String?>(null) }
+            val headerHeight = remember { mutableStateOf(0) }
             val list: @Composable (Modifier) -> Unit = { m ->
-                NeedsYouColumn(core, stack, moves, m, openAfterWork = { showAfterWork = true })
+                if (columns) {
+                    Row(m.testTag(NEEDS_YOU_COLUMNS_TAG)) {
+                        NeedsYouColumn(core, stack, moves, Modifier.weight(1f).fillMaxHeight(), openAfterWork = { showAfterWork = true },
+                            part = NeedsYouPart.LEFT, filterState = filter, openChatState = openChat, headerHeight = headerHeight)
+                        NeedsYouColumn(core, stack, moves, Modifier.weight(1f).fillMaxHeight(), openAfterWork = { showAfterWork = true },
+                            part = NeedsYouPart.RIGHT, filterState = filter, openChatState = openChat, headerHeight = headerHeight)
+                    }
+                } else {
+                    NeedsYouColumn(core, stack, moves, m, openAfterWork = { showAfterWork = true },
+                        filterState = filter, openChatState = openChat, headerHeight = headerHeight)
+                }
             }
             // Opening the Fold grows the detail out beside the stack; closed, the detail springs up over it.
             TwoPaneMorph(
-                twoPane,
+                twoPane && !columns,
                 list = list,
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -473,6 +496,10 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
 /** The Needs you list, so a by-hand test scrolls it in bounded steps (never performScrollToNode with the clock paused). */
 const val NEEDS_YOU_LIST_TAG = "needs-you-list"
 
+/** The open Fold's two columns (To decide + Messages | FYI + Mail), and the right one's list, for the screen tests. */
+const val NEEDS_YOU_COLUMNS_TAG = "needs-you-columns"
+const val NEEDS_YOU_RIGHT_TAG = "needs-you-right"
+
 /**
  * The Needs you list: its title, the after-work card, then the stack (or "Nothing needs you" beside the breathing
  * check ring). The tab shows it with the big title; the command centre with a smaller heading that carries the count.
@@ -481,6 +508,13 @@ const val NEEDS_YOU_LIST_TAG = "needs-you-list"
 internal fun NeedsYouColumn(
     core: MekaCore, stack: NeedsYouStack, moves: DecisionMoves, modifier: Modifier, openAfterWork: () -> Unit,
     compact: Boolean = false, play: Boolean = true,
+    /** The whole page, or one of the open Fold's two columns ([NeedsYouLayoutRules.side]). */
+    part: NeedsYouPart = NeedsYouPart.ALL,
+    /** The chip and the open chat, held by the screen so both columns share them; this list's own when null. */
+    filterState: MutableState<NeedsYouFilter>? = null,
+    openChatState: MutableState<String?>? = null,
+    /** The left column's header height, so the right column's first heading lines up with To decide's. */
+    headerHeight: MutableState<Int>? = null,
 ) {
     // Taps feel instant (2026-10-25): what was just decided here is hidden at once, until the views no longer hold it.
     val hidden = moves.hidden
@@ -575,17 +609,20 @@ internal fun NeedsYouColumn(
         summaryApp.openDestination.value = os.meka.android.shell.ShellDestination.ASK
     }
     // The approved Needs you look (2026-11-09): the chosen chip and the one chat open in place, on this screen only.
-    var filter by rememberSaveable { mutableStateOf(NeedsYouFilter.ALL) }
-    var openChat by rememberSaveable { mutableStateOf<String?>(null) }
+    val ownFilter = rememberSaveable { mutableStateOf(NeedsYouFilter.ALL) }
+    val ownOpenChat = rememberSaveable { mutableStateOf<String?>(null) }
+    var filter by (filterState ?: ownFilter)
+    var openChat by (openChatState ?: ownOpenChat)
     val messageChats = remember(chats) { NeedsYouLayoutRules.messages(chats) }
     val fyiChats = remember(chats) { NeedsYouLayoutRules.fyi(chats) }
     val replyCount = NeedsYouLayoutRules.replyCount(chats)
     val decideCount = approvals.size + looseRequests.size + asks + cards.size
     val mailCount = mailNeeds?.count ?: 0  // the card headline's figure, never just the rows shown
-    fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section)
+    fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section) && NeedsYouLayoutRules.inPart(part, section)
+    val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
-        modifier.footFade().testTag(NEEDS_YOU_LIST_TAG),
+        modifier.footFade().testTag(if (part == NeedsYouPart.RIGHT) NEEDS_YOU_RIGHT_TAG else NEEDS_YOU_LIST_TAG),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -804,11 +841,23 @@ internal fun NeedsYouColumn(
             meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         }
         } else {
+        if (part == NeedsYouPart.RIGHT) {
+            // The right column starts level with To decide: the left column's header height, empty.
+            item(key = "title-space") {
+                Spacer(Modifier.height(with(LocalDensity.current) { (headerHeight?.value ?: 0).toDp() }))
+            }
+            if ((!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny)) {
+                item(key = "right-empty") {
+                    Text(NeedsYouLayoutRules.RIGHT_EMPTY, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m, start = MekaSpace.xxs).appear(rememberAppearance(1, play)))
+                }
+            }
+        } else
         item(key = "title") {
             if (compact) {
                 SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
-                Column(Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
+                Column(Modifier.onSizeChanged { headerHeight?.value = it.height }.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
                     NeedsYouHeader(NeedsYouLayoutRules.subtitle(decideCount, replyCount, fyiChats.size), fyiChats.isNotEmpty(), onClear = {
                         fyiChats.forEach { moves.onTriageChat(it, ChatFinishTap.DONE) }
                     })
@@ -1021,7 +1070,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        if (show(NeedsYouSection.MAIL) && (mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null)) {
+        if (show(NeedsYouSection.MAIL) && mailAny) {
             item(key = "mail-head") { NeedsYouHead(NeedsYouLayoutRules.MAIL_HEAD, Modifier.animateItem()) }
         }
         if (show(NeedsYouSection.MAIL)) {
@@ -1092,7 +1141,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        if (filter == NeedsYouFilter.ALL) {
+        if (filter == NeedsYouFilter.ALL && part != NeedsYouPart.RIGHT) {
         if (cards.isEmpty() && approvals.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,

@@ -34,6 +34,10 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_LIST_TAG
 import os.meka.android.today.NeedsYouRoute
+import os.meka.core.domain.NeedsYouLayoutRules
+import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
+import os.meka.android.today.NEEDS_YOU_COLUMNS_TAG
+import androidx.compose.ui.test.hasTestTag
 import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.NeedsYouMeanwhileRules
@@ -288,4 +292,27 @@ class NeedsYouScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerManyLight() { shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT) }
+
+    /**
+     * The approved look on the open Fold: two columns while no task is open, To decide (the stack) and Coming up on the
+     * left, FYI and mail on the right (here its quiet line, as nothing is FYI or tidied), never the old empty
+     * "Select something" pane; ↑ Open turns it back into the list beside the task's detail.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerTwoColumns() {
+        val core = shoot("inner-dark-two-columns", Fill.MANY)
+        val name = "inner-two-columns"
+        if (!shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: the open Fold shows one column, not two")
+        ScreenShots.assertShows(compose, name, NeedsYouLayoutRules.RIGHT_EMPTY)
+        if (shows(hasText("Select something to see it here."))) fail("$name: the empty detail pane still shows")
+        val right = compose.onNodeWithTag(NEEDS_YOU_RIGHT_TAG).fetchSemanticsNode().boundsInRoot
+        val top = top(core) ?: fail("$name: no card on the stack")
+        val card = compose.onAllNodes(hasText(top.title)).fetchSemanticsNodes().firstOrNull() ?: fail("$name: the top card isn't drawn")
+        if (card.boundsInRoot.right > right.left + 1f) fail("$name: To decide isn't in the left column")
+        val empty = compose.onAllNodes(hasText(NeedsYouLayoutRules.RIGHT_EMPTY)).fetchSemanticsNodes().first()
+        if (empty.boundsInRoot.left < right.left - 1f) fail("$name: the right column's line isn't on the right")
+        tap(name, "Open", hasText(NeedsYouStackRules.buttonLabels(top)[1]))
+        until { !shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG)) }
+        if (shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: opening a task kept the two columns")
+    }
 }

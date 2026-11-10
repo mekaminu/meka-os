@@ -12,6 +12,12 @@ enum class NeedsYouFilter(val label: String) {
 
 enum class NeedsYouSection { DECIDE, MESSAGES, FYI, MAIL }
 
+/**
+ * Which part of Needs you a list draws: the whole page (the folded phone, the command centre), or one of the open
+ * Fold's two columns: To decide and Messages on the left, FYI and Mail on the right.
+ */
+enum class NeedsYouPart { ALL, LEFT, RIGHT }
+
 /** One person's or group's messages as a row: avatar letters, name, time, one-line gist and a badge. */
 data class NeedsYouMessageRow(
     val key: String,
@@ -88,6 +94,27 @@ object NeedsYouLayoutRules {
         NeedsYouFilter.FYI -> section == NeedsYouSection.FYI
         NeedsYouFilter.MAIL -> section == NeedsYouSection.MAIL
     }
+
+    /** Width (dp) from which Needs you lays out as two columns (the open Fold), as Today's two panes. */
+    const val TWO_COLUMNS_FROM_DP = 600
+
+    /** The right column's quiet line when it has nothing: FYI and mail land here. */
+    const val RIGHT_EMPTY = "No FYI or tidied mail right now"
+
+    /** The column [section] sits in on the open Fold: To decide and Messages left, FYI and Mail right. */
+    fun side(section: NeedsYouSection): NeedsYouPart = when (section) {
+        NeedsYouSection.DECIDE, NeedsYouSection.MESSAGES -> NeedsYouPart.LEFT
+        NeedsYouSection.FYI, NeedsYouSection.MAIL -> NeedsYouPart.RIGHT
+    }
+
+    /** Whether [part] draws [section]: the whole page draws every section, a column only its own. */
+    fun inPart(part: NeedsYouPart, section: NeedsYouSection): Boolean = part == NeedsYouPart.ALL || side(section) == part
+
+    /**
+     * Two columns on the open Fold ([widthDp] at least [TWO_COLUMNS_FROM_DP]) while no task is open; an opened task
+     * (from the stack) takes the right side as its detail, so the list goes back to one column beside it.
+     */
+    fun twoColumns(widthDp: Int, taskOpen: Boolean): Boolean = widthDp >= TWO_COLUMNS_FROM_DP && !taskOpen
 
     /** "W" for "Your wife"'s first word after "Your", "GT" for "Game testing group", "?" for no letters. */
     fun initials(name: String): String {

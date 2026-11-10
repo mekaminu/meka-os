@@ -15,6 +15,7 @@ import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
@@ -32,6 +33,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_LIST_TAG
+import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
 import os.meka.android.today.NeedsYouRoute
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
@@ -178,7 +180,9 @@ class NeedsYouMailScreensTest {
      */
     private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
         if (!shows(m)) {
-            val list = compose.onNodeWithTag(NEEDS_YOU_LIST_TAG)
+            // On the open Fold the mail sits in the right column's own list.
+            val right = compose.onAllNodesWithTag(NEEDS_YOU_RIGHT_TAG).fetchSemanticsNodes().isNotEmpty()
+            val list = compose.onNodeWithTag(if (right) NEEDS_YOU_RIGHT_TAG else NEEDS_YOU_LIST_TAG)
             val step = list.fetchSemanticsNode().size.height * 0.6f
             for (dy in List(20) { step } + List(40) { -step }) {
                 if (shows(m)) break

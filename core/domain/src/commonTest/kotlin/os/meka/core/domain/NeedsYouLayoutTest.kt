@@ -81,4 +81,25 @@ class NeedsYouLayoutTest {
         assertEquals("?", NeedsYouLayoutRules.initials("🙂"))
         assertEquals("FYI cleared · 1 chat", NeedsYouLayoutRules.clearedLine(1))
     }
+
+    @Test
+    fun theOpenFoldPutsDecideAndMessagesLeftAndFyiAndMailRight() {
+        assertEquals(NeedsYouPart.LEFT, NeedsYouLayoutRules.side(NeedsYouSection.DECIDE))
+        assertEquals(NeedsYouPart.LEFT, NeedsYouLayoutRules.side(NeedsYouSection.MESSAGES))
+        assertEquals(NeedsYouPart.RIGHT, NeedsYouLayoutRules.side(NeedsYouSection.FYI))
+        assertEquals(NeedsYouPart.RIGHT, NeedsYouLayoutRules.side(NeedsYouSection.MAIL))
+        NeedsYouSection.entries.forEach { assertTrue(NeedsYouLayoutRules.inPart(NeedsYouPart.ALL, it)) }
+        assertFalse(NeedsYouLayoutRules.inPart(NeedsYouPart.LEFT, NeedsYouSection.MAIL))
+        assertFalse(NeedsYouLayoutRules.inPart(NeedsYouPart.RIGHT, NeedsYouSection.DECIDE))
+        assertTrue(NeedsYouLayoutRules.inPart(NeedsYouPart.RIGHT, NeedsYouSection.FYI))
+    }
+
+    @Test
+    fun twoColumnsOnlyWhenWideAndNoTaskIsOpen() {
+        assertTrue(NeedsYouLayoutRules.twoColumns(840, taskOpen = false))
+        assertTrue(NeedsYouLayoutRules.twoColumns(600, taskOpen = false))
+        assertFalse(NeedsYouLayoutRules.twoColumns(599, taskOpen = false))
+        assertFalse(NeedsYouLayoutRules.twoColumns(840, taskOpen = true))
+        assertFalse(NeedsYouLayoutRules.twoColumns(360, taskOpen = false))
+    }
 }
