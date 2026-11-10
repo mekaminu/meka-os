@@ -1,6 +1,7 @@
 package os.meka.android.work
 
 import os.meka.core.domain.CaptureApp
+import os.meka.core.domain.TriageChatRules
 
 /**
  * Which notifications the work-mode listener reads, kept free of Android types so they are unit-tested.
@@ -54,6 +55,17 @@ object NotificationRules {
     }
 
     /** WhatsApp group fallbacks title messages "Group: Sender"; split them. */
+    /**
+     * The sender as Needs you stores it (Needs you bugs, 2026-11-10): Meka's own message, named "You" by WhatsApp or by
+     * his own name as the conversation's user ([userName]), is stored as [TriageChatRules.ME] so the core knows the
+     * chat's last word was his and keeps it out of FYI and Reply.
+     */
+    fun senderName(sender: String, userName: String?): String {
+        val s = sender.trim()
+        val me = userName?.trim()?.takeIf { it.isNotEmpty() }
+        return if (s.equals(TriageChatRules.ME, ignoreCase = true) || (me != null && s.equals(me, ignoreCase = true))) TriageChatRules.ME else s
+    }
+
     fun splitGroupTitle(title: String): Pair<String?, String> {
         val i = title.indexOf(": ")
         return if (i in 1 until title.length - 2) title.substring(0, i) to title.substring(i + 2) else null to title

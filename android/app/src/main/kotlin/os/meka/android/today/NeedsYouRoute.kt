@@ -548,7 +548,7 @@ internal fun NeedsYouColumn(
     val fyiChats = remember(chats) { NeedsYouLayoutRules.fyi(chats) }
     val replyCount = NeedsYouLayoutRules.replyCount(chats)
     val decideCount = approvals.size + looseRequests.size + asks + cards.size
-    val mailCount = mailNeeds?.rows?.size ?: 0
+    val mailCount = mailNeeds?.count ?: 0  // the card headline's figure, never just the rows shown
     fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section)
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(

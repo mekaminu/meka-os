@@ -33,6 +33,24 @@ object ChatTitleRules {
         return out.ifEmpty { t }
     }
 
+    /**
+     * A person's name as Needs you shows it (Needs you bugs, 2026-11-10): WhatsApp passes on the name someone typed for
+     * themselves when they aren't a saved contact ("Mato kano"), so a word starting with a small letter gets a capital
+     * ("Mato Kano"), as do its hyphenated parts; a word with a capital inside ("McDonald", "iPhone") and anything that
+     * isn't a plain name (a number, an email, a short code) are kept as they came.
+     */
+    fun personName(name: String): String {
+        val t = squash(name)
+        if (t.isEmpty() || '@' in t || t.any { it.isDigit() }) return t
+        return t.split(' ').joinToString(" ") { w -> w.split('-').joinToString("-") { part -> cap(part) } }
+    }
+
+    private fun cap(word: String): String {
+        val first = word.firstOrNull() ?: return word
+        if (!first.isLetter() || !first.isLowerCase() || word.drop(1).any { it.isUpperCase() }) return word
+        return first.uppercaseChar() + word.drop(1)
+    }
+
     /** [clean] for a nullable name; null or blank stays null. */
     fun cleanOrNull(name: String?): String? = name?.let { clean(it) }?.takeIf { it.isNotEmpty() }
 

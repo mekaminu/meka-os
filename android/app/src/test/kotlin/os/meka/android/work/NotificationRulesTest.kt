@@ -8,6 +8,16 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NotificationRulesTest {
+    /** Needs you bugs (2026-11-10): his own message is stored as "You", whether WhatsApp says "You" or his own name. */
+    @Test
+    fun hisOwnMessagesAreStoredAsYou() {
+        assertEquals("You", NotificationRules.senderName("You", null))
+        assertEquals("You", NotificationRules.senderName(" you ", "Alex Morgan"))
+        assertEquals("You", NotificationRules.senderName("Alex Morgan", "Alex Morgan"))
+        assertEquals("Sam", NotificationRules.senderName("Sam", "Alex Morgan"))
+        assertEquals("Yousef", NotificationRules.senderName("Yousef", ""))
+    }
+
     @Test
     fun onlyWhatsAppTextsAndMissedCallsAreRead() {
         assertEquals(CaptureApp.WHATSAPP, NotificationRules.appFor("com.whatsapp", "msg", null))

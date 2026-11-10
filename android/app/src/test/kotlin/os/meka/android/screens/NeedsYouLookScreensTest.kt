@@ -87,7 +87,7 @@ class NeedsYouLookScreensTest {
         }
     }
 
-    private fun draw(theme: ThemeChoice) {
+    private fun draw(theme: ThemeChoice, chats: List<os.meka.core.domain.TriageChat> = this.chats) {
         ThemeChoice.save(ApplicationProvider.getApplicationContext<ShotApplication>(), theme)
         compose.mainClock.autoAdvance = false
         val messages = NeedsYouLayoutRules.messages(chats)
@@ -137,6 +137,21 @@ class NeedsYouLookScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverDark() = shoot("cover-dark")
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverLight() = shoot("cover-light", ThemeChoice.LIGHT)
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerDark() = shoot("inner-dark")
+
+    /** Needs you bugs (2026-11-10): his own line never shows as a chat, and a lower-case name gets its capitals. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun hisOwnLinesStayOutAndNamesGetCapitals() {
+        draw(ThemeChoice.DARK, TriageChatRules.chats(listOf(
+            card("m1", "Mato kano", 3, "Sent the photos from Saturday", TriageLane.NEEDS_REPLY),
+            card("y1", "You", 5, "You asked whether it's the same tables"),
+            card("q1", "Jo", 6, "Asks about the tables", TriageLane.NEEDS_REPLY, group = "Quiz night"),
+            card("q2", "You", 8, "Says they are", group = "Quiz night"),
+        )))
+        if (!onScreen("Mato Kano")) fail("the name isn't shown with its capitals")
+        if (onScreen("Mato kano")) fail("the name still shows WhatsApp's casing")
+        if (onScreen("You asked") || onScreen("Says they are")) fail("his own message shows in Needs you")
+        if (onScreen("Quiz night")) fail("a group whose last word is his still shows")
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun aTapOpensARowAndASecondClosesIt() {

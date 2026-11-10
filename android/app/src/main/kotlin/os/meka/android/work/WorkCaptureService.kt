@@ -27,6 +27,7 @@ import os.meka.core.domain.RequestWatchRules
 import os.meka.core.domain.TriageReplyRules
 import os.meka.core.facade.RequestRead
 import os.meka.core.facade.TriageRead
+import os.meka.core.domain.TriageChatRules
 
 /**
  * Work mode's listener (build plan M1). Reads WhatsApp, SMS and missed-call notifications through Android's official
@@ -220,11 +221,20 @@ class WorkCaptureService : NotificationListenerService() {
             // A one-to-one WhatsApp chat's number (WhatsApp replies, slice 1): the chat id, the sender's tel: link, or the
             // sender shown as a number; so Reply in WhatsApp can open the chat with the reply typed once this goes.
             val shortcut = n.shortcutId
-            return style.messages.mapNotNull { m ->
-                val sender = m.person?.name?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null // null = Meka himself
+            val userName = style.user.name?.toString()
+            val parsed = style.messages.mapNotNull { m ->
+                val raw = m.person?.name?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null // null = Meka himself
+                val sender = NotificationRules.senderName(raw, userName)
                 val body = m.text?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val number = if (group == null && app == CaptureApp.WHATSAPP) TriageReplyRules.chatNumber(sender, m.person?.uri, shortcut) else null
-                item(app, CaptureKind.MESSAGE, sender, body, group, m.timestamp.takeIf { it > 0 } ?: at, number)
+                Triple(m, sender, body) to number
+            }
+            // His own line in a one-to-one chat carries the chat's number (the other person's), so the core can match it.
+            val theirNumber = parsed.filter { it.first.second != TriageChatRules.ME }.mapNotNull { it.second }.distinct().singleOrNull()
+            return parsed.map { (t, number) ->
+                val (m, sender, body) = t
+                val n0 = if (sender == TriageChatRules.ME && group == null && app == CaptureApp.WHATSAPP) number ?: theirNumber else number
+                item(app, CaptureKind.MESSAGE, sender, body, group, m.timestamp.takeIf { it > 0 } ?: at, n0)
             }
         }
         if (NotificationRules.isSummaryOnly(title, text)) return emptyList()

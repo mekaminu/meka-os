@@ -330,7 +330,7 @@ private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress:
         Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(card.why, style = MekaType.itemMeta, color = if (card.urgent) Meka.colors.critical else Meka.colors.accent)
             Text(card.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Text(NeedsYouStackRules.hint(card), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            // The moves are the buttons under the card; no hint line repeating them (Needs you bugs, 2026-11-10).
         }
         if (armed != null && progress > 0f) {
             val pop by animateFloatAsState(if (progress >= 1f && !reduced) 1.15f else 1f, MekaMotion.approve(reduced), label = "stack-pop")

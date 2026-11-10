@@ -201,7 +201,7 @@ private struct DecisionCardFace: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(card.why).font(MekaType.itemMeta).foregroundStyle(card.urgent ? palette.critical : palette.accent)
             Text(card.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).lineLimit(3)
-            Text(NeedsYouStackRules.shared.hint(card: card)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            // The moves are the buttons under the card; no hint line repeating them (Needs you bugs, 2026-11-10).
             Spacer(minLength: 0)
         }
         // Hugs its words (the gate's Needs you re-shot: a fixed height left a tall empty band under a short card).

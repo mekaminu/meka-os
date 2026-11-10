@@ -141,6 +141,11 @@ class NeedsYouMailScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
         ScreenShots.assertSensible(compose, name)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
+        // Needs you bugs (2026-11-10): a mail row is its sender and subject; the body waits until he opens the email.
+        if (compose.onAllNodes(androidx.compose.ui.test.hasText("Can you drive the boys", substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()) fail("$name: a mail row shows the email's body")
+        if (compose.onAllNodes(androidx.compose.ui.test.hasText("Football on Saturday", substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty()) fail("$name: a mail row's subject isn't shown")
         return core
     }
 

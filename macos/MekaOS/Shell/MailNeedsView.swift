@@ -305,9 +305,7 @@ struct MailNeedsRowView: View {
                     }
                 }
                 Text(row.subject).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(2)
-                if let preview = row.preview {
-                    Text(preview).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(2)
-                }
+                // Sender and subject only (Needs you bugs, 2026-11-10); the body shows once he opens the email.
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                 // Slice 3: an answer turning his times down says so in its own line instead.
                 if row.asksToMeet, row.pickedLine == nil {

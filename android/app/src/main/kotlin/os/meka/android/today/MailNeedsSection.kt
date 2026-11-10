@@ -303,7 +303,8 @@ internal fun MailNeedsRowView(
                 }
             }
             Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            // Sender and subject only (Needs you bugs, 2026-11-10: the first lines carried greetings, his name, a card's
+            // last digits); the body shows once he opens the email.
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             // Slice 3: an answer turning his times down says so in its own line instead.
             if (row.asksToMeet && row.pickedLine == null) Text(MeetingRequestRules.ASKS, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-asks-to-meet"))

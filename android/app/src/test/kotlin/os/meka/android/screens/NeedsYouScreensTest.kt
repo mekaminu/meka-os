@@ -127,8 +127,13 @@ class NeedsYouScreensTest {
             else -> {
                 ScreenShots.assertShows(compose, name, titles(fill).first())
                 ScreenShots.assertShows(compose, name, "Overdue")
-                // The card hugs its words: its padding (24 dp) and a little more under the hint, no empty band.
-                ScreenShots.assertHugs(compose, name, NeedsYouStackRules.TOP_CARD_TAG, "↑ Open", maxGapDp = 32f)
+                // The card hugs its words: its padding (24 dp) and a little more under the title, no empty band.
+                ScreenShots.assertHugs(compose, name, NeedsYouStackRules.TOP_CARD_TAG, titles(fill).first(), maxGapDp = 32f)
+                // Needs you bugs (2026-11-10): the moves are the buttons only, never again as a hint line on the card.
+                if (compose.onAllNodes(hasText(" · ← ", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                    fail("$name: the card repeats its moves as a hint line")
+                }
+                ScreenShots.assertShows(compose, name, "↑ Open")
             }
         }
         // Under a stack, the next reminder is in view (Coming up), not a blank page.

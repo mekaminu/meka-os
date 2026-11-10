@@ -4334,6 +4334,12 @@ class MekaCore(
         if (route == os.meka.core.domain.TriageRoute.Skip) return TriageRead.Skipped
         if (route is os.meka.core.domain.TriageRoute.Digest) return TriageRead.Digest(route.groupKey)
         if (onCore { triageCards.known(item.id) }) return TriageRead.Skipped
+        // Needs you bugs (2026-11-10): Meka's own message is never sent to the AI; it is kept, without a gist, only so
+        // Needs you knows the chat's last word was his (TriageChatRules.chats).
+        if (item.personName.trim().equals(os.meka.core.domain.TriageChatRules.ME, ignoreCase = true)) return onCore {
+            triageCards.save(item, os.meka.core.domain.MessageTriage(os.meka.core.domain.TriageLane.FYI), local = true)
+            TriageRead.Read(null)
+        }
         val text = item.text.orEmpty().trim()
         val requestRules = os.meka.core.domain.MessageRequestRules
         val fyi = os.meka.core.domain.MessageTriage(os.meka.core.domain.TriageLane.FYI)

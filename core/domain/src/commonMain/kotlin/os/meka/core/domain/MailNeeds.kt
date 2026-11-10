@@ -253,6 +253,11 @@ data class MailNeedsCard(
     val replyLine: String? = null,
     /** Protected time, slice 3: "2 business emails wait till tomorrow 07:00 · protected time", or null. */
     val heldLine: String? = null,
+    /**
+     * How many emails need him, the same figure as [headline] (Needs you bugs, 2026-11-10: the Mail chip said 5, the
+     * rows shown, while the card said 14): the Mail chip and every other count use this.
+     */
+    val count: Int = 0,
 )
 
 object MailNeedsRules {
@@ -504,6 +509,13 @@ object MailNeedsRules {
     fun headline(n: Int): String = if (n == 1) "1 email needs you" else "$n emails need you"
 
     /** Junk fix slice 3: notes to self aren't counted as needing him: "3 emails need you · 1 note to self". */
+    /** The figure [headline] leads with: the emails that need him, or the notes to self when there is nothing else. */
+    fun count(items: List<MailItem>): Int {
+        val notes = items.count { it.note != null }
+        val needs = items.size - notes
+        return if (needs > 0) needs else notes
+    }
+
     fun headline(items: List<MailItem>): String {
         val notes = items.count { it.note != null }
         val needs = items.size - notes
@@ -553,6 +565,7 @@ object MailNeedsRules {
                 else -> "$snoozedCount snoozed"
             },
             replyLine = MailAutoDraftRules.replyLine(all),
+            count = count(all),
         )
     }
 
@@ -586,7 +599,7 @@ object MailNeedsRules {
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull(note, security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
+                spoken = listOfNotNull(note, security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
                     i.wants?.let { "Needs a reply: $it" }?.takeIf { MailAutoDraftRules.needsReply(i) },
                     "Navilife drafted a reply".takeIf { MailAutoDraftRules.draftShowing(i) && notice == null }).joinToString(". "),
                 notice = notice,

@@ -83,14 +83,41 @@ object TriageChatRules {
     /** "Jordan asked": above a group's card when someone Meka watches for asked something there. */
     fun askedLine(name: String): String = "$name asked"
 
-    /** A group where someone Meka watches for asked something first, then chats needing a reply, then the newest. */
-    fun chats(cards: List<TriageCard>): List<TriageChat> =
-        cards.groupBy { key(it) }.map { (k, list) -> chat(k, list) }
+    /** How WhatsApp (and the Fold's capture) names Meka's own messages in a chat's notification. */
+    const val ME = "You"
+
+    /** True when [card] is Meka's own message ("You", or "You in Barça lads"), never something waiting on him. */
+    fun fromMe(card: TriageCard): Boolean = TriageReplyRules.who(card).substringBefore(" in ").trim().equals(ME, ignoreCase = true)
+
+    /**
+     * A group where someone Meka watches for asked something first, then chats needing a reply, then the newest.
+     * Meka's own messages are never shown (Needs you bugs, 2026-11-10): a chat whose last message is his leaves Needs
+     * you, and one that went on after his message shows only what came after it. His message is matched to its chat by
+     * the group, or for a one-to-one chat by the chat's number; what it hides goes into [TriageChat.repeatIds] so Done
+     * clears it with the chat.
+     */
+    fun chats(cards: List<TriageCard>): List<TriageChat> {
+        val (mine, theirs) = cards.partition(::fromMe)
+        val mineByKey = mine.groupBy { key(it) }
+        val mineByNumber = mine.filter { it.group == null && it.number != null }.groupBy { numberKey(it.app, it.number!!) }
+        return theirs.groupBy { key(it) }.mapNotNull { (k, list) ->
+            val number = list.firstNotNullOfOrNull { if (it.group == null) it.number else null }
+            val myCards = mineByKey[k].orEmpty() + (number?.let { mineByNumber[numberKey(list.first().app, it)] }.orEmpty())
+            val myLast = myCards.maxOfOrNull { it.atMs }
+            val after = if (myLast == null) list else list.filter { it.atMs > myLast }
+            if (after.isEmpty()) return@mapNotNull null
+            val c = chat(k, after)
+            val hidden = (list - after.toSet()).map { it.id } + myCards.map { it.id }
+            if (hidden.isEmpty()) c else c.copy(repeatIds = (c.repeatIds + hidden).distinct())
+        }
             .sortedWith(
                 compareByDescending<TriageChat> { it.askedBy != null }
                     .thenByDescending { it.replies > 0 }
                     .thenByDescending { it.latestMs },
             )
+    }
+
+    private fun numberKey(app: CaptureApp?, number: String) = "${app?.name ?: "APP"}|$number"
 
     /**
      * [chats] with each request from a person filed under that person's 1:1 chat (the latest one when they wrote on two
@@ -198,8 +225,7 @@ object TriageChatRules {
     }
 
     /** How many chats have a reply waiting, for the Needs you badge (one per chat, not per message). */
-    fun replyChats(cards: List<TriageCard>): Int =
-        cards.filter { it.lane == TriageLane.NEEDS_REPLY }.map { key(it) }.distinct().size
+    fun replyChats(cards: List<TriageCard>): Int = chats(cards).count { it.replies > 0 }
 
     /**
      * The same message stored twice (once from the group's notification, once from WhatsApp's bundled "… (2 messages)"
@@ -215,7 +241,7 @@ object TriageChatRules {
         val oldestFirst = list.sortedBy { it.atMs }
         val latest = oldestFirst.last()
         val group = ChatTitleRules.cleanOrNull(latest.group ?: list.firstNotNullOfOrNull { it.group })
-        val title = group ?: TriageReplyRules.who(latest).substringBefore(" in ")
+        val title = group ?: ChatTitleRules.personName(TriageReplyRules.who(latest).substringBefore(" in "))
         val people = list.map { it.personKey }.distinct()
         val replies = list.count { it.lane == TriageLane.NEEDS_REPLY }
         val n = list.size
@@ -234,7 +260,7 @@ object TriageChatRules {
                 .thenByDescending { it.atMs },
         )
         val top = ranked.map { c ->
-            val who = TriageReplyRules.who(c).substringBefore(" in ")
+            val who = ChatTitleRules.personName(TriageReplyRules.who(c).substringBefore(" in "))
             if (group != null) "$who: ${c.gist}" else c.gist
         }.distinct().take(TOP)
         val spoken = buildString {

@@ -276,6 +276,8 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
      */
     fun contacts(): List<ContactSeen> = replica.entities(EntityTypes.TRIAGE_CARD).flatMap { e ->
         val person = e[TriageCardFields.PERSON].textOrNull?.takeIf { it.isNotBlank() } ?: return@flatMap emptyList()
+        // Meka's own message ("You") is not a contact with someone.
+        if (person.trim().equals(TriageChatRules.ME, ignoreCase = true)) return@flatMap emptyList()
         if (e[TriageCardFields.GROUP].textOrNull != null) return@flatMap emptyList()
         val app = e[TriageCardFields.APP].textOrNull?.let { n -> CaptureApp.entries.firstOrNull { it.name == n } }
         listOfNotNull(

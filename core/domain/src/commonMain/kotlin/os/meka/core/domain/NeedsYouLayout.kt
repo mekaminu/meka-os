@@ -104,7 +104,8 @@ object NeedsYouLayoutRules {
     fun line(chat: TriageChat): String {
         val raw = chat.summary?.takeIf { it.isNotBlank() } ?: chat.top.firstOrNull() ?: chat.cards.lastOrNull()?.gist ?: chat.countLine
         val prefix = "${chat.title}: "
-        val trimmed = if (!chat.isGroup && raw.startsWith(prefix)) raw.removePrefix(prefix) else raw
+        // The summary may name them as WhatsApp did ("Mato kano: …") while the title is "Mato Kano".
+        val trimmed = if (!chat.isGroup && raw.startsWith(prefix, ignoreCase = true)) raw.substring(prefix.length) else raw
         return trimmed.lineSequence().firstOrNull()?.trim().orEmpty().ifEmpty { TriageCard.NO_GIST_LINE }
     }
 
