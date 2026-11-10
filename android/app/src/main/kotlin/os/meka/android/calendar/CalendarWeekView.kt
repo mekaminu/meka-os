@@ -291,7 +291,7 @@ private fun WeekStrip(monday: Long, start: Long, today: Long, week: List<WeekGri
                 // The mockup's load bar: 5 dp a thing up to 14 dp; the space stays on an empty day so the pills line up.
                 val bar by animateDpAsState((week.getOrNull(i)?.loadBarDp ?: 0f).dp, MekaMotion.appear(reduced), label = "load-$i")
                 Box(
-                    Modifier.padding(top = 2.dp).height(CalendarWeekRules.LOAD_HEIGHT_DP.dp).width(bar)
+                    Modifier.padding(top = MekaSpace.xxs / 2).height(CalendarWeekRules.LOAD_HEIGHT_DP.dp).width(bar)
                         .clip(RoundedCornerShape(2.dp)).background(Meka.colors.accent),
                 )
             }
