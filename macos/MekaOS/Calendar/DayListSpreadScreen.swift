@@ -315,7 +315,7 @@ private struct SpreadColumn: View {
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel("Add to \(column.title)")
         }
-        .padding(.leading, MekaSpace.s)
+        .padding(.leading, MekaSpace.m)
         .padding(.trailing, MekaSpace.xxs)
         .padding(.vertical, MekaSpace.xxs)
         .background(Capsule().fill(palette.surfaceRaised))
