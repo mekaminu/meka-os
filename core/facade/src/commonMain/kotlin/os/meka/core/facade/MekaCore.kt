@@ -8288,7 +8288,6 @@ class MekaCore(
         _archivedForYou.value = viewMemo.keep("Archived for you", listOf(tidies, seen, minuteNow(), timeZone())) {
             os.meka.core.domain.ArchivedForYouRules.card(tidies, seen, nowMs(), ZoneCalendar(timeZone))
         }
-}
         needsYouMailChanged()
     }
 
@@ -8597,7 +8596,6 @@ class MekaCore(
         _mailUnopened.value = viewMemo.keep("Not opened", listOf(senders, seen, minuteNow(), timeZone())) {
             os.meka.core.domain.MailUnopenedRules.card(senders, seen, nowMs(), ZoneCalendar(timeZone))
         }
-}
         needsYouMailChanged()
     }
 
