@@ -34,7 +34,9 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_LIST_TAG
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
+import os.meka.android.today.NeedsYouGroupStore
 import os.meka.android.today.NeedsYouRoute
+import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailNeedsRules
@@ -131,6 +133,8 @@ class NeedsYouMailScreensTest {
         }
         if (core.mailNeeds.value?.rows?.size != 2) fail("$name: From your mail has ${core.mailNeeds.value?.rows?.size} emails, not 2")
         if (core.mailFinds.value?.rows?.size != 2) fail("$name: Renewals from your mail has ${core.mailFinds.value?.rows?.size} rows, not 2")
+        // Grouped and folding (2026-11-10): the mail boxes start closed on the folded Fold; this check reads them open.
+        NeedsYouGroupStore.save(context, NeedsYouGroup.entries.toSet())
         compose.mainClock.autoAdvance = false
         compose.setContent {
             MekaTheme {

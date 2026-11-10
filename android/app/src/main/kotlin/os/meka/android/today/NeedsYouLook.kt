@@ -94,9 +94,15 @@ internal const val NEEDS_YOU_FYI_TAG = "needs-you-fyi"
 internal const val NEEDS_YOU_MAIL_TAG = "needs-you-mail"
 internal const val NEEDS_YOU_TILE_TAG = "needs-you-mail-tile"
 
-/** "Needs you" over "2 to decide · 4 to reply · 4 FYI", with Clear FYI on the right while there is FYI. */
+/**
+ * "Needs you" over "2 to decide · 4 to reply · 4 FYI", with Clear FYI on the right while there is FYI; grouped and
+ * folding (2026-11-10), the right-hand words are Open all / Close all ([actionLabel]).
+ */
 @Composable
-internal fun NeedsYouHeader(subtitle: String, showClear: Boolean, onClear: () -> Unit, modifier: Modifier = Modifier) {
+internal fun NeedsYouHeader(
+    subtitle: String, showClear: Boolean, onClear: () -> Unit, modifier: Modifier = Modifier,
+    actionLabel: String = NeedsYouLayoutRules.CLEAR_FYI,
+) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary)
@@ -104,7 +110,7 @@ internal fun NeedsYouHeader(subtitle: String, showClear: Boolean, onClear: () ->
         }
         if (showClear) {
             Text(
-                NeedsYouLayoutRules.CLEAR_FYI, style = MekaType.captionStrong, color = Meka.colors.textSecondary,
+                actionLabel, style = MekaType.captionStrong, color = Meka.colors.textSecondary,
                 modifier = Modifier.minTouch().wordsTap(onClick = onClear),
             )
         }
