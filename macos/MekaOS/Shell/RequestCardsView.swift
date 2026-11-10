@@ -17,7 +17,17 @@ struct RequestCardsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             ForEach(Array(model.looseRequests.enumerated()), id: \.element.id) { i, card in
-                RequestCardRow(card: card, palette: palette) { model.answerRequest(card, $0) }
+                Group {
+                    // The approved look (TO DECIDE, the Fold's slice 3): a compact card; a reply keeps its whole draft.
+                    if NeedsYouDecideRules.shared.compact(card: card) {
+                        NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.card(card: card), palette: palette,
+                                               onYes: { model.answerRequest(card, .add) },
+                                               onNo: { model.answerRequest(card, .decline) },
+                                               onChange: { model.answerRequest(card, .change) })
+                    } else {
+                        RequestCardRow(card: card, palette: palette) { model.answerRequest(card, $0) }
+                    }
+                }
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     .staggeredAppear(firstIndex + i)
             }

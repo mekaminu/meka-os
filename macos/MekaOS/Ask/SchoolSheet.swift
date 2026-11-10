@@ -357,12 +357,12 @@ private struct SchoolRowView: View {
     }
 }
 
-/// School rhythm, slice 1: the week-ahead cover questions in Needs you, above the requests, like the Fold's
-/// SchoolCoverCardView: "Theo and Finn are off Mon 27 Oct" · "INSET day · in 5 days" · the question · what working from
-/// home changes · I'll work from home · Covered. A card folds away on the expand spring and the undo bar rises.
-/// Reduce Motion: cross-fades. Nothing is sent to anyone. Date night's week-before card (slice 2) follows them, like the
-/// Fold's DateNightCardView: "In 7 days · from 19:00" · "Date night · Fri 23 Oct" · Booked · Skip this one. Then one
-/// card per appointment that has come due (AppointmentNudgeRow, appointment nudges slice 1).
+/// School rhythm, slice 1: the week-ahead cover questions in Needs you, above the requests, then date night's
+/// week-before card (slice 2), then one card per appointment that has come due (AppointmentNudgeRow). In the approved
+/// Needs you look (Mac TO DECIDE slice) a school day off and date night are compact NeedsYouDecideCardViews like the
+/// Fold's: the icon, the title over its when and question on one line, then its own two taps (I'll work from home ·
+/// Covered; Booked · Skip this one). A card folds away on the expand spring and the undo bar rises; Reduce Motion:
+/// cross-fades. Nothing is sent to anyone.
 struct SchoolCoversView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -372,12 +372,17 @@ struct SchoolCoversView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             ForEach(Array(model.schoolCovers.enumerated()), id: \.element.id) { i, card in
-                SchoolCoverRow(card: card, palette: palette) { model.answerSchoolCover(card.id, home: $0) }
+                // The approved look (TO DECIDE, the Fold's slice 4): one compact card, its own two taps.
+                NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.school(card: card), palette: palette,
+                                       onYes: { model.answerSchoolCover(card.id, home: true) },
+                                       onNo: { model.answerSchoolCover(card.id, home: false) })
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     .staggeredAppear(firstIndex + i)
             }
             if let card = model.dateNightNudge {
-                DateNightNudgeRow(card: card, palette: palette) { model.answerDateNight(day: card.day, booked: $0) }
+                NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.dateNight(card: card), palette: palette,
+                                       onYes: { model.answerDateNight(day: card.day, booked: true) },
+                                       onNo: { model.answerDateNight(day: card.day, booked: false) })
                     .id("date-night-\(card.day)")
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     .staggeredAppear(firstIndex + model.schoolCovers.count)
@@ -392,75 +397,5 @@ struct SchoolCoversView: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.schoolCovers.map(\.id))
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.dateNightNudge?.day)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.appointmentNudges.map(\.id))
-    }
-}
-
-private struct SchoolCoverRow: View {
-    let card: SchoolCover
-    let palette: MekaPalette
-    let answer: (Bool) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-            Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-            Text(card.question).font(MekaType.body).foregroundStyle(palette.textSecondary)
-            Text(card.detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            HStack(spacing: MekaSpace.xs) {
-                pill(card.homeLabel, filled: true) { answer(true) }
-                pill(card.coveredLabel, filled: false) { answer(false) }
-            }
-            .padding(.top, MekaSpace.m)
-        }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(card.spoken)
-        .mekaHoverLift()
-    }
-
-    private func pill(_ label: String, filled: Bool, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
-            .buttonStyle(MekaPressStyle())
-            .font(MekaType.itemMeta)
-            .foregroundStyle(filled ? palette.onAccent : palette.accent)
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-            .background(filled ? palette.accent : palette.surface, in: Capsule())
-    }
-}
-
-private struct DateNightNudgeRow: View {
-    let card: DateNightNudge
-    let palette: MekaPalette
-    let answer: (Bool) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
-            Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-            Text(card.question).font(MekaType.body).foregroundStyle(palette.textSecondary)
-            Text(card.detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            HStack(spacing: MekaSpace.xs) {
-                pill(card.bookedLabel, filled: true) { answer(true) }
-                pill(card.skipLabel, filled: false) { answer(false) }
-            }
-            .padding(.top, MekaSpace.m)
-        }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(card.spoken)
-        .mekaHoverLift()
-    }
-
-    private func pill(_ label: String, filled: Bool, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
-            .buttonStyle(MekaPressStyle())
-            .font(MekaType.itemMeta)
-            .foregroundStyle(filled ? palette.onAccent : palette.accent)
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-            .background(filled ? palette.accent : palette.surface, in: Capsule())
     }
 }
