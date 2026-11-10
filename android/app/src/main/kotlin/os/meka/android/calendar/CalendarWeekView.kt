@@ -1,6 +1,7 @@
 package os.meka.android.calendar
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -80,9 +81,9 @@ import os.meka.core.domain.CalendarWeekRules
 import os.meka.core.domain.WeekBlock
 import os.meka.core.domain.WeekChip
 import os.meka.core.domain.WeekChipKind
+import os.meka.core.domain.WeekGridDay
 import os.meka.core.domain.WeekDrop
 import os.meka.core.domain.WeekGrid
-import os.meka.core.domain.WeekGridDay
 import os.meka.core.facade.MekaCore
 
 internal const val CALENDAR_WEEK_TAG = "calendar-week"
@@ -155,7 +156,10 @@ fun CalendarWeekView(
                 }
             } else {
                 FoldedHead(grid, onMode, Modifier.appear(rememberAppearance(0)))
-                WeekStrip(CalendarWeekRules.monday(start), start, today, Modifier.appear(rememberAppearance(1))) { d -> haptics.tick(); anchor = d }
+                val monday = CalendarWeekRules.monday(start)
+                // The whole week's days, for each pill's load bar (the grid holds only the three in view).
+                val week = remember(board, monday) { core.calendarWeek(board, monday, 7).days }
+                WeekStrip(monday, start, today, week, Modifier.appear(rememberAppearance(1))) { d -> haptics.tick(); anchor = d }
             }
             Grid(
                 grid, wide,
@@ -263,9 +267,9 @@ private fun FoldedHead(grid: WeekGrid, onMode: (CalendarMode) -> Unit, modifier:
     }
 }
 
-/** Folded: the week's seven days; the three in view are lit, today's number in gold. */
+/** Folded: the week's seven days; the three in view are lit, today's number in gold, a small gold load bar under each busy day. */
 @Composable
-private fun WeekStrip(monday: Long, start: Long, today: Long, modifier: Modifier, onTap: (Long) -> Unit) {
+private fun WeekStrip(monday: Long, start: Long, today: Long, week: List<WeekGridDay>, modifier: Modifier, onTap: (Long) -> Unit) {
     val reduced = Meka.reducedMotion
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         (0 until 7).forEach { i ->
@@ -276,12 +280,20 @@ private fun WeekStrip(monday: Long, start: Long, today: Long, modifier: Modifier
             Column(
                 Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.s)).background(fill)
                     .clickable(role = Role.Button) { onTap(d) }
-                    .clearAndSetSemantics { contentDescription = os.meka.core.domain.CivilDate.longLabel(d) + if (d == today) ", today" else "" }
+                    .clearAndSetSemantics {
+                        contentDescription = week.getOrNull(i)?.spoken ?: (os.meka.core.domain.CivilDate.longLabel(d) + if (d == today) ", today" else "")
+                    }
                     .padding(vertical = MekaSpace.xs),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(os.meka.core.domain.LocalClock.DAY_SHORT[i].take(1), style = MekaType.micro, color = Meka.colors.textTertiary)
                 Text(ymd.day.toString(), style = MekaType.captionStrong, color = if (d == today) Meka.colors.accent else Meka.colors.textPrimary)
+                // The mockup's load bar: 5 dp a thing up to 14 dp; the space stays on an empty day so the pills line up.
+                val bar by animateDpAsState((week.getOrNull(i)?.loadBarDp ?: 0f).dp, MekaMotion.appear(reduced), label = "load-$i")
+                Box(
+                    Modifier.padding(top = 2.dp).height(CalendarWeekRules.LOAD_HEIGHT_DP.dp).width(bar)
+                        .clip(RoundedCornerShape(2.dp)).background(Meka.colors.accent),
+                )
             }
         }
     }

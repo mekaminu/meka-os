@@ -24,5 +24,5 @@ Wednesday 21 Oct). These are the shots *before* the fixes below; the fixed ones 
 5. The all-day label: right-aligned "all day" open, blank folded in the mockup; the app showed a cut "all" folded and a
    left-aligned label open. **Fixed** (core `allDayLabel`).
 6. Work band, the gold now line, today's gold date, task chips with the teal edge: **matches**.
-7. Not in the app yet: the folded week strip's small load bar under each day (the mockup's bars). Left for the Week
-   board's leftovers, as it is the same strip.
+7. The folded week strip's small load bar under each day (the mockup's bars): **added** 2026-11-10 (core
+   `CalendarWeekRules.loadBarDp`, 5 dp a thing up to 14 dp).

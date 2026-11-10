@@ -93,6 +93,12 @@ data class WeekGridDay(
     /** Minutes past midnight now, on today inside the grid's hours; null otherwise. */
     val nowMinute: Int?,
 ) {
+    /** How full the day is, for the folded week strip's load bar: its timed events plus its strip's chips. */
+    val load: Int get() = blocks.size + chips.size
+
+    /** The load bar's width under the day's number in the folded strip (0 on an empty day). */
+    val loadBarDp: Float get() = CalendarWeekRules.loadBarDp(load)
+
     /** Screen readers: "Monday 9 November, today, 2 events, 1 task". */
     val spoken: String get() {
         val tasks = chips.count { it.kind == WeekChipKind.TASK }
@@ -160,6 +166,13 @@ object CalendarWeekRules {
     /** Square corners (Meka 2026-11-10: "square cornered is better"). */
     const val CORNER_DP = 0f
     const val MAX_CHIPS = 3
+    /** The folded strip's load bar: [LOAD_STEP_DP] a thing, at most [LOAD_MAX_DP], [LOAD_HEIGHT_DP] tall (the mockup's bars). */
+    const val LOAD_STEP_DP = 5f
+    const val LOAD_MAX_DP = 14f
+    const val LOAD_HEIGHT_DP = 3f
+
+    /** 0 → no bar, 1 → 5, 2 → 10, 3 or more → 14. */
+    fun loadBarDp(load: Int): Float = minOf(LOAD_MAX_DP, load.coerceAtLeast(0) * LOAD_STEP_DP)
     const val BOOKED = "Booked this week"
     const val FOLDED_DAYS = 3
     const val DEFAULT_OPEN_DAYS = 5

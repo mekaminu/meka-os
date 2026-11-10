@@ -91,6 +91,22 @@ class CalendarWeekTest {
     }
 
     @Test
+    fun theFoldedStripsLoadBarGrowsWithTheDaysThingsUpToFourteenDp() {
+        val events = listOf(
+            ev("s", "Stand-up", mon, 9 * 60, 9 * 60 + 15),
+            ev("h", "Half term", mon, 0, 24 * 60, allDay = true),
+            ev("c", "Booked call", mon + 1, 11 * 60, 12 * 60),
+        )
+        val t = task("t1", "Cancel a subscription")
+        val b = board(mon, BoardCard(t, t.title, null, null, false, false), BoardCard(t.copy(id = "t2"), "Call the garage", null, null, false, false))
+        val g = CalendarWeekRules.build(mon, 7, events, b, null, ms(mon, 0), cal)
+        assertEquals(listOf(4, 1, 0, 0, 0, 0, 0), g.days.map { it.load })
+        assertEquals(listOf(14f, 5f, 0f, 0f, 0f, 0f, 0f), g.days.map { it.loadBarDp })
+        assertEquals(10f, CalendarWeekRules.loadBarDp(2))
+        assertEquals(0f, CalendarWeekRules.loadBarDp(-1))
+    }
+
+    @Test
     fun theStripHoldsAllDayEventsEarlyOrLateOnesAndOpenTasks() {
         val events = listOf(
             ev("h", "Half term", mon, 0, 24 * 60, allDay = true),

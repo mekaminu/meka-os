@@ -343,6 +343,8 @@ class CalendarScreensTest {
         assertWeek("week-cover-dark-many", open = false)
         // Folded: three days from today (Wed, Thu, Fri).
         if (!shows(hasContentDescription("Wednesday 21 October, today", substring = true))) fail("week-cover: today isn't first")
+        // The strip's pills (with the mockup's load bars, sized in core CalendarWeekTest) read what each day holds.
+        if (!shows(hasContentDescription("Wednesday 21 October, today, ", substring = true))) fail("week-cover: the strip's pill doesn't say what the day holds")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
