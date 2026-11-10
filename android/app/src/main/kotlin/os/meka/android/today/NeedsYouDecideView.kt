@@ -75,17 +75,14 @@ internal fun NeedsYouDecideShell(
             .testTag(NEEDS_YOU_DECIDE_TAG).padding(horizontal = MekaSpace.m, vertical = MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Row(Modifier.semantics(mergeDescendants = true) { contentDescription = card.spoken }, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.semantics(mergeDescendants = true) { contentDescription = card.spoken },
+            verticalAlignment = if (card.details.isEmpty()) Alignment.CenterVertically else Alignment.Top) {
             DecideIcon(card.icon)
             Column(Modifier.weight(1f).padding(start = MekaSpace.xs)) {
                 Text(card.what, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(card.from, style = MekaType.caption, color = if (card.urgent) Meka.colors.critical else Meka.colors.textSecondary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        // An approval's detail lines (what would happen) stay whole, beside the icon's column.
-        if (card.details.isNotEmpty()) {
-            Column(Modifier.padding(start = 34.dp + MekaSpace.xs).clearAndSetSemantics { }) {
+                // An approval's detail lines (what would happen) stay whole, never cut.
                 card.details.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
         }
@@ -134,6 +131,8 @@ private fun DecideIcon(icon: NeedsYouDecideIcon) {
         NeedsYouDecideIcon.SCHOOL -> Meka.colors.success
         NeedsYouDecideIcon.NIGHT -> Meka.colors.accent
         NeedsYouDecideIcon.APPOINTMENT -> Meka.colors.calendar1
+        NeedsYouDecideIcon.TRADE, NeedsYouDecideIcon.PAYMENT -> Meka.colors.approval
+        NeedsYouDecideIcon.SHARE -> Meka.colors.calendar1
     }
     val path = remember(icon) { PathParser().parsePathString(icon.path).toPath() }
     Box(
