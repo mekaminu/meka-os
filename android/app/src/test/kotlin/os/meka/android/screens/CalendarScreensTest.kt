@@ -321,7 +321,8 @@ class CalendarScreensTest {
 
     // ---- Calendar → Week, Option A (approved 2026-11-10): the calm time grid, Calendar's first view ----
 
-    private fun block(title: String) = hasContentDescription(title, substring = true) and androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_BLOCK_TAG)
+    /** A block on the grid: its spoken line is "Swimming lesson, 18:30 to 19:15" (the Agenda isn't on screen). */
+    private fun block(title: String) = hasContentDescription("$title, ", substring = true) and hasClickAction()
 
     private fun assertWeek(name: String, open: Boolean) {
         val grid = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_GRID_TAG)

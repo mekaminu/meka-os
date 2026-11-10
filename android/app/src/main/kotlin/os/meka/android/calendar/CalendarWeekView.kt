@@ -374,9 +374,9 @@ private fun Block(b: WeekBlock, hourDp: Float, modifier: Modifier, onTap: () -> 
     Row(
         modifier.background(Meka.colors.surfaceRaised)
             .let { if (b.clash) it.border(1.dp, amber.copy(alpha = 0.6f), RectangleShape) else it }
+            .testTag(WEEK_BLOCK_TAG)
             .clickable(role = Role.Button, onClickLabel = "Open the event", onClick = onTap)
-            .clearAndSetSemantics { contentDescription = b.spoken; role = Role.Button }
-            .testTag(WEEK_BLOCK_TAG),
+            .clearAndSetSemantics { contentDescription = b.spoken; role = Role.Button },
     ) {
         Box(Modifier.width(CalendarWeekRules.EDGE_DP.dp).fillMaxHeight().background(tone))
         val pad = Modifier.padding(horizontal = MekaSpace.xxs + 2.dp, vertical = if (b.oneLine) 0.dp else MekaSpace.xxs) // rhythm: ok (the mockup's 7 px inset)
@@ -415,8 +415,8 @@ private fun Chip(c: WeekChip, onTap: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(edge.copy(alpha = 0.10f))
             .let { if (c.event != null) it.clickable(role = Role.Button, onClick = onTap) else it }
-            .clearAndSetSemantics { contentDescription = c.spoken }
-            .testTag(WEEK_CHIP_TAG),
+            .testTag(WEEK_CHIP_TAG)
+            .clearAndSetSemantics { contentDescription = c.spoken },
     ) {
         Box(Modifier.width(CalendarWeekRules.EDGE_DP.dp).height(18.dp).background(edge))
         Text(c.text, style = TITLE, color = if (c.kind == WeekChipKind.TASK) Meka.colors.calendar1 else Meka.colors.textPrimary, maxLines = 1,
