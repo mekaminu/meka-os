@@ -13,8 +13,44 @@ struct TriageCardsView: View {
     let palette: MekaPalette
     /// The stagger index of the first card.
     var firstIndex: Int = 2
+    /// The approved Needs you look (MESSAGES): each chat is one row that opens in place. Today's command centre keeps
+    /// the cards (false), as the Fold's command centre keeps its compact list.
+    var rows: Bool = false
 
     var body: some View {
+        if rows { messageRows } else { cards }
+    }
+
+    /// MESSAGES as the approved look draws it (`docs/design/needs-you/needs-you.dc.html`, the Fold's slices 1 and 6):
+    /// "MESSAGES · 4", then one row per chat (initials, name, time, its one line, "2 to reply"); a click opens it in
+    /// place to its messages as lines with Reply · Done · Later · Task, a second click closes it. A chat carrying
+    /// requests opens to its full card, so every request keeps its own answers. Hint line under them.
+    private var messageRows: some View {
+        let chats = model.triageChats
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if !chats.isEmpty {
+                Text(NeedsYouLayoutRules.shared.head(title: NeedsYouLayoutRules.shared.MESSAGES_HEAD, count: Int32(chats.count)))
+                    .font(MekaType.captionStrong).tracking(MekaType.captionStrongTracking)
+                    .foregroundStyle(palette.textTertiary)
+                    .accessibilityAddTraits(.isHeader)
+                    .staggeredAppear(firstIndex)
+            }
+            ForEach(Array(chats.enumerated()), id: \.element.key) { i, chat in
+                NeedsYouChatRow(chat: chat, palette: palette)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    .staggeredAppear(firstIndex + 1 + i)
+            }
+            if !chats.isEmpty {
+                Text(NeedsYouLayoutRules.shared.MESSAGES_HINT_MAC)
+                    .font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                    .padding(.leading, MekaSpace.xxs)
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.triage.map(\.id))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.requests.map(\.id))
+    }
+
+    private var cards: some View {
         // One card per conversation (messages grouped per chat, slice 1): a chat with one message shows its card as
         // before; two or more show the chat's card with every message under Show all.
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -32,6 +68,127 @@ struct TriageCardsView: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.triage.map(\.id))
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.requests.map(\.id))
+    }
+}
+
+/// A chat as one row of MESSAGES (the approved look): a 32 pt circle with its initials, the name and time over its one
+/// line, the badge at the right ("1 request" / "2 to reply" lit, "3 new" quiet). A click opens it in place on the expand
+/// spring (a cross-fade with reduced motion): a plain chat's messages as lines under the name, then Reply (gold) · Done ·
+/// Later · Task; Reply unfolds the chat's own card (its draft and Copy reply / Send via your phone, still his click).
+/// A chat with requests opens to its full card. Done is also in the row's right-click menu and VoiceOver's actions (the
+/// Fold's swipe right).
+struct NeedsYouChatRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let chat: TriageChat
+    let palette: MekaPalette
+    @State private var open = false
+    @State private var replying = false
+
+    static let avatar: CGFloat = 32
+
+    var body: some View {
+        let row = NeedsYouLayoutRules.shared.row(chat: chat)
+        let rules = NeedsYouOpenRules.shared
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                MekaHaptics.light()
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                    open.toggle()
+                    if !open { replying = false }
+                }
+            } label: {
+                HStack(alignment: .center, spacing: MekaSpace.xs) {
+                    Text(row.initials).font(MekaType.captionStrong).foregroundStyle(palette.accent).lineLimit(1)
+                        .frame(width: Self.avatar, height: Self.avatar)
+                        .background(palette.surfaceRaised, in: Circle())
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: MekaSpace.xs) {
+                            Text(row.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                            Text(row.time).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                        }
+                        Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(row.badge).font(MekaType.micro).lineLimit(1)
+                        .foregroundStyle(row.hot ? palette.approval : palette.textSecondary)
+                        .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                        .background(palette.surfaceRaised, in: Capsule())
+                }
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.spoken)
+            .accessibilityValue(open ? "Open" : "Closed")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: rules.DONE) { model.doneTriageChat(chat) }
+            .contextMenu {
+                Button(rules.DONE) { model.doneTriageChat(chat) }
+                Button(rules.LATER) { model.laterTriageChat(chat) }
+                Button(rules.TASK) { model.taskFromTriageChat(chat) }
+            }
+            if open {
+                Group {
+                    if rules.plain(chat: chat) { openLines } else { fullCard }
+                }
+                .padding(.horizontal, MekaSpace.xs).padding(.bottom, MekaSpace.xs)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .mekaHoverLift()
+    }
+
+    /// The open row: its messages as lines under the name (past the avatar), then the four taps.
+    private var openLines: some View {
+        let rules = NeedsYouOpenRules.shared
+        let indent = Self.avatar + MekaSpace.xs + MekaSpace.xs
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                ForEach(Array(rules.lines(chat: chat).enumerated()), id: \.offset) { _, line in
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(rules.spoken(chat: chat))
+            HStack(spacing: MekaSpace.xxs) {
+                pill(replying ? rules.SHOW_LESS : rules.REPLY, gold: true) {
+                    MekaHaptics.light()
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { replying.toggle() }
+                }
+                pill(rules.DONE) { model.doneTriageChat(chat) }
+                pill(rules.LATER) { model.laterTriageChat(chat) }
+                pill(rules.TASK) { model.taskFromTriageChat(chat) }
+            }
+            if replying {
+                fullCard
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.leading, indent - MekaSpace.xs)
+    }
+
+    /// The chat's own card: one message's card, or the chat's with its requests and Show all.
+    @ViewBuilder private var fullCard: some View {
+        if chat.single, let card = chat.cards.first {
+            TriageCardRow(card: card, palette: palette) { model.answerTriage(card, lead: $0) }
+        } else {
+            TriageChatRow(chat: chat, palette: palette)
+        }
+    }
+
+    private func pill(_ label: String, gold: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(gold ? palette.onAccent : palette.textPrimary)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(gold ? palette.accent : palette.surfaceRaised, in: Capsule())
     }
 }
 

@@ -48,6 +48,7 @@ object NeedsYouLayoutRules {
     const val FYI_HEAD = "FYI · NO REPLY NEEDED"
     const val MAIL_HEAD = "MAIL NAVILIFE TIDIED TODAY"
     const val MESSAGES_HINT = NeedsYouOpenRules.HINT
+    const val MESSAGES_HINT_MAC = NeedsYouOpenRules.HINT_MAC
     const val ALL_CLEAR = "All clear"
     const val SEEN = "Seen"
 

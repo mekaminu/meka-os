@@ -185,7 +185,7 @@ struct NeedsYouView: View {
                         .staggeredAppear(1)
                     // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches
                     // (V1, requests slice 4), above the stack.
-                    TriageCardsView(palette: palette)
+                    TriageCardsView(palette: palette, rows: true)
                         .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
                     // School days off on office days, a week ahead (school rhythm, slice 1), above the requests.
                     SchoolCoversView(palette: palette, firstIndex: 2 + model.triage.count)

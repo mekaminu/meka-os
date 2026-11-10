@@ -4912,6 +4912,9 @@ final class CoreModel {
         case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .afterWork(let ids): run { try await $0.undoClearAfterWork(ids: ids) }
+        case .triageBack(let ids):
+            unhideDecided(ids)
+            run { _ = try await $0.laterTriageBack(messageIds: ids) }
         case .archivedSeen: unhideMail(); run { try await $0.undoSeenArchivedForYou() }
         case .archivedEmail(let batchId, let key, let action): run { try await $0.undoArchivedEmail(batchId: batchId, key: key, action: action) }
         case .mailUnopened: run { try await $0.undoUnopened() }
@@ -7687,6 +7690,46 @@ final class CoreModel {
         }
     }
 
+    /// Later on a chat's open row in Needs you (the approved look): its messages stay out of Needs you on both devices
+    /// until the next 08:00, then come back as they were; Undo brings them back now. Nothing is sent or marked read.
+    /// Only the title and ids (Strings) cross to the core.
+    func laterTriageChat(_ chat: TriageChat) {
+        guard let core else { return }
+        MekaHaptics.light()
+        let ids = chat.ids
+        let title = chat.title
+        hideDecided(ids)
+        Task {
+            do {
+                guard let later = try await core.laterTriageChat(title: title, messageIds: ids) else {
+                    unhideDecided(ids)
+                    return
+                }
+                offerEventUndo(later.line, .triageBack(later.ids))
+            } catch { restoreDecided(ids, what: NeedsYouOpenRules.shared.LATER, error: error) }
+        }
+    }
+
+    /// Task on a chat's open row: one "Reply to …" task with the chat's lines in its notes, and the chat leaves Needs you
+    /// as Done does (seen; nothing sent or marked read). Undo deletes the task. The chat (a Kotlin value) crosses to the
+    /// core once; everything else kept here is Strings.
+    func taskFromTriageChat(_ chat: TriageChat) {
+        guard let core else { return }
+        MekaHaptics.light()
+        let ids = chat.ids
+        let line = NeedsYouOpenRules.shared.taskLine(title: NeedsYouOpenRules.shared.taskTitle(chat: chat))
+        let groupKeys = TriageChatRules.shared.gistsInside(chat: chat, gists: groupGists).map(\.groupKey)
+        nonisolated(unsafe) let sent = chat
+        hideDecided(ids)
+        Task {
+            do {
+                let id = try await core.taskFromTriageChat(chat: sent)
+                if !groupKeys.isEmpty { _ = try await core.catchUpGroupDigest(groupKeys: groupKeys) }
+                offerEventUndo(line, .deleteTask(id))
+            } catch { restoreDecided(ids, what: NeedsYouOpenRules.shared.TASK, error: error) }
+        }
+    }
+
     /// Delete on a likely scam (Mac presentation pass, item 6): clears it on both devices like Not now; only the id
     /// crosses to the core.
     func deleteScamText(_ card: TriageCard) {
@@ -8461,6 +8504,12 @@ final class CoreModel {
         triage = InstantTapRules.shared.triage(cards: allTriage, hidden: decidedHere)
     }
 
+    /// [ids] are shown again (Undo of Later, or nothing to set aside).
+    func unhideDecided(_ ids: [String]) {
+        decidedHere.subtract(ids)
+        triage = InstantTapRules.shared.triage(cards: allTriage, hidden: decidedHere)
+    }
+
     /// The work behind a tap failed: [ids] come back, with the bar saying why.
     func restoreDecided(_ ids: [String], what: String, error: Error) {
         decidedHere.subtract(ids)
@@ -8717,6 +8766,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case dateNightSkipped(Int64)
         /// Done on an after-work card, or Clear all: those held messages come back (nothing was cleared yet).
         case afterWork([String])
+        /// Later on a chat's open row in Needs you: its messages come back now on both devices.
+        case triageBack([String])
         /// Caught up on the group digest: its cards come back on both devices.
         case groupDigest(GroupDigestUndo)
         /// Got it on "Archived for you": the card comes back on both devices.

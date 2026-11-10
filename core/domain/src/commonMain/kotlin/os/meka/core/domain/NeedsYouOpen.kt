@@ -23,6 +23,8 @@ object NeedsYouOpenRules {
     const val SHOW_LESS = "Hide reply"
     /** Under MESSAGES (the mockup's foot line). */
     const val HINT = "Tap a person to see their messages · swipe right for Done"
+    /** The Mac's foot line: no swipe there, so Done also sits in the row's right-click menu. */
+    const val HINT_MAC = "Click a person to see their messages · right-click for Done"
     /** The most message lines an open row shows; earlier ones are counted on one line above them. */
     const val MAX_LINES = 5
     /** Later brings a chat back at this minute of the day (08:00). */
