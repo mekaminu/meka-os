@@ -374,6 +374,15 @@ class CalendarScreensTest {
         if (!shows(close)) fail("$name: tapping Swimming lesson opened nothing")
         compose.onAllNodes(close)[0].performSemanticsAction(SemanticsActions.OnClick)
         until { !shows(close) }
+        // Slice 3: a task chip opens the task's detail (Close shuts it).
+        val chip = hasContentDescription("Task Pay the window cleaner", substring = true) and hasClickAction()
+        until { shows(chip) }
+        if (!shows(chip)) fail("$name: the task chip can't be tapped")
+        compose.onAllNodes(chip)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { shows(close) }
+        if (!shows(close)) fail("$name: tapping the task chip opened nothing")
+        compose.onAllNodes(close)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !shows(close) }
         // Agenda in the switch opens the Agenda.
         compose.onAllNodes(hasText("Agenda") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
         val agenda = androidx.compose.ui.test.hasTestTag(AGENDA_LIST_TAG)

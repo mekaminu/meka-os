@@ -126,6 +126,7 @@ fun CalendarRoute(core: MekaCore, initialMode: os.meka.core.domain.CalendarMode 
     val editLines by core.calendarEditLines.collectAsState()
     LaunchedEffect(Unit) { runCatching { core.refreshCalendarAccounts() } }
     var addingOn by remember { mutableStateOf<Long?>(null) }
+    var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     var addShown by remember { mutableLongStateOf(-1L) }
     addingOn?.let { addShown = it }
     val addHeader = AddHeader(editAccounts.isNotEmpty(), editLines) { day -> addingOn = day }
@@ -162,6 +163,18 @@ fun CalendarRoute(core: MekaCore, initialMode: os.meka.core.domain.CalendarMode 
             CalendarWeekView(
                 core, Modifier.fillMaxSize(), onMode = setMode, onEvent = { openEvent = it },
                 onAddOn = if (addHeader.canAdd) ({ day -> addingOn = day }) else null,
+                onTask = { id -> taskId = id },
+                canMove = { e -> core.canMoveEvent(e) },
+                onMove = { e, days, minutes ->
+                    scope.launch {
+                        when (val r = runCatching { core.moveEventBy(e.id, days, minutes) }.getOrNull()) {
+                            is os.meka.core.domain.EventEditResult.Made ->
+                                undo.show(core.eventEditLine(r.id) ?: "Moving “${e.title}”") { core.undoEventEdit(r.id) }
+                            is os.meka.core.domain.EventEditResult.Refused -> undo.show(r.reason, null)
+                            null -> undo.show("Couldn't move it · try again", null)
+                        }
+                    }
+                },
             )
         } else Agenda(
             core, v, handlers, showAgain, addHeader, mode, setMode, undo, onPlanWeek = draftWeek,
@@ -177,6 +190,21 @@ fun CalendarRoute(core: MekaCore, initialMode: os.meka.core.domain.CalendarMode 
         }
         MekaPane(visible = openEvent != null) {
             shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }, undo = undo) }
+        }
+        // Week slice 3: a task chip on the grid opens the task's full detail (when, length, notes, steps, Done), as on Today.
+        val boardNow by core.weekBoard.collectAsState()
+        val conflicts by core.conflicts.collectAsState()
+        val task = boardNow.dayOf(taskId ?: "")?.cards?.firstOrNull { it.id == taskId }?.task
+        var taskShown by remember { mutableStateOf(task) }
+        if (task != null) taskShown = task
+        val taskActions = os.meka.android.today.todayActions(core, scope, { taskId }, { taskId = it })
+        androidx.activity.compose.BackHandler(enabled = task != null) { taskId = null }
+        androidx.compose.runtime.CompositionLocalProvider(os.meka.android.designsystem.LocalSharedScope provides null) {
+            MekaPane(visible = task != null) {
+                taskShown?.let { t ->
+                    os.meka.android.today.DetailPane(t, conflicts.filter { it.taskId == t.id }, taskActions, Modifier.fillMaxSize(), onClose = { taskId = null })
+                }
+            }
         }
         MekaPane(visible = addingOn != null) {
             AddEventPane(

@@ -15,7 +15,10 @@ import SwiftUI
 /// work as a small amber dot and a thin amber outline; work hours a plain faint band; no commutes; the gold now line.
 ///
 /// Click an event (or an event chip) to open it; click an empty hour to add an event on that day (where an account
-/// allows editing).
+/// allows editing); click a task chip to open the task (slice 3). Drag an event that may be moved (its own, no guests,
+/// not started: EventMoveRules) and it follows the pointer a quarter hour and a whole day at a time (only onto a day in
+/// view), its time line saying where it will land; let go and it moves there with the five-second Undo (core
+/// `CalendarWeekRules.drop`, shared with the Fold).
 ///
 /// Motion (catalogue "Calendar"): the head, the key row and the grid stagger in; the days cross-fade as a set when the
 /// week changes; the lit switch blends across with a tick; the now dot breathes. Reduce Motion: cross-fades only, a
@@ -26,6 +29,7 @@ struct CalendarWeekScreen: View {
     let palette: MekaPalette
     @AppStorage("calendar.weekDays") private var storedDays = Int(CalendarWeekRules.shared.DEFAULT_OPEN_DAYS)
     @State private var anchor: Int64?
+    @State private var openTask: WeekTaskRef?
 
     private var rules: CalendarWeekRules { CalendarWeekRules.shared }
 
@@ -41,13 +45,23 @@ struct CalendarWeekScreen: View {
                         .staggeredAppear(0)
                     keyRow(grid)
                         .staggeredAppear(1)
-                    WeekGridPanel(grid: grid, palette: palette)
+                    WeekGridPanel(grid: grid, palette: palette, today: today, onTask: { openTask = WeekTaskRef(id: $0) })
                         .id(grid.startEpochDay * 10 + Int64(count))
                         .transition(.opacity)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .staggeredAppear(2)
                 }
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: grid.startEpochDay * 10 + Int64(count))
+                .sheet(item: $openTask) { t in
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        DetailView(task: model.board?.dayOf(taskId: t.id)?.cards.first(where: { $0.id == t.id })?.task, palette: palette)
+                            .frame(height: 480)
+                        HStack { Spacer(); Button("Done") { openTask = nil }.keyboardShortcut(.cancelAction) }
+                    }
+                    .padding(MekaSpace.l)
+                    .frame(width: 520)
+                    .background(palette.surface)
+                }
             } else {
                 Color.clear
             }
@@ -150,10 +164,17 @@ struct CalendarWeekScreen: View {
 
 /// The grid in one rounded panel: day heads, the all-day strip, then the hours (scrolling, opening at the morning or an
 /// hour before now).
+/// A task chip's task, opened in a sheet.
+private struct WeekTaskRef: Identifiable {
+    let id: String
+}
+
 private struct WeekGridPanel: View {
     @Environment(CoreModel.self) private var model
     let grid: WeekGrid
     let palette: MekaPalette
+    let today: Int64
+    let onTask: (String) -> Void
 
     private var rules: CalendarWeekRules { CalendarWeekRules.shared }
     private var hourPt: Float { rules.HOUR_DP }
@@ -202,7 +223,7 @@ private struct WeekGridPanel: View {
             ForEach(grid.days, id: \.epochDay) { d in
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     ForEach(rules.shownChips(chips: d.chips), id: \.key) { c in
-                        WeekChipView(chip: c, palette: palette)
+                        WeekChipView(chip: c, palette: palette, onTask: onTask)
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 22, alignment: .topLeading)
@@ -226,8 +247,9 @@ private struct WeekGridPanel: View {
                         }
                     }
                     .frame(width: labelWidth, height: height, alignment: .top)
-                    ForEach(grid.days, id: \.epochDay) { d in
-                        WeekDayColumn(day: d, hourPt: hourPt, palette: palette)
+                    ForEach(Array(grid.days.enumerated()), id: \.element.epochDay) { i, d in
+                        WeekDayColumn(day: d, hourPt: hourPt, palette: palette,
+                                      place: WeekHeldPlace(index: Int32(i), start: grid.startEpochDay, count: Int32(grid.days.count), today: today))
                             .frame(maxWidth: .infinity)
                             .frame(height: height)
                     }
@@ -246,13 +268,25 @@ private struct WeekGridPanel: View {
 
 /// One day's column: hour lines (a click on an empty hour adds an event that day), the faint work band, the blocks
 /// side by side where they overlap, and today's gold now line.
+/// Where a column sits among the days in view, for a dragged block's drop.
+private struct WeekHeldPlace: Equatable {
+    let index: Int32
+    let start: Int64
+    let count: Int32
+    let today: Int64
+}
+
 private struct WeekDayColumn: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let day: WeekGridDay
     let hourPt: Float
     let palette: MekaPalette
+    let place: WeekHeldPlace
     @State private var dim = false
+    /// The block being dragged and how far (points).
+    @State private var heldKey: String?
+    @State private var drag: CGSize = .zero
 
     private var rules: CalendarWeekRules { CalendarWeekRules.shared }
 
@@ -285,9 +319,18 @@ private struct WeekDayColumn: View {
                 }
                 ForEach(day.blocks, id: \.key) { b in
                     let w = (colW - 6) / CGFloat(max(1, b.columns))
-                    WeekBlockView(block: b, palette: palette)
+                    let held = heldKey == b.key
+                    let landing = held ? drop(b, colW) : nil
+                    let ox = CGFloat(landing?.days ?? 0) * colW
+                    let oy = CGFloat(landing?.minutes ?? 0) * CGFloat(hourPt) / 60
+                    WeekBlockView(block: b, palette: palette, hint: landing?.hint)
                         .frame(width: max(0, w - 1), height: CGFloat(b.heightDp(hourDp: hourPt)))
-                        .offset(x: 3 + w * CGFloat(b.column), y: CGFloat(b.topDp(hourDp: hourPt)) + 1)
+                        .shadow(color: .black.opacity(held ? 0.35 : 0), radius: held ? 6 : 0, y: held ? 2 : 0)
+                        .offset(x: 3 + w * CGFloat(b.column) + ox, y: CGFloat(b.topDp(hourDp: hourPt)) + 1 + oy)
+                        .zIndex(held ? 1 : 0)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: landing?.startMinute)
+                        .gesture(moveGesture(b, colW), including: model.canMoveEvent(b.event) ? .all : .subviews)
+                        .help(model.moveEventNote(b.event) ?? b.spoken + " · drag to move it")
                         .transition(.opacity)
                 }
                 // The gold now line, its dot breathing.
@@ -310,6 +353,39 @@ private struct WeekDayColumn: View {
             .frame(width: colW, height: geo.size.height, alignment: .topLeading)
         }
         .overlay(Rectangle().strokeBorder(palette.hairline, lineWidth: 0.5).allowsHitTesting(false))
+        .zIndex(heldKey != nil ? 1 : 0)
+    }
+
+    /// Where the dragged block would land now (core CalendarWeekRules.drop), or nil where it was.
+    private func drop(_ b: WeekBlock, _ colW: CGFloat) -> WeekDrop? {
+        CalendarWeekRules.shared.drop(
+            block: b, dayIndex: place.index, startEpochDay: place.start, count: place.count,
+            dxDp: Float(drag.width), dyDp: Float(drag.height), columnDp: Float(colW), hourDp: hourPt, today: place.today)
+    }
+
+    /// Drag an event: it follows a quarter hour and a day at a time with a tick; let go, it moves (only the id and two
+    /// numbers cross into the core) with the five-second Undo.
+    private func moveGesture(_ b: WeekBlock, _ colW: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { v in
+                let before = heldKey == b.key ? drop(b, colW)?.startMinute : nil
+                let beforeDays = heldKey == b.key ? drop(b, colW)?.days : nil
+                if heldKey != b.key { heldKey = b.key; MekaHaptics.light() }
+                drag = v.translation
+                let after = drop(b, colW)
+                if after?.startMinute != before || after?.days != beforeDays { MekaHaptics.tick() }
+            }
+            .onEnded { v in
+                drag = v.translation
+                let landed = drop(b, colW)
+                heldKey = nil
+                drag = .zero
+                guard let landed else { return }
+                let id = b.event.id
+                let days = landed.days
+                let minutes = landed.minutes
+                Task { await model.moveEventBy(id, days: days, minutes: minutes) }
+            }
     }
 }
 
@@ -318,6 +394,8 @@ private struct WeekDayColumn: View {
 private struct WeekBlockView: View {
     let block: WeekBlock
     let palette: MekaPalette
+    /// While dragged: "Move to Thu 12 Nov · 15:30" in the time's place.
+    var hint: String?
 
     var body: some View {
         let amber = palette.calendar3
@@ -329,8 +407,8 @@ private struct WeekBlockView: View {
                         title
                         if block.clash { Circle().fill(amber).frame(width: 6, height: 6) }
                         Spacer(minLength: 0)
-                        Text(block.time.components(separatedBy: "–").first ?? block.time)
-                            .font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
+                        Text(hint ?? (block.time.components(separatedBy: "–").first ?? block.time))
+                            .font(MekaType.micro).monospacedDigit().foregroundStyle(hint != nil ? palette.accent : palette.textTertiary).lineLimit(1)
                     }
                     .frame(maxHeight: .infinity)
                 } else {
@@ -339,7 +417,8 @@ private struct WeekBlockView: View {
                             title
                             if block.clash { Circle().fill(amber).frame(width: 6, height: 6) }
                         }
-                        Text(block.time).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
+                        Text(hint ?? block.time).font(MekaType.micro).monospacedDigit()
+                            .foregroundStyle(hint != nil ? palette.accent : palette.textTertiary).lineLimit(1)
                         Spacer(minLength: 0)
                     }
                     .padding(.vertical, MekaSpace.xxs)
@@ -354,7 +433,6 @@ private struct WeekBlockView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(block.spoken)
         .opensEvent(block.event)
-        .help(block.spoken)
     }
 
     private var title: some View {
@@ -367,6 +445,7 @@ private struct WeekBlockView: View {
 private struct WeekChipView: View {
     let chip: WeekChip
     let palette: MekaPalette
+    let onTask: (String) -> Void
 
     var body: some View {
         let task = chip.kind == WeekChipKind.task
@@ -382,5 +461,26 @@ private struct WeekChipView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(chip.spoken)
         .opensEvent(chip.event)
+        .modifier(OpensTask(id: chip.event == nil ? chip.taskId : nil, onTask: onTask))
+    }
+}
+
+/// A task chip opens its task (slice 3).
+private struct OpensTask: ViewModifier {
+    let id: String?
+    let onTask: (String) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let id {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { MekaHaptics.tick(); onTask(id) }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the task")
+                .help("Open the task")
+        } else {
+            content
+        }
     }
 }

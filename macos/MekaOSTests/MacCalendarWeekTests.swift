@@ -38,4 +38,15 @@ final class MacCalendarWeekTests: XCTestCase {
         XCTAssertEqual(rules.minuteDp(minute: 9 * 60 + 30, hourDp: rules.HOUR_DP), 60)
         XCTAssertEqual(rules.hoursLabel(minutes: 348), "5.8 h")
     }
+
+    func testADraggedEventSnapsToQuarterHoursAndDaysInView() {
+        // A 10:00 event: 130 pt across 100 pt columns is a day; 25 pt down at 40 pt an hour is 45 minutes (to the quarter).
+        let d = rules.dropAt(startMinute: 600, dayIndex: 0, startEpochDay: monday, count: 5, dxDp: 130, dyDp: 25, columnDp: 100, hourDp: 40, today: monday)
+        XCTAssertEqual(d?.days, 1)
+        XCTAssertEqual(d?.minutes, 45)
+        XCTAssertEqual(d?.hint, "Move to Tomorrow · 10:45")
+        // Let go where it was: nothing moves; far right from Friday: it stays on Friday.
+        XCTAssertNil(rules.dropAt(startMinute: 600, dayIndex: 2, startEpochDay: monday, count: 5, dxDp: 20, dyDp: 4, columnDp: 100, hourDp: 40, today: monday))
+        XCTAssertEqual(rules.dropAt(startMinute: 600, dayIndex: 4, startEpochDay: monday, count: 5, dxDp: 900, dyDp: 40, columnDp: 100, hourDp: 40, today: monday)?.days, 0)
+    }
 }

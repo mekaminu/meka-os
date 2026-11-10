@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,8 +35,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -43,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
@@ -57,6 +61,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -74,6 +79,7 @@ import os.meka.core.domain.CalendarWeekRules
 import os.meka.core.domain.WeekBlock
 import os.meka.core.domain.WeekChip
 import os.meka.core.domain.WeekChipKind
+import os.meka.core.domain.WeekDrop
 import os.meka.core.domain.WeekGrid
 import os.meka.core.domain.WeekGridDay
 import os.meka.core.facade.MekaCore
@@ -95,7 +101,11 @@ internal const val WEEK_GRID_TAG = "week-grid"
  * line with its breathing dot. Folded: "November" over "Week 46 · booked 5.8 h" with the switch, the week's seven days
  * as a strip, then three days from the chosen one (38 dp an hour); a swipe across the grid moves three days.
  *
- * A tap on an event opens it; a tap on an empty hour adds an event on that day (where an account allows editing).
+ * A tap on an event opens it; a tap on an empty hour adds an event on that day (where an account allows editing); a
+ * tap on a task chip opens the task. Hold an event (its own, no guests, not started: EventMoveRules) and drag it: it
+ * lifts with a light haptic, snaps a quarter hour at a time and a whole day per column (only onto a day in view), its
+ * time line says where it will land ("Move to Thu 12 Nov · 15:30"), and let go it moves there with the five-second
+ * Undo ([CalendarWeekRules.drop]).
  * Motion (catalogue "Calendar"): blocks fade up as the days change, the lit switch blends across with a tick, the now
  * dot breathes; reduced motion: no fade-up, a steady dot.
  */
@@ -106,6 +116,9 @@ fun CalendarWeekView(
     onMode: (CalendarMode) -> Unit,
     onEvent: (CalendarEvent) -> Unit,
     onAddOn: ((Long) -> Unit)?,
+    onTask: (String) -> Unit = {},
+    canMove: (CalendarEvent) -> Boolean = { false },
+    onMove: (CalendarEvent, Int, Int) -> Unit = { _, _, _ -> },
 ) {
     val board by core.weekBoard.collectAsState()
     val v by core.calendarView.collectAsState()
@@ -153,13 +166,21 @@ fun CalendarWeekView(
                         }) { _, d -> dx += d }
                     }
                 },
-                onEvent = onEvent, onAddOn = onAddOn,
+                onEvent = onEvent, onAddOn = onAddOn, today = today,
+                actions = WeekActions(onTask, canMove, onMove),
             )
         }
     }
 }
 
 private const val SWIPE_PX = 120f
+
+/** What the grid's chips and held blocks do: open a task, and move an event that may be moved. */
+private class WeekActions(
+    val onTask: (String) -> Unit,
+    val canMove: (CalendarEvent) -> Boolean,
+    val onMove: (CalendarEvent, Int, Int) -> Unit,
+)
 
 /** Week · Board · Agenda, as one quiet pill switch (the lit side blends across with a tick). */
 @Composable
@@ -266,7 +287,10 @@ private fun WeekStrip(monday: Long, start: Long, today: Long, modifier: Modifier
 }
 
 @Composable
-private fun Grid(grid: WeekGrid, wide: Boolean, modifier: Modifier, onEvent: (CalendarEvent) -> Unit, onAddOn: ((Long) -> Unit)?) {
+private fun Grid(
+    grid: WeekGrid, wide: Boolean, modifier: Modifier, onEvent: (CalendarEvent) -> Unit, onAddOn: ((Long) -> Unit)?, today: Long,
+    actions: WeekActions,
+) {
     val hourDp = if (wide) CalendarWeekRules.HOUR_DP else CalendarWeekRules.FOLDED_HOUR_DP
     val labelDp = (if (wide) CalendarWeekRules.LABEL_DP else CalendarWeekRules.FOLDED_LABEL_DP).dp
     val scroll = rememberScrollState()
@@ -305,7 +329,7 @@ private fun Grid(grid: WeekGrid, wide: Boolean, modifier: Modifier, onEvent: (Ca
                 modifier = Modifier.width(labelDp).align(Alignment.CenterVertically).padding(end = MekaSpace.xs).clearAndSetSemantics { })
             grid.days.forEach { d ->
                 Column(Modifier.weight(1f).padding(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    CalendarWeekRules.shownChips(d.chips).forEach { c -> Chip(c) { c.event?.let(onEvent) } }
+                    CalendarWeekRules.shownChips(d.chips).forEach { c -> Chip(c) { c.event?.let(onEvent) ?: c.taskId?.let(actions.onTask) } }
                 }
             }
         }
@@ -319,16 +343,27 @@ private fun Grid(grid: WeekGrid, wide: Boolean, modifier: Modifier, onEvent: (Ca
                             modifier = Modifier.align(Alignment.TopEnd).offset(y = (i * hourDp).dp).padding(end = MekaSpace.xs))
                     }
                 }
-                grid.days.forEach { d -> DayColumn(d, hourDp, Modifier.weight(1f).fillMaxHeight(), onEvent, onAddOn) }
+                grid.days.forEachIndexed { i, d ->
+                    DayColumn(d, hourDp, Modifier.weight(1f).fillMaxHeight(), onEvent, onAddOn, HeldPlace(i, grid.startEpochDay, grid.days.size, today), actions)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DayColumn(d: WeekGridDay, hourDp: Float, modifier: Modifier, onEvent: (CalendarEvent) -> Unit, onAddOn: ((Long) -> Unit)?) {
+private fun DayColumn(
+    d: WeekGridDay, hourDp: Float, modifier: Modifier, onEvent: (CalendarEvent) -> Unit, onAddOn: ((Long) -> Unit)?, place: HeldPlace,
+    actions: WeekActions,
+) {
     val reduced = Meka.reducedMotion
-    Box(modifier.border(width = 0.5.dp, color = Meka.colors.hairline, shape = RectangleShape)) {
+    val haptics = rememberMekaHaptics()
+    val density = LocalDensity.current
+    // The block being held in this column, and how far the finger has taken it (px).
+    var heldKey by remember { mutableStateOf<String?>(null) }
+    var dx by remember { mutableFloatStateOf(0f) }
+    var dy by remember { mutableFloatStateOf(0f) }
+    Box(modifier.zIndex(if (heldKey != null) 1f else 0f).border(width = 0.5.dp, color = Meka.colors.hairline, shape = RectangleShape)) {
         // Each hour's row: a hairline, and a tap adds an event on this day.
         (CalendarWeekRules.FIRST_HOUR until CalendarWeekRules.END_HOUR).forEachIndexed { i, _ ->
             Box(
@@ -345,11 +380,44 @@ private fun DayColumn(d: WeekGridDay, hourDp: Float, modifier: Modifier, onEvent
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val colW = maxWidth
+            val colDp = colW.value
             d.blocks.forEach { b ->
                 val w = (colW - 6.dp) / b.columns
                 androidx.compose.runtime.key(b.key) {
-                    Block(b, hourDp, Modifier.offset(x = 3.dp + w * b.column, y = b.topDp(hourDp).dp + 1.dp).width(w).height(b.heightDp(hourDp).dp)
-                        .appear(rememberAppearance(0, play = !reduced))) { onEvent(b.event) }
+                    val held = heldKey == b.key
+                    val drop: WeekDrop? = if (held) with(density) {
+                        CalendarWeekRules.drop(b, place.index, place.start, place.count, dx.toDp().value, dy.toDp().value, colDp, hourDp, place.today)
+                    } else null
+                    val (ox, oy) = CalendarWeekRules.dropOffsetDp(drop, colDp, hourDp)
+                    val movable = actions.canMove(b.event)
+                    val appearance = rememberAppearance(0, play = !reduced)
+                    Block(
+                        b, hourDp, drop?.hint,
+                        Modifier.offset(x = 3.dp + w * b.column + ox.dp, y = b.topDp(hourDp).dp + 1.dp + oy.dp).width(w).height(b.heightDp(hourDp).dp)
+                            .appear(appearance).let { if (held) it.zIndex(1f).shadow(6.dp, RectangleShape) else it }
+                            .let { m ->
+                                if (!movable) m else m.pointerInput(b, place, colDp) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { haptics.light(); dx = 0f; dy = 0f; heldKey = b.key },
+                                        onDragEnd = {
+                                            val landed = with(density) {
+                                                CalendarWeekRules.drop(b, place.index, place.start, place.count, dx.toDp().value, dy.toDp().value, colDp, hourDp, place.today)
+                                            }
+                                            heldKey = null; dx = 0f; dy = 0f
+                                            if (landed != null) actions.onMove(b.event, landed.days, landed.minutes)
+                                        },
+                                        onDragCancel = { heldKey = null; dx = 0f; dy = 0f },
+                                    ) { change, amount ->
+                                        change.consume()
+                                        val before = heldDrop(b, place, dx, dy, colDp, hourDp, density)
+                                        dx += amount.x; dy += amount.y
+                                        // A tick each time it snaps to a new quarter hour or day.
+                                        if (heldDrop(b, place, dx, dy, colDp, hourDp, density) != before) haptics.tick()
+                                    }
+                                }
+                            },
+                        movable = movable,
+                    ) { onEvent(b.event) }
                 }
             }
         }
@@ -366,9 +434,19 @@ private fun DayColumn(d: WeekGridDay, hourDp: Float, modifier: Modifier, onEvent
     }
 }
 
-/** One event: square corners, its calendar's colour on a 2 dp left edge, the title regular over its time. */
+/** Where a column sits among the days in view, for a held block's drop. */
+private data class HeldPlace(val index: Int, val start: Long, val count: Int, val today: Long)
+
+private fun heldDrop(b: WeekBlock, place: HeldPlace, dx: Float, dy: Float, colDp: Float, hourDp: Float, density: androidx.compose.ui.unit.Density): Pair<Int, Int>? =
+    with(density) { CalendarWeekRules.drop(b, place.index, place.start, place.count, dx.toDp().value, dy.toDp().value, colDp, hourDp, place.today) }
+        ?.let { it.days to it.minutes }
+
+/**
+ * One event: square corners, its calendar's colour on a 2 dp left edge, the title regular over its time. While held,
+ * [hint] ("Move to Thu 12 Nov · 15:30") takes the time's place.
+ */
 @Composable
-private fun Block(b: WeekBlock, hourDp: Float, modifier: Modifier, onTap: () -> Unit) {
+private fun Block(b: WeekBlock, hourDp: Float, hint: String?, modifier: Modifier, movable: Boolean = false, onTap: () -> Unit) {
     val tone = Meka.colors.calendarTone(b.tone)
     val amber = Meka.colors.calendar3
     Row(
@@ -376,7 +454,10 @@ private fun Block(b: WeekBlock, hourDp: Float, modifier: Modifier, onTap: () -> 
             .let { if (b.clash) it.border(1.dp, amber.copy(alpha = 0.6f), RectangleShape) else it }
             .testTag(WEEK_BLOCK_TAG)
             .clickable(role = Role.Button, onClickLabel = "Open the event", onClick = onTap)
-            .clearAndSetSemantics { contentDescription = b.spoken; role = Role.Button },
+            .clearAndSetSemantics {
+                contentDescription = b.spoken + if (movable) ", hold and drag to move" else ""
+                role = Role.Button
+            },
     ) {
         Box(Modifier.width(CalendarWeekRules.EDGE_DP.dp).fillMaxHeight().background(tone))
         val pad = Modifier.padding(horizontal = MekaSpace.xxs + 2.dp, vertical = if (b.oneLine) 0.dp else MekaSpace.xxs) // rhythm: ok (the mockup's 7 px inset)
@@ -384,7 +465,7 @@ private fun Block(b: WeekBlock, hourDp: Float, modifier: Modifier, onTap: () -> 
             Row(pad.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 BlockTitle(b, Modifier.weight(1f, fill = false))
                 if (b.clash) ClashDot(amber)
-                Text(b.time.substringBefore("–"), style = TIME, color = Meka.colors.textTertiary, maxLines = 1)
+                Text(hint ?: b.time.substringBefore("–"), style = TIME, color = if (hint != null) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
             }
         } else {
             Column(pad) {
@@ -392,7 +473,7 @@ private fun Block(b: WeekBlock, hourDp: Float, modifier: Modifier, onTap: () -> 
                     BlockTitle(b, Modifier.weight(1f, fill = false))
                     if (b.clash) ClashDot(amber)
                 }
-                Text(b.time, style = TIME, color = Meka.colors.textTertiary, maxLines = 1)
+                Text(hint ?: b.time, style = TIME, color = if (hint != null) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -414,7 +495,7 @@ private fun Chip(c: WeekChip, onTap: () -> Unit) {
     val edge = if (c.kind == WeekChipKind.TASK) Meka.colors.calendar1 else Meka.colors.calendarTone(c.tone)
     Row(
         Modifier.fillMaxWidth().background(edge.copy(alpha = 0.10f))
-            .let { if (c.event != null) it.clickable(role = Role.Button, onClick = onTap) else it }
+            .let { if (c.event != null || c.taskId != null) it.clickable(role = Role.Button, onClickLabel = if (c.event != null) "Open the event" else "Open the task", onClick = onTap) else it }
             .testTag(WEEK_CHIP_TAG)
             .clearAndSetSemantics { contentDescription = c.spoken },
     ) {

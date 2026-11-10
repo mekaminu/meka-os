@@ -130,4 +130,45 @@ class CalendarWeekTest {
         assertEquals("0 h", CalendarWeekRules.hoursLabel(0))
         assertEquals("12 h", CalendarWeekRules.hoursLabel(720))
     }
+
+    private fun block(start: Int, end: Int) =
+        WeekBlock("e:x", "Gym", "", start, end, 1, ev("x", "Gym", mon, start, end), clash = false)
+
+    @Test
+    fun aHeldEventSnapsToQuarterHoursAndWholeDays() {
+        val b = block(10 * 60, 11 * 60)
+        // 40 dp an hour, 100 dp columns: 25 dp down is 37.5 min, so 45 min (rounded to the quarter); 130 dp across is a day.
+        val d = CalendarWeekRules.drop(b, 0, mon, 5, 130f, 25f, 100f, 40f, today = mon)!!
+        assertEquals(1, d.days)
+        assertEquals(45, d.minutes)
+        assertEquals(mon + 1, d.day)
+        assertEquals(10 * 60 + 45, d.startMinute)
+        assertEquals("Move to Tomorrow · 10:45", d.hint)
+        assertEquals(100f to 30f, CalendarWeekRules.dropOffsetDp(d, 100f, 40f))
+    }
+
+    @Test
+    fun aHeldEventLetGoWhereItWasDoesNothing() {
+        val b = block(10 * 60, 11 * 60)
+        assertNull(CalendarWeekRules.drop(b, 2, mon, 5, 20f, 4f, 100f, 40f, today = mon))
+        assertEquals(0f to 0f, CalendarWeekRules.dropOffsetDp(null, 100f, 40f))
+    }
+
+    @Test
+    fun aHeldEventStaysOnTheDaysInViewAndOnTheGrid() {
+        val b = block(19 * 60, 20 * 60)
+        // Far right from Friday (index 4 of 5): stays Friday; far down: no later than 20:45.
+        val d = CalendarWeekRules.drop(b, 4, mon, 5, 900f, 400f, 100f, 40f, today = mon)!!
+        assertEquals(0, d.days)
+        assertEquals(20 * 60 + 45, d.startMinute)
+        // Far left from Monday: stays Monday; far up: no earlier than 08:00.
+        val up = CalendarWeekRules.drop(block(9 * 60, 10 * 60), 0, mon, 5, -900f, -400f, 100f, 40f, today = mon)!!
+        assertEquals(0, up.days)
+        assertEquals(8 * 60, up.startMinute)
+        assertEquals("Move to Today · 08:00", up.hint)
+        // A later day is named.
+        val thu = CalendarWeekRules.drop(b, 0, mon, 5, 300f, 0f, 100f, 40f, today = mon)!!
+        assertEquals(mon + 3, thu.day)
+        assertEquals("Move to " + CivilDate.shortLabel(mon + 3) + " · 19:00", thu.hint)
+    }
 }
