@@ -852,7 +852,7 @@ internal fun NeedsYouColumn(
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m, start = MekaSpace.xxs).appear(rememberAppearance(1, play)))
                 }
             }
-        } else
+        } else {
         item(key = "title") {
             if (compact) {
                 SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
@@ -865,6 +865,7 @@ internal fun NeedsYouColumn(
                         Modifier.padding(top = MekaSpace.m))
                 }
             }
+        }
         }
         if (show(NeedsYouSection.DECIDE) && decideCount > 0) {
             item(key = "decide-head") {

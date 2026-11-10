@@ -11,7 +11,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -113,10 +112,10 @@ fun DecisionStackView(
                     val lift by animateFloatAsState(12f * depth, MekaMotion.approve(Meka.reducedMotion), label = "stack-lift")
                     DecisionCardFace(
                         card, armed = null, progress = 0f,
-                        // Only the pile's look: their words are clipped to the top card's height and hidden behind it, so
-                        // screen readers (and the screen checks) read the top card alone.
+                        // Only the pile's look: the top card hides their words, which would only be clipped to its height
+                        // (a longer title in the open Fold's narrower column), so they draw as the card's face alone.
+                        faceOnly = true,
                         modifier = Modifier
-                            .clearAndSetSemantics { }
                             .then(if (topHeightPx > 0) Modifier.height(with(density) { topHeightPx.toDp() }) else Modifier)
                             .graphicsLayer {
                             scaleX = scale; scaleY = scale
@@ -318,7 +317,7 @@ private fun preview(x: Float, y: Float): DecisionMove? = when {
  * its icon growing; at the threshold the chip pops and the icon pops further (catalogue "Swipe actions").
  */
 @Composable
-private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress: Float, modifier: Modifier = Modifier) {
+private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress: Float, modifier: Modifier = Modifier, faceOnly: Boolean = false) {
     val reduced = Meka.reducedMotion
     val leanColor = when (armed) {
         DecisionMove.YES -> Meka.colors.accent
@@ -331,7 +330,7 @@ private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress:
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l))
             .background(face).padding(MekaSpace.l),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        if (!faceOnly) Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(card.why, style = MekaType.itemMeta, color = if (card.urgent) Meka.colors.critical else Meka.colors.accent)
             Text(card.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             // The moves are the buttons under the card; no hint line repeating them (Needs you bugs, 2026-11-10).
