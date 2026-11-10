@@ -96,6 +96,10 @@ jobs:
         env:
           PERSONAL_DENY_LIST: ${{ secrets.PERSONAL_DENY_LIST }}
         run: python3 tools/check-personal.py --self-test && python3 tools/check-personal.py
+      - name: Every Kotlin regex compiles under ICU, Android's regex engine (the 2026-11-10 Day list crash)
+        run: |
+          ldconfig -p | grep -q libicui18n || (sudo apt-get update -q && sudo apt-get install -yq libicu-dev)
+          python3 tools/check-icu-regex.py --self-test && python3 tools/check-icu-regex.py
       - name: Navilife's built-in help bundled from docs/help (Ask knows how Navilife itself works)
         run: python3 tools/gen-help.py --check
       - name: Infra typecheck, invariant tests, synth (no credentials)

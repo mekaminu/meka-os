@@ -82,7 +82,7 @@ object DayListRules {
     const val COPY_FIRST = "Copy a list first, one task per line"
 
     private val LENGTH = Regex("""(?i)(?<![A-Za-z0-9_:])(\d{1,2}(?:\.5)?)\s*h(?:rs?|ours?)?\s*(\d{1,2})?\s*(?:m(?:ins?)?)?(?![A-Za-z0-9_:])|(?<![A-Za-z0-9_:])(\d{1,3})\s*m(?:ins?|inutes?)?(?![A-Za-z0-9_:])""")
-    private val TIME = Regex("""(?<![A-Za-z0-9_:])([01]?\d|2[0-3])[:.]([0-5]\d)(?![A-Za-z0-9_:])""")
+    private val TIME = Regex("""(?<![A-Za-z0-9_:])([01]?\d|2[0-3])[.:]([0-5]\d)(?![A-Za-z0-9_:])""")
     private val TAG = Regex("""(?<!\S)#([A-Za-z][A-Za-z-]*)""")
     private val BULLET = Regex("""^\s*(?:[-*•–·]|\d{1,3}[.)]|\[\s?[xX]?\s?])\s*""")
     private val SPACE = Regex("""\s+""")
