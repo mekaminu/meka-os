@@ -254,6 +254,9 @@ final class CoreModel {
     private var mailUndoIds: [String] = []
     /// Inbox autopilot, slice 5c: the weekly "Not opened in 30 days · unsubscribe from 11?", from Saturday 09:00.
     private(set) var mailUnopened: MailUnopenedCard?
+    /// The approved Needs you look on the Mac (slice 2's tiles): today's tidies as four numbers, the one unsubscribe
+    /// question and See all ›, from core NeedsYouMailRules; nil while nothing was tidied today and no offer stands.
+    private(set) var needsYouMail: NeedsYouMailSummary?
     /// Inbox autopilot, slice 6a: "From your mail" — the emails that need Meka, each with Done and Snooze.
     private(set) var mailNeeds: MailNeedsCard?
     /// Inbox autopilot, slice 6b-3: "Time to chase" — Waiting for items from email whose chase is due, each drafted.
@@ -567,6 +570,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await u in core.mailUnopened { self?.mailUnopened = u }
+        })
+        observers.append(Task { [weak self] in
+            for await m in core.needsYouMail { self?.needsYouMail = m }
         })
         observers.append(Task { [weak self] in
             for await n in core.mailNeeds { self?.allMailNeeds = n; self?.showMailCards() }
@@ -7825,6 +7831,19 @@ final class CoreModel {
         Task {
             do {
                 let line = try await core.notNowUnopened()
+                offerEventUndo(line, .mailUnopened)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Unsubscribe on Needs you's one question (the approved look's mail tiles): just that sender, at the server's next
+    /// check; the next sender cross-fades in, with Undo on the bar. Only the id (a String) crosses.
+    func unsubscribeMailSender(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.unsubscribeUnopenedSender(id: id)
                 offerEventUndo(line, .mailUnopened)
             } catch { lastError = error.localizedDescription }
         }

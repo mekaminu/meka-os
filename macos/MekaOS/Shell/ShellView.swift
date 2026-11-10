@@ -210,12 +210,9 @@ struct NeedsYouView: View {
                     // The channels he follows on Discord (Discord channel watch, slice 1), each with Done.
                     DiscordCardsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.discord == nil ? 0 : MekaSpace.m)
-                    // What Autopilot archived (Inbox autopilot, slice 4), with the digests until Got it.
-                    ArchivedForYouView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.archivedForYou == nil ? 0 : MekaSpace.m)
-                    // The weekly "Not opened in 30 days" (Inbox autopilot, slice 5c), from Saturday 09:00 until answered.
-                    UnopenedOfferView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.mailUnopened == nil ? 0 : MekaSpace.m)
+                    // The approved look's mail (the Fold's slice 2): today's tidies as four tiles, the one unsubscribe
+                    // question and See all ›, in place of the long log and the weekly offer's card.
+                    NeedsYouMailGroup(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                     if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
