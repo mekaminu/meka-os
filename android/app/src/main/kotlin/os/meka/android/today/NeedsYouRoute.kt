@@ -57,6 +57,7 @@ import os.meka.core.domain.InstantTapRules
 import os.meka.core.domain.InstantMailRules
 import os.meka.core.domain.ChatSummaryRules
 import os.meka.core.domain.TriageChatRules
+import os.meka.core.domain.NeedsYouOpenRules
 import os.meka.core.domain.TriageReplyRules
 import os.meka.android.work.ChatSummarise
 import os.meka.android.work.LiveReplies
@@ -169,6 +170,10 @@ internal class DecisionMoves(
      * it seen on both devices, the notification's own Mark as read on Meka's tap, then its notifications cleared.
      */
     val onTriageChat: (TriageChat, ChatFinishTap) -> Unit = { _, _ -> },
+    /** Later on a chat's open row (the approved look): out of Needs you on both devices till 08:00, Undo on the bar. */
+    val onTriageLater: (TriageChat) -> Unit = {},
+    /** Task on a chat's open row: one "Reply to …" task, the chat done; Undo deletes the task. */
+    val onTriageTask: (TriageChat) -> Unit = {},
     /** "Clear this chat from the shade as it comes" switched on a chat's card (slice 2b). */
     val onChatArrival: (TriageChat, Boolean) -> Unit = { _, _ -> },
     /** The chat read to its last message under Show all (slice 2b): its notifications leave the shade, nothing else. */
@@ -396,6 +401,34 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 if (seen > 0 || marked || finish.openChat) undo.show(ChatShadeRules.line(chat, finish, marked), null)
                 Unit
+            }
+        }, onTriageLater = { chat ->
+            hide(chat.ids)
+            scope.launch {
+                val later = runCatching { core.laterTriageChat(chat.title, chat.ids) }.getOrElse { e ->
+                    restore(chat.ids)
+                    undo.show(InstantTapRules.failedLine(NeedsYouOpenRules.LATER, e.message), null)
+                    return@launch
+                }
+                if (later == null) { restore(chat.ids); return@launch }
+                undo.show(later.line) { core.laterTriageBack(later.ids); restore(chat.ids) }
+            }
+        }, onTriageTask = { chat ->
+            hide(chat.ids)
+            scope.launch {
+                val keys = LiveReplies.keysFor(chat.ids)
+                val id = runCatching { core.taskFromTriageChat(chat) }.getOrElse { e ->
+                    restore(chat.ids)
+                    undo.show(InstantTapRules.failedLine(NeedsYouOpenRules.TASK, e.message), null)
+                    return@launch
+                }
+                // Like Done: its notifications leave the shade, a group's digest chatter is caught up.
+                os.meka.android.work.WorkCaptureService.clear(keys)
+                chat.groupKey?.takeIf { chat.chatter > 0 }?.let { k ->
+                    (context as? MekaApplication)?.captures?.caughtUp(listOf(k))
+                    runCatching { core.catchUpGroupDigest(listOf(k)) }
+                }
+                undo.show(NeedsYouOpenRules.taskLine(NeedsYouOpenRules.taskTitle(chat))) { core.delete(id) }
             }
         }, onChatArrival = { chat, on ->
             val store = (context as? MekaApplication)?.captures
@@ -917,8 +950,10 @@ internal fun NeedsYouColumn(
         if (show(NeedsYouSection.MESSAGES)) messageChats.forEachIndexed { i, chat ->
             item(key = "triage-chat-${chat.key}") {
                 NeedsYouMessageRowView(NeedsYouLayoutRules.row(chat), openChat == chat.key, { openChat = if (openChat == chat.key) null else chat.key },
-                    Modifier.animateItem().appear(rememberAppearance(2 + i, play))) {
+                    Modifier.animateItem().appear(rememberAppearance(2 + i, play)),
+                    onSwipeDone = { moves.onTriageChat(chat, ChatFinishTap.DONE) }) {
                     val m = Modifier
+                val fullCard: @Composable () -> Unit = {
                 val cardFor: @Composable (TriageCard, Modifier) -> Unit = { card, m ->
                     TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it, false) }, m)
                 }
@@ -938,6 +973,17 @@ internal fun NeedsYouColumn(
                         arrival = arrival, onArrival = { on -> moves.onChatArrival(chat, on) },
                         onReadToEnd = { moves.onChatReadToEnd(chat) })
                 }
+                }
+                // The approved look: the chat's messages as lines with Reply · Done · Later · Task; Reply shows the
+                // chat's own card (its draft and Send, his tap). A chat carrying requests keeps its full card.
+                if (NeedsYouOpenRules.plain(chat)) {
+                    NeedsYouOpenView(
+                        NeedsYouOpenRules.lines(chat), NeedsYouOpenRules.spoken(chat),
+                        onDone = { moves.onTriageChat(chat, ChatFinishTap.DONE) },
+                        onLater = { moves.onTriageLater(chat) },
+                        onTask = { moves.onTriageTask(chat) },
+                    ) { fullCard() }
+                } else fullCard()
                 }
             }
         }

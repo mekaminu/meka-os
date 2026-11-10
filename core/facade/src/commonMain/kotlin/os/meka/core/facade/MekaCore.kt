@@ -4594,6 +4594,37 @@ class MekaCore(
         onCore { replica.batched { messageIds.count { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) } } }
 
     /**
+     * Later on a chat's open row in Needs you (the approved look): its messages ([os.meka.core.domain.TriageChat.ids])
+     * stay out of Needs you on every device until the next 08:00, then come back as they were. Nothing is sent or marked
+     * read. Null when none was still open. Undo is [laterTriageBack].
+     */
+    suspend fun laterTriageChat(title: String, messageIds: List<String>): os.meka.core.domain.NeedsYouLater? = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val until = os.meka.core.domain.NeedsYouOpenRules.laterUntil(now, cal)
+        val ids = replica.batched { triageCards.later(messageIds, until) }
+        if (ids.isEmpty()) null
+        else os.meka.core.domain.NeedsYouLater(ids, until, os.meka.core.domain.NeedsYouOpenRules.laterLine(title, until, now, cal))
+    }
+
+    /** Undo of [laterTriageChat]: the chat is back in Needs you on every device at once. */
+    suspend fun laterTriageBack(messageIds: List<String>): Int = onCore { replica.batched { triageCards.back(messageIds) } }
+
+    /**
+     * Task on a chat's open row (the approved look), Meka's tap: one task, "Reply to <name>", with the chat's lines in
+     * its notes, and the chat leaves Needs you as Done does (seen; nothing sent or marked read). Returns the task's id;
+     * Undo deletes the task ([delete]).
+     */
+    suspend fun taskFromTriageChat(chat: os.meka.core.domain.TriageChat): String = onCore {
+        val r = os.meka.core.domain.NeedsYouOpenRules
+        replica.batched {
+            val id = tasks.create(NewTask(r.taskTitle(chat), notes = r.taskNotes(chat)))
+            chat.ids.forEach { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) }
+            id
+        }
+    }
+
+    /**
      * WhatsApp replies, slice 2 (the Fold): which open reply cards the phone can still send itself ([live]: the message
      * ids whose notification Reply it holds), synced so the Mac offers Send (via your phone). Writes only changes.
      */

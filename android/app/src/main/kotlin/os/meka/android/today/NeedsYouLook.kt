@@ -57,6 +57,30 @@ import os.meka.core.domain.NeedsYouMailRules
 import os.meka.core.domain.NeedsYouMailSummary
 import os.meka.core.domain.NeedsYouUnsubQuestion
 import os.meka.core.domain.NeedsYouMessageRow
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import os.meka.android.designsystem.MekaChoreography
+import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.SwipeBackdrop
+import os.meka.android.designsystem.SwipeGlyph
+import os.meka.core.domain.NeedsYouOpenRules
 
 /*
  * The approved Needs you look (Meka 2026-11-09 22:33, docs/design/needs-you/needs-you.dc.html), slice 1 on the Fold:
@@ -118,50 +142,152 @@ internal fun NeedsYouHead(text: String, modifier: Modifier = Modifier) {
 
 /**
  * One person or group: the avatar's letters, the name and time, the one-line gist and the badge; a tap opens the
- * chat's own card under it (expand spring + fade; fades only with reduced motion), a second tap closes it.
+ * chat's own card under it (expand spring + fade; fades only with reduced motion), a second tap closes it. A swipe right
+ * on the row ([onSwipeDone]) washes in the gold Done layer, ticks when armed and lets go as Done (the row springs back as
+ * it leaves); TalkBack offers Done as an action instead.
  */
 @Composable
 internal fun NeedsYouMessageRowView(
-    row: NeedsYouMessageRow, open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit,
+    row: NeedsYouMessageRow, open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier,
+    onSwipeDone: (() -> Unit)? = null, content: @Composable () -> Unit,
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)) {
-        Row(
-            Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Close" else "Open") { haptics.light(); onToggle() }
-                .semantics(mergeDescendants = true) { contentDescription = row.spoken; stateDescription = if (open) "Open" else "Closed" }
-                .testTag(NEEDS_YOU_ROW_TAG)
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            verticalAlignment = Alignment.CenterVertically,
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val threshold = with(density) { MekaChoreography.swipeArmDistanceDp.dp.toPx() }
+    var dx by remember { mutableFloatStateOf(0f) }
+    var armed by remember { mutableStateOf(false) }
+    val done by rememberUpdatedState(onSwipeDone)
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val max = constraints.maxWidth.toFloat().coerceAtLeast(threshold * 1.5f)
+        val progress = MotionMath.swipeProgress(with(density) { dx.toDp().value })
+        val dragState = rememberDraggableState { delta ->
+            dx = (dx + delta).coerceIn(0f, max)
+            val now = dx >= threshold
+            if (now != armed) { if (now) haptics.tick(); armed = now }
+        }
+        SwipeBackdrop(
+            side = if (dx > 0f) 1 else 0, progress = progress, armed = armed, glyph = SwipeGlyph.CHECK,
+            label = NeedsYouOpenRules.DONE, fill = Meka.colors.accent, content = Meka.colors.onAccent,
+        )
+        Column(
+            Modifier.fillMaxWidth().offset { IntOffset(dx.roundToInt(), 0) }
+                .clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface),
         ) {
-            Box(Modifier.size(38.dp).clip(CircleShape).background(Meka.colors.surfaceRaised), contentAlignment = Alignment.Center) {
-                Text(row.initials, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1)
-            }
-            Spacer(Modifier.width(MekaSpace.xs))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(row.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                    Text(row.time, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1,
-                        modifier = Modifier.padding(start = MekaSpace.xs))
+            Row(
+                Modifier.fillMaxWidth()
+                    .then(
+                        if (onSwipeDone == null) Modifier else Modifier.draggable(
+                            orientation = Orientation.Horizontal,
+                            state = dragState,
+                            onDragStopped = {
+                                val go = armed
+                                armed = false
+                                if (go) { haptics.light(); done?.invoke() }
+                                scope.launch { animate(dx, 0f, animationSpec = MekaMotion.complete(reduced)) { v, _ -> dx = v } }
+                            },
+                        ),
+                    )
+                    .clickable(onClickLabel = if (open) "Close" else "Open") { haptics.light(); onToggle() }
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = row.spoken; stateDescription = if (open) "Open" else "Closed"
+                        if (onSwipeDone != null) {
+                            customActions = listOf(CustomAccessibilityAction(NeedsYouOpenRules.DONE) { done?.invoke(); true })
+                        }
+                    }
+                    .testTag(NEEDS_YOU_ROW_TAG)
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(38.dp).clip(CircleShape).background(Meka.colors.surfaceRaised), contentAlignment = Alignment.Center) {
+                    Text(row.initials, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1)
                 }
-                Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.width(MekaSpace.xs))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(row.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Text(row.time, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1,
+                            modifier = Modifier.padding(start = MekaSpace.xs))
+                    }
+                    Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.width(MekaSpace.xs))
+                Text(
+                    row.badge, style = MekaType.micro, maxLines = 1,
+                    color = if (row.hot) Meka.colors.approval else Meka.colors.textSecondary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+                )
             }
-            Spacer(Modifier.width(MekaSpace.xs))
-            Text(
-                row.badge, style = MekaType.micro, maxLines = 1,
-                color = if (row.hot) Meka.colors.approval else Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
-            )
+            AnimatedVisibility(
+                open,
+                enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+            ) {
+                Box(Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.xs)) { content() }
+            }
+        }
+    }
+}
+
+internal const val NEEDS_YOU_OPEN_TAG = "needs-you-open"
+
+/** The open row's lines and taps sit under the name, past the 38 dp avatar and its gap, as the mockup sets them. */
+private val AvatarSize = 38.dp
+private val OpenIndent = AvatarSize + MekaSpace.xs
+
+/**
+ * A chat's row opened (the approved look): its messages as plain lines indented under the name, then Reply (gold) ·
+ * Done · Later · Task. Reply shows the chat's own card under them ([reply]: its drafted reply, Send and the rest, all
+ * still his tap) and turns to Hide reply; the card unfolds on the expand spring (a fade with reduced motion).
+ */
+@Composable
+internal fun NeedsYouOpenView(
+    lines: List<String>, spoken: String, onDone: () -> Unit, onLater: () -> Unit, onTask: () -> Unit,
+    modifier: Modifier = Modifier, reply: @Composable () -> Unit,
+) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    var replying by rememberSaveable { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth().testTag(NEEDS_YOU_OPEN_TAG), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // Under the name, past the avatar (38 dp + the gap), as the mockup sets them.
+        Column(
+            Modifier.fillMaxWidth().padding(start = OpenIndent, end = MekaSpace.xs)
+                .semantics(mergeDescendants = true) { contentDescription = spoken },
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            lines.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textPrimary) }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(start = OpenIndent).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            NeedsYouPill(if (replying) NeedsYouOpenRules.SHOW_LESS else NeedsYouOpenRules.REPLY, gold = true) { haptics.light(); replying = !replying }
+            NeedsYouPill(NeedsYouOpenRules.DONE) { haptics.light(); onDone() }
+            NeedsYouPill(NeedsYouOpenRules.LATER) { haptics.light(); onLater() }
+            NeedsYouPill(NeedsYouOpenRules.TASK) { haptics.light(); onTask() }
         }
         AnimatedVisibility(
-            open,
+            replying,
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-        ) {
-            Box(Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.xs)) { content() }
-        }
+        ) { reply() }
+    }
+}
+
+@Composable
+private fun NeedsYouPill(label: String, gold: Boolean = false, onClick: () -> Unit) {
+    Box(
+        Modifier.heightIn(min = 34.dp).clip(RoundedCornerShape(MekaRadius.pill))
+            .background(if (gold) Meka.colors.accent else Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = MekaSpace.m),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = if (gold) MekaType.captionStrong else MekaType.caption,
+            color = if (gold) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1)
     }
 }
 

@@ -53,6 +53,12 @@ object TriageCardFields {
     const val PHONE_SEND_OUTCOME = "phoneSendOutcome"
     /** Which request ([PHONE_SEND_AT]) the outcome answers. */
     const val PHONE_SEND_FOR = "phoneSendForMs"
+    /**
+     * Later on a chat's open row in Needs you (the approved look, Meka 2026-11-09): the message stays out of Needs you on
+     * both devices until this time (the next 08:00, [NeedsYouOpenRules.laterUntil]), then comes back as it was. Absent or
+     * cleared (Undo) = shown. Nothing is sent or marked read.
+     */
+    const val LATER_UNTIL = "laterUntilMs"
     /** Sent, Not now or Seen on either device: gone from Needs you on both (TrueWins). */
     const val RESOLVED = "resolved"
     /** [TriageResolution.wire]. */
@@ -167,7 +173,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
     fun open(): List<TriageCard> {
         val now = nowMs()
         return stored().filter { s ->
-            !s.resolved && when (s.lane) {
+            !s.resolved && (s.laterUntil ?: 0L) <= now && when (s.lane) {
                 TriageLane.NEEDS_REPLY -> s.atMs >= now - REPLY_RETENTION_MS
                 TriageLane.FYI -> s.atMs >= now - FYI_RETENTION_MS
                 else -> false
@@ -204,6 +210,32 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             ),
         )
         return true
+    }
+
+    /**
+     * Later (the approved Needs you look): the open cards among [messageIds] stay out of Needs you on every device until
+     * [untilMs], then come back unchanged. Returns the ids it set aside, for Undo ([back]). Resolved or unknown ids are
+     * skipped; a time not in the future sets nothing.
+     */
+    fun later(messageIds: Collection<String>, untilMs: Long): List<String> {
+        if (untilMs <= nowMs()) return emptyList()
+        val open = stored().filter { !it.resolved }.associateBy { it.messageId }
+        return messageIds.distinct().filter { id ->
+            val s = open[id] ?: return@filter false
+            if (s.laterUntil == untilMs) return@filter false
+            replica.commitLocal(EntityTypes.TRIAGE_CARD, entityId(id), mapOf(TriageCardFields.LATER_UNTIL to untilMs.fv()))
+            true
+        }
+    }
+
+    /** Undo of [later]: those messages are back in Needs you at once. Returns how many came back. */
+    fun back(messageIds: Collection<String>): Int {
+        val open = stored().filter { !it.resolved && it.laterUntil != null }.associateBy { it.messageId }
+        return messageIds.distinct().count { id ->
+            if (open[id] == null) return@count false
+            replica.commitLocal(EntityTypes.TRIAGE_CARD, entityId(id), mapOf(TriageCardFields.LATER_UNTIL to FieldValue.Null))
+            true
+        }
     }
 
     /**
@@ -306,6 +338,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         val phoneSendAt: Long? = null,
         val phoneSendOutcome: String? = null,
         val phoneSendFor: Long? = null,
+        val laterUntil: Long? = null,
     )
 
     /** Where the Mac's last request on [s] stands at [now]; null when none was asked (or it was sent). */
@@ -338,6 +371,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             phoneSendAt = e[TriageCardFields.PHONE_SEND_AT].longOrNull,
             phoneSendOutcome = e[TriageCardFields.PHONE_SEND_OUTCOME].textOrNull,
             phoneSendFor = e[TriageCardFields.PHONE_SEND_FOR].longOrNull,
+            laterUntil = e[TriageCardFields.LATER_UNTIL].longOrNull,
         )
     }
 
