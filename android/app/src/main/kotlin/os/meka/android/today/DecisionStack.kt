@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -112,7 +113,10 @@ fun DecisionStackView(
                     val lift by animateFloatAsState(12f * depth, MekaMotion.approve(Meka.reducedMotion), label = "stack-lift")
                     DecisionCardFace(
                         card, armed = null, progress = 0f,
+                        // Only the pile's look: their words are clipped to the top card's height and hidden behind it, so
+                        // screen readers (and the screen checks) read the top card alone.
                         modifier = Modifier
+                            .clearAndSetSemantics { }
                             .then(if (topHeightPx > 0) Modifier.height(with(density) { topHeightPx.toDp() }) else Modifier)
                             .graphicsLayer {
                             scaleX = scale; scaleY = scale
