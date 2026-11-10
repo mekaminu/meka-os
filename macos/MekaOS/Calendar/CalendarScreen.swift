@@ -31,7 +31,14 @@ struct CalendarScreen: View {
 
     var body: some View {
         Group {
-            if let v = model.calendar, !v.sections.isEmpty {
+            if model.calendarMode == CalendarMode.week {
+                // Calendar → Week, Option A (approved 2026-11-10): the calm time grid is Calendar's first view.
+                CalendarWeekScreen(palette: palette)
+                    .padding(.horizontal, MekaSpace.gutterWide)
+                    .padding(.top, MekaSpace.xl)
+                    .padding(.bottom, MekaSpace.l)
+                    .transition(.opacity)
+            } else if let v = model.calendar, !v.sections.isEmpty {
                 content(v)
             } else {
                 Color.clear
@@ -39,6 +46,7 @@ struct CalendarScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.calendarModeId)
         .task { await model.refreshEditAccounts() }
         .sheet(isPresented: Binding(get: { model.addEventDay != nil }, set: { if !$0 { model.addEventDay = nil } })) {
             AddEventSheet(day: model.addEventDay ?? -1, palette: palette)
@@ -296,7 +304,7 @@ struct CalendarDot: View {
 }
 
 /// The key under the summary: each calendar's dot and name ("● Kids  ● Personal  ● Fixtures").
-private struct CalendarKey: View {
+struct CalendarKey: View {
     let legend: [CalendarTone]
     let palette: MekaPalette
 
@@ -572,8 +580,8 @@ private extension View {
     func movesEvent(_ event: CalendarEvent?) -> some View { modifier(MovesEvent(event: event)) }
 }
 
-/// Agenda · Board above the Calendar (Week board, slice 2): which view the Calendar section shows; the lit half blends
-/// across on the appear spring with a tick haptic.
+/// Week · Board · Agenda (Calendar → Week, 2026-11-10; was Agenda · Board, Week board slice 2): which view the Calendar
+/// section shows; the lit part blends across on the appear spring with a tick haptic.
 struct CalendarViewSwitch: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -581,21 +589,23 @@ struct CalendarViewSwitch: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach([false, true], id: \.self) { isBoard in
-                let lit = model.calendarShowsBoard == isBoard
+            ForEach([CalendarMode.week, CalendarMode.board, CalendarMode.agenda], id: \.id) { mode in
+                let lit = model.calendarModeId == mode.id
                 Button {
                     guard !lit else { return }
                     MekaHaptics.tick()
-                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.calendarShowsBoard = isBoard }
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.calendarMode = mode }
                 } label: {
-                    Text(isBoard ? WeekBoardRules.shared.VIEW_BOARD : WeekBoardRules.shared.VIEW_AGENDA)
-                        .font(MekaType.caption)
+                    Text(mode.label)
+                        .font(lit ? MekaType.captionStrong : MekaType.caption)
                         .foregroundStyle(lit ? palette.textPrimary : palette.textTertiary)
                         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                         .background(Capsule().fill(lit ? palette.surfaceRaised : Color.clear))
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(MekaPressStyle())
                 .accessibilityAddTraits(lit ? .isSelected : [])
+                .help("\(mode.label) view")
             }
         }
         .background(Capsule().fill(palette.surface))

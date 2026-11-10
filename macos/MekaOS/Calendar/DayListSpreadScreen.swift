@@ -4,7 +4,7 @@ import SwiftUI
 /// Calendar's Board on the Mac as Day lists side by side (the approved Day list item's slice 5, 2026-11-08: "the Mac
 /// offers 3 · 5 · 7 days, default 5"; the open Fold's `docs/design/day-list/OpenSpread.dc.html` at the Mac's width;
 /// core `DayListBoardRules` and `DayListSpreadRules`). One header row: the month, "Week 46 · 6h 15m planned", ‹ › (⌘[ ⌘])
-/// and ⋯ (Agenda view, New event, Plan your week); then the 3 days · 5 days · 7 days switch (this Mac remembers its
+/// and ⋯ (Week view, Agenda view, New event, Plan your week); then the 3 days · 5 days · 7 days switch (this Mac remembers its
 /// choice) beside the week's seven pills, each with its planned length and the days in view lit; then that many Day
 /// lists across, each with its heading ("Wed 11 · today"), total, the gold done bar, its rows (time · title · area
 /// stacked, the length on the right), and its own add field (Return adds the line and keeps focus for the next).
@@ -104,6 +104,10 @@ struct DayListSpreadScreen: View {
                 .help("Next week")
                 .accessibilityLabel("Next week")
             Menu {
+                Button("Week view") {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.calendarMode = CalendarMode.week }
+                }
                 Button("Agenda view") {
                     MekaHaptics.tick()
                     withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.calendarShowsBoard = false }
@@ -123,7 +127,7 @@ struct DayListSpreadScreen: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .accessibilityLabel(BoardOpenFoldRules.shared.MENU_LABEL)
-            .help("Agenda view, new event, plan your week")
+            .help("Week view, agenda view, new event, plan your week")
         }
     }
 

@@ -338,8 +338,18 @@ final class CoreModel {
     /// it in the same frame ([InstantBoardRules]); a tap is forgotten when its call returns.
     @ObservationIgnored private var coreBoard: WeekBoard?
     @ObservationIgnored private var boardTaps: [String: BoardTap] = [:]
-    /// Which view the Calendar section shows: the agenda (false) or the Board; kept while the app runs.
-    var calendarShowsBoard = false
+    /// Which view the Calendar section shows (Calendar → Week, Option A, 2026-11-10): Week first, then Board and Agenda
+    /// (`CalendarMode` ids); kept while the app runs.
+    var calendarModeId = CalendarMode.week.id
+    var calendarMode: CalendarMode {
+        get { CalendarMode.companion.of(id: calendarModeId) }
+        set { calendarModeId = newValue.id }
+    }
+    /// The Board (true) or the agenda (false); kept for the Board's own callers.
+    var calendarShowsBoard: Bool {
+        get { calendarMode == CalendarMode.board }
+        set { calendarModeId = newValue ? CalendarMode.board.id : CalendarMode.agenda.id }
+    }
     /// Plan your week's sheet (Week board item (6)): from the Board's header, Sunday's Needs you card or "plan my week".
     var showPlanWeek = false
     /// The card picked on the Board (a click), which ⌘← ⌘→ ⌘↑ ⌘↓ move.
@@ -4198,6 +4208,12 @@ final class CoreModel {
             guard let line = try? await core.dismissBoardHint(taskId: id, key: key) else { return }
             offerEventUndo(line, .boardHintAway)
         }
+    }
+
+    /// Calendar → Week (Option A): the time grid of `count` days from local `start`, the board's open tasks in each
+    /// day's strip (core `CalendarWeekRules`).
+    func calendarWeek(start: Int64, count: Int32) -> WeekGrid? {
+        core?.calendarWeek(board: board, start: start, count: count)
     }
 
     /// Option B slice 5: the day timeline for local `epochDay` on `board` (the board being drawn), or nil off the board.
