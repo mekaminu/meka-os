@@ -13,7 +13,7 @@ package os.meka.core.domain
  * Headlines are untrusted content (ADR-006): only ever shown as text; tapping opens MEKA's own News detail.
  */
 enum class TickerMode(val id: String, val label: String, val line: String) {
-    CALM("calm", "Calm", "Drifts twice when Today opens, then rests"),
+    CALM("calm", "Calm", "Today's news drifts slowly; the bedside strip rests after two rounds"),
     MOVING("moving", "Always moving", "Keeps drifting while Today is on screen"),
     OFF("off", "Off", "Not on Today · News stays in Ask → More"),
 }
@@ -52,8 +52,11 @@ object TickerRules {
     /** The fade's share of a strip [widthDp] wide (each end), never more than a quarter so the middle stays clear. */
     fun edgeFadeFraction(widthDp: Float): Float = if (widthDp <= 0f) 0f else minOf(0.25f, EDGE_FADE_DP / widthDp)
 
-    /** The stored choice; anything unknown (or nothing) is [TickerMode.CALM]. */
-    fun mode(id: String?): TickerMode = TickerMode.entries.firstOrNull { it.id == id } ?: TickerMode.CALM
+    /**
+     * The stored choice; anything unknown (or nothing) is [TickerMode.MOVING] (Meka 2026-11-10: the news should keep
+     * moving as it used to; it was Calm).
+     */
+    fun mode(id: String?): TickerMode = TickerMode.entries.firstOrNull { it.id == id } ?: TickerMode.MOVING
 
     /**
      * The strip from the News place: the matchday line, then one story from each lane in turn (Barça, AI, then the

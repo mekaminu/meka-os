@@ -1,10 +1,21 @@
 package os.meka.android.news
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.currentCoroutineContext
+import androidx.compose.ui.platform.InfiniteAnimationPolicy
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
@@ -20,7 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,19 +63,20 @@ import os.meka.core.domain.TodayNewsRules
 import os.meka.core.facade.MekaCore
 
 internal const val TODAY_NEWS_TAG = "today-news"
+internal const val TODAY_NEWS_ROW_TAG = "today-news-row"
 
 /**
  * The Today rebuild, slice 2b-2b-2b-3 (Meka 2026-11-09 08:09 (d)): NEWS as the approved mockup's row of picture cards
- * (core [TodayNewsRules]), in place of the drifting ticker on Today. It starts at the first card, whole, glides on to
- * the next card every few seconds on its own (as the ticker drifted), and a swipe of his settles on a card's start
- * (snap), so a card is never left half off the left edge. Reduced motion: it stays still. A tap presses the card in with a light haptic and opens the story
+ * (core [TodayNewsRules]), in place of the drifting ticker on Today. It starts at the first card, whole, and drifts
+ * across continuously on its own (Meka 2026-11-10: as the old ticker did); a swipe of his settles on a card's start
+ * (snap) and pauses the drift a few seconds. The app's own Motion → Off: it stays still. A tap presses the card in with a light haptic and opens the story
  * (or the match). The picture cross-fades in over its lettered tile ([NewsThumb]).
  */
 @Composable
 fun TodayNewsRow(
     core: MekaCore, ticker: NewsTicker, modifier: Modifier = Modifier,
     openStory: (String) -> Unit, openMatch: (CalendarEvent) -> Unit,
-    mode: os.meka.core.domain.TickerMode = os.meka.core.domain.TickerMode.CALM,
+    mode: os.meka.core.domain.TickerMode = os.meka.core.domain.TickerMode.MOVING,
 ) {
     val cards = remember(ticker) { TodayNewsRules.cards(ticker) }
     if (cards.isEmpty()) return
@@ -73,23 +84,53 @@ fun TodayNewsRow(
     val state = rememberLazyListState(initialFirstVisibleItemIndex = TodayNewsRules.START_INDEX)
     val snap = rememberSnapFlingBehavior(state, SnapPosition.Start)
     val byId = remember(ticker) { ticker.items.associateBy { it.id } }
-    // It drifts across on its own again (Meka 2026-11-09 19:20): a glide to the next card every few seconds, round
-    // twice when calm, on and on when Always moving; his own swipe pauses it a few seconds; reduced motion stays still.
+    // It drifts across continuously again (Meka 2026-11-10 07:38): a slow constant glide, no hops, looping without a
+    // seam (the cards are laid out [TodayNewsRules.LOOP_COPIES] times and it jumps back a set when it passes the first),
+    // for as long as Today is on screen, Calm or Always moving. His finger on the row pauses it; it picks up again a
+    // few seconds after he lets go. Only the app's own Motion → Off stills it.
     val reduced = Meka.reducedMotion
-    var touchedAt by remember { mutableStateOf<Long?>(null) }
-    var gliding by remember { mutableStateOf(false) }
-    LaunchedEffect(state) {
-        snapshotFlow { state.isScrollInProgress }.collect { moving -> if (moving && !gliding) touchedAt = System.currentTimeMillis() }
-    }
-    LaunchedEffect(cards.size, mode, reduced) {
-        var left = TodayNewsRules.driftSteps(mode, cards.size, reduced)
-        while (left > 0) {
-            delay(TodayNewsRules.DRIFT_STEP_MS)
-            if (!TodayNewsRules.mayDrift(touchedAt, System.currentTimeMillis()) || state.isScrollInProgress) continue
-            val next = TodayNewsRules.nextIndex(state.firstVisibleItemIndex, cards.size)
-            gliding = true
-            try { state.animateScrollToItem(next) } finally { gliding = false }
-            if (left != Int.MAX_VALUE) left--
+    val drifting = TodayNewsRules.drifts(mode, cards.size, reduced)
+    val count = if (drifting) cards.size * TodayNewsRules.LOOP_COPIES else cards.size
+    var touching by remember { mutableStateOf(false) }
+    // How many times he has let go of the row: each one restarts the few seconds' wait (counted on the frame clock's
+    // delay, so it follows the screen tests' clock too).
+    var letGo by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    LaunchedEffect(drifting, cards.size) {
+        if (!drifting) return@LaunchedEffect
+        val pxPerMs = with(density) { TodayNewsRules.SPEED_DP_PER_S.dp.toPx() } / 1000f
+        // An endless drift: run it as an infinite animation, so a screen test that waits for Today to settle isn't held
+        // up by it (the test's policy stops it then; a test that drives the clock itself sees it move).
+        val drift: suspend () -> Unit = {
+            var waited = letGo
+            while (currentCoroutineContext().isActive) {
+                if (touching || state.isScrollInProgress) { delay(100); continue }
+                if (letGo != waited) { waited = letGo; delay(TodayNewsRules.RESUME_AFTER_MS); continue }
+                TodayNewsRules.wrapIndex(state.firstVisibleItemIndex, cards.size)?.let { back ->
+                    state.scrollToItem(back, state.firstVisibleItemScrollOffset)
+                }
+                try {
+                    state.scroll {
+                        var last = withFrameNanos { it }
+                        while (!touching) {
+                            val now = withFrameNanos { it }
+                            val dtMs = ((now - last) / 1_000_000L).coerceIn(0L, 100L)
+                            last = now
+                            scrollBy(pxPerMs * dtMs)
+                            if (state.firstVisibleItemIndex >= cards.size) break
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    // His swipe took the row over (a user scroll outranks the drift): wait, then pick up again.
+                    if (!currentCoroutineContext().isActive) throw e
+                }
+            }
+        }
+        val policy = coroutineContext[InfiniteAnimationPolicy]
+        try {
+            if (policy != null) policy.onInfiniteOperation { drift() } else drift()
+        } catch (e: CancellationException) {
+            if (!isActive) throw e
         }
     }
     Column(modifier.fillMaxWidth().testTag(TODAY_NEWS_TAG), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -101,11 +142,27 @@ fun TodayNewsRow(
         }
         LazyRow(
             state = state, flingBehavior = snap,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(TODAY_NEWS_ROW_TAG).pointerInput(Unit) {
+                // Watches his finger without taking it: the row still scrolls and the cards still open.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    touching = true
+                    try {
+                        do {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (e.changes.any { it.pressed })
+                    } finally {
+                        touching = false
+                        letGo++
+                    }
+                }
+            },
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            items(cards, key = { it.key }) { c ->
-                NewsCard(core, c, c.storyId?.let { byId[it] }) {
+            items(count, key = { i -> if (i < cards.size) cards[i].key else cards[i % cards.size].key + "#" + i / cards.size }) { i ->
+                val c = cards[i % cards.size]
+                // The copies that make the loop seamless are for the eye only: a screen reader hears each story once.
+                NewsCard(core, c, c.storyId?.let { byId[it] }, copy = i >= cards.size) {
                     haptics.light()
                     val m = c.match
                     if (m != null) openMatch(m.event) else c.storyId?.let(openStory)
@@ -116,7 +173,7 @@ fun TodayNewsRow(
 }
 
 @Composable
-private fun NewsCard(core: MekaCore, c: TodayNewsCard, story: NewsItem?, onTap: () -> Unit) {
+private fun NewsCard(core: MekaCore, c: TodayNewsCard, story: NewsItem?, copy: Boolean = false, onTap: () -> Unit) {
     Row(
         Modifier.width(TodayNewsRules.CARD_WIDTH_DP.dp)
             .testTag("today-news-card")
@@ -124,7 +181,7 @@ private fun NewsCard(core: MekaCore, c: TodayNewsCard, story: NewsItem?, onTap: 
             .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClickLabel = if (c.match != null) "Open the match" else "Open story", onClick = onTap)
             .padding(MekaSpace.xs)
-            .clearAndSetSemantics { contentDescription = c.spoken; role = Role.Button },
+            .clearAndSetSemantics { if (copy) hideFromAccessibility() else { contentDescription = c.spoken; role = Role.Button } },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

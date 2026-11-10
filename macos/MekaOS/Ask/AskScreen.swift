@@ -403,7 +403,7 @@ private struct AppearanceRow: View {
     @Environment(CoreModel.self) private var model
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
     /// News ticker (news ticker, slice 2): how the strip at the foot of Today moves on this Mac.
-    @AppStorage(NewsTickerChoice.key) private var ticker = "calm"
+    @AppStorage(NewsTickerChoice.key) private var ticker = "moving"
     /// The floating ticker (slice 2b): the same strip over every app, also in View → Floating Ticker.
     @AppStorage(FloatingTicker.enabledKey) private var floating = false
     /// Motion (motion pass 2): MEKA's own motion on this Mac; "" until chosen (then Reduce Motion decides).

@@ -5,7 +5,7 @@ package os.meka.core.domain
  * mockup's row of picture cards that you swipe yourself, not the drifting ticker. A small-caps NEWS label with a quiet
  * "swipe ›" when there is more than one card, then today's match first (only with Barça chosen) and the stories, each a
  * picture, a two-line headline and "BBC News · 49 min ago". It always starts at the first card, never mid-card, and
- * glides on a card at a time on its own ([driftSteps]; still with reduced motion). Off (Appearance → News) still hides
+ * drifts across continuously on its own ([drifts]; still with the app's own Motion → Off). Off (Appearance → News) still hides
  * it. The Fold and the Mac (slice 2d-2e) both read these rules; the drifting ticker stays for the bedside clock and the
  * Mac's floating strip.
  *
@@ -44,27 +44,31 @@ object TodayNewsRules {
     fun shown(mode: TickerMode, ticker: NewsTicker): Boolean = TickerRules.shown(mode, ticker)
 
     /**
-     * The row drifts across on its own again (Meka 2026-11-09 19:20: "why are my news not scrolling across? That's what
-     * I enjoyed"): every [DRIFT_STEP_MS] it glides to the next card, back to the first after the last. Calm goes round
-     * [CALM_LOOPS] times then rests; Always moving keeps going; reduced motion never drifts. A swipe of his own pauses it
-     * for [RESUME_AFTER_MS].
+     * The row drifts across **continuously** again (Meka 2026-11-10 07:38: "my news are not scrolling as before"; first
+     * asked 2026-11-09 19:20: "why are my news not scrolling across? That's what I enjoyed"): a slow constant glide at
+     * [SPEED_DP_PER_S] (the old ticker's speed), no hops, looping back to the first card without a seam, for as long as
+     * Today is on screen, in Calm and in Always moving alike (Calm no longer rests after two rounds). His own swipe, a
+     * press or (on the Mac) a hover pauses it; it picks up again [RESUME_AFTER_MS] after he lets go. Only the app's own
+     * Motion → Off (reduced motion) or News → Off keeps it still.
      */
-    const val DRIFT_STEP_MS = 3_500L
-    const val RESUME_AFTER_MS = 6_000L
-    const val CALM_LOOPS = 2
+    const val SPEED_DP_PER_S = TickerRules.SPEED_DP_PER_S
+    const val RESUME_AFTER_MS = 4_000L
 
-    /** How many glides the row makes on its own for [count] cards: none with one card or reduced motion. */
-    fun driftSteps(mode: TickerMode, count: Int, reduced: Boolean): Int = when {
-        reduced || count < 2 || mode == TickerMode.OFF -> 0
-        mode == TickerMode.MOVING -> Int.MAX_VALUE
-        else -> CALM_LOOPS * count
-    }
+    /** How many copies of the cards the row lays out while it drifts, so the loop wraps without a gap. */
+    const val LOOP_COPIES = 3
 
-    /** The card the row glides to after [index]: the next, or the first after the last. */
-    fun nextIndex(index: Int, count: Int): Int = if (count <= 0) 0 else (index + 1) % count
+    /** Whether the row drifts on its own: two or more cards, News not Off, and the app's Motion not Off. */
+    fun drifts(mode: TickerMode, count: Int, reduced: Boolean): Boolean = !reduced && count >= 2 && mode != TickerMode.OFF
 
-    /** Whether the row may glide at [nowMs] after his own last swipe at [touchedAtMs] (null: never touched). */
-    fun mayDrift(touchedAtMs: Long?, nowMs: Long): Boolean = touchedAtMs == null || nowMs - touchedAtMs >= RESUME_AFTER_MS
+    /** The row's offset after [dtMs] of drift from [offsetDp], wrapped within one set of cards ([loopWidthDp]). */
+    fun drift(offsetDp: Float, dtMs: Long, loopWidthDp: Float): Float =
+        TickerRules.stepAt(TickerDrift(offsetDp, 0), dtMs, loopWidthDp, SPEED_DP_PER_S).offsetDp
+
+    /**
+     * Where the drifting row (laid out [LOOP_COPIES] times) jumps back to once [firstIndex] has passed the first set of
+     * [count] cards: the same card in the first set, so the jump can't be seen. Null: no jump needed.
+     */
+    fun wrapIndex(firstIndex: Int, count: Int): Int? = if (count <= 0 || firstIndex < count) null else firstIndex % count
 
     /** The cards in order: the match first, then the stories, at most [MAX_CARDS]. */
     fun cards(ticker: NewsTicker): List<TodayNewsCard> {

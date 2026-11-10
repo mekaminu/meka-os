@@ -5,15 +5,15 @@ import SwiftUI
 /// Fold's slices 2b-2b-2b-3 and the drift of 2026-11-09 19:20): the Mac's NEWS on Today is the mockup's row of picture
 /// cards below Also today (core TodayNewsRules), in place of the floating ticker at Today's foot and the News list under
 /// Coming up. A small-caps NEWS label with "swipe ›", then today's match first in Barça's colour and the stories, each a
-/// picture, a two-line headline and "BBC News · 49 min ago". It starts at the first card, whole; every few seconds it
-/// glides on to the next card on its own (round twice when Calm, on and on when Always moving, never with Reduce
-/// Motion or Off), settling on a card's start; hovering or scrolling it yourself pauses the glide a few seconds.
+/// picture, a two-line headline and "BBC News · 49 min ago". It starts at the first card, whole, and drifts across
+/// continuously on its own (Meka 2026-11-10; Calm or Always moving, never with Reduce Motion or Off); hovering or
+/// dragging it pauses it a few seconds.
 /// A click presses the card in with a tick and opens the story in the News sheet (the match opens its detail).
 /// Headlines are untrusted (ADR-006): text only.
 struct MacTodayNewsRow: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    @AppStorage(NewsTickerChoice.key) private var modeId = "calm"
+    @AppStorage(NewsTickerChoice.key) private var modeId = "moving"
     let palette: MekaPalette
 
     var body: some View {
@@ -43,7 +43,11 @@ struct MacTodayNewsRow: View {
     }
 }
 
-/// The row itself: the label, then the cards in a sideways scroll that snaps to a card's start.
+/// The row itself: the label, then the cards. While it drifts (Meka 2026-11-10 07:38: "my news are not scrolling as
+/// before") it is one slow constant glide, no hops, laid out twice so it loops back to the first card without a seam, for
+/// as long as Today is on screen, Calm or Always moving (core TodayNewsRules.drifts). Hovering or dragging it pauses it; it
+/// picks up again a few seconds after he moves away or lets go. With Reduce Motion (the app's Motion → Off) or one card
+/// it is the still row you scroll yourself, snapping to a card's start.
 private struct MacNewsCards: View {
     let cards: [TodayNewsCard]
     let stories: [String: NewsItem]
@@ -51,16 +55,21 @@ private struct MacNewsCards: View {
     let reduced: Bool
     let palette: MekaPalette
     let open: (TodayNewsCard) -> Void
-    @State private var current: String?
-    /// When he last hovered or scrolled the row himself (ms since 1970), so the glide waits.
-    @State private var touchedAt: Int64?
+    @State private var offset: CGFloat = 0
+    /// One set of cards' width plus the gap after it: the loop.
+    @State private var loopWidth: CGFloat = 0
+    @State private var hovering = false
+    @State private var dragStart: CGFloat?
+    /// Bumped each time he lets go (moves the pointer away or ends a drag): the drift waits a few seconds after it.
+    @State private var letGo = 0
 
     /// The mockup's 250 px card, so the next one peeks in from the edge.
     static var cardWidth: CGFloat { CGFloat(TodayNewsRules.shared.CARD_WIDTH_DP) }
     static var thumb: CGFloat { CGFloat(TodayNewsRules.shared.THUMB_DP) }
+    private static var gap: CGFloat { MekaSpace.xs }
 
     var body: some View {
-        let keys = cards.map(\.key)
+        let drifts = TodayNewsRules.shared.drifts(mode: mode, count: Int32(cards.count), reduced: reduced)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(spacing: MekaSpace.xs) {
                 Text(TodayNewsRules.shared.LABEL).font(MekaType.cardLabel).tracking(MekaType.cardLabelTracking)
@@ -74,45 +83,84 @@ private struct MacNewsCards: View {
                         .accessibilityHidden(true)
                 }
             }
-            ScrollView(.horizontal) {
-                HStack(spacing: MekaSpace.xs) {
-                    ForEach(cards, id: \.key) { c in
-                        MacNewsCard(card: c, story: c.storyId.flatMap { stories[$0] }, palette: palette, open: open)
-                            .id(c.key)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollIndicators(.never)
-            .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $current, anchor: .leading)
-            .onScrollPhaseChange { _, phase in
-                if phase == .interacting { touchedAt = Self.nowMs() }
-            }
-            .onHover { if $0 { touchedAt = Self.nowMs() } }
+            if drifts { drifting } else { still }
         }
-        .task(id: DriftKey(keys: keys, mode: mode, reduced: reduced)) {
-            var left = Int(TodayNewsRules.shared.driftSteps(mode: mode, count: Int32(cards.count), reduced: reduced))
-            while left > 0, !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(TodayNewsRules.shared.DRIFT_STEP_MS))
+    }
+
+    /// The still row: scroll it yourself; it settles on a card's start.
+    private var still: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Self.gap) {
+                ForEach(cards, id: \.key) { c in
+                    MacNewsCard(card: c, story: c.storyId.flatMap { stories[$0] }, palette: palette, open: open)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollIndicators(.never)
+        .scrollTargetBehavior(.viewAligned)
+    }
+
+    /// The drifting row: two sets side by side, slid left by `offset` (wrapped within one set by the core).
+    private var drifting: some View {
+        HStack(spacing: Self.gap) {
+            cardSet.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { loopWidth = $0 + Self.gap }
+            cardSet.accessibilityHidden(true)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .offset(x: -offset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
+        .contentShape(Rectangle())
+        .onHover { inside in
+            hovering = inside
+            if !inside { letGo += 1 }
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 4)
+                .onChanged { g in
+                    let start = dragStart ?? offset
+                    dragStart = start
+                    offset = CGFloat(TickerRules.shared.scrubbed(drift: TickerDrift(offsetDp: Float(offset), loops: 0),
+                                                                 offsetDp: Float(start - g.translation.width),
+                                                                 loopWidthDp: Float(loopWidth)).offsetDp)
+                }
+                .onEnded { _ in
+                    dragStart = nil
+                    letGo += 1
+                }
+        )
+        .task(id: DriftKey(held: hovering || dragStart != nil, letGo: letGo)) {
+            guard !hovering, dragStart == nil else { return }
+            // Just let go: a few seconds' rest first (none when Today first shows).
+            if letGo > 0 {
+                try? await Task.sleep(for: .milliseconds(TodayNewsRules.shared.RESUME_AFTER_MS))
+            }
+            let clock = ContinuousClock()
+            var last = clock.now
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(16))
                 if Task.isCancelled { return }
-                let touched = touchedAt.map { KotlinLong(value: $0) }
-                guard TodayNewsRules.shared.mayDrift(touchedAtMs: touched, nowMs: Self.nowMs()) else { continue }
-                let index = current.flatMap { keys.firstIndex(of: $0) } ?? Int(TodayNewsRules.shared.START_INDEX)
-                let next = Int(TodayNewsRules.shared.nextIndex(index: Int32(index), count: Int32(keys.count)))
-                // The glide (the motion catalogue's replan curve), back to the first after the last.
-                withAnimation(MekaMotion.replan(reduced: false)) { current = keys[next] }
-                if left != Int(Int32.max) { left -= 1 }
+                let now = clock.now
+                let d = (now - last).components
+                let ms = d.seconds * 1000 + d.attoseconds / 1_000_000_000_000_000
+                last = now
+                offset = CGFloat(TodayNewsRules.shared.drift(offsetDp: Float(offset), dtMs: ms, loopWidthDp: Float(loopWidth)))
             }
         }
     }
 
-    private static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+    private var cardSet: some View {
+        HStack(spacing: Self.gap) {
+            ForEach(cards, id: \.key) { c in
+                MacNewsCard(card: c, story: c.storyId.flatMap { stories[$0] }, palette: palette, open: open)
+            }
+        }
+    }
 
     private struct DriftKey: Equatable {
-        let keys: [String]
-        let mode: TickerMode
-        let reduced: Bool
+        let held: Bool
+        let letGo: Int
     }
 }
 

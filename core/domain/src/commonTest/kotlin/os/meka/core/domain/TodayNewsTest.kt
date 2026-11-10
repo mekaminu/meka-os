@@ -62,15 +62,29 @@ class TodayNewsTest {
     }
 
     @Test
-    fun theRowDriftsAcrossOnItsOwnAndAwipePausesIt() {
-        assertEquals(0, TodayNewsRules.driftSteps(TickerMode.CALM, 4, reduced = true))
-        assertEquals(0, TodayNewsRules.driftSteps(TickerMode.CALM, 1, reduced = false))
-        assertEquals(8, TodayNewsRules.driftSteps(TickerMode.CALM, 4, reduced = false))
-        assertEquals(Int.MAX_VALUE, TodayNewsRules.driftSteps(TickerMode.MOVING, 4, reduced = false))
-        assertEquals(1, TodayNewsRules.nextIndex(0, 4))
-        assertEquals(0, TodayNewsRules.nextIndex(3, 4))
-        kotlin.test.assertTrue(TodayNewsRules.mayDrift(null, 0L))
-        kotlin.test.assertFalse(TodayNewsRules.mayDrift(10_000L, 12_000L))
-        kotlin.test.assertTrue(TodayNewsRules.mayDrift(10_000L, 10_000L + TodayNewsRules.RESUME_AFTER_MS))
+    fun theRowDriftsContinuouslyInCalmAndMovingAndOnlyTheAppsMotionOffStillsIt() {
+        assertTrue(TodayNewsRules.drifts(TickerMode.CALM, 4, reduced = false))
+        assertTrue(TodayNewsRules.drifts(TickerMode.MOVING, 4, reduced = false))
+        kotlin.test.assertFalse(TodayNewsRules.drifts(TickerMode.CALM, 4, reduced = true))
+        kotlin.test.assertFalse(TodayNewsRules.drifts(TickerMode.MOVING, 1, reduced = false))
+        kotlin.test.assertFalse(TodayNewsRules.drifts(TickerMode.OFF, 4, reduced = false))
+    }
+
+    @Test
+    fun theDriftIsASlowConstantGlideThatWrapsWithoutASeam() {
+        // 40 dp a second: a tenth of a second moves 4 dp; a long gap counts as one short step, never a jump.
+        assertEquals(4f, TodayNewsRules.drift(0f, 100L, 1000f))
+        assertEquals(2f, TodayNewsRules.drift(998f, 100L, 1000f))
+        assertEquals(4f, TodayNewsRules.drift(0f, 60_000L, 1000f))
+        assertEquals(5f, TodayNewsRules.drift(5f, 100L, 0f))
+        // Laid out three times: past the first set it jumps back to the same card in the first set.
+        assertEquals(null, TodayNewsRules.wrapIndex(3, 4))
+        assertEquals(0, TodayNewsRules.wrapIndex(4, 4))
+        assertEquals(1, TodayNewsRules.wrapIndex(9, 4))
+    }
+
+    @Test
+    fun nothingChosenIsAlwaysMoving() {
+        assertEquals(TickerMode.MOVING, TickerRules.mode(null))
     }
 }

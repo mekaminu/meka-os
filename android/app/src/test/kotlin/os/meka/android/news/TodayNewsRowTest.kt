@@ -8,6 +8,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.TimeZone
@@ -74,5 +76,52 @@ class TodayNewsRowTest {
         }
         compose.onNodeWithText("NEWS").assertExists()
         compose.onNodeWithText("swipe ›").assertDoesNotExist()
+    }
+
+    /** Where the first story's own card starts, or null once it has drifted out of the row (disposed). */
+    private fun firstStoryLeft(): Float? = compose.onAllNodes(hasContentDescription("Markets steady", substring = true), useUnmergedTree = true)
+        .fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.left
+
+    private fun setRow(ticker: NewsTicker) {
+        val core = core()
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.width(360.dp).padding(horizontal = 16.dp)) {
+                    TodayNewsRow(core, ticker, openStory = {}, openMatch = {})
+                }
+            }
+        }
+    }
+
+    private val three = NewsTicker(null, listOf(story("s1", "Markets steady ahead of a rate decision"), story("s2", "Weekend weather: cold and clear"), story("s3", "A town opens a new library")))
+
+    @Test
+    fun theRowDriftsAcrossOnItsOwnWithNoTouch() {
+        // Meka 2026-11-10 07:38: "my news are not scrolling as before". Over ten seconds, untouched, it glides on.
+        compose.mainClock.autoAdvance = false
+        setRow(three)
+        compose.mainClock.advanceTimeByFrame()
+        val row = compose.onNodeWithTag(TODAY_NEWS_TAG).fetchSemanticsNode().boundsInRoot
+        assertEquals(row.left, firstStoryLeft()!!, 12f)
+        compose.mainClock.advanceTimeBy(10_000)
+        val left = firstStoryLeft()
+        assertTrue("the first card has drifted away to the left (was at ${row.left}, now $left)", left == null || left < row.left - 100f)
+    }
+
+    @Test
+    fun hisFingerOnTheRowPausesItAndItPicksUpAfterHeLetsGo() {
+        compose.mainClock.autoAdvance = false
+        setRow(three)
+        compose.mainClock.advanceTimeByFrame()
+        val row = compose.onNodeWithTag(TODAY_NEWS_TAG).fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag(TODAY_NEWS_ROW_TAG).performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(10_000)
+        assertEquals("held: it stays put", row.left, firstStoryLeft()!!, 12f)
+        compose.onNodeWithTag(TODAY_NEWS_ROW_TAG).performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(2_000)
+        assertEquals("just let go: it waits a few seconds", row.left, firstStoryLeft()!!, 12f)
+        compose.mainClock.advanceTimeBy(10_000)
+        val left = firstStoryLeft()
+        assertTrue("then it drifts again (now $left)", left == null || left < row.left - 100f)
     }
 }

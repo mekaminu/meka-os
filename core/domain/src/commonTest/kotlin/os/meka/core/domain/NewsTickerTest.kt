@@ -68,8 +68,8 @@ class NewsTickerTest {
 
     @Test
     fun theChoiceDefaultsToCalm() {
-        assertEquals(TickerMode.CALM, TickerRules.mode(null))
-        assertEquals(TickerMode.CALM, TickerRules.mode("sideways"))
+        assertEquals(TickerMode.MOVING, TickerRules.mode(null))
+        assertEquals(TickerMode.MOVING, TickerRules.mode("sideways"))
         assertEquals(TickerMode.MOVING, TickerRules.mode("moving"))
         assertEquals(TickerMode.OFF, TickerRules.mode("off"))
         assertEquals(listOf("Calm", "Always moving", "Off"), TickerMode.entries.map { it.label })

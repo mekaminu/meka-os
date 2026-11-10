@@ -656,11 +656,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NewsRules.shared.tileMark(source: "Mundo Deportivo"), "MD")
         XCTAssertEqual(NewsRules.shared.tileMark(source: "BBC News"), "BBC")
         XCTAssertEqual(TickerRules.shared.edgeFadeFraction(widthDp: 480), 0.1, accuracy: 0.0001)
-        // The news ticker (slice 2): nothing to show, so no strip; calm by default, rests after two loops.
+        // The news ticker (slice 2): nothing to show, so no strip; Always moving by default (2026-11-10); Calm rests after two loops.
         let ticker = TickerRules.shared.ticker(place: place)
         XCTAssertTrue(ticker.isEmpty)
         XCTAssertFalse(TickerRules.shared.shown(mode: TickerMode.calm, ticker: ticker))
-        XCTAssertEqual(TickerRules.shared.mode(id: "nonsense"), TickerMode.calm)
+        XCTAssertEqual(TickerRules.shared.mode(id: "nonsense"), TickerMode.moving)
         XCTAssertEqual([TickerMode.calm, TickerMode.moving, TickerMode.off].map(\.label), ["Calm", "Always moving", "Off"])
         XCTAssertFalse(TickerRules.shared.moving(mode: TickerMode.calm, reducedMotion: false, onScreen: true, held: false,
                                                  loopsDone: TickerRules.shared.CALM_LOOPS, hasItems: true))
