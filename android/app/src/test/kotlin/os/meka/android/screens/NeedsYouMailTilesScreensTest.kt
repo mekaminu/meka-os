@@ -109,7 +109,7 @@ class NeedsYouMailTilesScreensTest {
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
         listOf("138", "33", "71", "tidied", "newsletters", "promos", "junk & scams").forEach { if (!onScreen(it)) fail("$name: $it is missing") }
-        if (compose.onAllNodesWithTag(NEEDS_YOU_TILE_TAG).fetchSemanticsNodes().size != 4) fail("$name: not four tiles")
+        if (compose.onAllNodesWithTag(NEEDS_YOU_TILE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 4) fail("$name: not four tiles")
         if (!onScreen("Unsubscribe from Oakfield Kids Club?")) fail("$name: the one question is missing")
         if (!onScreen(NeedsYouMailRules.FOOT) || !onScreen("See all")) fail("$name: the foot is missing")
         ScreenShots.assertEachOneLine(compose, name, listOf("138", "71", "tidied", "promos", NeedsYouMailRules.UNSUBSCRIBE, NeedsYouMailRules.SEE_ALL))
