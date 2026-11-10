@@ -39,6 +39,14 @@ final class MacCalendarWeekTests: XCTestCase {
         XCTAssertEqual(rules.hoursLabel(minutes: 348), "5.8 h")
     }
 
+    func testHourLabelsSitOnTheirLinesAndShortBlocksAreOneLine() {
+        // Centred on the line (7 pt up), the first kept inside the grid; under 33 pt a block is one line (a 45 min call).
+        XCTAssertEqual(rules.hourLabelTopDp(index: 0, hourDp: rules.HOUR_DP), 0)
+        XCTAssertEqual(rules.hourLabelTopDp(index: 2, hourDp: rules.HOUR_DP), 73)
+        XCTAssertEqual(rules.TWO_LINE_DP, 33)
+        XCTAssertEqual(rules.allDayLabel(folded: false), "all day")
+    }
+
     func testADraggedEventSnapsToQuarterHoursAndDaysInView() {
         // A 10:00 event: 130 pt across 100 pt columns is a day; 25 pt down at 40 pt an hour is 45 minutes (to the quarter).
         let d = rules.dropAt(startMinute: 600, dayIndex: 0, startEpochDay: monday, count: 5, dxDp: 130, dyDp: 25, columnDp: 100, hourDp: 40, today: monday)

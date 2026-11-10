@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -325,8 +326,8 @@ private fun Grid(
         Box(Modifier.fillMaxWidth().height(1.dp).background(Meka.colors.hairline))
         // The all-day strip: all-day events, events outside the hours and the day's open tasks, as square chips.
         Row(Modifier.fillMaxWidth().heightIn(min = 30.dp)) {
-            Text("all day", style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1,
-                modifier = Modifier.width(labelDp).align(Alignment.CenterVertically).padding(end = MekaSpace.xs).clearAndSetSemantics { })
+            Text(CalendarWeekRules.allDayLabel(folded = !wide), style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1,
+                textAlign = TextAlign.End, modifier = Modifier.width(labelDp).align(Alignment.CenterVertically).padding(end = MekaSpace.xs).clearAndSetSemantics { })
             grid.days.forEach { d ->
                 Column(Modifier.weight(1f).padding(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     CalendarWeekRules.shownChips(d.chips).forEach { c -> Chip(c) { c.event?.let(onEvent) ?: c.taskId?.let(actions.onTask) } }
@@ -338,9 +339,10 @@ private fun Grid(
         Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll)) {
             Row(Modifier.fillMaxWidth().height(CalendarWeekRules.heightDp(hourDp).dp + MekaSpace.xs)) {
                 Box(Modifier.width(labelDp).fillMaxHeight()) {
-                    CalendarWeekRules.hours.forEachIndexed { i, h ->
-                        Text(h, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1,
-                            modifier = Modifier.align(Alignment.TopEnd).offset(y = (i * hourDp).dp).padding(end = MekaSpace.xs))
+                    (if (wide) CalendarWeekRules.hours else CalendarWeekRules.foldedHours).forEachIndexed { i, h ->
+                        Text(h, style = HOUR, color = Meka.colors.textTertiary, maxLines = 1,
+                            modifier = Modifier.align(Alignment.TopEnd).offset(y = CalendarWeekRules.hourLabelTopDp(i, hourDp).dp)
+                                .padding(end = if (wide) MekaSpace.xs else MekaSpace.xxs))
                     }
                 }
                 grid.days.forEachIndexed { i, d ->
@@ -460,8 +462,9 @@ private fun Block(b: WeekBlock, hourDp: Float, hint: String?, modifier: Modifier
             },
     ) {
         Box(Modifier.width(CalendarWeekRules.EDGE_DP.dp).fillMaxHeight().background(tone))
-        val pad = Modifier.padding(horizontal = MekaSpace.xxs + 2.dp, vertical = if (b.oneLine) 0.dp else MekaSpace.xxs) // rhythm: ok (the mockup's 7 px inset)
-        if (b.oneLine) {
+        val oneLine = b.oneLine(hourDp)
+        val pad = Modifier.padding(horizontal = MekaSpace.xxs + 2.dp, vertical = if (oneLine) 0.dp else MekaSpace.xxs) // rhythm: ok (the mockup's 7 px inset)
+        if (oneLine) {
             Row(pad.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 BlockTitle(b, Modifier.weight(1f, fill = false))
                 if (b.clash) ClashDot(amber)
@@ -506,5 +509,7 @@ private fun Chip(c: WeekChip, onTap: () -> Unit) {
 }
 
 /** The approved grid's 11 sp regular titles and 10 sp times (Option A). */
-private val TITLE = MekaType.micro.copy(fontSize = 11.sp) // type: ok (the approved Week grid's 11 sp titles)
-private val TIME = MekaType.micro.copy(fontSize = 10.sp) // type: ok (the approved Week grid's 10 sp times)
+private val TITLE = MekaType.micro.copy(fontSize = 11.sp, lineHeight = 13.sp) // type: ok (the approved Week grid's 11 sp titles)
+private val TIME = MekaType.micro.copy(fontSize = 10.sp, lineHeight = 12.sp) // type: ok (the approved Week grid's 10 sp times)
+/** The hour labels: 10.5 sp open, 10 sp folded in the mockups; one 10 sp line that fits the folded 40 dp column. */
+private val HOUR = MekaType.micro.copy(fontSize = 10.sp, lineHeight = 14.sp) // type: ok (the approved Week grid's hour labels)

@@ -60,8 +60,11 @@ data class WeekBlock(
     val column: Int = 0,
     val columns: Int = 1,
 ) {
-    /** Under [CalendarWeekRules.SHORT_MIN] minutes: the title and time on one line. */
-    val oneLine: Boolean get() = endMinute - startMinute < CalendarWeekRules.SHORT_MIN
+    /**
+     * Too short for the title over its time at [hourDp] per hour: the title and start time on one line. (Screenshot
+     * check 2026-11-10: a 30 min Dentist and a 45 min call drew two lines in 18 and 28 dp and lost both to the clip.)
+     */
+    fun oneLine(hourDp: Float): Boolean = heightDp(hourDp) < CalendarWeekRules.TWO_LINE_DP
 
     /** "Training, 16:55 to 17:55, clashes with work" */
     val spoken: String get() = "$title, " + time.replace("–", " to ") + if (clash) ", clashes with work" else ""
@@ -144,6 +147,8 @@ object CalendarWeekRules {
     const val LABEL_DP = 56f
     const val FOLDED_LABEL_DP = 40f
     const val SHORT_MIN = 30
+    /** The height two lines need: an 11 sp title (13 sp line) over a 10 sp time (12 sp line) with 4 dp above and below. */
+    const val TWO_LINE_DP = 33f
     const val MIN_BLOCK_DP = 18f
     /** The 2 dp coloured left edge on every block and chip. */
     const val EDGE_DP = 2f
@@ -167,6 +172,15 @@ object CalendarWeekRules {
 
     /** The hour labels down the side: "08:00" … "20:00". */
     val hours: List<String> get() = (FIRST_HOUR until END_HOUR).map { LocalClock.formatMinute(it * 60) }
+
+    /** The folded grid's narrow 40 dp column: "08" … "20", as the folded mockup. */
+    val foldedHours: List<String> get() = (FIRST_HOUR until END_HOUR).map { it.toString().padStart(2, '0') }
+
+    /** An hour label's top: centred on its line (7 dp up, as the mockups), the first one kept inside the grid. */
+    fun hourLabelTopDp(index: Int, hourDp: Float): Float = maxOf(0f, index * hourDp - 7f)
+
+    /** The all-day strip's label: "all day" open; nothing in the folded 40 dp column (the folded mockup leaves it blank). */
+    fun allDayLabel(folded: Boolean): String = if (folded) "" else "all day"
 
     /** The Monday of the week holding [epochDay]. */
     fun monday(epochDay: Long): Long = epochDay - (CivilDate.isoDayOfWeek(epochDay) - 1)

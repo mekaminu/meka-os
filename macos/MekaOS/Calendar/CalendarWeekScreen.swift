@@ -243,6 +243,8 @@ private struct WeekGridPanel: View {
                             Text(h).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
                                 .padding(.trailing, MekaSpace.xs)
                                 .frame(width: labelWidth, height: CGFloat(hourPt), alignment: .topTrailing)
+                                // Centred on its line as the mockup (the first kept inside the grid).
+                                .offset(y: CGFloat(rules.hourLabelTopDp(index: Int32(i), hourDp: hourPt)) - CGFloat(i) * CGFloat(hourPt))
                                 .id("hour-\(i)")
                         }
                     }
@@ -323,7 +325,7 @@ private struct WeekDayColumn: View {
                     let landing = held ? drop(b, colW) : nil
                     let ox = CGFloat(landing?.days ?? 0) * colW
                     let oy = CGFloat(landing?.minutes ?? 0) * CGFloat(hourPt) / 60
-                    WeekBlockView(block: b, palette: palette, hint: landing?.hint)
+                    WeekBlockView(block: b, hourPt: hourPt, palette: palette, hint: landing?.hint)
                         .frame(width: max(0, w - 1), height: CGFloat(b.heightDp(hourDp: hourPt)))
                         .shadow(color: .black.opacity(held ? 0.35 : 0), radius: held ? 6 : 0, y: held ? 2 : 0)
                         .offset(x: 3 + w * CGFloat(b.column) + ox, y: CGFloat(b.topDp(hourDp: hourPt)) + 1 + oy)
@@ -393,6 +395,8 @@ private struct WeekDayColumn: View {
 /// work adds a small amber dot after the title and a thin amber outline.
 private struct WeekBlockView: View {
     let block: WeekBlock
+    /// The grid's hour height: a block too short for two lines there is one line (core `WeekBlock.oneLine`).
+    let hourPt: Float
     let palette: MekaPalette
     /// While dragged: "Move to Thu 12 Nov · 15:30" in the time's place.
     var hint: String?
@@ -402,7 +406,7 @@ private struct WeekBlockView: View {
         HStack(spacing: 0) {
             Rectangle().fill(palette.calendarTone(Int32(block.tone))).frame(width: CGFloat(CalendarWeekRules.shared.EDGE_DP))
             Group {
-                if block.oneLine {
+                if block.oneLine(hourDp: hourPt) {
                     HStack(spacing: MekaSpace.xxs) {
                         title
                         if block.clash { Circle().fill(amber).frame(width: 6, height: 6) }

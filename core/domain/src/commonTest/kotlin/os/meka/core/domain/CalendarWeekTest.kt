@@ -53,8 +53,8 @@ class CalendarWeekTest {
     fun aShortEventIsOneLineAndBlocksSitOnFortyDpHoursFromEight() {
         val g = CalendarWeekRules.build(mon, 5, listOf(ev("s", "Stand-up", mon, 9 * 60, 9 * 60 + 15), ev("t", "Training", mon, 18 * 60, 19 * 60)), null, null, ms(mon, 0), cal)
         val (stand, training) = g.days[0].blocks
-        assertTrue(stand.oneLine)
-        assertFalse(training.oneLine)
+        assertTrue(stand.oneLine(CalendarWeekRules.HOUR_DP))
+        assertFalse(training.oneLine(CalendarWeekRules.HOUR_DP))
         assertEquals("09:00–09:15", stand.time)
         assertEquals(40f, stand.topDp(CalendarWeekRules.HOUR_DP))
         assertEquals(18f, stand.heightDp(CalendarWeekRules.HOUR_DP))
@@ -170,5 +170,31 @@ class CalendarWeekTest {
         val thu = CalendarWeekRules.drop(b, 0, mon, 5, 300f, 0f, 100f, 40f, today = mon)!!
         assertEquals(mon + 3, thu.day)
         assertEquals("Move to " + CivilDate.shortLabel(mon + 3) + " · 19:00", thu.hint)
+    }
+
+    @Test
+    fun aBlockTooShortForTwoLinesIsOneLineAtItsGridsHourHeight() {
+        val g = CalendarWeekRules.build(mon, 5, listOf(
+            ev("d", "Dentist", mon, 13 * 60 + 45, 14 * 60 + 15),
+            ev("c", "Call", mon, 15 * 60, 15 * 60 + 45),
+            ev("p", "Planning", mon, 10 * 60, 11 * 60),
+        ), null, null, ms(mon, 0), cal)
+        val (planning, dentist, call) = g.days[0].blocks.sortedBy { it.startMinute }
+        // 30 min = 18 dp and 45 min = 28 dp: neither holds two lines; an hour (38 dp) does, open and folded.
+        assertTrue(dentist.oneLine(CalendarWeekRules.HOUR_DP))
+        assertTrue(call.oneLine(CalendarWeekRules.HOUR_DP))
+        assertFalse(planning.oneLine(CalendarWeekRules.HOUR_DP))
+        assertFalse(planning.oneLine(CalendarWeekRules.FOLDED_HOUR_DP))
+    }
+
+    @Test
+    fun hourLabelsSitOnTheirLinesAndFoldedOnesAreHoursOnly() {
+        assertEquals("08", CalendarWeekRules.foldedHours.first())
+        assertEquals("20", CalendarWeekRules.foldedHours.last())
+        assertEquals(CalendarWeekRules.hours.size, CalendarWeekRules.foldedHours.size)
+        assertEquals(0f, CalendarWeekRules.hourLabelTopDp(0, 40f))
+        assertEquals(73f, CalendarWeekRules.hourLabelTopDp(2, 40f))
+        assertEquals("all day", CalendarWeekRules.allDayLabel(folded = false))
+        assertEquals("", CalendarWeekRules.allDayLabel(folded = true))
     }
 }
