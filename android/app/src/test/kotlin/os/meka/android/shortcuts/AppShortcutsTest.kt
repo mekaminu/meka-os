@@ -86,7 +86,7 @@ class AppShortcutsTest {
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.waitUntil(5_000) {
             runBlocking { core.tick() }
-            core.dayList(core.weekBoard.value, core.weekBoard.value.todayEpochDay, true).rows.any { it.title == "Call Sam" }
+            core.dayList(core.weekBoard.value, core.weekBoard.value.todayEpochDay, true)?.rows.orEmpty().any { it.title == "Call Sam" }
         }
         compose.onNode(hasSetTextAction()).assertIsFocused()
     }
