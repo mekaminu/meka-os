@@ -6,12 +6,22 @@ import SwiftUI
 /// own yes · change · no pills. The words and taps come from the core (NeedsYouDecideRules); nothing here sends or adds
 /// anything. Pills press in (MekaPressStyle); the card folds away with its list's expand spring and the undo bar rises.
 /// Hover lifts it a little; reduced motion keeps only the cross-fades. VoiceOver reads the card's one sentence.
+/// Mac slice 3: an appointment's quieter second row (Call to book · Copy email, `card.more`) and its When? field
+/// (`below`, shown inside the card under the one line); an approval's yes carries the Touch ID mark (`yesSymbol`).
 struct NeedsYouDecideCardView: View {
     let card: NeedsYouDecideCard
     let palette: MekaPalette
     let onYes: () -> Void
     let onNo: () -> Void
     var onChange: () -> Void = {}
+    /// The quieter row's taps, by their index in `card.more`.
+    var onMore: (Int) -> Void = { _ in }
+    /// The system symbol drawn before the yes pill's words (Touch ID on an approval).
+    var yesSymbol: String? = nil
+    /// The yes pill's extra words for VoiceOver ("with Touch ID").
+    var yesSpokenSuffix: String = ""
+    /// Something shown inside the card under its one line (an appointment's When? field once Booked… is clicked).
+    var below: AnyView? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -36,10 +46,18 @@ struct NeedsYouDecideCardView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(card.spoken)
+            if let below { below.padding(.leading, 34 + MekaSpace.xs) }
             HStack(spacing: MekaSpace.xs) {
-                pill(card.yesLabel, tone: .filled, action: onYes)
+                pill(card.yesLabel, tone: .filled, symbol: yesSymbol, spokenSuffix: yesSpokenSuffix, action: onYes)
                 if let change = card.changeLabel { pill(change, tone: .plain, action: onChange) }
                 pill(card.noLabel, tone: .quiet, action: onNo)
+            }
+            if !card.more.isEmpty {
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(Array(card.more.enumerated()), id: \.offset) { i, label in
+                        pill(label, tone: .quiet) { onMore(i) }
+                    }
+                }
             }
             if let note = card.note {
                 Text(note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -54,14 +72,17 @@ struct NeedsYouDecideCardView: View {
 
     enum Tone { case filled, plain, quiet }
 
-    private func pill(_ label: String, tone: Tone, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
+    private func pill(_ label: String, tone: Tone, symbol: String? = nil, spokenSuffix: String = "",
+                      action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if let symbol { Label(label, systemImage: symbol) } else { Text(label) }
+        }
             .buttonStyle(MekaPressStyle())
             .font(tone == .filled ? MekaType.captionStrong : MekaType.caption)
             .foregroundStyle(tone == .filled ? palette.onAccent : (tone == .plain ? palette.textPrimary : palette.textSecondary))
             .padding(.horizontal, tone == .quiet ? MekaSpace.xs : MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(tone == .filled ? palette.accent : (tone == .plain ? palette.surfaceRaised : Color.clear), in: Capsule())
-            .accessibilityLabel("\(label): \(card.what)")
+            .accessibilityLabel("\(label): \(card.what)\(spokenSuffix)")
     }
 
     /// The nearest system symbol for each of the mockup's stroke icons (the Fold draws the core's paths).

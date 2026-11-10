@@ -40,4 +40,34 @@ final class MacNeedsYouDecideTests: XCTestCase {
         XCTAssertFalse(symbols.contains("circle"))
         XCTAssertEqual(Set(symbols).count, icons.count)
     }
+
+    /// Mac slice 3: an approval is a compact card; what would happen stays whole and the Touch ID note sits under it.
+    @MainActor
+    func testAnApprovalIsACompactCardWithItsDetailWhole() {
+        let a = ApprovalCard(id: "a1", kind: .trade, label: "TRADE · KESTREL", title: "Buy 0.1 ETH",
+                             lines: ["At about £250", " "], why: "Asked 21:40 · expires in 14 min", biometric: true,
+                             urgent: true, approveLabel: "Approve", declineLabel: "Decline", spoken: "Kestrel asks to buy 0.1 ETH")
+        let c = NeedsYouDecideRules.shared.approval(card: a, lock: ApprovalRules.shared.LOCK_MAC)
+        XCTAssertEqual(c.what, "Buy 0.1 ETH")
+        XCTAssertEqual(c.from, "Trade · Kestrel · Asked 21:40 · expires in 14 min")
+        XCTAssertEqual(c.details, ["At about £250"])
+        XCTAssertTrue(c.urgent)
+        XCTAssertNil(c.changeLabel)
+        XCTAssertEqual([c.yesLabel, c.noLabel], ["Approve", "Decline"])
+        XCTAssertEqual(c.note, ApprovalRules.shared.LOCK_MAC)
+        XCTAssertEqual(NeedsYouDecideCardView.symbol(c.icon), "chart.line.uptrend.xyaxis")
+    }
+
+    /// Mac slice 3: a due appointment is a compact card with Call to book · Copy email in its quieter row.
+    @MainActor
+    func testAnAppointmentIsACompactCardWithAQuieterRow() {
+        let n = AppointmentNudge(id: "dentist", line: "Due Mon 2 Nov · every 6 months", title: "Dentist",
+                                 question: "Have you booked it?", detail: "Last went in May", spoken: "The dentist is due")
+        let c = NeedsYouDecideRules.shared.appointment(card: n)
+        XCTAssertEqual(c.what, "Dentist")
+        XCTAssertEqual(c.from, "Due Mon 2 Nov · every 6 months · Have you booked it?")
+        XCTAssertEqual([c.yesLabel, c.changeLabel, c.noLabel], [n.bookedLabel, n.wentLabel, n.laterLabel])
+        XCTAssertEqual(c.more, [n.callLabel, n.emailLabel])
+        XCTAssertEqual(NeedsYouDecideCardView.symbol(c.icon), "clock")
+    }
 }

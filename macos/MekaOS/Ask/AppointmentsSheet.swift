@@ -141,7 +141,9 @@ private struct AppointmentRowView: View {
 /// Appointment nudges, slice 1: Needs you's card for one appointment that has come due, like the Fold's
 /// AppointmentCardView: "Due Mon 2 Nov · every 6 months" · "Dentist" · the question · Booked… · Went · Not yet.
 /// Booked… unfolds a field on the expand spring for the day and time; a date that can't be read stays on the card
-/// with the reason under the field, lit in the accent. Reduce Motion: cross-fades. MEKA books nothing.
+/// with the reason under the field, lit in the accent. Reduce Motion: cross-fades. MEKA books nothing. In the approved
+/// Needs you look (Mac slice 3) it is a compact NeedsYouDecideCardView: the title over its when and question on one
+/// line, Booked… · Went · Not yet, then Call to book · Copy email in a quieter row.
 struct AppointmentNudgeRow: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -151,52 +153,28 @@ struct AppointmentNudgeRow: View {
     @State private var text = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
-            Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-            Text(card.question).font(MekaType.body).foregroundStyle(palette.textSecondary)
-            Text(card.detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            if asking {
-                VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    TextField(card.whenHint, text: $text)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { model.bookAppointment(card.id, when: text) }
-                    if let refusal = model.appointmentRefusal, refusal.id == card.id {
-                        Text(refusal.line).font(MekaType.caption).foregroundStyle(palette.accent)
-                    }
-                }
-                .padding(.top, MekaSpace.m)
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-            }
-            HStack(spacing: MekaSpace.xs) {
-                pill(card.bookedLabel, filled: true) { MekaHaptics.light(); asking.toggle() }
-                pill(card.wentLabel, filled: false) { model.appointmentWent(card.id) }
-                pill(card.laterLabel, filled: false) { model.appointmentNotYet(card.id) }
-            }
-            .padding(.top, MekaSpace.m)
-            // Slice 2b: Call to book (a task on Today) and Copy email (the pasteboard); MEKA calls and sends nothing.
-            HStack(spacing: MekaSpace.xs) {
-                pill(card.callLabel, filled: false) { model.appointmentCallToBook(card.id) }
-                pill(card.emailLabel, filled: false) { model.appointmentCopyEmail(card.id) }
-            }
-            .padding(.top, MekaSpace.xs)
-        }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: asking)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(card.spoken)
-        .mekaHoverLift()
+        // The approved look (TO DECIDE, the Fold's slice 4): one compact card; Booked… opens When? inside it, and
+        // Call to book · Copy email sit in its quieter row.
+        NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.appointment(card: card), palette: palette,
+                               onYes: { MekaHaptics.light(); asking.toggle() },
+                               onNo: { model.appointmentNotYet(card.id) },
+                               onChange: { model.appointmentWent(card.id) },
+                               onMore: { i in
+                                   if i == 0 { model.appointmentCallToBook(card.id) } else { model.appointmentCopyEmail(card.id) }
+                               },
+                               below: asking ? AnyView(whenField) : nil)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: asking)
     }
 
-    private func pill(_ label: String, filled: Bool, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
-            .buttonStyle(MekaPressStyle())
-            .font(MekaType.itemMeta)
-            .foregroundStyle(filled ? palette.onAccent : palette.accent)
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-            .background(filled ? palette.accent : palette.surface, in: Capsule())
+    private var whenField: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            TextField(card.whenHint, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.bookAppointment(card.id, when: text) }
+            if let refusal = model.appointmentRefusal, refusal.id == card.id {
+                Text(refusal.line).font(MekaType.caption).foregroundStyle(palette.accent)
+            }
+        }
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
     }
 }
