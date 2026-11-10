@@ -17,7 +17,8 @@ Wednesday 21 Oct). These are the shots *before* the fixes below; the fixed ones 
 3. Short blocks: the mockup puts title and time on one line when two won't fit. The app drew two lines in a 30 min
    (18 dp) and a 45 min (28 dp) block and lost both lines to the clip ("Dentist", "Call with Priya"). **Fixed**: one
    line whenever the block is under 33 dp at that grid's hour height (core `WeekBlock.oneLine(hourDp)`), with tighter
-   13/12 sp lines so an hour block holds both; Fold and Mac.
+   13/12 sp lines so an hour block holds both; Fold and Mac. In a block under 110 dp wide (the folded three days)
+   the one line is the title alone (`oneLineShowsTime`), after run 1702's shot showed "Den… 13:45".
 4. Hour labels: the mockups centre each on its line and the folded one reads "09", not "09:00". The app sat them under
    the line and the folded 40 dp column overflowed "08:00". **Fixed** (core `hourLabelTopDp`, `foldedHours`).
 5. The all-day label: right-aligned "all day" open, blank folded in the mockup; the app showed a cut "all" folded and a

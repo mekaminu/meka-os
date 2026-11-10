@@ -149,6 +149,11 @@ object CalendarWeekRules {
     const val SHORT_MIN = 30
     /** The height two lines need: an 11 sp title (13 sp line) over a 10 sp time (12 sp line) with 4 dp above and below. */
     const val TWO_LINE_DP = 33f
+    /** A one-line block narrower than this (the folded three days, or overlaps side by side) shows only its title. */
+    const val ONE_LINE_TIME_DP = 110f
+
+    /** Whether a one-line block [widthDp] wide has room for its start time after the title (title first, always). */
+    fun oneLineShowsTime(widthDp: Float): Boolean = widthDp >= ONE_LINE_TIME_DP
     const val MIN_BLOCK_DP = 18f
     /** The 2 dp coloured left edge on every block and chip. */
     const val EDGE_DP = 2f

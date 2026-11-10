@@ -185,6 +185,9 @@ class CalendarWeekTest {
         assertTrue(call.oneLine(CalendarWeekRules.HOUR_DP))
         assertFalse(planning.oneLine(CalendarWeekRules.HOUR_DP))
         assertFalse(planning.oneLine(CalendarWeekRules.FOLDED_HOUR_DP))
+        // The folded three days (~100 dp a column) keep the title whole and drop the time; open columns show both.
+        assertFalse(CalendarWeekRules.oneLineShowsTime(100f))
+        assertTrue(CalendarWeekRules.oneLineShowsTime(150f))
     }
 
     @Test

@@ -394,7 +394,7 @@ private fun DayColumn(
                     val movable = actions.canMove(b.event)
                     val appearance = rememberAppearance(0, play = !reduced)
                     Block(
-                        b, hourDp, drop?.hint,
+                        b, hourDp, drop?.hint, w.value,
                         Modifier.offset(x = 3.dp + w * b.column + ox.dp, y = b.topDp(hourDp).dp + 1.dp + oy.dp).width(w).height(b.heightDp(hourDp).dp)
                             .appear(appearance).let { if (held) it.zIndex(1f).shadow(6.dp, RectangleShape) else it }
                             .let { m ->
@@ -448,7 +448,7 @@ private fun heldDrop(b: WeekBlock, place: HeldPlace, dx: Float, dy: Float, colDp
  * [hint] ("Move to Thu 12 Nov · 15:30") takes the time's place.
  */
 @Composable
-private fun Block(b: WeekBlock, hourDp: Float, hint: String?, modifier: Modifier, movable: Boolean = false, onTap: () -> Unit) {
+private fun Block(b: WeekBlock, hourDp: Float, hint: String?, widthDp: Float, modifier: Modifier, movable: Boolean = false, onTap: () -> Unit) {
     val tone = Meka.colors.calendarTone(b.tone)
     val amber = Meka.colors.calendar3
     Row(
@@ -468,7 +468,9 @@ private fun Block(b: WeekBlock, hourDp: Float, hint: String?, modifier: Modifier
             Row(pad.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 BlockTitle(b, Modifier.weight(1f, fill = false))
                 if (b.clash) ClashDot(amber)
-                Text(hint ?: b.time.substringBefore("–"), style = TIME, color = if (hint != null) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+                if (hint != null || CalendarWeekRules.oneLineShowsTime(widthDp)) {
+                    Text(hint ?: b.time.substringBefore("–"), style = TIME, color = if (hint != null) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+                }
             }
         } else {
             Column(pad) {
