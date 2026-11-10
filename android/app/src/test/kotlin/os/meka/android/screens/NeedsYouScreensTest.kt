@@ -129,10 +129,12 @@ class NeedsYouScreensTest {
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, NeedsYouStackRules.EMPTY_LINE)
             // The top card is the first overdue task, and says why it's here.
             else -> {
-                ScreenShots.assertShows(compose, name, titles(fill).first())
+                // The top card as the core orders the stack (the cards behind it draw as the face alone).
+                val topTitle = top(core)?.title ?: fail("$name: no card on the stack")
+                ScreenShots.assertShows(compose, name, topTitle)
                 ScreenShots.assertShows(compose, name, "Overdue")
                 // The card hugs its words: its padding (24 dp) and a little more under the title, no empty band.
-                ScreenShots.assertHugs(compose, name, NeedsYouStackRules.TOP_CARD_TAG, titles(fill).first(), maxGapDp = 32f)
+                ScreenShots.assertHugs(compose, name, NeedsYouStackRules.TOP_CARD_TAG, topTitle, maxGapDp = 32f)
                 // Needs you bugs (2026-11-10): the moves are the buttons only, never again as a hint line on the card.
                 if (compose.onAllNodes(hasText(" · ← ", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
                     fail("$name: the card repeats its moves as a hint line")
