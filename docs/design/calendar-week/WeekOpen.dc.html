@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar week</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.35)}}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.pulse{animation:none}}
+</style>
+</helmet>
+<div style="width:884px;height:980px;box-sizing:border-box;background:#0b0b0c;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;padding:18px 18px 12px;gap:12px;position:relative;overflow:hidden">
+
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;gap:12px;align-items:baseline"><span style="font-size:24px;font-weight:700">November 2026</span><span style="font-size:13px;color:#8f897f">Week 46</span></div>
+<div style="display:flex;gap:8px;align-items:center">
+<span style="display:flex;gap:2px;background:#151517;border-radius:999px;padding:3px"><sc-for list="{{views}}" as="v" hint-placeholder-count="3"><button type="button" onClick="{{v.go}}" style="{{v.style}}">{{v.name}}</button></sc-for></span>
+<span style="display:flex;gap:2px;background:#151517;border-radius:999px;padding:3px"><sc-for list="{{counts}}" as="c" hint-placeholder-count="2"><button type="button" onClick="{{c.go}}" style="{{c.style}}">{{c.name}}</button></sc-for></span>
+<button type="button" style="border:0;background:#151517;color:#ededed;border-radius:999px;height:34px;padding:0 14px;font-size:13px">Today</button>
+<button type="button" aria-label="Last week" style="width:34px;height:34px;border-radius:17px;border:0;background:#151517;color:#a8a29a">‹</button>
+<button type="button" aria-label="Next week" style="width:34px;height:34px;border-radius:17px;border:0;background:#151517;color:#ededed">›</button>
+</div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#a8a29a">
+<span style="display:flex;gap:14px"><span style="display:flex;gap:6px;align-items:center"><span style="width:8px;height:8px;border-radius:4px;background:#b48ad1"></span>Personal</span><span style="display:flex;gap:6px;align-items:center"><span style="width:8px;height:8px;border-radius:4px;background:#e88aa0"></span>Fixtures</span><span style="display:flex;gap:6px;align-items:center"><span style="width:8px;height:8px;border-radius:4px;background:#8a9bd1"></span>Work</span><span style="display:flex;gap:6px;align-items:center"><span style="width:12px;height:8px;border-radius:2px;background:#141416;border:1px solid #222225"></span>Work hours</span></span>
+<span>Booked this week <b style="color:#ededed;font-size:15px;margin-left:6px">{{booked}}</b></span>
+</div>
+
+<div style="background:#0f0f11;border:1px solid #1a1a1d;border-radius:14px;flex:1;display:flex;flex-direction:column;overflow:hidden">
+<div style="{{headGrid}}">
+<span></span>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0 8px">
+<span style="font-size:12px;color:#8f897f">{{d.w}}</span>
+<span style="{{d.numStyle}}">{{d.n}}</span>
+</div>
+</sc-for>
+</div>
+<div style="{{taskGrid}}">
+<span style="font-size:10.5px;color:#6f6a62;align-self:center;text-align:right;padding-right:8px">all day</span>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;gap:3px;padding:4px 4px 6px;min-width:0">
+<sc-for list="{{d.chips}}" as="c" hint-placeholder-count="1"><button type="button" onClick="{{c.go}}" style="{{c.style}}">{{c.t}}</button></sc-for>
+</div>
+</sc-for>
+</div>
+<div style="flex:1;overflow:auto;position:relative">
+<div style="{{bodyGrid}}">
+<div style="position:relative">
+<sc-for list="{{hours}}" as="h" hint-placeholder-count="14"><span style="{{h.style}}">{{h.label}}</span></sc-for>
+</div>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="5">
+<div style="position:relative;border-left:1px solid #1a1a1d">
+<sc-for list="{{hours}}" as="h" hint-placeholder-count="14"><button type="button" onClick="{{d.slot}}" aria-label="Add at this time" style="{{h.slotStyle}}"></button></sc-for>
+<sc-if value="{{d.work}}" hint-placeholder-val="{{true}}"><span style="{{d.work}}"></span></sc-if>
+<sc-for list="{{d.events}}" as="e" hint-placeholder-count="2">
+<button type="button" onClick="{{e.go}}" class="in" style="{{e.style}}"><span style="font-size:11px;font-weight:400;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:left;display:flex;gap:5px;align-items:center">{{e.t}}<sc-if value="{{e.flag}}" hint-placeholder-val="{{false}}"><span style="width:6px;height:6px;border-radius:3px;background:#e0a050;flex-shrink:0"></span></sc-if></span><span style="font-size:10px;color:#8f897f;text-align:left;white-space:nowrap">{{e.time}}</span></button>
+</sc-for>
+<sc-if value="{{d.now}}" hint-placeholder-val="{{false}}"><span style="{{d.now}}"><span class="pulse" style="position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:5px;background:#c9b37e"></span></span></sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:50%;transform:translateX(-50%);bottom:24px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px;white-space:nowrap">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":884,"height":980}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={count:5,view:'Week',toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var H0=8,H1=21,PX=40;
+var col={p:'#b48ad1',f:'#e88aa0',t:'#7fb3a8',w:'#8a9bd1'};
+var W=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],N=[9,10,11,12,13,14,15];
+var work=[[9,17.5],[9,17.5],[9,17.5],[9,15.5],[9,17.5],null,null];
+var ev=[
+[[9,9.25,'Stand-up','w']],
+[[11,12,'Booked call','w']],
+[[9,9.25,'Stand-up','w'],[16.92,17.92,'Training','p','clash'],[18,19,'Training','p']],
+[[14,15,'Booked call','w'],[18,19,'Training','p']],
+[[9,9.25,'Stand-up','w']],
+[[10.67,12,'Match · U7','f']],
+[[9.5,11,'Match · U10','f']]];
+var chips=[['Do feedback for all','Cancel a subscription'],[],[],[],[],[],['Set up a call with two contacts']];
+var fmt=function(h){var hh=Math.floor(h),mm=Math.round((h-hh)*60);return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');};
+var k=s.count;var cols='56px repeat('+k+',minmax(0,1fr))';
+var booked=0;
+var days=[];for(var i=0;i<k;i++){(function(i){
+ var evs=ev[i].map(function(e){booked+=e[1]-e[0];var c=col[e[3]];
+  return {t:e[2],time:fmt(e[0])+'–'+fmt(e[1]),flag:e[4]?'clash':'',go:function(){self.setState({toast:e[2]+' · '+fmt(e[0])+'–'+fmt(e[1])});},
+  style:'position:absolute;left:3px;right:3px;top:'+((e[0]-H0)*PX+1)+'px;height:'+Math.max(18,(e[1]-e[0])*PX-2)+'px;border:0;border-radius:0;padding:'+((e[1]-e[0])<0.5?'2px 7px':'4px 7px')+';box-sizing:border-box;display:flex;flex-direction:'+((e[1]-e[0])<0.5?'row':'column')+';align-items:'+((e[1]-e[0])<0.5?'center':'flex-start')+';gap:'+((e[1]-e[0])<0.5?'6px':'0')+';overflow:hidden;color:#ededed;z-index:2;background:#26262a;border-left:2px solid '+c+';background:#222226'+(e[4]?';box-shadow:inset 0 0 0 1px #8a6a3a':'')};});
+ days.push({w:W[i],n:N[i],
+  numStyle:'font-size:16px;font-weight:600;min-width:30px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;'+(i===0?'background:#c9b37e;color:#111':''),
+  chips:chips[i].map(function(t){return {t:t,go:function(){self.setState({toast:t+' · task, any time'});},style:'border:0;border-radius:0;padding:3px 6px;font-size:10.5px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;background:#16201e;color:#a9d1c6;border-left:2px solid #7fb3a8'};}),
+  work:work[i]?'position:absolute;left:0;right:0;top:'+((work[i][0]-H0)*PX)+'px;height:'+((work[i][1]-work[i][0])*PX)+'px;background:#141416;z-index:0;pointer-events:none':'',
+  now:i===0?'position:absolute;left:0;right:0;top:'+((19.33-H0)*PX)+'px;height:2px;background:#c9b37e;z-index:3':'',
+  slot:function(){self.setState({toast:'New event on '+W[i]+' '+N[i]+' · pick a time'});},
+  events:evs});})(i);}
+var hours=[];for(var h=H0;h<H1;h++){hours.push({label:String(h).padStart(2,'0')+':00',style:'position:absolute;right:8px;top:'+((h-H0)*PX-7)+'px;font-size:10.5px;color:#6f6a62',slotStyle:'position:absolute;left:0;right:0;top:'+((h-H0)*PX)+'px;height:'+PX+'px;border:0;border-top:1px solid #161618;background:transparent;z-index:1'});}
+var chip=function(on){return 'border:0;border-radius:999px;height:28px;padding:0 12px;font-size:12.5px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:transparent;color:#a8a29a');};
+return {
+views:['Week','Board','Agenda'].map(function(v){return {name:v,go:function(){self.setState({view:v,toast:v==='Week'?'':v+' opens the other view'});},style:chip(s.view===v)};}),
+counts:[5,7].map(function(c){return {name:c+' days',go:function(){self.setState({count:c});},style:chip(s.count===c)};}),
+booked:Math.round(booked*10)/10+' h',
+headGrid:'display:grid;grid-template-columns:'+cols+';border-bottom:1px solid #1d1d20',
+taskGrid:'display:grid;grid-template-columns:'+cols+';border-bottom:1px solid #1d1d20;min-height:30px',
+bodyGrid:'display:grid;grid-template-columns:'+cols+';height:'+((H1-H0)*PX)+'px;position:relative',
+days:days,hours:hours,toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
