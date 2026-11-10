@@ -97,6 +97,8 @@ class MainActivity : ComponentActivity() {
             }
             // The wake alarm was dismissed: Today with the morning brief springing up.
             open == OPEN_BRIEF -> app.openBrief.value = true
+            // Add tasks on the app icon (the Day list, slice 2): Today with today's Day list up, its add bar ready.
+            open == OPEN_DAY_LIST_ADD -> app.openDayList.value = true
             // A school holiday with nothing booked (annual leave, slice 2): Ask with the Annual leave pane up.
             // "Near Tesco · milk, batteries" (errands by location, slice 2): Ask with Errands up.
             open == OPEN_ERRANDS -> {
@@ -202,6 +204,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_STUDY_IMPORT = "os.meka.studyImport"
         const val OPEN_AFTER_WORK = "after_work"
         const val OPEN_BRIEF = "brief"
+        /** Add tasks, the app icon's shortcut: today's Day list with the add bar focused. */
+        const val OPEN_DAY_LIST_ADD = "day_list_add"
         /** Ask → More → Annual leave, its pane up (the leave heads-up). */
         const val OPEN_LEAVE = "leave"
         /** Ask → More → Week ahead, its pane up (Sunday's week-ahead heads-up). */

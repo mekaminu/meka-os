@@ -86,6 +86,8 @@ open class MekaApplication : Application() {
     val openPlan = MutableStateFlow(false)
     /** "Shut down the day" said to Talk (Done for the day, completeness 2): Today opens Shut down, then clears it. */
     val openShutdown = MutableStateFlow(false)
+    /** Add tasks on the app icon (the Day list, slice 2): Today opens today's Day list ready to type, then clears it. */
+    val openDayList = MutableStateFlow(false)
     /**
      * Week board item (6) part 2: "plan my week" said to Obi, or Plan now on Sunday's Needs you card: Calendar opens on
      * the Board with Plan your week up, then clears it.
@@ -206,6 +208,8 @@ open class MekaApplication : Application() {
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
         // Notifications never seen (slice 1): every channel exists from the first start, and the trace says so.
         os.meka.android.notify.MekaChannels.ensureAll(this)
+        // Add tasks on the app icon's menu (the Day list, slice 2).
+        os.meka.android.shortcuts.AppShortcuts.publish(this)
         // Screenshots and photos, slice 2: while it's on, the watch for new screenshots stays armed.
         runCatching { os.meka.android.capture.ScreenshotWatch.start(this) }
         os.meka.android.notify.NotifyTraceStore.started(this, os.meka.android.notify.MekaChannels.states(this).size)

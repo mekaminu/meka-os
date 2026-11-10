@@ -130,6 +130,18 @@ final class MekaAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The Dock icon's menu (the Day list, slice 2): Add Tasks… opens today's Day list ready to type.
+    /// (AppKit's delegate is main-actor, so the menu is made there.)
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        DockMenu.menu(target: self, action: #selector(dockAddTasks(_:)))
+    }
+
+    @objc func dockAddTasks(_ sender: Any?) {
+        NSApp.activate()
+        NSApp.windows.first { $0.canBecomeMain }?.makeKeyAndOrderFront(nil)
+        DockMenu.shared.addTasks()
+    }
+
     /// A Dock click: "Listen when I open MEKA" listens when it brought MEKA forward; the window comes back as usual.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         MainActor.assumeIsolated { MacTalkOnOpen.shared.reopened() }

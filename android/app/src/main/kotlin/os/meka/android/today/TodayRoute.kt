@@ -253,6 +253,8 @@ private fun TodayRouteContent(
     var showTomorrow by rememberSaveable { mutableStateOf(false) }
     // The Day list (approved 2026-11-08): today's, from the Anytime today heading's "Day list ›".
     var showDayList by rememberSaveable { mutableStateOf(false) }
+    // Opened from the app icon's Add tasks (slice 2): the add bar takes the keyboard as the list arrives.
+    var dayListReady by rememberSaveable { mutableStateOf(false) }
     val pageHaptics = rememberMekaHaptics()
     /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
     var showActivity by rememberSaveable { mutableStateOf(false) }
@@ -275,6 +277,11 @@ private fun TodayRouteContent(
     val talkPlan = widgetApp?.openPlan?.collectAsState()?.value ?: false
     LaunchedEffect(talkPlan) {
         if (talkPlan) { showBrief = false; showPlan = true; widgetApp?.openPlan?.value = false }
+    }
+    // Add tasks on the app icon (the Day list, slice 2): today's Day list springs up with its add bar ready.
+    val iconDayList = widgetApp?.openDayList?.collectAsState()?.value ?: false
+    LaunchedEffect(iconDayList) {
+        if (iconDayList) { showBrief = false; showPlan = false; dayListReady = true; showDayList = true; widgetApp?.openDayList?.value = false }
     }
     // Done for the day, completeness 2: "shut down the day" said to Talk opens the shutdown pane over Today.
     val talkShutdown = widgetApp?.openShutdown?.collectAsState()?.value ?: false
@@ -535,8 +542,10 @@ private fun TodayRouteContent(
             MekaPane(visible = showWeekAhead) { WeekAheadPane(core, onClose = { showWeekAhead = false }, closeLabel = "‹ Today") }
             BackHandler(enabled = showTomorrow) { showTomorrow = false }
             MekaPane(visible = showTomorrow) { TomorrowPane(core, onClose = { showTomorrow = false }) }
-            BackHandler(enabled = showDayList) { showDayList = false }
-            MekaPane(visible = showDayList) { DayListPane(core, onClose = { showDayList = false }) }
+            BackHandler(enabled = showDayList) { showDayList = false; dayListReady = false }
+            MekaPane(visible = showDayList) {
+                DayListPane(core, onClose = { showDayList = false; dayListReady = false }, readyToType = dayListReady)
+            }
             MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {

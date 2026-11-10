@@ -135,6 +135,8 @@ fun DayListPane(
     sidePadding: androidx.compose.ui.unit.Dp = MekaSpace.gutter,
     /** A column of the open Fold's spread: a held task can be dragged out to another day's list or pill. */
     across: DayListAcross? = null,
+    /** Opened from the app icon's Add tasks (slice 2): the add bar takes the focus and the keyboard as the list opens. */
+    readyToType: Boolean = false,
 ) {
     val board by core.weekBoard.collectAsState()
     // Null: today's list (it follows the board's today past midnight).
@@ -151,6 +153,10 @@ fun DayListPane(
     var sheetId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(readyToType) {
+        if (readyToType) { runCatching { focus.requestFocus() }; keyboard?.show() }
+    }
     val context = LocalContext.current
     // Drag to reorder (slice 1c): the held row follows the finger by its grip; the open rows it passes make room.
     var dragId by remember { mutableStateOf<String?>(null) }

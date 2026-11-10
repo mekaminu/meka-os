@@ -46,6 +46,8 @@ struct MekaOSApp: App {
                     }
                     // Screenshots and photos, slice 1: "Handle this picture with Navilife" from Services.
                     CaptureInbox.shared.attachPictures { model.handlePicture($0) }
+                    // The Dock icon's Add Tasks… (the Day list, slice 2): today's Day list, its field ready.
+                    DockMenu.shared.attach { model.openDayList() }
                     // Notification buttons pressed while the core was starting are answered now.
                     NotificationActionInbox.shared.attach { model.answerFromNotification($0) }
                     // Screenshots and photos, slice 2: while it's on, new screen captures are noticed.

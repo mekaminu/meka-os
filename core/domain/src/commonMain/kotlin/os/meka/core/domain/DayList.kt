@@ -79,6 +79,13 @@ object DayListRules {
     const val LINK = "Day list ›"
     const val EMPTY_LINK = "Plan today’s tasks · Day list ›"
     const val TYPE_FIRST = "Type a task first"
+    /**
+     * The Day list's way in from the app icon (slice 2, `Today.dc.html`: "hold the app icon → Add tasks"): the Fold's
+     * launcher shortcut and the Mac's Dock menu open today's Day list with the add bar ready for the first task.
+     */
+    const val SHORTCUT = "Add tasks"
+    const val SHORTCUT_LONG = "Add tasks for today"
+    const val SHORTCUT_ID = "add_tasks"
     const val COPY_FIRST = "Copy a list first, one task per line"
 
     private val LENGTH = Regex("""(?i)(?<![A-Za-z0-9_:])(\d{1,2}(?:\.5)?)\s*h(?:rs?|ours?)?\s*(\d{1,2})?\s*(?:m(?:ins?)?)?(?![A-Za-z0-9_:])|(?<![A-Za-z0-9_:])(\d{1,3})\s*m(?:ins?|inutes?)?(?![A-Za-z0-9_:])""")

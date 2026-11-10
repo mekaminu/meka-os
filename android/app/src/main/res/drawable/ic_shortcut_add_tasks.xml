@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Add tasks on the app icon's menu: a gold plus on Navilife's dark round, as the launcher draws shortcut icons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#FF16161A" android:pathData="M24,0A24,24 0,1 1,24 48A24,24 0,1 1,24 0Z" />
+    <path android:fillColor="#FFC9B37E" android:pathData="M22.5,14h3v8.5H34v3h-8.5V34h-3v-8.5H14v-3h8.5Z" />
+</vector>
