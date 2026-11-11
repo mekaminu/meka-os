@@ -70,7 +70,16 @@ object MailSendAllRules {
     const val LINE = "Each goes from the account its email came to, only when you tap · read each one first"
 
     /** "Draft replies to 3", offered with two or more emails showing; null otherwise (one email has its own Draft it). */
-    fun draftLabel(rows: Int): String? = if (rows >= 2) "Draft replies to $rows" else null
+    fun draftLabel(rows: Int): String? = draftLabel(rows, aiDown = false)
+
+    /**
+     * Walk-through 2026-11-08 A11: while Navilife's AI can't draft ([aiDown]: its line says "nothing is drafted"), no
+     * Draft replies button sits over that line; the bar keeps the line and Send all.
+     */
+    fun draftLabel(rows: Int, aiDown: Boolean): String? = if (rows >= 2 && !aiDown) "Draft replies to $rows" else null
+
+    /** Whether the bar shows at all: two or more emails showing (Send all and the AI's line live there too). */
+    fun barShows(rows: Int): Boolean = rows >= 2
 
     fun draftSpoken(rows: Int): String = "Let Navilife draft replies to the $rows emails for you to read; nothing is sent"
 

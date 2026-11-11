@@ -462,6 +462,12 @@ object MailAutopilotPanelRules {
     /** Whether a switch card [widthDp] wide puts its button under the words. */
     fun stacked(widthDp: Float): Boolean = widthDp < STACK_BELOW_DP
 
+    /**
+     * The line a switch card shows: the short one, or the full one in its place once "How it works" is open (walk-through
+     * 2026-11-08 A11: the full line under the short one said "Off · new mail stays where it lands" twice).
+     */
+    fun shownLine(short: String, full: String, open: Boolean): String = if (open && hasMore(short, full)) full else short
+
     /** Whether a switch has more to say than its short line ("How it works" only then). */
     fun hasMore(short: String, full: String): Boolean = full != short
 
@@ -524,8 +530,9 @@ object MailAutopilotPanelRules {
 
     /** What switching says (Mail's note, What Navilife may do's undo bar). */
     fun switchedLine(on: Boolean): String =
-        if (on) "Autopilot is on · new mail is tidied as it arrives, each with Undo"
-        else "Autopilot is off · new mail stays where it lands; what was tidied stays tidied (Undo is still there)"
+        // Walk-through 2026-11-08 A11: the card's own line already says what on and off mean, so this says only what's new.
+        if (on) "Autopilot is on · from the next email that arrives"
+        else "Autopilot is off · what was tidied stays tidied, Undo is still there"
 
     /** The tidy's state line: put back (the server's note), asked (waiting for the server's next check), or null. */
     fun state(b: MailTidyBatch): String? = when {

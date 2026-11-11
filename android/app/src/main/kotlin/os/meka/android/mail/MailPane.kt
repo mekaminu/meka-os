@@ -761,19 +761,16 @@ private fun SwitchCard(
                         Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
                         Text(LoneWordGlue.kept(title), style = MekaType.body, color = Meka.colors.textPrimary)
                     }
-                    Crossfade(short, animationSpec = MekaMotion.appear(reduced), label = "$tag-line") {
+                    // Walk-through A11: How it works puts the full line in the short one's place (cross-fade, the
+                    // card growing on the expand spring), so the same words never show twice.
+                    Crossfade(
+                        MailAutopilotPanelRules.shownLine(short, full, open), animationSpec = MekaMotion.appear(reduced), label = "$tag-line",
+                        modifier = Modifier.animateContentSize(MekaMotion.expand(reduced)),
+                    ) {
                         Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
                 if (MailAutopilotPanelRules.hasMore(short, full)) {
-                    AnimatedVisibility(
-                        open,
-                        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
-                        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-                    ) {
-                        Text(LoneWordGlue.kept(full), style = MekaType.caption, color = Meka.colors.textTertiary,
-                            modifier = Modifier.padding(top = MekaSpace.xs))
-                    }
                     Text(
                         if (open) MailAutopilotPanelRules.HIDE_HOW else MailAutopilotPanelRules.HOW_IT_WORKS,
                         style = MekaType.caption, color = Meka.colors.accent,

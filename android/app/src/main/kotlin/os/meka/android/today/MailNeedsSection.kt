@@ -124,7 +124,8 @@ internal fun MailNeedsSection(
     // AI layer completeness slice 3: while Navilife's AI can't draft, the bar says so and what still works.
     var aiLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { aiLine = runCatching { core.aiFeatureLine(AiFeature.DRAFTS) }.getOrNull() }
-    val draftAll = MailSendAllRules.draftLabel(shownRows.size)
+    // Walk-through A11: no Draft replies over the AI's "nothing is drafted" line.
+    val draftAll = MailSendAllRules.draftLabel(shownRows.size, aiDown = aiLine != null)
     val sendAll = MailSendAllRules.sendAll(shownRows, texts.toMap())
     Column(
         (if (boxed) modifier.fillMaxWidth() else modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
@@ -153,7 +154,7 @@ internal fun MailNeedsSection(
             Column(Modifier.padding(top = if (boxed) 0.dp else MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)),
                 verticalArrangement = Arrangement.spacedBy(if (boxed) 0.dp else MekaSpace.m)) {
                 @Composable fun draftBar() {
-                if (draftAll != null) {
+                if (MailSendAllRules.barShows(shownRows.size)) {
                     MailSendAllBar(
                         draftLabel = if (draftingAll) MailSendAllRules.DRAFTING else draftAll, drafting = draftingAll,
                         draftSpoken = MailSendAllRules.draftSpoken(shownRows.size),
@@ -579,7 +580,7 @@ internal fun MailNeedsRowView(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MailSendAllBar(
-    draftLabel: String, drafting: Boolean, draftSpoken: String, sendLabel: String?, sendSpoken: String?, line: String?,
+    draftLabel: String?, drafting: Boolean, draftSpoken: String, sendLabel: String?, sendSpoken: String?, line: String?,
     onDraft: () -> Unit, onSendAll: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -588,7 +589,7 @@ private fun MailSendAllBar(
             AnimatedVisibility(sendLabel != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut()) {
                 MailCardPill(sendLabel ?: "", spoken = sendSpoken ?: "", onClick = onSendAll)
             }
-            MailCardPill(draftLabel, quiet = true, enabled = !drafting, spoken = draftSpoken, onClick = onDraft)
+            if (draftLabel != null) MailCardPill(draftLabel, quiet = true, enabled = !drafting, spoken = draftSpoken, onClick = onDraft)
         }
         val shown = if (sendLabel != null) MailSendAllRules.LINE else line
         AnimatedContent(shown, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-send-all-line") { l ->

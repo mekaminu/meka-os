@@ -470,21 +470,16 @@ private struct SwitchPanelView: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
                     Text(LoneWordGlue.shared.kept(line: title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 }
-                Text(LoneWordGlue.shared.kept(line: short)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                // Walk-through A11: How it works puts the full line in the short one's place, never both.
+                let line = rules.shownLine(short: short, full: full, open: open)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: short)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(title + ". " + full)
             if rules.hasMore(short: short, full: full) {
-                if open {
-                    Text(LoneWordGlue.shared.kept(line: full)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, MekaSpace.xs)
-                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                        .accessibilityHidden(true)
-                }
                 Button(open ? rules.HIDE_HOW : rules.HOW_IT_WORKS) {
                     withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open.toggle() }
                 }

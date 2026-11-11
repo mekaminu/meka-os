@@ -2541,6 +2541,10 @@ struct MoneySheet: View {
                 MoneyWorthLine(points: r.points, palette: palette, reduced: reduceMotion, dots: false).id(r.key)
                     .transition(.opacity)
             }
+            // Walk-through A11: the chips never sit under nothing; until the line can be drawn, this says when it will.
+            if let hint = TradingEquity.shared.lineHint(r: r) {
+                Text(hint).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
             HStack(spacing: MekaSpace.xs) {
                 ForEach(TradingEquity.shared.chips(c: c, key: tradingRange), id: \.key) { ch in
                     Button {

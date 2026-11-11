@@ -62,8 +62,8 @@ struct MailNeedsView: View {
                     .accessibilityLabel("\(card.title). \(card.headline)")
                     if open {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
-                            if let draftLabel = MailSendAllRules.shared.draftLabel(rows: Int32(card.rows.count)) {
-                                sendAllBar(rows: card.rows, draftLabel: draftLabel)
+                            if MailSendAllRules.shared.barShows(rows: Int32(card.rows.count)) {
+                                sendAllBar(rows: card.rows)
                             }
                             ForEach(card.rows, id: \.id) { row in rowView(row) }
                             if let more = card.moreLine {
@@ -147,8 +147,8 @@ struct MailNeedsView: View {
                 NeedsYouPagerView(page: p, palette: palette, onPage: onPage)
                     .padding(.top, MekaSpace.xxs)
             }
-            if let draftLabel = MailSendAllRules.shared.draftLabel(rows: Int32(shown.count)) {
-                sendAllBar(rows: shown, draftLabel: draftLabel)
+            if MailSendAllRules.shared.barShows(rows: Int32(shown.count)) {
+                sendAllBar(rows: shown)
                     .padding(.top, MekaSpace.xs)
             }
             if let snoozed = card.snoozedLine {
@@ -168,20 +168,25 @@ extension MailNeedsView {
     /// Draft replies to N, and Send all N once two or more open editors hold a short reply (it fades in), with the line
     /// saying what Draft replies did or how Send all sends.
     @ViewBuilder
-    fileprivate func sendAllBar(rows: [MailNeedsRow], draftLabel: String) -> some View {
+    fileprivate func sendAllBar(rows: [MailNeedsRow]) -> some View {
         let all = MailSendAllRules.shared.sendAll(rows: rows, texts: texts)
         // AI layer completeness slice 3: while Navilife's AI can't draft, the bar says so and what still works.
-        let shown = all != nil ? MailSendAllRules.shared.LINE : (allLine ?? AiFeatureRules.shared.line(feature: .drafts, view: model.aiStatus))
+        let aiLine = AiFeatureRules.shared.line(feature: .drafts, view: model.aiStatus)
+        // Walk-through A11: no Draft replies over the AI's "nothing is drafted" line.
+        let draftLabel = MailSendAllRules.shared.draftLabel(rows: Int32(rows.count), aiDown: aiLine != nil)
+        let shown = all != nil ? MailSendAllRules.shared.LINE : (allLine ?? aiLine)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(spacing: MekaSpace.xs) {
                 if let all {
                     MailNeedsPill(label: all.label, palette: palette, spoken: all.spoken, action: { sendAll(all) })
                         .transition(.opacity)
                 }
-                MailNeedsPill(label: draftingAll ? MailSendAllRules.shared.DRAFTING : draftLabel, palette: palette, quiet: true,
-                              spoken: MailSendAllRules.shared.draftSpoken(rows: Int32(rows.count)),
-                              action: { draftAll(rows: rows) })
-                    .disabled(draftingAll)
+                if let draftLabel {
+                    MailNeedsPill(label: draftingAll ? MailSendAllRules.shared.DRAFTING : draftLabel, palette: palette, quiet: true,
+                                  spoken: MailSendAllRules.shared.draftSpoken(rows: Int32(rows.count)),
+                                  action: { draftAll(rows: rows) })
+                        .disabled(draftingAll)
+                }
             }
             if let shown {
                 Text(shown).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)

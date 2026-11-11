@@ -158,6 +158,10 @@ class NeedsYouMailScreensTest {
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
         ScreenShots.assertSensible(compose, name)
+        // Walk-through A11 (2026-11-08): no "Draft replies to 2" over the AI's "nothing is drafted" line.
+        fun showing(t: String) = compose.onAllNodes(androidx.compose.ui.test.hasText(t, substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+        if (showing("nothing is drafted") && showing("Draft replies to")) fail("$name: Draft replies sits over \"nothing is drafted\"")
         openRow(name, football)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
         // Needs you bugs (2026-11-10): a mail row is its sender and subject; the body waits until he opens the email.

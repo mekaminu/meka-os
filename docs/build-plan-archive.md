@@ -5652,6 +5652,19 @@ Monday's and Wednesday's evenings, so nothing to fix there. Core `StudyRules.pla
 StudyTest, StudyAutoTest, StudyScreensTest.shootPlan; Mac `StudySheet`; Mac checked nightly.
 
 **A10 (2026-11-11), Accounts' headline, real:** with no account balance and only a typed pension, the total card read "Outside these accounts" over £42,000, then "Not counted yet · 2 accounts have no balance", then the row "Outside these accounts · Pension · Change": the label twice and the big figure looked like the outside row's own, the "Not counted yet" line as if £42,000 weren't counted. Now the head is "Counted so far" (`MoneyTotal.OUTSIDE_ONLY`), the line "Your 2 accounts aren't in it yet · add their balances" (`MoneyWorth.noneCountedLine`), and the label shows once, on its row. Core only, both apps follow; help entry reworded. Tests: `MoneyTotalTest` (the head differs from the row's title), `MoneyScreensTest` (the Accounts shot fails if "Outside these accounts" shows twice). Mac checked nightly.
+
+**A11 (2026-11-11), cut and repeated labels:** (1) Plan's forecast tiles (`MoneyPlanTileView`) drew the label with
+`Text(maxLines = 1)`, which broke "OUT / MONTH" after the slash on the cover; label and figure are now `BasicText` with no
+soft wrap and a step-based auto size (Mac: `minimumScaleFactor(0.8)`), and the forecast shot runs `assertNotCut` over
+the tiles' labels. (2) Mail's switch cards showed the short line and, under How it works, the full one that starts with
+the same words; `MailAutopilotPanelRules.shownLine` now puts the full line in the short one's place (cross-fade, the
+card growing on the expand spring), and `switchedLine` says only what's new ("Autopilot is off · what was tidied stays
+tidied, Undo is still there"); MailScreensTest fails if "new mail stays" is drawn more than once. (3) Needs you's mail
+bar offered "Draft replies to 2" over the AI's "… · nothing is drafted" line; `MailSendAllRules.draftLabel(rows, aiDown)`
+drops the button while the AI can't draft, `barShows` keeps the bar for that line and Send all; NeedsYouMailScreensTest
+fails if both show. (4) Trading's 1D · 1W · 1M chips sat under no chart while fewer than two day ends were read;
+`TradingEquity.lineHint` puts "The line draws once two days have been read" where the line goes. Core test
+`CutAndRepeatedLabelsTest`; Fold and Mac; no server change, no migration; Mac checked nightly.
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 
 Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:

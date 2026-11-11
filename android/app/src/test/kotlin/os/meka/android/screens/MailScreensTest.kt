@@ -271,6 +271,10 @@ class MailScreensTest {
         turns()
         if (compose.onAllNodes(hasText(LoneWordGlue.kept(MailAutopilotPanelRules.OFF_LINE)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
             fail("Mail: How it works didn't open Autopilot's full line")
+        // Walk-through A11 (2026-11-08): the full line takes the short one's place, so "new mail stays where it lands" shows once.
+        val repeats = compose.onAllNodes(hasText("new mail stays", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            .count { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text) != null }
+        if (repeats != 1) fail("Mail: \"new mail stays\" is drawn $repeats times with How it works open")
         ScreenShots.assertShows(compose, "mail-by-hand", MailAutopilotPanelRules.HIDE_HOW)
         ScreenShots.assertShows(compose, "mail-by-hand", LoneWordGlue.kept(MailAutopilotPanelRules.switchedLine(false)))
         if (compose.onAllNodes(hasText(MailAutopilotPanelRules.TURN_ON) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {

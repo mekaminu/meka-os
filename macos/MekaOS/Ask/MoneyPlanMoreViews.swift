@@ -53,11 +53,12 @@ struct MoneyPlanTileView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            // Walk-through A11: the label and figure whole ("OUT / MONTH", never "OUT /"), stepping down to fit.
             Text(tile.label).font(MekaType.micro).tracking(MekaType.microTracking)
-                .foregroundStyle(tile.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                .foregroundStyle(tile.lit ? palette.accent : palette.textSecondary).lineLimit(1).minimumScaleFactor(0.8)
             Text(tile.value).font(MekaType.metaStrong)
                 .foregroundStyle(tile.alarm ? palette.critical : (tile.lit ? palette.accent : palette.textPrimary))
-                .lineLimit(1).contentTransition(.numericText())
+                .lineLimit(1).minimumScaleFactor(0.8).contentTransition(.numericText())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xs)

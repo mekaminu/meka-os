@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -105,9 +108,17 @@ internal fun MoneyPlanTileView(t: MoneyPlanTile, modifier: Modifier = Modifier) 
             .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
-        Text(t.label, style = MekaType.micro, color = if (t.lit) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
+        // Walk-through A11 (2026-11-08): the label whole ("OUT / MONTH", never "OUT /") and the figure whole, stepping
+        // down to fit three tiles on the closed Fold rather than cutting.
+        BasicText(
+            t.label, style = MekaType.micro.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textSecondary), maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = MekaType.micro.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 9)
+        )
         Crossfade(t.value, animationSpec = MekaMotion.appear(reduced), label = "money-plan-tile-value-${t.label}") { v ->
-            Text(v, style = MekaType.metaStrong, color = ink, maxLines = 1)
+            BasicText(
+                v, style = MekaType.metaStrong.copy(color = ink), maxLines = 1, softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = MekaType.metaStrong.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 11)
+            )
         }
     }
 }

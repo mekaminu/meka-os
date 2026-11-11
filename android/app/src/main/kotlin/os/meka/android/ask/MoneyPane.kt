@@ -1604,6 +1604,10 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
         if (r.points.size >= 2) {
             Crossfade(r.points, animationSpec = MekaMotion.appear(reduced), label = "trading-line") { pts -> WorthLine(pts, dots = false) }
         }
+        // Walk-through A11: the chips never sit under nothing; until the line can be drawn, this says when it will.
+        TradingEquity.lineHint(r)?.let { h ->
+            Text(h, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-trading-line-hint"))
+        }
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             TradingEquity.chips(c, chosen).forEach { ch -> key(ch.key) {
                 val fill by animateColorAsState(if (ch.on) Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surfaceRaised) else Meka.colors.surfaceRaised,

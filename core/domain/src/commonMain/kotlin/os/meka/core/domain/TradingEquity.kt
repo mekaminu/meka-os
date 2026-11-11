@@ -42,6 +42,14 @@ object TradingEquity {
     const val DEFAULT = MONTH
     val KEYS = listOf(DAY, WEEK, MONTH)
 
+    /**
+     * Walk-through 2026-11-08 A11: what sits where the line goes while the chosen range has fewer than two day ends
+     * read, so the chips never sit under nothing. Null once the line can be drawn.
+     */
+    const val NO_LINE = "The line draws once two days have been read"
+
+    fun lineHint(r: TradingRange): String? = if (r.points.size >= 2) null else NO_LINE
+
     /** The range [key] picks (the month for anything else), with its chips' on state. */
     fun range(c: TradingEquityCard, key: String): TradingRange = c.ranges.firstOrNull { it.key == key } ?: c.ranges.first { it.key == DEFAULT }
 

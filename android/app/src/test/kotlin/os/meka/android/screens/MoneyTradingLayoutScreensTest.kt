@@ -248,6 +248,11 @@ class MoneyTradingLayoutScreensTest {
         assertTrue(shows("money-trading-risk-card"), "Obi's risk line sits in its own card")
         // Walk-through A2 (2026-11-08): the shot's position adds up — its entry-to-now move is what's not yet taken.
         assertEquals(SEED_BTC.unrealisedCents, SEED_BTC.priceMoveCents, "entry ${SEED_BTC.entry}, now ${SEED_BTC.mark}")
+        // Walk-through A11 (2026-11-08): with no line to draw yet, the chips don't sit under nothing.
+        val eq = core.moneyView.value.trading?.equity
+        if (eq != null && TradingEquity.range(eq, TradingEquity.DEFAULT).points.size < 2) {
+            assertTrue(showsText(TradingEquity.NO_LINE), "the equity card should say when its line draws")
+        }
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-risk"))
         scrollTo("money-kestrel-card")
         assertTrue(showsText("1 trade waiting for your OK"), "Kestrel's card says what's waiting")
