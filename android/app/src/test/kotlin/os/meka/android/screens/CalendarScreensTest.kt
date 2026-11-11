@@ -137,9 +137,11 @@ class CalendarScreensTest {
             core.tick()
             // Works by hand: one event hidden from my day, so the day's foot has a Show to tap.
             if (hand) {
-                val long = core.calendarView.value.sections.flatMap { it.rows }.firstOrNull { it.title == longTitle }?.event
-                    ?: fail("$name: no \"$longTitle\" to hide")
-                core.hideEvent(long.id)
+                // Thursday's parents' evening (Wednesday's planning meeting is over by 17:15, so it isn't a row to hide).
+                val hidden = ShotLife.PARENTS_EVENING.title
+                val ev = core.calendarView.value.sections.flatMap { it.rows }.firstOrNull { it.title == hidden }?.event
+                    ?: fail("$name: no \"$hidden\" to hide")
+                core.hideEvent(ev.id)
                 core.tick()
             }
         }
