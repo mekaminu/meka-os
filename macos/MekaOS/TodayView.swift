@@ -543,6 +543,8 @@ struct TodayView: View {
             }
         } else if kind == AlsoKind.studyWeek, let c = checkin {
             StudyCheckinCard(checkin: c, palette: palette)
+        } else if kind == AlsoKind.trains, let t = model.weather?.trains {
+            MacTrainsDetail(detail: t, palette: palette)
         }
     }
 

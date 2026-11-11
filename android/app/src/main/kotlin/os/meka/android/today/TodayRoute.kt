@@ -1171,6 +1171,8 @@ private fun TodayPane(
                                 os.meka.core.domain.AlsoKind.WEEK_AHEAD, os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> true
                                 os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.STUDY_WEEK,
                                 os.meka.core.domain.AlsoKind.REVIEW -> true
+                                // Meka 2026-11-11 07:30: the Trains tile's tap shows what the trains are doing.
+                                os.meka.core.domain.AlsoKind.TRAINS -> weather.trains != null
                                 os.meka.core.domain.AlsoKind.PRESSURE -> core != null && today.pressure?.fixes?.isNotEmpty() == true
                                 else -> alsoApp != null && paneFor(t.kind) != null
                             }
@@ -1183,7 +1185,7 @@ private fun TodayPane(
                                 os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> openQueue()
                                 os.meka.core.domain.AlsoKind.REVIEW -> openReviewCard()
                                 os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.PRESSURE,
-                                os.meka.core.domain.AlsoKind.STUDY_WEEK ->
+                                os.meka.core.domain.AlsoKind.STUDY_WEEK, os.meka.core.domain.AlsoKind.TRAINS ->
                                     alsoUnfolded = if (alsoUnfolded == t.kind) null else t.kind
                                 else -> paneFor(t.kind)?.let { item ->
                                     alsoApp?.let { app ->
@@ -1197,6 +1199,7 @@ private fun TodayPane(
                         detail = { kind ->
                             when (kind) {
                                 os.meka.core.domain.AlsoKind.PREP -> today.meetingPrep?.let { p -> PrepDetail(p) }
+                                os.meka.core.domain.AlsoKind.TRAINS -> weather.trains?.let { t -> TrainsDetail(t) }
                                 os.meka.core.domain.AlsoKind.PRESSURE -> today.pressure?.let { p ->
                                     PressureDetail(p) { fix ->
                                         if (core != null) carryScope.launch {

@@ -570,6 +570,41 @@ class TodayScreensTest {
         if (fixed != listOf("t1")) fail("pressure: the fix wasn't tapped ($fixed)")
     }
 
+    /** Meka 2026-11-11 07:30: the Trains tile stays in Also today and its tap unfolds the train details. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theTrainsTileUnfoldsTheTrainDetails() {
+        val line = os.meka.core.domain.RouteLine("South Rail · 07:12 on time · 07:24 5 min late", lit = true, spoken = "Trains: South Rail")
+        val row = { t: String, st: String, bad: Boolean -> os.meka.core.domain.TrainDetailRow(t, st, "platform 3", "arrives 07:41", bad) }
+        val detail = os.meka.core.domain.TrainDetail(
+            title = "South Rail · Oakfield to Oakfield Junction", status = "minor delays", leaveBy = "Leave by 07:02 for the 07:12",
+            rows = listOf(row("07:12", "on time", false), row("07:24", "5 min late", true)), noTrains = null,
+            change = "Change at Oakfield Junction for Metro line · good service", fallback = "Or North Rail to Riverside · good service",
+            fallbackRows = emptyList(), checked = "Live · checked 07:05", lit = true, spoken = "South Rail.",
+        )
+        val tiles = os.meka.core.domain.AlsoTodayRules.withHeader(emptyList(), line, null)
+        compose.setContent {
+            MekaTheme {
+                var unfolded by remember { mutableStateOf<os.meka.core.domain.AlsoKind?>(null) }
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.AlsoTodayRow(
+                        tiles, onOpen = { t -> unfolded = if (unfolded == t.kind) null else t.kind }, opens = { true },
+                        unfolded = unfolded,
+                        detail = { k -> if (k == os.meka.core.domain.AlsoKind.TRAINS) os.meka.android.today.TrainsDetail(detail) },
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(os.meka.android.today.TRAINS_DETAIL_TAG).fetchSemanticsNodes().isNotEmpty()) fail("trains: details showed before a tap")
+        compose.onNodeWithTag("also-tile-trains").performClick()
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(os.meka.android.today.TRAINS_DETAIL_TAG).fetchSemanticsNodes().isEmpty()) fail("trains: the tap didn't unfold the details")
+        ScreenShots.assertShows(compose, "trains", "Change at Oakfield Junction for Metro line · good service")
+        compose.onNodeWithTag("also-tile-trains").performClick()
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(os.meka.android.today.ALSO_DETAIL_TAG).fetchSemanticsNodes().isNotEmpty()) fail("trains: a second tap didn't fold it")
+    }
+
     /**
      * Meka 2026-11-09 08:09 (b, f): the Sunday study check-in is Also today's STUDY WEEK tile, which unfolds the
      * check-in under the row (Looks good folds it away); Monday's review is a REVIEW tile that opens Review.

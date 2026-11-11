@@ -54,6 +54,8 @@ import os.meka.core.domain.AlsoTodayRules
 import os.meka.core.domain.DayPressure
 import os.meka.core.domain.MeetingPrep
 import os.meka.core.domain.PressureFix
+import os.meka.core.domain.TrainDetail
+import os.meka.core.domain.TrainDetailRow
 
 internal const val ALSO_TODAY_TAG = "today-also"
 
@@ -152,6 +154,45 @@ internal fun PressureDetail(p: DayPressure, onFix: (PressureFix) -> Unit) {
     p.fixes.forEach { fix ->
         Text(fix.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag("also-fix-${fix.taskId}").wordsTap { onFix(fix) }.padding(vertical = MekaSpace.xxs))
+    }
+}
+
+internal const val TRAINS_DETAIL_TAG = "today-trains-detail"
+
+/**
+ * The Trains tile unfolded (Meka 2026-11-11 07:30; core RouteRules.detail): the line and its stations with TfL's word,
+ * when to leave, every departure it knows (time, on time / late / cancelled in amber when bad, platform and
+ * arrival), the change, the fallback with its own trains, and when it was checked. One screen-reader line for the whole.
+ */
+@Composable
+internal fun TrainsDetail(d: TrainDetail) {
+    Column(
+        Modifier.fillMaxWidth().testTag(TRAINS_DETAIL_TAG).semantics(mergeDescendants = true) { contentDescription = d.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Text(d.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        d.status?.let { Text(it, style = MekaType.caption, color = if (d.lit) os.meka.core.domain.TodayInk.ATTENTION.color() else Meka.colors.textSecondary, maxLines = 1) }
+        d.leaveBy?.let { Text(it, style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        d.rows.forEach { TrainRowLine(it) }
+        d.noTrains?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        d.change?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = MekaSpace.xxs)) }
+        d.fallback?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        d.fallbackRows.forEach { TrainRowLine(it) }
+        d.checked?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1,
+            modifier = Modifier.padding(top = MekaSpace.xxs)) }
+    }
+}
+
+/** "07:12  on time  platform 3 · arrives 07:41": the time, the status (amber when late or cancelled), the rest quieter. */
+@Composable
+private fun TrainRowLine(r: TrainDetailRow) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        Text(r.time, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
+        Text(r.status, style = MekaType.caption, color = if (r.bad) os.meka.core.domain.TodayInk.ATTENTION.color() else Meka.colors.textSecondary, maxLines = 1)
+        if (r.meta.isNotEmpty()) {
+            Text(r.meta, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 

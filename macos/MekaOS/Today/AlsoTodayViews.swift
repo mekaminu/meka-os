@@ -139,3 +139,55 @@ struct MacPressureDetail: View {
         }
     }
 }
+
+/// The Trains tile unfolded (Meka 2026-11-11 07:30: "when I click I can see details of what the train status are
+/// saying"; core RouteRules.detail, as the Fold's): the line and stations with TfL's word, when to leave, every departure
+/// (time, on time / late / cancelled in amber when bad, platform and arrival), the change, the fallback with its own
+/// trains, and when it was checked. VoiceOver hears it as one line.
+struct MacTrainsDetail: View {
+    let detail: TrainDetail
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(detail.title).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).lineLimit(2)
+            if let status = detail.status {
+                Text(status).font(MekaType.caption)
+                    .foregroundStyle(detail.lit ? TodayInk.attention.color(palette) : palette.textSecondary).lineLimit(1)
+            }
+            if let leave = detail.leaveBy {
+                Text(leave).font(MekaType.caption).foregroundStyle(palette.textPrimary).lineLimit(1)
+            }
+            ForEach(Array(detail.rows.enumerated()), id: \.offset) { _, row in rowView(row) }
+            if let none = detail.noTrains {
+                Text(none).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(2)
+            }
+            if let change = detail.change {
+                Text(change).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+                    .padding(.top, MekaSpace.xxs)
+            }
+            if let fallback = detail.fallback {
+                Text(fallback).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+            }
+            ForEach(Array(detail.fallbackRows.enumerated()), id: \.offset) { _, row in rowView(row) }
+            if let checked = detail.checked {
+                Text(checked).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    .padding(.top, MekaSpace.xxs)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(detail.spoken)
+        .accessibilityIdentifier("today-trains-detail")
+    }
+
+    private func rowView(_ row: TrainDetailRow) -> some View {
+        HStack(spacing: MekaSpace.xs) {
+            Text(row.time).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).monospacedDigit()
+            Text(row.status).font(MekaType.caption)
+                .foregroundStyle(row.bad ? TodayInk.attention.color(palette) : palette.textSecondary)
+            if !row.meta.isEmpty {
+                Text(row.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+            }
+        }
+    }
+}

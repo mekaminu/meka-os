@@ -14220,7 +14220,7 @@ class MekaCore(
         }
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.
-            .copy(route = routeNow)
+            .copy(route = routeNow, trains = routeNow?.let { os.meka.core.domain.RouteRules.detail(lineSnap, office, nowMs(), cal) })
         // Away from home and work with a fresh fix (Places item 3): Today's line says where Meka is.
         val hereLine = os.meka.core.domain.HereRules.todayLine(hereFix, nowMs(), cal)
         _signIn.value = listOfNotNull(os.meka.core.domain.SignInRules.line(signIns.all(), nowMs(), cal))

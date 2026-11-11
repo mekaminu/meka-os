@@ -834,7 +834,136 @@ object RouteRules {
 
     /** The server's checked time, rounded down so a quiet line writes at most twice an hour. */
     fun checkedStep(nowMs: Long): Long = nowMs.floorDiv(CHECKED_STEP_MS) * CHECKED_STEP_MS
+
+    // ---- Today regression 2 (Meka 2026-11-11 07:30): the Trains tile's tap shows the details ----
+
+    /** "on time", "5 min late", "cancelled", "delayed" (no time: the row shows it beside). */
+    fun status(d: TrainDeparture): String {
+        val late = d.lateMin
+        return when {
+            d.cancelled -> "cancelled"
+            late == null -> "delayed"
+            late == 0 -> "on time"
+            else -> "$late min late"
+        }
+    }
+
+    private fun row(d: TrainDeparture): TrainDetailRow = TrainDetailRow(
+        time = LocalClock.formatMinute(d.depMin),
+        status = status(d),
+        platform = d.platform?.let { "platform $it" },
+        arrives = d.arrMin?.takeIf { !d.cancelled }?.let { "arrives " + LocalClock.formatMinute(it) },
+        bad = bad(d),
+    )
+
+    /**
+     * What the Trains tile unfolds on Today (Meka 2026-11-11 07:30: "when I click I can see details of what the train
+     * status are saying"), morning and evening alike, whenever [todayLine] shows. The live board's every departure it
+     * knows (on time / late / cancelled, the platform and arrival when known), when to leave, the change (where and onto
+     * which line, with TfL's word for it) and the fallback route (TfL's word and its own live trains when read). Without
+     * live times, each line's TfL status, and why there are no live times when that's known. Null when [todayLine] is.
+     */
+    fun detail(s: LineStatusSnapshot, office: OfficeWindow?, nowMs: Long, cal: LocalCalendar): TrainDetail? {
+        val r = route() ?: return null
+        todayLine(s, office, nowMs, cal) ?: return null
+        val commute = commute(office, nowMs, cal) ?: return null
+        val morning = commute == Commute.MORNING
+        val tfl = fresh(s, nowMs)
+        val sev = { id: String? -> if (tfl && id != null) s.severityOf(id) else null }
+        val home = Household.names.homeStation
+        val change = r.change
+        val board = liveBoard(s, commute, nowMs)
+        val live = board?.let { upcoming(it, nowMs, cal, n = TrainBoardCodec.MAX) }.orEmpty()
+        val (from, to) = if (morning) home to change else change to home
+        val title = name(r.firstId, r) + when {
+            from != null && to != null -> " · $from to $to"
+            to != null -> " · to $to"
+            from != null -> " · from $from"
+            else -> ""
+        }
+        val firstStatus = sev(r.firstId)?.let { words(it) }
+        val leave = if (office != null && board != null) leaveBy(board, commute, office, nowMs, cal) else null
+        val leaveLine = leave?.words?.replaceFirstChar { it.uppercase() }
+        val onward = r.onward?.let { on ->
+            val word = sev(r.onwardId)?.let { " · ${words(it)}" }.orEmpty()
+            when {
+                morning && change != null -> "Change at $change for $on$word"
+                morning -> "Then $on$word"
+                change != null -> "Start on $on to $change$word"
+                else -> "Start on $on$word"
+            }
+        }
+        val fallback = r.fallback?.let { f ->
+            val word = sev(r.fallbackId)?.let { " · ${words(it)}" }.orEmpty()
+            "Or " + (fallbackName(r, morning) ?: f) + word
+        }
+        val fallbackRows = board?.let { upcoming(it.copy(departures = it.fallback), nowMs, cal, n = TrainBoardCodec.MAX) }.orEmpty().map(::row)
+        val checked = when {
+            board != null -> "Live · checked " + LocalClock.formatMinute(cal.minuteOfDay(board.checkedMs!!))
+            tfl -> "TfL · checked " + LocalClock.formatMinute(cal.minuteOfDay(s.checkedMs!!))
+            else -> null
+        }
+        val missing = if (board == null) liveMissing(s.board)?.first?.replaceFirstChar { it.uppercase() } else null
+        val rows = live.map(::row)
+        val noTrains = if (rows.isEmpty()) (missing ?: if (home == null) NO_STATION else NO_LIVE) else null
+        val spoken = buildList {
+            add(title.replace(" · ", ", ") + (firstStatus?.let { ", $it" }.orEmpty()) + ".")
+            leaveLine?.let { add("$it.") }
+            rows.forEach { add(it.spoken + ".") }
+            noTrains?.let { add("$it.") }
+            onward?.let { add(it.replace(" · ", ", ") + ".") }
+            fallback?.let { add(it.replace(" · ", ", ") + ".") }
+            fallbackRows.forEach { add(it.spoken + ".") }
+            checked?.let { add(it.replace(" · ", ", ") + ".") }
+        }.joinToString(" ")
+        return TrainDetail(
+            title = title, status = firstStatus, leaveBy = leaveLine, rows = rows, noTrains = noTrains,
+            change = onward, fallback = fallback, fallbackRows = fallbackRows, checked = checked,
+            lit = rows.any { it.bad } || (sev(r.firstId)?.let { level(it) != LineLevel.GOOD } ?: false),
+            spoken = spoken,
+        )
+    }
+
+    /** The details with no live times and no home station in About you. */
+    const val NO_STATION = "Add your home station in About you for live times"
+    /** The details with no live times on the board yet (the server hasn't read one, or none is due). */
+    const val NO_LIVE = "No live times yet"
 }
+
+/** One departure in the Trains tile's details: "07:12" · "on time" · "platform 3" · "arrives 07:41"; [bad] in amber. */
+data class TrainDetailRow(
+    val time: String,
+    val status: String,
+    val platform: String?,
+    val arrives: String?,
+    val bad: Boolean,
+) {
+    /** "07:12 on time, platform 3, arrives 07:41". */
+    val spoken: String get() = listOfNotNull("$time $status", platform, arrives).joinToString(", ")
+    /** The quieter part after the status: "platform 3 · arrives 07:41"; empty when neither is known. */
+    val meta: String get() = listOfNotNull(platform, arrives).joinToString(" · ")
+}
+
+/**
+ * The Trains tile unfolded ([RouteRules.detail]): [title] "South Rail · Oakfield to Oakfield Junction" with TfL's
+ * [status] for that line, [leaveBy] "Leave by 07:32 for the 07:42", the departures ([rows]; [noTrains] says why
+ * there are none), the [change] "Change at Oakfield Junction for Metro · good service", the [fallback] "Or North Rail
+ * to Riverside · good service" with its own trains ([fallbackRows], read only while the first line is in trouble),
+ * and when it was [checked]. [lit] when a train is cancelled or late, or the first line isn't good.
+ */
+data class TrainDetail(
+    val title: String,
+    val status: String?,
+    val leaveBy: String?,
+    val rows: List<TrainDetailRow>,
+    val noTrains: String?,
+    val change: String?,
+    val fallback: String?,
+    val fallbackRows: List<TrainDetailRow>,
+    val checked: String?,
+    val lit: Boolean,
+    val spoken: String,
+)
 
 /** Reads the mirrored line status. The apps never write it. */
 class LineStatusStore(private val replica: Replica) {

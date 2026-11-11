@@ -141,6 +141,8 @@ data class WeatherView(
      * service", lit when a line isn't running well; null outside the commute. Shown under the weather line.
      */
     val route: RouteLine? = null,
+    /** What the Trains tile unfolds on Today ([RouteRules.detail]); null whenever [route] is. */
+    val trains: TrainDetail? = null,
 ) {
     companion object {
         val EMPTY = WeatherView(null, null, null, "")
