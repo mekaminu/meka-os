@@ -201,6 +201,11 @@ class MoneyScreensTest {
             if (toCome != card) fail("$name: Spending says $toCome to come, the Bills tab $card")
             if (toCome == "£0") fail("$name: the full month's fixture has nothing to come")
         }
+        // Walk-through 2026-11-08 A10: the total card's head and the outside row said "Outside these accounts" twice.
+        if (tab == MoneyTab.ACCOUNTS && fill == Fill.MANY) {
+            val said = compose.onAllNodesWithText(os.meka.core.domain.MoneyWorthOther.TITLE, useUnmergedTree = true).fetchSemanticsNodes().size
+            if (said > 1) fail("$name: \"${os.meka.core.domain.MoneyWorthOther.TITLE}\" shows $said times")
+        }
         if (tab != MoneyTab.SPENDING) {
             if (compose.onAllNodesWithText("WHERE IT WENT").fetchSemanticsNodes().isNotEmpty()) fail("$name: Spending's categories show on ${tab.label}")
             MoneyTabs.empty(tab, v)?.let { ScreenShots.assertShows(compose, name, it) }

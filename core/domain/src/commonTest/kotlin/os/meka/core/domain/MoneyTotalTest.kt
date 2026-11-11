@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -79,7 +80,12 @@ class MoneyTotalTest {
         assertEquals(MoneyTotal.OUTSIDE_ONLY, c.head)
         assertEquals("£42,000", c.total)
         assertNull(c.breakdown)
-        assertEquals("Not counted yet · 2 accounts have no balance", w.missingLine)
+        assertEquals("Your 2 accounts aren't in it yet · add their balances", w.missingLine)
+        // Walk-through 2026-11-08 A10: the card's head is not the outside row's title, so the label shows once and the
+        // big figure isn't read as the outside row's own.
+        assertEquals("Counted so far", c.head)
+        assertNotEquals(MoneyWorthOther.row(w)!!.title, c.head)
+        assertEquals("Your account isn't in it yet · add its balance", MoneyWorth.noneCountedLine(1))
         // One balance in: the head counts only it, the breakdown has two parts, and Partial is true again.
         val one = MoneyWorth.view(listOf(accounts[0].copy(balance = MoneyBalance(100_000, today, typed = true)), accounts[1]),
             emptyList(), items, emptyList(), today)

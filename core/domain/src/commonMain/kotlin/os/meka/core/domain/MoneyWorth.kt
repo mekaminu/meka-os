@@ -106,11 +106,13 @@ object MoneyWorth {
     /**
      * Found and fixing A4 (walk-through 2026-10-30): with no account or card counted at all (only what he typed outside
      * them, or trading), "Partial" read as if part of them were in. Say none of them is counted yet instead.
+     * Walk-through 2026-11-08 A10: "Not counted yet" under the big figure read as if the figure weren't counted; the line
+     * now says which accounts are left out of it and what to do.
      */
     fun noneCountedLine(missing: Int): String? = when (missing) {
         0 -> null
-        1 -> "Not counted yet · 1 account has no balance"
-        else -> "Not counted yet · $missing accounts have no balance"
+        1 -> "Your account isn't in it yet · add its balance"
+        else -> "Your $missing accounts aren't in it yet · add their balances"
     }
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)

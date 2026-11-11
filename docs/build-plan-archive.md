@@ -5650,6 +5650,8 @@ suggestions line dates a day a week or more after the first ("Mon, Wed, Mon 2 No
 wrap to a second line instead of "Welcome and se…" (Fold and Mac). "Today 20:30 then a Wed row" on the Monday shot is
 Monday's and Wednesday's evenings, so nothing to fix there. Core `StudyRules.plan/gives`, `StudyAutoRules.line`; tests
 StudyTest, StudyAutoTest, StudyScreensTest.shootPlan; Mac `StudySheet`; Mac checked nightly.
+
+**A10 (2026-11-11), Accounts' headline, real:** with no account balance and only a typed pension, the total card read "Outside these accounts" over £42,000, then "Not counted yet · 2 accounts have no balance", then the row "Outside these accounts · Pension · Change": the label twice and the big figure looked like the outside row's own, the "Not counted yet" line as if £42,000 weren't counted. Now the head is "Counted so far" (`MoneyTotal.OUTSIDE_ONLY`), the line "Your 2 accounts aren't in it yet · add their balances" (`MoneyWorth.noneCountedLine`), and the label shows once, on its row. Core only, both apps follow; help entry reworded. Tests: `MoneyTotalTest` (the head differs from the row's title), `MoneyScreensTest` (the Accounts shot fails if "Outside these accounts" shows twice). Mac checked nightly.
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 
 Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:

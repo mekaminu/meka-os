@@ -34,8 +34,12 @@ object MoneyTotal {
         else -> "Across $accounts account${if (accounts == 1) "" else "s"}" + if (trading > 0) " and trading" else ""
     }
 
-    /** Shown over the total when only what he typed outside his accounts is counted (walk-through A4, 2026-10-30). */
-    const val OUTSIDE_ONLY = "Outside these accounts"
+    /**
+     * Shown over the total when only what he typed outside his accounts is counted (walk-through A4, 2026-10-30).
+     * Walk-through 2026-11-08 A10: it said "Outside these accounts", the same words as the row under it, so the label
+     * showed twice and the big figure read as if it were the outside row's own; now the head says what the figure is.
+     */
+    const val OUTSIDE_ONLY = "Counted so far"
 
     /**
      * Found and fixing A4 (walk-through 2026-10-30): the head counts only the accounts and cards in the total. With no
