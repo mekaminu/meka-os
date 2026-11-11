@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ask hub</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+.chev{transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.in{animation:none}.chev{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:980px;box-sizing:border-box;padding:16px 16px 28px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<span style="font-size:28px;font-weight:700">Ask</span>
+
+<div style="display:flex;align-items:center;gap:8px;background:#111113;border:1px solid #1a1a1d;border-radius:999px;height:48px;padding:0 7px 0 16px">
+<span style="flex:1;font-size:14.5px;color:#6f6a62">Ask Obi or search anything…</span>
+<button type="button" onClick="{{mic}}" aria-label="Speak" style="width:34px;height:34px;border-radius:17px;border:1px solid #c9b37e;background:transparent;color:#c9b37e;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+</div>
+
+<sc-if value="{{showLook}}" hint-placeholder-val="{{true}}">
+<button type="button" onClick="{{lookGo}}" class="in" style="border:0;background:#1b1810;border-radius:14px;display:flex;align-items:center;gap:10px;padding:11px 14px;text-align:left;color:#ededed">
+<span style="width:8px;height:8px;border-radius:4px;background:#e0b860;flex-shrink:0"></span>
+<span style="flex:1;font-size:13.5px">Health · 1 thing wants a look</span>
+<span style="font-size:12.5px;color:#c9b37e">Open ›</span>
+</button>
+</sc-if>
+
+<div style="display:flex;gap:2px;background:#111113;border-radius:999px;padding:3px">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{t.go}}" style="{{t.style}}">{{t.name}}</button></sc-for>
+</div>
+
+<sc-if value="{{isLife}}" hint-placeholder-val="{{true}}">
+<div class="in" style="display:flex;flex-direction:column;gap:10px">
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<sc-for list="{{tiles}}" as="x" hint-placeholder-count="8">
+<button type="button" onClick="{{x.go}}" style="border:1px solid #1a1a1d;background:#111113;border-radius:14px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;text-align:left;color:#ededed;min-height:74px">
+<span style="display:flex;gap:8px;align-items:center"><span style="{{x.icon}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{x.path}}"></path></svg></span><span style="font-size:14px;font-weight:600">{{x.name}}</span></span>
+<span style="{{x.lineStyle}}">{{x.line}}</span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="display:flex;gap:6px;align-items:center"><sc-for list="{{dots}}" as="d" hint-placeholder-count="2"><span style="{{d}}"></span></sc-for><span style="font-size:12px;color:#8f897f;margin-left:6px">{{pageLine}}</span></span>
+<span style="display:flex;gap:6px"><button type="button" onClick="{{prev}}" aria-label="Previous" style="{{prevStyle}}">‹</button><button type="button" onClick="{{next}}" aria-label="Next" style="{{nextStyle}}">›</button></span>
+</div>
+<button type="button" onClick="{{toggleSetup}}" style="border:1px solid #1a1a1d;background:#111113;border-radius:14px;display:flex;align-items:center;gap:10px;padding:12px 14px;text-align:left;color:#ededed">
+<span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:14px;font-weight:600">To set up · 5</span><span style="font-size:12px;color:#8f897f">Bins, Gifts, Annual leave, Errands, Emergency card</span></span>
+<span class="chev" style="{{setupChev}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a8a29a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+</button>
+<sc-if value="{{setupOpen}}" hint-placeholder-val="{{false}}"><div class="in" style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{setup}}" as="u" hint-placeholder-count="5"><button type="button" onClick="{{u.go}}" style="border:0;background:#1d1d20;color:#c9b37e;border-radius:999px;height:34px;padding:0 13px;font-size:12.5px">{{u.name}}</button></sc-for></div></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{isList}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<sc-if value="{{g.title}}" hint-placeholder-val="{{true}}">
+<button type="button" onClick="{{g.toggle}}" style="width:100%;border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:10px;padding:13px 14px;text-align:left">
+<span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px;font-weight:600">{{g.title}}</span><span style="font-size:12px;color:#8f897f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{g.peek}}</span></span>
+<span class="chev" style="{{g.chev}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a8a29a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+</button>
+</sc-if>
+<sc-if value="{{g.open}}" hint-placeholder-val="{{true}}">
+<div class="in" style="display:flex;flex-direction:column;padding:0 14px">
+<sc-for list="{{g.rows}}" as="r" hint-placeholder-count="4">
+<button type="button" onClick="{{r.go}}" style="{{r.style}}">
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14px;font-weight:500">{{r.name}}</span><span style="{{r.lineStyle}}">{{r.line}}</span></span>
+<span style="color:#6f6a62;font-size:15px">›</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;align-self:center;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={tab:'Life',page:0,setupOpen:false,open:{you:true},toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var say=function(t){return function(){self.setState({toast:t});};};
+var I={list:'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',goal:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',people:'M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM21 20v-2a4 4 0 0 0-3-3.9',money:'M3 7h18v10H3zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',car:'M5 16h14M6 16l1.5-6h9L18 16M7 16v2M17 16v2M8 13h8',trip:'M3 11l18-7-7 18-3-8z',study:'M3 8l9-4 9 4-9 4zM7 10v5c2 2 8 2 10 0v-5',food:'M6 3v8M9 3v8M6 7h3M7.5 11v10M16 3c-2 2-2 7 0 9v9',school:'M4 20V9l8-5 8 5v11M9 20v-6h6v6',kids:'M12 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 22v-6l-2-4 4-2h8l4 2-2 4v6',appt:'M5 5h14v15H5zM5 10h14M9 3v4M15 3v4',heart:'M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z',info:'M12 16v-4M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',team:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3v18'};
+var T=[
+ ['Money','money','2 bills this week',1],['Your team','team','4 things wait on you',1],
+ ['Lists','list','Shopping · 6 to get',0],['Goals and habits','goal','3 of 5 habits today',0],
+ ['Study','study','Lesson 4 planned today',1],['Car','car','MOT due in 3 weeks',1],
+ ['People','people','A birthday on Saturday',1],['Trips','trip','Lisbon · packing 8 of 20',0],
+ ['Dinners','food','Tonight: pasta bake',0],['School','school','Inset day Fri 20 Nov',0],
+ ['Kids','kids','Shoe sizes checked Oct',0],['Appointments','appt','Dentist · Tue 17 Nov',0],
+ ['Date night','heart','Next: Fri 27 Nov',0],['Routines','list','Morning · runs 06:30',0],
+ ['What Navilife knows','info','212 facts',0]];
+var PG=8,pages=Math.ceil(T.length/PG),p=Math.min(s.page,pages-1);
+var tint=function(lit){return 'width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:'+(lit?'#1b1810':'#18181b')+';color:'+(lit?'#e0b860':'#a8a29a');};
+var btn=function(on){return 'width:32px;height:32px;border-radius:16px;border:0;background:#1d1d20;font-size:16px;color:'+(on?'#c9b37e':'#4a4744');};
+var row=function(first){return 'border:0;'+(first?'':'border-top:1px solid #1a1a1d;')+'background:transparent;color:#ededed;display:flex;align-items:center;gap:10px;min-height:52px;text-align:left;padding:0;width:100%';};
+var mk=function(arr){return arr.map(function(r,i){return {name:r[0],line:r[1],lineStyle:'font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:'+(r[2]?'#e0b860':'#8f897f'),go:say(r[0]+' opens'),style:row(i===0)};});};
+var daily=[['Morning brief','Read at 06:42 today',0],['Week ahead','Sunday’s look at the week',0],['News','12 new stories',0],['Shut down the day','Ready from 17:00',1],['Train queue','1 article saved',0],['Life admin hour','Next: Saturday 10:00',0],['Review','This week’s review is ready',1]];
+var SG=[
+ {k:'you',title:'You and your day',rows:[['About you','Home, work, stations'],['Work mode','On · 09:00–17:30 · call assistant'],['Protected time','Evenings and weekends'],['Calendars','4 connected'],['Family','2 children']]},
+ {k:'obi',title:'Obi',rows:[['Obi’s voice','One voice everywhere'],['Talk','Wake phrase on'],['What Navilife may do','Asks before sending or paying'],['Navilife’s AI','£11 of £47 this month']]},
+ {k:'dev',title:'Phone, watch and look',rows:[['Appearance','Dark · motion on'],['Notifications','Quiet at work'],['Watch','Connected']]},
+ {k:'data',title:'Privacy and data',rows:[['Vault','Locked'],['Your data','Export or delete'],['Recovery key','Saved'],['Activity','What Navilife did'],['Health','1 thing wants a look',1],['Setup','All done']]}];
+var tab=s.tab;
+return {
+ mic:say('Listening…'),
+ showLook:true,lookGo:say('Health opens'),
+ tabs:['Life','Daily','Settings'].map(function(n){var on=tab===n;return {name:n,go:function(){self.setState({tab:n,toast:''});},style:'flex:1;border:0;border-radius:999px;height:34px;font-size:13.5px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:transparent;color:#a8a29a')};}),
+ isLife:tab==='Life',isList:tab!=='Life',
+ tiles:T.slice(p*PG,p*PG+PG).map(function(x){return {name:x[0],line:x[2],path:I[x[1]],icon:tint(x[3]),lineStyle:'font-size:12.5px;line-height:1.3;color:'+(x[3]?'#e0b860':'#8f897f'),go:say(x[0]+' opens')};}),
+ dots:Array.from({length:pages},function(_,i){return 'width:'+(i===p?'14px':'5px')+';height:5px;border-radius:3px;background:'+(i===p?'#c9b37e':'#3a3833');}),
+ pageLine:(p*PG+1)+'–'+Math.min(T.length,p*PG+PG)+' of '+T.length+' · today’s first',
+ prev:function(){self.setState({page:Math.max(0,p-1)});},next:function(){self.setState({page:Math.min(pages-1,p+1)});},prevStyle:btn(p>0),nextStyle:btn(p<pages-1),
+ toggleSetup:function(){self.setState({setupOpen:!s.setupOpen});},setupOpen:s.setupOpen,setupChev:'display:flex;transform:rotate('+(s.setupOpen?180:0)+'deg)',
+ setup:['Bins','Gifts','Annual leave','Errands','Emergency card'].map(function(n){return {name:n,go:say('Set up '+n)};}),
+ groups:tab==='Daily'?[{title:'',peek:'',open:true,chev:'',toggle:function(){},rows:mk(daily)}]:SG.map(function(g){var o=!!s.open[g.k];return {title:g.title,peek:o?'':g.rows.map(function(r){return r[0];}).join(' · '),open:o,chev:'display:flex;transform:rotate('+(o?180:0)+'deg)',toggle:function(){var op={};op[g.k]=!o;self.setState({open:op});},rows:mk(g.rows)};}),
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>

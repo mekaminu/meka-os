@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spending plans</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+.bar{transition:width .35s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.in{animation:none}.bar{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1120px;box-sizing:border-box;padding:16px 16px 28px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<button type="button" style="border:0;background:transparent;color:#c9b37e;font-size:13px;text-align:left;padding:0;height:24px">‹ Money</button>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<span style="font-size:28px;font-weight:700">Spending plans</span>
+<button type="button" onClick="{{newPlan}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font-size:13.5px;font-weight:600">+ New plan</button>
+</div>
+
+<div style="display:flex;gap:6px;overflow-x:auto">
+<sc-for list="{{plans}}" as="p" hint-placeholder-count="3"><button type="button" onClick="{{p.go}}" style="{{p.style}}">{{p.name}}</button></sc-for>
+</div>
+
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:flex-end">
+<span style="display:flex;flex-direction:column;gap:1px"><span style="font-size:11px;letter-spacing:.12em;color:#8f897f">THIS PLAN</span><span style="font-size:30px;font-weight:700">{{total}}</span><span style="font-size:12.5px;color:#8f897f">{{totalSub}}</span></span>
+<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px"><span style="font-size:12px;color:#8f897f">needed by</span><span style="font-size:14px;font-weight:600">{{by}}</span></span>
+</div>
+<span style="height:6px;border-radius:3px;background:#1d1d20;overflow:hidden;display:flex"><span class="bar" style="{{spentBar}}"></span></span>
+<span style="font-size:12.5px;color:#a8a29a">{{spentLine}}</span>
+</div>
+
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:9px">
+<span style="font-size:15px;font-weight:600">Can I afford it?</span>
+<sc-for list="{{sums}}" as="m" hint-placeholder-count="4"><span style="{{m.style}}"><span>{{m.l}}</span><span style="{{m.vStyle}}">{{m.v}}</span></span></sc-for>
+<span style="{{verdictStyle}}">{{verdict}}</span>
+<div style="display:flex;gap:6px"><sc-for list="{{spread}}" as="x" hint-placeholder-count="3"><button type="button" onClick="{{x.go}}" style="{{x.style}}">{{x.name}}</button></sc-for></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{months}}" as="mo" hint-placeholder-count="3"><div style="background:#111113;border:1px solid #1a1a1d;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:1px"><span style="font-size:11px;color:#8f897f">{{mo.m}}</span><span style="font-size:17px;font-weight:600">{{mo.t}}</span><span style="{{mo.vStyle}}">{{mo.v}}</span></div></sc-for>
+</div>
+
+<sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+<div class="in" style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px;font-weight:600">Same for everyone</span>
+<span style="display:flex;align-items:center;gap:8px"><button type="button" onClick="{{less}}" aria-label="Less each" style="width:36px;height:36px;border-radius:18px;border:0;background:#1d1d20;color:#c9b37e;font-size:18px">−</button><span style="font-size:15px;font-weight:600;min-width:74px;text-align:center">{{each}}</span><button type="button" onClick="{{more}}" aria-label="More each" style="width:36px;height:36px;border-radius:18px;border:0;background:#1d1d20;color:#c9b37e;font-size:18px">+</button></span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#8f897f"><span>{{rateLine}}</span><button type="button" onClick="{{changeRate}}" style="border:0;background:transparent;color:#c9b37e;font-size:12.5px;padding:0">Change rate</button></div>
+</div>
+</sc-if>
+
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px"><span style="display:flex;gap:8px;align-items:center"><span style="font-size:15px;font-weight:600">{{listTitle}}</span><span style="font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a">{{listCount}}</span></span><button type="button" onClick="{{addItem}}" style="border:0;background:transparent;color:#c9b37e;font-size:12.5px;padding:0">+ Add</button></div>
+<div style="display:flex;flex-direction:column;padding:0 14px 4px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:10px;min-height:52px;border-top:1px solid #1a1a1d">
+<button type="button" onClick="{{r.tick}}" aria-label="{{r.tickLabel}}" style="{{r.tickStyle}}"><sc-if value="{{r.done}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L19 7"></path></svg></sc-if></button>
+<sc-if value="{{r.hasThumb}}" hint-placeholder-val="{{false}}"><button type="button" onClick="{{r.thumbGo}}" aria-label="{{r.thumbLabel}}" style="{{r.thumb}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path></svg></button></sc-if>
+<button type="button" onClick="{{r.edit}}" style="flex:1;min-width:0;border:0;background:transparent;color:#ededed;text-align:left;padding:0;display:flex;flex-direction:column;gap:1px"><span style="{{r.nameStyle}}">{{r.name}}</span><span style="font-size:12px;color:#8f897f">{{r.note}}</span></button>
+<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px"><span style="font-size:14px;font-weight:600">{{r.gbp}}</span><span style="font-size:11.5px;color:#8f897f">{{r.local}}</span></span>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{pager}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 14px 12px"><span style="font-size:12px;color:#8f897f">{{pager}}</span><span style="display:flex;gap:6px"><button type="button" onClick="{{prev}}" aria-label="Previous" style="{{prevStyle}}">‹</button><button type="button" onClick="{{next}}" aria-label="Next" style="{{nextStyle}}">›</button></span></div>
+</sc-if>
+</div>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:0 2px">A calculator only: Navilife never sends or moves money · the figures here are examples</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;align-self:center;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1120}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={plan:'Money home',each:50000,done:{},page:0,months:1,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var say=function(t){return function(){self.setState({toast:t});};};
+var RATE=2000; // example only: naira to the pound
+var gbp=function(n){return '£'+Math.round(n).toLocaleString('en-GB');};
+var ngn=function(n){return '₦'+n.toLocaleString('en-GB');};
+var home=['Mum','Brother 1','Brother 2','Sister 1','Sister 2','Uncle','Aunty','Cousin 1','Cousin 2','Cousin 3','Family friend','Church'];
+var gifts=[['Son 1','Football boots',45,'Nov',1],['Son 2','Lego set',60,'Dec',1],['Wife','Perfume',85,'Dec',0],['Mum','Wrapper',40,'Dec',0],['Me','Winter coat',120,'Jan',1],['Me','Trainers',70,'Nov',0]];
+var hol=[['Flights','4 people',620,'Nov',0],['Hotel','5 nights',540,'Dec',0],['Car hire','',150,'Jan',0],['Spending money','',400,'Jan',0]];
+var items;
+if(s.plan==='Money home')items=home.map(function(n){return {k:n,name:n,note:'',g:s.each/RATE,local:ngn(s.each),m:'Dec',ph:-1};});
+else if(s.plan==='Christmas gifts')items=gifts.map(function(x){return {k:x[0]+x[1],name:x[1],note:'For '+x[0],g:x[2],local:'',m:x[3],ph:x[4]};});
+else items=hol.map(function(x){return {k:x[0],name:x[0],note:x[1],g:x[2],local:'',m:x[3],ph:-1};});
+var total=items.reduce(function(a,x){return a+x.g;},0);
+var spent=items.filter(function(x){return s.done[s.plan+x.k];}).reduce(function(a,x){return a+x.g;},0);
+var income=3200,regular=2560,left=income-regular,perMonth=total/s.months,after=left-perMonth,ok=after>=0;
+var PG=5,pages=Math.ceil(items.length/PG),p=Math.min(s.page,pages-1);
+var btn=function(on){return 'width:32px;height:32px;border-radius:16px;border:0;background:#1d1d20;font-size:16px;color:'+(on?'#c9b37e':'#4a4744');};
+var line='display:flex;justify-content:space-between;font-size:13.5px;color:#a8a29a';
+return {
+ newPlan:say('Name it, pick a date, add people or things'),
+ plans:['Money home','Christmas gifts','Holiday'].map(function(n){var on=s.plan===n;return {name:n,go:function(){self.setState({plan:n,page:0,months:1,toast:''});},style:'flex-shrink:0;border:0;border-radius:999px;height:34px;padding:0 13px;font-size:13px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:#151517;color:#d8d2c6')};}),
+ total:gbp(total),totalSub:s.plan==='Money home'?ngn(s.each*home.length)+' · '+home.length+' people':items.length+' things',
+ by:s.plan==='Holiday'?'1 Feb':'20 Dec',
+ spentBar:'width:'+(total?Math.round(spent/total*100):0)+'%;background:#c9b37e;border-radius:3px',
+ spentLine:gbp(spent)+(s.plan==='Money home'?' sent':' bought')+' · '+gbp(total-spent)+' to go',
+ sums:[{l:'Comes in each month',v:gbp(income)},{l:'Regular bills and spending',v:'− '+gbp(regular)},{l:'Left over',v:gbp(left)},{l:'This plan'+(s.months>1?' ÷ '+s.months+' months':''),v:'− '+gbp(perMonth)}].map(function(m,i){return {l:m.l,v:m.v,style:line+(i===2?';border-top:1px solid #1a1a1d;padding-top:8px':''),vStyle:'color:#ededed;font-weight:'+(i>=2?600:400)};}),
+ verdict:ok?'Fits · '+gbp(after)+' left'+(s.months>1?' each month':' this month'):gbp(-after)+' short'+(s.months>1?' each month':' this month')+' · spread it or trim it',
+ verdictStyle:'font-size:14.5px;font-weight:600;border-radius:10px;padding:9px 12px;'+(ok?'background:#14201a;color:#86d39c':'background:#2a2014;color:#e0b860'),
+ spread:[1,2,3].map(function(m){var on=s.months===m;return {name:m===1?'This month':'Over '+m+' months',go:function(){self.setState({months:m});},style:'border:0;border-radius:999px;height:32px;padding:0 12px;font-size:12.5px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:#1d1d20;color:#c9b37e')};}),
+ months:['Nov','Dec','Jan'].map(function(mn){var t=items.filter(function(x){return x.m===mn;}).reduce(function(a,x){return a+x.g;},0);var fit=left-t>=0;return {m:mn,t:gbp(t),v:t===0?'nothing':(fit?'fits':gbp(t-left)+' short'),vStyle:'font-size:11px;color:'+(t===0?'#6f6a62':(fit?'#86d39c':'#e0b860'))};}),
+ isHome:s.plan==='Money home',each:ngn(s.each),
+ less:function(){self.setState({each:Math.max(5000,s.each-5000)});},more:function(){self.setState({each:s.each+5000});},
+ rateLine:ngn(s.each)+' ≈ '+gbp(s.each/RATE)+' each · example rate',changeRate:say('Type today’s rate, or let Navilife look it up daily'),
+ listTitle:s.plan==='Money home'?'People':'Things',listCount:String(items.length),addItem:say('Add a person or thing with its own amount'),
+ rows:items.slice(p*PG,p*PG+PG).map(function(x){var d=!!s.done[s.plan+x.k];return {name:x.name,note:(x.note||(d?(s.plan==='Money home'?'Sent':'Bought'):'Tap to set a different amount'))+(s.plan==='Money home'?'':' · buy in '+x.m),hasThumb:x.ph>=0,thumb:'width:36px;height:36px;border-radius:9px;flex-shrink:0;border:0;display:flex;align-items:center;justify-content:center;'+(x.ph===1?'background:linear-gradient(135deg,#3a3326,#55482f);color:#f0e6cf':'background:#1d1d20;color:#c9b37e'),thumbLabel:x.ph===1?'Photo saved, tap to see':'Take a photo',thumbGo:function(){self.setState({toast:x.ph===1?'Opens the photo you took':'Opens the camera · the photo stays on your devices'});},gbp:gbp(x.g),local:x.local,done:d,
+  nameStyle:'font-size:14px;font-weight:500;'+(d?'color:#8f897f;text-decoration:line-through':''),
+  tick:function(){var dn=Object.assign({},s.done);dn[s.plan+x.k]=!d;self.setState({done:dn,toast:''});},tickLabel:d?'Marked done, tap to undo':'Mark as done',
+  tickStyle:'width:28px;height:28px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;'+(d?'border:0;background:#c9b37e;color:#111':'border:1.5px solid #c9b37e;background:transparent;color:#c9b37e'),
+  edit:say(x.name+' · amount, which month, photo, link, notes')};}),
+ pager:pages>1?(p*PG+1)+'–'+Math.min(items.length,p*PG+PG)+' of '+items.length:'',
+ prev:function(){self.setState({page:Math.max(0,p-1)});},next:function(){self.setState({page:Math.min(pages-1,p+1)});},prevStyle:btn(p>0),nextStyle:btn(p<pages-1),
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Habits</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pop{0%{transform:scale(.7)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+.pop{animation:pop .28s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+.bar{transition:width .35s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.in,.pop{animation:none}.bar{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:980px;box-sizing:border-box;padding:16px 16px 28px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<button type="button" style="border:0;background:transparent;color:#c9b37e;font-size:13px;text-align:left;padding:0;height:24px">‹ Ask</button>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<span style="font-size:28px;font-weight:700">Habits</span>
+<button type="button" onClick="{{add}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font-size:13.5px;font-weight:600">+ Add</button>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px">
+<sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+<button type="button" onClick="{{d.go}}" aria-label="{{d.label}}" style="{{d.style}}">
+<span style="font-size:10.5px;opacity:.8">{{d.w}}</span>
+<span style="font-size:16px;font-weight:600">{{d.n}}</span>
+<span style="width:22px;height:3px;border-radius:2px;background:rgba(128,128,128,.25);overflow:hidden;display:flex"><span style="{{d.fill}}"></span></span>
+</button>
+</sc-for>
+</div>
+
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:14px;padding:11px 14px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px;font-weight:600">{{doneLine}}</span><span style="font-size:12px;color:#8f897f">{{streakLine}}</span></div>
+<span style="height:5px;border-radius:3px;background:#1d1d20;overflow:hidden;display:flex"><span class="bar" style="{{progress}}"></span></span>
+</div>
+
+<div style="display:flex;gap:6px;overflow-x:auto">
+<sc-for list="{{lists}}" as="l" hint-placeholder-count="5"><button type="button" onClick="{{l.go}}" style="{{l.style}}">{{l.name}}</button></sc-for>
+</div>
+
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<div class="in" style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 4px"><span style="display:flex;gap:8px;align-items:center"><span style="font-size:15px;font-weight:600">{{g.title}}</span><span style="font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a">{{g.count}}</span></span><span style="font-size:12px;color:#8f897f">{{g.when}}</span></div>
+<div style="display:flex;flex-direction:column;padding:0 14px 4px">
+<sc-for list="{{g.rows}}" as="h" hint-placeholder-count="2">
+<div style="{{h.rowStyle}}">
+<span style="{{h.icon}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{h.path}}"></path></svg></span>
+<button type="button" onClick="{{h.open}}" style="flex:1;min-width:0;border:0;background:transparent;color:#ededed;text-align:left;padding:0;display:flex;flex-direction:column;gap:3px">
+<span style="font-size:14.5px;font-weight:500">{{h.name}}</span>
+<span style="display:flex;gap:8px;align-items:center"><span style="font-size:12px;color:#8f897f">{{h.meta}}</span><span style="display:flex;gap:3px"><sc-for list="{{h.week}}" as="w" hint-placeholder-count="7"><span style="{{w}}"></span></sc-for></span></span>
+</button>
+<button type="button" onClick="{{h.mark}}" aria-label="{{h.markLabel}}" style="{{h.markStyle}}"><sc-if value="{{h.markPath}}" hint-placeholder-val="{{false}}"><svg class="pop" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{h.markPath}}"></path></svg></sc-if></button>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:0 2px">Tap the circle: done, then missed, then clear · tap a day to mark an earlier day · tap a habit for its history and reminder</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;align-self:center;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
+class Component extends DCLogic {
+constructor(p){super(p);
+var H=[['teeth','Brush teeth','do','Morning',9],['water','Drink water','do','Morning',4],['walk','Walk 20 minutes','do','All day',2],['coffee','No shop coffee','avoid','All day',6],['biscuits','No biscuits','avoid','All day',0],['cake','No cake','avoid','Night time',3],['teeth2','Brush teeth','do','Night time',9],['read','Read 10 pages','do','Night time',1]];
+var marks={};
+[['teeth',[1,1,1,1,1,1,1]],['water',[1,0,1,1,1,1,0]],['walk',[0,1,2,1,2,1,0]],['coffee',[1,1,1,1,1,1,1]],['biscuits',[1,2,1,2,2,2,2]],['cake',[2,1,1,2,1,1,1]],['teeth2',[1,1,1,1,1,1,0]],['read',[2,2,1,2,2,1,0]]].forEach(function(m){marks[m[0]]=m[1];});
+this.H=H;this.state={sel:6,list:'All',marks:marks,toast:''};}
+renderVals(){
+var s=this.state,self=this,H=this.H;
+var W=['Thu','Fri','Sat','Sun','Mon','Tue','Wed'],N=[5,6,7,8,9,10,11];
+var GREEN='#6fcf8a',RED='#e07a6a';
+var doneOn=function(i){return H.filter(function(h){return s.marks[h[0]][i]===1;}).length;};
+var shown=H.filter(function(h){return s.list==='All'||h[3]===s.list;});
+var done=shown.filter(function(h){return s.marks[h[0]][s.sel]===1;}).length;
+var order=['Morning','All day','Night time'],when={'Morning':'before work','All day':'any time','Night time':'before bed'};
+var P={do:'M12 5v14M5 12h14',avoid:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8'};
+var row=function(h,i){var st=s.marks[h[0]][s.sel];
+ return {name:h[1],meta:(h[2]==='avoid'?'Avoid':'Do')+(h[4]?' · '+h[4]+' day streak':' · start today'),path:P[h[2]],
+  rowStyle:'display:flex;align-items:center;gap:11px;min-height:60px;'+(i?'border-top:1px solid #1a1a1d':''),
+  icon:'width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;'+(h[2]==='avoid'?'background:#261615;color:#e59a8c':'background:#14201a;color:#86d39c'),
+  week:s.marks[h[0]].map(function(m,j){return 'width:6px;height:6px;border-radius:3px;background:'+(m===1?GREEN:(m===2?RED:'#2a2a2e'))+(j===s.sel?';outline:1px solid #6f6a62;outline-offset:1px':'');}),
+  open:function(){self.setState({toast:h[1]+' · history, reminder time, which list, edit'});},
+  mark:function(){var mk=Object.assign({},s.marks);var a=mk[h[0]].slice();a[s.sel]=(a[s.sel]+1)%3;mk[h[0]]=a;self.setState({marks:mk,toast:a[s.sel]===1?'Done · nice':(a[s.sel]===2?'Marked missed':'')});},
+  markLabel:st===1?'Done, tap for missed':(st===2?'Missed, tap to clear':'Not marked, tap for done'),
+  markPath:st===1?'M5 12l5 5L19 7':(st===2?'M6 6l12 12M18 6L6 18':''),
+  markStyle:'width:44px;height:44px;border-radius:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:'+(st===0?'1.5px solid #c9b37e;background:transparent;color:#c9b37e':(st===1?'0;background:#16301f;color:'+GREEN:'0;background:#3a1a17;color:'+RED))};};
+return {
+ add:function(){self.setState({toast:'New habit: name · Do or Avoid · Morning, All day or Night · days · reminder'});},
+ days:W.map(function(w,i){var on=s.sel===i,pct=Math.round(doneOn(i)/H.length*100);return {w:w,n:N[i],label:w+' '+N[i]+', '+doneOn(i)+' of '+H.length+' done',go:function(){self.setState({sel:i,toast:''});},
+  style:'border:0;border-radius:12px;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;'+(on?'background:#c9b37e;color:#111':'background:#111113;color:#d8d2c6'),
+  fill:'width:'+pct+'%;background:'+(on?'#111':'#c9b37e')};}),
+ doneLine:done+' of '+shown.length+' done'+(s.sel===6?' today':' · '+W[s.sel]+' '+N[s.sel]),
+ streakLine:'best streak 9 days',
+ progress:'width:'+(shown.length?Math.round(done/shown.length*100):0)+'%;background:#c9b37e;border-radius:3px',
+ lists:['All','Morning','All day','Night time','+ New list'].map(function(n){var on=s.list===n;return {name:n,go:function(){if(n==='+ New list'){self.setState({toast:'Name a list, e.g. Weekend or Gym days'});}else self.setState({list:n,toast:''});},style:'flex-shrink:0;border:0;border-radius:999px;height:34px;padding:0 13px;font-size:13px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:#151517;color:'+(n==='+ New list'?'#c9b37e':'#d8d2c6'))};}),
+ groups:order.filter(function(o){return s.list==='All'||s.list===o;}).map(function(o){var rows=H.filter(function(h){return h[3]===o;});var d=rows.filter(function(h){return s.marks[h[0]][s.sel]===1;}).length;return {title:o,count:d+' of '+rows.length,when:when[o],rows:rows.map(row)};}),
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>

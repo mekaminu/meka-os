@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Countdowns</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .28s cubic-bezier(.2,.8,.2,1) both}
+@keyframes drop{0%{transform:translateY(-14px);opacity:0}60%{transform:translateY(3px);opacity:1}100%{transform:none}}
+.num{animation:drop .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes twinkle{0%,100%{opacity:.25}50%{opacity:1}}
+.tw{animation:twinkle 2.4s ease-in-out infinite}
+@keyframes grow{from{stroke-dashoffset:302}}
+.ring{animation:grow .9s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.num,.tw,.ring{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:900px;box-sizing:border-box;padding:16px 16px 0;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden">
+
+<button type="button" style="border:0;background:transparent;color:#c9b37e;font-size:13px;text-align:left;padding:0;height:24px">‹ Ask</button>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<span style="font-size:28px;font-weight:700">Countdowns</span>
+<button type="button" onClick="{{add}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font-size:13.5px;font-weight:600">+ Add</button>
+</div>
+
+<div style="display:flex;gap:2px;background:#111113;border-radius:999px;padding:3px;align-self:flex-start">
+<sc-for list="{{units}}" as="u" hint-placeholder-count="2"><button type="button" onClick="{{u.go}}" style="{{u.style}}">{{u.name}}</button></sc-for>
+</div>
+
+<button type="button" onClick="{{heroGo}}" style="border:1px solid #2a2619;background:#14120c;border-radius:20px;padding:18px 16px;display:flex;align-items:center;gap:16px;text-align:left;color:#ededed">
+<span style="position:relative;width:112px;height:112px;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+<svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true" style="position:absolute;inset:0;transform:rotate(-90deg)"><circle cx="56" cy="56" r="48" fill="none" stroke="#2a2619" stroke-width="7"></circle><circle class="ring" cx="56" cy="56" r="48" fill="none" stroke="#c9b37e" stroke-width="7" stroke-linecap="round" stroke-dasharray="302" stroke-dashoffset="{{heroOffset}}"></circle></svg>
+<span style="display:flex;flex-direction:column;align-items:center"><span class="num" style="font-size:40px;font-weight:700;line-height:1">{{heroN}}</span><span style="font-size:12px;color:#a8a29a">{{unit}}</span></span>
+</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;letter-spacing:.12em;color:#c9b37e">NEXT UP · ON TODAY</span><span style="font-size:22px;font-weight:700">{{heroName}}</span><span style="font-size:13px;color:#a8a29a">{{heroDate}}</span><span style="font-size:12.5px;color:#8f897f">{{heroExtra}}</span></span>
+</button>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="4">
+<button type="button" onClick="{{c.go}}" class="in" style="{{c.style}}">
+<span style="display:flex;justify-content:space-between;align-items:center"><span style="{{c.icon}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{c.path}}"></path></svg></span><span style="font-size:11.5px;color:#8f897f">{{c.date}}</span></span>
+<span style="display:flex;align-items:baseline;gap:6px"><span style="font-size:30px;font-weight:700;line-height:1">{{c.n}}</span><span style="font-size:12px;color:#a8a29a">{{c.unit}}</span></span>
+<span style="font-size:14px;font-weight:600">{{c.name}}</span>
+</button>
+</sc-for>
+</div>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:0 2px">Tap one to show it big for the kids · birthdays and holidays you already have in Navilife appear here on their own · one can sit on Today and on the home screen</div>
+
+<sc-if value="{{big}}" hint-placeholder-val="{{false}}">
+<div class="in" style="position:absolute;inset:0;background:#0b0a07;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center">
+<sc-for list="{{stars}}" as="st" hint-placeholder-count="8"><span class="tw" style="{{st}}"></span></sc-for>
+<span style="font-size:15px;letter-spacing:.14em;color:#c9b37e">{{bigName}}</span>
+<span class="num" style="font-size:150px;font-weight:700;line-height:1;color:#f0e6cf">{{bigN}}</span>
+<span style="font-size:26px;font-weight:600">{{bigUnit}}</span>
+<span style="font-size:14px;color:#a8a29a">{{bigDate}}</span>
+<div style="display:flex;gap:8px;margin-top:18px"><button type="button" onClick="{{pin}}" style="border:0;background:#1d1d20;color:#c9b37e;border-radius:999px;height:40px;padding:0 16px;font-size:13.5px">Show on Today</button><button type="button" onClick="{{closeBig}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:40px;padding:0 20px;font-size:13.5px;font-weight:600">Done</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px;white-space:nowrap">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={unit:'Days',big:-1,pinned:0,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var say=function(t){return function(){self.setState({toast:t});};};
+var I={gift:'M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-2-4-6-3-5 0M12 7c2-4 6-3 5 0',cake:'M5 20h14v-7H5zM5 16c2 2 3-1 5 0s3 1 4 0 3-2 5 0M12 13V8M12 5v.01',plane:'M3 11l18-7-7 18-3-8z',heart:'M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z',star:'M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-3-5.4 3 1.1-6L3.2 9.4l6.1-.8z'};
+var E=[
+ {name:'Son’s birthday',date:'Wed 2 Dec',n:21,of:365,icon:'cake',extra:'Party to plan · 2 gift ideas saved'},
+ {name:'Christmas',date:'Fri 25 Dec',n:44,of:365,icon:'gift',extra:'Christmas gifts plan · £185 to go'},
+ {name:'School breaks up',date:'Fri 18 Dec',n:37,of:60,icon:'star',extra:''},
+ {name:'Holiday',date:'Sat 13 Feb',n:94,of:200,icon:'plane',extra:''},
+ {name:'Anniversary',date:'Sun 6 Jun',n:207,of:365,icon:'heart',extra:''}];
+var sleeps=s.unit==='Sleeps';
+var unit=function(n){return sleeps?(n===1?'sleep':'sleeps'):(n===1?'day':'days');};
+var h=E[s.pinned];
+var others=E.map(function(e,i){return {e:e,i:i};}).filter(function(x){return x.i!==s.pinned;});
+var b=s.big>=0?E[s.big]:null;
+return {
+ add:say('Name · date · repeats every year? · show on Today'),
+ units:['Days','Sleeps'].map(function(n){var on=s.unit===n;return {name:n,go:function(){self.setState({unit:n});},style:'border:0;border-radius:999px;height:30px;padding:0 14px;font-size:12.5px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:transparent;color:#a8a29a')};}),
+ heroGo:function(){self.setState({big:s.pinned,toast:''});},
+ heroN:String(h.n),unit:unit(h.n)+' to go',heroName:h.name,heroDate:h.date,heroExtra:h.extra,
+ heroOffset:String(Math.round(302*Math.min(1,h.n/h.of))),
+ cards:others.map(function(x,j){return {name:x.e.name,date:x.e.date,n:String(x.e.n),unit:unit(x.e.n),path:I[x.e.icon],
+  icon:'width:26px;height:26px;border-radius:8px;background:#18181b;color:#c9b37e;display:flex;align-items:center;justify-content:center',
+  style:'border:1px solid #1a1a1d;background:#111113;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;text-align:left;color:#ededed;animation-delay:'+(j*60)+'ms',
+  go:function(){self.setState({big:x.i,toast:''});}};}),
+ big:!!b,bigName:b?b.name.toUpperCase():'',bigN:b?String(b.n):'',bigUnit:b?unit(b.n)+' to go':'',bigDate:b?b.date:'',
+ stars:[[12,14],[78,9],[30,30],[88,36],[8,62],[70,70],[22,86],[90,88]].map(function(p,i){return 'position:absolute;left:'+p[0]+'%;top:'+p[1]+'%;width:4px;height:4px;border-radius:2px;background:#c9b37e;animation-delay:'+(i*0.3)+'s';}),
+ pin:function(){self.setState({pinned:s.big,big:-1,toast:'Now on Today and the home-screen widget'});},
+ closeBig:function(){self.setState({big:-1});},
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>

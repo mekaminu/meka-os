@@ -110,17 +110,17 @@ var say=function(t){return function(){self.setState({toast:t});};};
 var set=function(k){return function(){var o=Object.assign({},s.open);o[k]=!o[k];self.setState({open:o,toast:''});};};
 var pill=function(gold){return 'border:0;border-radius:999px;height:32px;padding:0 13px;font-size:12.5px;'+(gold?'background:#1d1d20;color:#c9b37e':'background:#1d1d20;color:#d8d2c6');};
 var msgs=[
- {i:'E',n:'Efe',t:'12:51',l:'Sent “KGB 20” with no context',b:'1 to reply'},
- {i:'CG',n:'Card game testing',t:'13:36',l:'Mentioned you: put the time in the group',b:'2 to reply'},
- {i:'H',n:'Hamid',t:'08:23',l:'Asks if you saw his missed call and voice note',b:'1 to reply'},
- {i:'J',n:'Jess',t:'12:22',l:'Work approved the show in Birmingham, 25–26 Nov',b:'1 request'}];
+ {i:'E',n:'Lee',t:'12:51',l:'Sent “OK 20” with no context',b:'1 to reply'},
+ {i:'CG',n:'Game testing',t:'13:36',l:'Mentioned you: put the time in the group',b:'2 to reply'},
+ {i:'H',n:'Dan',t:'08:23',l:'Asks if you saw his missed call and voice note',b:'1 to reply'},
+ {i:'J',n:'Robin',t:'12:22',l:'Work approved the show in Birmingham, 25–26 Nov',b:'1 request'}];
 var fyi=[
- {n:'A friend',l:'Thanks you; discharged, still waiting on a driver'},
- {n:'Nnamdi',l:'Jokes that “these boys” have eaten his money'},
- {n:'Aunty Pat',l:'Sends warm regards to the footballers'},
- {n:'Victor',l:'Sent you a message'},
+ {n:'Pat',l:'Thanks you; discharged, still waiting on a driver'},
+ {n:'Sam',l:'Jokes that “these boys” have eaten his money'},
+ {n:'Aunt Jo',l:'Sends warm regards to the footballers'},
+ {n:'Chris',l:'Sent you a message'},
  {n:'Coach',l:'Training moved indoors on Thursday'},
- {n:'Tobi',l:'Shared a photo from Saturday'}];
+ {n:'Alex',l:'Shared a photo from Saturday'}];
 var mail=[
  {n:'Samsung Care+',l:'Your subscription has been renewed',t:'02:08'},
  {n:'PayPal',l:'Update your card details',t:'Yest 23:10'},
@@ -155,7 +155,7 @@ var G=[];
 if(show('decide'))G.push({k:'decide',title:'To decide',count:'1',c:['#2a2418','#e0b860'],path:'M12 8v5M12 16.5v.5M12 3l9 16H3z',peek:'1 renewal due from your lists',
  lead:'1 renewal due · from your lists',leadBtn:'Go through',leadGo:say('Opens the renewal to decide'),
  rows:[],foot:'At work until 17:30 · 37 held for later ›',footGo:say('Opens what is held until after work')});
-if(show('msgs'))G.push({k:'msgs',title:'Messages',count:'4',c:['#141b28','#9db4e0'],path:'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z',peek:'Efe, Card game testing, Hamid, Jess',
+if(show('msgs'))G.push({k:'msgs',title:'Messages',count:'4',c:['#141b28','#9db4e0'],path:'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z',peek:'Lee, Game testing, Dan, Robin',
  rows:msgs.map(function(m){return {initials:m.i,name:m.n,time:m.t,line:m.l,badge:m.b,tap:say('Opens '+m.n+'’s messages')};})});
 if(show('fyi')){var pf=paged('fyi',fyiLive);G.push({k:'fyi',title:'FYI',count:String(fyiLive.length),c:['#18181b','#a8a29a'],path:'M12 16v-4M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',peek:'No reply needed · '+fyiLive.slice(0,3).map(function(x){return x.n;}).join(', '),
  lead:fyiLive.length?'Nothing here needs a reply':'',leadBtn:'Clear all',leadGo:function(){var g=Object.assign({},s.gone);fyi.forEach(function(x,i){g['f'+i]=1;});self.setState({gone:g,toast:'FYI cleared · Undo'});},

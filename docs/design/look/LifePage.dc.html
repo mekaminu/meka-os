@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Life page pattern</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{transform:translateY(100%)}to{transform:none}}
+.sheet{animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.sheet{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:900px;box-sizing:border-box;padding:16px 16px 0;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden">
+
+<div style="display:flex;gap:2px;background:#111113;border-radius:999px;padding:3px;align-self:flex-start">
+<sc-for list="{{examples}}" as="e" hint-placeholder-count="2"><button type="button" onClick="{{e.go}}" style="{{e.style}}">{{e.name}}</button></sc-for>
+</div>
+
+<button type="button" style="border:0;background:transparent;color:#c9b37e;font-size:13px;text-align:left;padding:0;height:24px">‹ Ask</button>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;gap:8px;align-items:center"><span style="font-size:28px;font-weight:700">{{title}}</span>
+<button type="button" onClick="{{toggleInfo}}" aria-label="What this page does" style="width:26px;height:26px;border-radius:13px;border:1px solid #c9b37e;background:transparent;color:#c9b37e;font-size:12px">i</button></div>
+<button type="button" onClick="{{openAdd}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:36px;padding:0 16px;font-size:13.5px;font-weight:600">+ Add</button>
+</div>
+<sc-if value="{{info}}" hint-placeholder-val="{{false}}"><div class="in" style="background:#18181b;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#a8a29a;line-height:1.45">{{info}}</div></sc-if>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="3"><div style="background:#111113;border:1px solid #1a1a1d;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:1px"><span style="{{t.numStyle}}">{{t.n}}</span><span style="font-size:11px;color:#8f897f">{{t.l}}</span></div></sc-for>
+</div>
+
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="2">
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px"><span style="display:flex;gap:8px;align-items:center"><span style="font-size:15px;font-weight:600">{{c.title}}</span><span style="font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a">{{c.count}}</span></span>
+<sc-if value="{{c.more}}" hint-placeholder-val="{{true}}"><button type="button" onClick="{{c.moreGo}}" style="border:0;background:transparent;color:#c9b37e;font-size:12.5px;padding:0">{{c.more}} ›</button></sc-if></div>
+<div style="display:flex;flex-direction:column;padding:0 14px 4px">
+<sc-for list="{{c.rows}}" as="r" hint-placeholder-count="4">
+<button type="button" onClick="{{r.go}}" class="in" style="border:0;border-top:1px solid #1a1a1d;background:transparent;color:#ededed;display:flex;align-items:center;gap:10px;min-height:52px;text-align:left;padding:0;width:100%">
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14px;font-weight:500">{{r.name}}</span><span style="font-size:12.5px;color:#8f897f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.line}}</span></span>
+<span style="{{r.whenStyle}}">{{r.when}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:0 2px">The same shape for every page under Ask: title, the i for help, + Add, three numbers, then cards of at most five rows</div>
+
+<sc-if value="{{adding}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end">
+<div class="sheet" style="width:100%;box-sizing:border-box;background:#141416;border-radius:20px 20px 0 0;padding:14px 16px 22px;display:flex;flex-direction:column;gap:12px">
+<span style="width:36px;height:4px;border-radius:2px;background:#3a3833;align-self:center"></span>
+<span style="font-size:17px;font-weight:600">{{addTitle}}</span>
+<div style="background:#1d1d20;border-radius:12px;height:46px;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#6f6a62">{{addHint}}</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{addChips}}" as="a" hint-placeholder-count="3"><button type="button" onClick="{{a.go}}" style="{{a.style}}">{{a.name}}</button></sc-for></div>
+<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" onClick="{{closeAdd}}" style="border:0;background:transparent;color:#a8a29a;height:40px;padding:0 14px;font-size:14px">Cancel</button><button type="button" onClick="{{saveAdd}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:40px;padding:0 20px;font-size:14px;font-weight:600">Save</button></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px;white-space:nowrap">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={ex:'Car',info:false,adding:false,chip:0,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var say=function(t){return function(){self.setState({toast:t});};};
+var D={
+ Car:{info:'Navilife keeps your cars’ dates, where you parked and fuel prices near you. It reminds you before anything is due.',
+  tiles:[['3 wks','to the MOT',1],['£1.38','cheapest petrol near',0],['Level 2','parked · 08:10',0]],
+  cards:[{title:'Dates',count:'4',more:'',rows:[['MOT','Family car','Wed 2 Dec',1],['Insurance','Family car · renews','14 Jan',0],['Road tax','Family car','1 Mar',0],['Service','Second car','May',0]]},
+         {title:'Parked',count:'1',more:'Find my car',rows:[['Station car park','Level 2 · bay 41 · 9 h left','08:10',0]]}],
+  addTitle:'Add to Car',addHint:'e.g. Insurance renews 14 January',chips:['A date','A car','Where I parked']},
+ People:{info:'Birthdays, how long since you spoke, and gift ideas for the people who matter. Nothing is sent to anyone.',
+  tiles:[['Sat','next birthday',1],['3','to call this month',0],['12','people',0]],
+  cards:[{title:'Coming up',count:'3',more:'',rows:[['Sam','Birthday · gift idea saved','Sat 14',1],['Aunt Jo','Call · 5 weeks since you spoke','this week',0],['Alex','Birthday','2 Dec',0]]},
+         {title:'Everyone',count:'12',more:'See all',rows:[['Mum','Spoke 6 days ago','',0],['Sam','Spoke 2 weeks ago','',0],['Aunt Jo','Spoke 5 weeks ago','',0],['Alex','Spoke yesterday','',0],['Coach','Spoke 3 days ago','',0]]}],
+  addTitle:'Add to People',addHint:'e.g. Sam, birthday 14 November',chips:['A person','A birthday','A gift idea']}};
+var d=D[s.ex];
+return {
+ examples:['Car','People'].map(function(n){var on=s.ex===n;return {name:'Example: '+n,go:function(){self.setState({ex:n,info:false,adding:false,toast:''});},style:'border:0;border-radius:999px;height:30px;padding:0 12px;font-size:12px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:transparent;color:#a8a29a')};}),
+ title:s.ex,info:s.info?d.info:'',toggleInfo:function(){self.setState({info:!s.info});},
+ tiles:d.tiles.map(function(t){return {n:t[0],l:t[1],numStyle:'font-size:18px;font-weight:600;color:'+(t[2]?'#e0b860':'#ededed')};}),
+ cards:d.cards.map(function(c){return {title:c.title,count:c.count,more:c.more,moreGo:say(c.more+' opens'),rows:c.rows.map(function(r){return {name:r[0],line:r[1],when:r[2],whenStyle:'font-size:12.5px;flex-shrink:0;color:'+(r[3]?'#e0b860':'#8f897f'),go:say(r[0]+' opens its sheet: edit, done, delete')};})};}),
+ openAdd:function(){self.setState({adding:true,toast:''});},closeAdd:function(){self.setState({adding:false});},
+ saveAdd:function(){self.setState({adding:false,toast:'Added · Undo'});},
+ adding:s.adding,addTitle:d.addTitle,addHint:d.addHint,
+ addChips:d.chips.map(function(n,i){var on=s.chip===i;return {name:n,go:function(){self.setState({chip:i});},style:'border:0;border-radius:999px;height:34px;padding:0 13px;font-size:12.5px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:#1d1d20;color:#c9b37e')};}),
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
