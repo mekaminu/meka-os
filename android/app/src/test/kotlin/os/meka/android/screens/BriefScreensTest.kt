@@ -88,7 +88,10 @@ class BriefScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private val longTitle = "Quarterly planning with the design and engineering leads"
+    private val longTitle = ShotLife.PLANNING.title
+
+    /** [minute] minutes after midnight on 2026-10-[day] in London. */
+    private fun atDay(day: Int, minute: Int) = LocalDateTime(2026, 10, day, minute / 60, minute % 60).toInstant(london).toEpochMilliseconds()
 
     private val ops = InMemoryServerOpStore()
     private val serverClock = HlcClock("server", { now })
@@ -118,16 +121,18 @@ class BriefScreensTest {
         if (fill == Fill.EMPTY) return
         var k = 0
         val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
-        fun event(id: String, title: String, start: Long, end: Long, place: String? = null) =
-            mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
-                put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
+        fun event(e: ShotLife.WeekEvent) =
+            mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
+                put(EventFields.TITLE, e.title.fv()); put(EventFields.START_AT, atDay(e.day, e.startMin).fv())
+                put(EventFields.END_AT, atDay(e.day, e.endMin).fv())
                 put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
-                put(EventFields.CALENDAR, "Personal".fv())
-                place?.let { put(EventFields.LOCATION, it.fv()) }
+                put(EventFields.CALENDAR, e.calendar.fv())
+                e.place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("ev1", "Swimming lesson", at(18, 30), at(19, 15), place = "Oakfield Leisure Centre")
+        event(ShotLife.SWIM)
         if (fill != Fill.MANY) return
-        event("ev2", longTitle, at(10, 0), at(11, 30), place = "Harbour House, Dock Street")
+        // The shots' one week (ShotLife, walk-through A8): the Calendar and the bedside show these same events.
+        ShotLife.WEEK.drop(1).forEach(::event)
         headline("top-0", "Rail fares to rise less than expected next year", "top", 40, "BBC News")
         headline("world-0", "Leaders meet to agree a new climate fund", "world", 95, "BBC News")
         headline("ai-0", "A new open model tops the coding charts", "ai", 150, "The Verge")
@@ -158,7 +163,7 @@ class BriefScreensTest {
                 core.addOnBoardSized("Plan Saturday's football run with Sam", today, 120)
                 core.addWaiting("Quote for the new fence", "Casey", 0)
                 core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
-                core.startFast(720)
+                core.startFast(ShotLife.fastMinutesAt(7 * 60 + 40)) // the shots' one fast, from 03:45 (Fasting's too)
             }
             core.tick()
         }

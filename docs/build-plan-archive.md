@@ -5632,6 +5632,14 @@ set's call assistant switch (Setup's full shot on; Health's full shot now sets W
 Ask, Setup and WatchHealth screen tests read it. Left of A8: the Wed/Thu events and the fast across Brief, Calendar, Board,
 Bedside, Tomorrow and Fasting.
 
+Slice 13 (2026-11-11): **A8 done, the week and the fast** (test only, Fold). `ShotLife` gains `WeekEvent` and `WEEK`
+(the swim Wed 18:30, the quarterly planning Wed 10:00 at Harbour House, the dentist Wed 13:45, the call with Priya Wed
+17:00, the parents' evening Thu 09:30) and `FAST_STARTED_MIN` (03:45 Wed) with `fastMinutesAt`. BriefScreensTest,
+CalendarScreensTest and BedsideScreensTest seed their events from it (the Calendar had the planning meeting on Thursday,
+the brief lacked the dentist, the call and Thursday, the bedside lacked the call); the "one event" shots keep the swim.
+BriefScreensTest's fast now started at 03:45 like FastingScreensTest's (it was 12 h before 07:40). BoardScreensTest and
+TomorrowScreensTest seed tasks only, which no other shot contradicts. A8 is closed; next A9.
+
 
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 

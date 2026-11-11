@@ -132,18 +132,18 @@ class BedsideScreensTest {
         if (scene == Scene.EMPTY) return
         var k = 0
         val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
-        fun event(id: String, title: String, start: Long, end: Long, place: String? = null) =
-            mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
-                put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
+        fun event(e: ShotLife.WeekEvent) =
+            mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
+                put(EventFields.TITLE, e.title.fv())
+                put(EventFields.START_AT, at(e.startMin / 60, e.startMin % 60, e.day).fv())
+                put(EventFields.END_AT, at(e.endMin / 60, e.endMin % 60, e.day).fv())
                 put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
-                put(EventFields.CALENDAR, "Personal".fv())
-                place?.let { put(EventFields.LOCATION, it.fv()) }
+                put(EventFields.CALENDAR, e.calendar.fv())
+                e.place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("ev1", "Quarterly planning with the design and engineering leads", at(10, 0), at(11, 30), place = "Harbour House, Dock Street")
-        // Within the hour, so it is what Up next names (Today's next event looks an hour ahead, TimelineRules.UP_NEXT_WINDOW_MIN).
-        event("ev2", "Dentist", at(13, 45), at(14, 15), place = "Oakfield Dental")
-        event("ev3", "Swimming lesson", at(18, 30), at(19, 15), place = "Oakfield Leisure Centre")
-        event("ev4", "Parents' evening at Oakfield School", at(9, 30, day = 22), at(10, 0, day = 22))
+        // The shots' one week (ShotLife, walk-through A8), as the brief and the Calendar show it. The dentist at 13:45 is
+        // within the hour of the day scene's 13:00, so it is what Up next names (TimelineRules.UP_NEXT_WINDOW_MIN).
+        ShotLife.WEEK.forEach(::event)
         headline("top-0", "Rail fares to rise less than expected next year", "top", 40, "BBC News")
         headline("world-0", "Leaders meet to agree a new climate fund", "world", 95, "BBC News")
     }

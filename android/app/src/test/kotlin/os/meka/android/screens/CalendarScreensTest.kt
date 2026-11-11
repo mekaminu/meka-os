@@ -79,7 +79,7 @@ class CalendarScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private val longTitle = "Quarterly planning with the design and engineering leads"
+    private val longTitle = ShotLife.PLANNING.title
 
     private fun titles(fill: Fill): List<String> = when (fill) {
         Fill.EMPTY -> emptyList()
@@ -100,11 +100,13 @@ class CalendarScreensTest {
                 if (allDay) put(EventFields.ALL_DAY, true.fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("ev1", "Swimming lesson", at(21, 18, 30), at(21, 19, 15), "Kids", place = "Oakfield Leisure Centre")
+        fun weekEvent(e: ShotLife.WeekEvent) =
+            event(e.id, e.title, at(e.day, e.startMin / 60, e.startMin % 60), at(e.day, e.endMin / 60, e.endMin % 60), e.calendar, e.place)
+        weekEvent(ShotLife.SWIM)
         if (fill != Fill.MANY) return
-        event("ev2", "Dentist", at(21, 13, 45), at(21, 14, 15), "Personal", place = "Oakfield Dental") // the bedside's dentist (walk-through A16)
-        event("ev3", "Call with Priya", at(21, 17, 0), at(21, 17, 45), "Personal")
-        event("ev4", longTitle, at(22, 10, 0), at(22, 11, 30), "Personal")
+        // The shots' one week (ShotLife, walk-through A8): the planning meeting on Wednesday morning as the brief and the
+        // bedside have it (it was on Thursday here), Thursday's parents' evening as the bedside has it.
+        ShotLife.WEEK.drop(1).forEach(::weekEvent)
         event("ev5", "Inset day", utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
         event("ev6", "Football training", at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
         if (!hand) return

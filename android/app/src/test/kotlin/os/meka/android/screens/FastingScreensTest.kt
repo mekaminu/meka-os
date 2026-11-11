@@ -98,8 +98,8 @@ class FastingScreensTest {
                 }
                 clock = now
             }
-            // A fast running 13½ hours: started at 03:45 today.
-            if (fill != Fill.EMPTY) core.startFast(13 * 60 + 30)
+            // A fast running 13½ hours: the shots' one fast, started at 03:45 today (ShotLife; the brief's too).
+            if (fill != Fill.EMPTY) core.startFast(ShotLife.fastMinutesAt(17 * 60 + 15))
             core.tick()
         }
         return core
