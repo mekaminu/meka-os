@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -183,7 +185,8 @@ internal fun VoiceMessagePlayer(
                     style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) {
                         if (on) { haptics.tick(); stop() } else { haptics.light(); start() }
-                    }.padding(vertical = MekaSpace.xs)
+                    // A full 48 dp to tap (the words stay centred in it).
+                    }.heightIn(min = 48.dp).wrapContentHeight()
                         .semantics { contentDescription = if (on) "Stop $spokenWhat" else "Play $spokenWhat" },
                 )
             }
