@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Team simpler</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.35}}
+.live{animation:breathe 1.8s ease-in-out infinite}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+.chev{transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.in,.live{animation:none}.chev{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;min-height:1100px;box-sizing:border-box;padding:16px 16px 28px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative">
+
+<button type="button" style="border:0;background:transparent;color:#c9b37e;font-size:13px;text-align:left;padding:0;height:28px">‹ Ask</button>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:28px;font-weight:700">Your team</span><span style="font-size:13px;color:#8f897f">{{subtitle}}</span></div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="3"><div style="background:#111113;border:1px solid #1a1a1d;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:1px"><span style="{{t.numStyle}}">{{t.n}}</span><span style="font-size:11px;color:#8f897f">{{t.l}}</span></div></sc-for>
+</div>
+
+<sc-if value="{{hasWaiting}}" hint-placeholder-val="{{true}}">
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:8px;padding:13px 14px 6px"><span style="font-size:15px;font-weight:600">Waiting on you</span><span style="font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#2a2418;color:#e0b860">{{waitCount}}</span></div>
+<div style="display:flex;flex-direction:column;padding:0 14px 6px">
+<sc-for list="{{waiting}}" as="w" hint-placeholder-count="4">
+<button type="button" onClick="{{w.go}}" class="in" style="border:0;border-top:1px solid #1a1a1d;background:transparent;color:#ededed;display:flex;align-items:center;gap:10px;min-height:52px;text-align:left;padding:0">
+<span style="{{w.icon}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{w.path}}"></path></svg></span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14px;font-weight:500">{{w.what}}</span><span style="font-size:12px;color:#8f897f">{{w.who}}</span></span>
+<span style="font-size:12.5px;color:#c9b37e;flex-shrink:0">{{w.cta}} ›</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<div style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px"><span style="font-size:15px;font-weight:600">Helpers</span><span style="font-size:12px;color:#8f897f">tap one for its day</span></div>
+<div style="display:flex;flex-direction:column;padding:0 14px 6px">
+<sc-for list="{{helpers}}" as="h" hint-placeholder-count="5">
+<div style="border-top:1px solid #1a1a1d">
+<button type="button" onClick="{{h.toggle}}" aria-expanded="{{h.open}}" style="width:100%;border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:10px;min-height:56px;text-align:left;padding:0">
+<span style="{{h.icon}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{h.path}}"></path></svg></span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+<span style="display:flex;gap:8px;align-items:center"><span style="font-size:14.5px;font-weight:600">{{h.name}}</span><span style="display:flex;gap:5px;align-items:center;font-size:11.5px;color:#8f897f"><span class="{{h.dotClass}}" style="{{h.dot}}"></span>{{h.status}}</span></span>
+<span style="font-size:12.5px;color:#a8a29a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{h.today}}</span>
+</span>
+<span class="chev" style="{{h.chev}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a8a29a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+</button>
+<sc-if value="{{h.open}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;flex-direction:column;gap:8px;padding:0 0 12px 44px">
+<span style="font-size:12px;color:#8f897f">{{h.role}}</span>
+<div style="display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{h.log}}" as="l" hint-placeholder-count="3"><span style="display:flex;gap:10px;font-size:12.5px"><span style="width:38px;color:#6f6a62;flex-shrink:0">{{l.t}}</span><span style="color:#d8d2c6">{{l.w}}</span></span></sc-for>
+</div>
+<div style="display:flex;gap:6px;padding-top:2px">
+<button type="button" onClick="{{h.openGo}}" style="border:0;border-radius:999px;height:32px;padding:0 13px;font-size:12.5px;background:#1d1d20;color:#c9b37e">{{h.openLabel}}</button>
+<button type="button" onClick="{{h.pause}}" style="border:0;border-radius:999px;height:32px;padding:0 13px;font-size:12.5px;background:#1d1d20;color:#c9b37e">{{h.pauseLabel}}</button>
+<button type="button" onClick="{{h.all}}" style="border:0;border-radius:999px;height:32px;padding:0 13px;font-size:12.5px;background:transparent;color:#c9b37e">Whole day ›</button>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;background:#111113;border:1px solid #1a1a1d;border-radius:999px;height:46px;padding:0 6px 0 16px">
+<span style="flex:1;font-size:14px;color:#6f6a62">Ask the team…</span>
+<button type="button" onClick="{{ask}}" aria-label="Speak" style="width:34px;height:34px;border-radius:17px;border:1px solid #c9b37e;background:transparent;color:#c9b37e;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+</div>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:0 2px">Each one shows what it did. None sends messages, pays or trades by itself.</div>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:sticky;bottom:16px;align-self:center;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={open:'',paused:{},done:{},toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var say=function(t){return function(){self.setState({toast:t});};};
+var P={obi:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3v18',inbox:'M4 6h16v12H4zM4 7l8 6 8-6',calls:'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z',money:'M3 7h18v10H3zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',trade:'M3 17l6-6 4 4 8-8M15 7h6v6'};
+var C={obi:['#1b1a14','#c9b37e'],inbox:['#141b28','#9db4e0'],calls:['#14201d','#7fb3a8'],money:['#1b1a14','#d8b36a'],trade:['#1a1420','#c9a0e0']};
+var icon=function(k){return 'width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:'+C[k][0]+';color:'+C[k][1];};
+var H=[
+ {k:'obi',name:'Obi',status:'Ready',live:false,role:'Your assistant on the orb and in Ask',today:'14 answers · 3 cards made',openLabel:'Open Ask',log:[['12:40','Answered “what’s on tonight”'],['11:05','Made a card: book the dentist'],['08:10','Read your morning brief']]},
+ {k:'inbox',name:'Inbox',status:'Working',live:true,role:'Sorts and tidies your three mailboxes',today:'46 sorted · 12 tidied',openLabel:'Open mail',log:[['13:02','Tidied 4 promos'],['12:15','Flagged 2 emails for you'],['09:30','Sorted 31 overnight emails']]},
+ {k:'calls',name:'Calls',status:'Ready',live:false,role:'Screens calls and takes messages in Work mode',today:'3 screened · 1 message',openLabel:'Open calls',log:[['11:48','Took a message from the garage'],['10:20','Turned away a sales call'],['09:55','Declined a WhatsApp call · sent your at-work message']]},
+ {k:'money',name:'Money',status:'Idle',live:false,role:'Checks your accounts and renewals each week',today:'Synced 6 accounts',openLabel:'Open Money',log:[['07:00','Synced 6 accounts'],['07:01','Spotted a renewal next week']]},
+ {k:'trade',name:'Kestrel',status:'Watching',live:true,role:'Trading agent · runs outside Navilife, asks before any trade',today:'No trades today',openLabel:'Open Trading',log:[['12:58','Asked for your answer on 1 trade'],['06:00','Started watching']]}];
+var W=[
+ {k:'obi',what:'1 card to tap',who:'Obi · book the dentist',cta:'Open'},
+ {k:'inbox',what:'2 emails to answer',who:'Inbox · flagged at 12:15',cta:'Open'},
+ {k:'money',what:'1 idea to look at',who:'Money · a renewal next week',cta:'Open'},
+ {k:'trade',what:'1 trade to answer',who:'Kestrel · answered in Needs you, with your fingerprint',cta:'Needs you'}].filter(function(w){return !s.done[w.k];});
+var working=H.filter(function(h){return !s.paused[h.k];}).length;
+return {
+ subtitle:W.length?W.length+' things wait on you · '+working+' helpers on':'All clear · '+working+' helpers on',
+ tiles:[{n:String(working),l:'working',numStyle:'font-size:19px;font-weight:600'},{n:String(W.length),l:'need you',numStyle:'font-size:19px;font-weight:600;color:'+(W.length?'#e0b860':'#ededed')},{n:'64',l:'done today',numStyle:'font-size:19px;font-weight:600'}],
+ hasWaiting:W.length>0,waitCount:String(W.length),
+ waiting:W.map(function(w){return {what:w.what,who:w.who,cta:w.cta,icon:icon(w.k),path:P[w.k],go:function(){var d=Object.assign({},s.done);d[w.k]=1;self.setState({done:d,toast:'Opens it · the row leaves once you have dealt with it'});}};}),
+ helpers:H.map(function(h){var open=s.open===h.k,paused=!!s.paused[h.k];
+  return {name:h.name,status:paused?'Paused':h.status,today:paused?'Paused until you turn it back on':h.today,role:h.role,icon:icon(h.k),path:P[h.k],open:open,
+   dot:'width:7px;height:7px;border-radius:4px;background:'+(paused?'#6f6a62':(h.live?'#7fc98f':'#8f897f')),dotClass:(h.live&&!paused)?'live':'',
+   chev:'display:flex;transform:rotate('+(open?180:0)+'deg)',
+   toggle:function(){self.setState({open:open?'':h.k,toast:''});},
+   log:h.log.map(function(l){return {t:l[0],w:l[1]};}),
+   openLabel:h.openLabel,openGo:say(h.openLabel+' opens'),
+   pauseLabel:paused?'Turn back on':'Pause',pause:function(){var p=Object.assign({},s.paused);p[h.k]=!paused;self.setState({paused:p,toast:h.name+(paused?' is back on':' paused · Undo')});},
+   all:say('The whole day’s log for '+h.name)};}),
+ ask:say('Ask anything: “what did Inbox do this morning?”'),
+ toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
