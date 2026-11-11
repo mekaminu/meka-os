@@ -10804,6 +10804,25 @@ class MekaCore(
         return bytes?.takeIf { it.isNotEmpty() && it.size <= os.meka.core.domain.VoiceRecordingRules.MAX_BYTES }
     }
 
+    /**
+     * Recordings with both voices, slice 2: a booking call's whole recording (Obi and the business) as MP3, while its
+     * result card offers ▶ Play ([os.meka.core.domain.BookingCallRow.canPlay]); null otherwise or offline. Never saved.
+     */
+    suspend fun bookingCallAudio(id: String): ByteArray? {
+        if (!os.meka.core.domain.CallRecordingRules.isBookingId(id)) return null
+        val offered = onCore {
+            bookingCalls.all().any { it.id == id && it.state.finished && os.meka.core.domain.CallRecordingRules.bookingPlayable(it.audio, it.endedAtMs, nowMs()) }
+        }
+        if (!offered) return null
+        val api = voiceMessageApi ?: return null
+        val bytes = try { api.bookingCallAudio(id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return bytes?.takeIf { it.isNotEmpty() && it.size <= os.meka.core.domain.VoiceRecordingRules.MAX_BYTES }
+    }
+
+    /** [bookingCallAudio] as base64, for the Mac. */
+    suspend fun bookingCallAudioBase64(id: String): String? =
+        bookingCallAudio(id)?.let { kotlin.io.encoding.Base64.encode(it) }
+
     /** [voiceMessageAudio] as base64, for the Mac (Swift turns it into `Data`). */
     suspend fun voiceMessageAudioBase64(id: String): String? =
         voiceMessageAudio(id)?.let { kotlin.io.encoding.Base64.encode(it) }

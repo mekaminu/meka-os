@@ -2342,6 +2342,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.PRIVACY.contains("7 days"))
     }
 
+    func testBookingCallRecordingReachesSwift() {
+        // Recordings with both voices, slice 2: the result card's player, and only a call card's id is ever asked for.
+        let rules = CallRecordingRules.shared
+        XCTAssertTrue(rules.isBookingId(id: "0123456789abcdef0123456789abcdef"))
+        XCTAssertFalse(rules.isBookingId(id: "h0123456789abcdef"))
+        XCTAssertEqual(rules.BOOKING_LABEL, "Listen to the call")
+        XCTAssertTrue(rules.BOOKING_FOOT.contains("7 days"))
+        XCTAssertFalse(rules.bookingPlayable(audio: true, endedAtMs: nil, nowMs: 1_000, keepDays: 7))
+        XCTAssertTrue(rules.bookingPlayable(audio: true, endedAtMs: KotlinLong(value: 500), nowMs: 1_000, keepDays: 7))
+    }
+
     func testPlayMyMessagesReachesSwift() {
         // Call assistant polish 8c: "play my messages" in Talk is played on the Mac, step by step, with no AI call.
         XCTAssertTrue(VoicePlaylistRules.shared.isPlayRequest(utterance: "Play my messages"))

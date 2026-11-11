@@ -182,6 +182,8 @@ class WorkingOnScreensTest {
             BookingCallFields.APPROVED_AT to (now - 7_000_000L).fv(), BookingCallFields.CALLED_AT to (now - 3_700_000L).fv(),
             BookingCallFields.ENDED_AT to (now - 3_600_000L).fv(), BookingCallFields.SECONDS to 95L.fv(),
             BookingCallFields.RESULT to "Not booked · they're full at 7 on Saturday · they offered 21:00".fv(),
+            // Recordings with both voices, slice 2: the server kept the call's recording.
+            BookingCallFields.AUDIO to true.fv(),
         ))
     }
 
@@ -227,7 +229,8 @@ class WorkingOnScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", name))
         val lines = listOf(v.summary, WorkingOnRules.INTRO, ObiJobRules.INTRO, ObiJobRules.EMPTY, ObiJobRules.DRAFT_FOOT) +
             v.cards.flatMap { listOfNotNull(it.did, it.need) } + v.jobs.flatMap { listOfNotNull(it.title, it.status, it.did, it.need) } +
-            v.switches.map { it.line } + v.calls.flatMap { listOfNotNull(it.status, it.result, it.lengthLine, it.triedAgainLine) }
+            v.switches.map { it.line } + v.calls.flatMap { listOfNotNull(it.status, it.result, it.lengthLine, it.triedAgainLine) } +
+            (if (v.calls.any { it.canPlay }) listOf(os.meka.core.domain.CallRecordingRules.BOOKING_FOOT) else emptyList())
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -260,6 +263,9 @@ class WorkingOnScreensTest {
             Fill.CALL -> {
                 val r = v.calls.singleOrNull() ?: fail("$name: ${v.calls.size} call cards, not 1")
                 if (!r.canTryAgain) fail("$name: a not-booked call can't be tried again")
+                if (!r.canPlay) fail("$name: the kept recording isn't offered")
+                if (compose.onAllNodes(hasTestTag("call-recording"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Listen to the call")
+                if (!onScreen(os.meka.core.domain.CallRecordingRules.BOOKING_LABEL.uppercase())) fail("$name: the recording's label isn't shown")
                 if (compose.onAllNodes(hasTestTag("call-try-again"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Try again")
                 if (!onScreen("they offered 21:00")) fail("$name: the result isn't shown")
             }

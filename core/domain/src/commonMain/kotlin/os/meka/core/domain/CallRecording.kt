@@ -30,4 +30,35 @@ object CallRecordingRules {
 
     /** Only a finished recording is kept; anything else (absent or failed) is only deleted. */
     fun completed(status: String?): Boolean = status?.trim()?.lowercase() == "completed"
+
+    // ---- Booking calls (slice 2): Obi's outbound calls are recorded the same way, kept beside the call card ----
+
+    /** The result card's label over the player. */
+    const val BOOKING_LABEL = "Listen to the call"
+    /** Read out with the player, and the player's own words for what it plays. */
+    const val BOOKING_SPOKEN = "the call's recording"
+    /** Under the player: whose voices, how long it's kept. */
+    const val BOOKING_FOOT = "Obi and them, from Obi's first word · kept 7 days, then deleted"
+
+    private val bookingIdPattern = Regex("^[0-9a-f]{32}$")
+    private val householdPattern = Regex("^[A-Za-z0-9_-]{1,64}$")
+
+    /** A call card's id as the apps make them ([IdGenerator]); anything else is refused. */
+    fun isBookingId(id: String): Boolean = bookingIdPattern.matches(id)
+
+    /**
+     * The bucket key of a call card's recording, under the household's recordings prefix so the hourly sweep (and
+     * "Don't keep") covers it like a caller's message; null for an id or household that couldn't be one.
+     */
+    fun bookingKey(householdId: String, bookingId: String): String? {
+        if (!householdPattern.matches(householdId) || !isBookingId(bookingId)) return null
+        return "${VoiceRecordingRules.PREFIX}$householdId/call-$bookingId.mp3"
+    }
+
+    /**
+     * Whether a call card's recording is offered: kept ([audio]), the call over ([endedAtMs]) and younger than the
+     * chosen [keepDays] (7; none with "Don't keep").
+     */
+    fun bookingPlayable(audio: Boolean, endedAtMs: Long?, nowMs: Long, keepDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS): Boolean =
+        audio && endedAtMs != null && nowMs - endedAtMs in 0 until VoiceRecordingRules.keepMs(keepDays)
 }

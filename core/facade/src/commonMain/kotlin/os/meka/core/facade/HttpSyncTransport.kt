@@ -585,6 +585,8 @@ interface NotifyDiagnosticsApi {
  */
 interface VoiceMessageApi {
     suspend fun voiceMessageAudio(id: String): ByteArray?
+    /** Recordings with both voices, slice 2: a booking call's recording, by its call card's id; null when none is kept. */
+    suspend fun bookingCallAudio(id: String): ByteArray? = null
 }
 
 /**
@@ -814,16 +816,22 @@ class HttpSyncTransport(
         }
     }
 
-    override suspend fun voiceMessageAudio(id: String): ByteArray? {
+    override suspend fun voiceMessageAudio(id: String): ByteArray? =
+        audioAt(os.meka.core.wire.VoiceMessageCodec.PATH, os.meka.core.wire.VoiceMessageCodec.encodeRequest(id))
+
+    override suspend fun bookingCallAudio(id: String): ByteArray? =
+        audioAt(os.meka.core.wire.VoiceMessageCodec.BOOKING_PATH, os.meka.core.wire.VoiceMessageCodec.encodeBookingRequest(id))
+
+    /** A kept recording at [path] for the signed [body]: raw MP3, or null (404/403, not audio, too large). */
+    private suspend fun audioAt(path: String, body: String): ByteArray? {
         val codec = os.meka.core.wire.VoiceMessageCodec
-        val body = codec.encodeRequest(id)
         prepare() // the route requires the device's signing key on the server
-        val resp = send(codec.PATH, body)
+        val resp = send(path, body)
         return when {
-            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.PATH}")
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from $path")
             // 404: no recording kept (or an older server); 403: this device's key isn't registered yet.
             resp.status.value == 404 || resp.status.value == 403 -> null
-            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
             resp.contentType()?.match(AUDIO_MPEG) != true -> null
             else -> {
                 val size = resp.contentLength()

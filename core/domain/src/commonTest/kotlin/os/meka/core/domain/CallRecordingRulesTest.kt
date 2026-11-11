@@ -36,5 +36,6 @@ class CallRecordingRulesTest {
     fun theRecordingsNoteSaysLiveCallsAreRecorded() {
         assertTrue("live calls with both voices" in CallsSettingsRules.RECORDINGS_NOTE)
         assertTrue("Obi tells callers" in CallsSettingsRules.RECORDINGS_NOTE)
+        assertTrue("his booking calls too" in CallsSettingsRules.RECORDINGS_NOTE)
     }
 }

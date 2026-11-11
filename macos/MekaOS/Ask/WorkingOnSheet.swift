@@ -328,6 +328,18 @@ struct WorkingOnSheet: View {
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
             .padding(.top, MekaSpace.xs)
         }
+        // Recordings with both voices, slice 2: the whole call, Obi and them, played from memory.
+        if r.canPlay {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(CallRecordingRules.shared.BOOKING_LABEL.uppercased())
+                    .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
+                VoiceMessagePlayerView(id: id, palette: palette, booking: true)
+                Text(LoneWordGlue.shared.kept(line: CallRecordingRules.shared.BOOKING_FOOT))
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            .accessibilityIdentifier("call-recording")
+            .padding(.top, MekaSpace.xs)
+        }
         if let back = r.calledBackLine {
             Text(LoneWordGlue.shared.kept(line: back)).font(MekaType.caption).foregroundStyle(palette.accent)
                 .padding(.top, MekaSpace.xs)

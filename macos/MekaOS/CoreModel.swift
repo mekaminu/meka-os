@@ -3419,6 +3419,14 @@ final class CoreModel {
         return data
     }
 
+    /// Recordings with both voices, slice 2: a booking call's whole recording (Obi and the business) from MEKA's server,
+    /// while its result card offers ▶ Play; played from memory, never saved. Only Strings cross.
+    func bookingCallAudio(_ id: String) async -> Data? {
+        guard let core else { return nil }
+        guard let b64 = try? await core.bookingCallAudioBase64(id: id), let data = Data(base64Encoded: b64) else { return nil }
+        return data
+    }
+
     /// The player's waveform (call notifications slice 7) for a recording [voiceMessageAudio] fetched: the core reads
     /// the MP3's frames in memory; only a String goes in and plain Doubles come back, on the main actor.
     func voiceWaveform(_ data: Data) -> [Double] {

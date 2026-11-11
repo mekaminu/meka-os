@@ -79,6 +79,8 @@ internal fun VoiceMessagePlayer(
     /** Start playing as soon as it appears (▶ Play on the urgent alert), once; [onAutoStarted] then clears the ask. */
     autoStart: Boolean = false,
     onAutoStarted: () -> Unit = {},
+    /** What it plays, for TalkBack ("Play the voice message"; a booking call's "the call's recording"). */
+    spokenWhat: String = "the voice message",
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -182,7 +184,7 @@ internal fun VoiceMessagePlayer(
                     modifier = Modifier.clickable(role = Role.Button) {
                         if (on) { haptics.tick(); stop() } else { haptics.light(); start() }
                     }.padding(vertical = MekaSpace.xs)
-                        .semantics { contentDescription = if (on) "Stop the voice message" else "Play the voice message" },
+                        .semantics { contentDescription = if (on) "Stop $spokenWhat" else "Play $spokenWhat" },
                 )
             }
             val line = when (state) {

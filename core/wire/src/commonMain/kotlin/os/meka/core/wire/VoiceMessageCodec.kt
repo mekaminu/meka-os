@@ -40,6 +40,30 @@ object VoiceMessageCodec {
         throw WireFormatException("bad voice message request: ${e.message}", e)
     }
 
+    // ---- Recordings with both voices, slice 2: a booking call's recording, by its call card's id ----
+
+    /** `POST` with one call card's id; the server answers with the call's recording as MP3, or 404. */
+    const val BOOKING_PATH = "/v1/booking-call/audio"
+    private val bookingIdPattern = Regex("^[0-9a-f]{32}$")
+
+    fun encodeBookingRequest(id: String): String {
+        require(bookingIdPattern.matches(id)) { "not a call card id" }
+        return buildJsonObject { put("w", WireCodec.VERSION); put("id", id) }.toString()
+    }
+
+    /** The call card's id; anything that couldn't be one is refused. */
+    fun decodeBookingRequest(body: String): String = try {
+        val o = json.parseToJsonElement(body).jsonObject
+        checkVersion(o)
+        val id = (o["id"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw IllegalArgumentException("id")
+        if (!bookingIdPattern.matches(id)) throw IllegalArgumentException("id")
+        id
+    } catch (e: WireFormatException) {
+        throw e
+    } catch (e: Exception) {
+        throw WireFormatException("bad booking call recording request: ${e.message}", e)
+    }
+
     private fun checkVersion(o: JsonObject) {
         val w = (o["w"] as? JsonPrimitive)?.intOrNull ?: throw IllegalArgumentException("w")
         if (w != WireCodec.VERSION) throw IllegalArgumentException("unsupported wire version $w")

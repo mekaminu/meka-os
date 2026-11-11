@@ -276,8 +276,7 @@ class LiveCallLine(
         val slots = if (CallsSettingsRules.offersSlots(slotsOn, knows)) callbackSlots(hh, now) else emptyList()
         val labels = slots.map { LiveCallRules.callbackLabel(it, now, calendar) }
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        val keepDays = VoiceRecordingRules.keepDays((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.RECORDING_DAYS) as? FieldValue.Int64)?.value)
-        val recorded = CallRecordingRules.records(keepDays, runCatching { recordsCalls() }.getOrDefault(false))
+        val recorded = records(hh)
         val instruction = LiveCallRules.instruction(atWork, knows, first, null, null, labels, recorded = recorded) +
             (card?.let { "\n" + BookingCallbackRules.instruction(it, first, now, calendar).trimEnd() } ?: "")
         tickets[token] = LiveCallTicket(
@@ -295,13 +294,22 @@ class LiveCallLine(
      * Slice 2b: a one-use ticket for an outbound booking call on card [cardId] to [e164], with Obi's [instruction]. Its
      * call id is bound once the phone service has made the call ([bind]). Null when Gemini isn't set up or too many wait.
      */
-    fun bookingTicket(hh: String, provider: String, cardId: String, e164: String, instruction: String): String? = runCatching {
+    /**
+     * Recordings with both voices: whether [hh]'s calls are recorded now ("Keep callers' recordings" isn't Don't keep and
+     * the server has somewhere to keep them); false when it can't be read.
+     */
+    fun records(hh: String): Boolean = runCatching {
+        val keepDays = VoiceRecordingRules.keepDays((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.RECORDING_DAYS) as? FieldValue.Int64)?.value)
+        CallRecordingRules.records(keepDays, recordsCalls())
+    }.getOrDefault(false)
+
+    fun bookingTicket(hh: String, provider: String, cardId: String, e164: String, instruction: String, recorded: Boolean = false): String? = runCatching {
         if (!configured()) return null
         val now = nowMs()
         tickets.entries.removeIf { now - it.value.mintedAtMs > it.value.ttlMs }
         if (tickets.size >= MAX_TICKETS) return null
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        tickets[token] = LiveCallTicket(token, hh, provider, "", null, false, instruction, now, bookingId = cardId, bookingNumber = e164)
+        tickets[token] = LiveCallTicket(token, hh, provider, "", null, false, instruction, now, bookingId = cardId, bookingNumber = e164, recorded = recorded)
         token
     }.getOrNull()
 

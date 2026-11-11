@@ -61,6 +61,7 @@ import os.meka.android.designsystem.TouchPill
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.core.domain.BookingCallRow
+import os.meka.core.domain.CallRecordingRules
 import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.BookingNumberRules
@@ -93,6 +94,8 @@ fun BookingCallCard(
     onPeople: (Int) -> Unit, onCall: () -> Unit, onEdit: () -> Unit, onCancel: () -> Unit,
     onHangUp: () -> Unit = {}, onAddToCalendar: () -> Unit = {}, onRead: () -> Unit = {}, onTakeOver: () -> Unit = {},
     onListen: () -> Unit = {}, onTryAgain: () -> Unit = {}, onUseFound: () -> Unit = {},
+    /** Recordings with both voices, slice 2: the call's recording for ▶ Play, fetched when tapped. */
+    audio: suspend (String) -> ByteArray? = { null },
 ) {
     val reduced = Meka.reducedMotion
     Column(
@@ -111,7 +114,7 @@ fun BookingCallCard(
             return@Column
         }
         if (!r.showBrief) {
-            ResultView(r, onAddToCalendar, onRead, onTryAgain)
+            ResultView(r, onAddToCalendar, onRead, onTryAgain, audio)
             return@Column
         }
         Text(LoneWordGlue.kept(r.numberLine), style = MekaType.caption,
@@ -222,7 +225,10 @@ private fun Words(lines: List<BookingWordLine>, tag: String) {
 
 /** Slice 3: the result card: how long, the tiles, the result line, the calendar row and Read the call. */
 @Composable
-private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: () -> Unit, onTryAgain: () -> Unit) {
+private fun ResultView(
+    r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: () -> Unit, onTryAgain: () -> Unit,
+    audio: suspend (String) -> ByteArray? = { null },
+) {
     r.lengthLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
     if (r.resultTiles.isNotEmpty()) {
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -243,6 +249,14 @@ private fun ResultView(r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: (
                 r.canAddToCalendar -> TouchPill(BookingLiveRules.ADD_TO_CALENDAR, Meka.colors.accent, Meka.colors.onAccent,
                     spoken = "${BookingLiveRules.ADD_TO_CALENDAR}: ${r.business}", modifier = Modifier.testTag("call-add-calendar"), onClick = onAddToCalendar)
             }
+        }
+    }
+    // Recordings with both voices, slice 2: the whole call, Obi and them, played from memory (the voice message player).
+    if (r.canPlay) {
+        Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).testTag("call-recording")) {
+            Text(CallRecordingRules.BOOKING_LABEL.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+            os.meka.android.work.VoiceMessagePlayer(r.id, audio, spokenWhat = CallRecordingRules.BOOKING_SPOKEN)
+            Text(LoneWordGlue.kept(CallRecordingRules.BOOKING_FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
     }
     r.calledBackLine?.let {

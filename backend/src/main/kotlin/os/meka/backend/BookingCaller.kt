@@ -9,6 +9,8 @@ import os.meka.core.domain.BookingCallRules
 import os.meka.core.domain.BookingCallState
 import os.meka.core.domain.BookingDialRules
 import os.meka.core.domain.BookingLiveRules
+import os.meka.core.domain.CallRecordingRules
+import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LocalCalendar
@@ -54,12 +56,20 @@ class BookingCaller(
     private val listen: BookingListen? = null,
     private val listenTwiml: () -> String = { "" },
     private val listenStatusUrl: String = "",
+    /** Recordings with both voices, slice 2: where a booking call's recording is kept (the callers' recordings bucket). */
+    private val recordings: RecordingStore? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
     private val rng = SecureRandom()
 
     /** Calls rung and not yet over, by the phone service's call id: the household and the card. Memory only. */
     private val pending = ConcurrentHashMap<String, Pair<String, String>>()
+
+    /**
+     * Recordings with both voices: calls rung lately, by call id (household, card, when), kept a while after the call
+     * so its recording, reported after the call's end, finds its card. Memory only.
+     */
+    private val rung = ConcurrentHashMap<String, Triple<String, String, Long>>()
 
     @Volatile var lastReport: String = "not run yet"
         private set
@@ -85,9 +95,10 @@ class BookingCaller(
         var report = if (onCall) "on a call" else "idle"
         // Slice 3: a call's words are kept 7 days, then blanked.
         for (c in cards.filter { BookingLiveRules.shouldForget(it, t) }) {
+            if (c.audio) CallRecordingRules.bookingKey(hh, c.id)?.let { k -> runCatching { recordings?.delete(k) } }
             if (write(hh, EntityTypes.BOOKING_CALL, c.id, mapOf(
                     BookingCallFields.TRANSCRIPT to FieldValue.Text(""), BookingCallFields.WORDS to FieldValue.Text(""),
-                ), heads[c.id])) wrote = true
+                ) + (if (c.audio) mapOf(BookingCallFields.AUDIO to FieldValue.Bool(false)) else emptyMap()), heads[c.id])) wrote = true
         }
         // Slice 4: with "Booking calls" off (absent = on) approved cards wait; nothing rings.
         val bookingOn = read(hh, EntityTypes.CONTEXT_MODE)[WorkMode.ENTITY_ID]?.get(WorkFields.CALL_BOOKING)?.value != FieldValue.Bool(false)
@@ -118,8 +129,10 @@ class BookingCaller(
             BookingCallFields.CALLED_AT to FieldValue.Int64(t),
         ), head)
         val first = shownName?.split(' ')?.firstOrNull()?.takeIf { n -> n.length in 1..30 && n.all { it.isLetter() || it in "-'" } }
-        val instruction = BookingDialRules.instruction(c, first, from, t, calendar)
-        val token = line.bookingTicket(hh, provider, c.id, e164, instruction)
+        // Recordings with both voices: only when it can be kept (a store, and not "Don't keep"); Obi then says so.
+        val recorded = recordings != null && line.records(hh)
+        val instruction = BookingDialRules.instruction(c, first, from, t, calendar, recorded)
+        val token = line.bookingTicket(hh, provider, c.id, e164, instruction, recorded)
             ?: return close(hh, c.id, BookingCallState.FAILED, BookingDialRules.DIAL_FAILED, from = BookingCallState.CALLING).let { true }
         val sid = runCatching { dialer!!.dial(e164, from, twiml(token), statusUrl, BookingDialRules.RING_SECONDS, BookingDialRules.LIMIT_SECONDS) }.getOrNull()
         if (sid == null) {
@@ -129,6 +142,8 @@ class BookingCaller(
         }
         line.bind(token, sid)
         pending[sid] = hh to c.id
+        rung.entries.removeIf { t - it.value.third > RUNG_KEEP_MS }
+        rung[sid] = Triple(hh, c.id, t)
         System.err.println("booking call: ringing a business for a call card") // no names, no numbers
         return true
     }
@@ -157,6 +172,8 @@ class BookingCaller(
         is VoiceEvent.BookingTakenDialed -> takenDialed(event)
         is VoiceEvent.BookingListenAnswered -> listenAnswered(event)
         is VoiceEvent.BookingListenStatus -> listenEnded(event)
+        // Kept off the request ([keepRecording]).
+        is VoiceEvent.BookingRecorded -> VoiceReply.Done
         is VoiceEvent.BookingStatus -> {
             val p = pending.remove(event.callId)
             // A call Obi talked on is closed by its session's end ([ended]); any other one by how it ended.
@@ -312,6 +329,56 @@ class BookingCaller(
         if (write(hh, EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.LISTENING_AT to FieldValue.Int64(-1)), head)) runCatching { onWritten(hh) }
     }
 
+    /**
+     * Recordings with both voices, slice 2: keeps a booking call's recording (both voices, from Obi's first word until
+     * his part ended) beside its call card ([CallRecordingRules.bookingKey]), so the result card offers ▶ Play. The card
+     * is closed when the stream ends, which may be just after the phone service says the recording is ready, so this
+     * waits up to [CallRecordingRules.WAIT_FOR_MESSAGE_MS] for it. Nothing is kept for a failed recording, a call this
+     * server didn't ring lately, or with "Don't keep". Returns whether it is now kept; the caller deletes the phone
+     * service's copy either way.
+     */
+    fun keepRecording(source: VoiceProvider, event: VoiceEvent.BookingRecorded, sleep: (Long) -> Unit = Thread::sleep): Boolean {
+        val store = recordings ?: return false
+        val recording = event.recording ?: return false
+        if (!CallRecordingRules.completed(event.status)) return false
+        val (hh, id, _) = rung[event.callId] ?: return false
+        if (keepDays(hh) <= 0) return false
+        val key = CallRecordingRules.bookingKey(hh, id) ?: return false
+        fun card() = read(hh, EntityTypes.BOOKING_CALL)[id]?.let { f -> BookingCallRules.read(id, f.mapValues { it.value.value }) }
+        var waited = 0L
+        while (card()?.state?.finished != true && waited < CallRecordingRules.WAIT_FOR_MESSAGE_MS) {
+            sleep(CallRecordingRules.WAIT_STEP_MS)
+            waited += CallRecordingRules.WAIT_STEP_MS
+        }
+        val c = card() ?: return false
+        if (!c.state.finished) return false
+        if (c.audio) return true
+        val audio = source.fetchRecording(recording)?.takeIf { it.isNotEmpty() && it.size <= VoiceRecordingRules.MAX_BYTES } ?: return false
+        store.put(key, audio)
+        if (write(hh, EntityTypes.BOOKING_CALL, id, mapOf(BookingCallFields.AUDIO to FieldValue.Bool(true)), read(hh, EntityTypes.BOOKING_CALL)[id])) {
+            runCatching { onWritten(hh) }
+        }
+        return true
+    }
+
+    /**
+     * A booking call's recording for a keyed device of [householdId] to play: only while its card offers it
+     * ([CallRecordingRules.bookingPlayable]: kept, the call over and within "Keep callers' recordings"). Null otherwise.
+     */
+    fun recording(householdId: String, bookingId: String): ByteArray? {
+        val store = recordings ?: return null
+        val key = CallRecordingRules.bookingKey(householdId, bookingId) ?: return null
+        val c = read(householdId, EntityTypes.BOOKING_CALL)[bookingId]?.let { f -> BookingCallRules.read(bookingId, f.mapValues { it.value.value }) }
+            ?: return null
+        if (!c.state.finished || !CallRecordingRules.bookingPlayable(c.audio, c.endedAtMs, now(), keepDays(householdId))) return null
+        return store.get(key)
+    }
+
+    /** The synced "Keep callers' recordings" choice, in days (0 = don't keep). Unreadable reads as the default. */
+    private fun keepDays(hh: String): Int = runCatching {
+        VoiceRecordingRules.keepDays((read(hh, EntityTypes.CONTEXT_MODE)[WorkMode.ENTITY_ID]?.get(WorkFields.RECORDING_DAYS)?.value as? FieldValue.Int64)?.value)
+    }.getOrDefault(VoiceRecordingRules.DEFAULT_KEEP_DAYS)
+
     /** Slice 3: whether he tapped Hang up on the card this booking call is for. */
     fun hangUpAsked(t: LiveCallTicket): Boolean {
         val id = t.bookingId ?: return false
@@ -400,6 +467,8 @@ class BookingCaller(
 
     companion object {
         const val LOOK_MS = 60_000L
+        /** How long a rung call is remembered for its recording: the longest call plus the wait for its recording. */
+        const val RUNG_KEEP_MS = 30 * 60_000L
     }
 }
 

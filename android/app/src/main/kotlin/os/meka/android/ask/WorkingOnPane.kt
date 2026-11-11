@@ -189,6 +189,8 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
             v.calls.forEachIndexed { i, r ->
                 BookingCallCard(
                     r, Modifier.appear(rememberAppearance(v.jobs.size + 3 + i)),
+                    // Recordings with both voices, slice 2: ▶ Play the whole call on its result card.
+                    audio = { id -> core.bookingCallAudio(id) },
                     onPeople = { n ->
                         haptics.tick()
                         scope.launch { view = runCatching { core.setBookingCallPeople(r.id, n) }.getOrNull() ?: view }

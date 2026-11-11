@@ -16,10 +16,14 @@ struct VoiceMessagePlayerView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let id: String
     let palette: MekaPalette
+    /// Recordings with both voices, slice 2: a booking call's whole recording (by its call card's id), not a voice message.
+    var booking: Bool = false
     @State private var playback = VoiceMessagePlayback()
     /// Where the pointer is on the waveform while dragging (0...1).
     @State private var scrub: Double?
     @State private var rise: Double = 0
+
+    private var spokenWhat: String { booking ? CallRecordingRules.shared.BOOKING_SPOKEN : "the voice message" }
 
     var body: some View {
         let rules = VoiceRecordingRules.shared
@@ -32,14 +36,15 @@ struct VoiceMessagePlayerView: View {
                         playback.stop()
                     } else {
                         MekaHaptics.light()
-                        let id = id, model = model
-                        playback.start(fetch: { await model.voiceMessageAudio(id) }, wave: { model.voiceWaveform($0) })
+                        let id = id, model = model, booking = booking
+                        playback.start(fetch: { booking ? await model.bookingCallAudio(id) : await model.voiceMessageAudio(id) },
+                                       wave: { model.voiceWaveform($0) })
                     }
                 }
                 .buttonStyle(MekaPressStyle())
                 .foregroundStyle(palette.accent)
                 .contentTransition(.opacity)
-                .accessibilityLabel(on ? "Stop the voice message" : "Play the voice message")
+                .accessibilityLabel(on ? "Stop \(spokenWhat)" : "Play \(spokenWhat)")
                 if let line = line(rules) {
                     Text(line)
                         .font(MekaType.caption).monospacedDigit()

@@ -27,4 +27,16 @@ class VoiceMessageCodecTest {
         assertFailsWith<WireFormatException> { VoiceMessageCodec.decodeRequest("not json") }
         assertFailsWith<IllegalArgumentException> { VoiceMessageCodec.encodeRequest("nope") }
     }
+
+    @Test
+    fun aBookingCallsRecordingIsAskedForByItsCardIdOnly() {
+        val card = "0123456789abcdef0123456789abcdef"
+        assertEquals("""{"w":${WireCodec.VERSION},"id":"$card"}""", VoiceMessageCodec.encodeBookingRequest(card))
+        assertEquals(card, VoiceMessageCodec.decodeBookingRequest(VoiceMessageCodec.encodeBookingRequest(card)))
+        for (bad in listOf(id, "../etc", card.uppercase(), card + "0", "")) {
+            assertFailsWith<WireFormatException>(bad) { VoiceMessageCodec.decodeBookingRequest("""{"w":${WireCodec.VERSION},"id":"$bad"}""") }
+        }
+        assertFailsWith<IllegalArgumentException> { VoiceMessageCodec.encodeBookingRequest(id) }
+        assertEquals("/v1/booking-call/audio", VoiceMessageCodec.BOOKING_PATH)
+    }
 }

@@ -120,10 +120,13 @@ sealed class VoiceEvent {
      * ([status]); [recording] names it, and the server deletes it from the phone service once it is kept.
      */
     data class CallRecorded(override val callId: String, val recording: String?, val status: String?) : VoiceEvent()
+    /** Recordings with both voices, slice 2: a booking call's recording is ready (or failed); the [BookingCaller] keeps it. */
+    data class BookingRecorded(override val callId: String, val recording: String?, val status: String?) : VoiceEvent()
 
     /** Whether this step belongs to an outbound booking call (the [BookingCaller]'s, never the assistant's). */
     val forBooking: Boolean get() = this is BookingEnded || this is BookingStatus || this is BookingWhisper ||
-        this is BookingWhisperAnswered || this is BookingTakenDialed || this is BookingListenAnswered || this is BookingListenStatus
+        this is BookingWhisperAnswered || this is BookingTakenDialed || this is BookingListenAnswered || this is BookingListenStatus ||
+        this is BookingRecorded
 }
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
@@ -220,6 +223,8 @@ object VoiceStep {
     const val BOOKING_LISTEN_STATUS = "booking-listen-status"
     /** Recordings with both voices: a live call's recording is ready. */
     const val CALL_RECORDED = "call-recorded"
+    /** Slice 2: a booking call's recording is ready. */
+    const val BOOKING_RECORDED = "booking-recorded"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -615,7 +620,7 @@ class CallAssistant(
             is VoiceEvent.BookingStatus -> VoiceReply.Done
             is VoiceEvent.BookingWhisper, is VoiceEvent.BookingWhisperAnswered, is VoiceEvent.BookingTakenDialed,
             is VoiceEvent.BookingListenAnswered -> VoiceReply.HangUp
-            is VoiceEvent.BookingListenStatus -> VoiceReply.Done
+            is VoiceEvent.BookingListenStatus, is VoiceEvent.BookingRecorded -> VoiceReply.Done
             // Kept off the request ([keepCallRecording]).
             is VoiceEvent.CallRecorded -> VoiceReply.Done
             is VoiceEvent.Transcribed -> {
@@ -1257,6 +1262,7 @@ class TwilioVoice(
             VoiceStep.BOOKING_LISTEN_ANSWERED -> VoiceEvent.BookingListenAnswered(call, form["Digits"])
             VoiceStep.BOOKING_LISTEN_STATUS -> VoiceEvent.BookingListenStatus(call, form["CallDuration"]?.trim()?.toLongOrNull()?.coerceIn(0, 24 * 3600) ?: 0)
             VoiceStep.CALL_RECORDED -> VoiceEvent.CallRecorded(call, form["RecordingSid"]?.trim()?.takeIf { it.isNotEmpty() }, form["RecordingStatus"]?.trim()?.take(20))
+            VoiceStep.BOOKING_RECORDED -> VoiceEvent.BookingRecorded(call, form["RecordingSid"]?.trim()?.takeIf { it.isNotEmpty() }, form["RecordingStatus"]?.trim()?.take(20))
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )

@@ -1073,7 +1073,8 @@ fun Application.mekaSync(
                 val reply = withContext(Dispatchers.IO) {
                     // Recordings with both voices: Obi's part is over, so the recording stops before any put-through
                     // rings his mobile (his own conversation is never recorded).
-                    if (event is VoiceEvent.LiveEnded) voice.live?.line?.takeIf { it.isRecording(event.callId) }?.let { line ->
+                    // Slice 2: a booking call's too, before Take over rings his mobile.
+                    if (event is VoiceEvent.LiveEnded || event is VoiceEvent.BookingEnded) voice.live?.line?.takeIf { it.isRecording(event.callId) }?.let { line ->
                         if (provider.stopCallRecording(event.callId)) line.stoppedRecording(event.callId)
                     }
                     // Obi on calls, slice 2b: a booking call's steps are the booking caller's.
@@ -1106,6 +1107,15 @@ fun Application.mekaSync(
                         runCatching { provider.deleteRecording(rec) }
                     }
                 }
+                // Slice 2: a booking call's recording kept beside its call card, then deleted from the phone service.
+                if (event is VoiceEvent.BookingRecorded) event.recording?.let { rec ->
+                    val log = call.application.environment.log
+                    background {
+                        runCatching { booking?.keepRecording(provider, event) }
+                            .onFailure { log.warn("booking call recording not kept: ${it::class.simpleName}") } // no identifiers
+                        runCatching { provider.deleteRecording(rec) }
+                    }
+                }
                 if (event is VoiceEvent.Recorded && reply is VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
                 val callVoice = if (reply == VoiceReply.Done || reply == VoiceReply.Busy) CallVoice.DEFAULT else withContext(Dispatchers.IO) { voice.assistant.voice() }
                 val clips = voice.clips
@@ -1130,6 +1140,20 @@ fun Application.mekaSync(
                 val who = call.device(devices, verifier, body, requireKey = true)
                 val id = VoiceMessageCodec.decodeRequest(body)
                 val audio = withContext(Dispatchers.IO) { voice.assistant.recording(who.householdId, id) }
+                    ?: return@post call.respondText("no recording", status = HttpStatusCode.NotFound)
+                call.response.header("Cache-Control", "no-store")
+                call.respondBytes(audio, ContentType.parse(VoiceMessageCodec.AUDIO_TYPE))
+            }
+        }
+
+        voice?.booking?.let { booking ->
+            // Recordings with both voices, slice 2: a booking call's recording, raw MP3, for a keyed device of the
+            // household, only while its result card offers it; 404 otherwise. The card's id is the only thing sent.
+            post(VoiceMessageCodec.BOOKING_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val id = VoiceMessageCodec.decodeBookingRequest(body)
+                val audio = withContext(Dispatchers.IO) { booking.recording(who.householdId, id) }
                     ?: return@post call.respondText("no recording", status = HttpStatusCode.NotFound)
                 call.response.header("Cache-Control", "no-store")
                 call.respondBytes(audio, ContentType.parse(VoiceMessageCodec.AUDIO_TYPE))
@@ -1652,6 +1676,8 @@ fun voiceFromEnv(
                 twilio.render(VoiceReply.Whisper(BookingLiveRules.LISTEN_WHISPER, VoiceStep.BOOKING_LISTEN_ANSWERED), publicUrl, CallVoice.DEFAULT) { _, _ -> null }.second
             },
             listenStatusUrl = publicUrl.trimEnd('/') + VoiceStep.path(TwilioVoice.ID, VoiceStep.BOOKING_LISTEN_STATUS),
+            // Recordings with both voices, slice 2: kept with callers' messages, under the same sweep.
+            recordings = recordings,
         )
     }
     return VoiceRoutes(assistant, listOf(twilio), publicUrl, clips, liveCalls, booking)
@@ -1779,9 +1805,11 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
                 log.info("live call: Obi is talking to a caller")
                 // Recordings with both voices: from Obi's first word, each side on its own channel.
                 val provider = voice.providers[ticket.provider]
-                if (ticket.recorded && !ticket.booking && provider != null) Thread.ofVirtual().name("live-call-record").start {
+                // Slice 2: a booking call too; its recording is reported to the booking caller's own step.
+                val step = if (ticket.booking) VoiceStep.BOOKING_RECORDED else VoiceStep.CALL_RECORDED
+                if (ticket.recorded && provider != null) Thread.ofVirtual().name("live-call-record").start {
                     val started = runCatching {
-                        provider.startCallRecording(ticket.callId, voice.publicUrl.trimEnd('/') + VoiceStep.path(provider.id, VoiceStep.CALL_RECORDED))
+                        provider.startCallRecording(ticket.callId, voice.publicUrl.trimEnd('/') + VoiceStep.path(provider.id, step))
                     }.getOrDefault(false)
                     if (started) live.line.markRecording(ticket.callId)
                 }

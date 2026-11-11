@@ -225,7 +225,7 @@ object BookingLiveRules {
 
     /** Whether the server should blank card [c]'s words now (over [KEEP_DAYS] days since the call ended). */
     fun shouldForget(c: BookingCall, nowMs: Long): Boolean =
-        (c.transcript != null || c.words != null) && c.state.finished && c.endedAtMs != null && nowMs - c.endedAtMs > KEEP_MS
+        (c.transcript != null || c.words != null || c.audio) && c.state.finished && c.endedAtMs != null && nowMs - c.endedAtMs > KEEP_MS
 
     /** [row] with slice 3's live view or result card for [c]. */
     fun withLive(row: BookingCallRow, c: BookingCall, nowMs: Long, cal: LocalCalendar, hasMobile: Boolean = false): BookingCallRow {
@@ -258,6 +258,7 @@ object BookingLiveRules {
             canAddToCalendar = draftable && c.calendarEditId == null,
             addedToCalendar = booked && c.calendarEditId != null,
             transcript = transcript,
+            canPlay = finished && CallRecordingRules.bookingPlayable(c.audio, c.endedAtMs, nowMs),
             spoken = if (live) listOfNotNull(row.spoken, BookingWords.decode(c.words, c.business).lastOrNull()?.let { "${it.who}: ${it.text}" }).joinToString(". ")
                 else row.spoken,
         )

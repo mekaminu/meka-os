@@ -5493,6 +5493,13 @@ The item's board text when it was closed:
 - Tests: CallRecordingRulesTest (core), LiveCallRecordingTest (backend, CI). No migration. Twilio's recording costs about $0.0025 a minute on the existing account (deleted from Twilio once fetched).
 - Left: booking calls recorded the same way (their result card's Listen), then the player showing who's speaking along the words.
 
+### Obi on calls: recordings with both voices, slice 2 · booking calls (2026-11-11)
+- Core: `BookingCallFields.AUDIO` / `BookingCall.audio` (server: the call's recording is kept), `BookingCallRow.canPlay` (finished, kept, within 7 days), `CallRecordingRules.bookingKey` (`voice/<household>/call-<card>.mp3`, under the household's recordings prefix so the hourly sweep and Don't keep cover it), `isBookingId`, `bookingPlayable`, `BOOKING_LABEL` "Listen to the call", `BOOKING_FOOT`; `BookingDialRules.instruction(…, recorded)` puts "This call is recorded." after Obi's opening; `BookingLiveRules.shouldForget` also forgets the recording. Wire `VoiceMessageCodec.BOOKING_PATH` (`/v1/booking-call/audio`, the card's id only); facade `bookingCallAudio(Base64)` (only while the card offers Play), transport `audioAt` shared with voice messages.
+- Server: `LiveCallLine.records(hh)`; `BookingCaller` (now with the recordings store) marks the booking ticket recorded and remembers rung calls 30 min; the stream's `onLive` starts Twilio's dual-channel recording for booking calls too (status to the new step `booking-recorded`), and `BookingEnded` stops it before Take over rings his mobile (his own part is never recorded; his Listen leg is its own call, never recorded). `VoiceEvent.BookingRecorded` → `BookingCaller.keepRecording` (waits up to 20 s for the card to close, fetches, keeps, writes `audio`, deletes Twilio's copy); `BookingCaller.recording` serves it to a keyed device while playable; after 7 days the card's words and recording go together.
+- Apps: the result card shows LISTEN TO THE CALL with the voice message player (▶ Play, waveform, scrub) and "Obi and them, from Obi's first word · kept 7 days, then deleted" on the Fold (`BookingCallCards.ResultView`, `VoiceMessagePlayer(spokenWhat)`) and the Mac (`WorkingOnSheet.resultView`, `VoiceMessagePlayerView(booking:)`, `CoreModel.bookingCallAudio`).
+- Tests: BookingCallRecordingTest (core and backend), VoiceMessageCodecTest, WorkingOnScreensTest (the not-booked card offers Listen to the call), MekaCoreBridgeTests.testBookingCallRecordingReachesSwift. No migration; recording costs as slice 1.
+- Left: the player showing who's speaking along the words.
+
 
 ## Found and fixing, week 3 (walk-through 2026-11-08)
 

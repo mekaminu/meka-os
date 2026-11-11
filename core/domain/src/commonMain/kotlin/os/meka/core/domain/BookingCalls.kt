@@ -73,6 +73,8 @@ object BookingCallFields {
     /** The business rang back (server, [BookingCallbackRules]): when, and the call assistant message it left. */
     const val CALLED_BACK_AT = "calledBackAt"
     const val CALLED_BACK_HELD = "calledBackHeld"
+    /** Recordings with both voices (server): the whole call's recording is kept ([CallRecordingRules.bookingKey]). */
+    const val AUDIO = "audio"
 }
 
 enum class BookingCallState(val code: String) {
@@ -131,6 +133,8 @@ data class BookingCall(
     val foundFrom: String? = null,
     /** The business rang back on the assistant's number (server): when. */
     val calledBackAtMs: Long? = null,
+    /** Recordings with both voices: the server kept the call's recording, both voices. */
+    val audio: Boolean = false,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -200,6 +204,8 @@ data class BookingCallRow(
     val canUseFound: Boolean = false,
     /** "They rang back · Sun 8 Nov, 14:05 · their message is in While you were at work" ([BookingCallbackRules.cardLine]). */
     val calledBackLine: String? = null,
+    /** Recordings with both voices: ▶ Play the whole call (Obi and them) on the result card, while it is kept. */
+    val canPlay: Boolean = false,
 ) {
     val canRead: Boolean get() = transcript.isNotEmpty()
 }
@@ -352,6 +358,7 @@ object BookingCallRules {
             lookup = text(BookingCallFields.LOOKUP), lookedUpFor = text(BookingCallFields.LOOKED_UP_FOR),
             foundNumber = text(BookingCallFields.FOUND_NUMBER), foundFrom = text(BookingCallFields.FOUND_FROM),
             calledBackAtMs = num(BookingCallFields.CALLED_BACK_AT),
+            audio = (f[BookingCallFields.AUDIO] as? FieldValue.Bool)?.value == true,
         )
     }
 

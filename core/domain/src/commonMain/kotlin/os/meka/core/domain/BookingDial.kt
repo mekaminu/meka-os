@@ -89,7 +89,11 @@ object BookingDialRules {
      * is the only name he gives, [assistantNumber] the only number; nothing else of Meka's life is in it, so nothing
      * else can be drawn out of him. His own note on the card is his request, kept short.
      */
-    fun instruction(c: BookingCall, firstName: String?, assistantNumber: String?, nowMs: Long, cal: LocalCalendar): String = buildString {
+    fun instruction(
+        c: BookingCall, firstName: String?, assistantNumber: String?, nowMs: Long, cal: LocalCalendar,
+        /** Recordings with both voices: the call is recorded, and Obi says so straight after his opening. */
+        recorded: Boolean = false,
+    ): String = buildString {
         val name = firstName?.trim()?.takeIf { it.isNotEmpty() && it.length <= 40 }
         val who = name ?: "the person you assist"
         val dayWords = when (c.day - cal.epochDayOf(nowMs)) { 0L -> "today (${CivilDate.longLabel(c.day)})"; 1L -> "tomorrow (${CivilDate.longLabel(c.day)})"; else -> CivilDate.longLabel(c.day) }
@@ -97,7 +101,8 @@ object BookingDialRules {
         val what = c.what.trim().take(BookingCallRules.MAX_WHAT)
         // "Table for 4" already says the party; otherwise it's added once.
         val partyWords = party?.takeIf { !Regex("""\bfor\s+${c.people}\b""").containsMatchIn(what) }
-        val opening = if (name != null) "Hi, this is Obi, $name's AI assistant." else ObiCallRules.OPENING
+        val opening = (if (name != null) "Hi, this is Obi, $name's AI assistant." else ObiCallRules.OPENING) +
+            if (recorded) " " + CallRecordingRules.RECORDED_LINE else ""
         appendLine("You are Obi, an AI assistant, phoning ${c.business.trim().take(BookingCallRules.MAX_BUSINESS)} to make a booking for $who. Speak British English only, in short natural sentences (one or two at a time), warm, polite and calm.")
         appendLine("When they answer, start by saying exactly: \"$opening\" Then say you're calling to book: $what${partyWords?.let { " for $it" } ?: ""}, $dayWords, ${windowWords(c)}.")
         c.note?.trim()?.take(BookingCallRules.MAX_NOTE)?.takeIf { it.isNotEmpty() }?.let { appendLine("$who also asked for: \"$it\". Ask for it, but book without it if they can't.") }
