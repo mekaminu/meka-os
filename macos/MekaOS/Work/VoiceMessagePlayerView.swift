@@ -18,6 +18,9 @@ struct VoiceMessagePlayerView: View {
     let palette: MekaPalette
     /// Recordings with both voices, slice 2: a booking call's whole recording (by its call card's id), not a voice message.
     var booking: Bool = false
+    /// Recordings with both voices, slice 3: the call card whose words carry their times, so the player shows who's
+    /// speaking along them ([CallRecordingRules.speakingInRow]); nil shows no speaker line.
+    var bookingRow: BookingCallRow? = nil
     @State private var playback = VoiceMessagePlayback()
     /// Where the pointer is on the waveform while dragging (0...1).
     @State private var scrub: Double?
@@ -65,6 +68,11 @@ struct VoiceMessagePlayerView: View {
                     .transition(.opacity)
                 } else {
                     waveform(rules)
+                        .transition(.opacity)
+                }
+                if let row = bookingRow, let now = speaking(row, rules) {
+                    speakerLine(now)
+                        .id(now.index)
                         .transition(.opacity)
                 }
             }
@@ -123,8 +131,28 @@ struct VoiceMessagePlayerView: View {
     }
 
     private func seek(_ f: Double) {
-        let id = id, model = model
-        playback.seek(fraction: f, fetch: { await model.voiceMessageAudio(id) }, wave: { model.voiceWaveform($0) })
+        let id = id, model = model, booking = booking
+        playback.seek(fraction: f, fetch: { booking ? await model.bookingCallAudio(id) : await model.voiceMessageAudio(id) },
+                      wave: { model.voiceWaveform($0) })
+    }
+
+    /// Slice 3: who's speaking where the recording has got to (or where the pointer is while scrubbing).
+    private func speaking(_ row: BookingCallRow, _ rules: VoiceRecordingRules) -> SpeakingNow? {
+        let at = scrub.map { rules.seekMs(fraction: Float($0), durationMs: playback.durationMs) } ?? playback.positionMs
+        return CallRecordingRules.shared.speakingInRow(row: row, positionMs: at)
+    }
+
+    /// "Obi  We'd like a table for four…": Obi in gold, the business in the secondary colour, two lines at most.
+    private func speakerLine(_ n: SpeakingNow) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+            Text(n.who).font(MekaType.caption.weight(.semibold)).foregroundStyle(n.obi ? palette.accent : palette.textSecondary)
+                .lineLimit(1)
+            Text(n.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+        }
+        .padding(.top, MekaSpace.xxs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(CallRecordingRules.shared.speakingSpoken(s: n))
+        .accessibilityIdentifier("call-speaking")
     }
 
     private func line(_ rules: VoiceRecordingRules) -> String? {

@@ -75,6 +75,8 @@ object BookingCallFields {
     const val CALLED_BACK_HELD = "calledBackHeld"
     /** Recordings with both voices (server): the whole call's recording is kept ([CallRecordingRules.bookingKey]). */
     const val AUDIO = "audio"
+    /** Recordings with both voices, slice 3 (server): when each transcript line started in the recording ([BookingWords.times]). */
+    const val WORD_TIMES = "wordTimes"
 }
 
 enum class BookingCallState(val code: String) {
@@ -135,6 +137,8 @@ data class BookingCall(
     val calledBackAtMs: Long? = null,
     /** Recordings with both voices: the server kept the call's recording, both voices. */
     val audio: Boolean = false,
+    /** Slice 3: when each [transcript] line started, ms into the recording, comma separated ([BookingWords.times]). */
+    val wordTimes: String? = null,
 ) {
     val open: Boolean get() = !cancelled && !state.finished
 }
@@ -206,6 +210,11 @@ data class BookingCallRow(
     val calledBackLine: String? = null,
     /** Recordings with both voices: ▶ Play the whole call (Obi and them) on the result card, while it is kept. */
     val canPlay: Boolean = false,
+    /**
+     * Recordings with both voices, slice 3: when each [transcript] line starts in the recording (ms), one per line;
+     * empty when the times aren't known, and then the player shows no speaker ([CallRecordingRules.speaking]).
+     */
+    val transcriptAtMs: List<Long> = emptyList(),
 ) {
     val canRead: Boolean get() = transcript.isNotEmpty()
 }
@@ -359,6 +368,7 @@ object BookingCallRules {
             foundNumber = text(BookingCallFields.FOUND_NUMBER), foundFrom = text(BookingCallFields.FOUND_FROM),
             calledBackAtMs = num(BookingCallFields.CALLED_BACK_AT),
             audio = (f[BookingCallFields.AUDIO] as? FieldValue.Bool)?.value == true,
+            wordTimes = text(BookingCallFields.WORD_TIMES),
         )
     }
 

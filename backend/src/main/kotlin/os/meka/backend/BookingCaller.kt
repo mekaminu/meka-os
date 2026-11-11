@@ -98,7 +98,7 @@ class BookingCaller(
             if (c.audio) CallRecordingRules.bookingKey(hh, c.id)?.let { k -> runCatching { recordings?.delete(k) } }
             if (write(hh, EntityTypes.BOOKING_CALL, c.id, mapOf(
                     BookingCallFields.TRANSCRIPT to FieldValue.Text(""), BookingCallFields.WORDS to FieldValue.Text(""),
-                ) + (if (c.audio) mapOf(BookingCallFields.AUDIO to FieldValue.Bool(false)) else emptyMap()), heads[c.id])) wrote = true
+                ) + (if (c.wordTimes != null) mapOf(BookingCallFields.WORD_TIMES to FieldValue.Text("")) else emptyMap()) + (if (c.audio) mapOf(BookingCallFields.AUDIO to FieldValue.Bool(false)) else emptyMap()), heads[c.id])) wrote = true
         }
         // Slice 4: with "Booking calls" off (absent = on) approved cards wait; nothing rings.
         val bookingOn = read(hh, EntityTypes.CONTEXT_MODE)[WorkMode.ENTITY_ID]?.get(WorkFields.CALL_BOOKING)?.value != FieldValue.Bool(false)
@@ -412,7 +412,11 @@ class BookingCaller(
         val extra = buildMap<String, FieldValue> {
             if (end.live) put(BookingCallFields.SECONDS, FieldValue.Int64(end.seconds))
             put(BookingCallFields.WORDS, FieldValue.Text(""))
-            if (end.live && end.words.isNotBlank()) put(BookingCallFields.TRANSCRIPT, FieldValue.Text(end.words.take(BookingLiveRules.MAX_TRANSCRIPT + BookingLiveRules.MAX_LINES * 3)))
+            if (end.live && end.words.isNotBlank()) {
+                put(BookingCallFields.TRANSCRIPT, FieldValue.Text(end.words.take(BookingLiveRules.MAX_TRANSCRIPT + BookingLiveRules.MAX_LINES * 3)))
+                // Slice 3: when each line started, for the player's speaker line (only when every line's start is known).
+                if (end.wordTimes.isNotBlank()) put(BookingCallFields.WORD_TIMES, FieldValue.Text(end.wordTimes))
+            }
             if (state == BookingCallState.BOOKED) {
                 BookingLiveRules.agreedMinute(end.booking?.time, card?.fromMin, card?.toMin)?.let { put(BookingCallFields.BOOKED_MIN, FieldValue.Int64(it.toLong())) }
                 end.booking?.name?.let { put(BookingCallFields.BOOKED_NAME, FieldValue.Text(it)) }

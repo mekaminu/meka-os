@@ -12,24 +12,32 @@ data class BookingWordLine(val who: String, val text: String, val obi: Boolean)
 
 data class BookingTile(val label: String, val value: String)
 
-/** The call's words as they are said: Gemini's transcript fragments joined into lines, one per turn. */
+/**
+ * The call's words as they are said: Gemini's transcript fragments joined into lines, one per turn. Recordings with
+ * both voices, slice 3: each line also keeps when it started ([add]'s atMs, from the moment Obi's side opened, which is
+ * when the recording starts), so the player can show who's speaking along the words ([times]).
+ */
 class BookingWords {
-    private val lines = mutableListOf<Pair<Boolean, StringBuilder>>()
+    private class Line(val obi: Boolean, val atMs: Long, val text: StringBuilder)
+    private val lines = mutableListOf<Line>()
     private var size = 0
     private var version = 0
     private var published = -1
 
-    /** A fragment Obi said ([obi]) or the business said; a new line when the speaker changes. Beyond the cap it's dropped. */
-    fun add(obi: Boolean, fragment: String) {
+    /**
+     * A fragment Obi said ([obi]) or the business said; a new line when the speaker changes, starting at [atMs]
+     * (milliseconds into the recording; -1 when unknown). Beyond the cap it's dropped.
+     */
+    fun add(obi: Boolean, fragment: String, atMs: Long = -1) {
         val t = fragment.replace(Regex("[\\t\\r\\n]+"), " ")
         if (t.isBlank() || size >= BookingLiveRules.MAX_TRANSCRIPT) return
         val room = BookingLiveRules.MAX_TRANSCRIPT - size
         val last = lines.lastOrNull()
-        if (last == null || last.first != obi) {
+        if (last == null || last.obi != obi) {
             if (lines.size >= BookingLiveRules.MAX_LINES) return
-            lines += obi to StringBuilder(t.trimStart().take(room))
-        } else last.second.append(t.take(room))
-        size = lines.sumOf { it.second.length }
+            lines += Line(obi, atMs, StringBuilder(t.trimStart().take(room)))
+        } else last.text.append(t.take(room))
+        size = lines.sumOf { it.text.length }
         version++
     }
 
@@ -37,20 +45,28 @@ class BookingWords {
     fun liveIfChanged(): String? {
         if (version == published) return null
         published = version
-        return encode(lines.takeLast(BookingLiveRules.LIVE_LINES), BookingLiveRules.MAX_LIVE)
+        return encode(lines.takeLast(BookingLiveRules.LIVE_LINES), BookingLiveRules.MAX_LIVE).joinToString("\n") { it.first }
     }
 
     /** The whole call, encoded. */
-    fun all(): String = encode(lines, BookingLiveRules.MAX_TRANSCRIPT)
+    fun all(): String = encode(lines, BookingLiveRules.MAX_TRANSCRIPT).joinToString("\n") { it.first }
+
+    /**
+     * When each of [all]'s lines started, in milliseconds into the recording, comma separated and one per line
+     * ([CallRecordingRules.wordTimes] reads it back); empty when any line's start isn't known.
+     */
+    fun times(): String {
+        val kept = encode(lines, BookingLiveRules.MAX_TRANSCRIPT).map { it.second }
+        return if (kept.isEmpty() || kept.any { it < 0 }) "" else kept.joinToString(",")
+    }
 
     companion object {
-        private fun encode(ls: List<Pair<Boolean, StringBuilder>>, max: Int): String {
-            val out = ls.map { (obi, b) -> (if (obi) "O" else "T") + "\t" + b.toString().replace(Regex("\\s+"), " ").trim() }
-                .filter { it.length > 2 }
+        private fun encode(ls: List<Line>, max: Int): List<Pair<String, Long>> {
+            val out = ls.map { l -> (if (l.obi) "O" else "T") + "\t" + l.text.toString().replace(Regex("\\s+"), " ").trim() to l.atMs }
+                .filter { it.first.length > 2 }
             // The newest lines are the ones kept when the live view's cap bites.
             var total = 0
-            val kept = out.asReversed().takeWhile { total += it.length + 1; total <= max + 1 }.asReversed()
-            return kept.joinToString("\n")
+            return out.asReversed().takeWhile { total += it.first.length + 1; total <= max + 1 }.asReversed()
         }
 
         /** The lines as the apps draw them: Obi's as "Obi", the business's under its name. Anything malformed is skipped. */
@@ -258,6 +274,7 @@ object BookingLiveRules {
             canAddToCalendar = draftable && c.calendarEditId == null,
             addedToCalendar = booked && c.calendarEditId != null,
             transcript = transcript,
+            transcriptAtMs = CallRecordingRules.wordTimes(c.wordTimes, transcript.size),
             canPlay = finished && CallRecordingRules.bookingPlayable(c.audio, c.endedAtMs, nowMs),
             spoken = if (live) listOfNotNull(row.spoken, BookingWords.decode(c.words, c.business).lastOrNull()?.let { "${it.who}: ${it.text}" }).joinToString(". ")
                 else row.spoken,

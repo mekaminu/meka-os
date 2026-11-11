@@ -2353,6 +2353,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.bookingPlayable(audio: true, endedAtMs: KotlinLong(value: 500), nowMs: 1_000, keepDays: 7))
     }
 
+    func testCallSpeakerReachesSwift() {
+        // Recordings with both voices, slice 3: who's speaking along the words as the call's recording plays.
+        let rules = CallRecordingRules.shared
+        let lines = [BookingWordLine(who: "Obi", text: "Hi, this is Obi.", obi: true),
+                     BookingWordLine(who: "Rosa's Kitchen", text: "How can I help?", obi: false)]
+        let at = rules.wordTimes(raw: "0,2500", lines: 2)
+        XCTAssertEqual(at.count, 2)
+        let now = rules.speaking(lines: lines, atMs: at, positionMs: 3_000)
+        XCTAssertEqual(now?.who, "Rosa's Kitchen")
+        XCTAssertEqual(now?.obi, false)
+        XCTAssertEqual(rules.speakingSpoken(s: now!), "Rosa's Kitchen is speaking: How can I help?")
+        XCTAssertNil(rules.speaking(lines: lines, atMs: [], positionMs: 3_000))
+    }
+
     func testPlayMyMessagesReachesSwift() {
         // Call assistant polish 8c: "play my messages" in Talk is played on the Mac, step by step, with no AI call.
         XCTAssertTrue(VoicePlaylistRules.shared.isPlayRequest(utterance: "Play my messages"))

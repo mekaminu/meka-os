@@ -49,6 +49,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -60,6 +62,8 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.CallRecordingRules
+import os.meka.core.domain.SpeakingNow
 import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.VoiceWaveformRules
 
@@ -83,6 +87,11 @@ internal fun VoiceMessagePlayer(
     onAutoStarted: () -> Unit = {},
     /** What it plays, for TalkBack ("Play the voice message"; a booking call's "the call's recording"). */
     spokenWhat: String = "the voice message",
+    /**
+     * Recordings with both voices, slice 3: who is speaking at a point in the recording (ms), for a call's recording
+     * whose words carry their times ([CallRecordingRules.speaking]); null shows no speaker line.
+     */
+    speakingAt: ((Long) -> SpeakingNow?)? = null,
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -225,7 +234,25 @@ internal fun VoiceMessagePlayer(
                     Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
                 }
             }
+            // Slice 3: who's speaking now, along the words; it follows the finger while scrubbing.
+            val now = speakingAt?.invoke(if (scrub >= 0f) VoiceRecordingRules.seekMs(scrub, duration) else position)
+            Crossfade(now, animationSpec = if (scrub >= 0f) tween(0) else MekaMotion.appear(reduced), label = "voice-speaker") { n ->
+                if (n != null) SpeakerLine(n)
+            }
         }
+    }
+}
+
+/** "Obi  We'd like a table for four…": the speaker in gold for Obi (the business in the secondary colour), two lines at most. */
+@Composable
+private fun SpeakerLine(n: SpeakingNow) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.xxs).testTag("call-speaking")
+            .semantics(mergeDescendants = true) { contentDescription = CallRecordingRules.speakingSpoken(n) },
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(n.who, style = MekaType.captionStrong, color = if (n.obi) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
+        Text(n.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

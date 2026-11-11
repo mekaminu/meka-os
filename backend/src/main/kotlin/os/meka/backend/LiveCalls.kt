@@ -214,6 +214,8 @@ data class LiveCallEnd(
     /** Slice 3: a booking call's words ([BookingWords.all]) and whether he tapped Hang up. */
     val words: String = "",
     val hungUp: Boolean = false,
+    /** Recordings with both voices, slice 3: when each of [words]' lines started in the recording ([BookingWords.times]). */
+    val wordTimes: String = "",
     /** Slice 3b: he tapped Take over: the end step rings his mobile. */
     val takenOver: Boolean = false,
 )
@@ -443,6 +445,8 @@ class LiveCallSession(
     private var outcome: BookingDialRules.Outcome? = null
     /** Slice 3: a booking call's words as said, for the live view and Read the call; Hang up and its goodbye. */
     private val words = BookingWords()
+    /** When Obi's side opened (the recording starts then): each line of [words] keeps its start from here. */
+    private var liveAt = -1L
     private var hungUp = false
     private var takenOver = false
     private var awaitingBye = false
@@ -508,6 +512,7 @@ class LiveCallSession(
         for (e in LiveProtocol.decode(text)) when (e) {
             LiveProtocol.Event.SetupComplete -> if (!live) {
                 live = true
+                liveAt = nowMs()
                 runCatching { onLive() }
                 link?.send(turn(if (ticket.booking) BookingDialRules.KICKOFF else LiveCallRules.KICKOFF))
             }
@@ -524,10 +529,10 @@ class LiveCallSession(
             }
             is LiveProtocol.Event.Heard -> {
                 if (heard.length < MAX_HEARD) heard.append(e.text.take(MAX_HEARD - heard.length))
-                if (ticket.booking) words.add(false, e.text)
+                if (ticket.booking) words.add(false, e.text, intoCall())
             }
             is LiveProtocol.Event.Said -> if (ticket.booking) {
-                words.add(true, e.text)
+                words.add(true, e.text, intoCall())
                 awaitingBye = false
             }
             is LiveProtocol.Event.ToolCall -> when {
@@ -598,10 +603,14 @@ class LiveCallSession(
         // The outcome first, then the phone side: its end step (the put-through) must find it.
         runCatching {
             onEnd(LiveCallEnd(live, seconds, obi.coerceAtMost(seconds), message, heard.toString(), putThrough && live, outcome,
-                words = if (ticket.booking) words.all() else "", hungUp = hungUp, takenOver = takenOver && live && !hungUp))
+                words = if (ticket.booking) words.all() else "", hungUp = hungUp,
+                wordTimes = if (ticket.booking) words.times() else "", takenOver = takenOver && live && !hungUp))
         }
         runCatching { hangUp() }
     }
+
+    /** How far into the call's recording it is now (ms), or -1 before Obi's side opened. */
+    private fun intoCall(): Long = if (liveAt < 0) -1 else (nowMs() - liveAt).coerceAtLeast(0)
 
     private fun media(mu: ByteArray) = buildJsonObject {
         put("event", "media")

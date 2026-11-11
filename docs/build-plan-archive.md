@@ -5500,6 +5500,12 @@ The item's board text when it was closed:
 - Tests: BookingCallRecordingTest (core and backend), VoiceMessageCodecTest, WorkingOnScreensTest (the not-booked card offers Listen to the call), MekaCoreBridgeTests.testBookingCallRecordingReachesSwift. No migration; recording costs as slice 1.
 - Left: the player showing who's speaking along the words.
 
+### Obi on calls: recordings with both voices, slice 3 · who's speaking along the words (2026-11-11)
+- Core: `BookingWords.add(obi, fragment, atMs)` keeps each line's start (ms from Obi's side opening, when the recording starts) and `times()` gives them comma separated beside `all()` (empty when any start is unknown, never misaligned); `BookingCallFields.WORD_TIMES` / `BookingCall.wordTimes`; `BookingCallRow.transcriptAtMs` (`CallRecordingRules.wordTimes`: one per line, none negative, in order, else empty); `CallRecordingRules.speaking(lines, atMs, positionMs)` / `speakingInRow` (the last line started by then, shown `LEAD_MS` 250 ms early), `speakingSpoken` ("Obi is speaking: …"), `SpeakingNow`.
+- Server: `LiveCallSession` notes `liveAt` at setup and passes each fragment's time into the words; `LiveCallEnd.wordTimes`; `BookingCaller.ended` writes `wordTimes` beside the transcript; the 7-day forget blanks it too. The times are as the words reached the server, so a line may show a moment off.
+- Apps: `VoiceMessagePlayer(speakingAt)` on the Fold and `VoiceMessagePlayerView(bookingRow:)` on the Mac show a speaker line under the waveform (Obi in gold, the business in the secondary colour, two lines at most), cross-fading per line and following the scrub; screen readers hear "<who> is speaking: …". The Mac player's scrub now fetches the booking recording (not a voice message) when it isn't in memory yet. Calls from before this slice play with no speaker line.
+- Tests: CallSpeakerTest (core), BookingCallerTest (the times reach the card and are forgotten), MekaCoreBridgeTests.testCallSpeakerReachesSwift. No migration.
+
 
 ## Found and fixing, week 3 (walk-through 2026-11-08)
 

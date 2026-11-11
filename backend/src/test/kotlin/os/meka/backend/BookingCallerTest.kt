@@ -11,6 +11,7 @@ import os.meka.core.domain.BookingCallState
 import os.meka.core.domain.BookingCalls
 import os.meka.core.domain.BookingDialRules
 import os.meka.core.domain.BookingLiveRules
+import os.meka.core.domain.CallRecordingRules
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LiveCallRules
@@ -206,6 +207,7 @@ class BookingCallerTest {
         assertNotNull(cardOnFold(id).answeredAtMs)
         model.say("""{"serverContent":{"outputTranscription":{"text":"Hi, this is Obi,"}}}""")
         model.say("""{"serverContent":{"outputTranscription":{"text":" Alex's AI assistant."}}}""")
+        nowMs += 2_500
         model.say("""{"serverContent":{"inputTranscription":{"text":"Hello Rosa's, how can I help?"}}}""")
         val w = assertNotNull(s.liveWords())
         assertNull(s.liveWords()) // unchanged since
@@ -228,10 +230,15 @@ class BookingCallerTest {
         assertEquals(listOf("When" to "Sat 19:30", "People" to "4", "Name" to "Alex"), row.resultTiles.map { it.label to it.value })
         assertTrue(row.canAddToCalendar && row.canRead)
         assertEquals(2, row.transcript.size)
+        // Recordings with both voices, slice 3: each line's start in the recording, for the player's speaker line.
+        assertEquals("0,2500", c.wordTimes)
+        assertEquals(listOf(0L, 2_500L), row.transcriptAtMs)
+        assertEquals("Rosa's Kitchen", CallRecordingRules.speakingInRow(row, 3_000)?.who)
         // Seven days after the call the words are blanked; the result stays.
         nowMs += BookingLiveRules.KEEP_MS + 60_000
         assertTrue(caller.tick())
         assertNull(cardOnFold(id).transcript)
+        assertNull(cardOnFold(id).wordTimes)
         assertEquals(BookingCallState.BOOKED, cardOnFold(id).state)
     }
 

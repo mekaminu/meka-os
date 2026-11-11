@@ -333,7 +333,8 @@ struct WorkingOnSheet: View {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(CallRecordingRules.shared.BOOKING_LABEL.uppercased())
                     .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
-                VoiceMessagePlayerView(id: id, palette: palette, booking: true)
+                VoiceMessagePlayerView(id: id, palette: palette, booking: true,
+                                       bookingRow: r.transcriptAtMs.isEmpty ? nil : r)
                 Text(LoneWordGlue.shared.kept(line: CallRecordingRules.shared.BOOKING_FOOT))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }

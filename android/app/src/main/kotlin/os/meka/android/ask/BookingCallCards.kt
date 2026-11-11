@@ -255,7 +255,11 @@ private fun ResultView(
     if (r.canPlay) {
         Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).testTag("call-recording")) {
             Text(CallRecordingRules.BOOKING_LABEL.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-            os.meka.android.work.VoiceMessagePlayer(r.id, audio, spokenWhat = CallRecordingRules.BOOKING_SPOKEN)
+            os.meka.android.work.VoiceMessagePlayer(
+                r.id, audio, spokenWhat = CallRecordingRules.BOOKING_SPOKEN,
+                // Slice 3: who's speaking along the words, when the call's words carry their times.
+                speakingAt = if (r.transcriptAtMs.isEmpty()) null else { ms -> CallRecordingRules.speaking(r.transcript, r.transcriptAtMs, ms) },
+            )
             Text(LoneWordGlue.kept(CallRecordingRules.BOOKING_FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
     }

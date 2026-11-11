@@ -61,4 +61,41 @@ object CallRecordingRules {
      */
     fun bookingPlayable(audio: Boolean, endedAtMs: Long?, nowMs: Long, keepDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS): Boolean =
         audio && endedAtMs != null && nowMs - endedAtMs in 0 until VoiceRecordingRules.keepMs(keepDays)
+
+    // ---- Slice 3: the player shows who's speaking along the words ----
+
+    /**
+     * [raw]'s line starts ([BookingWords.times]) as numbers, only when there is one per line of the [lines]-line
+     * transcript, none negative, and in order; otherwise empty (the player then shows no speaker).
+     */
+    fun wordTimes(raw: String?, lines: Int): List<Long> {
+        if (raw.isNullOrBlank() || lines <= 0) return emptyList()
+        val ts = raw.split(',').map { it.trim().toLongOrNull() ?: return emptyList() }
+        if (ts.size != lines || ts.any { it < 0 } || ts.zipWithNext().any { (a, b) -> b < a }) return emptyList()
+        return ts
+    }
+
+    /** A line shows this much before its recorded start (the words reach the server a moment after they're said). */
+    const val LEAD_MS = 250L
+
+    /**
+     * Who is speaking [positionMs] into the call's recording, and what they're saying: the last line that has started
+     * by then. Null before the first line, without times, or when the times don't fit the lines.
+     */
+    fun speaking(lines: List<BookingWordLine>, atMs: List<Long>, positionMs: Long): SpeakingNow? {
+        if (lines.isEmpty() || atMs.size != lines.size || positionMs < 0) return null
+        val i = atMs.indexOfLast { it <= positionMs + LEAD_MS }
+        if (i < 0) return null
+        val l = lines[i]
+        return SpeakingNow(l.who, l.text, l.obi, i)
+    }
+
+    /** [speaking] for a call card's row (the Mac's player reads it this way). */
+    fun speakingInRow(row: BookingCallRow, positionMs: Long): SpeakingNow? = speaking(row.transcript, row.transcriptAtMs, positionMs)
+
+    /** What a screen reader says for the speaker line: "Obi is speaking: …". */
+    fun speakingSpoken(s: SpeakingNow): String = "${s.who} is speaking: ${s.text}"
 }
+
+/** Who is speaking at a point in a call's recording ([CallRecordingRules.speaking]); [index] is the transcript line. */
+data class SpeakingNow(val who: String, val text: String, val obi: Boolean, val index: Int)
