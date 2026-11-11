@@ -145,7 +145,7 @@ struct VoiceMessagePlayerView: View {
     /// "Obi  We'd like a table for four…": Obi in gold, the business in the secondary colour, two lines at most.
     private func speakerLine(_ n: SpeakingNow) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-            Text(n.who).font(MekaType.caption.weight(.semibold)).foregroundStyle(n.obi ? palette.accent : palette.textSecondary)
+            Text(n.who).font(MekaType.captionStrong).foregroundStyle(n.obi ? palette.accent : palette.textSecondary)
                 .lineLimit(1)
             Text(n.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
         }

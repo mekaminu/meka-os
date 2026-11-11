@@ -217,7 +217,7 @@ class BookingCallerTest {
         assertEquals(listOf("Obi" to "Hi, this is Obi, Alex's AI assistant.", "Rosa's Kitchen" to "Hello Rosa's, how can I help?"),
             live.liveWords.map { it.who to it.text })
         model.say("""{"toolCall":{"functionCalls":[{"id":"2","name":"booking_result","args":{"booked":true,"agreed":"Sat 19:30 for 4","time":"19:30","name":"Alex"}}]}}""")
-        nowMs += 160_000
+        nowMs += 157_500 // 160 s in all, with the 2.5 s above
         s.fromCaller("""{"event":"stop"}""")
         val c = cardOnFold(id)
         assertEquals(BookingCallState.BOOKED, c.state)
