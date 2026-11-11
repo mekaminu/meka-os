@@ -301,7 +301,7 @@ private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, o
             .clickable(role = Role.Button) { onOpen() }
             .semantics { contentDescription = r.spoken }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("routine-row"),
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DayTile(r.day, r.time, r.on)
@@ -428,7 +428,7 @@ private fun StarterCard(s: RoutineStarterRow, modifier: Modifier, onAdd: () -> U
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).semantics(mergeDescendants = false) { contentDescription = s.spoken }.testTag("routine-starter"),
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DayTile(s.day, s.time, on = false)
