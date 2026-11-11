@@ -36,18 +36,30 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.today.NEEDS_YOU_FOOT_TAG
 import os.meka.android.today.NEEDS_YOU_FYI_TAG
 import os.meka.android.today.NEEDS_YOU_GROUP_TAG
+import os.meka.android.today.NEEDS_YOU_LISTS_LEAD_TAG
 import os.meka.android.today.NEEDS_YOU_PAGER_TAG
 import os.meka.android.today.NeedsYouChips
 import os.meka.android.today.NeedsYouFyiRowView
+import os.meka.android.today.NeedsYouGroupFoot
 import os.meka.android.today.NeedsYouGroupHeadView
 import os.meka.android.today.NeedsYouGroupLead
 import os.meka.android.today.NeedsYouGroupStore
 import os.meka.android.today.NeedsYouHeader
 import os.meka.android.today.NeedsYouPager
 import os.meka.android.today.rememberOpenGroups
+import os.meka.core.domain.AfterWorkSummary
+import os.meka.core.domain.CaptureApp
+import os.meka.core.domain.CaptureKind
+import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.DecisionCard
+import os.meka.core.domain.DecisionEffect
+import os.meka.core.domain.DecisionKind
 import os.meka.core.domain.NeedsYouFilter
+import os.meka.core.domain.NeedsYouStackRules
+import os.meka.core.domain.PersonSummary
 import os.meka.core.domain.NeedsYouFyiRow
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.NeedsYouGroupRules
@@ -75,8 +87,23 @@ class NeedsYouGroupsScreensTest {
         NeedsYouFyiRow("f$i", who, "Says thanks for Saturday", "$who: Says thanks for Saturday. No reply needed.")
     }
 
+    // Slice 2: the lists card as To decide's one row, the after-work card as its foot line.
+    private val listsCard = DecisionCard(
+        id = NeedsYouStackRules.LISTS_ID, kind = DecisionKind.LISTS, title = "From your lists", why = "1 renewal due",
+        taskId = null, yesLabel = "Go through", laterLabel = "Later", openLabel = "Open Lists",
+        yes = DecisionEffect.OPEN_LISTS, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_LISTS, urgent = false,
+    )
+    private val held = AfterWorkSummary(listOf(PersonSummary(
+        personName = "Alex", isFamily = false, urgent = false, messages = 37, missedCalls = 0,
+        apps = listOf(CaptureApp.WHATSAPP), firstAtMs = 0, latestAtMs = 0, latestText = null,
+        items = listOf(CapturedItem("i-alex", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Alex", "Hi", null, 0L)),
+    )))
+    private val foot = NeedsYouGroupRules.afterWorkFoot(held, "At work until 17:30 · 37 held for later")!!
+    private var goThrough = 0
+    private var footTaps = 0
+
     private val peeks = mapOf(
-        NeedsYouGroup.DECIDE to NeedsYouGroupRules.decidePeek(0, 0, 0, 1),
+        NeedsYouGroup.DECIDE to NeedsYouGroupRules.decidePeekOf(0, 0, 0, listOf(listsCard)),
         NeedsYouGroup.MESSAGES to NeedsYouGroupRules.names(listOf("Alex", "Game testing group", "Sam")),
         NeedsYouGroup.FYI to NeedsYouGroupRules.fyiPeek(fyi.map { it.who }),
         NeedsYouGroup.CHATS to "1 group · 3 messages · digest at 12:30",
@@ -122,6 +149,11 @@ class NeedsYouGroupsScreensTest {
                             NeedsYouGroupRules.head(g, counts.getValue(g), peeks.getValue(g), o, if (g == NeedsYouGroup.FYI) pg else null),
                             { open = NeedsYouGroupRules.toggle(open, g) },
                         )
+                        if (o && g == NeedsYouGroup.DECIDE) {
+                            NeedsYouGroupLead(NeedsYouGroupRules.listsLead(listsCard.why), listsCard.yesLabel, { goThrough++ },
+                                Modifier.testTag(NEEDS_YOU_LISTS_LEAD_TAG))
+                            NeedsYouGroupFoot(foot, { footTaps++ })
+                        }
                         if (o && g == NeedsYouGroup.FYI) {
                             NeedsYouGroupLead(NeedsYouGroupRules.FYI_LEAD, NeedsYouGroupRules.CLEAR_ALL, {})
                             pg.of(fyi).forEach { NeedsYouFyiRowView(it, {}) }
@@ -149,7 +181,17 @@ class NeedsYouGroupsScreensTest {
         NeedsYouGroup.entries.forEach { if (!onScreen(it.title)) fail("$name: the ${it.title} box is missing") }
         if (fyiRows() != 0) fail("$name: FYI starts open")
         if (!onScreen(peeks.getValue(NeedsYouGroup.TIDIED))) fail("$name: a closed box doesn't peek")
+        if (!onScreen("1 renewal due · from your lists")) fail("$name: From your lists isn't one row inside To decide")
+        if (!onScreen("At work until 17:30 · 37 held for later ›")) fail("$name: the after-work foot line is missing")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "groups-$name"))
+        compose.onAllNodes(hasText("Go through"))[0].performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(NEEDS_YOU_FOOT_TAG).performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        assertEquals(1, goThrough, "$name: Go through didn't go through the lists")
+        assertEquals(1, footTaps, "$name: the foot line doesn't open what's held")
+        val footHeight = compose.onNodeWithTag(NEEDS_YOU_FOOT_TAG).fetchSemanticsNode().size.height
+        val density = compose.onNodeWithTag(NEEDS_YOU_FOOT_TAG).fetchSemanticsNode().layoutInfo.density.density
+        if (footHeight < (48 * density).toInt()) fail("$name: the foot line is under a 48 dp tap ($footHeight px)")
 
         tapHead(NeedsYouGroup.FYI)
         assertEquals(NeedsYouGroupRules.PAGE_SIZE, fyiRows(), "$name: FYI opened shows one page of five")
@@ -168,6 +210,7 @@ class NeedsYouGroupsScreensTest {
         compose.onAllNodes(hasText(NeedsYouGroupRules.CLOSE_ALL))[0].performSemanticsAction(SemanticsActions.OnClick)
         turns()
         if (fyiRows() != 0) fail("$name: Close all left FYI open")
+        if (onScreen("held for later")) fail("$name: the foot line shows with To decide closed")
         if (!onScreen(NeedsYouGroupRules.OPEN_ALL)) fail("$name: Close all didn't turn to Open all")
         assertEquals(emptySet(), NeedsYouGroupStore.load(context), "$name: Close all isn't kept")
     }

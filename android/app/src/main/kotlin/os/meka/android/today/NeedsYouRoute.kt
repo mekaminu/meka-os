@@ -628,6 +628,16 @@ internal fun NeedsYouColumn(
     // and the command centre keep their look until their slices.
     val boxed = !compact && part == NeedsYouPart.ALL
     var openGroups by rememberOpenGroups()
+    // Slice 2: the "While you were at work" card is To decide's gold foot line, and the big "From your lists" card one
+    // row with Go through at the top of To decide (the rest of the stack stays under it).
+    val workNow by core.workMode.collectAsState()
+    val afterWorkFoot = remember(boxed, afterWork, peopleLists, workNow) {
+        if (!boxed || afterWork.isEmpty) null else {
+            val summary = afterWork.withLists(peopleLists, os.meka.android.work.CallerLookup.names(appContext))
+            NeedsYouGroupRules.afterWorkFoot(summary, if (workNow.atWork) core.heldPreview(summary).label else null)
+        }
+    }
+    val (listsCard, stackCards) = remember(boxed, cards) { if (boxed) NeedsYouGroupRules.splitLists(cards) else null to cards }
     var msgPage by rememberSaveable { mutableIntStateOf(0) }
     var fyiPage by rememberSaveable { mutableIntStateOf(0) }
     fun sectionOf(g: NeedsYouGroup): NeedsYouSection = when (g) {
@@ -645,7 +655,7 @@ internal fun NeedsYouColumn(
     val tidiedAny = needsMail != null || archived != null || unopened != null
     val msgsAny = messageChats.isNotEmpty() || sendAll != null
     val present: List<NeedsYouGroup> = buildList {
-        if (decideCount > 0) add(NeedsYouGroup.DECIDE)
+        if (decideCount > 0 || afterWorkFoot != null) add(NeedsYouGroup.DECIDE)
         if (msgsAny) add(NeedsYouGroup.MESSAGES)
         if (fyiChats.isNotEmpty()) add(NeedsYouGroup.FYI)
         if (digest != null || discord != null) add(NeedsYouGroup.CHATS)
@@ -660,7 +670,8 @@ internal fun NeedsYouColumn(
         val open = g in openGroups
         return when (g) {
             NeedsYouGroup.DECIDE -> NeedsYouGroupRules.head(g, decideCount,
-                NeedsYouGroupRules.decidePeek(approvals.size, looseRequests.size, asks, cards.size), open)
+                NeedsYouGroupRules.decidePeekOf(approvals.size, looseRequests.size, asks, cards)
+                    .ifEmpty { afterWorkFoot?.removeSuffix(" ›").orEmpty() }, open)
             NeedsYouGroup.MESSAGES -> NeedsYouGroupRules.head(g, messageChats.size,
                 NeedsYouGroupRules.names(messageChats.map { it.title }), open, msgPg)
             NeedsYouGroup.FYI -> NeedsYouGroupRules.head(g, fyiChats.size, NeedsYouGroupRules.fyiPeek(fyiChats.map { it.title }), open, fyiPg)
@@ -936,6 +947,13 @@ internal fun NeedsYouColumn(
         }
         groupHead(boxed && NeedsYouGroup.DECIDE in present, NeedsYouGroup.DECIDE, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.DECIDE)) {
+        // Slice 2: From your lists is one row at the top of To decide; Go through opens Lists as the card's did.
+        listsCard?.let { lc ->
+            item(key = "lists-lead") {
+                NeedsYouGroupLead(NeedsYouGroupRules.listsLead(lc.why), lc.yesLabel, { moves.onMove(lc, DecisionMove.YES) },
+                    Modifier.animateItem().testTag(NEEDS_YOU_LISTS_LEAD_TAG).padding(bottom = MekaSpace.xs))
+            }
+        }
         // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
         approvals.forEachIndexed { i, card ->
             item(key = "approval-${card.id}") {
@@ -1020,18 +1038,21 @@ internal fun NeedsYouColumn(
         }
         if (inG(NeedsYouGroup.DECIDE)) {
         if (cards.isNotEmpty()) {
-            item(key = "stack") {
-                DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
+            if (stackCards.isNotEmpty()) item(key = "stack") {
+                DecisionStackView(stackCards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
                     toDays = { core.needsYouFeedDays() }, onToDay = moves.onToDay)
             }
             workingItems(stack.working, play, index = 2, open = openMail)
             // Under the stack, the next reminders (the gate's Needs you re-shot: the page below the stack was blank).
             meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         }
+        afterWorkFoot?.let { foot ->
+            item(key = "after-work-foot") { NeedsYouGroupFoot(foot, openAfterWork, Modifier.animateItem()) }
+        }
         }
         groupHead(boxed && NeedsYouGroup.MESSAGES in present, NeedsYouGroup.MESSAGES, ::headOf, toggleGroup, play)
-        // While you were at work sits in Messages; with no messages there is no box, so it stands on its own.
-        if (showG(NeedsYouGroup.MESSAGES) && (!boxed || !msgsAny || NeedsYouGroup.MESSAGES in openGroups)) {
+        // Unboxed (the open Fold), While you were at work still sits in Messages; boxed it is To decide's foot line.
+        if (!boxed && showG(NeedsYouGroup.MESSAGES)) {
         item(key = "after-work") {
             AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1, play)), moves.undoLine) { openAfterWork() }
         }

@@ -85,4 +85,44 @@ class NeedsYouGroupsTest {
         assertEquals("3 mail", R.subtitle(0, 0, 0, 3))
         assertEquals(NeedsYouLayoutRules.ALL_CLEAR, R.subtitle(0, 0, 0, 0))
     }
+
+    // Slice 2: the lists card as one row with Go through, the after-work card as To decide's foot line.
+    private fun card(id: String, kind: DecisionKind, why: String = "") = DecisionCard(
+        id = id, kind = kind, title = id, why = why, taskId = null, yesLabel = "Go through", laterLabel = "Later",
+        openLabel = "Open Lists", yes = DecisionEffect.OPEN_LISTS, later = DecisionEffect.SET_ASIDE,
+        open = DecisionEffect.OPEN_LISTS, urgent = false,
+    )
+
+    @Test fun theListsCardBecomesOneRow() {
+        val lists = card(NeedsYouStackRules.LISTS_ID, DecisionKind.LISTS, "2 to chase")
+        val task = card("t1", DecisionKind.OVERDUE)
+        val (row, rest) = R.splitLists(listOf(task, lists))
+        assertEquals(lists, row)
+        assertEquals(listOf(task), rest)
+        assertEquals("2 to chase · from your lists", R.listsLead(row!!.why))
+        assertEquals("From your lists", R.listsLead(" "))
+        assertEquals(null to listOf(task), R.splitLists(listOf(task)))
+    }
+
+    @Test fun toDecidesPeekSaysWhatIsReallyInIt() {
+        val lists = card(NeedsYouStackRules.LISTS_ID, DecisionKind.LISTS, "1 renewal due")
+        assertEquals("1 approval · 2 tasks · 1 renewal due from your lists",
+            R.decidePeekOf(1, 0, 0, listOf(card("a", DecisionKind.OVERDUE), card("b", DecisionKind.DUE_TODAY), lists)))
+        assertEquals("1 request · 1 task", R.decidePeekOf(0, 1, 0, listOf(card("a", DecisionKind.CONFLICT))))
+        assertEquals("", R.decidePeekOf(0, 0, 0, emptyList()))
+    }
+
+    private fun person(name: String, messages: Int, urgent: Boolean = false) = PersonSummary(
+        personName = name, isFamily = false, urgent = urgent, messages = messages, missedCalls = 0,
+        apps = listOf(CaptureApp.WHATSAPP), firstAtMs = 0, latestAtMs = 0, latestText = null,
+        items = listOf(CapturedItem("i-$name", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, name, "Hi", null, 0L)),
+    )
+
+    @Test fun theAfterWorkCardBecomesTheFootLine() {
+        assertEquals(null, R.afterWorkFoot(AfterWorkSummary(emptyList()), "At work · 3 held for later"))
+        val summary = AfterWorkSummary(listOf(person("Alex", 3, urgent = true), person("Sam", 2)))
+        assertEquals("At work until 17:30 · 37 held for later ›", R.afterWorkFoot(summary, "At work until 17:30 · 37 held for later"))
+        assertEquals("While you were at work · 2 people · 5 messages · 1 urgent ›", R.afterWorkFoot(summary, null))
+        assertEquals("While you were at work · 1 person · 2 messages ›", R.afterWorkFoot(AfterWorkSummary(listOf(person("Sam", 2))), null))
+    }
 }

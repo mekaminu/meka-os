@@ -66,6 +66,8 @@ import os.meka.core.domain.NeedsYouPage
 
 internal const val NEEDS_YOU_GROUP_TAG = "needs-you-group"
 internal const val NEEDS_YOU_PAGER_TAG = "needs-you-pager"
+internal const val NEEDS_YOU_FOOT_TAG = "needs-you-foot"
+internal const val NEEDS_YOU_LISTS_LEAD_TAG = "needs-you-lists-lead"
 
 /** What he left open, kept on this phone (display state only, never synced). */
 internal object NeedsYouGroupStore {
@@ -192,6 +194,21 @@ internal fun NeedsYouGroupLead(line: String, button: String, onClick: () -> Unit
             contentAlignment = Alignment.Center,
         ) { Text(button, style = MekaType.captionStrong, color = Meka.colors.onAccent, maxLines = 1) }
     }
+}
+
+/**
+ * A group's gold foot line (slice 2): To decide's "At work until 17:30 · 37 held for later ›", where the "While you were
+ * at work" card was. A full 48 dp tap with a light haptic opens the after-work summary; nothing is cleared or marked read.
+ */
+@Composable
+internal fun NeedsYouGroupFoot(line: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberMekaHaptics()
+    Box(
+        modifier.fillMaxWidth().testTag(NEEDS_YOU_FOOT_TAG).heightIn(min = 48.dp).clip(RoundedCornerShape(MekaRadius.s))
+            .clickable(role = Role.Button) { haptics.light(); onClick() }
+            .padding(horizontal = MekaSpace.xxs),
+        contentAlignment = Alignment.CenterStart,
+    ) { Text(line, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis) }
 }
 
 /**

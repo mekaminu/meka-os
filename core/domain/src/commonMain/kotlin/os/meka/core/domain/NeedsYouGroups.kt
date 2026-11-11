@@ -51,6 +51,7 @@ object NeedsYouGroupRules {
     const val CLEAR_ALL = "Clear all"
     const val FYI_PEEK = "No reply needed"
     const val RENEWALS_PEEK = "nothing added until you tap Add"
+    const val LISTS_TITLE = "From your lists"
     const val HINT = "Tap a heading to open or close it · up to 5 in a page, ‹ › for the next · Navilife remembers which groups you left open"
 
     /** The groups open before he has opened or closed any: To decide and Messages. */
@@ -116,6 +117,49 @@ object NeedsYouGroupRules {
         plural(asks, "plan to make", "plans to make").takeIf { asks > 0 },
         "$fromLists from your lists".takeIf { fromLists > 0 },
     ).joinToString(" · ")
+
+    /**
+     * Slice 2: To decide's peek from what is really in it: "1 approval · 2 tasks · 2 to chase from your lists" (the
+     * stack's lists card by its own line, every other stack card a task to decide).
+     */
+    fun decidePeekOf(approvals: Int, requests: Int, asks: Int, cards: List<DecisionCard>): String {
+        val lists = cards.firstOrNull { it.kind == DecisionKind.LISTS }
+        val tasks = cards.count { it.kind != DecisionKind.LISTS }
+        return listOfNotNull(
+            plural(approvals, "approval", "approvals").takeIf { approvals > 0 },
+            plural(requests, "request", "requests").takeIf { requests > 0 },
+            plural(asks, "plan to make", "plans to make").takeIf { asks > 0 },
+            plural(tasks, "task", "tasks").takeIf { tasks > 0 },
+            lists?.let { listsPeek(it.why) },
+        ).joinToString(" · ")
+    }
+
+    /** "2 to chase from your lists" (the peek); "From your lists" when the line says nothing. */
+    fun listsPeek(why: String): String = if (why.isBlank()) LISTS_TITLE else "${why.trim()} from your lists"
+
+    /** "2 to chase · from your lists": the one row inside To decide that takes the big lists card's place. */
+    fun listsLead(why: String): String = if (why.isBlank()) LISTS_TITLE else "${why.trim()} · from your lists"
+
+    /**
+     * The big "From your lists" card leaves the stack while boxed: it is [listsLead]'s row with Go through instead.
+     * Returns the lists card (or null) and the cards the stack still shows, in their order.
+     */
+    fun splitLists(cards: List<DecisionCard>): Pair<DecisionCard?, List<DecisionCard>> {
+        val lists = cards.firstOrNull { it.kind == DecisionKind.LISTS }
+        return lists to cards.filter { it !== lists }
+    }
+
+    /**
+     * To decide's foot line, where the "While you were at work" card was: at work, the held line ("At work until 17:30 ·
+     * 37 held for later ›", [heldLabel]); after work, "While you were at work · 2 people · 5 messages · 1 urgent ›".
+     * Null when nothing is held or waiting. A tap opens the after-work summary; nothing is cleared or marked read.
+     */
+    fun afterWorkFoot(summary: AfterWorkSummary, heldLabel: String?): String? {
+        if (summary.isEmpty) return null
+        if (heldLabel != null) return "$heldLabel ›"
+        val urgent = summary.urgentPeople.takeIf { it > 0 }?.let { "$it urgent" }
+        return listOfNotNull(summary.title, summary.headline, urgent).joinToString(" · ") + " ›"
+    }
 
     /** "No reply needed · Alex, Sam, Jo". */
     fun fyiPeek(names: List<String>): String = listOf(FYI_PEEK, names(names, 3)).filter { it.isNotEmpty() }.joinToString(" · ")
