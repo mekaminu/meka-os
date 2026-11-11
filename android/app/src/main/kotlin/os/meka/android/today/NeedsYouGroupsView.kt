@@ -51,6 +51,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.minTouchSquare
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.NeedsYouGroup
@@ -182,17 +183,23 @@ internal fun NeedsYouGroupLead(line: String, button: String, onClick: () -> Unit
     val haptics = rememberMekaHaptics()
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
-            .padding(start = MekaSpace.m, end = MekaSpace.xs, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
+            .padding(start = MekaSpace.m, end = MekaSpace.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
+        // The mockup's 32 dp gold pill, inside a whole 48 dp tap (slice 2a: Go through failed the touch check at 32).
         Box(
-            Modifier.padding(start = MekaSpace.xs).heightIn(min = 32.dp).clip(RoundedCornerShape(MekaRadius.pill))
-                .background(Meka.colors.accent).clickable(role = Role.Button) { haptics.light(); onClick() }
-                .padding(horizontal = MekaSpace.m),
+            Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button) { haptics.light(); onClick() }.minTouch(),
             contentAlignment = Alignment.Center,
-        ) { Text(button, style = MekaType.captionStrong, color = Meka.colors.onAccent, maxLines = 1) }
+        ) {
+            Box(
+                Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                    .padding(horizontal = MekaSpace.m),
+                contentAlignment = Alignment.Center,
+            ) { Text(button, style = MekaType.captionStrong, color = Meka.colors.onAccent, maxLines = 1) }
+        }
     }
 }
 
