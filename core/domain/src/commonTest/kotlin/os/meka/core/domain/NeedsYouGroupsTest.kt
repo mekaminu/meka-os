@@ -22,6 +22,21 @@ class NeedsYouGroupsTest {
         assertEquals(setOf(NeedsYouGroup.MAIL), R.decode("mail, gone ,"))
     }
 
+    @Test fun theOpenFoldSplitsTheBoxesIntoTwoColumns() {
+        assertEquals(listOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES), NeedsYouGroup.entries.filter { R.side(it) == NeedsYouPart.LEFT })
+        assertEquals(listOf(NeedsYouGroup.FYI, NeedsYouGroup.CHATS, NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED),
+            NeedsYouGroup.entries.filter { R.side(it) == NeedsYouPart.RIGHT })
+        NeedsYouGroup.entries.forEach { g ->
+            assertTrue(R.inPart(NeedsYouPart.ALL, g))
+            // Each box draws in exactly one column, never both.
+            assertTrue(R.inPart(NeedsYouPart.LEFT, g) != R.inPart(NeedsYouPart.RIGHT, g))
+        }
+        // A chip's groups share a column, so its list opens together.
+        NeedsYouFilter.entries.filter { it != NeedsYouFilter.ALL }.forEach { f ->
+            assertEquals(1, NeedsYouGroup.entries.filter { R.shows(f, it) }.map(R::side).distinct().size, "$f")
+        }
+    }
+
     @Test fun aTapOpensOrCloses() {
         val once = R.toggle(R.DEFAULT_OPEN, NeedsYouGroup.FYI)
         assertTrue(NeedsYouGroup.FYI in once)

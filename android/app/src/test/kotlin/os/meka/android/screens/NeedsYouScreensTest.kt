@@ -37,6 +37,9 @@ import os.meka.android.today.NeedsYouRoute
 import os.meka.core.domain.NeedsYouLayoutRules
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
 import os.meka.android.today.NEEDS_YOU_COLUMNS_TAG
+import os.meka.android.today.NEEDS_YOU_GROUP_TAG
+import os.meka.core.domain.NeedsYouGroup
+import os.meka.core.domain.NeedsYouGroupRules
 import androidx.compose.ui.test.hasTestTag
 import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.DecisionCard
@@ -316,5 +319,33 @@ class NeedsYouScreensTest {
         tap(name, "Open", hasText(NeedsYouStackRules.buttonLabels(top)[1]))
         until { !shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG)) }
         if (shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: opening a task kept the two columns")
+    }
+
+    /**
+     * Grouped and folding, slice 3: the open Fold's two columns are boxes too. To decide's box sits in the left column,
+     * open, with the stack under it; the header's Close all closes every box in both columns (the top card goes) and
+     * says Open all, which brings it back. The after-work card is To decide's foot line, never a card in Messages.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerTwoColumnsBoxed() {
+        val core = shoot("inner-dark-two-columns-boxed", Fill.MANY)
+        val name = "inner-two-columns-boxed"
+        if (!shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: the open Fold shows one column, not two")
+        val right = compose.onNodeWithTag(NEEDS_YOU_RIGHT_TAG).fetchSemanticsNode().boundsInRoot
+        val heads = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+        if (heads.isEmpty()) fail("$name: no box heads in the open Fold's columns")
+        val decide = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(NeedsYouGroup.DECIDE.title, substring = true),
+            useUnmergedTree = true).fetchSemanticsNodes().firstOrNull() ?: fail("$name: no To decide box")
+        if (decide.boundsInRoot.right > right.left + 1f) fail("$name: To decide's box isn't in the left column")
+        val top = top(core) ?: fail("$name: no card on the stack")
+        ScreenShots.assertShows(compose, name, top.title)
+        assertTouchTargets(name)
+        tap(name, NeedsYouGroupRules.CLOSE_ALL, hasText(NeedsYouGroupRules.CLOSE_ALL))
+        until { compose.onAllNodes(hasText(top.title)).fetchSemanticsNodes().isEmpty() }
+        if (shows(hasText(top.title))) fail("$name: Close all left To decide open")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "inner-dark-two-columns-closed"))
+        tap(name, NeedsYouGroupRules.OPEN_ALL, hasText(NeedsYouGroupRules.OPEN_ALL))
+        until { shows(hasText(top.title)) }
+        if (!shows(hasText(top.title))) fail("$name: Open all didn't open To decide again")
     }
 }

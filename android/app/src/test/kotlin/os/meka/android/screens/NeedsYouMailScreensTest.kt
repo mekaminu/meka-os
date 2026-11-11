@@ -290,5 +290,5 @@ class NeedsYouMailScreensTest {
     fun coverMailByHand() { mailByHand(shoot("cover-dark-mail-by-hand")) }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerMail() { boxed = false; shoot("inner-dark-mail") }
+    fun innerMail() { shoot("inner-dark-mail") }
 }

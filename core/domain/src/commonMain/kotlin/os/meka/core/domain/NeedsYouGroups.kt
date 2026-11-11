@@ -79,6 +79,18 @@ object NeedsYouGroupRules {
         NeedsYouFilter.MAIL -> group == NeedsYouGroup.MAIL || group == NeedsYouGroup.RENEWALS || group == NeedsYouGroup.TIDIED
     }
 
+    /**
+     * The open Fold's column for [group] (slice 3): To decide and Messages on the left; FYI, Group chats and the three
+     * mail boxes on the right, so a chip's groups (FYI → FYI and Group chats) open side by side in one column.
+     */
+    fun side(group: NeedsYouGroup): NeedsYouPart = when (group) {
+        NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES -> NeedsYouPart.LEFT
+        NeedsYouGroup.FYI, NeedsYouGroup.CHATS, NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED -> NeedsYouPart.RIGHT
+    }
+
+    /** Whether [group]'s box draws in [part]: the whole page holds every group, a column only its side's. */
+    fun inPart(part: NeedsYouPart, group: NeedsYouGroup): Boolean = part == NeedsYouPart.ALL || side(group) == part
+
     fun toggle(open: Set<NeedsYouGroup>, group: NeedsYouGroup): Set<NeedsYouGroup> =
         if (group in open) open - group else open + group
 

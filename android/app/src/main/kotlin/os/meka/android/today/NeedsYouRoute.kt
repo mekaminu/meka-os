@@ -125,17 +125,19 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
             val filter = rememberSaveable { mutableStateOf(NeedsYouFilter.ALL) }
             val openChat = rememberSaveable { mutableStateOf<String?>(null) }
             val headerHeight = remember { mutableStateOf(0) }
+            // Grouped and folding, slice 3: both columns read one set of open boxes, so Open all / Close all reaches both.
+            val openGroups = rememberOpenGroups()
             val list: @Composable (Modifier) -> Unit = { m ->
                 if (columns) {
                     Row(m.testTag(NEEDS_YOU_COLUMNS_TAG)) {
                         NeedsYouColumn(core, stack, moves, Modifier.weight(1f).fillMaxHeight(), openAfterWork = { showAfterWork = true },
-                            part = NeedsYouPart.LEFT, filterState = filter, openChatState = openChat, headerHeight = headerHeight)
+                            part = NeedsYouPart.LEFT, filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups)
                         NeedsYouColumn(core, stack, moves, Modifier.weight(1f).fillMaxHeight(), openAfterWork = { showAfterWork = true },
-                            part = NeedsYouPart.RIGHT, filterState = filter, openChatState = openChat, headerHeight = headerHeight)
+                            part = NeedsYouPart.RIGHT, filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups)
                     }
                 } else {
                     NeedsYouColumn(core, stack, moves, m, openAfterWork = { showAfterWork = true },
-                        filterState = filter, openChatState = openChat, headerHeight = headerHeight)
+                        filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups)
                 }
             }
             // Opening the Fold grows the detail out beside the stack; closed, the detail springs up over it.
@@ -518,6 +520,8 @@ internal fun NeedsYouColumn(
     openChatState: MutableState<String?>? = null,
     /** The left column's header height, so the right column's first heading lines up with To decide's. */
     headerHeight: MutableState<Int>? = null,
+    /** The open boxes, held by the screen so the open Fold's two columns share them; this list's own when null. */
+    openGroupsState: MutableState<Set<NeedsYouGroup>>? = null,
 ) {
     // Taps feel instant (2026-10-25): what was just decided here is hidden at once, until the views no longer hold it.
     val hidden = moves.hidden
@@ -624,10 +628,12 @@ internal fun NeedsYouColumn(
     fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section) && NeedsYouLayoutRules.inPart(part, section)
     val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null
     // Needs you grouped and folding (APPROVED 2026-11-10 21:51, needs-you-grouped.dc.html), slice 1: on the folded Fold
-    // every section is a box that opens and closes; what he left open is kept on this phone. The open Fold's two columns
-    // and the command centre keep their look until their slices.
-    val boxed = !compact && part == NeedsYouPart.ALL
-    var openGroups by rememberOpenGroups()
+    // every section is a box that opens and closes; what he left open is kept on this phone. Slice 3: the open Fold's
+    // two columns are boxes too (To decide and Messages left; FYI, Group chats and the mail boxes right), sharing one
+    // set of open boxes. The command centre keeps its look.
+    val boxed = !compact
+    val ownOpenGroups = rememberOpenGroups()
+    var openGroups by (openGroupsState ?: ownOpenGroups)
     // Slice 2: the "While you were at work" card is To decide's gold foot line, and the big "From your lists" card one
     // row with Go through at the top of To decide (the rest of the stack stays under it).
     val workNow by core.workMode.collectAsState()
@@ -648,14 +654,17 @@ internal fun NeedsYouColumn(
         NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED -> NeedsYouSection.MAIL
     }
     /** Whether [g]'s chip shows it (boxed), else the section's as before. */
-    fun showG(g: NeedsYouGroup): Boolean = if (boxed) NeedsYouGroupRules.shows(filter, g) else show(sectionOf(g))
+    fun showG(g: NeedsYouGroup): Boolean =
+        if (boxed) NeedsYouGroupRules.shows(filter, g) && NeedsYouGroupRules.inPart(part, g) else show(sectionOf(g))
     /** Whether [g]'s contents draw: shown, and open while boxed. */
     fun inG(g: NeedsYouGroup): Boolean = showG(g) && (!boxed || g in openGroups)
     val chatsCount = (digest?.cards?.size ?: 0) + (discord?.cards?.size ?: 0)
     val mailAnswerAny = mailMoment != null || mailMomentSession != null || mailNeeds != null || mailChases != null
     val tidiedAny = needsMail != null || archived != null || unopened != null
     val msgsAny = messageChats.isNotEmpty() || sendAll != null
-    val present: List<NeedsYouGroup> = buildList {
+    // Every group with something in it on the whole page (the header's Open all / Close all reaches both columns);
+    // [present] is this column's.
+    val presentAll: List<NeedsYouGroup> = buildList {
         if (decideCount > 0 || afterWorkFoot != null) add(NeedsYouGroup.DECIDE)
         if (msgsAny) add(NeedsYouGroup.MESSAGES)
         if (fyiChats.isNotEmpty()) add(NeedsYouGroup.FYI)
@@ -663,7 +672,8 @@ internal fun NeedsYouColumn(
         if (mailAnswerAny) add(NeedsYouGroup.MAIL)
         if (mailFinds != null) add(NeedsYouGroup.RENEWALS)
         if (tidiedAny) add(NeedsYouGroup.TIDIED)
-    }.filter { showG(it) }
+    }.filter { !boxed || NeedsYouGroupRules.shows(filter, it) }
+    val present: List<NeedsYouGroup> = presentAll.filter { showG(it) }
     val msgPg = NeedsYouGroupRules.page(messageChats.size, msgPage)
     val fyiPg = NeedsYouGroupRules.page(fyiChats.size, fyiPage)
     val mailPg = NeedsYouGroupRules.page(mailNeeds?.every?.size ?: 0, mailPage)
@@ -916,7 +926,7 @@ internal fun NeedsYouColumn(
             item(key = "title-space") {
                 Spacer(Modifier.height(with(LocalDensity.current) { (headerHeight?.value ?: 0).toDp() }))
             }
-            if ((!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny)) {
+            if (if (boxed) present.isEmpty() else (!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny)) {
                 item(key = "right-empty") {
                     Text(NeedsYouLayoutRules.RIGHT_EMPTY, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m, start = MekaSpace.xxs).appear(rememberAppearance(1, play)))
@@ -929,9 +939,9 @@ internal fun NeedsYouColumn(
             } else {
                 Column(Modifier.onSizeChanged { headerHeight?.value = it.height }.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
                     if (boxed) {
-                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount), present.isNotEmpty(),
-                            onClear = { openGroups = NeedsYouGroupRules.all(openGroups, present) },
-                            actionLabel = NeedsYouGroupRules.allLabel(openGroups, present))
+                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount), presentAll.isNotEmpty(),
+                            onClear = { openGroups = NeedsYouGroupRules.all(openGroups, presentAll) },
+                            actionLabel = NeedsYouGroupRules.allLabel(openGroups, presentAll))
                     } else {
                         NeedsYouHeader(NeedsYouLayoutRules.subtitle(decideCount, replyCount, fyiChats.size), fyiChats.isNotEmpty(), onClear = {
                             fyiChats.forEach { moves.onTriageChat(it, ChatFinishTap.DONE) }
@@ -1275,7 +1285,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
-        if (boxed && present.isNotEmpty()) {
+        if (boxed && presentAll.isNotEmpty() && part != NeedsYouPart.RIGHT) {
             item(key = "groups-hint") {
                 Text(NeedsYouGroupRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.xxs, start = MekaSpace.xxs))
