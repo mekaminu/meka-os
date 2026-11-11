@@ -1090,6 +1090,28 @@ final class CoreModel {
         )
     }
 
+    /// When this Mac last started the morning read-out (a welcome back just after it stays quiet).
+    private var morningReadOutAt: Date?
+
+    /// The morning read-out (Meka 2026-11-11 06:40: "My start of day reading out is no longer happening"): the first
+    /// open of Today in the morning brings up the brief reading itself, once a day on this Mac (the wake alarm's read
+    /// counts), never once the brief was opened today, in quiet hours or at work (`MekaCore.morningReadOutPlays`). The
+    /// Mac has no ringer or call state of its own to read. Returns whether it started.
+    @discardableResult
+    func morningReadOutIfDue(reduced: Bool) -> Bool {
+        guard let core else { return false }
+        let defaults = UserDefaults.standard
+        let last = defaults.object(forKey: Self.morningReadOutKey) as? Int64
+        let lastDay: KotlinLong? = last.map { KotlinLong(value: $0) }
+        guard core.morningReadOutPlays(lastDay: lastDay, onCall: false, silent: false, private: true) else { return false }
+        defaults.set(core.todayEpochDay(), forKey: Self.morningReadOutKey)
+        morningReadOutAt = Date()
+        listenToBrief(reduced: reduced)
+        return true
+    }
+
+    static let morningReadOutKey = "meka.morningReadOut.lastDay"
+
     /// Today → Listen to the Brief (⇧⌘B; the Mac's counterpart of the Fold's brief widget): Today comes forward and
     /// the brief sheet opens reading itself aloud. With the sheet already open, it starts reading there.
     func listenToBrief(reduced: Bool) {
@@ -2974,6 +2996,9 @@ final class CoreModel {
     /// once per return, not in quiet hours or protected time); then Navilife comes forward and greets him.
     func welcomeBack(minutesAway: Int, reduced: Bool) {
         guard let core else { return }
+        // The morning read-out comes first (Meka 2026-11-11): the brief is read instead of a hello, never both.
+        if morningReadOutIfDue(reduced: reduced) { return }
+        if let at = morningReadOutAt, Date().timeIntervalSince(at) < 10 * 60 { return }
         let since = lastHelloAt.map { Int32(min(Date().timeIntervalSince($0) / 60, 100_000)) } ?? -1
         guard core.welcomeBackGreets(on: MacWelcomeBack.enabled, awayMin: Int32(min(minutesAway, 100_000)),
                                      minutesSinceHello: since, micAllowed: MacTalkOnOpen.micAllowed) else { return }
@@ -3578,7 +3603,11 @@ final class CoreModel {
             } else if a.action == MacAlarm.dismissAction {
                 run { _ = try await $0.dismissAlarm(id: alarm) }
                 // Only the wake alarm brings up the brief; a quick alarm or a timer just stops (Alarms, slice 2).
-                if MacAlarm.opensBrief(alarmID: alarm) { readBriefOnOpen = true; showBrief = true }
+                if MacAlarm.opensBrief(alarmID: alarm) {
+                    readBriefOnOpen = true; showBrief = true
+                    // The wake alarm's read is the morning's read-out: Today's first open doesn't read it again.
+                    if let core { UserDefaults.standard.set(core.todayEpochDay(), forKey: Self.morningReadOutKey) }
+                }
             }
             return
         }

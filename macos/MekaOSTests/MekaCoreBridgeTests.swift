@@ -2353,6 +2353,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.bookingPlayable(audio: true, endedAtMs: KotlinLong(value: 500), nowMs: 1_000, keepDays: 7))
     }
 
+    func testMorningReadOutReachesSwift() {
+        // The morning read-out (2026-11-11): the first morning open reads the brief, the second doesn't.
+        let rules = MorningReadOutRules.shared
+        XCTAssertTrue(rules.reads(lastDay: KotlinLong(value: 9), today: 10, minuteOfDay: 7 * 60 + 15, startMinute: 7 * 60, ready: true,
+                                  seenToday: false, quiet: false, atWork: false, onCall: false, silent: false, private: true))
+        XCTAssertFalse(rules.reads(lastDay: KotlinLong(value: 10), today: 10, minuteOfDay: 7 * 60 + 15, startMinute: 7 * 60, ready: true,
+                                   seenToday: false, quiet: false, atWork: false, onCall: false, silent: false, private: true))
+        XCTAssertEqual(rules.line(preparing: false), "Reading your morning brief")
+    }
+
     func testCallSpeakerReachesSwift() {
         // Recordings with both voices, slice 3: who's speaking along the words as the call's recording plays.
         let rules = CallRecordingRules.shared

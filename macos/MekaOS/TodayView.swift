@@ -122,8 +122,11 @@ struct TodayView: View {
             .onAppear {
                 if ringPlay == nil { ringPlay = DayRingOpen.claim(reduced: reduceMotion) }
                 takeOpeningRequest()
+                model.morningReadOutIfDue(reduced: reduceMotion)
             }
             .onChange(of: model.openingRequested) { takeOpeningRequest() }
+            // The morning read-out also starts when the brief's day comes in after Today opened.
+            .onChange(of: model.brief?.dateLabel ?? "") { model.morningReadOutIfDue(reduced: reduceMotion) }
             // Every open is a moment (Living Today, slice 2): coming back to MEKA after a while draws the ring in
             // again and replays Today's stagger; the first return on a new day plays the full opening even when MEKA
             // stayed open overnight. A quick switch away and back leaves Today as it was.
@@ -133,6 +136,7 @@ struct TodayView: View {
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 // Reconnect clears at once: back from a sign-in page, the accounts are checked again straight away.
                 Task { await model.returnedToApp() }
+                model.morningReadOutIfDue(reduced: reduceMotion)
                 let away = resignedAt.map { Date().timeIntervalSince($0) } ?? 0
                 guard let back = DayRingOpen.onReturn(away: away, reduced: reduceMotion) else { return }
                 ringPlay = back

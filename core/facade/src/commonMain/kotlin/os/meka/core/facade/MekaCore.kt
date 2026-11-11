@@ -7852,6 +7852,22 @@ class MekaCore(
         )
     }
 
+    /**
+     * The morning read-out (Meka 2026-11-11): whether this open of Today reads the brief aloud
+     * ([os.meka.core.domain.MorningReadOutRules]): once a day on this device ([lastDay], kept there), the morning only,
+     * never once the brief was opened today, in quiet hours or at work; [onCall], [silent] (ringer on silent or vibrate)
+     * and [private] (headphones or the car) are the device's. Pure, nothing stored.
+     */
+    fun morningReadOutPlays(lastDay: Long?, onCall: Boolean, silent: Boolean, private: Boolean): Boolean {
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val b = _brief.value
+        return os.meka.core.domain.MorningReadOutRules.reads(
+            lastDay, todayEpochDay(), cal.minuteOfDay(now), b.startMinute, b.dateLabel.isNotEmpty(), b.seenToday,
+            _notifySettings.value.quiet.isQuietAt(now, cal), _workMode.value.atWork, onCall, silent, private,
+        )
+    }
+
     /** How many cards Needs you holds now: the Hello orb's warm halo while any do. */
     fun needsYouCount(): Int = _needsYouStack.value.cards.size
 

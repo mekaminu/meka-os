@@ -271,7 +271,11 @@ private fun TodayRouteContent(
     // Dismissing the wake alarm (Alarms, slice 1): the brief springs up over Today.
     val alarmBrief = widgetApp?.openBrief?.collectAsState()?.value ?: false
     LaunchedEffect(alarmBrief) {
-        if (alarmBrief) { briefReadAloud = !showBrief; showBrief = true; widgetApp?.openBrief?.value = false }
+        if (alarmBrief) {
+            briefReadAloud = !showBrief; showBrief = true; widgetApp?.openBrief?.value = false
+            // The wake alarm's read is the morning's read-out (Meka 2026-11-11): Today's first open doesn't read it again.
+            if (briefReadAloud) widgetApp?.let { MorningReadOutStore.markRead(it, core.todayEpochDay()) }
+        }
     }
     // "Plan my day" said to Talk (morning brief, slice 5): the planner springs up over Today, as its button does.
     val talkPlan = widgetApp?.openPlan?.collectAsState()?.value ?: false
@@ -303,6 +307,8 @@ private fun TodayRouteContent(
     if (eventOpen != null) eventShown = eventOpen
     val shutdown by core.shutdownView.collectAsState()
     val brief by core.briefView.collectAsState()
+    // The morning read-out (Meka 2026-11-11 06:40): the first morning open of Today reads the brief once, card or not.
+    val morningReadOut = rememberMorningReadOut(core, briefReady = brief.dateLabel.isNotEmpty(), briefPaneReading = { showBrief })
     val review by core.reviewView.collectAsState()
     // The command centre beside Today on the open Fold (Fold modes, slice 2): Needs you and Coming up.
     val stack by core.needsYouStack.collectAsState()
@@ -457,7 +463,7 @@ private fun TodayRouteContent(
                         split = split,
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
-                        brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
+                        brief = brief, openBrief = { morningReadOut.stop(); showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
                         laterReviewCard = { scope.launch { runCatching { core.reviewLater(null) } } },
                         laterShutdownCard = { scope.launch { runCatching { core.shutdownLater(null) } } },
@@ -493,6 +499,8 @@ private fun TodayRouteContent(
                     )
                 },
             )
+            // "Reading your morning brief · Stop" over the top of Today while the morning read-out speaks.
+            MorningReadOutLine(morningReadOut, Modifier.align(Alignment.TopCenter))
             // Closed Fold: detail springs up over Today. The last task is kept so it stays visible while leaving.
             var shown by remember { mutableStateOf<Task?>(null) }
             if (selected != null) shown = selected
