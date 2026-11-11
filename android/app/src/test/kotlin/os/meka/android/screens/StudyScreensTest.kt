@@ -155,7 +155,9 @@ class StudyScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "On track for Mon 23 Nov")
         ScreenShots.assertShows(compose, name, "2 sessions a week")
-        ScreenShots.assertShows(compose, name, "Fits: you need 2 of the 4 sessions a week the 2 times you picked hold.")
+        ScreenShots.assertShows(compose, name, "Fits: the 2 times you picked give 4 sessions a week; you need 2.")
+        // Walk-through 2026-11-08 A9: two 45-minute sessions are 1 h 30 a week, not "about 1 h".
+        ScreenShots.assertShows(compose, name, "1 h 30 a week · 5 lessons left")
         // Walk-through 2026-11-02 A3: the week's time says it's a week's, and the next lesson names its module in full.
         ScreenShots.assertShows(compose, name, "a week · 5 lessons left")
         ScreenShots.assertShows(compose, name, "Next: Pivot tables · Module 2: Core skills")

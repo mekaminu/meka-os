@@ -163,7 +163,11 @@ object StudyAutoRules {
         val mine = lessons.filter { it.courseId == courseId && it.suggested && !it.done }
         if (mine.isEmpty()) return null
         val days = mine.mapNotNull { it.plannedDay }.distinct().sorted()
-        val names = days.take(3).map { LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(it) - 1] } + listOfNotNull("…".takeIf { days.size > 3 })
+        // Walk-through 2026-11-08 A9: "Mon, Wed, Mon, …" named next week's Monday like this one's; a day a week or more
+        // after the first carries its date ("Mon, Wed, Mon 2 Nov, …").
+        val first = days.first()
+        val names = days.take(3).map { if (it - first >= 7) CivilDate.shortLabel(it) else LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(it) - 1] } +
+            listOfNotNull("…".takeIf { days.size > 3 })
         val n = mine.size
         val what = if (n == 1) "1 lesson suggested" else "$n lessons suggested"
         val sessions = if (days.size == 1) "your next session" else "your next ${days.size} sessions"

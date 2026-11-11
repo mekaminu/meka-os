@@ -286,9 +286,10 @@ class StudyTest {
         assertTrue(sFold.setFinish(id, today + 42, today))
         assertFalse(sFold.setFinish(id, today + 42, today))
         p = sFold.view(today).course(id)!!.plan
-        // 860 min left over six weeks: 144 a week, four 45-minute sessions.
+        // 860 min left over six weeks: 144 a week, four 45-minute sessions, so 3 h booked a week (walk-through A9:
+        // the week's time is the sessions', never less than they add up to).
         assertEquals("4 sessions a week", p.perWeek)
-        assertEquals("about 2½ h a week · 19 lessons left", p.perWeekSub)
+        assertEquals("3 h a week · 19 lessons left", p.perWeekSub)
         assertEquals(StudyRules.PICK_SLOTS, p.fit)
         assertEquals("On track for Mon 7 Dec", p.status)
         assertEquals(listOf(false, true, false), p.ends.map { it.on })
@@ -298,14 +299,14 @@ class StudyTest {
         assertFalse(sFold.setSlot(id, "moon", true))
         p = sFold.view(today).course(id)!!.plan
         assertTrue(p.fits)
-        assertEquals("Fits: you need 4 of the 5 sessions a week the 3 times you picked hold.", p.fit)
+        assertEquals("Fits: the 3 times you picked give 5 sessions a week; you need 4.", p.fit)
         assertEquals("That leaves 1 spare session a week to catch up if one slips.", p.obi)
 
         // Only Saturday mornings: longer sessions aren't enough, a later date is.
         listOf("train", "thu").forEach { sFold.setSlot(id, it, false) }
         p = sFold.view(today).course(id)!!.plan
         assertFalse(p.fits)
-        assertEquals("Doesn’t fit: you need 4 sessions a week but the time you picked holds 1. Add a time, make sessions longer or move the date.", p.fit)
+        assertEquals("Doesn’t fit: the time you picked gives 1 session a week; you need 4. Add a time, make sessions longer or move the date.", p.fit)
         assertEquals("Move the date to Mon 15 Mar and it fits the times you picked.", p.obi)
         // Hour-long sessions with the train mornings added: 144 min a week is three sessions, and four slots are picked.
         sFold.setSlot(id, "train", true)
@@ -313,6 +314,7 @@ class StudyTest {
         assertFalse(sFold.setSession(id, 5))
         p = sFold.view(today).course(id)!!.plan
         assertEquals("3 sessions a week", p.perWeek)
+        assertEquals("3 h a week · 19 lessons left", p.perWeekSub)
         assertTrue(p.fits)
         assertEquals(listOf(false, false, true), p.lens.map { it.on })
 

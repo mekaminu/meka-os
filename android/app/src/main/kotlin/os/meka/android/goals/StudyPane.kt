@@ -799,7 +799,8 @@ private fun WeekCard(
                 }
                 Column(Modifier.weight(1f)) {
                     Text(
-                        row.lessons, style = MekaType.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        // Walk-through 2026-11-08 A9: "Welcome and se…" cut the lesson's name; it wraps to a second line.
+                        row.lessons, style = MekaType.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         color = if (row.catchUp) Meka.colors.textTertiary else Meka.colors.textPrimary,
                     )
                     Crossfade(note ?: row.place, animationSpec = MekaMotion.appear(reduced), label = "study-week-where") { line ->

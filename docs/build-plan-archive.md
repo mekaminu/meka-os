@@ -5641,6 +5641,15 @@ BriefScreensTest's fast now started at 03:45 like FastingScreensTest's (it was 1
 TomorrowScreensTest seed tasks only, which no other shot contradicts. A8 is closed; next A9.
 
 
+
+**Slice 14 (2026-11-11): A9, Study plan's figures.** (1) The plan's week line is the sessions he books: two 45-minute
+sessions read "1 h 30 a week · 5 lessons left", not "about 1 h a week" (the lessons' bare minutes); (2) the fit line
+says what the times give, then what he needs: "Fits: the 2 times you picked give 4 sessions a week; you need 2." (all N
+/ it when every session is needed; "Doesn't fit: the time you picked gives 1 session a week; you need 4. …"); (3) the
+suggestions line dates a day a week or more after the first ("Mon, Wed, Mon 2 Nov, …"); (4) THIS WEEK's lesson names
+wrap to a second line instead of "Welcome and se…" (Fold and Mac). "Today 20:30 then a Wed row" on the Monday shot is
+Monday's and Wednesday's evenings, so nothing to fix there. Core `StudyRules.plan/gives`, `StudyAutoRules.line`; tests
+StudyTest, StudyAutoTest, StudyScreensTest.shootPlan; Mac `StudySheet`; Mac checked nightly.
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 
 Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:

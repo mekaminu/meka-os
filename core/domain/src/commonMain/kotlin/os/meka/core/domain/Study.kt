@@ -837,6 +837,10 @@ object StudyRules {
 
     private fun picked(slots: Set<String>): String = pickedCount(slots).let { if (it == 1) "the time you picked" else "the $it times you picked" }
 
+    /** "the 3 times you picked give 5 sessions a week", "the time you picked gives 1 session a week". */
+    private fun gives(slots: Set<String>, avail: Int): String =
+        "${picked(slots)} ${if (pickedCount(slots) == 1) "gives" else "give"} ${plural(avail, "session")} a week"
+
     /** "Mon 7 Dec · 6 wks" */
     fun endLabel(day: Long, today: Long): String {
         val days = day - today
@@ -895,15 +899,17 @@ object StudyRules {
                 // Walk-through A9: "about 1 h 4" read as cut off; the week's time is rounded like every other "about".
                 // Walk-through 2026-11-02 A3: "about 1 h · 5 lessons left" under "about 4½ h left" read as the time
                 // left; it's the week's time, so it says so.
-                perWeekSub = "${aboutLabel(minsPerWeek(i, finish).coerceAtLeast(1))} a week · ${plural(i.leftLessons, "lesson")} left"
+                // Walk-through 2026-11-08 A9: "2 sessions a week" at 45 min over "about 1 h a week" didn't add up; the
+                // week's time is the sessions he books (2 × 45 min = 1 h 30), not the bare minutes the lessons need.
+                perWeekSub = "${minsLabel(sessions * i.sessionMins)} a week · ${plural(i.leftLessons, "lesson")} left"
                 fits = avail > 0 && sessions <= avail
                 fit = when {
                     avail == 0 -> PICK_SLOTS
-                    // Walk-through 2026-11-02 A3: "Fits: … hold 4 sessions a week" beside "2 sessions a week" read as
-                    // two answers; the line says how many of the times' sessions he needs.
-                    fits -> "Fits: you need " + (if (avail == 1) "the one session" else if (sessions == avail) "all ${plural(avail, "session")}" else "$sessions of the ${plural(avail, "session")}") +
-                        " a week ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"}."
-                    else -> "Doesn’t fit: you need ${plural(sessions, "session")} a week but ${picked(i.slots)} ${if (pickedCount(i.slots) == 1) "holds" else "hold"} $avail. Add a time, make sessions longer or move the date."
+                    // Walk-through 2026-11-08 A9: "Fits: you need 2 of the 4 sessions a week the 2 times you picked
+                    // hold." read as garbled; the line says what the times give, then what he needs.
+                    fits -> "Fits: ${gives(i.slots, avail)}; you need " +
+                        (if (sessions == avail) (if (avail == 1) "it" else "all $avail") else "$sessions") + "."
+                    else -> "Doesn’t fit: ${gives(i.slots, avail)}; you need $sessions. Add a time, make sessions longer or move the date."
                 }
                 val by = behindBy(i)
                 behind = by > 0

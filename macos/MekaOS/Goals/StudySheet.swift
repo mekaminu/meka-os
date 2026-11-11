@@ -645,7 +645,7 @@ struct StudySheet: View {
                     }
                     .frame(width: 52, alignment: .leading)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(row.lessons).font(MekaType.body).lineLimit(1)
+                        Text(row.lessons).font(MekaType.body).lineLimit(1...2) // walk-through A9: the lesson's name wraps, not cut
                             .foregroundStyle(row.catchUp ? palette.textTertiary : palette.textPrimary)
                         Text(note ?? row.place).font(MekaType.caption).lineLimit(1)
                             .foregroundStyle(note != nil ? palette.accent : palette.textSecondary)

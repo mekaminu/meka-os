@@ -111,6 +111,13 @@ class StudyAutoTest {
         assertEquals("3 lessons suggested for your next 2 sessions · Tue, Thu · from your calendar", v.suggested)
         assertEquals("1 lesson suggested for your next session · Tue · from the times you picked", StudyAutoRules.line("c1", lessons.take(1), false))
         assertNull(StudyRules.view(course, listOf(lesson("a", 30, 1)), mon).suggested)
+        // Walk-through 2026-11-08 A9: next week's Monday carries its date, never a second bare "Mon".
+        val twoWeeks = StudyAutoRules.suggest(
+            listOf(course), (1L..4L).map { lesson("l$it", 60, it) },
+            listOf(StudySession(mon, 60, "c1"), StudySession(mon + 2, 60, "c1"), StudySession(mon + 7, 60, "c1"), StudySession(mon + 9, 60, "c1")),
+            mon, dayOf,
+        )
+        assertEquals("4 lessons suggested for your next 4 sessions · Mon, Wed, Mon 2 Nov, … · from the times you picked", StudyAutoRules.line("c1", twoWeeks, false))
         // The Week board and Tomorrow read them like planned lessons.
         assertEquals("Study · 2 lessons · about 1 h · Lesson a, Lesson b", StudyRules.tomorrowLine(StudyRules.onDay(lessons, listOf(course), mon + 1, false, dayOf))?.text)
     }
