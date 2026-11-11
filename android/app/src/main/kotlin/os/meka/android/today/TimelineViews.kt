@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +67,10 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AllDayItem
 import os.meka.core.domain.CardEdge
 import os.meka.core.domain.ScheduleCardRules
+import os.meka.core.domain.ScheduleEdgeInk
+import os.meka.core.domain.TimelineKind
+import os.meka.android.designsystem.calendarTone
+import os.meka.core.domain.CalendarTones
 import os.meka.core.domain.TodayInkRules
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.TimelineRow
@@ -125,11 +133,60 @@ internal fun Modifier.scheduleSegment(edge: CardEdge): Modifier {
 /** The Schedule card's side inset (the mockup's 14 px). */
 internal val SCHEDULE_INSET = 14.dp
 
+/** The Schedule card's 2 dp edge colours (core [ScheduleCardRules.edgeInk]). */
+@Composable
+internal fun ScheduleEdgeInk.color(): Color = when (this) {
+    ScheduleEdgeInk.CALENDAR -> Meka.colors.calendarTone(1)
+    ScheduleEdgeInk.FIXTURE -> Meka.colors.calendarTone(CalendarTones.FIXTURE)
+    ScheduleEdgeInk.TASK -> Meka.colors.calendarTone(2)
+    ScheduleEdgeInk.QUIET -> Meka.colors.hairline
+    ScheduleEdgeInk.NOW -> Meka.colors.accent
+}
+
+/**
+ * Today regression 3: the one mark every Schedule card row wears, a 2 dp coloured edge between the time and the title,
+ * as tall as the row's words (the row is measured with IntrinsicSize.Min). Outside the card nothing is drawn.
+ */
+@Composable
+internal fun ScheduleEdge(ink: ScheduleEdgeInk?, modifier: Modifier = Modifier) {
+    if (!LocalScheduleCard.current || ink == null) return
+    val c = ink.color()
+    Box(modifier.width(ScheduleCardRules.EDGE_DP.dp).fillMaxHeight().padding(vertical = 2.dp).background(c))
+    Spacer(Modifier.width(MekaSpace.s))
+}
+
+/**
+ * Work and the commute inside the Schedule card (Today regression 3, Meka 2026-11-11: "don't like the oval outline"):
+ * one dim line on the card's own surface: time, the quiet edge (gold while on), "Work · Now · until 17:30". No band,
+ * no outline. No taps.
+ */
+@Composable
+internal fun ScheduleBackgroundRow(r: TimelineRow, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = MekaSpace.xs).testTag(SCHEDULE_BACKGROUND_TAG)
+            .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(r.title, r.time, r.detail).joinToString(", ") },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TimeColumn(r.time, past = true)
+        ScheduleEdge(ScheduleCardRules.edgeInk(r.kind, r.running))
+        val detail = r.detail?.let { if (r.kind == TimelineKind.COMMUTE) CommuteRules.shown(it) else it }
+        Text(
+            ScheduleCardRules.backgroundLine(r.title, detail), style = MekaType.caption,
+            color = if (r.running) Meka.colors.textSecondary else Meka.colors.textTertiary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** Every work or commute line in the Schedule card, for the screen tests. */
+internal const val SCHEDULE_BACKGROUND_TAG = "schedule-background-row"
+
 /** An event: time on the left, title and where/which calendar under it. A running one is marked "Now". */
 @Composable
 internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past)
+        ScheduleEdge(ScheduleCardRules.edgeInk(TimelineKind.EVENT, r.running, fixture = r.event?.isFixture == true))
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.eventTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
             // In Today's Schedule card the time column shows the start only, so the end leads the line ("until 10:00").
@@ -152,11 +209,12 @@ internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier 
 @Composable
 internal fun SessionTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().padding(vertical = MekaSpace.xs)
+        modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "${r.title}, ${r.time}, ${r.detail.orEmpty()}" },
         verticalAlignment = Alignment.Top,
     ) {
         TimeColumn(r.time, past = false)
+        ScheduleEdge(ScheduleCardRules.edgeInk(TimelineKind.SESSION, r.running))
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
             r.detail?.let { Text(it, style = MekaType.caption, color = TodayInkRules.detail(r.running).color()) }
@@ -171,6 +229,7 @@ internal fun SessionTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
  */
 @Composable
 internal fun WorkTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
+    if (LocalScheduleCard.current) return ScheduleBackgroundRow(r, modifier)
     Row(
         modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs)
             .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(r.title, r.time, r.detail).joinToString(", ") },
@@ -206,6 +265,7 @@ internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier
  */
 @Composable
 internal fun CommuteTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
+    if (LocalScheduleCard.current) return ScheduleBackgroundRow(r, modifier)
     Row(
         modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs)
             .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(r.title, r.time, r.detail).joinToString(", ") },

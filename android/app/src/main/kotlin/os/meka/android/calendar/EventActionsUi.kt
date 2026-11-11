@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -196,6 +197,11 @@ fun SwipeableEvent(
     modifier: Modifier = Modifier,
     /** Tapping the row opens the event; long-pressing opens the actions menu. */
     onOpen: ((CalendarEvent) -> Unit)? = null,
+    /**
+     * What the row sits on while it slides (it covers the swipe's backdrop): the screen by default; Today's Schedule card
+     * passes its own surface, so an event isn't a black block inside the card (Today regression 3, Meka 2026-11-11).
+     */
+    fill: Color? = null,
     content: @Composable (Modifier) -> Unit,
 ) {
     if (event == null || handlers == null) {
@@ -250,7 +256,7 @@ fun SwipeableEvent(
         content(
             Modifier
                 .offset { IntOffset(x.roundToInt(), 0) }
-                .background(Meka.colors.background)
+                .background(fill ?: Meka.colors.background)
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->

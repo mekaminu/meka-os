@@ -48,4 +48,26 @@ class ScheduleCardTest {
         assertEquals(9, ScheduleCardRules.count(allDay = 2, more = true, earlier = true, earlierRows = 2, rows = 3))
         assertEquals(3, ScheduleCardRules.count(allDay = 0, more = false, earlier = false, earlierRows = 5, rows = 3))
     }
+
+    @Test
+    fun everyRowTakesOneColouredEdgeAndNoBand() {
+        assertEquals(ScheduleEdgeInk.CALENDAR, ScheduleCardRules.edgeInk(TimelineKind.EVENT, running = false))
+        assertEquals(ScheduleEdgeInk.FIXTURE, ScheduleCardRules.edgeInk(TimelineKind.EVENT, running = false, fixture = true))
+        assertEquals(ScheduleEdgeInk.TASK, ScheduleCardRules.edgeInk(TimelineKind.TASK, running = false))
+        assertEquals(ScheduleEdgeInk.TASK, ScheduleCardRules.edgeInk(TimelineKind.SESSION, running = true))
+        assertEquals(ScheduleEdgeInk.QUIET, ScheduleCardRules.edgeInk(TimelineKind.WORK, running = false))
+        assertEquals(ScheduleEdgeInk.NOW, ScheduleCardRules.edgeInk(TimelineKind.COMMUTE, running = true))
+        assertNull(ScheduleCardRules.edgeInk(TimelineKind.NOW, running = true))
+        assertNull(ScheduleCardRules.edgeInk(TimelineKind.GAP, running = false))
+    }
+
+    @Test
+    fun workAndTheCommuteAreOneDimLine() {
+        assertTrue(ScheduleCardRules.isBackground(TimelineKind.WORK))
+        assertTrue(ScheduleCardRules.isBackground(TimelineKind.COMMUTE))
+        assertFalse(ScheduleCardRules.isBackground(TimelineKind.EVENT))
+        assertFalse(ScheduleCardRules.isBackground(TimelineKind.SESSION))
+        assertEquals("Work · Now · until 17:30", ScheduleCardRules.backgroundLine("Work", "Now · until 17:30"))
+        assertEquals("Work", ScheduleCardRules.backgroundLine("Work", null))
+    }
 }

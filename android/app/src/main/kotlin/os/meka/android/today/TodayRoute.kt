@@ -1434,7 +1434,7 @@ private fun TodayPane(
                         val m = m0.scheduleSegment(edge(rowsAt + i))
                         InScheduleCard {
                         when (r.kind) {
-                            TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
+                            TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent, fill = Meka.colors.surface) { sm ->
                                 TimelineEventRow(r, past = false, modifier = sm)
                             }
                             TimelineKind.TASK -> r.task?.let { t ->

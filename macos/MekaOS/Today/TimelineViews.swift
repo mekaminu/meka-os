@@ -56,7 +56,76 @@ struct ScheduleCard<Content: View>: View {
         .padding(.vertical, MekaSpace.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        // The card's corners clip its rows (Today regression 3): nothing pokes out of it.
+        .clipShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         .environment(\.scheduleCard, true)
+    }
+}
+
+/// The Schedule card's 2 pt edge colours (core ScheduleCardRules.edgeInk).
+extension ScheduleEdgeInk {
+    func color(_ p: MekaPalette) -> Color {
+        switch self {
+        case .calendar: p.calendarTone(1)
+        case .fixture: p.calendarTone(0)
+        case .task: p.calendarTone(2)
+        case .now: p.accent
+        default: p.hairline
+        }
+    }
+}
+
+/// Today regression 3 (Meka 2026-11-11: "don't like the oval outline and also the black box"): the one mark every
+/// Schedule card row wears, a 2 pt coloured edge between the time and the title, as tall as the row's words. Outside the
+/// card nothing is drawn. Drawn on the words' leading side, so it is exactly as tall as they are.
+struct ScheduleEdge: ViewModifier {
+    @Environment(\.scheduleCard) private var card
+    let ink: ScheduleEdgeInk?
+    let palette: MekaPalette
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if card, let ink {
+            let w = CGFloat(ScheduleCardRules.shared.EDGE_DP)
+            content
+                .padding(.leading, w + MekaSpace.s)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(ink.color(palette)).frame(width: w).padding(.vertical, 2)
+                }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func scheduleEdge(_ ink: ScheduleEdgeInk?, palette: MekaPalette) -> some View { modifier(ScheduleEdge(ink: ink, palette: palette)) }
+}
+
+/// Work and the commute inside the Schedule card: one dim line on the card's own surface (time, the quiet edge, gold
+/// while on, "Work · Now · until 17:30"). No band, no outline, no clicks.
+struct ScheduleBackgroundRow: View {
+    let row: TimelineRow
+    let palette: MekaPalette
+
+    var body: some View {
+        let rules = ScheduleCardRules.shared
+        let detail = row.detail.map { row.kind == .commute ? CommuteRules.shared.shown(line: $0) : $0 }
+        HStack(spacing: 0) {
+            Text(TimelineMetrics.shown(row.time, card: true)).font(MekaType.itemMeta).monospacedDigit()
+                .foregroundStyle(palette.textTertiary).lineLimit(1)
+                .frame(width: TimelineMetrics.column(card: true), alignment: .leading)
+            Text(rules.backgroundLine(title: row.title, detail: detail)).font(MekaType.caption)
+                .foregroundStyle(row.running ? palette.textSecondary : palette.textTertiary)
+                .lineLimit(1).truncationMode(.tail)
+                .scheduleEdge(rules.edgeInk(kind: row.kind, running: row.running, fixture: false), palette: palette)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([row.title, row.time, row.detail].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityIdentifier("schedule-background-row")
     }
 }
 
@@ -264,6 +333,7 @@ struct TimelineEventRow: View {
                     Text(clash).font(MekaType.caption).foregroundStyle(TodayInkRules.shared.clash(past: past).color(palette))
                 }
             }
+            .scheduleEdge(ScheduleCardRules.shared.edgeInk(kind: .event, running: row.running, fixture: row.event?.isFixture == true), palette: palette)
             Spacer()
         }
         .padding(.vertical, MekaSpace.xs)
@@ -292,6 +362,7 @@ struct SessionTimelineRow: View {
                     Text(line).font(MekaType.caption).foregroundStyle(TodayInkRules.shared.detail(running: row.running).color(palette))
                 }
             }
+            .scheduleEdge(ScheduleCardRules.shared.edgeInk(kind: .session, running: row.running, fixture: false), palette: palette)
             Spacer()
         }
         .padding(.vertical, MekaSpace.xs)
@@ -326,6 +397,10 @@ struct WorkTimelineRow: View {
     let palette: MekaPalette
 
     var body: some View {
+        if card { ScheduleBackgroundRow(row: row, palette: palette) } else { band }
+    }
+
+    private var band: some View {
         HStack(spacing: 0) {
             Text(TimelineMetrics.shown(row.time, card: card)).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
                 .lineLimit(card ? 1 : nil)
@@ -360,6 +435,10 @@ struct CommuteTimelineRow: View {
     }
 
     var body: some View {
+        if card { ScheduleBackgroundRow(row: row, palette: palette) } else { strip }
+    }
+
+    private var strip: some View {
         HStack(spacing: 0) {
             Text(TimelineMetrics.shown(row.time, card: card)).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
                 .lineLimit(card ? 1 : nil)

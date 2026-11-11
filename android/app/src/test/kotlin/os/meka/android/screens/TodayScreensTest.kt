@@ -606,6 +606,37 @@ class TodayScreensTest {
     }
 
     /**
+     * Today regression 3 (Meka 2026-11-11 06:40: "don't like the oval outline and also the black box"): inside the
+     * Schedule card work and the commute are one dim line ("Work · Now · until 17:30"), not the outlined band; outside the
+     * card (the Calendar) the band stays.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theScheduleCardsWorkRowIsOneDimLine() {
+        val tag = os.meka.android.today.SCHEDULE_BACKGROUND_TAG
+        val work = os.meka.core.domain.TimelineRow("w-540", os.meka.core.domain.TimelineKind.WORK, "09:00–17:30", "Work", "Now · until 17:30", null, null, true, 0)
+        val commute = os.meka.core.domain.TimelineRow("c-home", os.meka.core.domain.TimelineKind.COMMUTE, "17:30", "Commute home", "Home about 18:50", null, null, false, 0)
+        val event = os.meka.core.domain.TimelineRow("e-1", os.meka.core.domain.TimelineKind.EVENT, "18:00–19:00", "Training", "Oakfield Park", null, null, false, 0)
+        var card by mutableStateOf(true)
+        compose.setContent {
+            MekaTheme {
+                androidx.compose.runtime.CompositionLocalProvider(os.meka.android.today.LocalScheduleCard provides card) {
+                    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                        os.meka.android.today.WorkTimelineRow(work)
+                        os.meka.android.today.TimelineEventRow(event, past = false)
+                        os.meka.android.today.CommuteTimelineRow(commute)
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size != 2) fail("schedule: work and the commute aren't one line each in the card")
+        ScreenShots.assertShows(compose, "schedule-card-rows", "Work · Now · until 17:30")
+        card = false
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()) fail("schedule: the Calendar lost its work band")
+    }
+
+    /**
      * Meka 2026-11-09 08:09 (b, f): the Sunday study check-in is Also today's STUDY WEEK tile, which unfolds the
      * check-in under the row (Looks good folds it away); Monday's review is a REVIEW tile that opens Review.
      */
