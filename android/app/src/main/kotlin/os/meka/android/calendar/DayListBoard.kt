@@ -65,6 +65,8 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.minTouch
 import os.meka.android.today.DayListInBoard
 import os.meka.android.today.DayListPane
+import os.meka.android.today.DayTaskOverlay
+import os.meka.android.today.DayTaskOverlays
 import os.meka.core.domain.DayListBoardRules
 import os.meka.core.domain.DayListPill
 import os.meka.core.domain.DayListSpreadRules
@@ -227,6 +229,8 @@ fun DayListSpread(
     val places = remember { HashMap<String, DayDropZone>() }
     var ghost by remember { mutableStateOf<SpreadGhost?>(null) }
     var origin by remember { mutableStateOf(Offset.Zero) }
+    // A tapped task's sheet and Edit's detail open over the whole spread, not inside its narrow column.
+    val overlays = remember { DayTaskOverlays() }
     fun zones(): List<DayDropZone> =
         strip.mapNotNull { places["pill-${it.epochDay}"] } + columns.mapNotNull { places["col-${it.epochDay}"] }
     fun acrossFrom(from: Long) = DayListAcross(
@@ -309,6 +313,7 @@ fun DayListSpread(
                                 inBoard = DayListInBoard(c.title, c.placeholder, DayListBoardRules.HINT, narrow = true),
                                 sidePadding = MekaSpace.xs,
                                 across = acrossFrom(c.epochDay),
+                                overlays = overlays,
                             )
                         }
                     }
@@ -336,9 +341,21 @@ fun DayListSpread(
             )
         }
     }
+    overlays.day?.let { d ->
+        val v = remember(board, d) { core.dayList(board, d, true) }
+        DayTaskOverlay(
+            core, board, d, v, overlays.sheetId, overlays.editingId, undo,
+            tick = { id -> scope.launch { runCatching { core.complete(id) } } },
+            onSheet = { overlays.sheetId = it }, onEditing = { overlays.editingId = it },
+            maxSheetWidth = SPREAD_SHEET_MAX_DP.dp,
+        )
+    }
     EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l))
     }
 }
+
+/** The widest a task's sheet grows on the open Fold's spread: readable, centred at the foot, never one narrow column. */
+const val SPREAD_SHEET_MAX_DP = 560
 
 /** The held task's card on the spread: its title, the finger's place on the screen, and the day it would land on. */
 private data class SpreadGhost(val title: String, val at: Offset, val target: Long?)

@@ -45,6 +45,10 @@ import os.meka.android.calendar.DAY_LIST_COLUMN_TAG
 import os.meka.android.calendar.DAY_LIST_GHOST_TAG
 import os.meka.android.calendar.DAY_LIST_SPREAD_TAG
 import os.meka.android.calendar.DayListSpread
+import os.meka.android.calendar.SPREAD_SHEET_MAX_DP
+import os.meka.android.today.DAY_TASK_SHEET_TAG
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import os.meka.core.domain.DayListBoardRules
 import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
@@ -193,6 +197,37 @@ class DayListSpreadScreensTest {
         until { core.weekBoard.value.day(sun)?.cards?.any { it.title == "Gym" } == true }
         assertEquals(45, core.weekBoard.value.day(sun)!!.cards.single { it.title == "Gym" }.task.estimateMinutes)
     }
+
+    /**
+     * A task's sheet opens across the spread, not inside its ~270 dp column (2026-11-11): tap "Complete feedbacks" in
+     * Wednesday's list: one sheet, wider than a column and no wider than the cap, centred at the foot; MOVE TO Fri 23
+     * there moves it to Friday (the spread's Undo bar says so).
+     */
+    private fun sheetAcross(theme: ThemeChoice, name: String) {
+        val core = setUp(theme)
+        val board = core.weekBoard.value
+        val column = compose.onAllNodesWithTag(DAY_LIST_COLUMN_TAG)[0].fetchSemanticsNode().size.width / compose.density.density
+        compose.onAllNodes(hasText("Complete feedbacks") and hasClickAction()).fetchSemanticsNodes().ifEmpty { fail("$name: the task's row doesn't open") }
+        compose.onAllNodes(hasText("Complete feedbacks") and hasClickAction())[0].performClick()
+        until { compose.onAllNodesWithTag(DAY_TASK_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
+        val sheets = compose.onAllNodesWithTag(DAY_TASK_SHEET_TAG).fetchSemanticsNodes()
+        assertEquals(1, sheets.size, "$name: not one sheet")
+        val width = sheets.single().size.width / compose.density.density
+        assertTrue(width > column * 1.5f, "$name: the sheet is squeezed into its column ($width dp, a column is $column dp)")
+        assertTrue(width <= SPREAD_SHEET_MAX_DP + 0.5f, "$name: the sheet is wider than the cap ($width dp)")
+        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
+        val box = sheets.single().boundsInRoot
+        assertTrue(kotlin.math.abs(box.center.x - screen.center.x) < 2f, "$name: the sheet isn't centred on the spread")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("day-list", "$name-sheet"))
+        assertTouchTargets("$name-sheet")
+        val id = board.day(board.todayEpochDay)!!.cards.single { it.title.startsWith("Complete feedbacks") }.id
+        compose.onNode(hasText("Fri 23") and hasClickAction() and hasAnyAncestor(hasTestTag(DAY_TASK_SHEET_TAG))).performClick()
+        until { core.weekBoard.value.day(board.todayEpochDay + 2)?.cards?.any { it.id == id } == true }
+        assertTrue(core.weekBoard.value.day(board.todayEpochDay + 2)!!.cards.any { it.id == id }, "$name: Move to Fri 23 from the sheet didn't move it")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.INNER) fun sheetAcrossDark() = sheetAcross(ThemeChoice.DARK, "board-open-dark")
+    @Test @Config(qualifiers = ScreenShots.INNER) fun sheetAcrossLight() = sheetAcross(ThemeChoice.LIGHT, "board-open-light")
 
     @Test @Config(qualifiers = ScreenShots.INNER) fun boardOpenDark() = run(ThemeChoice.DARK, "board-open-dark")
     @Test @Config(qualifiers = ScreenShots.INNER) fun boardOpenLight() = run(ThemeChoice.LIGHT, "board-open-light")

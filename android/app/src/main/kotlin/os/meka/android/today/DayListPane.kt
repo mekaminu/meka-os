@@ -137,13 +137,14 @@ fun DayListPane(
     across: DayListAcross? = null,
     /** Opened from the app icon's Add tasks (slice 2): the add bar takes the focus and the keyboard as the list opens. */
     readyToType: Boolean = false,
+    /** A column of the open Fold's spread: a tapped task's sheet (and Edit's detail) opens over the whole spread. */
+    overlays: DayTaskOverlays? = null,
 ) {
     val board by core.weekBoard.collectAsState()
     // Null: today's list (it follows the board's today past midnight).
     val day = forDay ?: board.todayEpochDay
     var timesOn by rememberSaveable { mutableStateOf(true) }
     val v = remember(board, day, timesOn) { core.dayList(board, day, timesOn) }
-    val conflicts by core.conflicts.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -280,7 +281,7 @@ fun DayListPane(
                     val grip = if (DayListRules.canDrag(r, v.timesOn) && (openRows > 1 || across != null)) Grip(
                         label = StudyRules.gripLabel(r.title),
                         dy = if (held && !crossing) dragDy else 0f, lifted = held,
-                        onStart = { haptics.light(); sheetId = null; dragDy = 0f; crossing = false; lastAt[0] = null; dragId = r.id },
+                        onStart = { haptics.light(); sheetId = null; overlays?.close(); dragDy = 0f; crossing = false; lastAt[0] = null; dragId = r.id },
                         onDrag = { dragDy += it },
                         onEnd = {
                             val moved = across?.onEnd?.invoke(r.id, lastAt[0]) == true
@@ -294,7 +295,7 @@ fun DayListPane(
                         onUp = DayListRules.stepTo(v, r.id, up = true)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
                         onDown = DayListRules.stepTo(v, r.id, up = false)?.let { to -> { haptics.tick(); reorder(r.id, to) } },
                     ) else null
-                    DayListRowView(r, v.timesOn, tick, onOpen = { haptics.tick(); sheetId = r.id }, stacked = inBoard?.narrow == true,
+                    DayListRowView(r, v.timesOn, tick, onOpen = { haptics.tick(); if (overlays != null) overlays.open(day, r.id) else sheetId = r.id }, stacked = inBoard?.narrow == true,
                         modifier = Modifier.then(if (dragId != null) Modifier else Modifier.animateItem()).appear(rememberAppearance(2))
                             .graphicsLayer { translationY = if (held) 0f else slide.value },
                         grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
@@ -369,31 +370,70 @@ fun DayListPane(
         }
         EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l))
 
-        // A task's sheet springs up over the dimmed list.
-        val open = v?.rows?.firstOrNull { it.id == sheetId }
-        BackHandler(enabled = open != null && editingId == null) { sheetId = null }
-        DayTaskSheet(
-            row = open, board = board, day = day,
-            onClose = { sheetId = null },
-            onLength = { id, m -> scope.launch { runCatching { core.setEstimate(id, m) }.getOrNull()?.let { l -> undo.show(l) { core.undoEstimate() } } } },
-            onArea = { id, a -> scope.launch { runCatching { core.areaOnBoard(id, a) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardArea() } } } },
-            onMoveTo = { id, d -> sheetId = null; scope.launch { runCatching { core.moveOnBoard(id, d, Int.MAX_VALUE) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } } },
-            onNextWeek = { id, w -> sheetId = null; scope.launch { runCatching { core.parkOnBoard(id, w, Int.MAX_VALUE) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } } },
-            onSomeday = { id -> sheetId = null; scope.launch { runCatching { core.somedayOnBoard(id) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } } },
-            onEdit = { id -> sheetId = null; editingId = id },
-            onDone = { id -> sheetId = null; haptics.light(); tick(id) },
-        )
+        // A task's sheet springs up over the dimmed list; in a column of the open Fold's spread it springs up over the
+        // whole spread instead (the spread draws it), so the sheet and Edit's detail aren't squeezed into one narrow day.
+        if (overlays == null) {
+            DayTaskOverlay(
+                core, board, day, v, sheetId, editingId, undo, tick,
+                onSheet = { sheetId = it }, onEditing = { editingId = it },
+            )
+        }
+    }
+}
 
-        // Edit opens the task's full detail (when, reminder, repeat, notes, steps, delete), as on Today.
-        val editing = board.dayOf(editingId ?: "")?.cards?.firstOrNull { it.id == editingId }?.task
-        var shown by remember { mutableStateOf(editing) }
-        if (editing != null) shown = editing
-        val actions = todayActions(core, scope, { editingId }, { editingId = it })
-        BackHandler(enabled = editing != null) { editingId = null }
-        CompositionLocalProvider(LocalSharedScope provides null) {
-            MekaPane(visible = editing != null) {
-                shown?.let { t -> DetailPane(t, conflicts.filter { it.taskId == t.id }, actions, Modifier.fillMaxSize(), onClose = { editingId = null }) }
-            }
+/**
+ * Which day's task has its sheet (or Edit's full detail) open over the open Fold's spread (2026-11-11): the columns
+ * hand a tapped task here and the spread draws one sheet across its whole width, not inside a ~270 dp column.
+ */
+@androidx.compose.runtime.Stable
+class DayTaskOverlays {
+    var day by mutableStateOf<Long?>(null)
+        private set
+    var sheetId by mutableStateOf<String?>(null)
+    var editingId by mutableStateOf<String?>(null)
+    fun open(day: Long, id: String) { this.day = day; editingId = null; sheetId = id }
+    fun close() { sheetId = null; editingId = null }
+}
+
+/**
+ * A day's task sheet and, from its Edit…, the task's full detail: drawn by the Day list itself, or by the open Fold's
+ * spread for the column that opened it ([DayTaskOverlays]). [maxSheetWidth] keeps the sheet a readable width on a wide
+ * spread (centred at the foot); the detail fills the space it's given.
+ */
+@Composable
+fun DayTaskOverlay(
+    core: MekaCore, board: os.meka.core.domain.WeekBoard, day: Long, v: os.meka.core.domain.DayListView?,
+    sheetId: String?, editingId: String?,
+    undo: os.meka.android.calendar.EventUndo, tick: (String) -> Unit,
+    onSheet: (String?) -> Unit, onEditing: (String?) -> Unit,
+    maxSheetWidth: androidx.compose.ui.unit.Dp? = null,
+) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val conflicts by core.conflicts.collectAsState()
+    val open = v?.rows?.firstOrNull { it.id == sheetId }
+    BackHandler(enabled = open != null && editingId == null) { onSheet(null) }
+    DayTaskSheet(
+        row = open, board = board, day = day, maxWidth = maxSheetWidth,
+        onClose = { onSheet(null) },
+        onLength = { id, m -> scope.launch { runCatching { core.setEstimate(id, m) }.getOrNull()?.let { l -> undo.show(l) { core.undoEstimate() } } } },
+        onArea = { id, a -> scope.launch { runCatching { core.areaOnBoard(id, a) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardArea() } } } },
+        onMoveTo = { id, d -> onSheet(null); scope.launch { runCatching { core.moveOnBoard(id, d, Int.MAX_VALUE) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } } },
+        onNextWeek = { id, w -> onSheet(null); scope.launch { runCatching { core.parkOnBoard(id, w, Int.MAX_VALUE) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } } },
+        onSomeday = { id -> onSheet(null); scope.launch { runCatching { core.somedayOnBoard(id) }.getOrNull()?.let { l -> undo.show(l) { core.undoBoardMove() } } } },
+        onEdit = { id -> onSheet(null); onEditing(id) },
+        onDone = { id -> onSheet(null); haptics.light(); tick(id) },
+    )
+
+    // Edit opens the task's full detail (when, reminder, repeat, notes, steps, delete), as on Today.
+    val editing = board.dayOf(editingId ?: "")?.cards?.firstOrNull { it.id == editingId }?.task
+    var shown by remember { mutableStateOf(editing) }
+    if (editing != null) shown = editing
+    val actions = todayActions(core, scope, { editingId }, { onEditing(it) })
+    BackHandler(enabled = editing != null) { onEditing(null) }
+    CompositionLocalProvider(LocalSharedScope provides null) {
+        MekaPane(visible = editing != null) {
+            shown?.let { t -> DetailPane(t, conflicts.filter { it.taskId == t.id }, actions, Modifier.fillMaxSize(), onClose = { onEditing(null) }) }
         }
     }
 }
@@ -554,6 +594,9 @@ private fun Modifier.testTagSay(): Modifier = this.then(Modifier.testTag(DAY_LIS
 /** The Say them chip, for screen tests. */
 const val DAY_LIST_SAY_TAG = "day-list-say"
 
+/** A day's task sheet, for screen tests (its width on the open Fold's spread). */
+const val DAY_TASK_SHEET_TAG = "day-task-sheet"
+
 /**
  * A task's sheet (the approved `Sheet.dc.html`, slice 1): LENGTH 15m · 30m · 1h · 2h, AREA, MOVE TO Tomorrow · the
  * week's days · Next week · Someday, then Edit (the full detail: time, repeat, notes, delete) and Done. Every change
@@ -563,6 +606,7 @@ const val DAY_LIST_SAY_TAG = "day-list-say"
 @Composable
 private fun DayTaskSheet(
     row: DayListRow?, board: os.meka.core.domain.WeekBoard, day: Long,
+    maxWidth: androidx.compose.ui.unit.Dp? = null,
     onClose: () -> Unit,
     onLength: (String, Int?) -> Unit,
     onArea: (String, os.meka.core.domain.BoardArea?) -> Unit,
@@ -590,7 +634,9 @@ private fun DayTaskSheet(
             val card = r.card
             val shape = RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l)
             Column(
-                Modifier.fillMaxWidth().clip(shape).background(Meka.colors.surface).border(1.dp, Meka.colors.hairline, shape)
+                Modifier.then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier).fillMaxWidth()
+                    .testTag(DAY_TASK_SHEET_TAG)
+                    .clip(shape).background(Meka.colors.surface).border(1.dp, Meka.colors.hairline, shape)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
                     .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
