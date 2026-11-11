@@ -375,6 +375,8 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/needs-you/inner-dark-mail.png](docs/screens/fold/needs-you/inner-dark-mail.png)
 - [fold/needs-you/inner-dark-many.png](docs/screens/fold/needs-you/inner-dark-many.png)
 - [fold/needs-you/inner-dark-one.png](docs/screens/fold/needs-you/inner-dark-one.png)
+- [fold/needs-you/inner-dark-two-columns-boxed.png](docs/screens/fold/needs-you/inner-dark-two-columns-boxed.png)
+- [fold/needs-you/inner-dark-two-columns-closed.png](docs/screens/fold/needs-you/inner-dark-two-columns-closed.png)
 - [fold/needs-you/inner-dark-two-columns.png](docs/screens/fold/needs-you/inner-dark-two-columns.png)
 - [fold/needs-you/inner-dark.png](docs/screens/fold/needs-you/inner-dark.png)
 - [fold/needs-you/inner-light-many.png](docs/screens/fold/needs-you/inner-light-many.png)
