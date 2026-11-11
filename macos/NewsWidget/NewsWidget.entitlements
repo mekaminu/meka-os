@@ -7,6 +7,7 @@
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
 	<array>
 		<string>/Library/Application Support/MekaOS/NewsWidget/</string>
+		<string>/Library/Application Support/MekaOS/DayListWidget/</string>
 	</array>
 </dict>
 </plist>

@@ -68,4 +68,12 @@ class DayListWidgetTest {
         assertEquals("Today. ${w.line}. Call Sam, 14:30, 15m long", DayListWidgetRules.describe(w))
         assertEquals("Mark done: Call Sam", DayListWidgetRules.tickLabel(w.rows[0]))
     }
+
+    @Test
+    fun theMacsDesktopWidgetSaysClickNotTap() {
+        assertEquals("Tap + Add tasks and type one after another", DayListWidgetRules.emptyHint(desk = false))
+        assertEquals("Click + Add tasks and type one after another", DayListWidgetRules.emptyHint(desk = true))
+        assertTrue(DayListWidgetRules.emptyHint(true).contains(DayListWidgetRules.ADD))
+        assertEquals(1_800_000L, DayListWidgetRules.DESK_REFRESH_MS)
+    }
 }

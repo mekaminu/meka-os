@@ -8145,6 +8145,15 @@ class MekaCore(
         return os.meka.core.domain.DayListWidgetRules.view(dayList(board, board.todayEpochDay, timesOn = false))
     }
 
+    /**
+     * Whether [taskId] is still open on today's Day list: the Mac's desktop widget ticks only such a task (its click
+     * arrives as a link, so the app checks before marking anything done).
+     */
+    fun isOpenOnTodaysDayList(taskId: String): Boolean {
+        val board = _board.value
+        return dayList(board, board.todayEpochDay, timesOn = false)?.rows?.any { it.id == taskId && !it.done } == true
+    }
+
     /** The Day list widget's tick: marks [taskId] done, the same as ticking it in the Day list. */
     suspend fun completeFromWidget(taskId: String) = complete(taskId)
 

@@ -111,4 +111,24 @@ class DayListFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertEquals(v.rows.map { it.id }, mac.dayList(mac.weekBoard.value, day, true)!!.rows.map { it.id })
     }
+
+    /** The Day list, slice 6b: the Mac's desktop widget ticks only a task still open on today's list. */
+    @Test
+    fun theDesktopWidgetTicksOnlyTodaysOpenTasks() = runTest {
+        val mac = core("mac")
+        mac.tick()
+        val today = mac.weekBoard.value.todayEpochDay
+        mac.addToDayList("Call Sam 15m", today)!!
+        now += 1_000L
+        mac.addToDayList("Email Alex 30m", today + 1)!!
+        val todays = mac.dayList(mac.weekBoard.value, today, timesOn = false)!!.rows.single()
+        val tomorrows = mac.dayList(mac.weekBoard.value, today + 1, timesOn = false)!!.rows.single()
+        assertTrue(mac.isOpenOnTodaysDayList(todays.id))
+        assertEquals(false, mac.isOpenOnTodaysDayList(tomorrows.id))
+        assertEquals(false, mac.isOpenOnTodaysDayList("not-a-task"))
+        assertEquals(listOf(todays.id), mac.dayListWidget().rows.map { it.id })
+        mac.completeFromWidget(todays.id)
+        assertEquals(false, mac.isOpenOnTodaysDayList(todays.id))
+        assertTrue(mac.dayListWidget().rows.isEmpty())
+    }
 }

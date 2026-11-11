@@ -935,6 +935,11 @@ final class CoreModel {
             showNews = true
             return
         }
+        // The desktop Day list widget (the Day list, slice 6b).
+        if url.host == DeskDayListLink.host {
+            if let link = DeskDayListLink.parse(url) { handleDayListLink(link) }
+            return
+        }
         guard url.host == "publish-fold-update" else { return }
         let apk = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "apk" }?.value
         prepareFoldUpdate(path: apk)
@@ -2607,6 +2612,24 @@ final class CoreModel {
 
     /// The Mac's desktop News widget (news ticker slice 3b): the top three stories still, from the current News place.
     func deskNewsWidget() -> DeskNewsView? { core?.deskNewsWidget() }
+
+    /// The Mac's desktop Day list widget (the Day list, slice 6b): today's open tasks as the core cuts them for a widget.
+    func deskDayListWidget() -> WidgetDayList? { core?.dayListWidget() }
+
+    /// A click on the desktop Day list widget (`mekaos://day-list…`): the header or a title opens today's Day list, + Add
+    /// tasks opens it ready to type, a tick marks that task done (only one still open on today's list) with Undo on the bar.
+    func handleDayListLink(_ link: DeskDayListLink) {
+        switch link {
+        case .open, .add:
+            openDayList()
+        case .done(let id):
+            guard core?.isOpenOnTodaysDayList(taskId: id) == true else {
+                openDayList()
+                return
+            }
+            complete(id)
+        }
+    }
 
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
     /// "A morning brief worth listening to", slice 3: Short · Standard · Full (synced). Only the id String crosses.

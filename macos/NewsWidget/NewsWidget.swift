@@ -12,6 +12,8 @@ import WidgetKit
 struct MekaNewsWidgetBundle: WidgetBundle {
     var body: some Widget {
         MekaNewsWidget()
+        // The Day list, slice 6b: today's tasks on the desktop (DayListWidget.swift).
+        MekaDayListWidget()
     }
 }
 

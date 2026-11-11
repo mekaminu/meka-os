@@ -34,6 +34,8 @@ struct MekaOSApp: App {
                     FloatingTicker.shared.attach(model)
                     // The desktop News widget (news ticker slice 3b) reads what this writes.
                     DeskNewsWidgetWriter.shared.attach(model)
+                    // The desktop Day list widget (the Day list, slice 6b) reads what this writes.
+                    DeskDayListWidgetWriter.shared.attach(model)
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
                     CaptureInbox.shared.attach { text, subject, kind in

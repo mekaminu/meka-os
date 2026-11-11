@@ -40,6 +40,13 @@ object DayListWidgetRules {
     const val EMPTY = "Nothing planned yet"
     const val EMPTY_HINT = "Tap + Add tasks and type one after another"
     const val TICK = "Mark done"
+    /** The Mac's desktop widget is clicked, not tapped (the Day list, slice 6b). */
+    const val DESK_EMPTY_HINT = "Click + Add tasks and type one after another"
+    /** The Mac's desktop widget looks again this often besides when Navilife writes (and so after midnight). */
+    const val DESK_REFRESH_MS = 30 * 60_000L
+
+    /** The Mac's empty line: the Fold's hint with "Click" for "Tap". */
+    fun emptyHint(desk: Boolean): String = if (desk) DESK_EMPTY_HINT else EMPTY_HINT
 
     fun view(list: DayListView?, rows: Int = ROWS): WidgetDayList {
         val all = list?.rows.orEmpty()
