@@ -88,9 +88,9 @@ struct ScheduleEdge: ViewModifier {
         if card, let ink {
             let w = CGFloat(ScheduleCardRules.shared.EDGE_DP)
             content
-                .padding(.leading, w + MekaSpace.s)
+                .padding(.leading, w + MekaSpace.xs)
                 .overlay(alignment: .leading) {
-                    Rectangle().fill(ink.color(palette)).frame(width: w).padding(.vertical, 2)
+                    Rectangle().fill(ink.color(palette)).frame(width: w).padding(.vertical, MekaSpace.xxs)
                 }
         } else {
             content

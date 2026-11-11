@@ -151,8 +151,8 @@ internal fun ScheduleEdgeInk.color(): Color = when (this) {
 internal fun ScheduleEdge(ink: ScheduleEdgeInk?, modifier: Modifier = Modifier) {
     if (!LocalScheduleCard.current || ink == null) return
     val c = ink.color()
-    Box(modifier.width(ScheduleCardRules.EDGE_DP.dp).fillMaxHeight().padding(vertical = 2.dp).background(c))
-    Spacer(Modifier.width(MekaSpace.s))
+    Box(modifier.width(ScheduleCardRules.EDGE_DP.dp).fillMaxHeight().padding(vertical = MekaSpace.xxs).background(c))
+    Spacer(Modifier.width(MekaSpace.xs))
 }
 
 /**
