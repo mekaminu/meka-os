@@ -20,11 +20,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -44,6 +46,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -265,15 +268,24 @@ const val ROUTINES_PANE_TAG = "routines-pane"
 /** The cross-fade's key for New routine (routine ids never start with "+"). */
 private const val NEW_KEY = "+new"
 
-/** The day tile: "SUN" over "19:00", on the raised surface. */
+/**
+ * The day tile's one width: every tile is this wide, so the routines' and the starters' names start in one column
+ * (walk-through 2026-11-08 A12: MON–FRI's tile was ~10 dp wider than DAILY's); a longer day ("MON · THU") steps down.
+ */
+internal val DAY_TILE_WIDTH = 72.dp
+
+/** The day tile: "SUN" over "19:00", on the raised surface, always [DAY_TILE_WIDTH] wide. */
 @Composable
 private fun DayTile(day: String, time: String, on: Boolean) {
     Column(
-        Modifier.widthIn(min = 64.dp).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+        Modifier.width(DAY_TILE_WIDTH).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xs).testTag("routine-day-tile"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(day, style = MekaType.sectionLabel, color = if (on) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+        BasicText(
+            day, style = MekaType.sectionLabel.copy(color = if (on) Meka.colors.accent else Meka.colors.textTertiary), maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = MekaType.sectionLabel.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 9)
+        )
         Text(time, style = MekaType.itemMeta, color = if (on) Meka.colors.textPrimary else Meka.colors.textTertiary, maxLines = 1)
     }
 }
@@ -289,14 +301,16 @@ private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, o
             .clickable(role = Role.Button) { onOpen() }
             .semantics { contentDescription = r.spoken }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("routine-row"),
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DayTile(r.day, r.time, r.on)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(r.name, style = MekaType.upNextCardTitle, color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Walk-through A12: the steps wrap (up to three lines) before "…" ("What came i…" on one said nothing).
+            Text(LoneWordGlue.kept(r.line), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("routine-row-line"))
         }
         RoutineSwitch(r.on, r.switchSpoken, onToggle)
     }
@@ -414,7 +428,7 @@ private fun StarterCard(s: RoutineStarterRow, modifier: Modifier, onAdd: () -> U
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).semantics(mergeDescendants = false) { contentDescription = s.spoken }.testTag("routine-starter"),
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DayTile(s.day, s.time, on = false)

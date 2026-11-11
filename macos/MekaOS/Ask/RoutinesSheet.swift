@@ -433,14 +433,18 @@ struct RoutinesSheet: View {
         }
     }
 
-    /// The day tile: "SUN" over "19:00".
+    /// The day tile's one width (walk-through 2026-11-08 A12): every tile this wide, so the routines' and the starters'
+    /// names start in one column; a longer day ("MON · THU") steps down rather than widening its tile.
+    static let dayTileWidth: CGFloat = 64
+
+    /// The day tile: "SUN" over "19:00", always `dayTileWidth` wide.
     private func dayTile(_ day: String, _ time: String, on: Bool) -> some View {
         VStack(spacing: MekaSpace.xxs) {
             Text(day).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(on ? palette.accent : palette.textTertiary).lineLimit(1)
+                .foregroundStyle(on ? palette.accent : palette.textTertiary).lineLimit(1).minimumScaleFactor(0.7)
             Text(time).font(MekaType.itemMeta).foregroundStyle(on ? palette.textPrimary : palette.textTertiary).lineLimit(1)
         }
-        .frame(minWidth: 64)
+        .frame(width: Self.dayTileWidth)
         .padding(MekaSpace.xs)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
     }
@@ -456,8 +460,9 @@ struct RoutinesSheet: View {
                 Text(r.name).font(MekaType.upNextCardTitle)
                     .foregroundStyle(r.on ? palette.textPrimary : palette.textTertiary)
                     .lineLimit(1).truncationMode(.tail)
-                Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .lineLimit(1).truncationMode(.tail)
+                // Walk-through A12: the steps wrap (up to three lines) before "…".
+                Text(LoneWordGlue.shared.kept(line: r.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .lineLimit(1...3).truncationMode(.tail).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             Toggle("", isOn: Binding(get: { isOn }, set: { model.setRoutineOn(id, on: $0) }))

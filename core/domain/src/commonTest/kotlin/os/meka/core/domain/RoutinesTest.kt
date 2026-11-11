@@ -214,6 +214,9 @@ class RoutinesTest {
         assertEquals("Show the week ahead of bills", card.stepTitle)
         assertEquals("Have a look", card.state)
         assertFalse(card.waitingOnYou)
+        // Walk-through A12: step 1 of 4 lights half its quarter of the bar, and LAST RUN says Now, not "Not yet".
+        assertEquals(0.125f, card.fraction)
+        assertEquals(RoutineRules.LAST_NOW, r.view().detail(id)!!.lastRun)
         assertNull(r.view().detail(id)!!.runNow)
         assertEquals("Running now · step 1 of 4", r.view().rows.single().next)
         assertTrue(r.carryOn(id))
@@ -226,6 +229,7 @@ class RoutinesTest {
         card = r.view().running.single()
         assertEquals("Step 4 of 4", card.progress)
         assertEquals("Bins and car dates", card.stepTitle)
+        assertEquals(0.875f, card.fraction)
         world.clock.nowMs = at(fri, 20, 5)
         assertTrue(r.skipStep(id))
         assertTrue(r.view().running.isEmpty())

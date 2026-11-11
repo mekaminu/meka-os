@@ -37,6 +37,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.RoutineOutcome
 import os.meka.core.domain.RoutineIdeas
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.RoutineRules
 import os.meka.core.domain.RoutineSentence
 import os.meka.core.facade.MekaCore
@@ -148,6 +149,12 @@ class RoutinesScreensTest {
         ScreenShots.assertNoDotEndingALine(compose, name, lines)
         assertTouchTargets(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        // Walk-through 2026-11-08 A12: every day tile one width (MON–FRI's no wider than DAILY's), so the names start
+        // in one column, and no row's steps or tile's day drawn cut ("What came i…").
+        val tiles = compose.onAllNodes(hasTestTag("routine-day-tile"), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.size.width }.distinct()
+        if (tiles.size > 1) fail("$name: the day tiles differ in width: $tiles px")
+        ScreenShots.assertNotCut(compose, name, v.rows.map { LoneWordGlue.kept(it.line) } + v.rows.map { it.day } + v.starters.map { it.day })
         when (fill) {
             Fill.EMPTY -> {
                 if (v.summary != RoutineRules.EMPTY_LINE) fail("$name: the summary reads \"${v.summary}\"")
@@ -217,6 +224,9 @@ class RoutinesScreensTest {
         ScreenShots.assertNoDotEndingALine(compose, "$name-running", runLines)
         assertTouchTargets("$name-running")
         if (!onScreen(RoutineRules.WAITING)) fail("$name: an Asks you step doesn't say it's waiting on you")
+        // Walk-through A12: the bar shows the step it's on, and LAST RUN says Now beside Running now, not "Not yet".
+        if (c.fraction <= 0f) fail("$name: step 1's bar is empty")
+        if (!onScreen(RoutineRules.LAST_NOW) || onScreen(RoutineRules.NOT_YET)) fail("$name: LAST RUN doesn't say Now while it runs")
         tap("${RoutineRules.CARRY_ON}: ${c.stepTitle}")
         until { page()?.running?.progress == "Step 2 of 4" }
         tap("${RoutineRules.CARRY_ON}: ${page()!!.running!!.stepTitle}")

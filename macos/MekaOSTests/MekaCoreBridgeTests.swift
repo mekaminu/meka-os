@@ -434,6 +434,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let row = try XCTUnwrap(core.routinesView.value.rows.first)
         XCTAssertEqual(row.name, "Sunday evening")
         XCTAssertEqual(core.routinesView.value.detail(id: row.id)?.steps[1].badge, "Just show")
+        // Walk-through A12: Running now's bar lights half the step it's on, and LAST RUN says Now while it runs.
+        XCTAssertEqual(RoutineRules.shared.barFraction(step: 0, count: 4), 0.125, accuracy: 0.0001)
+        XCTAssertEqual(RoutineRules.shared.LAST_NOW, "Now")
     }
 
     func testWeekAheadSettingReachesSwift() async throws {

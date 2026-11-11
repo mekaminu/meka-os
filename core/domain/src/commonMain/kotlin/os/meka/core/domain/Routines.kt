@@ -83,7 +83,10 @@ data class RoutineRunCard(
     val name: String,
     /** "Step 2 of 4". */
     val progress: String,
-    /** 0.0..1.0 of the steps behind it, for the card's bar. */
+    /**
+     * 0.0..1.0 for the card's bar: the steps behind it plus half of the one it's on, so "Step 1 of 4" never draws an
+     * empty bar (walk-through 2026-11-08 A12) and the last step never draws a full one before it's done.
+     */
     val fraction: Float,
     val stepTitle: String,
     /** The Navilife place the step uses ("Week board"). */
@@ -230,7 +233,7 @@ data class RoutineDetail(
     val next: String,
     /** The STEPS tile: "4". */
     val stepCount: String,
-    /** The LAST RUN tile: "Not yet", "Today 19:02", "Yesterday", "Sun 1 Nov". */
+    /** The LAST RUN tile: "Not yet", "Now" (while it runs), "Today 19:02", "Yesterday", "Sun 1 Nov". */
     val lastRun: String,
     val steps: List<RoutineStepRow>,
     /** LAST TIME: what happened the last time it ran ("Sun 1 Nov at 19:02 · 3 done, 1 skipped"). */
@@ -569,7 +572,7 @@ object RoutineRules {
         val last = r.lastRun
         return RoutineDetail(
             r.id, r.name, whenLine(r.schedule), nextTile(r, today, nowMinute, payday), "${steps.size}",
-            last?.let { lastTile(it.atMs, today, cal) } ?: NOT_YET, steps,
+            if (card != null) LAST_NOW else last?.let { lastTile(it.atMs, today, cal) } ?: NOT_YET, steps,
             last?.let { historyLine(it, today, cal) } ?: NO_HISTORY, r.on, STEPS_NOTE,
             lastSteps = last?.log.orEmpty(),
             running = card,
@@ -592,10 +595,17 @@ object RoutineRules {
         val progress = "Step ${run.step + 1} of ${r.steps.size}"
         val state = if (waiting) WAITING else HAVE_A_LOOK
         return RoutineRunCard(
-            r.id, r.name, progress, run.step.toFloat() / r.steps.size, step.title, step.place.label, state, waiting,
+            r.id, r.name, progress, barFraction(run.step, r.steps.size), step.title, step.place.label, state, waiting,
             spoken = "$RUNNING_NOW: ${r.name}. $progress: ${step.title}, in ${step.place.label}. $state",
         )
     }
+
+    /** The Running now card's bar: [step] (0-based) of [count], with half of the step it's on lit. */
+    fun barFraction(step: Int, count: Int): Float =
+        if (count <= 0) 0f else ((step.coerceIn(0, count - 1) + 0.5f) / count)
+
+    /** The LAST RUN tile while a run is going (walk-through A12: never "Not yet" beside Running now). */
+    const val LAST_NOW = "Now"
 
     /** The LAST RUN tile: "Today 19:02", "Yesterday", "Sun 1 Nov". */
     fun lastTile(atMs: Long, today: Long, cal: LocalCalendar): String {
