@@ -280,7 +280,7 @@ struct NeedsYouView: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     contents(group, facts: f, chats: chats)
                 }
-                .padding(MekaSpace.s)
+                .padding(MekaSpace.xs)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(palette.surface.opacity(0.5), in: UnevenRoundedRectangle(
                     topLeadingRadius: 0, bottomLeadingRadius: MekaRadius.m, bottomTrailingRadius: MekaRadius.m,
