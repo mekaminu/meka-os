@@ -4811,6 +4811,29 @@ class MekaCore(
         requestCards.dropHandled(id, undone = true).also { refresh() }
     }
 
+    /**
+     * Handle her requests for me, slice 2: the morning brief's Done for you sentences, from the rows handled since the
+     * start of yesterday, with the request's own task as it is now and its steps still open by today. Caller is on the core.
+     */
+    private fun briefDoneForYou(all: List<os.meka.core.domain.Task>, today: Long, cal: ZoneCalendar): List<String> {
+        val rows = requestCards.doneForYou()
+        if (rows.isEmpty()) return emptyList()
+        val byId = all.associateBy { it.id }
+        fun open(id: String) = byId[id]?.takeIf { !it.lifecycle.isTerminal }
+        val items = rows.map { r ->
+            val own = if (r.homeDay == null) r.taskIds.firstOrNull()?.let(::open) else null
+            val stepIds = if (r.homeDay == null) r.taskIds.drop(1) else r.taskIds
+            os.meka.core.domain.DoneForYouBrief(
+                who = r.person, atMs = r.atMs, homeDay = r.homeDay,
+                title = own?.title, day = own?.let { os.meka.core.domain.TaskWhenRules.dayOf(it, today, cal) },
+                openToday = stepIds.mapNotNull(::open)
+                    .filter { os.meka.core.domain.TaskWhenRules.dayOf(it, today, cal) <= today }
+                    .map { it.title },
+            )
+        }
+        return os.meka.core.domain.HandleForMeRules.briefSentences(items, today, cal.toEpochMs(today - 1, 0))
+    }
+
     /** Clear on a Done for you row: seen, gone from Needs you on both apps; what it made stays. */
     suspend fun clearDoneForYou(id: String): Boolean = onCore { requestCards.dropHandled(id, undone = false).also { refresh() } }
 
@@ -14270,6 +14293,8 @@ class MekaCore(
                             family = listOfNotNull(t.bins?.spoken, t.parcels?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
                             // Slice 4: urgent voice messages and requests from watched people, waiting on you.
                             asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
+                            // Handle her requests for me, slice 2: what was done for him since yesterday.
+                            doneForYou = briefDoneForYou(all, todayDay, cal),
                             mail = briefMail,
                             // Weekly reflection, slice 2: the one thing that matters this week.
                             weekMatters = os.meka.core.domain.ReflectionRules.briefSentence(t.reflection, it.story.length, todayDay),

@@ -28,6 +28,22 @@ data class HandlePlan(
 /** The request's own task: its title, its day and time, and when it reminds (day and minute; null: no reminder). */
 data class HandleTask(val title: String, val day: Long, val minute: Int?, val remindDay: Long?, val remindMinute: Int?)
 
+/**
+ * Slice 2: one handled request as the morning brief says it ([HandleForMeRules.briefSentences]): who asked, the home
+ * day or the task's title and day, and the steps still open that are due by today.
+ */
+data class DoneForYouBrief(
+    val who: String,
+    val atMs: Long,
+    /** The work-from-home day it marked, or null. */
+    val homeDay: Long?,
+    /** The request's own task, while it is still on his list (null for a work-from-home day, or once it's gone or done). */
+    val title: String?,
+    val day: Long?,
+    /** The prep steps still open that are due today or earlier, in order. */
+    val openToday: List<String>,
+)
+
 /** One "Done for you" row in Needs you (both apps). */
 data class DoneForYou(
     /** The request card's id. */
@@ -45,6 +61,8 @@ data class DoneForYou(
     val homeDay: Long?,
     /** The title of the task Change opens (the Mac finds it by its title and id). */
     val changeTitle: String? = null,
+    /** Who asked, as the notification named her ("Ada", "Ada Smith"); said in the morning brief. */
+    val person: String = "",
 ) {
     val undoLabel: String get() = HandleForMeRules.UNDO
     val changeLabel: String? get() = if (taskIds.isEmpty()) null else HandleForMeRules.CHANGE
@@ -202,6 +220,61 @@ object HandleForMeRules {
     /** The rows still shown at [nowMs]: not cleared or undone, from the last [SHOWN_MS]; newest first. */
     fun shown(rows: List<DoneForYou>, nowMs: Long): List<DoneForYou> =
         rows.filter { it.atMs >= nowMs - SHOWN_MS }.sortedByDescending { it.atMs }
+
+    /** The morning brief names at most this many handled requests; the rest are counted. */
+    const val MAX_BRIEF = 2
+    const val BRIEF_HEAD = "Done for you"
+
+    /**
+     * Slice 2 (Meka 2026-11-11: "obviously it will tell me what it's done"): the morning brief's sentences for what was
+     * handled for him since [sinceMs] (the start of yesterday, so last night's requests are said this morning), oldest
+     * first, said straight after the requests waiting on him: "Done for you: Alex asked you to work from home tomorrow,
+     * and it's marked as a home day. Still to do today: tell your manager, get approval and put the request in at work."
+     * · "Alex asked for “Pick up the dry cleaning”, and it's on your list for Thursday." A request whose day has gone,
+     * or that left nothing on his list or calendar, isn't said. Never the message's own words: only its title.
+     */
+    fun briefSentences(items: List<DoneForYouBrief>, today: Long, sinceMs: Long): List<String> {
+        val said = items
+            .filter { it.atMs >= sinceMs }
+            .filter { b -> (b.homeDay != null && b.homeDay >= today) || (b.title != null && (b.day ?: today) >= today) || b.openToday.isNotEmpty() }
+            .sortedBy { it.atMs }
+        if (said.isEmpty()) return emptyList()
+        val out = mutableListOf<String>()
+        said.take(MAX_BRIEF).forEachIndexed { i, b ->
+            val who = b.who.trim().take(40).ifEmpty { "Someone" }
+            val what = when {
+                b.homeDay != null && b.homeDay >= today -> "$who asked you to work from home ${daySaid(b.homeDay, today)}, and it's marked as a home day"
+                b.title != null -> {
+                    val day = b.day ?: today
+                    "$who asked for “${b.title.trim()}”, and it's on " + if (day == today) "today's list" else "your list for ${daySaid(day, today).removePrefix("on ")}"
+                }
+                else -> "$who asked you to work from home"
+            }
+            out += (if (i == 0) "$BRIEF_HEAD: " else "") + what + "."
+            if (b.openToday.isNotEmpty()) {
+                val steps = b.openToday.mapIndexed { j, t -> if (j == 0) t.trim() else t.trim().replaceFirstChar { it.lowercase() } }
+                out += "Still to do today: " + listing(steps) + "."
+            }
+        }
+        if (said.size > MAX_BRIEF) {
+            val n = said.size - MAX_BRIEF
+            out += "And $n more ${if (n == 1) "request" else "requests"} done for you, in Needs you."
+        }
+        return out
+    }
+
+    /** "today", "tomorrow", "on Thursday" within the week ahead, else "on Thu 19 Nov". */
+    fun daySaid(day: Long, today: Long): String = when (val w = dayWord(day, today)) {
+        "Today" -> "today"
+        "Tomorrow" -> "tomorrow"
+        else -> "on $w"
+    }
+
+    private fun listing(items: List<String>): String = when (items.size) {
+        0 -> ""
+        1 -> items[0]
+        else -> items.dropLast(1).joinToString(", ") + " and " + items.last()
+    }
 
     /** One heads-up per row as it is handled: "Done for you · from Ada" · the line. Never the message's text. */
     fun notices(rows: List<DoneForYou>): List<Notice> = rows.map { r ->

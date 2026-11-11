@@ -157,6 +157,11 @@ data class BriefStory(
     val plan: String? = null,
     /** Week board item (10): "Thursday is stacking up: …" ([DayPressure.spoken]), after the plan. */
     val pressure: String? = null,
+    /**
+     * Handle her requests for me, slice 2: what was done for him since yesterday, each already spoken
+     * ([HandleForMeRules.briefSentences]); said straight after the requests waiting on him, in every length.
+     */
+    val doneForYou: List<String> = emptyList(),
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -227,6 +232,8 @@ object BriefScriptRules {
 
         // Waiting on him: urgent voice messages, then what people asked for, then decisions and chases.
         out += askLines(s)
+        // Handle her requests for me, slice 2: what was done for him, and the steps still open today.
+        out += s.doneForYou
         // Inbox autopilot, slice 9a: how many emails need him and who from (never a subject: someone else's words).
         s.mail?.let { out += MailAskRules.briefSentence(it) }
         if (s.needsYou > 0) out += if (s.needsYou == 1) "One decision is waiting for you in Needs you." else "${s.needsYou} decisions are waiting for you in Needs you."

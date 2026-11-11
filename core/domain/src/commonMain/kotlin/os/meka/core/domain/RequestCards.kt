@@ -188,6 +188,7 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
                 changeTitle = e[RequestCardFields.KIND].textOrNull?.let(RequestKind::of)?.let { k ->
                     HandleForMeRules.stepsFor(k).firstOrNull()?.takeIf { k == RequestKind.WORK_FROM_HOME }
                 } ?: e[RequestCardFields.TITLE].textOrNull,
+                person = person,
             )
         }
         return HandleForMeRules.shown(rows, nowMs())

@@ -127,6 +127,52 @@ class HandleForMeTest {
     }
 
     @Test
+    fun theMorningBriefSaysWhatWasDoneAndTheStepsStillOpen() {
+        val since = LocalCalendar.UTC.toEpochMs(wed - 1, 0)
+        val last = LocalCalendar.UTC.toEpochMs(wed - 1, 22 * 60 + 15)
+        val wfh = DoneForYouBrief("Alex", last, thu, null, null, HandleForMeRules.WORK_FROM_HOME_STEPS)
+        assertEquals(
+            listOf(
+                "Done for you: Alex asked you to work from home tomorrow, and it's marked as a home day.",
+                "Still to do today: Tell your manager, get approval and put the request in at work.",
+            ),
+            HandleForMeRules.briefSentences(listOf(wfh), wed, since),
+        )
+        // All the steps done: only what was done is said.
+        assertEquals(
+            listOf("Done for you: Alex asked you to work from home tomorrow, and it's marked as a home day."),
+            HandleForMeRules.briefSentences(listOf(wfh.copy(openToday = emptyList())), wed, since),
+        )
+        val milk = DoneForYouBrief("Alex", last + 60_000, null, "Pick up the dry cleaning", mon, emptyList())
+        val today = DoneForYouBrief("Alex", last + 120_000, null, "Get milk", wed, emptyList())
+        val more = DoneForYouBrief("Alex", last + 180_000, null, "Call the vet", thu, emptyList())
+        assertEquals(
+            listOf(
+                "Done for you: Alex asked you to work from home tomorrow, and it's marked as a home day.",
+                "Alex asked for “Pick up the dry cleaning”, and it's on your list for Monday.",
+                "And 2 more requests done for you, in Needs you.",
+            ),
+            HandleForMeRules.briefSentences(listOf(more, today, milk, wfh.copy(openToday = emptyList())), wed, since),
+        )
+        assertEquals(
+            listOf("Done for you: Alex asked for “Get milk”, and it's on today's list."),
+            HandleForMeRules.briefSentences(listOf(today), wed, since),
+        )
+        // Before yesterday, a day gone by, or nothing left of it: not said.
+        assertTrue(HandleForMeRules.briefSentences(listOf(wfh.copy(atMs = since - 1)), wed, since).isEmpty())
+        assertTrue(HandleForMeRules.briefSentences(listOf(wfh.copy(homeDay = wed - 1, openToday = emptyList())), wed, since).isEmpty())
+        assertTrue(HandleForMeRules.briefSentences(listOf(milk.copy(title = null)), wed, since).isEmpty())
+        assertTrue(HandleForMeRules.briefSentences(emptyList(), wed, since).isEmpty())
+    }
+
+    @Test
+    fun theBriefSaysDoneForYouAfterTheRequestsWaiting() {
+        val story = BriefStory(epochDay = wed, doneForYou = listOf("Done for you: Alex asked you to work from home tomorrow, and it's marked as a home day."))
+        val script = BriefScriptRules.script(MorningBriefView.EMPTY.copy(story = story))
+        assertTrue(script.contains("Done for you: Alex asked you to work from home tomorrow"), script)
+    }
+
+    @Test
     fun aHeadsUpNeverCarriesTheMessage() {
         val row = DoneForYou("m1#0", "From Alex · 22:14", "Work from home Thu 12 Nov · added to Tomorrow", "x", 1000L, listOf("t1"), thu)
         val n = HandleForMeRules.notices(listOf(row)).single()

@@ -72,8 +72,25 @@ class HandleForMeFacadeTest {
         assertTrue(row.taskIds.all { c.taskForDetail(it)?.remindAtMs != null }, "each step reminds")
         assertTrue(c.calendarView.value.sections.first { it.title == "Mon 12 Oct" }.workLine.orEmpty().startsWith("Work from home"))
 
+        // Slice 2: the morning brief says what was done, and the steps still open today.
+        assertEquals(
+            listOf(
+                "Done for you: Alex asked you to work from home on Monday, and it's marked as a home day.",
+                "Still to do today: Tell your manager, get approval and put the request in at work.",
+            ),
+            c.briefView.value.story.doneForYou,
+        )
+        assertTrue(os.meka.core.domain.BriefScriptRules.script(c.briefView.value).contains("Done for you: Alex asked you to work from home on Monday"))
+        c.complete(row.taskIds[0])
+        assertEquals(
+            "Still to do today: Get approval and put the request in at work.",
+            c.briefView.value.story.doneForYou.last(),
+            "a step done is no longer said",
+        )
+
         assertTrue(c.undoDoneForYou(row.id))
         assertTrue(c.doneForYou.value.isEmpty())
+        assertTrue(c.briefView.value.story.doneForYou.isEmpty(), "Undo: nothing to say")
         assertTrue(titles(c, row.taskIds).isEmpty())
         assertFalse(c.calendarView.value.sections.first { it.title == "Mon 12 Oct" }.workLine.orEmpty().startsWith("Work from home"))
         assertFalse(c.undoDoneForYou(row.id), "only once")
