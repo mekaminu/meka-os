@@ -95,7 +95,7 @@ internal fun WhatsAppCallsRowView(
         LaunchedEffect(settings.message) { text = settings.message }
         Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         ) {
             BasicTextField(
                 value = text,
