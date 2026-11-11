@@ -70,6 +70,9 @@ class CallSpamFacadeTest {
     fun withTheAssistantOnSpamAndWithheldCallsInQuietHoursGoToTheAssistant() = runTest {
         val c = core()
         c.setCallAssistant(true)
+        // Screen unknown callers all the time is on by default (#46; its own test below); off here, so only the
+        // quiet-hours rule sends a withheld call to the assistant.
+        assertTrue(c.setScreenUnknownAlways(false))
         assertTrue(c.blockCaller("07700 900555", "Kept ringing"))
         assertFalse(c.blockCaller("abc", null))
         assertEquals(CallReason.AUTO_BLOCKED, c.screenIncomingCall("01632 960000", lists, emptyList(), CallSignals(verificationFailed = true)).reason)
