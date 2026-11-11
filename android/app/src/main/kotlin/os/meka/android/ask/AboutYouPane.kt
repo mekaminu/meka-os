@@ -119,6 +119,13 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
                         scope.launch { runCatching { core.setAboutYouPartnerWatch(!v.partnerWatch) } }
                     }
                 }
+                // "Handle her requests for me" (2026-11-11): on by default, shown while her messages are watched.
+                if (row.field == AboutField.PARTNER_EMAIL) v.handleLine?.let { line ->
+                    WatchRow(v.partnerHandle, line, title = os.meka.core.domain.HandleForMeRules.TITLE) {
+                        haptics.tick()
+                        scope.launch { runCatching { core.setAboutYouPartnerHandle(!v.partnerHandle) } }
+                    }
+                }
             }
         }
         item(key = "children-label") {
@@ -211,15 +218,15 @@ private fun SaidLine(said: AboutSaved?, onUndo: (String) -> Unit) {
 
 /** "Watch for requests": On/Off in a pill that blends to the accent, with what it means under it. */
 @Composable
-private fun WatchRow(on: Boolean, line: String, onToggle: () -> Unit) {
+private fun WatchRow(on: Boolean, line: String, title: String = "Watch for requests", onToggle: () -> Unit) {
     val dot by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "about-watch")
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
-            .semantics { contentDescription = "Watch for requests"; selected = on }.minTouch().padding(vertical = MekaSpace.xs),
+            .semantics { contentDescription = title; selected = on }.minTouch().padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Watch for requests", style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+            Text(title, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
             Text(os.meka.core.domain.LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         os.meka.android.designsystem.SwitchPill(on, dot)

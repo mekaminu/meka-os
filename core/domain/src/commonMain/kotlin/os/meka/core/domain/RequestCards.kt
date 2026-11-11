@@ -50,10 +50,24 @@ object RequestCardFields {
     /** "added" · "declined" · "changed". */
     const val RESOLUTION = "resolution"
     const val RESOLVED_AT = "resolvedAtMs"
+    /**
+     * "Handle her requests for me" (2026-11-11, additive): on a card resolved as [RequestResolution.HANDLED], what was
+     * made — the task ids, comma-separated (the request's own first, then the steps), the home day — and the Done for you
+     * row's line. [HANDLED_CLEARED] (Clear) and [HANDLED_UNDONE] (Undo) take the row away on both apps.
+     */
+    const val HANDLED_TASKS = "handledTasks"
+    const val HANDLED_HOME_DAY = "handledHomeDay"
+    const val HANDLED_LINE = "handledLine"
+    const val HANDLED_CLEARED = "handledCleared"
+    const val HANDLED_UNDONE = "handledUndone"
 }
 
 /** How a request card left Needs you. */
-enum class RequestResolution(val wire: String) { ADDED("added"), DECLINED("declined"), CHANGED("changed") }
+enum class RequestResolution(val wire: String) {
+    ADDED("added"), DECLINED("declined"), CHANGED("changed"),
+    /** Acted on at once, no tap ("Handle her requests for me", [HandleForMeRules]). */
+    HANDLED("handled"),
+}
 
 /**
  * The open request cards as synced entities, non-AI. The Fold [save]s the cards for a message it read (the same
@@ -135,6 +149,61 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
         return true
     }
 
+    /**
+     * Marks the open [cardId] as handled for him: resolved (gone from the cards on every device, its text blanked) with
+     * what was made ([taskIds], [homeDay]) and the Done for you [line]. False when it was already answered.
+     */
+    fun handled(cardId: String, taskIds: List<String>, homeDay: Long?, line: String): Boolean {
+        if (!resolve(cardId, RequestResolution.HANDLED)) return false
+        replica.commitLocal(
+            EntityTypes.REQUEST_CARD, entityId(cardId),
+            buildMap {
+                put(RequestCardFields.HANDLED_TASKS, taskIds.joinToString(",").fv())
+                homeDay?.let { put(RequestCardFields.HANDLED_HOME_DAY, it.fv()) }
+                put(RequestCardFields.HANDLED_LINE, line.take(MAX_LINE).fv())
+            },
+        )
+        return true
+    }
+
+    /** The Done for you rows: handled cards not cleared or undone, from the last [HandleForMeRules.SHOWN_MS], newest first. */
+    fun doneForYou(): List<DoneForYou> {
+        val rows = replica.entities(EntityTypes.REQUEST_CARD).mapNotNull { e ->
+            if (e[RequestCardFields.RESOLUTION].textOrNull != RequestResolution.HANDLED.wire) return@mapNotNull null
+            if (e[RequestCardFields.HANDLED_CLEARED].boolOrNull == true || e[RequestCardFields.HANDLED_UNDONE].boolOrNull == true) return@mapNotNull null
+            val messageId = e[RequestCardFields.MESSAGE_ID].textOrNull ?: return@mapNotNull null
+            val index = e[RequestCardFields.INDEX].longOrNull ?: return@mapNotNull null
+            val person = e[RequestCardFields.PERSON].textOrNull ?: return@mapNotNull null
+            val line = e[RequestCardFields.HANDLED_LINE].textOrNull ?: return@mapNotNull null
+            val sent = e[RequestCardFields.AT].longOrNull ?: return@mapNotNull null
+            val at = e[RequestCardFields.RESOLVED_AT].longOrNull ?: sent
+            DoneForYou(
+                id = "$messageId#$index",
+                from = HandleForMeRules.from(person, calendar.minuteOfDay(sent)),
+                line = line,
+                spoken = HandleForMeRules.spoken(person, line),
+                atMs = at,
+                taskIds = e[RequestCardFields.HANDLED_TASKS].textOrNull.orEmpty().split(',').filter { it.isNotBlank() },
+                homeDay = e[RequestCardFields.HANDLED_HOME_DAY].longOrNull,
+                changeTitle = e[RequestCardFields.KIND].textOrNull?.let(RequestKind::of)?.let { k ->
+                    HandleForMeRules.stepsFor(k).firstOrNull()?.takeIf { k == RequestKind.WORK_FROM_HOME }
+                } ?: e[RequestCardFields.TITLE].textOrNull,
+            )
+        }
+        return HandleForMeRules.shown(rows, nowMs())
+    }
+
+    /** Clear (it's seen) or Undo (everything it made is gone): the row leaves Done for you on every device. */
+    fun dropHandled(cardId: String, undone: Boolean): Boolean {
+        val id = entityId(cardId)
+        val e = replica.entity(EntityTypes.REQUEST_CARD, id) ?: return false
+        if (e[RequestCardFields.RESOLUTION].textOrNull != RequestResolution.HANDLED.wire) return false
+        val field = if (undone) RequestCardFields.HANDLED_UNDONE else RequestCardFields.HANDLED_CLEARED
+        if (e[field].boolOrNull == true) return false
+        replica.commitLocal(EntityTypes.REQUEST_CARD, id, mapOf(field to true.fv()))
+        return true
+    }
+
     private class Stored(val message: RequestMessage, val index: Int, val proposal: RequestProposal, val atMs: Long, val resolved: Boolean)
 
     private fun stored(): List<Pair<String, Stored>> = replica.entities(EntityTypes.REQUEST_CARD).mapNotNull { e ->
@@ -171,6 +240,7 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
         const val RETENTION_MS = 7 * 24 * 60 * 60_000L
         const val MAX_TEXT = 2_000
         const val MAX_REPLY = HandleThisRules.MAX_REPLY
+        const val MAX_LINE = 300
 
         /** The `request_card` id for a card's id: the same on every device and install. */
         fun entityId(cardId: String): String = "r" + ActivityRules.fnv64("request:$cardId")

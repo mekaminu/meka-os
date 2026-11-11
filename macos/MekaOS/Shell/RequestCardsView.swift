@@ -85,3 +85,65 @@ struct RequestCardRow: View {
             .accessibilityLabel(spoken)
     }
 }
+
+/// "Handle her requests for me" (2026-11-11): the Done for you rows at the top of Needs you — the gold DONE FOR YOU
+/// label, what the Fold did at once from his partner's request, who asked and when, then Undo · Change · Clear. Rows
+/// fold away with the expand spring (reduced motion: a cross-fade). Nothing here sends anything.
+struct DoneForYouView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    var firstIndex: Int = 1
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            ForEach(Array(model.doneForYou.enumerated()), id: \.element.id) { i, row in
+                DoneForYouRow(row: row, palette: palette)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    .staggeredAppear(firstIndex + i)
+            }
+        }
+        .padding(.bottom, model.doneForYou.isEmpty ? 0 : MekaSpace.m)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.doneForYou.map(\.id))
+    }
+}
+
+struct DoneForYouRow: View {
+    @Environment(CoreModel.self) private var model
+    let row: DoneForYou
+    let palette: MekaPalette
+
+    var body: some View {
+        let id = row.id
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(HandleForMeRules.shared.HEAD.uppercased()).font(MekaType.sectionLabel).foregroundStyle(palette.accent)
+            Text(row.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Text(row.from).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+            HStack(spacing: MekaSpace.xs) {
+                pill(row.undoLabel, quiet: false, spoken: "\(row.undoLabel): \(row.line)") { model.undoDoneForYou(id) }
+                if let change = row.changeLabel, let task = row.changeTaskId {
+                    let title = row.changeTitle
+                    pill(change, quiet: false, spoken: "\(change): \(row.line)") { model.changeDoneForYou(taskId: task, title: title) }
+                }
+                pill(HandleForMeRules.shared.CLEAR, quiet: true, spoken: "\(HandleForMeRules.shared.CLEAR): \(row.line)") { model.clearDoneForYou(id) }
+            }
+            .padding(.top, MekaSpace.m)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.spoken)
+        .mekaHoverLift()
+    }
+
+    private func pill(_ label: String, quiet: Bool, spoken: String, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(quiet ? palette.textSecondary : palette.accent)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(palette.surface, in: Capsule())
+            .accessibilityLabel(spoken)
+    }
+}

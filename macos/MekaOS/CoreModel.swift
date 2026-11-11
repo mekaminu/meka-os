@@ -26,6 +26,9 @@ final class CoreModel {
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
     private(set) var requests: [RequestCard] = []
+    /// "Handle her requests for me" (2026-11-11): what the Fold did at once from his partner's requests, newest first,
+    /// at the top of Needs you (Undo · Change · Clear). Synced on the request cards.
+    private(set) var doneForYou: [DoneForYou] = []
     /// The approvals inbox (V1, slice 1): requests to trade, pay or share a document, first in Needs you. Approve asks
     /// for Touch ID every time; synced with the Fold.
     private(set) var approvals: [ApprovalCard] = []
@@ -605,6 +608,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await r in core.requests { self?.requests = r }
+        })
+        observers.append(Task { [weak self] in
+            for await d in core.doneForYou { self?.doneForYou = d }
         })
         observers.append(Task { [weak self] in
             for await a in core.approvals { self?.approvals = a }
@@ -7684,6 +7690,37 @@ final class CoreModel {
     /// Add · Change · Not a task on a request card. Add makes the task, event or work-from-home day; Change makes it a
     /// task and opens it in Search beside the results; each raises the undo bar (Undo takes back what was made; the
     /// card stays answered on both devices). Nothing is sent to anyone.
+    /// Undo on a Done for you row: everything it made goes (its tasks, the home day); only the id crosses.
+    func undoDoneForYou(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if try await core.undoDoneForYou(id: id).boolValue { offerEventUndo(HandleForMeRules.shared.UNDONE_LINE, nil) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Clear on a Done for you row: seen; what it made stays.
+    func clearDoneForYou(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do { _ = try await core.clearDoneForYou(id: id) } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Change on a Done for you row: opens its task in Search, as Change on a request card does.
+    func changeDoneForYou(taskId: String, title: String?) {
+        MekaHaptics.light()
+        searchSeed = title ?? ""
+        searchChosenSeed = taskId
+        showSearch = true
+    }
+
+    /// About you → Handle her requests for me (only a Bool crosses).
+    func setAboutYouPartnerHandle(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setAboutYouPartnerHandle(on: on) } }
+
     func answerRequest(_ card: RequestCard, _ choice: RequestAnswer) {
         guard let core else { return }
         let id = card.id

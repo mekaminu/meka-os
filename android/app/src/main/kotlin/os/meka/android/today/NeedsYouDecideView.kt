@@ -146,3 +146,37 @@ private fun DecideIcon(icon: NeedsYouDecideIcon) {
         }
     }
 }
+
+internal const val DONE_FOR_YOU_TAG = "done-for-you"
+
+/**
+ * "Handle her requests for me" (2026-11-11): one Done for you row at the top of Needs you — the gold DONE FOR YOU label,
+ * what was done, who asked and when, then Undo · Change · Clear. Undo and Change press in with a light haptic, Clear a
+ * tick. Nothing here sends anything.
+ */
+@Composable
+internal fun DoneForYouRow(
+    row: os.meka.core.domain.DoneForYou,
+    onUndo: () -> Unit,
+    onChange: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberMekaHaptics()
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .testTag(DONE_FOR_YOU_TAG).padding(horizontal = MekaSpace.m, vertical = MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
+            Text(os.meka.core.domain.HandleForMeRules.HEAD.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent)
+            Text(row.line, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(row.from, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            DecidePill(row.undoLabel, DecideTone.PLAIN, "${row.undoLabel}: ${row.line}") { haptics.light(); onUndo() }
+            row.changeLabel?.let { label -> DecidePill(label, DecideTone.PLAIN, "$label: ${row.line}") { haptics.light(); onChange() } }
+            DecidePill(os.meka.core.domain.HandleForMeRules.CLEAR, DecideTone.QUIET, "${os.meka.core.domain.HandleForMeRules.CLEAR}: ${row.line}") { haptics.tick(); onClear() }
+        }
+    }
+}

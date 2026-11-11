@@ -30,6 +30,11 @@ object AboutYouFields {
     const val PARTNER_EMAIL = "partnerEmail"
     /** Bool: MEKA reads her messages for requests (absent = on once a partner is named). */
     const val PARTNER_WATCH = "partnerWatch"
+    /**
+     * Bool: "Handle her requests for me" (2026-11-11): her requests are acted on at once, with reminders and prep steps,
+     * and he is told what was done ([HandleForMeRules]); absent = on. Additive.
+     */
+    const val PARTNER_HANDLE = "partnerHandle"
     /** One child per line, "name|ageGroup|school" (age group a number or empty, school possibly empty). */
     const val CHILDREN = "children"
     const val HOME = "home"
@@ -142,6 +147,8 @@ data class AboutYou(
     val partnerPhone: String? = null,
     val partnerWatch: Boolean = true,
     val partnerEmail: String? = null,
+    /** Her requests handled for him ([AboutYouFields.PARTNER_HANDLE]); on unless he turned it off. */
+    val partnerHandle: Boolean = true,
     val children: List<AboutChild> = emptyList(),
     val home: String? = null,
     val work: String? = null,
@@ -235,6 +242,9 @@ data class AboutYouView(
     val callName: String? = null,
     /** The add-a-child field's fuller how-to for TalkBack and the Mac's label ([AboutYouRules.CHILD_DESCRIPTION]). */
     val childDescription: String = AboutYouRules.CHILD_DESCRIPTION,
+    /** "Handle her requests for me" ([HandleForMeRules.TITLE]): its state and line (null: no partner, or not watched). */
+    val partnerHandle: Boolean = true,
+    val handleLine: String? = null,
 ) {
     companion object {
         val EMPTY: AboutYouView = AboutYouRules.view(AboutYou.EMPTY, LocalCalendar.UTC, 0L)
@@ -349,6 +359,7 @@ object AboutYouRules {
             partnerName = text(AboutYouFields.PARTNER_NAME),
             partnerPhone = text(AboutYouFields.PARTNER_PHONE),
             partnerWatch = fields[AboutYouFields.PARTNER_WATCH]?.boolOrNull ?: true,
+            partnerHandle = fields[AboutYouFields.PARTNER_HANDLE]?.boolOrNull ?: true,
             partnerEmail = text(AboutYouFields.PARTNER_EMAIL),
             children = decodeChildren(fields[AboutYouFields.CHILDREN]?.textOrNull),
             home = text(AboutYouFields.HOME),
@@ -648,6 +659,9 @@ object AboutYouRules {
             partnerWatch = a.partnerWatch,
             watchLine = a.partnerName?.let { if (a.partnerWatch) WATCH_ON else WATCH_OFF },
             isEmpty = a.isEmpty,
+            partnerHandle = a.partnerHandle,
+            // Only while her messages are watched: handling needs them read.
+            handleLine = a.partnerName?.takeIf { a.partnerWatch }?.let { if (a.partnerHandle) HandleForMeRules.ON else HandleForMeRules.OFF },
             callName = CallNameRules.called(a.shownName),
         )
     }
@@ -774,6 +788,13 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
     fun setPartnerWatch(on: Boolean): Boolean {
         if (exists() && profile().partnerWatch == on) return false
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.PARTNER_WATCH to FieldValue.Bool(on)))
+        return true
+    }
+
+    /** Her requests handled for him at once ([HandleForMeRules]), or left as cards. */
+    fun setPartnerHandle(on: Boolean): Boolean {
+        if (exists() && profile().partnerHandle == on) return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.PARTNER_HANDLE to FieldValue.Bool(on)))
         return true
     }
 

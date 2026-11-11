@@ -244,6 +244,8 @@ struct NeedsYouView: View {
                     }
                     .padding(.bottom, MekaSpace.m)
                     .staggeredAppear(0)
+                    // "Handle her requests for me": what was done for him, above the boxes.
+                    DoneForYouView(palette: palette, firstIndex: 1)
                     ForEach(Array(present.enumerated()), id: \.element.id) { i, group in
                         box(group, facts: f, open: open, chats: chats)
                             .staggeredAppear(1 + i)

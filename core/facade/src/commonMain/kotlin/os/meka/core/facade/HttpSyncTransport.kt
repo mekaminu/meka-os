@@ -332,6 +332,8 @@ sealed class TriageRead {
     data class Read(
         val card: os.meka.core.domain.TriageCard?,
         val requests: List<os.meka.core.domain.RequestCard> = emptyList(),
+        /** "Handle her requests for me": what was done at once from his partner's message (no cards for those). */
+        val handled: List<os.meka.core.domain.DoneForYou> = emptyList(),
     ) : TriageRead()
     /** Couldn't ask: offline, AI off, the month's budget spent; [line] says which. Not stored, so it is tried again. */
     data class Unavailable(val line: String) : TriageRead()
@@ -342,7 +344,11 @@ sealed class RequestRead {
     /** Not a message MEKA may read (not watched, a group, a missed call, a bare photo). */
     data object Skipped : RequestRead()
     /** Read: the new Needs you cards (none when the message asked for nothing, or only repeated an open card). */
-    data class Read(val cards: List<os.meka.core.domain.RequestCard>) : RequestRead()
+    data class Read(
+        val cards: List<os.meka.core.domain.RequestCard>,
+        /** "Handle her requests for me": what was done at once (no cards for those). */
+        val handled: List<os.meka.core.domain.DoneForYou> = emptyList(),
+    ) : RequestRead()
     /** Couldn't ask: offline, AI off, the month's budget spent; [line] says which. */
     data class Unavailable(val line: String) : RequestRead()
 }

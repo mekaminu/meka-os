@@ -2327,6 +2327,13 @@ class MekaCore(
      */
     val requests: StateFlow<List<os.meka.core.domain.RequestCard>> = _requests.asStateFlow()
 
+    private val _doneForYou = MutableStateFlow<List<os.meka.core.domain.DoneForYou>>(emptyList())
+    /**
+     * "Handle her requests for me": what Navilife did for him from his partner's requests, newest first, at the top of
+     * Needs you on both apps (Undo · Change · Clear). Synced on the request cards.
+     */
+    val doneForYou: StateFlow<List<os.meka.core.domain.DoneForYou>> = _doneForYou.asStateFlow()
+
     private val _approvals = MutableStateFlow<List<os.meka.core.domain.ApprovalCard>>(emptyList())
     /**
      * The approvals inbox (V1, slice 1; ADR-006 addendum 2026-10-11): requests from outside MEKA to trade, pay or share
@@ -4159,11 +4166,14 @@ class MekaCore(
         if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
             return RequestRead.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
         }
-        return RequestRead.Read(onCore {
+        return onCore {
             val raw = reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words) }
             // The day the message came, not the day it was read: "tomorrow" in last night's message is today.
-            requestCards.save(message, rules.check(raw, cal.epochDayOf(item.atMs), cal.minuteOfDay(item.atMs)))
-        })
+            val made = requestCards.save(message, rules.check(raw, cal.epochDayOf(item.atMs), cal.minuteOfDay(item.atMs)))
+            // "Handle her requests for me": his partner's certain requests are acted on at once; the rest stay cards.
+            val handled = handleForHim(made)
+            RequestRead.Read(made.filter { c -> handled.none { it.id == c.id } }, handled)
+        }
     }
 
     /**
@@ -4392,9 +4402,12 @@ class MekaCore(
                 val quote = checked.summary ?: os.meka.core.domain.TriageCard.NO_GIST_LINE
                 requestCards.save(os.meka.core.domain.RequestMessage(item.id, item.personName.trim(), quote, item.atMs), checked.proposals)
             } else emptyList()
+            // "Handle her requests for me": his partner's certain requests are acted on at once; the rest stay cards.
+            // Only from a 1:1 chat: a group's words are never acted on for him.
+            val handled = if (item.conversation == null) handleForHim(requests) else emptyList()
             // A question from someone Meka watches for in a group (Fold review 2026-10-12, bug 3): "Jordan asked".
             val watched = (route as? os.meka.core.domain.TriageRoute.AskAi)?.watched == true
-            TriageRead.Read(triageCards.save(item, checked, watched = watched), requests)
+            TriageRead.Read(triageCards.save(item, checked, watched = watched), requests.filter { c -> handled.none { it.id == c.id } }, handled)
         }
     }
 
@@ -4739,6 +4752,70 @@ class MekaCore(
         done.bookingId?.let { id -> if (trips.removeBooking(id)) undone = true }
         undone
     }
+
+    /**
+     * "Handle her requests for me" (Take first, Meka 2026-11-11 22:15), slice 1: of the request cards just [made] from
+     * one message, the ones from his partner (About you) that are certain ([os.meka.core.domain.HandleForMeRules.certain])
+     * are acted on now, with no tap, while the switch is on: the task on its day with a reminder, or the work-from-home
+     * day with its prep steps dated ahead of it. Each card is resolved as handled and becomes a Done for you row
+     * ([doneForYou]) with a heads-up. Only his own tasks, reminders and home day are made: nothing is sent, replied to or
+     * submitted. Caller is on the core. Returns the rows made.
+     */
+    private fun handleForHim(made: List<os.meka.core.domain.RequestCard>): List<os.meka.core.domain.DoneForYou> {
+        if (made.isEmpty()) return emptyList()
+        val rules = os.meka.core.domain.HandleForMeRules
+        val about = aboutYou.profile()
+        val cal = ZoneCalendar(timeZone)
+        val today = todayEpochDay()
+        val nowMinute = cal.minuteOfDay(nowMs())
+        val schedule = work.schedule()
+        val holidays = bankHolidays.calendar()
+        val off = leave.days()
+        val isWorkDay: (Long) -> Boolean = { d -> os.meka.core.domain.WorkModeRules.isWorkDay(schedule, holidays, d) && d !in off }
+        val ids = mutableListOf<String>()
+        made.filter { it.person.isNotEmpty() && rules.handles(it.person, about) && rules.certain(it.proposal, today) }.forEach { card ->
+            val p = card.proposal
+            val plan = rules.plan(p, today, nowMinute, isWorkDay)
+            val taskIds = mutableListOf<String>()
+            plan.task?.let { t ->
+                val id = needsTask(t.title)
+                tasks.setWhen(id, t.day, t.minute)
+                t.remindDay?.let { d -> t.remindMinute?.let { m -> tasks.setReminder(id, cal.toEpochMs(d, m)) } }
+                taskIds += id
+            }
+            plan.homeDay?.let { work.setHomeDay(it, true, today) }
+            plan.steps.forEach { st ->
+                val id = needsTask(st.title)
+                tasks.setWhen(id, st.day, null)
+                st.remindDay?.let { d -> st.remindMinute?.let { m -> tasks.setReminder(id, cal.toEpochMs(d, m)) } }
+                taskIds += id
+            }
+            followBlocks(taskIds)
+            if (requestCards.handled(card.id, taskIds, plan.homeDay, rules.line(p, plan, today))) ids += card.id
+        }
+        if (ids.isEmpty()) return emptyList()
+        val rows = requestCards.doneForYou()
+        _doneForYou.value = rows
+        return rows.filter { it.id in ids }
+    }
+
+    /**
+     * Undo on a Done for you row: deletes every task it made (the request's own and the steps), takes the home day back
+     * and takes the row away on both apps. False when it was already undone or cleared.
+     */
+    suspend fun undoDoneForYou(id: String): Boolean = onCore {
+        val row = requestCards.doneForYou().firstOrNull { it.id == id } ?: return@onCore false
+        row.taskIds.forEach { t -> if (tasks.get(t) != null) tasks.delete(t) }
+        followBlocks(row.taskIds)
+        row.homeDay?.let { work.setHomeDay(it, false, todayEpochDay()) }
+        requestCards.dropHandled(id, undone = true).also { refresh() }
+    }
+
+    /** Clear on a Done for you row: seen, gone from Needs you on both apps; what it made stays. */
+    suspend fun clearDoneForYou(id: String): Boolean = onCore { requestCards.dropHandled(id, undone = false).also { refresh() } }
+
+    /** About you → Handle her requests for me. */
+    suspend fun setAboutYouPartnerHandle(on: Boolean): Boolean = onCore { aboutYou.setPartnerHandle(on) }
 
     /**
      * A task made from a request card in Needs you, marked as from there so the Board shows its colour dot (by hand,
@@ -14362,6 +14439,7 @@ class MekaCore(
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary().without(afterWorkHiding)
         _requests.value = requestCards.open()
+        _doneForYou.value = requestCards.doneForYou()
         _approvals.value = approvalStore.cards()
         _tradingKestrel.value = os.meka.core.domain.TradingKestrel.view(approvalStore.all(), nowMs(), cal)
         // Taps feel instant, slice 12: School is kept while his work hours, the minute and every record type it reads
@@ -14582,6 +14660,7 @@ class MekaCore(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
             requests = requestCards.open(), settings = notifyPrefs.settings(), signIns = signIns.all(),
+            doneForYou = requestCards.doneForYou(),
             lines = lineStatus.snapshot(), office = officeToday(),
             callCredit = callCredit.current(), callAssistantOn = _workMode.value.callAssistant,
             school = school.items(), schoolCovers = _school.value.covers,

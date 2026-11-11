@@ -788,6 +788,8 @@ object NoticeSources {
         tasks: List<Task> = emptyList(),
         forecast: WeatherForecast = WeatherForecast.EMPTY,
         requests: List<RequestCard> = emptyList(),
+        /** "Handle her requests for me": what was done for him, a heads-up each ([HandleForMeRules.notices]). */
+        doneForYou: List<DoneForYou> = emptyList(),
         settings: NotificationSettings = NotificationSettings.DEFAULT,
         signIns: List<SignIn> = emptyList(),
         lines: LineStatusSnapshot = LineStatusSnapshot.EMPTY,
@@ -1059,6 +1061,7 @@ object NoticeSources {
         out += TrainWakeRules.notices(trainWake, lines, trainWakeAlarmMinute, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
+        out += HandleForMeRules.notices(doneForYou)
         // The approvals inbox: Needs a decision when a request arrives, Critical in its last 15 minutes.
         out += ApprovalRules.notices(approvals, cal)
         return out

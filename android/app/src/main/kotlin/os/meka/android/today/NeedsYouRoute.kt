@@ -527,6 +527,9 @@ internal fun NeedsYouColumn(
     val hidden = moves.hidden
     val cards = NeedsYouStackRules.ordered(NeedsYouStack(InstantTapRules.stack(stack.cards, hidden)), moves.setAside)
     val requests by core.requests.collectAsState()
+    // "Handle her requests for me": what was done for him, at the top (Undo · Change · Clear).
+    val allDone by core.doneForYou.collectAsState()
+    val doneForYou = remember(allDone, hidden) { allDone.filter { it.id !in hidden } }
     val approvals by core.approvals.collectAsState()
     val allTriage by core.triage.collectAsState()
     // WhatsApp Open chat (2026-10-29): a 1:1 chat's number looked up on this phone (Family, always-notify, then a contact
@@ -955,6 +958,7 @@ internal fun NeedsYouColumn(
             }
         }
         }
+        if (part != NeedsYouPart.RIGHT) doneForYouItems(doneForYou, core, moves, scope, play)
         if (show(NeedsYouSection.DECIDE) && decideCount > 0 && !boxed) {
             item(key = "decide-head") {
                 NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.DECIDE_HEAD, decideCount), Modifier.animateItem())
@@ -1326,5 +1330,35 @@ private fun androidx.compose.foundation.lazy.LazyListScope.groupHead(
     item(key = "group-${group.id}") {
         NeedsYouGroupHeadView(head(group), { toggle(group) },
             Modifier.animateItem().padding(top = MekaSpace.xxs).appear(rememberAppearance(1 + group.ordinal, play)))
+    }
+}
+
+/**
+ * "Handle her requests for me" (2026-11-11): the Done for you rows, newest first. Undo takes back everything a row made
+ * (the bar says so), Change opens its task, Clear takes the row away; each hides the row in this frame (taps feel
+ * instant) and both apps follow through the synced cards.
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.doneForYouItems(
+    rows: List<os.meka.core.domain.DoneForYou>, core: MekaCore, moves: DecisionMoves, scope: kotlinx.coroutines.CoroutineScope, play: Boolean,
+) {
+    rows.forEachIndexed { i, row ->
+        item(key = "done-for-you-${row.id}") {
+            DoneForYouRow(
+                row,
+                onUndo = {
+                    moves.hide(listOf(row.id))
+                    scope.launch {
+                        val ok = runCatching { core.undoDoneForYou(row.id) }.getOrDefault(false)
+                        if (ok) moves.undoLine(os.meka.core.domain.HandleForMeRules.UNDONE_LINE, null) else moves.restore(listOf(row.id))
+                    }
+                },
+                onChange = { row.changeTaskId?.let(moves.openTask) },
+                onClear = {
+                    moves.hide(listOf(row.id))
+                    scope.launch { if (!runCatching { core.clearDoneForYou(row.id) }.getOrDefault(false)) moves.restore(listOf(row.id)) }
+                },
+                modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)),
+            )
+        }
     }
 }
