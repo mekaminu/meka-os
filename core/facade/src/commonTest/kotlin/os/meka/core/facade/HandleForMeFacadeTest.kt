@@ -50,7 +50,7 @@ class HandleForMeFacadeTest {
     private fun msg(who: String, text: String, at: Long = now - 60_000) =
         CapturedItem("wa-$who-$at", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, who, text, null, at)
 
-    private fun todayTitles(c: MekaCore) = c.calendarView.value.sections.first { it.title == "Today" }.rows.map { it.title }
+    private suspend fun titles(c: MekaCore, ids: List<String>) = ids.mapNotNull { c.taskForDetail(it)?.title }
 
     @Test
     fun herWorkFromHomeRequestIsDoneAtOnceAndUndoTakesItAllBack() = runTest {
@@ -68,12 +68,13 @@ class HandleForMeFacadeTest {
         assertEquals("From Alex · 14:02", row.from)
         assertEquals(listOf(row), c.doneForYou.value)
         assertEquals(3, row.taskIds.size)
-        assertEquals(listOf("Tell your manager", "Get approval", "Put the request in at work"), todayTitles(c).filter { it in setOf("Tell your manager", "Get approval", "Put the request in at work") })
+        assertEquals(listOf("Tell your manager", "Get approval", "Put the request in at work"), titles(c, row.taskIds))
+        assertTrue(row.taskIds.all { c.taskForDetail(it)?.remindAtMs != null }, "each step reminds")
         assertTrue(c.calendarView.value.sections.first { it.title == "Mon 12 Oct" }.workLine.orEmpty().startsWith("Work from home"))
 
         assertTrue(c.undoDoneForYou(row.id))
         assertTrue(c.doneForYou.value.isEmpty())
-        assertTrue(todayTitles(c).none { it == "Tell your manager" })
+        assertTrue(titles(c, row.taskIds).isEmpty())
         assertFalse(c.calendarView.value.sections.first { it.title == "Mon 12 Oct" }.workLine.orEmpty().startsWith("Work from home"))
         assertFalse(c.undoDoneForYou(row.id), "only once")
     }
@@ -107,9 +108,10 @@ class HandleForMeFacadeTest {
         server.reply = MessageRequestCodec.Response("answered", listOf(MessageRequestCodec.Proposal("task", "pick up the dry cleaning", words = "tomorrow")))
         val row = assertIs<RequestRead.Read>(c.readRequest(msg("Alex", "can you pick up the dry cleaning tomorrow?"), lists, emptySet())).handled.single()
         assertEquals("“Pick up the dry cleaning” · Tomorrow · added to Tomorrow, reminder Tomorrow 09:00", row.line)
-        assertEquals(listOf("Pick up the dry cleaning"), c.calendarView.value.sections.first { it.title == "Tomorrow" }.rows.map { it.title })
+        assertEquals(listOf("Pick up the dry cleaning"), titles(c, row.taskIds))
+        assertTrue(c.taskForDetail(row.taskIds.single())?.remindAtMs != null)
         assertTrue(c.clearDoneForYou(row.id))
         assertTrue(c.doneForYou.value.isEmpty())
-        assertEquals(listOf("Pick up the dry cleaning"), c.calendarView.value.sections.first { it.title == "Tomorrow" }.rows.map { it.title })
+        assertEquals(listOf("Pick up the dry cleaning"), titles(c, row.taskIds), "Clear keeps what it made")
     }
 }
