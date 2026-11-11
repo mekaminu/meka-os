@@ -90,6 +90,22 @@ object LiveReplies {
     }
 
     /**
+     * WhatsApp calls in Work mode: sends [text] through [n]'s own Reply straight away (the declined call's notification,
+     * or the missed-call or chat notification from that caller that followed it). Only ever called with Meka's fixed
+     * at-work message, under the one standing approval he gave for it ([os.meka.core.domain.WhatsAppCallRules]).
+     * False when [n] offers no free-text Reply or the app refused.
+     */
+    fun replyVia(context: Context, n: Notification, text: String): Boolean {
+        val action = replyAction(n) ?: return false
+        val inputs = action.remoteInputs?.takeIf { it.isNotEmpty() } ?: return false
+        val results = Bundle().apply { inputs.forEach { putCharSequence(it.resultKey, text) } }
+        val fill = Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        RemoteInput.addResultsToIntent(inputs, fill, results)
+        RemoteInput.setResultsSource(fill, RemoteInput.SOURCE_FREE_FORM_INPUT)
+        return runCatching { action.actionIntent.send(context, 0, fill) }.isSuccess
+    }
+
+    /**
      * Marks [messageIds]' chat read in the app through each live notification's own Mark as read (once per notification).
      * Only ever called from Meka's tap (the chat card's Mark read, or Done with "Mark read when I finish a card" on).
      * Returns how many notifications took it; 0 when none showed or offered it (the caller opens the chat instead).

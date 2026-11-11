@@ -55,6 +55,8 @@ open class MekaApplication : Application() {
      * synced one ([MekaCore.afterWork]).
      */
     val captures: CaptureStore by lazy { CaptureStore(this) }
+    /** WhatsApp calls in Work mode: his switch, his at-work message and who had it today (this phone only). */
+    val whatsAppCalls: os.meka.android.work.WhatsAppCallStore by lazy { os.meka.android.work.WhatsAppCallStore(this) }
     /** "Your after-work summary is ready" when work mode ends with something held. */
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
     /** Notification governor: tiers, quiet hours and the two digests, posted on this phone. */

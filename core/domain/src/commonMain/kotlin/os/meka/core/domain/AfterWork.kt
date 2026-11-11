@@ -97,7 +97,8 @@ data class CapturedItem(
 
     /** One line for this item in the after-work summary, the same on both apps. */
     val displayLine: String get() = when (kind) {
-        CaptureKind.MISSED_CALL -> "Missed call"
+        // WhatsApp calls in Work mode: "Called on WhatsApp · at-work message sent".
+        CaptureKind.MISSED_CALL -> if (app == CaptureApp.WHATSAPP) WhatsAppCallRules.displayLine(this) else "Missed call"
         CaptureKind.MESSAGE -> text.orEmpty()
         CaptureKind.VOICE_MESSAGE -> if (endedAsScam) CallIntroRules.DISPLAY_SCAM + (summary?.let { " \u00b7 $it" } ?: "") else if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let {
             // Call notifications, slice 2: the AI's one-line summary first, then the words.

@@ -73,7 +73,7 @@ object HeldPreviewRules {
             ?.let { "$displayName · $it" } ?: displayName
         val line = when (item.kind) {
             CaptureKind.MESSAGE -> firstLine(item.text.orEmpty()).ifEmpty { "Message" }
-            CaptureKind.MISSED_CALL -> "Missed call"
+            CaptureKind.MISSED_CALL -> item.displayLine
             CaptureKind.VOICE_MESSAGE -> item.text?.let(::firstLine)?.takeIf { it.isNotEmpty() }
                 ?.let { "Voice message · “$it”" } ?: item.displayLine // "Transcribing…" until its words arrive
         }

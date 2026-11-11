@@ -7515,6 +7515,15 @@ class MekaCore(
      * hours (filled in here), the block list and Suspected spam decide, with what the phone knows about the caller ([signals]: contacts,
      * recent calls, the network's caller check; never sent anywhere). A call spam protection stopped goes in Activity.
      */
+    /**
+     * WhatsApp calls in Work mode (Meka approved 2026-11-11): one call the Fold declined, in Activity → Calls with
+     * [summary] ([os.meka.core.domain.WhatsAppCallRules.activitySummary]); synced, so the Mac shows it. Once per call.
+     */
+    suspend fun recordWhatsAppCall(caller: String, atMs: Long, summary: String) = onCore {
+        activity.recordScreened("wa:" + os.meka.core.domain.People.key(caller), atMs, summary, os.meka.core.domain.WhatsAppCallRules.WHY)
+        activityChanged()
+    }
+
     suspend fun screenIncomingCall(
         number: String?,
         lists: os.meka.core.domain.PeopleLists,

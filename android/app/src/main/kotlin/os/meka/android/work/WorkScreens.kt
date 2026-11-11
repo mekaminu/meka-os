@@ -291,6 +291,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         ScreenUnknownRow(work.screenUnknownAlways, work.callAssistant, Modifier.appear(rememberAppearance(4))) {
             haptics.tick(); scope.launch { core.setScreenUnknownAlways(!work.screenUnknownAlways) }
         }
+        // WhatsApp calls in Work mode (Meka approved 2026-11-11): decline them at work and send his one at-work message.
+        WhatsAppCallsRow(work.callAssistant && !work.callAssistantPaused && screening, Modifier.appear(rememberAppearance(4)))
         // Obi on calls, slice 4: Live conversation, the cap, what callers may know, booking calls and recordings live on
         // their own page; the row says the month's spend.
         ObiCallsEntry(
@@ -590,6 +592,8 @@ internal fun PersonCard(
                             }
                             // Obi on calls: Remind me on a call back he agreed with a live caller.
                             CallbackRemindChip(item)
+                            // WhatsApp calls in Work mode: Call back opens the caller's WhatsApp chat.
+                            WhatsAppCallBackChip(item)
                         }
                     }
                 }

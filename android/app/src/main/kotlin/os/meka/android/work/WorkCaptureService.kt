@@ -78,6 +78,9 @@ class WorkCaptureService : NotificationListenerService() {
             }
             return
         }
+        // WhatsApp calls in Work mode (Meka approved 2026-11-11): a ringing call is declined (and answered with his one
+        // at-work message) there, never read as a message; other WhatsApp posts may carry the Reply a declined call waits for.
+        if (runCatching { WhatsAppCalls.onPosted(this, scope, sbn, n) }.getOrDefault(false)) return
         val defaultSms = runCatching { Telephony.Sms.getDefaultSmsPackage(this) }.getOrNull()
         val app = NotificationRules.appFor(sbn.packageName, n.category, defaultSms) ?: return
         val meka = application as MekaApplication
