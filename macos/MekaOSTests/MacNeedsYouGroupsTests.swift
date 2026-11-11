@@ -6,10 +6,10 @@ import XCTest
 /// NeedsYouGroupRules as on the Fold; what he leaves open is kept on this Mac; long groups page five at a time.
 final class MacNeedsYouGroupsTests: XCTestCase {
     private func facts(decide: Int32 = 0, foot: String? = nil, messages: [String] = [], fyi: [String] = [],
-                       mail: Bool = false) -> NeedsYouGroupFacts {
+                       mail: Bool = false, mailRows: Int32 = 0) -> NeedsYouGroupFacts {
         NeedsYouGroupFacts(decideCount: decide, decidePeek: decide > 0 ? "\(decide) tasks" : "", afterWorkFoot: foot,
                            messages: messages, fyi: fyi, chatsCount: 0, chatsPeek: "", mailAny: mail, mailCount: mail ? 3 : 0,
-                           mailPeek: mail ? "Sam" : "", mailRows: 0, renewals: nil, tidiedAny: false, tidiedCount: 0,
+                           mailPeek: mail ? "Sam" : "", mailRows: mailRows, renewals: nil, tidiedAny: false, tidiedCount: 0,
                            tidiedPeek: "")
     }
 
@@ -59,5 +59,24 @@ final class MacNeedsYouGroupsTests: XCTestCase {
         XCTAssertTrue(p.hasPrev)
         XCTAssertFalse(p.hasNext)
         XCTAssertEqual(NeedsYouGroup.mail.symbol, "envelope")
+    }
+
+    /// Slice 4b: Mail to answer pages every email five at a time ("1–5 of 7" in its head while open), the due ten-minute
+    /// inbox is its lead line with Start (gone once it runs), and a thin row's lines come from the core.
+    @MainActor
+    func testMailToAnswerPagesEveryEmailAndLeadsWithTheTenMinuteInbox() {
+        let f = facts(mail: true, mailRows: 7)
+        let open = NeedsYouGroupRules.shared.headOf(group: .mail, facts: f, open: [NeedsYouGroup.mail],
+                                                    msgPage: 0, fyiPage: 0, mailPage: 1)
+        XCTAssertEqual(open.peek, "6–7 of 7")
+        let closed = NeedsYouGroupRules.shared.headOf(group: .mail, facts: f, open: [], msgPage: 0, fyiPage: 0, mailPage: 0)
+        XCTAssertEqual(closed.peek, "Sam")
+        let running = NeedsYouGroupRules.shared.headOf(group: .mail, facts: facts(mail: true, mailRows: 0),
+                                                       open: [NeedsYouGroup.mail], msgPage: 0, fyiPage: 0, mailPage: 0)
+        XCTAssertEqual(running.peek, "")
+        XCTAssertEqual(NeedsYouGroupRules.shared.mailLead(momentDue: true, running: false), "Ten-minute inbox · one at a time")
+        XCTAssertNil(NeedsYouGroupRules.shared.mailLead(momentDue: true, running: true))
+        XCTAssertNil(NeedsYouGroupRules.shared.mailLead(momentDue: false, running: false))
+        XCTAssertEqual(NeedsYouGroupRules.shared.MAIL_START, "Start")
     }
 }

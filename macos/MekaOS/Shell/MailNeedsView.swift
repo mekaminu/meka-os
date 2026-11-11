@@ -25,11 +25,21 @@ struct MailNeedsView: View {
     @State private var seq = 0
     @State private var draftingAll = false
     @State private var allLine: String?
+    /// Needs you grouped and folding, slice 4b (the Mac's Mail to answer box): no card of its own (the box head says who
+    /// and how many), every email a thin row (sender · time over the subject) that a click opens for Reply · Done · Task ·
+    /// More, `page` of every email five at a time with "1–5 of 14" and ‹ ›, Draft replies at the foot.
+    var boxed = false
+    var page = 0
+    var onPage: (Int) -> Void = { _ in }
+    /// Slice 4b: which thin rows are open (Draft replies opens the ones it drafted, so their drafts can be read).
+    @State private var openRows: Set<String> = []
 
     var body: some View {
         Group {
+            if boxed, let card = model.mailNeeds, model.mailMomentSession == nil {
+                boxedBody(card)
             // While the ten-minute inbox runs (slice 7) it shows these one at a time instead.
-            if let card = model.mailNeeds, model.mailMomentSession == nil {
+            } else if !boxed, let card = model.mailNeeds, model.mailMomentSession == nil {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Button { MekaHaptics.tick(); open.toggle() } label: {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -53,30 +63,9 @@ struct MailNeedsView: View {
                     if open {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
                             if let draftLabel = MailSendAllRules.shared.draftLabel(rows: Int32(card.rows.count)) {
-                                sendAllBar(card: card, draftLabel: draftLabel)
+                                sendAllBar(rows: card.rows, draftLabel: draftLabel)
                             }
-                            ForEach(card.rows, id: \.id) { row in
-                                MailNeedsRowView(row: row, palette: palette,
-                                                 done: { model.doneMailItem(row.id) },
-                                                 task: { model.taskFromMailItem(row.id) },
-                                                 waiting: { model.waitingFromMailItem(row.id) },
-                                                 snooze: { model.snoozeMailItem(row.id) },
-                                                 send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) },
-                                                 draft: { await model.draftMailReply(row.id) },
-                                                 alwaysTidy: { model.alwaysTidyMailItem(row.id) },
-                                                 block: { model.blockMailItem(row.id) },
-                                                 unsubscribe: { model.unsubscribeMailItem(row.id) },
-                                                 notScam: { model.notScamMailItem(row.id) },
-                                                 incoming: incoming[row.id],
-                                                 onEditor: { t in texts[row.id] = t },
-                                                 suggestTimes: { await model.suggestMeetingTimes(row.id) },
-                                                 book: { model.bookMeetingPick(row.id) },
-                                                 notNeeded: { model.dismissMailDraft(row.id) },
-                                                 read: { images in await model.readMailItem(row.id, images: images) },
-                                                 attachment: { v, a in await model.openMailAttachment(v, a) },
-                                                 toDay: { day in model.mailToDay(row.id, day: day) },
-                                                 toDays: { model.boardFeedDays() })
-                            }
+                            ForEach(card.rows, id: \.id) { row in rowView(row) }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                             }
@@ -102,7 +91,76 @@ struct MailNeedsView: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailNeeds == nil)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailNeeds?.rows.map(\.id) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: openRows)
         .task { await model.refreshAiStatus() }
+    }
+
+    /// One email's answers (and, unboxed, its sender, subject and when): the same card row everywhere.
+    fileprivate func rowView(_ row: MailNeedsRow, head: Bool = true) -> MailNeedsRowView {
+        MailNeedsRowView(row: row, palette: palette,
+                         done: { model.doneMailItem(row.id) },
+                         task: { model.taskFromMailItem(row.id) },
+                         waiting: { model.waitingFromMailItem(row.id) },
+                         snooze: { model.snoozeMailItem(row.id) },
+                         send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) },
+                         draft: { await model.draftMailReply(row.id) },
+                         alwaysTidy: { model.alwaysTidyMailItem(row.id) },
+                         block: { model.blockMailItem(row.id) },
+                         unsubscribe: { model.unsubscribeMailItem(row.id) },
+                         notScam: { model.notScamMailItem(row.id) },
+                         incoming: incoming[row.id],
+                         onEditor: { t in texts[row.id] = t },
+                         suggestTimes: { await model.suggestMeetingTimes(row.id) },
+                         book: { model.bookMeetingPick(row.id) },
+                         notNeeded: { model.dismissMailDraft(row.id) },
+                         read: { images in await model.readMailItem(row.id, images: images) },
+                         attachment: { v, a in await model.openMailAttachment(v, a) },
+                         toDay: { day in model.mailToDay(row.id, day: day) },
+                         toDays: { model.boardFeedDays() },
+                         head: head)
+    }
+
+    /// Slice 4b: the Mail to answer box's insides on the Mac: this page's thin rows (a click unfolds that email's answers
+    /// under it on the expand spring, a second click folds them; reduced motion: cross-fade), the pager, then Draft
+    /// replies and the snoozed and held lines.
+    @ViewBuilder
+    fileprivate func boxedBody(_ card: MailNeedsCard) -> some View {
+        let p = NeedsYouGroupRules.shared.page(total: Int32(card.every.count), page: Int32(page),
+                                               size: NeedsYouGroupRules.shared.PAGE_SIZE)
+        let shown = needsYouPageRows(card.every, p)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(shown, id: \.id) { row in
+                let rowOpen = openRows.contains(row.id)
+                VStack(alignment: .leading, spacing: 0) {
+                    NeedsYouMailThinRowView(row: NeedsYouGroupRules.shared.mailRow(row: row), open: rowOpen, palette: palette) {
+                        if rowOpen { openRows.remove(row.id) } else { openRows.insert(row.id) }
+                    }
+                    if rowOpen {
+                        rowView(row, head: false)
+                            .padding(.horizontal, MekaSpace.xxs).padding(.bottom, MekaSpace.xs)
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            if p.pages > 1 {
+                NeedsYouPagerView(page: p, palette: palette, onPage: onPage)
+                    .padding(.top, MekaSpace.xxs)
+            }
+            if let draftLabel = MailSendAllRules.shared.draftLabel(rows: Int32(shown.count)) {
+                sendAllBar(rows: shown, draftLabel: draftLabel)
+                    .padding(.top, MekaSpace.xs)
+            }
+            if let snoozed = card.snoozedLine {
+                Text(snoozed).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            }
+            if let held = card.heldLine {
+                Text(held).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: shown.map(\.id))
+        .accessibilityIdentifier("mail-needs")
     }
 }
 
@@ -110,8 +168,8 @@ extension MailNeedsView {
     /// Draft replies to N, and Send all N once two or more open editors hold a short reply (it fades in), with the line
     /// saying what Draft replies did or how Send all sends.
     @ViewBuilder
-    fileprivate func sendAllBar(card: MailNeedsCard, draftLabel: String) -> some View {
-        let all = MailSendAllRules.shared.sendAll(rows: card.rows, texts: texts)
+    fileprivate func sendAllBar(rows: [MailNeedsRow], draftLabel: String) -> some View {
+        let all = MailSendAllRules.shared.sendAll(rows: rows, texts: texts)
         // AI layer completeness slice 3: while Navilife's AI can't draft, the bar says so and what still works.
         let shown = all != nil ? MailSendAllRules.shared.LINE : (allLine ?? AiFeatureRules.shared.line(feature: .drafts, view: model.aiStatus))
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -121,8 +179,8 @@ extension MailNeedsView {
                         .transition(.opacity)
                 }
                 MailNeedsPill(label: draftingAll ? MailSendAllRules.shared.DRAFTING : draftLabel, palette: palette, quiet: true,
-                              spoken: MailSendAllRules.shared.draftSpoken(rows: Int32(card.rows.count)),
-                              action: { draftAll(card: card) })
+                              spoken: MailSendAllRules.shared.draftSpoken(rows: Int32(rows.count)),
+                              action: { draftAll(rows: rows) })
                     .disabled(draftingAll)
             }
             if let shown {
@@ -136,10 +194,10 @@ extension MailNeedsView {
 
     /// Draft it for each email whose editor is empty or still holds Navilife's draft (never over his words), one after
     /// another; each draft opens its email's editor.
-    fileprivate func draftAll(card: MailNeedsCard) {
+    fileprivate func draftAll(rows: [MailNeedsRow]) {
         MekaHaptics.light()
         draftingAll = true
-        let targets = card.rows.map(\.id).filter { MailDraftRules.shared.canDraft(editor: texts[$0] ?? "", lastDraft: drafted[$0]) }
+        let targets = rows.map(\.id).filter { MailDraftRules.shared.canDraft(editor: texts[$0] ?? "", lastDraft: drafted[$0]) }
         Task { @MainActor in
             var n = 0
             var problem: String?
@@ -150,6 +208,7 @@ extension MailNeedsView {
                     drafted[id] = t
                     seq += 1
                     incoming[id] = MailIncomingDraft(seq: seq, text: t)
+                    if boxed { openRows.insert(id) }
                 } else {
                     problem = d.line
                 }
@@ -209,6 +268,9 @@ struct MailNeedsRowView: View {
     /// Week board item (5): To a day… puts the email's task on one of `toDays` (nil: not offered here).
     var toDay: (@MainActor (Int64) -> Void)? = nil
     var toDays: @MainActor () -> [FeedDay] = { [] }
+    /// Needs you grouped (slice 4b): false under a thin row in the Mail to answer box, which already says who, when and
+    /// the subject; then the email opens from "Read the whole email ›" instead of a click on its head.
+    var head = true
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var reading = false
     @State private var replying = false
@@ -295,7 +357,7 @@ struct MailNeedsRowView: View {
                     Text(warning).font(MekaType.itemMeta).foregroundStyle(row.scam ? palette.critical : palette.accent)
                         .transition(.opacity)
                 }
-                HStack(spacing: MekaSpace.xs) {
+                if head { HStack(spacing: MekaSpace.xs) {
                     Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                     if row.business {
                         Text(MailNeedsRules.shared.BUSINESS_CHIP)
@@ -307,6 +369,18 @@ struct MailNeedsRowView: View {
                 Text(row.subject).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(2)
                 // Sender and subject only (Needs you bugs, 2026-11-10); the body shows once he opens the email.
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                }
+                // Slice 4b: under a thin row, the whole email opens from its own line (a full-height click).
+                if !head, read != nil {
+                    Button { MekaHaptics.light(); reading = true } label: {
+                        Text("\(MailReaderRules.shared.READ_WHOLE) ›").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel("\(row.spoken). \(MailReaderRules.shared.READ_WHOLE)")
+                    .accessibilityIdentifier("mail-read-\(row.id)")
+                }
                 // Slice 3: an answer turning his times down says so in its own line instead.
                 if row.asksToMeet, row.pickedLine == nil {
                     Text(MeetingRequestRules.shared.ASKS).font(MekaType.itemMeta).foregroundStyle(palette.accent)
@@ -327,13 +401,13 @@ struct MailNeedsRowView: View {
                         .font(MekaType.itemMeta).foregroundStyle(palette.accent).lineLimit(2)
                 }
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(read != nil ? "\(row.spoken). \(MailReaderRules.shared.READ_WHOLE)" : row.spoken)
+            .accessibilityElement(children: head ? .ignore : .contain)
+            .accessibilityLabel(head ? (read != nil ? "\(row.spoken). \(MailReaderRules.shared.READ_WHOLE)" : row.spoken) : "")
             // Read the full email: a click on the email (its sender, subject and first lines) opens the reader.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { if read != nil { MekaHaptics.light(); reading = true } }
-            .accessibilityAddTraits(read != nil ? .isButton : [])
+            .onTapGesture { if head, read != nil { MekaHaptics.light(); reading = true } }
+            .accessibilityAddTraits(head && read != nil ? .isButton : [])
             .sheet(isPresented: $reading) {
                 if let read {
                     MailReaderSheet(palette: palette, load: read, actions: readerActions, attachment: attachment,
@@ -665,7 +739,7 @@ private struct MailChaseRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                HStack(spacing: MekaSpace.xs) {
+                if head { HStack(spacing: MekaSpace.xs) {
                     Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                     if row.business {
                         Text(MailNeedsRules.shared.BUSINESS_CHIP)

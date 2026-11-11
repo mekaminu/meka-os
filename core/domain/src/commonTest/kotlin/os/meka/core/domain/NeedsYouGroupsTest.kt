@@ -217,6 +217,9 @@ class NeedsYouGroupsTest {
         assertEquals("No reply needed · Sam, Jo", R.headOf(NeedsYouGroup.FYI, f, closed, 0, 0, 0).peek)
         assertEquals("", R.headOf(NeedsYouGroup.FYI, f, setOf(NeedsYouGroup.FYI), 0, 0, 0).peek)
         assertEquals("1–5 of 12", R.headOf(NeedsYouGroup.MAIL, f, setOf(NeedsYouGroup.MAIL), 0, 0, 0).peek)
+        // Slice 4b (the Mac pages Mail to answer too): the last page, and no page line while the ten-minute inbox runs.
+        assertEquals("11–12 of 12", R.headOf(NeedsYouGroup.MAIL, f, setOf(NeedsYouGroup.MAIL), 0, 0, 2).peek)
+        assertEquals("", R.headOf(NeedsYouGroup.MAIL, f.copy(mailRows = 0), setOf(NeedsYouGroup.MAIL), 0, 0, 0).peek)
         assertEquals("Streamly, Music Plus · nothing added until you tap Add", R.headOf(NeedsYouGroup.RENEWALS, f, closed, 0, 0, 0).peek)
         assertEquals("Five-a-side", R.headOf(NeedsYouGroup.CHATS, f, closed, 0, 0, 0).peek)
     }

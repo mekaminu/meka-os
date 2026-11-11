@@ -102,16 +102,30 @@ struct NeedsYouGroupHeadView: View {
 
 /// The quiet line at the top of a group with its gold button: "Nothing here needs a reply" · Clear all, or
 /// "2 to chase · from your lists" · Go through.
+/// Slice 4b: "Ten-minute inbox · one at a time" · Start, with Not today as a quiet second button.
 struct NeedsYouGroupLeadView: View {
     let line: String
     let button: String
     let palette: MekaPalette
     let action: () -> Void
+    var second: String? = nil
+    var onSecond: () -> Void = {}
 
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
             Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            if let second {
+                Button {
+                    MekaHaptics.light()
+                    onSecond()
+                } label: {
+                    Text(second).font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                        .padding(.horizontal, MekaSpace.xs).frame(minHeight: 28)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(MekaPressStyle())
+            }
             Button {
                 MekaHaptics.light()
                 action()
@@ -189,6 +203,59 @@ struct NeedsYouPagerView: View {
         .buttonStyle(MekaPressStyle())
         .disabled(!enabled)
         .accessibilityLabel(label)
+    }
+}
+
+/// Slice 4b: one email in the Mail to answer box, as the mockup draws it: a hairline above, "Possible scam" first on a
+/// possible scam, the sender with when beside it, the subject under it; never the body. A click (a tick) unfolds Reply ·
+/// Done · Task · More under it and a second folds them away; the chevron turns half a turn on the expand spring.
+struct NeedsYouMailThinRowView: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let row: NeedsYouMailRow
+    let open: Bool
+    let palette: MekaPalette
+    let onTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(palette.hairline).frame(height: 1)
+            Button {
+                MekaHaptics.tick()
+                onTap()
+            } label: {
+                HStack(spacing: MekaSpace.xs) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: MekaSpace.xs) {
+                            if let flag = row.flag {
+                                Text(flag).font(MekaType.micro).foregroundStyle(palette.critical).lineLimit(1)
+                            }
+                            Text(row.from).font(MekaType.captionStrong).foregroundStyle(palette.textPrimary)
+                                .lineLimit(1).truncationMode(.tail)
+                            if !row.time.isEmpty {
+                                Text(row.time).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                            }
+                        }
+                        Text(row.subject).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .lineLimit(1).truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down")
+                        .font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+                .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xxs)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.spoken)
+            .accessibilityValue(open ? "Open" : "Closed")
+            .accessibilityHint(open ? NeedsYouGroupRules.shared.MAIL_CLOSE_HINT : NeedsYouGroupRules.shared.MAIL_OPEN_HINT)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("needs-you-mail-row-\(row.id)")
+        }
     }
 }
 

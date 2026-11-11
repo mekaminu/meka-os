@@ -175,6 +175,7 @@ struct NeedsYouView: View {
     @AppStorage(NeedsYouOpenGroups.key) private var savedOpen: String?
     @State private var msgPage = 0
     @State private var fyiPage = 0
+    @State private var mailPage = 0
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
     private var decideCount: Int {
@@ -216,7 +217,8 @@ struct NeedsYouView: View {
             mailCount: Int32(Int(model.mailNeeds?.count ?? 0) + (model.mailChases?.rows.count ?? 0)),
             mailPeek: NeedsYouGroupRules.shared.mailPeek(momentDue: model.mailMoment != nil,
                                                          rows: model.mailNeeds?.every ?? [], chases: model.mailChases?.headline),
-            mailRows: 0,
+            // Slice 4b: every email that needs him pages in the box, except while the ten-minute inbox runs.
+            mailRows: model.mailMomentSession == nil ? Int32(model.mailNeeds?.every.count ?? 0) : 0,
             renewals: renewals,
             tidiedAny: tidiedAny,
             tidiedCount: Int32(tiles.first.flatMap { Int($0.number) } ?? 0),
@@ -271,7 +273,7 @@ struct NeedsYouView: View {
     @ViewBuilder private func box(_ group: NeedsYouGroup, facts f: NeedsYouGroupFacts, open: Set<NeedsYouGroup>,
                                   chats: [TriageChat]) -> some View {
         let head = NeedsYouGroupRules.shared.headOf(group: group, facts: f, open: open,
-                                                    msgPage: Int32(msgPage), fyiPage: Int32(fyiPage), mailPage: 0)
+                                                    msgPage: Int32(msgPage), fyiPage: Int32(fyiPage), mailPage: Int32(mailPage))
         VStack(alignment: .leading, spacing: 0) {
             NeedsYouGroupHeadView(head: head, palette: palette) {
                 setOpen(NeedsYouGroupRules.shared.toggle(open: open, group: group))
@@ -309,8 +311,19 @@ struct NeedsYouView: View {
             GroupGistsView(palette: palette, firstIndex: 0)
             DiscordCardsView(palette: palette, firstIndex: 0)
         case .mail:
-            MailMomentView(palette: palette, firstIndex: 0)
-            MailNeedsView(palette: palette, firstIndex: 0)
+            // Slice 4b: the due ten-minute inbox is the box's lead line (Start, Not today with Undo on the bar); once
+            // under way it takes the box, one email at a time. Every email that needs him is a thin row, five a page.
+            if let lead = NeedsYouGroupRules.shared.mailLead(momentDue: model.mailMoment != nil,
+                                                             running: model.mailMomentSession != nil) {
+                NeedsYouGroupLeadView(line: lead, button: NeedsYouGroupRules.shared.MAIL_START, palette: palette,
+                                      action: { model.startMailMoment() },
+                                      second: MailMomentRules.shared.NOT_TODAY, onSecond: { model.notTodayMailMoment() })
+                    .accessibilityIdentifier("needs-you-mail-lead")
+            }
+            if model.mailMomentSession != nil { MailMomentView(palette: palette, firstIndex: 0) }
+            MailNeedsView(palette: palette, firstIndex: 0, boxed: true, page: mailPage) { next in
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { mailPage = next }
+            }
             MailChaseView(palette: palette, firstIndex: 0)
         case .renewals:
             MailFindView(palette: palette, firstIndex: 0)
