@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -466,11 +468,13 @@ private fun KidChoreDot(title: String, d: KidChoreDay, modifier: Modifier, onTic
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.width(32.dp).height(32.dp).clip(CircleShape).background(fill)
+            // Walk-through 2026-11-08 A13: drawn up to 36 dp (was 32), as big as its seventh of the row allows.
+            Modifier.sizeIn(maxWidth = 36.dp, maxHeight = 36.dp).fillMaxWidth().aspectRatio(1f).testTag("kid-chore-dot")
+                .clip(CircleShape).background(fill)
                 .then(if (d.today) Modifier.border(1.dp, Meka.colors.accent, CircleShape) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
-            Text(d.letter, style = MekaType.caption, color = ink)
+            Text(d.letter, style = MekaType.itemMeta, color = ink)
         }
     }
 }

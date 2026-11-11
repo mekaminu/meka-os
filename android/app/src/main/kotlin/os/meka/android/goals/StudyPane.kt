@@ -97,6 +97,7 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.ask.TripPill
+import os.meka.android.designsystem.FoldChevron
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -1037,7 +1038,6 @@ private fun ModuleHead(
     val done = m.lessons.count { pending[it.id] ?: it.done }
     val count = StudyRules.moduleCount(done, m.lessons.size)
     val allDone = done == m.lessons.size
-    val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "study-module-chev")
     val lift by animateFloatAsState(if (grip?.lifted == true && !reduced) 1f else 0f, MekaMotion.approve(reduced), label = "study-module-lift")
     // Where a held module will land: a 2 dp gold line above this head (fades in and out).
     val line by animateFloatAsState(if (dropAbove) 1f else 0f, MekaMotion.appear(reduced), label = "study-module-drop")
@@ -1057,7 +1057,7 @@ private fun ModuleHead(
     ) {
         Text(m.name, style = MekaType.taskTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textTertiary)
-        Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+        FoldChevron(open, Meka.colors.textSecondary)
         grip?.let { GripHandle(it, "study-module-grip-${m.key}") }
     }
 }
@@ -1375,7 +1375,6 @@ private fun AddModule(modifier: Modifier, onAdd: (String, String) -> Unit) {
 @Composable
 private fun DeletedHead(n: Int, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     val reduced = Meka.reducedMotion
-    val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "study-deleted-chev")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onToggle)
             .semantics(mergeDescendants = true) { contentDescription = "${StudyRules.RECENT_LABEL}, $n, " + if (open) "tap to fold" else "tap to open" }
@@ -1383,7 +1382,7 @@ private fun DeletedHead(n: Int, open: Boolean, modifier: Modifier, onToggle: () 
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("${StudyRules.RECENT_LABEL} · $n", style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-        Text("⌄", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.rotate(turn))
+        FoldChevron(open, Meka.colors.textSecondary)
     }
 }
 

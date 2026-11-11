@@ -82,7 +82,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import os.meka.android.designsystem.FoldChevron
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MoreButton
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -875,7 +877,6 @@ private fun GroupHead(
     val done = g.rows.count { pending[it.id] ?: it.done }
     val allDone = g.rows.isNotEmpty() && done == g.rows.size
     val count = if (g.rows.isEmpty()) TripGroupRules.EMPTY else if (allDone) "All done" else "$done of ${g.rows.size}"
-    val turn by animateFloatAsState(if (open) 180f else 0f, MekaMotion.expand(reduced), label = "trip-group-chev")
     // Slice 4b: the drop target under a dragged thing.
     val glow by animateColorAsState(if (lit) Meka.colors.accent.copy(alpha = 0.18f) else Meka.colors.accent.copy(alpha = 0f), MekaMotion.appear(reduced), label = "trip-group-lit")
     Row(
@@ -891,11 +892,9 @@ private fun GroupHead(
     ) {
         Text(g.name, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
         Text(count, style = MekaType.caption, color = if (allDone) Meka.colors.success else Meka.colors.textSecondary)
-        Text("⌄", style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.rotate(turn))
+        FoldChevron(open, Meka.colors.textSecondary)
         if (onMenu != null) {
-            Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onMenu)
-                    .semantics { contentDescription = "Change the group ${g.name}" }.minTouchSquare().testTag("trip-group-more-${g.name}"))
+            MoreButton("Change the group ${g.name}", Meka.colors.textSecondary, "trip-group-more-${g.name}", onClick = onMenu)
         }
     }
 }
@@ -924,9 +923,7 @@ private fun ItemRow(row: TripListRow, done: Boolean, modifier: Modifier, onTick:
             if (row.sub.isNotEmpty()) Text(row.sub, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         if (row.qty.isNotEmpty()) Text(row.qty, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.alpha(fade))
-        Text("⋯", style = MekaType.captionStrong, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpen)
-                .semantics { contentDescription = "Change ${row.text}" }.minTouchSquare().testTag("trip-item-more-${row.id}"))
+        MoreButton("Change ${row.text}", Meka.colors.textSecondary, "trip-item-more-${row.id}", onClick = onOpen)
     }
 }
 

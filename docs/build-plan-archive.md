@@ -5665,6 +5665,17 @@ drops the button while the AI can't draft, `barShows` keeps the bar for that lin
 fails if both show. (4) Trading's 1D · 1W · 1M chips sat under no chart while fewer than two day ends were read;
 `TradingEquity.lineHint` puts "The line draws once two days have been read" where the line goes. Core test
 `CutAndRepeatedLabelsTest`; Fold and Mac; no server change, no migration; Mac checked nightly.
+
+Slice (2026-11-11): **A13, small targets and bare glyphs.** Trip lists' group heads and Study's module heads and
+Recently deleted showed a caption-size "⌄" (a few dp of ink, low on the line) and Trip lists' ⋯ was a bare glyph. New
+designsystem `FoldMarks.kt`: `FoldChevron(open, color)` draws a 20 dp chevron (1.75 dp round stroke) that turns 180°
+on the expand spring as the head opens; `MoreButton(spoken, ink, tag)` is a 48 × 48 target with a 32 dp disc on the
+raised surface and three dots. Kids' chore day dots are drawn up to 36 dp (were 32), square to the row's seventh, the
+day letter in itemMeta. Left as they are: the No-spend week dots (a picture of the week, not tappable), and the On
+pills, Week ahead chips and Watch for requests (drawn 32 dp inside 48 dp targets since A9, the shots measured the
+drawing). Tests: `ScreenShots.assertDrawnMarks` (no bare "⌄ ˅ ^ ⌃ ⋯" text, marks at full size) in TripListsScreensTest's
+pack shots and StudyScreensTest's course shots; AdminPlacesScreensTest measures the chore dots on the cover. Fold only
+(the Mac uses SF Symbols chevrons); no core change.
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 
 Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:

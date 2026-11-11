@@ -125,6 +125,8 @@ class StudyScreensTest {
         // Slice 2a: YOUR PLAN sits between the header and the lessons, so the modules are further down.
         scrollTo(hasTestTag("study-module-${core.studyView.value.course(id)!!.modules[1].key}"))
         ScreenShots.assertShows(compose, name, "2 · Core skills")
+        // Walk-through 2026-11-08 A13: each module's fold mark is drawn whole, never a bare "⌄".
+        kotlin.test.assertTrue(ScreenShots.assertDrawnMarks(compose, name) > 0, "$name: no drawn fold marks")
     }
 
     /** Scrolls the course to [m] with the clock running, then pauses it again for the next-frame checks. */

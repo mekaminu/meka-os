@@ -15,6 +15,7 @@ import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -451,6 +452,15 @@ class AdminPlacesScreensTest {
     fun kidsByHand() {
         kidsByHand(shoot(Place.KIDS, "cover-dark-kids-by-hand", Fill.MANY))
         ScreenShots.reshootAfterHand(compose, Place.KIDS.area, "cover-dark-kids-by-hand") // walk-through A15
+        // Walk-through 2026-11-08 A13: a chore's day dots are drawn 36 dp on the cover (they were 32), round.
+        val d = compose.density.density
+        val dots = compose.onAllNodes(hasTestTag("kid-chore-dot"), useUnmergedTree = true).fetchSemanticsNodes()
+        if (dots.isEmpty()) fail("kids-by-hand: no chore day dots on screen")
+        dots.forEach { n ->
+            val w = n.size.width / d
+            val h = n.size.height / d
+            if (w < 35.5f || kotlin.math.abs(w - h) > 0.5f) fail("kids-by-hand: a chore dot is ${w.toInt()} × ${h.toInt()} dp")
+        }
     }
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun schoolByHand() {

@@ -537,6 +537,32 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-08 A13: no bare glyph stands in for a fold mark or a ⋯ button ("⌄", "˅", "^", "⋯" as a
+     * line's whole text), and the drawn marks that replace them are whole: each `fold-chevron` at least
+     * [os.meka.android.designsystem.FoldMarkSpec.CHEVRON_DP] and each `more-disc` at least
+     * [os.meka.android.designsystem.FoldMarkSpec.MORE_DISC_DP]. Returns how many drawn marks were on screen.
+     */
+    fun assertDrawnMarks(compose: ComposeContentTestRule, name: String): Int {
+        val d = compose.density.density
+        val bare = setOf("⌄", "˅", "^", "⌃", "⋯")
+        val glyphs = compose.onAllNodes(androidx.compose.ui.test.hasText("", substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.trim() }
+            .filter { it in bare }
+        if (glyphs.isNotEmpty()) fail("$name: bare glyphs on screen: ${glyphs.joinToString()}")
+        val spec = os.meka.android.designsystem.FoldMarkSpec
+        var count = 0
+        val small = listOf("fold-chevron" to spec.CHEVRON_DP, "more-disc" to spec.MORE_DISC_DP).flatMap { (tag, min) ->
+            compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
+                .also { count += it.size }
+                .filter { it.size.height / d < min - 0.5f || it.size.width / d < min - 0.5f }
+                .map { "$tag ${(it.size.width / d).toInt()} × ${(it.size.height / d).toInt()} dp" }
+        }
+        if (small.isNotEmpty()) fail("$name: marks drawn too small:\n" + small.joinToString("\n") { "- $it" })
+        return count
+    }
+
+    /**
      * Walk-through A15 (2026-11-02): each by-hand state's shot was taken as the screen opened, so it was byte for byte
      * another state's shot and nothing the hand did was ever looked at. Call this at the end of a by-hand walk: it lets
      * the screen settle, shoots it again over the opening shot, and fails if the picture didn't change or matches

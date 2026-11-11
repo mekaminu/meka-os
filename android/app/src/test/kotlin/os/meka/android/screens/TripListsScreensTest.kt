@@ -41,6 +41,7 @@ import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Trip lists, slice 1: a trip's To pack on the Fold's cover and inner screens (Dark, and Light on the cover), read for
@@ -120,6 +121,8 @@ class TripListsScreensTest {
         ScreenShots.assertNotCornerClipped(compose, name, "2 days to go")
         // Walk-through 2026-11-02 A9: each "⋯" is a whole 48 × 48 target, not as wide as its glyph.
         ScreenShots.assertWholeTargets(compose, name)
+        // Walk-through 2026-11-08 A13: the groups' fold marks and every ⋯ are drawn, not bare glyphs.
+        assertTrue(ScreenShots.assertDrawnMarks(compose, name) > 0, "$name: no drawn fold marks or ⋯ buttons")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun packCoverDark() = shoot("cover-dark-pack")
