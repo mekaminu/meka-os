@@ -16,10 +16,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
@@ -123,7 +125,10 @@ class NeedsYouMailBoxScreensTest {
     }
 
     private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
-    private fun rows() = compose.onAllNodesWithTag(NEEDS_YOU_MAIL_ROW_TAG, substring = true, useUnmergedTree = true).fetchSemanticsNodes().size
+    private val mailRow = SemanticsMatcher("a thin mail row") { n ->
+        n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("$NEEDS_YOU_MAIL_ROW_TAG-") == true
+    }
+    private fun rows() = compose.onAllNodes(mailRow, useUnmergedTree = true).fetchSemanticsNodes().size
     private fun tapRow(id: String) {
         compose.onNodeWithTag("$NEEDS_YOU_MAIL_ROW_TAG-$id", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         turns()

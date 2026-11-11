@@ -234,7 +234,7 @@ internal fun MailNeedsSection(
                                     undo(said) { runCatching { core.undoMailItem() } }
                                 }
                             },
-                            modifier = if (boxed) Modifier.padding(bottom = MekaSpace.s) else Modifier,
+                            modifier = if (boxed) Modifier.padding(bottom = MekaSpace.xs) else Modifier,
                         )
                         }
                     }
