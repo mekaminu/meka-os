@@ -113,7 +113,7 @@ class SetupScreensTest {
                     HealthAccount("travel", "Google Routes · drive times to football", "Travel times", "ok", now),
                 ),
                 signIns = listOf(SignIn("google", "jordan@example.com", SignInState.OK, null, canEdit = true)),
-                ai = ai, callAssistantOn = true, voiceMessageSeen = true, voiceChosen = "Kore",
+                ai = ai, callAssistantOn = ShotLife.CALL_ASSISTANT_ON_WHEN_FULL, voiceMessageSeen = true, voiceChosen = "Kore",
                 homePlace = "Oakfield", workPlace = "Riverside", nowMs = now,
             ),
             SetupRecovery(null), SetupScreenSaver(true), CommuteSetting(80, 75, chosen = true),

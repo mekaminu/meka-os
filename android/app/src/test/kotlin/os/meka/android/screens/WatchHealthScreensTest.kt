@@ -256,6 +256,9 @@ class WatchHealthScreensTest {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         runBlocking {
             if (server != null) core.syncNow()
+            // Walk-through 2026-11-08 A8: Setup's full shot has the call assistant on, so Health's full one does too
+            // (both read the same Work mode switch); they said Off here beside On there.
+            if (fill == Fill.MANY) core.setCallAssistant(ShotLife.CALL_ASSISTANT_ON_WHEN_FULL)
             core.refreshHealth(HealthDevice.facts(context))
         }
         show { HealthPane(core, onClose = {}, openPane = {}) }
@@ -282,6 +285,8 @@ class WatchHealthScreensTest {
             Fill.EMPTY -> if (server0.line != "This device isn't connected yet") fail("$name: not connected, the server row says \"${server0.line}\"")
             Fill.ONE -> if (!server0.line.startsWith("Connected")) fail("$name: connected, the server row says \"${server0.line}\"")
             Fill.MANY -> {
+                val calls = v.rows.firstOrNull { it.key == "calls" } ?: fail("$name: no Call assistant row")
+                if (calls.line.startsWith("Off")) fail("$name: Call assistant says \"${calls.line}\" while Setup's full shot has it on")
                 val expired = v.rows.firstOrNull { it.key.startsWith("calendar:microsoft") } ?: fail("$name: no row for the work calendar")
                 if (expired.fixLabel != "Reconnect") fail("$name: an expired sign-in offers \"${expired.fixLabel}\"")
                 if (v.attention < 1) fail("$name: an expired sign-in doesn't need a look (${v.summary})")

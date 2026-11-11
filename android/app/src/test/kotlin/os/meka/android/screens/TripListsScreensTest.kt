@@ -72,7 +72,7 @@ class TripListsScreensTest {
         context.useCoreForScreens(core)
         val tripId = runBlocking {
             core.tick()
-            check(!core.addTrip("Seville 28–31 Oct").refused)
+            check(!core.addTrip(ShotLife.NEXT_TRIP).refused)
             val id = core.tripsView.value.rows.single().id
             listOf(
                 "passports × 4", "GHIC cards × 4", "boarding passes", "t-shirts × 5 for me", "kids outfits × 10",
@@ -153,7 +153,7 @@ class TripListsScreensTest {
         context.useCoreForScreens(core)
         val tripId = runBlocking {
             core.tick()
-            check(!core.addTrip("Seville 28–31 Oct").refused)
+            check(!core.addTrip(ShotLife.NEXT_TRIP).refused)
             val id = core.tripsView.value.rows.single().id
             listOf("passports", "boarding passes", "t-shirts").forEach { check(!core.addTripItem(id, it, TripList.PACK).refused) }
             core.tick()

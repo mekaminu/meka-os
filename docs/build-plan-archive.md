@@ -5623,6 +5623,15 @@ AppointmentsFacadeTest, the Mac bridge test; LifePlacesScreensTest fails if the 
 AdminPlacesScreensTest if "all in hand" sits over a lit row. Core only; both apps draw the lines from the core; Mac
 checked nightly.
 
+Slice 12 (2026-11-11): **A8, one invented life across the shots** (test only, Fold). New `android/app/src/test/.../screens/ShotLife.kt`
+holds what two screens show of the same thing: the GP (`GP: Dr Patel, 01632 960123`, on Emergency → Call and as a Fact,
+which had two different surgeries and numbers), Sam's birthday (3 Nov on People and Ask; Gifts had 12 Dec, now 3 Nov 2016),
+the next trip (Seville 28–31 Oct on Trips and Trip lists; Ask's tiles had a Lisbon trip no other shot knew) and the full
+set's call assistant switch (Setup's full shot on; Health's full shot now sets Work mode's switch on too, and
+`WatchHealthScreensTest.health` fails if its Call assistant row says Off). KeptPlaces, LifePlaces, PlansPlaces, TripLists,
+Ask, Setup and WatchHealth screen tests read it. Left of A8: the Wed/Thu events and the fast across Brief, Calendar, Board,
+Bedside, Tomorrow and Fasting.
+
 
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 

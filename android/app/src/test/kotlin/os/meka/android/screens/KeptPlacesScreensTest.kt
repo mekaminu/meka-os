@@ -112,7 +112,7 @@ class KeptPlacesScreensTest {
                 }
             }
             Place.EMERGENCY -> {
-                check(!core.addEmergency(EmergencySection.CALL.key, "GP: Dr Patel, 01632 960123").refused)
+                check(!core.addEmergency(EmergencySection.CALL.key, ShotLife.GP).refused)
                 if (fill == Fill.MANY) {
                     check(!core.addEmergency(EmergencySection.CALL.key, "Alex's school office: 01632 960456").refused)
                     check(!core.addEmergency(EmergencySection.CALL.key, "Neighbour with the spare key: Pat two doors down, 07700 900123").refused)
@@ -125,7 +125,7 @@ class KeptPlacesScreensTest {
             Place.FACTS -> {
                 check(!core.addFact("Car reg: AB12 CDE").refused)
                 if (fill == Fill.MANY) {
-                    check(!core.addFact("GP: Oakfield Surgery, 01632 960789").refused)
+                    check(!core.addFact(ShotLife.GP).refused)
                     check(!core.addFact("Alex's shoe size: 13").refused)
                     check(!core.addFact("Energy supplier: Oakfield Energy").refused)
                     check(!core.addFact("Boiler: Oakfield Combi 30, serviced every autumn by the plumber on the high street").refused)

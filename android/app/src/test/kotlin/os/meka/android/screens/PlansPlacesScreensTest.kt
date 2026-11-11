@@ -100,14 +100,14 @@ class PlansPlacesScreensTest {
                     check(!core.addTrip("Flight BA479 Wed 18 Nov 18:20 ref ABC123").refused)
                     check(!core.addTrip("Porto 4–7 Dec").refused)
                     // Walk-through A16: the trip Trip lists packs for is on Trips too.
-                    check(!core.addTrip("Seville 28–31 Oct").refused)
+                    check(!core.addTrip(ShotLife.NEXT_TRIP).refused)
                 }
             }
             Place.GIFTS -> {
                 check(!core.addOccasion("Alex's birthday 31 Oct 2019").refused)
                 if (fill == Fill.MANY) {
                     check(!core.addOccasion("Wedding anniversary 20 Aug 2015").refused)
-                    check(!core.addOccasion("Sam's birthday 12 Dec 2016").refused)
+                    check(!core.addOccasion(ShotLife.SAM_BIRTHDAY_WITH_YEAR).refused)
                     check(!core.addOccasion("Grandma Rose's eightieth birthday party at the community hall 6 Nov 1946").refused)
                     val first = core.giftsView.value.rows.first()
                     check(core.addGiftIdea(first.id, "Football boots, size 13"))
