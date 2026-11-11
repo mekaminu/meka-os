@@ -87,21 +87,23 @@ class ScreenUnknownTest {
     }
 
     @Test
-    fun theSettingIsSyncedAndOffUntilTurnedOn() {
+    fun theSettingIsSyncedAndOnUntilTurnedOff() {
         val world = SyncWorld()
         val fold = world.device("android")
         val mac = world.device("mac")
         val clock = LocalClock(6, 18 * 60)
         val onFold = WorkMode(fold.replica) { world.clock.nowMs }
         val onMac = WorkMode(mac.replica) { world.clock.nowMs }
-        assertFalse(onFold.state(clock).screenUnknownAlways)
-        assertTrue(onFold.setScreenUnknownAlways(true))
-        assertFalse(onFold.setScreenUnknownAlways(true))
-        fold.sync(); mac.sync()
+        // Needs Meka #46 (2026-11-11, "Yes"): on with nothing stored, on both devices.
+        assertTrue(onFold.state(clock).screenUnknownAlways)
         assertTrue(onMac.state(clock).screenUnknownAlways)
+        assertFalse(onFold.setScreenUnknownAlways(true))
+        assertTrue(onFold.setScreenUnknownAlways(false))
+        fold.sync(); mac.sync()
+        assertFalse(onMac.state(clock).screenUnknownAlways)
         world.clock.nowMs += 1_000
-        assertTrue(onMac.setScreenUnknownAlways(false))
+        assertTrue(onMac.setScreenUnknownAlways(true))
         mac.sync(); fold.sync()
-        assertFalse(onFold.state(clock).screenUnknownAlways)
+        assertTrue(onFold.state(clock).screenUnknownAlways)
     }
 }

@@ -380,6 +380,8 @@ class CallSpamFacadeTest {
     fun screenUnknownCallersAllTheTimeSendsAWeekendStrangerToTheAssistant() = runTest {
         val c = core() // Saturday morning: off work
         c.setCallAssistant(true)
+        assertTrue(c.workMode.value.screenUnknownAlways) // on until he turns it off (#46)
+        assertTrue(c.setScreenUnknownAlways(false))
         assertEquals(CallReason.OFF_WORK, c.screenIncomingCall("01632 960321", lists, emptyList(), CallSignals.NONE).reason)
         assertFalse(c.workMode.value.screenUnknownAlways)
         assertTrue(c.setScreenUnknownAlways(true))

@@ -97,7 +97,7 @@ class BookingCallRecordingTest {
         assertTrue(c.tick())
         val t = ticket()
         assertTrue(t.booking && t.recorded)
-        assertTrue("\"Hi, this is Obi, Alex's AI assistant. ${CallRecordingRules.RECORDED_LINE}\"" in t.instruction, t.instruction)
+        assertTrue("\"Hi, this is Obi, Alex's assistant. ${CallRecordingRules.RECORDED_LINE}\"" in t.instruction, t.instruction)
     }
 
     @Test

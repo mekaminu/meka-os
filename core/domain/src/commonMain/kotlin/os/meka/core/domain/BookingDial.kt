@@ -101,7 +101,7 @@ object BookingDialRules {
         val what = c.what.trim().take(BookingCallRules.MAX_WHAT)
         // "Table for 4" already says the party; otherwise it's added once.
         val partyWords = party?.takeIf { !Regex("""\bfor\s+${c.people}\b""").containsMatchIn(what) }
-        val opening = (if (name != null) "Hi, this is Obi, $name's AI assistant." else ObiCallRules.OPENING) +
+        val opening = (if (name != null) "Hi, this is Obi, $name's assistant." else ObiCallRules.OPENING) +
             if (recorded) " " + CallRecordingRules.RECORDED_LINE else ""
         appendLine("You are Obi, an AI assistant, phoning ${c.business.trim().take(BookingCallRules.MAX_BUSINESS)} to make a booking for $who. Speak British English only, in short natural sentences (one or two at a time), warm, polite and calm.")
         appendLine("When they answer, start by saying exactly: \"$opening\" Then say you're calling to book: $what${partyWords?.let { " for $it" } ?: ""}, $dayWords, ${windowWords(c)}.")

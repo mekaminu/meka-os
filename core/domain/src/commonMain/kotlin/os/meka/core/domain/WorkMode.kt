@@ -300,7 +300,7 @@ data class WorkModeState(
     val callAssistant: Boolean = false,
     /** Spam protection ([SpamProtectionRules]): on unless turned off in Advanced; independent of the call assistant. */
     val spamProtection: Boolean = true,
-    /** "Screen unknown callers all the time" ([ScreenUnknownRules]): off until Meka turns it on. */
+    /** "Screen unknown callers all the time" ([ScreenUnknownRules]): on unless Meka turns it off (the synced value; #46). */
     val screenUnknownAlways: Boolean = false,
     /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7 or 0 (don't keep). */
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
@@ -611,9 +611,12 @@ class WorkMode(
         return true
     }
 
-    /** "Screen unknown callers all the time" (synced); absent reads as off. */
+    /**
+     * "Screen unknown callers all the time" (synced); absent reads as on (Meka 2026-11-11, Needs Meka #46: "Yes"), so it
+     * is on for him on every device until he turns it off, and an explicit off stays off.
+     */
     fun screenUnknownAlways(): Boolean =
-        replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCREEN_UNKNOWN_ALWAYS)?.boolOrNull == true
+        replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCREEN_UNKNOWN_ALWAYS)?.boolOrNull != false
 
     /** Turns "Screen unknown callers all the time" on or off, synced; false when nothing changed. */
     fun setScreenUnknownAlways(on: Boolean): Boolean {

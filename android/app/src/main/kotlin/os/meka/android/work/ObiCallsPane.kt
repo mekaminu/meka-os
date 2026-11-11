@@ -88,7 +88,7 @@ internal fun ObiCallsEntry(line: String, modifier: Modifier = Modifier, onOpen: 
 /**
  * Obi on calls, slice 4 (mockup `docs/design/calls/settings.dc.html`): THIS MONTH with spent, calls and booked against
  * the cap and the £10 · £20 · £30 · £50 chips; WHEN SOMEONE CALLS YOU's three switches; WHAT CALLERS MAY KNOW's chips;
- * the fixed BOOKING CALLS limits; RECORDINGS; "Obi always says he's your AI assistant". Everything is synced with the
+ * the fixed BOOKING CALLS limits; RECORDINGS; "Obi always says he's an AI assistant when asked". Everything is synced with the
  * Mac. Motion: sections stagger in 40 ms apart; the spend bar grows from the left to its share; chips and switches
  * blend on the appear spring with a tick haptic; lines cross-fade. Reduced motion: cross-fades, the bar drawn at once.
  */

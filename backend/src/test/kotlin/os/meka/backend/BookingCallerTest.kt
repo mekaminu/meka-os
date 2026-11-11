@@ -145,7 +145,7 @@ class BookingCallerTest {
         val setup = Json.parseToJsonElement(model.sent.single()).jsonObject["setup"].toString()
         assertTrue(BookingDialRules.BOOKING_RESULT in setup && LiveCallRules.END_CALL in setup)
         assertFalse(LiveCallRules.TAKE_MESSAGE in setup)
-        assertTrue("Alex's AI assistant" in setup && "a high chair" in setup && "020 7946 0000" in setup)
+        assertTrue("Alex's assistant." in setup && "a high chair" in setup && "020 7946 0000" in setup)
         assertFalse("07700" in setup)
         model.say("""{"setupComplete":{}}""")
         assertTrue(BookingDialRules.KICKOFF in model.sent.last())

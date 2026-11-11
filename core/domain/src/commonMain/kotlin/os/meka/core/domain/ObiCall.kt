@@ -2,15 +2,16 @@ package os.meka.core.domain
 
 /**
  * Obi on a call (build plan "the assistant becomes Obi", slice 5: the honesty rule; Meka 2026-10-22/23). Whenever Obi
- * speaks to someone on Meka's behalf he opens with his name and that he is Meka's AI assistant, and if a caller asks
- * whether he's a robot, an AI or a real person he says plainly "I am, yes, Meka's AI assistant." — then carries on.
+ * speaks to someone on Meka's behalf he opens with his name and that he is Meka's assistant ("Drop AI" from the opening,
+ * Meka 2026-11-11, Needs Meka #50), and if a caller asks whether he's a robot, an AI or a real person he says plainly
+ * "I am, yes, Meka's AI assistant." — then carries on. He never claims to be a person.
  *
  * Non-AI and pure, so the call assistant answers inside the phone service's wait. The caller's words are untrusted
  * (ADR-006): a question here only ever adds the plain answer; it never changes what the assistant may do.
  */
 object ObiCallRules {
     /** How every call Obi takes or makes opens (the greetings in [CallAssistantScript] start with it). */
-    const val OPENING = "Hi, this is Obi, Meka's AI assistant."
+    const val OPENING = "Hi, this is Obi, Meka's assistant."
     /** His answer when asked whether he's a person, a robot or an AI. */
     const val AI_ANSWER = "I am, yes, Meka's AI assistant."
     /** After answering, asked once more in place of "who's calling?" ([CallIntroRules.INTRO_QUESTION]). */

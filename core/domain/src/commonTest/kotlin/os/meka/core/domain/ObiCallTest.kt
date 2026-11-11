@@ -8,8 +8,11 @@ import kotlin.test.assertTrue
 
 class ObiCallTest {
     @Test
-    fun everyGreetingOpensWithHisNameAndThatHesAnAi() {
-        assertEquals("Hi, this is Obi, Meka's AI assistant.", ObiCallRules.OPENING)
+    fun everyGreetingOpensWithHisNameAndThatHesMekasAssistant() {
+        // Needs Meka #50 (2026-11-11, "Drop AI"): the opening says assistant, not AI; asked, he still says plainly he's an AI.
+        assertEquals("Hi, this is Obi, Meka's assistant.", ObiCallRules.OPENING)
+        assertFalse(" AI" in CallAssistantScript.greeting(atWork = true) || " AI" in CallAssistantScript.greeting(atWork = false))
+        assertEquals("Hi, this is Obi, Meka's assistant. This call is recorded.", CallRecordingRules.opening(true))
         assertTrue(CallAssistantScript.greeting(atWork = true).startsWith(ObiCallRules.OPENING))
         assertTrue(CallAssistantScript.greeting(atWork = false).startsWith(ObiCallRules.OPENING))
         assertFalse("Navilife" in CallAssistantScript.GREETING)

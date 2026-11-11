@@ -16,7 +16,7 @@ class CallRecordingRulesTest {
 
     @Test
     fun obiSaysSoInHisOpening() {
-        assertEquals("Hi, this is Obi, Meka's AI assistant. This call is recorded.", CallRecordingRules.opening(true))
+        assertEquals("Hi, this is Obi, Meka's assistant. This call is recorded.", CallRecordingRules.opening(true))
         assertEquals(ObiCallRules.OPENING, CallRecordingRules.opening(false))
         val recorded = LiveCallRules.instruction(false, LiveCallRules.DEFAULT_KNOWS, "Alex", null, null, recorded = true)
         assertTrue("Start by saying exactly: \"${CallRecordingRules.opening(true)}\"" in recorded, recorded)

@@ -222,7 +222,7 @@ data class BookingCallRow(
 object BookingCallRules {
     const val TITLE = "Calls for you"
     const val INTRO = "Ask Obi to book a table or an appointment and he makes a call card here. Nothing rings until you tap Call now; " +
-        "he rings businesses only, between 09:00 and 20:00, says he's your AI assistant and never pays or gives card details."
+        "he rings businesses only, between 09:00 and 20:00, says he's your assistant (an AI one, if asked) and never pays or gives card details."
     const val EMPTY = "No calls waiting · say \"book a table for 4 at … on Saturday at 7\" to Obi"
     const val CARD_BUTTON = "Make the card"
     const val CALL_NOW = "Call now"

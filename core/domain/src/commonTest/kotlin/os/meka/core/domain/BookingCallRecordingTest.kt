@@ -67,7 +67,7 @@ class BookingCallRecordingTest {
     fun obiSaysTheBookingCallIsRecorded() {
         val c = BookingCallRules.read(id, fields(BookingCallState.APPROVED, null, null))!!
         val recorded = BookingDialRules.instruction(c, "Alex", null, now, cal, recorded = true)
-        assertTrue("start by saying exactly: \"Hi, this is Obi, Alex's AI assistant. This call is recorded.\"" in recorded, recorded)
+        assertTrue("start by saying exactly: \"Hi, this is Obi, Alex's assistant. This call is recorded.\"" in recorded, recorded)
         val plain = BookingDialRules.instruction(c, "Alex", null, now, cal)
         assertFalse(CallRecordingRules.RECORDED_LINE in plain)
         assertTrue("This call is recorded." in BookingDialRules.instruction(c, null, null, now, cal, recorded = true))

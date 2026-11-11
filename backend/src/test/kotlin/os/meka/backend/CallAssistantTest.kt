@@ -95,7 +95,7 @@ class CallAssistantTest {
         val call = arrayOf("CallSid" to "CA700", "From" to "+447700900777", "To" to "+441234567890")
         val answer = "I am, yes, Meka&apos;s AI assistant."
 
-        assertTrue("Hi, this is Obi, Meka&apos;s AI assistant." in hook(VoiceStep.INCOMING, *call).bodyAsText())
+        assertTrue("Hi, this is Obi, Meka&apos;s assistant." in hook(VoiceStep.INCOMING, *call).bodyAsText())
         // A question and nothing else: the plain answer, then "who's calling?" once more, not the greeting again.
         val first = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "Hello? Are you a robot?").bodyAsText()
         assertTrue(answer in first, first)
@@ -166,7 +166,7 @@ class CallAssistantTest {
         assertEquals(HttpStatusCode.OK, greet.status)
         val twiml = greet.bodyAsText()
         assertTrue(twiml.startsWith("<?xml"))
-        assertTrue("Hi, this is Obi, Meka&apos;s AI assistant." in twiml, twiml)
+        assertTrue("Hi, this is Obi, Meka&apos;s assistant." in twiml, twiml)
         // The assistant talks to them (2026-10-17): first it asks who's calling, then takes the message.
         assertTrue("""<Gather input="speech"""" in twiml, twiml)
         assertTrue("""action="$base/v1/voice/twilio/introduced"""" in twiml, twiml)
@@ -608,7 +608,7 @@ class CallAssistantTest {
         assertEquals("high", m["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
         assertEquals("sync", m["data"]!!.jsonObject["t"]!!.jsonPrimitive.content)
         assertEquals("normal", FcmSender.message("tok")["message"]!!.jsonObject["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
-        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, this is Obi, Meka's AI assistant."))
+        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, this is Obi, Meka's assistant."))
     }
 
     @Test

@@ -4,7 +4,7 @@ import SwiftUI
 /// Work mode → Obi on calls on the Mac (Obi on calls, slice 4; mockup `docs/design/calls/settings.dc.html`), like the
 /// Fold's ObiCallsPane: THIS MONTH (spent, calls, booked, a bar against the cap and the £10 · £20 · £30 · £50 chips),
 /// WHEN SOMEONE CALLS YOU's three switches, WHAT CALLERS MAY KNOW's chips, the fixed BOOKING CALLS limits, RECORDINGS
-/// and "Obi always says he's your AI assistant". The words are the core's `CallsSettingsRules.view`; everything is
+/// and "Obi always says he's an AI assistant when asked". The words are the core's `CallsSettingsRules.view`; everything is
 /// synced with the Fold. Only Bools, Int32s and Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); sections stagger in; the bar grows from the left to its share on the expand

@@ -57,7 +57,7 @@ class BookingDialRulesTest {
     @Test
     fun obisBriefIsTheCardAndTheHardRulesOnly() {
         val brief = BookingDialRules.instruction(card(note = "a high chair"), "Alex", assistant, at(11 * 60), cal)
-        assertTrue("Hi, this is Obi, Alex's AI assistant." in brief)
+        assertTrue("Hi, this is Obi, Alex's assistant." in brief)
         assertTrue("Table for 4, Saturday 14 November, between 19:00 and 20:00" in brief, brief)
         assertTrue("\"a high chair\"" in brief)
         assertTrue("020 7946 0000" in brief)

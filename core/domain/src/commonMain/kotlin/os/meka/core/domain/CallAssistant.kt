@@ -16,7 +16,7 @@ import os.meka.core.sync.fv
 object CallAssistantScript {
     /**
      * Meka's greeting (approved 2026-10-07), saying it is an automated assistant as the build plan requires; Obi's
-     * opening since slice 5 of "the assistant becomes Obi" ([ObiCallRules.OPENING]: his name, and that he's an AI).
+     * opening since slice 5 of "the assistant becomes Obi" ([ObiCallRules.OPENING]: his name, and that he's Meka's assistant; an AI when asked).
      */
     const val GREETING = ObiCallRules.OPENING + " Meka is at work right now and will call you back. " +
         "Can I take a message, and is it urgent?"
