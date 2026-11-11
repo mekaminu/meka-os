@@ -69,6 +69,8 @@ internal const val NEEDS_YOU_GROUP_TAG = "needs-you-group"
 internal const val NEEDS_YOU_PAGER_TAG = "needs-you-pager"
 internal const val NEEDS_YOU_FOOT_TAG = "needs-you-foot"
 internal const val NEEDS_YOU_LISTS_LEAD_TAG = "needs-you-lists-lead"
+internal const val NEEDS_YOU_MAIL_ROW_TAG = "needs-you-mail-row"
+internal const val NEEDS_YOU_MAIL_LEAD_TAG = "needs-you-mail-lead"
 
 /** What he left open, kept on this phone (display state only, never synced). */
 internal object NeedsYouGroupStore {
@@ -179,7 +181,11 @@ private fun GroupIcon(group: NeedsYouGroup, ink: Color) {
 
 /** The quiet line at the top of a group with its button: "Nothing here needs a reply" · Clear all. */
 @Composable
-internal fun NeedsYouGroupLead(line: String, button: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun NeedsYouGroupLead(
+    line: String, button: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    /** A quiet second answer before the gold one (the ten-minute inbox's Not today), or null. */
+    second: String? = null, onSecond: () -> Unit = {},
+) {
     val haptics = rememberMekaHaptics()
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
@@ -188,6 +194,13 @@ internal fun NeedsYouGroupLead(line: String, button: String, onClick: () -> Unit
     ) {
         Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
+        if (second != null) {
+            Box(
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { haptics.tick(); onSecond() }
+                    .minTouch().padding(horizontal = MekaSpace.xs),
+                contentAlignment = Alignment.Center,
+            ) { Text(second, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1) }
+        }
         // The mockup's 32 dp gold pill, inside a whole 48 dp tap (slice 2a: Go through failed the touch check at 32).
         Box(
             Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
@@ -254,6 +267,41 @@ private fun PagerArrow(glyph: String, label: String, on: Boolean, onClick: () ->
     ) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(Meka.colors.surfaceRaised), contentAlignment = Alignment.Center) {
             Text(glyph, style = MekaType.metaStrong, color = if (on) Meka.colors.accent else Meka.colors.textTertiary)
+        }
+    }
+}
+
+/**
+ * Slice 2b: one email in the Mail to answer box: the sender and when on the first line, the subject under it (a possible
+ * scam says so first, in the critical colour), on a hairline, a 52 dp tap (tick haptic) that opens or closes Reply · Done ·
+ * Task · More under it.
+ */
+@Composable
+internal fun NeedsYouMailRowView(row: os.meka.core.domain.NeedsYouMailRow, open: Boolean, onTap: () -> Unit) {
+    val haptics = rememberMekaHaptics()
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Meka.colors.hairline))
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(MekaRadius.s))
+                .clickable(role = Role.Button, onClickLabel = if (open) os.meka.core.domain.NeedsYouGroupRules.MAIL_CLOSE_HINT else os.meka.core.domain.NeedsYouGroupRules.MAIL_OPEN_HINT) {
+                    haptics.tick(); onTap()
+                }
+                .semantics(mergeDescendants = true) { contentDescription = row.spoken; stateDescription = if (open) "Open" else "Closed" }
+                .testTag("$NEEDS_YOU_MAIL_ROW_TAG-${row.id}")
+                .padding(vertical = MekaSpace.xs, horizontal = MekaSpace.xxs),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                row.flag?.let {
+                    Text(it, style = MekaType.micro, color = Meka.colors.critical, maxLines = 1, modifier = Modifier.padding(end = MekaSpace.xs))
+                }
+                Text(row.from, style = MekaType.captionStrong, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false))
+                if (row.time.isNotBlank()) {
+                    Text(row.time, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.padding(start = MekaSpace.xs))
+                }
+            }
+            Text(row.subject, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

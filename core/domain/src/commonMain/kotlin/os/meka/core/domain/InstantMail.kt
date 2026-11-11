@@ -15,12 +15,17 @@ object InstantMailRules {
     fun archivedKey(card: ArchivedForYouCard): String =
         ARCHIVED_PREFIX + card.slot + ":" + card.lines.joinToString(",") { it.id }
 
-    /** From your mail as drawn: the rows not answered here yet; null once every row it showed is answered. */
+    /**
+     * From your mail as drawn: the rows not answered here yet; null once every row it showed is answered. Needs you
+     * grouped (slice 2b): with more waiting beyond the rows shown, the next ones fill in instead.
+     */
     fun needs(card: MailNeedsCard?, hidden: Set<String>): MailNeedsCard? {
         if (card == null || hidden.isEmpty()) return card
         val rows = card.rows.filter { it.id !in hidden }
-        if (rows.size == card.rows.size) return card
-        return if (rows.isEmpty()) null else card.copy(rows = rows)
+        val every = card.every.filter { it.id !in hidden }
+        if (rows.size == card.rows.size && every.size == card.every.size) return card
+        if (every.isEmpty()) return null
+        return card.copy(rows = rows.ifEmpty { every.take(MailNeedsRules.SHOWN) }, every = every)
     }
 
     /** Time to chase as drawn. */

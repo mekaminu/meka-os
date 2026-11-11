@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
@@ -88,10 +89,22 @@ import os.meka.core.facade.MekaCore
 internal fun MailNeedsSection(
     card: MailNeedsCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, taps: MailTaps,
     modifier: Modifier = Modifier,
+    /**
+     * Needs you grouped and folding, slice 2b (the folded Fold's Mail to answer box): no card of its own (the box head
+     * says who and how many), every email a thin row (sender · time over the subject) that a tap opens for Reply · Done ·
+     * Task · More, [page] of every email five at a time with "1–5 of 14" and ‹ ›, Draft replies at the foot.
+     */
+    boxed: Boolean = false,
+    page: Int = 0,
+    onPage: (Int) -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf(true) }
+    val pg = os.meka.core.domain.NeedsYouGroupRules.page(card.every.size, page)
+    val shownRows = if (boxed) pg.of(card.every) else card.rows
+    // Slice 2b: which thin rows are open (Draft replies opens the ones it drafted, so their drafts can be read).
+    var openRows by remember { mutableStateOf(setOf<String>()) }
     val reduced = Meka.reducedMotion
     fun answer(action: suspend () -> String) {
         scope.launch {
@@ -111,14 +124,14 @@ internal fun MailNeedsSection(
     // AI layer completeness slice 3: while Navilife's AI can't draft, the bar says so and what still works.
     var aiLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { aiLine = runCatching { core.aiFeatureLine(AiFeature.DRAFTS) }.getOrNull() }
-    val draftAll = MailSendAllRules.draftLabel(card.rows.size)
-    val sendAll = MailSendAllRules.sendAll(card.rows, texts.toMap())
+    val draftAll = MailSendAllRules.draftLabel(shownRows.size)
+    val sendAll = MailSendAllRules.sendAll(shownRows, texts.toMap())
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-            .padding(MekaSpace.m).testTag("mail-needs"),
+        (if (boxed) modifier.fillMaxWidth() else modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .padding(MekaSpace.m)).testTag("mail-needs"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
-        Row(
+        if (!boxed) Row(
             Modifier.fillMaxWidth().heightIn(min = MekaSpace.touch).clickable(role = Role.Button) { haptics.tick(); open = !open }
                 .semantics(mergeDescendants = true) { contentDescription = "${card.title}. ${card.headline}" },
             verticalAlignment = Alignment.CenterVertically,
@@ -135,26 +148,28 @@ internal fun MailNeedsSection(
                 }
             }
         }
-        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+        AnimatedVisibility(open || boxed, enter = unfold(), exit = fold()) {
             // A done or snoozed email leaves and the list closes up on the expand spring.
-            Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Column(Modifier.padding(top = if (boxed) 0.dp else MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)),
+                verticalArrangement = Arrangement.spacedBy(if (boxed) 0.dp else MekaSpace.m)) {
+                @Composable fun draftBar() {
                 if (draftAll != null) {
                     MailSendAllBar(
                         draftLabel = if (draftingAll) MailSendAllRules.DRAFTING else draftAll, drafting = draftingAll,
-                        draftSpoken = MailSendAllRules.draftSpoken(card.rows.size),
+                        draftSpoken = MailSendAllRules.draftSpoken(shownRows.size),
                         sendLabel = sendAll?.label, sendSpoken = sendAll?.spoken, line = allLine ?: aiLine,
                         onDraft = {
                             haptics.light()
                             draftingAll = true
                             scope.launch {
                                 // Only into an editor that is empty or still holds Navilife's draft: never over his words.
-                                val targets = card.rows.filter { MailDraftRules.canDraft(texts[it.id] ?: "", drafted[it.id]) }
+                                val targets = shownRows.filter { MailDraftRules.canDraft(texts[it.id] ?: "", drafted[it.id]) }
                                 var n = 0
                                 var problem: String? = null
                                 for (r in targets) {
                                     val d = runCatching { core.draftMailReply(r.id) }.getOrNull()
                                     val t = d?.text
-                                    if (t != null) { n++; drafted[r.id] = t; incoming[r.id] = (seq++) to t } else problem = d?.line ?: problem
+                                    if (t != null) { n++; drafted[r.id] = t; incoming[r.id] = (seq++) to t; if (boxed) openRows = openRows + r.id } else problem = d?.line ?: problem
                                 }
                                 draftingAll = false
                                 allLine = MailSendAllRules.draftedLine(n, targets.size, problem)
@@ -172,10 +187,21 @@ internal fun MailNeedsSection(
                         },
                     )
                 }
-                card.rows.forEach { row ->
+                }
+                if (!boxed) draftBar()
+                shownRows.forEach { row ->
                     androidx.compose.runtime.key(row.id) {
+                        val rowOpen = !boxed || row.id in openRows
+                        if (boxed) {
+                            NeedsYouMailRowView(os.meka.core.domain.NeedsYouGroupRules.mailRow(row), rowOpen) {
+                                openRows = if (rowOpen) openRows - row.id else openRows + row.id
+                            }
+                        }
+                        // Slice 2b: a tapped thin row unfolds its answers under it (expand spring; reduced motion: cross-fade).
+                        AnimatedVisibility(rowOpen, enter = unfold(), exit = fold()) {
                         MailNeedsRowView(
                             row,
+                            head = !boxed,
                             incoming = incoming[row.id],
                             onEditor = { t -> if (t == null) texts.remove(row.id) else texts[row.id] = t },
                             onDone = { haptics.medium(); gone(row.id, MailNeedsRules.DONE) { core.doneMailItem(row.id) } },
@@ -208,10 +234,14 @@ internal fun MailNeedsSection(
                                     undo(said) { runCatching { core.undoMailItem() } }
                                 }
                             },
+                            modifier = if (boxed) Modifier.padding(bottom = MekaSpace.s) else Modifier,
                         )
+                        }
                     }
                 }
-                card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                if (boxed && pg.pages > 1) NeedsYouPager(pg, onPage, Modifier.padding(top = MekaSpace.xxs))
+                if (boxed) draftBar()
+                if (!boxed) card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 card.snoozedLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 // Protected time, slice 3: the business mail that waits till morning.
                 card.heldLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
@@ -247,6 +277,12 @@ internal fun MailNeedsRowView(
     /** Week board item (5): To a day… puts the email's task on one of [toDays] (null: not offered here). */
     onToDay: ((Long) -> Unit)? = null,
     toDays: () -> List<os.meka.core.domain.FeedDay> = { emptyList() },
+    /**
+     * Needs you grouped (slice 2b): false under a thin row in the Mail to answer box, which already says who, when and
+     * the subject; then the email opens from "Read the whole email ›" instead of a tap on its head.
+     */
+    head: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -268,11 +304,11 @@ internal fun MailNeedsRowView(
     }
     // The card reads each open editor's words for Send all.
     LaunchedEffect(replying, text) { onEditor?.invoke(if (replying) text else null) }
-    Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+    Column(modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
-                .then(if (onRead != null) Modifier.clickable(role = Role.Button) { haptics.light(); reading = true } else Modifier)
-                .semantics(mergeDescendants = true) { contentDescription = if (onRead != null) "${row.spoken}. ${MailReaderRules.READ_WHOLE}" else row.spoken },
+                .then(if (onRead != null && head) Modifier.clickable(role = Role.Button) { haptics.light(); reading = true } else Modifier)
+                .then(if (head) Modifier.semantics(mergeDescendants = true) { contentDescription = if (onRead != null) "${row.spoken}. ${MailReaderRules.READ_WHOLE}" else row.spoken } else Modifier),
         ) {
             // Junk fix slice 3: a link he emailed himself, above the sender.
             row.note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-note-${row.id}")) }
@@ -291,7 +327,7 @@ internal fun MailNeedsRowView(
                         modifier = Modifier.testTag("mail-warning-${row.id}"))
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            if (head) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(row.from, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false))
                 if (row.business) {
@@ -302,10 +338,19 @@ internal fun MailNeedsRowView(
                     )
                 }
             }
-            Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (head) Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             // Sender and subject only (Needs you bugs, 2026-11-10: the first lines carried greetings, his name, a card's
             // last digits); the body shows once he opens the email.
-            Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            if (head) Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            // Slice 2b: under a thin row, the whole email opens from its own line (a full 48 dp tap).
+            if (!head && onRead != null) {
+                Text(
+                    "${MailReaderRules.READ_WHOLE} ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.s))
+                        .clickable(role = Role.Button) { haptics.light(); reading = true }
+                        .wrapContentHeight(Alignment.CenterVertically).testTag("mail-read-${row.id}"),
+                )
+            }
             // Slice 3: an answer turning his times down says so in its own line instead.
             if (row.asksToMeet && row.pickedLine == null) Text(MeetingRequestRules.ASKS, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-asks-to-meet"))
             // Scheduling assistant, slice 2: the time they picked, then "Booked · …" (cross-fades in place).

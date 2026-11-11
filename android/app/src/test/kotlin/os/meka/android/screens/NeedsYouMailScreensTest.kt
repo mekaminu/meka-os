@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -36,6 +37,7 @@ import os.meka.android.today.NEEDS_YOU_LIST_TAG
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
 import os.meka.android.today.NeedsYouGroupStore
 import os.meka.android.today.NeedsYouRoute
+import os.meka.android.today.NEEDS_YOU_MAIL_ROW_TAG
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
@@ -114,6 +116,16 @@ class NeedsYouMailScreensTest {
     private lateinit var streamly: String
     private lateinit var safeDrive: String
 
+    /** Grouped and folding, slice 2b: on the folded Fold an email is a thin row; a tap unfolds its answers. */
+    private var boxed = true
+
+    private fun openRow(name: String, id: String) {
+        if (!boxed) return
+        reach(name, hasTestTag("$NEEDS_YOU_MAIL_ROW_TAG-$id") and hasClickAction(), "the thin row for $id")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+    }
+
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
@@ -146,6 +158,7 @@ class NeedsYouMailScreensTest {
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
         ScreenShots.assertSensible(compose, name)
+        openRow(name, football)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
         // Needs you bugs (2026-11-10): a mail row is its sender and subject; the body waits until he opens the email.
         if (compose.onAllNodes(androidx.compose.ui.test.hasText("Can you drive the boys", substring = true), useUnmergedTree = true)
@@ -243,6 +256,7 @@ class NeedsYouMailScreensTest {
         if (onCard(core, football)) fail("$name: Done left \"Football on Saturday\" on From your mail")
 
         val other = row(core, invoice) ?: fail("$name: \"Invoice question\" left From your mail with Done on the other email")
+        openRow(name, invoice)
         tap(name, MailRowActionRules.MORE, hasContentDescription(MailRowActionRules.moreSpoken(false, other)))
         val snooze = hasContentDescription(MailRowActionRules.spoken(MailRowAction.SNOOZE, other))
         until { shows(snooze and hasClickAction()) }
@@ -276,5 +290,5 @@ class NeedsYouMailScreensTest {
     fun coverMailByHand() { mailByHand(shoot("cover-dark-mail-by-hand")) }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerMail() { shoot("inner-dark-mail") }
+    fun innerMail() { boxed = false; shoot("inner-dark-mail") }
 }

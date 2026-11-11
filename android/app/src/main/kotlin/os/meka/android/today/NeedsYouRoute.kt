@@ -640,6 +640,7 @@ internal fun NeedsYouColumn(
     val (listsCard, stackCards) = remember(boxed, cards) { if (boxed) NeedsYouGroupRules.splitLists(cards) else null to cards }
     var msgPage by rememberSaveable { mutableIntStateOf(0) }
     var fyiPage by rememberSaveable { mutableIntStateOf(0) }
+    var mailPage by rememberSaveable { mutableIntStateOf(0) }
     fun sectionOf(g: NeedsYouGroup): NeedsYouSection = when (g) {
         NeedsYouGroup.DECIDE -> NeedsYouSection.DECIDE
         NeedsYouGroup.MESSAGES, NeedsYouGroup.CHATS -> NeedsYouSection.MESSAGES
@@ -665,6 +666,9 @@ internal fun NeedsYouColumn(
     }.filter { showG(it) }
     val msgPg = NeedsYouGroupRules.page(messageChats.size, msgPage)
     val fyiPg = NeedsYouGroupRules.page(fyiChats.size, fyiPage)
+    val mailPg = NeedsYouGroupRules.page(mailNeeds?.every?.size ?: 0, mailPage)
+    // Slice 2b: the ten-minute inbox is Mail to answer's lead line with Start while it is due and not under way.
+    val mailLead = NeedsYouGroupRules.mailLead(mailMoment != null, mailMomentSession != null)
     val toggleGroup: (NeedsYouGroup) -> Unit = { g -> openGroups = NeedsYouGroupRules.toggle(openGroups, g) }
     fun headOf(g: NeedsYouGroup): os.meka.core.domain.NeedsYouGroupHead {
         val open = g in openGroups
@@ -678,7 +682,8 @@ internal fun NeedsYouColumn(
             NeedsYouGroup.CHATS -> NeedsYouGroupRules.head(g, chatsCount,
                 listOfNotNull(digest?.line, discord?.headline).filter { it.isNotBlank() }.joinToString(" · "), open)
             NeedsYouGroup.MAIL -> NeedsYouGroupRules.head(g, (mailNeeds?.count ?: 0) + (mailChases?.rows?.size ?: 0),
-                listOfNotNull(mailMoment?.let { "Ten-minute inbox" }, mailNeeds?.headline, mailChases?.headline).joinToString(" · "), open)
+                NeedsYouGroupRules.mailPeek(mailMoment != null, mailNeeds?.every.orEmpty(), mailChases?.headline),
+                open, mailPg.takeIf { mailMomentSession == null })
             NeedsYouGroup.RENEWALS -> NeedsYouGroupRules.head(g, mailFinds?.rows?.size ?: 0,
                 NeedsYouGroupRules.renewalsPeek(mailFinds?.rows?.map { it.title }.orEmpty()), open)
             NeedsYouGroup.TIDIED -> NeedsYouGroupRules.head(g, needsMail?.tiles?.firstOrNull()?.number?.toIntOrNull() ?: 0,
@@ -1184,8 +1189,22 @@ internal fun NeedsYouColumn(
         }
         groupHead(boxed && NeedsYouGroup.MAIL in present, NeedsYouGroup.MAIL, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.MAIL)) {
+        // Slice 2b: boxed, the due ten-minute inbox is the box's lead line: Start (gold) and Not today (Undo on the bar).
+        if (boxed && mailLead != null) {
+            item(key = "mail-lead") {
+                NeedsYouGroupLead(mailLead, NeedsYouGroupRules.MAIL_START, {
+                    mailScope.launch { runCatching { core.startMailMoment() } }
+                }, Modifier.animateItem().testTag(NEEDS_YOU_MAIL_LEAD_TAG),
+                    second = os.meka.core.domain.MailMomentRules.NOT_TODAY, onSecond = {
+                        mailScope.launch {
+                            val said = runCatching { core.notTodayMailMoment() }.getOrNull() ?: return@launch
+                            moves.undoLine(said) { runCatching { core.undoMailMoment() } }
+                        }
+                    })
+            }
+        }
         // Inbox autopilot, slice 7: the ten-minute inbox — from the moment, Start goes through the emails one by one.
-        if (mailMoment != null || mailMomentSession != null) {
+        if (mailMomentSession != null || (mailMoment != null && !boxed)) {
             item(key = "mail-moment") {
                 MailMomentSection(mailMoment, mailMomentSession, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
@@ -1196,7 +1215,8 @@ internal fun NeedsYouColumn(
         mailNeeds?.takeIf { mailMomentSession == null }?.let { n ->
             item(key = "mail-needs") {
                 MailNeedsSection(n, core, moves.undoLine, mailTaps,
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
+                    boxed = boxed, page = mailPg.page, onPage = { mailPage = it })
             }
         }
         // Inbox autopilot, slice 6b-3: Waiting for items from email whose chase is due, a chase drafted for each.

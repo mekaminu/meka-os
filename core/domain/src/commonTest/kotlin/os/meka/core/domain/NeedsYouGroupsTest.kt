@@ -125,4 +125,50 @@ class NeedsYouGroupsTest {
         assertEquals("While you were at work · 2 people · 5 messages · 1 urgent ›", R.afterWorkFoot(summary, null))
         assertEquals("While you were at work · 1 person · 2 messages ›", R.afterWorkFoot(AfterWorkSummary(listOf(person("Sam", 2))), null))
     }
+
+    private fun mail(id: String, from: String, scam: Boolean = false) =
+        MailNeedsRow(id, from, "Personal · 09:12", "Lunch $id", null, false, "spoken $id", scam = scam, time = "09:12")
+
+    @Test fun mailRowsAreSenderTimeAndSubjectOnly() {
+        val row = R.mailRow(mail("a", "Sam Taylor").copy(preview = "Hi Meka, the card ending 1234"))
+        assertEquals("Sam Taylor", row.from)
+        assertEquals("09:12", row.time)
+        assertEquals("Lunch a", row.subject)
+        assertEquals(null, row.flag)
+        assertEquals("Sam Taylor, Lunch a, 09:12", row.spoken)
+        assertFalse(row.spoken.contains("1234"))
+        val scam = R.mailRow(mail("b", "PayPal", scam = true))
+        assertEquals("Possible scam", scam.flag)
+        assertTrue(scam.spoken.startsWith("Possible scam, PayPal"))
+        assertEquals("(no subject)", R.mailRow(mail("c", "Jo").copy(subject = " ")).subject)
+    }
+
+    @Test fun theTenMinuteInboxLeadsOnlyWhileDueAndNotRunning() {
+        assertEquals("Ten-minute inbox · one at a time", R.mailLead(momentDue = true, running = false))
+        assertEquals(null, R.mailLead(momentDue = true, running = true))
+        assertEquals(null, R.mailLead(momentDue = false, running = false))
+    }
+
+    @Test fun mailPeekSaysTheMomentThenWho() {
+        val rows = listOf(mail("a", "Sam"), mail("b", "School"), mail("c", "School"), mail("d", "Council"), mail("e", "Gym"))
+        assertEquals("Ten-minute inbox · about 2 min each · Sam, School, Council + 1 more · 1 to chase",
+            R.mailPeek(true, rows, "1 to chase"))
+        assertEquals("Sam", R.mailPeek(false, rows.take(1), null))
+    }
+
+    @Test fun mailPagesFiveAtATimeThroughEveryRow() {
+        val every = (1..14).map { mail("m$it", "Sender $it") }
+        val p = R.page(every.size, 2)
+        assertEquals("11–14 of 14", p.label)
+        assertEquals(listOf("m11", "m12", "m13", "m14"), p.of(every).map { it.id })
+    }
+
+    @Test fun answeredRowsMakeRoomForTheNextOnes() {
+        val every = (1..7).map { mail("m$it", "S$it") }
+        val card = MailNeedsCard(MailNeedsRules.TITLE, "7 emails need you", every.take(5), null, null, count = 7, every = every)
+        val left = InstantMailRules.needs(card, every.take(5).map { it.id }.toSet())!!
+        assertEquals(listOf("m6", "m7"), left.rows.map { it.id })
+        assertEquals(listOf("m6", "m7"), left.every.map { it.id })
+        assertEquals(null, InstantMailRules.needs(card, every.map { it.id }.toSet()))
+    }
 }

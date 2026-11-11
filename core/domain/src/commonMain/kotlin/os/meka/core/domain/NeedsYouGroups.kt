@@ -43,6 +43,19 @@ data class NeedsYouPage(val page: Int, val pages: Int, val from: Int, val to: In
     fun <T> of(rows: List<T>): List<T> = rows.subList(from.coerceAtMost(rows.size), to.coerceAtMost(rows.size))
 }
 
+/**
+ * Slice 2b: one email in the Mail to answer box, as the mockup draws it: the sender and when on the first line, the
+ * subject under it; [flag] "Possible scam" (critical) on a possible scam. Tapped, Reply · Done · Task · More unfold under it.
+ */
+data class NeedsYouMailRow(
+    val id: String,
+    val from: String,
+    val time: String,
+    val subject: String,
+    val flag: String?,
+    val spoken: String,
+)
+
 object NeedsYouGroupRules {
     const val PAGE_SIZE = 5
     const val OPEN_ALL = "Open all"
@@ -160,6 +173,38 @@ object NeedsYouGroupRules {
         val urgent = summary.urgentPeople.takeIf { it > 0 }?.let { "$it urgent" }
         return listOfNotNull(summary.title, summary.headline, urgent).joinToString(" · ") + " ›"
     }
+
+    /** Slice 2b: Mail to answer's lead line, with Start, while the ten-minute inbox is due and not yet started. */
+    const val MAIL_LEAD = "Ten-minute inbox · one at a time"
+    const val MAIL_START = "Start"
+    const val SCAM_FLAG = "Possible scam"
+    /** What a mail row's tap says to a screen reader, open and closed. */
+    const val MAIL_OPEN_HINT = "Show Reply, Done, Task and More"
+    const val MAIL_CLOSE_HINT = "Hide the answers"
+
+    /** The lead line when the moment is due ([momentDue]) and no session runs ([running]); null otherwise. */
+    fun mailLead(momentDue: Boolean, running: Boolean): String? = MAIL_LEAD.takeIf { momentDue && !running }
+
+    /**
+     * The thin row for [row]: sender · time over the subject, the body never shown (it opens in the reader). The spoken
+     * line keeps the warning first, as the full card does.
+     */
+    fun mailRow(row: MailNeedsRow): NeedsYouMailRow {
+        val flag = SCAM_FLAG.takeIf { row.scam }
+        val subject = row.subject.trim().ifEmpty { "(no subject)" }
+        val spoken = listOfNotNull(flag, row.from, subject, row.time.takeIf { it.isNotBlank() }).joinToString(", ")
+        return NeedsYouMailRow(row.id, row.from, row.time, subject, flag, spoken)
+    }
+
+    /**
+     * Mail to answer's peek while closed: "Ten-minute inbox · about 2 min each" when it is due (the mockup), then the
+     * senders ("Sam, School, Council + 3 more"), then the chases' headline.
+     */
+    fun mailPeek(momentDue: Boolean, rows: List<MailNeedsRow>, chases: String?): String = listOfNotNull(
+        "${MailMomentRules.TITLE} · about ${MailMomentRules.MIN_EACH} min each".takeIf { momentDue },
+        names(rows.map { it.from }.distinct(), 3).takeIf { it.isNotEmpty() },
+        chases,
+    ).joinToString(" · ")
 
     /** "No reply needed · Alex, Sam, Jo". */
     fun fyiPeek(names: List<String>): String = listOf(FYI_PEEK, names(names, 3)).filter { it.isNotEmpty() }.joinToString(" · ")

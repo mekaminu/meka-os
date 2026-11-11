@@ -236,6 +236,8 @@ data class MailNeedsRow(
     val canBlock: Boolean = false,
     /** Junk fix slice 3: "Note to self · a link to bbc.co.uk" for a link he emailed himself (Save as task · Done), else null. */
     val note: String? = null,
+    /** Needs you grouped (slice 2b): when it came, "09:12" / "yesterday 18:40", for the thin row beside the sender. */
+    val time: String = "",
 )
 
 data class MailNeedsCard(
@@ -258,6 +260,11 @@ data class MailNeedsCard(
      * rows shown, while the card said 14): the Mail chip and every other count use this.
      */
     val count: Int = 0,
+    /**
+     * Needs you grouped (slice 2b): every row that needs him, newest first ([rows] is its first [MailNeedsRules.SHOWN]),
+     * so the folded Fold's Mail to answer box pages through them five at a time.
+     */
+    val every: List<MailNeedsRow> = rows,
 )
 
 object MailNeedsRules {
@@ -551,7 +558,8 @@ object MailNeedsRules {
         val all = showingSorted(items, nowMs)
         if (all.isEmpty()) return null
         val groups = MailLinkRules.groups(all)
-        val rows = rowsOf(groups.take(SHOWN), nowMs, cal, items)
+        val every = rowsOf(groups, nowMs, cal, items)
+        val rows = every.take(SHOWN)
         val more = groups.drop(SHOWN).sumOf { it.size }
         val snoozedCount = items.count { snoozed(it, nowMs) }
         return MailNeedsCard(
@@ -566,6 +574,7 @@ object MailNeedsRules {
             },
             replyLine = MailAutoDraftRules.replyLine(all),
             count = count(all),
+            every = every,
         )
     }
 
@@ -617,6 +626,7 @@ object MailNeedsRules {
                 scam = MailScamRules.scamLine(warning),
                 canUnsubscribe = i.canUnsubscribe && security == null && note == null,
                 note = note,
+                time = whenLabel(i.receivedAtMs, nowMs, cal),
             ).let { it.copy(canBlock = note == null && MailSenderRuleRules.canBlock(it)) }
         }
 
