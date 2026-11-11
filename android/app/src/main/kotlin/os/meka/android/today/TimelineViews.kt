@@ -137,7 +137,7 @@ internal fun Modifier.scheduleSegment(edge: CardEdge): Modifier {
             }
         }
         .clip(shape).background(surface)
-        .testTag(SCHEDULE_SEGMENT_TAG)
+        .semantics { scheduleSegment = true }
         .padding(horizontal = inset)
         .padding(top = if (edge.roundsTop) MekaSpace.xxs else 0.dp, bottom = if (edge.roundsBottom) MekaSpace.xxs else 0.dp)
 }
@@ -145,8 +145,12 @@ internal fun Modifier.scheduleSegment(edge: CardEdge): Modifier {
 /** The space Today's lists put between items ([Arrangement.spacedBy] in TodayRoute); the card's rows bridge it. */
 internal val SCHEDULE_ROW_GAP = MekaSpace.xs
 
-/** Each row of Today's Schedule card (the screen tests check the card is one surface between them). */
-internal const val SCHEDULE_SEGMENT_TAG = "schedule-segment"
+/**
+ * Marks each row of Today's Schedule card (the screen tests check the card is one surface between them). A semantics
+ * key of its own, not a test tag: the rows inside carry their own tags (a test tag set outside would hide them).
+ */
+internal val ScheduleSegmentKey = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("ScheduleSegment")
+internal var androidx.compose.ui.semantics.SemanticsPropertyReceiver.scheduleSegment by ScheduleSegmentKey
 
 /** The Schedule card's side inset (the mockup's 14 px). */
 internal val SCHEDULE_INSET = 14.dp

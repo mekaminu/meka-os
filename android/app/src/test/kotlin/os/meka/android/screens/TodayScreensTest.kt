@@ -398,7 +398,7 @@ class TodayScreensTest {
         // The re-shoot's finding: the list's 8 dp item gap showed the screen's black between the card's rows. Between two
         // rows the card's surface carries on: a point in the gap (clear of the hairline) isn't the screen's background.
         val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
-        val rows = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_SEGMENT_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        val rows = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(os.meka.android.today.ScheduleSegmentKey), useUnmergedTree = true).fetchSemanticsNodes()
             .map { it.boundsInRoot }.filter { it.top >= 0f && it.bottom <= shot.height }.sortedBy { it.top }
         if (rows.size < 3) fail("$name: only ${rows.size} Schedule rows on screen")
         rows.zipWithNext().filter { (a, b) -> b.top - a.bottom >= 4f && kotlin.math.abs(a.left - b.left) < 1f }.forEach { (a, b) ->
