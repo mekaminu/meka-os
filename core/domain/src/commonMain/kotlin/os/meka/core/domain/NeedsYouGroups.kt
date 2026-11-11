@@ -56,6 +56,39 @@ data class NeedsYouMailRow(
     val spoken: String,
 )
 
+/**
+ * Slice 4 (the Mac): what each group holds, in plain counts and names, so the Mac builds the same box heads and the same
+ * groups as the Fold from one rule ([NeedsYouGroupRules.present], [NeedsYouGroupRules.headOf]). Nothing in it is a
+ * message's words beyond the names and lines the heads already show.
+ */
+data class NeedsYouGroupFacts(
+    /** Approvals + requests outside a chat + school / date-night / appointment asks + the stack's cards. */
+    val decideCount: Int,
+    /** [NeedsYouGroupRules.decidePeekOf]'s line. */
+    val decidePeek: String,
+    /** [NeedsYouGroupRules.afterWorkFoot], or null. */
+    val afterWorkFoot: String?,
+    /** The chats waiting on a reply, by title, in their order. */
+    val messages: List<String>,
+    /** The chats needing nothing, by title. */
+    val fyi: List<String>,
+    /** Group digests + Discord channels. */
+    val chatsCount: Int,
+    val chatsPeek: String,
+    /** The ten-minute inbox (due or running), the emails that need him or chases. */
+    val mailAny: Boolean,
+    val mailCount: Int,
+    val mailPeek: String,
+    /** How many mail rows page in the box (0 while the ten-minute inbox runs). */
+    val mailRows: Int,
+    /** The renewals read from mail, by name; null when there is no card. */
+    val renewals: List<String>?,
+    /** Today's tidies, the archived log or the unopened offer. */
+    val tidiedAny: Boolean,
+    val tidiedCount: Int,
+    val tidiedPeek: String,
+)
+
 object NeedsYouGroupRules {
     const val PAGE_SIZE = 5
     const val OPEN_ALL = "Open all"
@@ -66,6 +99,8 @@ object NeedsYouGroupRules {
     const val RENEWALS_PEEK = "nothing added until you tap Add"
     const val LISTS_TITLE = "From your lists"
     const val HINT = "Tap a heading to open or close it · up to 5 in a page, ‹ › for the next · Navilife remembers which groups you left open"
+    /** The Mac's foot hint (slice 4): a click, and this Mac keeps what he left open. */
+    const val HINT_MAC = "Click a heading to open or close it · up to 5 in a page, ‹ › for the next · this Mac remembers which groups you left open"
 
     /** The groups open before he has opened or closed any: To decide and Messages. */
     val DEFAULT_OPEN: Set<NeedsYouGroup> = NeedsYouGroup.entries.filter { it.openByDefault }.toSet()
@@ -244,6 +279,51 @@ object NeedsYouGroupRules {
         }
         return NeedsYouGroupHead(group, group.title, countText, shownPeek, open, spoken)
     }
+
+    /**
+     * Slice 4: every group with something in it, in the page's order, that [filter]'s chip shows. To decide shows while
+     * it holds a decision or the after-work foot line.
+     */
+    fun present(facts: NeedsYouGroupFacts, filter: NeedsYouFilter): List<NeedsYouGroup> = buildList {
+        if (facts.decideCount > 0 || facts.afterWorkFoot != null) add(NeedsYouGroup.DECIDE)
+        if (facts.messages.isNotEmpty()) add(NeedsYouGroup.MESSAGES)
+        if (facts.fyi.isNotEmpty()) add(NeedsYouGroup.FYI)
+        if (facts.chatsCount > 0) add(NeedsYouGroup.CHATS)
+        if (facts.mailAny) add(NeedsYouGroup.MAIL)
+        if (facts.renewals != null) add(NeedsYouGroup.RENEWALS)
+        if (facts.tidiedAny) add(NeedsYouGroup.TIDIED)
+    }.filter { shows(filter, it) }
+
+    /**
+     * Slice 4: [group]'s head from [facts], as the Fold draws it: Messages, FYI and Mail to answer show their page line
+     * while open and longer than a page ([msgPage], [fyiPage], [mailPage]); To decide's peek falls back to the after-work
+     * line when it holds nothing else.
+     */
+    fun headOf(
+        group: NeedsYouGroup,
+        facts: NeedsYouGroupFacts,
+        open: Set<NeedsYouGroup>,
+        msgPage: Int,
+        fyiPage: Int,
+        mailPage: Int,
+    ): NeedsYouGroupHead {
+        val isOpen = group in open
+        return when (group) {
+            NeedsYouGroup.DECIDE -> head(group, facts.decideCount,
+                facts.decidePeek.ifEmpty { facts.afterWorkFoot?.removeSuffix(" ›").orEmpty() }, isOpen)
+            NeedsYouGroup.MESSAGES -> head(group, facts.messages.size, names(facts.messages), isOpen, page(facts.messages.size, msgPage))
+            NeedsYouGroup.FYI -> head(group, facts.fyi.size, fyiPeek(facts.fyi), isOpen, page(facts.fyi.size, fyiPage))
+            NeedsYouGroup.CHATS -> head(group, facts.chatsCount, facts.chatsPeek, isOpen)
+            NeedsYouGroup.MAIL -> head(group, facts.mailCount, facts.mailPeek, isOpen,
+                page(facts.mailRows, mailPage).takeIf { facts.mailRows > 0 })
+            NeedsYouGroup.RENEWALS -> head(group, facts.renewals?.size ?: 0, renewalsPeek(facts.renewals.orEmpty()), isOpen)
+            NeedsYouGroup.TIDIED -> head(group, facts.tidiedCount, facts.tidiedPeek, isOpen)
+        }
+    }
+
+    /** The Group chats peek: the digests' group names, then Discord's headline. */
+    fun chatsPeek(groups: List<String>, discord: String?): String =
+        listOf(names(groups, 3), discord.orEmpty().trim()).filter { it.isNotEmpty() }.joinToString(" · ")
 
     /** "1 to decide · 4 to reply · 5 FYI · 14 mail", leaving out what is nothing; "All clear" when all are. */
     fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int): String {

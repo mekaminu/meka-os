@@ -43,6 +43,9 @@ struct NeedsYouHeaderView: View {
     let palette: MekaPalette
     let counts: NeedsYouHeaderCounts
     let onClearFyi: () -> Void
+    /// Needs you grouped (slice 4): "Open all" / "Close all" in Clear FYI's place (Clear all then leads FYI's box).
+    var allLabel: String? = nil
+    var onAll: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .center, spacing: MekaSpace.m) {
@@ -56,7 +59,17 @@ struct NeedsYouHeaderView: View {
                     .contentTransition(.numericText())
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if counts.showsClear {
+            if let allLabel {
+                Button(allLabel) {
+                    MekaHaptics.light()
+                    onAll()
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.captionStrong).foregroundStyle(palette.accent)
+                .padding(.horizontal, MekaSpace.xs).frame(minHeight: 28)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("needs-you-all")
+            } else if counts.showsClear {
                 Button(NeedsYouLayoutRules.shared.CLEAR_FYI, action: onClearFyi)
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
@@ -124,10 +137,12 @@ struct NeedsYouFyiRowsView: View {
     let palette: MekaPalette
     let chats: [TriageChat]
     var firstIndex: Int = 4
+    /// Needs you grouped (slice 4): inside the FYI box, which carries the title and count.
+    var boxed: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            if !chats.isEmpty {
+            if !chats.isEmpty && !boxed {
                 NeedsYouSectionHead(palette: palette, text: NeedsYouLayoutRules.shared.head(
                     title: NeedsYouLayoutRules.shared.FYI_HEAD, count: Int32(chats.count)))
                     .staggeredAppear(firstIndex)

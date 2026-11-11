@@ -160,49 +160,100 @@ struct TabIconView: View {
     }
 }
 
-/// NEEDS YOU on the Mac, in the approved look (`docs/design/needs-you/needs-you.dc.html`, Mac slice 5): "Needs you" over
-/// "2 to decide · 4 to reply · 4 FYI" with Clear FYI, the chips All · Decide · Reply · FYI · Mail (each shows only its
-/// section), then TO DECIDE (approvals, school days off, date night, appointments, requests, the stack), MESSAGES (the
-/// after-work card, one row per chat, the group digest, Discord), FYI · NO REPLY NEEDED as thin rows with a ✓, and the
-/// mail Navilife tidied. The detail sits beside it.
+/// NEEDS YOU on the Mac, in the approved look (`docs/design/needs-you/needs-you.dc.html`, Mac slice 5), grouped and
+/// folding (`needs-you-grouped.dc.html`, slice 4): "Needs you" over "2 to decide · 4 to reply · 4 FYI · 14 mail" with
+/// Open all / Close all, the chips All · Decide · Reply · FYI · Mail (a chip shows just its groups and opens them), then
+/// every section as one box (To decide, Messages, FYI, Group chats, Mail to answer, Renewals found in mail, Mail tidied
+/// today) with its icon, count and a one-line peek, a click to open or close it; To decide and Messages open at first and
+/// this Mac remembers what he left open. To decide's foot is the after-work line; From your lists is its lead row with
+/// Go through; FYI leads with Clear all; Messages and FYI show five a page. The detail sits beside it.
 struct NeedsYouView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var filter: NeedsYouFilter = .all
+    @AppStorage(NeedsYouOpenGroups.key) private var savedOpen: String?
+    @State private var msgPage = 0
+    @State private var fyiPage = 0
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
     private var decideCount: Int {
         model.approvals.count + model.looseRequests.count + model.needsYouAsks + model.needsYouCards.count
     }
 
-    private func show(_ section: NeedsYouSection) -> Bool { NeedsYouHeaderCounts.shows(filter, section) }
+    private var openGroups: Set<NeedsYouGroup> { NeedsYouOpenGroups.decode(savedOpen) }
+
+    private func setOpen(_ open: Set<NeedsYouGroup>) {
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { savedOpen = NeedsYouOpenGroups.encode(open) }
+    }
+
+    /// The after-work line at To decide's foot: the held line at work, else who and what waited; nil when nothing did.
+    private var afterWorkFoot: String? {
+        guard let summary = model.afterWork, !summary.isEmpty else { return nil }
+        let held = (model.work?.atWork ?? false) ? model.heldPreview?.label : nil
+        return NeedsYouGroupRules.shared.afterWorkFoot(summary: summary, heldLabel: held)
+    }
+
+    /// The "From your lists" card, which leaves the stack to be To decide's lead row.
+    private var listsCard: DecisionCard? { model.needsYouCards.first { $0.kind == .lists } }
+
+    private func facts(_ chats: [TriageChat]) -> NeedsYouGroupFacts {
+        let mailMomentOn = model.mailMoment != nil || model.mailMomentSession != nil
+        let renewals = model.mailFinds.map { $0.rows.map(\.title) }
+        let tiles = model.needsYouMail?.tiles ?? []
+        let tidiedAny = model.needsYouMail != nil || model.archivedForYou != nil || model.mailUnopened != nil
+        return NeedsYouGroupFacts(
+            decideCount: Int32(decideCount),
+            decidePeek: NeedsYouGroupRules.shared.decidePeekOf(
+                approvals: Int32(model.approvals.count), requests: Int32(model.looseRequests.count),
+                asks: Int32(model.needsYouAsks), cards: model.needsYouCards),
+            afterWorkFoot: afterWorkFoot,
+            messages: NeedsYouLayoutRules.shared.messages(chats: chats).map(\.title),
+            fyi: NeedsYouLayoutRules.shared.fyi(chats: chats).map(\.title),
+            chatsCount: Int32(model.digestGists.count + (model.discord?.cards.count ?? 0)),
+            chatsPeek: NeedsYouGroupRules.shared.chatsPeek(groups: model.digestGists.map(\.title), discord: model.discord?.headline),
+            mailAny: mailMomentOn || model.mailNeeds != nil || model.mailChases != nil,
+            mailCount: Int32(Int(model.mailNeeds?.count ?? 0) + (model.mailChases?.rows.count ?? 0)),
+            mailPeek: NeedsYouGroupRules.shared.mailPeek(momentDue: model.mailMoment != nil,
+                                                         rows: model.mailNeeds?.every ?? [], chases: model.mailChases?.headline),
+            mailRows: 0,
+            renewals: renewals,
+            tidiedAny: tidiedAny,
+            tidiedCount: Int32(tiles.first.flatMap { Int($0.number) } ?? 0),
+            tidiedPeek: tiles.isEmpty ? (model.archivedForYou == nil ? "" : "Archived for you")
+                : NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles))
+    }
 
     var body: some View {
         let chats = model.triageChats
         let counts = NeedsYouHeaderCounts(decide: decideCount, chats: chats, mail: Int(model.mailNeeds?.count ?? 0))
+        let f = facts(chats)
+        let present = NeedsYouGroupRules.shared.present(facts: f, filter: filter)
+        let open = openGroups
         HSplitView {
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
-                        NeedsYouHeaderView(palette: palette, counts: counts) {
+                        NeedsYouHeaderView(palette: palette, counts: counts, onClearFyi: {
                             model.clearFyiChats(NeedsYouLayoutRules.shared.fyi(chats: chats))
-                        }
+                        }, allLabel: present.isEmpty ? nil : NeedsYouGroupRules.shared.allLabel(open: open, shown: present),
+                           onAll: { setOpen(NeedsYouGroupRules.shared.all(open: open, shown: present)) })
                         NeedsYouChipsView(palette: palette, chips: counts.chips, chosen: $filter)
                     }
                     .padding(.bottom, MekaSpace.m)
                     .staggeredAppear(0)
-                    if show(.decide) { decideSection(counts) }
-                    if show(.messages) { messagesSection }
-                    if show(.fyi) {
-                        NeedsYouFyiRowsView(palette: palette, chats: NeedsYouLayoutRules.shared.fyi(chats: chats),
-                                            firstIndex: 3 + model.triage.count)
-                            .padding(.bottom, counts.fyi == 0 ? 0 : MekaSpace.m)
+                    ForEach(Array(present.enumerated()), id: \.element.id) { i, group in
+                        box(group, facts: f, open: open, chats: chats)
+                            .staggeredAppear(1 + i)
                     }
-                    if show(.mail) { mailSection }
                     if filter == .all { emptyState }
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
-                    if show(.messages) { ScamTextsView(palette: palette) }
+                    if NeedsYouGroupRules.shared.shows(filter: filter, group: .messages) { ScamTextsView(palette: palette) }
+                    if !present.isEmpty {
+                        Text(NeedsYouGroupRules.shared.HINT_MAC)
+                            .font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                            .padding(.top, MekaSpace.xs).padding(.leading, MekaSpace.xxs)
+                    }
                 }
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: filter)
                 .padding(.horizontal, MekaSpace.gutterWide)
@@ -213,57 +264,91 @@ struct NeedsYouView: View {
                 .frame(minWidth: 280, idealWidth: 360)
         }
         .background(palette.background)
+        .onChange(of: filter) { _, chosen in setOpen(NeedsYouGroupRules.shared.pick(open: openGroups, filter: chosen)) }
     }
 
-    /// TO DECIDE · n: the approvals inbox first (time-limited, nothing happens until Meka answers), school days off on
-    /// office days, date night and appointments, requests from people he watches, then the stack.
-    @ViewBuilder private func decideSection(_ counts: NeedsYouHeaderCounts) -> some View {
-        if counts.decide > 0 {
-            NeedsYouSectionHead(palette: palette, text: NeedsYouLayoutRules.shared.head(
-                title: NeedsYouLayoutRules.shared.DECIDE_HEAD, count: Int32(counts.decide)))
-                .staggeredAppear(1)
+    /// One group's box: its head, then (while open) what it holds, fading in on the expand spring.
+    @ViewBuilder private func box(_ group: NeedsYouGroup, facts f: NeedsYouGroupFacts, open: Set<NeedsYouGroup>,
+                                  chats: [TriageChat]) -> some View {
+        let head = NeedsYouGroupRules.shared.headOf(group: group, facts: f, open: open,
+                                                    msgPage: Int32(msgPage), fyiPage: Int32(fyiPage), mailPage: 0)
+        VStack(alignment: .leading, spacing: 0) {
+            NeedsYouGroupHeadView(head: head, palette: palette) {
+                setOpen(NeedsYouGroupRules.shared.toggle(open: open, group: group))
+            }
+            if head.open {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    contents(group, facts: f, chats: chats)
+                }
+                .padding(MekaSpace.s)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.surface.opacity(0.5), in: UnevenRoundedRectangle(
+                    topLeadingRadius: 0, bottomLeadingRadius: MekaRadius.m, bottomTrailingRadius: MekaRadius.m,
+                    topTrailingRadius: 0, style: .continuous))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
         }
-        ApprovalCardsView(palette: palette, firstIndex: 1)
-            .padding(.bottom, model.approvals.isEmpty ? 0 : MekaSpace.m)
-        SchoolCoversView(palette: palette, firstIndex: 2)
-            .padding(.bottom, model.needsYouAsks == 0 ? 0 : MekaSpace.m)
-        RequestCardsView(palette: palette, firstIndex: 2 + model.needsYouAsks)
-            .padding(.bottom, model.looseRequests.isEmpty ? 0 : MekaSpace.m)
-        if !model.needsYouCards.isEmpty {
-            NeedsYouStackView(palette: palette).staggeredAppear(1)
+        .padding(.bottom, MekaSpace.xs)
+    }
+
+    @ViewBuilder private func contents(_ group: NeedsYouGroup, facts f: NeedsYouGroupFacts, chats: [TriageChat]) -> some View {
+        switch group {
+        case .decide: decideSection
+        case .messages:
+            TriageCardsView(palette: palette, firstIndex: 0, rows: true, boxedPage: msgPage)
+            pager(total: f.messages.count, page: msgPage) { msgPage = $0 }
+        case .fyi:
+            let fyi = NeedsYouLayoutRules.shared.fyi(chats: chats)
+            NeedsYouGroupLeadView(line: NeedsYouGroupRules.shared.FYI_LEAD, button: NeedsYouGroupRules.shared.CLEAR_ALL,
+                                  palette: palette) { model.clearFyiChats(fyi) }
+            let page = NeedsYouGroupRules.shared.page(total: Int32(fyi.count), page: Int32(fyiPage),
+                                                      size: NeedsYouGroupRules.shared.PAGE_SIZE)
+            NeedsYouFyiRowsView(palette: palette, chats: needsYouPageRows(fyi, page), firstIndex: 0, boxed: true)
+            pager(total: fyi.count, page: fyiPage) { fyiPage = $0 }
+        case .chats:
+            GroupGistsView(palette: palette, firstIndex: 0)
+            DiscordCardsView(palette: palette, firstIndex: 0)
+        case .mail:
+            MailMomentView(palette: palette, firstIndex: 0)
+            MailNeedsView(palette: palette, firstIndex: 0)
+            MailChaseView(palette: palette, firstIndex: 0)
+        case .renewals:
+            MailFindView(palette: palette, firstIndex: 0)
+        default:
+            NeedsYouMailGroup(palette: palette, firstIndex: 0)
+        }
+    }
+
+    /// "1–5 of 14" with ‹ › under a group longer than a page.
+    @ViewBuilder private func pager(total: Int, page: Int, go: @escaping (Int) -> Void) -> some View {
+        let p = NeedsYouGroupRules.shared.page(total: Int32(total), page: Int32(page), size: NeedsYouGroupRules.shared.PAGE_SIZE)
+        if p.pages > 1 {
+            NeedsYouPagerView(page: p, palette: palette) { next in
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { go(next) }
+            }
+        }
+    }
+
+    /// To decide: From your lists as one row with Go through, the approvals inbox (time-limited, nothing happens until
+    /// Meka answers), school days off on office days, date night and appointments, requests from people he watches, the
+    /// rest of the stack, then the after-work foot line.
+    @ViewBuilder private var decideSection: some View {
+        if let lists = listsCard {
+            NeedsYouGroupLeadView(line: NeedsYouGroupRules.shared.listsLead(why: lists.why), button: lists.yesLabel,
+                                  palette: palette) { model.decide(lists, .yes, reduced: reduceMotion) }
+        }
+        ApprovalCardsView(palette: palette, firstIndex: 0)
+        SchoolCoversView(palette: palette, firstIndex: 0)
+        RequestCardsView(palette: palette, firstIndex: 0)
+        if model.needsYouCards.contains(where: { $0.id != listsCard?.id }) {
+            NeedsYouStackView(palette: palette, leaveOut: listsCard?.id)
             MailWorkingView(palette: palette)
             // Under the stack, the next reminders (the gate's Needs you re-shot).
             NeedsYouMeanwhileView(palette: palette, underStack: true)
         }
-    }
-
-    /// MESSAGES: what the Fold held at work (the card after work, a quiet count during it), one row per chat the Fold
-    /// triaged, the group digest (gists, never the messages) and the Discord channels he follows.
-    @ViewBuilder private var messagesSection: some View {
-        AfterWorkCard(palette: palette)
-            .padding(.bottom, MekaSpace.m)
-            .staggeredAppear(2)
-        TriageCardsView(palette: palette, firstIndex: 2 + model.needsYouAsks + model.requests.count, rows: true)
-            .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
-        GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-            .padding(.bottom, model.digestGists.isEmpty ? 0 : MekaSpace.m)
-        DiscordCardsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-            .padding(.bottom, model.discord == nil ? 0 : MekaSpace.m)
-    }
-
-    /// The mail: the ten-minute inbox, the emails that need him, chases due, renewals read from his mail, then MAIL
-    /// NAVILIFE TIDIED TODAY as four tiles with the one unsubscribe question and See all ›.
-    @ViewBuilder private var mailSection: some View {
-        let first = 3 + model.triage.count + model.needsYouAsks + model.requests.count
-        MailMomentView(palette: palette, firstIndex: first)
-            .padding(.bottom, model.mailMoment == nil && model.mailMomentSession == nil ? 0 : MekaSpace.m)
-        MailNeedsView(palette: palette, firstIndex: first)
-            .padding(.bottom, model.mailNeeds == nil || model.mailMomentSession != nil ? 0 : MekaSpace.m)
-        MailChaseView(palette: palette, firstIndex: first)
-            .padding(.bottom, model.mailChases == nil ? 0 : MekaSpace.m)
-        MailFindView(palette: palette, firstIndex: first)
-            .padding(.bottom, model.mailFinds == nil ? 0 : MekaSpace.m)
-        NeedsYouMailGroup(palette: palette, firstIndex: first)
+        if let foot = afterWorkFoot {
+            NeedsYouGroupFootView(line: foot, palette: palette) { model.showAfterWork = true }
+        }
     }
 
     /// Nothing to decide or answer: the breathing check ring beside a light line and what lands here (catalogue

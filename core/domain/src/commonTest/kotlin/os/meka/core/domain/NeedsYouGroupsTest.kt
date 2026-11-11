@@ -186,4 +186,45 @@ class NeedsYouGroupsTest {
         assertEquals(listOf("m6", "m7"), left.every.map { it.id })
         assertEquals(null, InstantMailRules.needs(card, every.map { it.id }.toSet()))
     }
+
+    private fun facts(
+        decide: Int = 0, foot: String? = null, messages: List<String> = emptyList(), fyi: List<String> = emptyList(),
+        chats: Int = 0, mailAny: Boolean = false, mailRows: Int = 0, renewals: List<String>? = null, tidied: Boolean = false,
+    ) = NeedsYouGroupFacts(decide, if (decide > 0) "$decide tasks" else "", foot, messages, fyi, chats,
+        if (chats > 0) "Five-a-side" else "", mailAny, mailRows, if (mailAny) "Sam" else "", mailRows, renewals, tidied,
+        if (tidied) 12 else 0, if (tidied) "12 tidied" else "")
+
+    @Test fun macGroupsArePresentOnlyWithSomethingInThem() {
+        val f = facts(decide = 2, messages = listOf("Alex"), fyi = listOf("Sam"), mailAny = true, tidied = true)
+        assertEquals(listOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES, NeedsYouGroup.FYI, NeedsYouGroup.MAIL, NeedsYouGroup.TIDIED),
+            R.present(f, NeedsYouFilter.ALL))
+        assertEquals(listOf(NeedsYouGroup.MAIL, NeedsYouGroup.TIDIED), R.present(f, NeedsYouFilter.MAIL))
+        assertEquals(listOf(NeedsYouGroup.DECIDE), R.present(facts(foot = "At work until 17:30 · 3 held for later ›"), NeedsYouFilter.ALL))
+        assertEquals(emptyList(), R.present(facts(), NeedsYouFilter.ALL))
+        assertEquals(listOf(NeedsYouGroup.RENEWALS), R.present(facts(renewals = listOf("Streamly")), NeedsYouFilter.ALL))
+    }
+
+    @Test fun macHeadsMatchTheFolds() {
+        val names = (1..7).map { "Person $it" }
+        val f = facts(decide = 0, foot = "While you were at work · 2 people ›", messages = names, fyi = listOf("Sam", "Jo"),
+            chats = 2, mailAny = true, mailRows = 12, renewals = listOf("Streamly", "Music Plus"))
+        val closed = emptySet<NeedsYouGroup>()
+        assertEquals("While you were at work · 2 people", R.headOf(NeedsYouGroup.DECIDE, f, closed, 0, 0, 0).peek)
+        val msgs = R.headOf(NeedsYouGroup.MESSAGES, f, closed, 0, 0, 0)
+        assertEquals("7", msgs.count)
+        assertEquals("Person 1, Person 2, Person 3, Person 4 + 3 more", msgs.peek)
+        assertEquals("6–7 of 7", R.headOf(NeedsYouGroup.MESSAGES, f, setOf(NeedsYouGroup.MESSAGES), 1, 0, 0).peek)
+        assertEquals("No reply needed · Sam, Jo", R.headOf(NeedsYouGroup.FYI, f, closed, 0, 0, 0).peek)
+        assertEquals("", R.headOf(NeedsYouGroup.FYI, f, setOf(NeedsYouGroup.FYI), 0, 0, 0).peek)
+        assertEquals("1–5 of 12", R.headOf(NeedsYouGroup.MAIL, f, setOf(NeedsYouGroup.MAIL), 0, 0, 0).peek)
+        assertEquals("Streamly, Music Plus · nothing added until you tap Add", R.headOf(NeedsYouGroup.RENEWALS, f, closed, 0, 0, 0).peek)
+        assertEquals("Five-a-side", R.headOf(NeedsYouGroup.CHATS, f, closed, 0, 0, 0).peek)
+    }
+
+    @Test fun chatsPeekNamesTheGroupsThenDiscord() {
+        assertEquals("Five-a-side, Parents · 3 new in 2 channels", R.chatsPeek(listOf("Five-a-side", "Parents"), "3 new in 2 channels"))
+        assertEquals("Five-a-side", R.chatsPeek(listOf("Five-a-side"), null))
+        assertEquals("", R.chatsPeek(emptyList(), " "))
+        assertTrue(R.HINT_MAC.startsWith("Click a heading"))
+    }
 }

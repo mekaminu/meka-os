@@ -16,6 +16,8 @@ struct TriageCardsView: View {
     /// The approved Needs you look (MESSAGES): each chat is one row that opens in place. Today's command centre keeps
     /// the cards (false), as the Fold's command centre keeps its compact list.
     var rows: Bool = false
+    /// Needs you grouped (slice 4): inside the Messages box, with no MESSAGES label of its own, [PAGE_SIZE] chats a page.
+    var boxedPage: Int? = nil
 
     var body: some View {
         if rows { messageRows } else { cards }
@@ -27,9 +29,13 @@ struct TriageCardsView: View {
     /// requests opens to its full card, so every request keeps its own answers. Hint line under them.
     private var messageRows: some View {
         // Chats needing nothing from Meka sit under FYI as thin rows (NeedsYouFyiRowsView), not here.
-        let chats = NeedsYouLayoutRules.shared.messages(chats: model.triageChats)
+        let every = NeedsYouLayoutRules.shared.messages(chats: model.triageChats)
+        let chats = boxedPage.map {
+            needsYouPageRows(every, NeedsYouGroupRules.shared.page(total: Int32(every.count), page: Int32($0),
+                                                                   size: NeedsYouGroupRules.shared.PAGE_SIZE))
+        } ?? every
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            if !chats.isEmpty {
+            if !chats.isEmpty && boxedPage == nil {
                 Text(NeedsYouLayoutRules.shared.head(title: NeedsYouLayoutRules.shared.MESSAGES_HEAD, count: Int32(chats.count)))
                     .font(MekaType.captionStrong).tracking(MekaType.captionStrongTracking)
                     .foregroundStyle(palette.textTertiary)

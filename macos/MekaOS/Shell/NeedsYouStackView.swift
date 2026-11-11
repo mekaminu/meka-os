@@ -11,6 +11,8 @@ struct NeedsYouStackView: View {
     let palette: MekaPalette
     /// The Needs you tab takes the keyboard on appear; the command centre beside Today doesn't (click a card first).
     var autofocus: Bool = true
+    /// Needs you grouped (slice 4): the "From your lists" card, shown as To decide's lead row instead.
+    var leaveOut: String? = nil
 
     @State private var drag: CGSize = .zero
     @State private var armed: DecisionMove?
@@ -26,7 +28,7 @@ struct NeedsYouStackView: View {
     private let thresholdY: CGFloat = 100
 
     var body: some View {
-        let cards = model.needsYouCards
+        let cards = model.needsYouCards.filter { $0.id != leaveOut }
         let shown = cards.filter { !gone.contains($0.id) }
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             if let top = shown.first {
