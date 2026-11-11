@@ -14059,6 +14059,8 @@ class MekaCore(
                 // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
                 // Deliveries completeness: lit with "you're at the office" on an office day, and yesterday's that didn't show.
                 parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay, officeDay = office != null),
+                // Meka 2026-11-11: the PARCELS tile's tap unfolds every parcel (no Also today tile is a dead end).
+                parcelDetail = os.meka.core.domain.ParcelRules.detail(activity.parcels(), todayDay, officeDay = office != null),
                 mailUnread = todayUnread,
                 mailReplies = todayReplies,
                 // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.

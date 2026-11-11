@@ -184,6 +184,34 @@ internal fun TrainsDetail(d: TrainDetail) {
     }
 }
 
+internal const val PARCELS_DETAIL_TAG = "today-parcels-detail"
+
+/**
+ * The PARCELS tile unfolded (Meka 2026-11-11: no Also today tile is a dead end; core ParcelRules.detail): "Parcels
+ * today", then each parcel (who it's from, what the emails say, amber when yesterday's hasn't come, the window and
+ * carrier quieter) and where it was read from. One screen-reader line for the whole.
+ */
+@Composable
+internal fun ParcelsDetail(d: os.meka.core.domain.ParcelDetail) {
+    Column(
+        Modifier.fillMaxWidth().testTag(PARCELS_DETAIL_TAG).semantics(mergeDescendants = true) { contentDescription = d.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Text(d.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        d.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                Text(r.name, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false))
+                Text(r.status, style = MekaType.caption, color = if (r.bad) os.meka.core.domain.TodayInk.ATTENTION.color() else Meka.colors.textSecondary, maxLines = 1)
+                if (r.meta.isNotEmpty()) {
+                    Text(r.meta, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Text(d.note, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.padding(top = MekaSpace.xxs))
+    }
+}
+
 /** "07:12  on time  platform 3 · arrives 07:41": the time, the status (amber when late or cancelled), the rest quieter. */
 @Composable
 private fun TrainRowLine(r: TrainDetailRow) {

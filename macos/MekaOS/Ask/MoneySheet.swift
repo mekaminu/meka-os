@@ -222,7 +222,11 @@ struct MoneySheet: View {
         .frame(width: wide ? MoneyMacLayout.wideWidth : MoneyMacLayout.narrowWidth)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wide)
         .background(palette.surface)
-        .onAppear { if model.money?.locked ?? true { unlock() } }
+        .onAppear {
+            // Meka 2026-11-11: Today's TRADING tile opens Money on its Trading tab.
+            if let t = model.moneyStartTab { tab = t; model.moneyStartTab = nil }
+            if model.money?.locked ?? true { unlock() }
+        }
         .onDisappear { model.closeMoney() }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.screensDidSleepNotification)) { _ in model.closeMoney() }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.sessionDidResignActiveNotification)) { _ in model.closeMoney() }

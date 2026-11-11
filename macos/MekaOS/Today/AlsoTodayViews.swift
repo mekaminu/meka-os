@@ -191,3 +191,32 @@ struct MacTrainsDetail: View {
         }
     }
 }
+
+/// The PARCELS tile unfolded (Meka 2026-11-11: no Also today tile is a dead end; core ParcelRules.detail, as the
+/// Fold's): "Parcels today", each parcel (who it's from, what the emails say, amber when yesterday's hasn't come, the
+/// window and carrier quieter), then where it was read from. VoiceOver hears it as one line.
+struct MacParcelsDetail: View {
+    let detail: ParcelDetail
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(detail.title).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).lineLimit(1)
+            ForEach(Array(detail.rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: MekaSpace.xs) {
+                    Text(row.name).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(row.status).font(MekaType.caption)
+                        .foregroundStyle(row.bad ? TodayInk.attention.color(palette) : palette.textSecondary).lineLimit(1)
+                    if !row.meta.isEmpty {
+                        Text(row.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
+                }
+            }
+            Text(detail.note).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                .padding(.top, MekaSpace.xxs)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(detail.spoken)
+        .accessibilityIdentifier("today-parcels-detail")
+    }
+}

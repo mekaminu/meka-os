@@ -1174,6 +1174,11 @@ private fun TodayPane(
                                 // Meka 2026-11-11 07:30: the Trains tile's tap shows what the trains are doing.
                                 os.meka.core.domain.AlsoKind.TRAINS -> weather.trains != null
                                 os.meka.core.domain.AlsoKind.PRESSURE -> core != null && today.pressure?.fixes?.isNotEmpty() == true
+                                // Meka 2026-11-11: no tile is a dead end. Parcels unfold every parcel; goals, trading,
+                                // this week's one thing and a clash open Goals, Money's Trading, Review and the Calendar.
+                                os.meka.core.domain.AlsoKind.PARCELS -> today.parcelDetail != null
+                                os.meka.core.domain.AlsoKind.GOALS, os.meka.core.domain.AlsoKind.TRADING,
+                                os.meka.core.domain.AlsoKind.REFLECTION, os.meka.core.domain.AlsoKind.CLASH -> alsoApp != null
                                 else -> alsoApp != null && paneFor(t.kind) != null
                             }
                         },
@@ -1185,8 +1190,20 @@ private fun TodayPane(
                                 os.meka.core.domain.AlsoKind.TRAIN_QUEUE -> openQueue()
                                 os.meka.core.domain.AlsoKind.REVIEW -> openReviewCard()
                                 os.meka.core.domain.AlsoKind.PREP, os.meka.core.domain.AlsoKind.PRESSURE,
-                                os.meka.core.domain.AlsoKind.STUDY_WEEK, os.meka.core.domain.AlsoKind.TRAINS ->
+                                os.meka.core.domain.AlsoKind.STUDY_WEEK, os.meka.core.domain.AlsoKind.TRAINS,
+                                os.meka.core.domain.AlsoKind.PARCELS ->
                                     alsoUnfolded = if (alsoUnfolded == t.kind) null else t.kind
+                                os.meka.core.domain.AlsoKind.GOALS ->
+                                    alsoApp?.openDestination?.value = os.meka.android.shell.ShellDestination.GOALS
+                                os.meka.core.domain.AlsoKind.REFLECTION ->
+                                    alsoApp?.openDestination?.value = os.meka.android.shell.ShellDestination.REVIEW
+                                os.meka.core.domain.AlsoKind.CLASH ->
+                                    alsoApp?.openDestination?.value = os.meka.android.shell.ShellDestination.CALENDAR
+                                os.meka.core.domain.AlsoKind.TRADING -> alsoApp?.let { app ->
+                                    app.openMoneyTab.value = os.meka.core.domain.MoneyTab.TRADING
+                                    app.openMoney.value = true
+                                    app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
+                                }
                                 else -> paneFor(t.kind)?.let { item ->
                                     alsoApp?.let { app ->
                                         app.openPane.value = item
@@ -1200,6 +1217,7 @@ private fun TodayPane(
                             when (kind) {
                                 os.meka.core.domain.AlsoKind.PREP -> today.meetingPrep?.let { p -> PrepDetail(p) }
                                 os.meka.core.domain.AlsoKind.TRAINS -> weather.trains?.let { t -> TrainsDetail(t) }
+                                os.meka.core.domain.AlsoKind.PARCELS -> today.parcelDetail?.let { d -> ParcelsDetail(d) }
                                 os.meka.core.domain.AlsoKind.PRESSURE -> today.pressure?.let { p ->
                                     PressureDetail(p) { fix ->
                                         if (core != null) carryScope.launch {

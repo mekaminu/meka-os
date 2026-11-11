@@ -545,6 +545,8 @@ struct TodayView: View {
             StudyCheckinCard(checkin: c, palette: palette)
         } else if kind == AlsoKind.trains, let t = model.weather?.trains {
             MacTrainsDetail(detail: t, palette: palette)
+        } else if kind == AlsoKind.parcels, let d = today.parcelDetail {
+            MacParcelsDetail(detail: d, palette: palette)
         }
     }
 
@@ -567,7 +569,15 @@ struct TodayView: View {
         case .lifeAdmin: model.showLifeAdmin = true
         case .school: model.showSchool = true
         case .mail: model.showMail = true
-        case .review: model.openReviewCard(reduced: reduceMotion)
+        case .review:
+            // This week's one thing lives in Review's reflection; Monday's review tile opens Review on that week.
+            if tile.kind == AlsoKind.reflection { model.go(to: .review, reduced: reduceMotion) } else { model.openReviewCard(reduced: reduceMotion) }
+        // Meka 2026-11-11: no tile is a dead end.
+        case .goals: model.go(to: .goals, reduced: reduceMotion)
+        case .calendar: model.go(to: .calendar, reduced: reduceMotion)
+        case .moneyTrading:
+            model.moneyStartTab = MoneyTab.trading
+            model.showMoney = true
         default: break
         }
     }

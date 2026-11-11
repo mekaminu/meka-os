@@ -239,6 +239,10 @@ fun MoneyPane(
     var busy by remember { mutableStateOf(false) }
     // Money redesign (B), slice 1: the tab shown; Money opens on Spending each time the pane opens.
     var tab by rememberSaveable { mutableStateOf(MoneyTabs.FIRST) }
+    // Meka 2026-11-11: Today's TRADING tile opens Money on its Trading tab (the app's openMoneyTab, cleared once taken).
+    val tabApp = context.applicationContext as? os.meka.android.MekaApplication
+    val askedTab by remember(tabApp) { tabApp?.openMoneyTab ?: kotlinx.coroutines.flow.MutableStateFlow(null) }.collectAsState()
+    LaunchedEffect(askedTab) { askedTab?.let { tab = it; tabApp?.openMoneyTab?.value = null } }
     val has: (MoneySection) -> Boolean = { s -> MoneyTabs.shows(tab, s, v) }
     // Money redesign (B2): the category picked on Spending's ring, and whether all categories / all payments show.
     var focus by rememberSaveable { mutableStateOf<String?>(null) }

@@ -92,6 +92,8 @@ final class CoreModel {
     @ObservationIgnored private var coreMoney: MoneyView?
     @ObservationIgnored private var paymentTaps: [PaymentTap] = []
     var showMoney = false
+    /// Meka 2026-11-11: the tab Money opens on when something asks for one (Today's TRADING tile → Trading); Money clears it.
+    var moneyStartTab: MoneyTab?
     /// About you (rule 13, slice 1): the household profile, synced with the Fold; kept in his data, not in code.
     private(set) var aboutYou: AboutYouView?
     /// Ask → Settings → About you.

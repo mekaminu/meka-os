@@ -204,14 +204,24 @@ class AlsoTodayTest {
         // A day stacking up with no fix to offer only tells.
         assertEquals(AlsoPlace.INFO, AlsoTodayRules.place(tile(AlsoKind.PRESSURE, false, null)))
         assertEquals(AlsoPlace.UNFOLD, AlsoTodayRules.place(tile(AlsoKind.PRESSURE, true, null)))
-        assertEquals(AlsoPlace.INFO, AlsoTodayRules.place(tile(AlsoKind.TRADING, true, null)))
+        // Meka 2026-11-11: no tile is a dead end; the ones that only told now open somewhere.
+        assertEquals(AlsoPlace.MONEY_TRADING, AlsoTodayRules.place(tile(AlsoKind.TRADING, true, null)))
+        assertEquals(AlsoPlace.GOALS, AlsoTodayRules.place(tile(AlsoKind.GOALS, false, null)))
+        assertEquals(AlsoPlace.REVIEW, AlsoTodayRules.place(tile(AlsoKind.REFLECTION, true, null)))
+        assertEquals(AlsoPlace.CALENDAR, AlsoTodayRules.place(tile(AlsoKind.CLASH, true, null)))
+        assertEquals(AlsoPlace.UNFOLD, AlsoTodayRules.place(tile(AlsoKind.PARCELS, true, null)))
+        assertTrue(AlsoTodayRules.unfolds(AlsoKind.PARCELS))
+        assertEquals("Shows the parcels", AlsoTodayRules.hint(tile(AlsoKind.PARCELS, false, null)))
+        assertEquals("Opens Trading", AlsoTodayRules.hint(tile(AlsoKind.TRADING, false, null)))
         assertEquals("Opens Renewals", AlsoTodayRules.hint(tile(AlsoKind.RENEWAL, true, "r1")))
         assertEquals("Shows the check-in", AlsoTodayRules.hint(tile(AlsoKind.STUDY_WEEK, true, null)))
-        assertEquals("", AlsoTodayRules.hint(tile(AlsoKind.GOALS, false, null)))
+        assertEquals("Opens Goals", AlsoTodayRules.hint(tile(AlsoKind.GOALS, false, null)))
         // Every kind has a place (the when is exhaustive) and every tappable one a hint.
         AlsoKind.entries.forEach { k ->
             val t = tile(k, true, "x")
             assertEquals(AlsoTodayRules.place(t) == AlsoPlace.INFO, AlsoTodayRules.hint(t).isEmpty(), k.name)
+            // No tile that can show goes nowhere: a lit tile with its target always has a place.
+            assertTrue(AlsoTodayRules.place(t) != AlsoPlace.INFO, k.name)
         }
     }
 }

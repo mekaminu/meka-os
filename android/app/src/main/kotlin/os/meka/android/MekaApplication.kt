@@ -115,6 +115,8 @@ open class MekaApplication : Application() {
     val openRoutines = MutableStateFlow(false)
     /** A card heads-up (Money manager, slice 7): Ask with the Money pane up (behind the fingerprint as always). */
     val openMoney = MutableStateFlow(false)
+    /** Meka 2026-11-11: the tab Money opens on when something asks for one (the TRADING tile → Trading); Money clears it. */
+    val openMoneyTab = MutableStateFlow<os.meka.core.domain.MoneyTab?>(null)
     /** The Week board's study line (plan a lesson for a day) → Goals with that course open. */
     val openStudy = MutableStateFlow<String?>(null)
     /** One-tap course import: a course link or shared course waiting for Add on Goals (its text; nothing written yet). */

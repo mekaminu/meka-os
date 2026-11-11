@@ -605,6 +605,37 @@ class TodayScreensTest {
         if (compose.onAllNodesWithTag(os.meka.android.today.ALSO_DETAIL_TAG).fetchSemanticsNodes().isNotEmpty()) fail("trains: a second tap didn't fold it")
     }
 
+    /** Meka 2026-11-11: no Also today tile is a dead end; the PARCELS tile unfolds every parcel (core ParcelRules.detail). */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theParcelsTileUnfoldsTheParcels() {
+        val today = 20_400L
+        val parcels = listOf(
+            os.meka.core.domain.Parcel("a", "Mail", os.meka.core.domain.ParcelState.OUT_FOR_DELIVERY, today, "10:15–11:15", "Evri", "Shop One", 0L),
+            os.meka.core.domain.Parcel("b", "Mail", os.meka.core.domain.ParcelState.COMING, today - 1, null, "DPD", "Shop Two", 0L),
+        )
+        val line = os.meka.core.domain.ParcelRules.todayLine(parcels, today)!!
+        val detail = os.meka.core.domain.ParcelRules.detail(parcels, today)!!
+        val tiles = listOf(os.meka.core.domain.AlsoTodayRules.split(os.meka.core.domain.AlsoKind.PARCELS, line.text, line.spoken, line.lit))
+        compose.setContent {
+            MekaTheme {
+                var unfolded by remember { mutableStateOf<os.meka.core.domain.AlsoKind?>(null) }
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    os.meka.android.today.AlsoTodayRow(
+                        tiles, onOpen = { t -> unfolded = if (unfolded == t.kind) null else t.kind }, opens = { true },
+                        unfolded = unfolded,
+                        detail = { k -> if (k == os.meka.core.domain.AlsoKind.PARCELS) os.meka.android.today.ParcelsDetail(detail) },
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(os.meka.android.today.PARCELS_DETAIL_TAG).fetchSemanticsNodes().isNotEmpty()) fail("parcels: details showed before a tap")
+        compose.onNodeWithTag("also-tile-parcels").performClick()
+        compose.waitForIdle()
+        if (compose.onAllNodesWithTag(os.meka.android.today.PARCELS_DETAIL_TAG).fetchSemanticsNodes().isEmpty()) fail("parcels: the tap didn't unfold them")
+        ScreenShots.assertShows(compose, "parcels", "Due yesterday · not delivered yet")
+    }
+
     /**
      * Today regression 3 (Meka 2026-11-11 06:40: "don't like the oval outline and also the black box"): inside the
      * Schedule card work and the commute are one dim line ("Work · Now · until 17:30"), not the outlined band; outside the

@@ -15,6 +15,9 @@ enum class AlsoKind {
 enum class AlsoPlace {
     STUDY, RENEWALS, WEEK_AHEAD, TRAIN_QUEUE, BINS, TRIPS, GIFTS, DINNERS, DATE_NIGHT, LIFE_ADMIN, SCHOOL, MAIL, REVIEW,
     UNFOLD, INFO,
+    // Meka 2026-11-11 (Today regression 2, "no Also today tile may be a dead end"): the tiles that only told now open
+    // a place too: this week's goals open Goals, trading opens Money on its Trading tab, a clash opens the Calendar.
+    GOALS, MONEY_TRADING, CALENDAR,
 }
 
 /**
@@ -90,16 +93,21 @@ object AlsoTodayRules {
     const val OPENS_REVIEW = "Opens Review."
     /** Meka 2026-11-11 07:30: the Trains tile stays where it is and its tap shows what the trains are doing. */
     const val UNFOLD_TRAINS = "Shows the train details."
+    /** Meka 2026-11-11: no tile is a dead end; the parcels tile unfolds the parcels ([ParcelRules.detail]). */
+    const val UNFOLD_PARCELS = "Shows the parcels."
 
     /** The kinds whose tap unfolds a detail card under the row rather than opening a place. */
     fun unfolds(kind: AlsoKind): Boolean =
-        kind == AlsoKind.PREP || kind == AlsoKind.PRESSURE || kind == AlsoKind.STUDY_WEEK || kind == AlsoKind.TRAINS
+        kind == AlsoKind.PREP || kind == AlsoKind.PRESSURE || kind == AlsoKind.STUDY_WEEK || kind == AlsoKind.TRAINS ||
+            kind == AlsoKind.PARCELS
 
     /**
      * The Today rebuild, slice 2d-2b (the Mac's Also today): where a tile's tap goes, so both apps agree. [AlsoPlace.UNFOLD]
      * unfolds the detail under the row ([unfolds]: prep, a day stacking up, the study check-in and the trains, whose
-     * details are [RouteRules.detail]); [AlsoPlace.INFO] is a tile that only tells (parcels, trading, goals, this week's
-     * one thing, a clash). A study or renewal tile with no [AlsoTile.targetId] goes nowhere.
+     * details are [RouteRules.detail], and the parcels, [ParcelRules.detail]). Meka 2026-11-11: no tile is a dead end, so
+     * the ones that only told open a place: this week's goals Goals, trading Money's Trading tab, this week's one thing
+     * Review (where the reflection lives), a clash the Calendar. [AlsoPlace.INFO] is left for a study or renewal tile
+     * with no [AlsoTile.targetId] and a day stacking up with no fix to offer.
      */
     fun place(tile: AlsoTile): AlsoPlace = when (tile.kind) {
         AlsoKind.STUDY -> if (tile.targetId != null) AlsoPlace.STUDY else AlsoPlace.INFO
@@ -115,10 +123,13 @@ object AlsoTodayRules {
         AlsoKind.SCHOOL -> AlsoPlace.SCHOOL
         AlsoKind.REPLIES -> AlsoPlace.MAIL
         AlsoKind.REVIEW -> AlsoPlace.REVIEW
-        AlsoKind.PREP, AlsoKind.STUDY_WEEK, AlsoKind.TRAINS -> AlsoPlace.UNFOLD
+        AlsoKind.PREP, AlsoKind.STUDY_WEEK, AlsoKind.TRAINS, AlsoKind.PARCELS -> AlsoPlace.UNFOLD
         // A day stacking up unfolds only when there's a fix to offer (its tile is lit then).
         AlsoKind.PRESSURE -> if (tile.lit) AlsoPlace.UNFOLD else AlsoPlace.INFO
-        AlsoKind.PARCELS, AlsoKind.TRADING, AlsoKind.GOALS, AlsoKind.REFLECTION, AlsoKind.CLASH -> AlsoPlace.INFO
+        AlsoKind.GOALS -> AlsoPlace.GOALS
+        AlsoKind.TRADING -> AlsoPlace.MONEY_TRADING
+        AlsoKind.REFLECTION -> AlsoPlace.REVIEW
+        AlsoKind.CLASH -> AlsoPlace.CALENDAR
     }
 
     /** What a screen reader hears after the tile: "Opens Renewals", "Shows the check-in"; empty for a tile that only tells. */
@@ -136,10 +147,14 @@ object AlsoTodayRules {
         AlsoPlace.SCHOOL -> "Opens School"
         AlsoPlace.MAIL -> "Opens mail"
         AlsoPlace.REVIEW -> "Opens Review"
+        AlsoPlace.GOALS -> "Opens Goals"
+        AlsoPlace.MONEY_TRADING -> "Opens Trading"
+        AlsoPlace.CALENDAR -> "Opens the Calendar"
         AlsoPlace.UNFOLD -> when (tile.kind) {
             AlsoKind.PREP -> UNFOLD_PREP.removeSuffix(".")
             AlsoKind.PRESSURE -> UNFOLD_PRESSURE.removeSuffix(".")
             AlsoKind.TRAINS -> UNFOLD_TRAINS.removeSuffix(".")
+            AlsoKind.PARCELS -> UNFOLD_PARCELS.removeSuffix(".")
             else -> UNFOLD_STUDY_WEEK.removeSuffix(".")
         }
         AlsoPlace.INFO -> ""

@@ -65,6 +65,12 @@ data class Parcel(
 /** Today's line: "2 parcels arriving today · Amazon, DPD"; [lit] while one is out for delivery. */
 data class ParcelLine(val text: String, val spoken: String, val lit: Boolean, val parcelCount: Int)
 
+/** One parcel in the unfolded PARCELS tile ([ParcelRules.detail]): who it's from, what the emails say, the window and carrier; [bad] in amber. */
+data class ParcelDetailRow(val name: String, val status: String, val meta: String, val bad: Boolean)
+
+/** The PARCELS tile unfolded ([ParcelRules.detail]): the [title], a row per parcel, where it was read from, one [spoken] line. */
+data class ParcelDetail(val title: String, val rows: List<ParcelDetailRow>, val note: String, val spoken: String)
+
 /** Deliveries, slice 2: the week ahead's line for one day; [lit] when it's due on an office day (nobody home). */
 data class ParcelWeekLine(val text: String, val spoken: String, val lit: Boolean)
 
@@ -332,6 +338,42 @@ object ParcelRules {
             spokenOffice + "." + spokenLate
         return ParcelLine(text, spoken, lit = out > 0 || officeDay, parcelCount = due.size)
     }
+
+    /**
+     * Meka 2026-11-11 (no Also today tile may be a dead end): the PARCELS tile unfolded, or null when the tile wouldn't
+     * show. "Parcels today" (or "Parcels today · you're at the office"), then one row per parcel: due today first (out
+     * for delivery, then by window), then today's delivered ones, then yesterday's that no email called delivered, in
+     * amber. Each row is who it's from, what the emails say ("Out for delivery", "Arriving today", "Delivered", "Due
+     * yesterday · not delivered yet") and the window and carrier. Read from shipping emails only; nothing is tracked.
+     */
+    fun detail(parcels: List<Parcel>, todayDay: Long, officeDay: Boolean = false): ParcelDetail? {
+        todayLine(parcels, todayDay, officeDay) ?: return null
+        val due = parcels.filter { it.state != ParcelState.DELIVERED && it.day == todayDay }
+            .sortedWith(compareBy<Parcel> { it.state != ParcelState.OUT_FOR_DELIVERY }.thenBy { it.window ?: "~" }.thenBy { it.lastAtMs })
+        val delivered = parcels.filter { it.state == ParcelState.DELIVERED && it.day == todayDay }.sortedBy { it.lastAtMs }
+        val late = late(parcels, todayDay)
+        fun row(p: Parcel, status: String, bad: Boolean): ParcelDetailRow {
+            val carrier = p.carrier?.takeIf { it != p.name }?.let { "with $it" }
+            val meta = listOfNotNull(p.window?.takeIf { p.state != ParcelState.DELIVERED }, carrier).joinToString(" · ")
+            return ParcelDetailRow(p.name ?: "A parcel", status, meta, bad)
+        }
+        val rows = due.map { row(it, if (it.state == ParcelState.OUT_FOR_DELIVERY) SAYS_OUT else SAYS_ARRIVING, bad = false) } +
+            delivered.map { row(it, SAYS_DELIVERED, bad = false) } +
+            late.map { row(it, SAYS_LATE, bad = true) }
+        val title = DETAIL_TITLE + if (officeDay && due.isNotEmpty()) " · you're at the office" else ""
+        val said = rows.joinToString(" ") { r ->
+            "${r.name}: ${r.status.replace(" · ", ", ").lowercase()}" + (if (r.meta.isNotEmpty()) ", ${r.meta.replace(" · ", ", ").replace("–", " to ")}" else "") + "."
+        }
+        val spoken = (if (officeDay && due.isNotEmpty()) "Parcels today, while you're at the office. " else "Parcels today. ") + said + " $DETAIL_NOTE."
+        return ParcelDetail(title, rows, DETAIL_NOTE, spoken)
+    }
+
+    const val DETAIL_TITLE = "Parcels today"
+    const val DETAIL_NOTE = "From your shipping emails"
+    const val SAYS_OUT = "Out for delivery"
+    const val SAYS_ARRIVING = "Arriving today"
+    const val SAYS_DELIVERED = "Delivered"
+    const val SAYS_LATE = "Due yesterday · not delivered yet"
 
     /**
      * Deliveries completeness: the parcels due yesterday that no email has called delivered (a missed "delivered" email,

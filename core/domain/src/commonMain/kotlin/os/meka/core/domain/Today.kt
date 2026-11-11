@@ -87,6 +87,8 @@ data class Today(
      * ahead, bins and the other one-line notes), built from the fields above ([AlsoTodayRules]); set by the facade.
      */
     val alsoToday: List<AlsoTile> = emptyList(),
+    /** Meka 2026-11-11: what the PARCELS tile unfolds, every parcel today and yesterday's late ones ([ParcelRules.detail]); set by the facade. */
+    val parcelDetail: ParcelDetail? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false
