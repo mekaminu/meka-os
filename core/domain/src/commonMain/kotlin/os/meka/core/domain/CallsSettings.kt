@@ -31,7 +31,7 @@ object CallsSettingsRules {
 
     const val LIMITS_TITLE = "Booking calls"
     const val RECORDINGS_TITLE = "Recordings"
-    const val RECORDINGS_NOTE = "Callers' voice messages are kept encrypted on Navilife's server, then deleted. A booking call's words are kept 7 days."
+    const val RECORDINGS_NOTE = "Callers' voice messages, and live calls with both voices from Obi's first word, are kept encrypted on Navilife's server, then deleted. Obi tells callers the call is recorded. A booking call's words are kept 7 days."
     const val FOOTER = "Obi always says he's your AI assistant"
 
     /** Said when Call now is tapped with Booking calls switched off. */

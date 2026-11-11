@@ -1071,6 +1071,11 @@ fun Application.mekaSync(
                     ?: return@post call.respondText("unknown step", status = HttpStatusCode.NotFound)
                 val booking = voice.booking
                 val reply = withContext(Dispatchers.IO) {
+                    // Recordings with both voices: Obi's part is over, so the recording stops before any put-through
+                    // rings his mobile (his own conversation is never recorded).
+                    if (event is VoiceEvent.LiveEnded) voice.live?.line?.takeIf { it.isRecording(event.callId) }?.let { line ->
+                        if (provider.stopCallRecording(event.callId)) line.stoppedRecording(event.callId)
+                    }
                     // Obi on calls, slice 2b: a booking call's steps are the booking caller's.
                     if (event.forBooking) booking?.handle(event) ?: VoiceReply.HangUp
                     else voice.assistant.handle(provider.id, event)
@@ -1088,6 +1093,16 @@ fun Application.mekaSync(
                             .onFailure { log.warn("transcript not settled: ${it::class.simpleName}") }
                         // "Don't keep": the recording was held only for Transcribe.
                         runCatching { voice.assistant.releaseUnkept(provider, event) }
+                        runCatching { provider.deleteRecording(rec) }
+                    }
+                }
+                // Recordings with both voices: a live call's recording kept beside its message, then deleted from the
+                // phone service (off the request; it waits for the message, written as the stream ends).
+                if (event is VoiceEvent.CallRecorded) event.recording?.let { rec ->
+                    val log = call.application.environment.log
+                    background {
+                        runCatching { voice.assistant.keepCallRecording(provider, event) }
+                            .onFailure { log.warn("call recording not kept: ${it::class.simpleName}") } // no identifiers
                         runCatching { provider.deleteRecording(rec) }
                     }
                 }
@@ -1600,6 +1615,8 @@ fun voiceFromEnv(
                     opStore.latestFieldOps(hh, EntityTypes.BOOKING_CALL)
                         .mapNotNull { (id, f) -> os.meka.core.domain.BookingCallRules.read(id, f.mapValues { it.value.value }) }
                 },
+                // Recordings with both voices: kept in the same private bucket as callers' messages.
+                recordsCalls = { recordings != null },
             ),
             GeminiLiveDial({ reader()?.key }),
         )
@@ -1757,7 +1774,18 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
             ticket, streamSid, live.dial, live.model, live.voice,
             toCaller = { out.trySend(it) },
             hangUp = { out.close() },
-            onLive = { live.line.markLive(ticket.callId); log.info("live call: Obi is talking to a caller") },
+            onLive = {
+                live.line.markLive(ticket.callId)
+                log.info("live call: Obi is talking to a caller")
+                // Recordings with both voices: from Obi's first word, each side on its own channel.
+                val provider = voice.providers[ticket.provider]
+                if (ticket.recorded && !ticket.booking && provider != null) Thread.ofVirtual().name("live-call-record").start {
+                    val started = runCatching {
+                        provider.startCallRecording(ticket.callId, voice.publicUrl.trimEnd('/') + VoiceStep.path(provider.id, VoiceStep.CALL_RECORDED))
+                    }.getOrDefault(false)
+                    if (started) live.line.markRecording(ticket.callId)
+                }
+            },
             onEnd = { end ->
                 live.line.ended(ticket.callId, end)
                 Thread.ofVirtual().name("live-call-end").start {

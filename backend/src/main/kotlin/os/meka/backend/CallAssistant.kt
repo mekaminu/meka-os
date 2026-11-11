@@ -18,6 +18,7 @@ import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.CallCreditReading
+import os.meka.core.domain.CallRecordingRules
 import os.meka.core.domain.CallIntroRules
 import os.meka.core.domain.IntroJudgement
 import os.meka.core.domain.IntroVerdict
@@ -114,6 +115,11 @@ sealed class VoiceEvent {
     data class BookingListenAnswered(override val callId: String, val digits: String?) : VoiceEvent()
     /** Slice 3c: his listening leg ended ([seconds] its length, from the phone service's final status). */
     data class BookingListenStatus(override val callId: String, val seconds: Long) : VoiceEvent()
+    /**
+     * Recordings with both voices: the phone service's recording of a live call ([callId]) is ready, or failed
+     * ([status]); [recording] names it, and the server deletes it from the phone service once it is kept.
+     */
+    data class CallRecorded(override val callId: String, val recording: String?, val status: String?) : VoiceEvent()
 
     /** Whether this step belongs to an outbound booking call (the [BookingCaller]'s, never the assistant's). */
     val forBooking: Boolean get() = this is BookingEnded || this is BookingStatus || this is BookingWhisper ||
@@ -212,6 +218,8 @@ object VoiceStep {
     /** Slice 3c: his listening leg: his key after the whisper, and the leg's final status. */
     const val BOOKING_LISTEN_ANSWERED = "booking-listen-answered"
     const val BOOKING_LISTEN_STATUS = "booking-listen-status"
+    /** Recordings with both voices: a live call's recording is ready. */
+    const val CALL_RECORDED = "call-recorded"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -246,6 +254,15 @@ interface VoiceProvider {
      * null when it can't be had. Never larger than [VoiceRecordingRules.MAX_BYTES].
      */
     fun fetchRecording(recording: String): ByteArray? = null
+
+    /**
+     * Recordings with both voices: starts recording the call [callId] now, each side on its own channel, its end
+     * reported to [statusUrl] ([VoiceStep.CALL_RECORDED]). Returns whether the phone service started it.
+     */
+    fun startCallRecording(callId: String, statusUrl: String): Boolean = false
+
+    /** Stops [callId]'s recording now (before a put-through to his mobile). Returns whether it is stopped. */
+    fun stopCallRecording(callId: String): Boolean = false
 }
 
 /**
@@ -599,6 +616,8 @@ class CallAssistant(
             is VoiceEvent.BookingWhisper, is VoiceEvent.BookingWhisperAnswered, is VoiceEvent.BookingTakenDialed,
             is VoiceEvent.BookingListenAnswered -> VoiceReply.HangUp
             is VoiceEvent.BookingListenStatus -> VoiceReply.Done
+            // Kept off the request ([keepCallRecording]).
+            is VoiceEvent.CallRecorded -> VoiceReply.Done
             is VoiceEvent.Transcribed -> {
                 // With Transcribe on, the words wait for it ([transcribeKept], off the request); Twilio's are its fallback.
                 if (!transcribesLater(event)) settle(hh, id, event.text)
@@ -926,6 +945,39 @@ class CallAssistant(
     }
 
     /**
+     * Recordings with both voices: keeps a live call's recording beside its message, as a caller's message is kept
+     * ([keepRecording]): the same key, so Play, Delete recording, Done and the 7-day sweep all cover it. The message is
+     * written when the stream ends, which may be just after the phone service says the recording is ready, so this waits
+     * up to [CallRecordingRules.WAIT_FOR_MESSAGE_MS] for it. Nothing is kept for a call that left no message, one Meka
+     * already dismissed, a failed recording, or with "Don't keep". Returns whether the recording is now kept; the caller
+     * deletes the phone service's copy either way.
+     */
+    fun keepCallRecording(provider: VoiceProvider, event: VoiceEvent.CallRecorded, sleep: (Long) -> Unit = Thread::sleep): Boolean {
+        val store = recordings ?: return false
+        val recording = event.recording ?: return false
+        if (!CallRecordingRules.completed(event.status)) return false
+        val hh = household() ?: return false
+        if (keepDays(hh) <= 0) return false
+        val id = CallAssistantRules.heldId(provider.id, event.callId)
+        var waited = 0L
+        while (!exists(hh, id) && waited < CallRecordingRules.WAIT_FOR_MESSAGE_MS) {
+            sleep(CallRecordingRules.WAIT_STEP_MS)
+            waited += CallRecordingRules.WAIT_STEP_MS
+        }
+        if (!exists(hh, id) || gone(hh, id)) return false
+        val key = VoiceRecordingRules.key(hh, id) ?: return false
+        if (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AUDIO) == FieldValue.Bool(true)) return true
+        val audio = provider.fetchRecording(recording)?.takeIf { it.isNotEmpty() && it.size <= VoiceRecordingRules.MAX_BYTES } ?: return false
+        store.put(key, audio)
+        if (gone(hh, id)) {
+            store.delete(key)
+            return false
+        }
+        if (write(hh, id, mapOf(HeldMessageFields.AUDIO to true.fv()))) runCatching { onWritten(hh) }
+        return true
+    }
+
+    /**
      * After [transcribeKept]: with "Don't keep" ([keepDays] 0), the recording held for Transcribe is deleted now (and
      * any transcript left beside it). Nothing happens for a kept one.
      */
@@ -1204,6 +1256,7 @@ class TwilioVoice(
             VoiceStep.BOOKING_TAKEN_DIALED -> VoiceEvent.BookingTakenDialed(call, form["DialCallDuration"]?.trim()?.toLongOrNull()?.coerceIn(0, 24 * 3600) ?: 0)
             VoiceStep.BOOKING_LISTEN_ANSWERED -> VoiceEvent.BookingListenAnswered(call, form["Digits"])
             VoiceStep.BOOKING_LISTEN_STATUS -> VoiceEvent.BookingListenStatus(call, form["CallDuration"]?.trim()?.toLongOrNull()?.coerceIn(0, 24 * 3600) ?: 0)
+            VoiceStep.CALL_RECORDED -> VoiceEvent.CallRecorded(call, form["RecordingSid"]?.trim()?.takeIf { it.isNotEmpty() }, form["RecordingStatus"]?.trim()?.take(20))
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -1305,6 +1358,34 @@ class TwilioVoice(
         return CallCreditReading(active, amount, balance?.get("currency")?.jsonPrimitive?.content)
     }
 
+    override fun startCallRecording(callId: String, statusUrl: String): Boolean {
+        if (!callSid.matches(callId)) return false
+        val sid = accountSid()?.trim()?.takeIf { accountSidPattern.matches(it) } ?: return false
+        val token = authToken()?.takeIf { it.isNotBlank() } ?: return false
+        val auth = Base64.getEncoder().encodeToString("$sid:$token".toByteArray(Charsets.UTF_8))
+        val form = linkedMapOf(
+            "RecordingChannels" to CallRecordingRules.CHANNELS, "RecordingTrack" to CallRecordingRules.TRACK,
+            "RecordingStatusCallback" to statusUrl, "RecordingStatusCallbackMethod" to "POST",
+            "RecordingStatusCallbackEvent" to "completed absent",
+        )
+        val r = runCatching { post("https://api.twilio.com/2010-04-01/Accounts/$sid/Calls/$callId/Recordings.json", form, mapOf("Authorization" to "Basic $auth")) }
+            .getOrElse { System.err.println("call recording: couldn't reach the phone service (${it::class.simpleName})"); return false }
+        if (r.status !in 200..299) { System.err.println("call recording: not started (${r.status})"); return false }
+        return true
+    }
+
+    override fun stopCallRecording(callId: String): Boolean {
+        if (!callSid.matches(callId)) return false
+        val sid = accountSid()?.trim()?.takeIf { accountSidPattern.matches(it) } ?: return false
+        val token = authToken()?.takeIf { it.isNotBlank() } ?: return false
+        val auth = Base64.getEncoder().encodeToString("$sid:$token".toByteArray(Charsets.UTF_8))
+        val r = runCatching {
+            post("https://api.twilio.com/2010-04-01/Accounts/$sid/Calls/$callId/Recordings/Twilio.CURRENT.json", mapOf("Status" to "stopped"), mapOf("Authorization" to "Basic $auth"))
+        }.getOrElse { return false }
+        // 404: nothing recording any more (the call ended, or it was never started).
+        return r.status in 200..299 || r.status == 404
+    }
+
     override fun fetchRecording(recording: String): ByteArray? {
         if (!recordingSid.matches(recording)) return null
         val sid = accountSid()?.trim()?.takeIf { accountSidPattern.matches(it) } ?: return null
@@ -1331,6 +1412,7 @@ class TwilioVoice(
         /** Those Twilio also offers on Polly's generative engine (`Polly.<Name>-Generative`). */
         val GENERATIVE_VOICES = setOf("Amy")
         private val recordingSid = Regex("^RE[0-9a-fA-F]{32}$")
+        private val callSid = Regex("^CA[0-9a-fA-F]{32}$")
         private val accountSidPattern = Regex("^AC[0-9a-fA-F]{32}$")
 
         fun jdkGet(url: String, headers: Map<String, String>): HttpFetched {

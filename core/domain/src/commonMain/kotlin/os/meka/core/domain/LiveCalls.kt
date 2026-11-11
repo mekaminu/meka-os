@@ -114,11 +114,13 @@ object LiveCallRules {
     fun instruction(
         atWork: Boolean, knows: Set<Knows>, firstName: String?, workPlace: String?, workEmail: String?,
         callbackTimes: List<String> = emptyList(),
+        /** The call is being recorded ([CallRecordingRules]): Obi says so in his opening. */
+        recorded: Boolean = false,
     ): String = buildString {
         val name = firstName?.trim()?.takeIf { Knows.NAME in knows && it.isNotEmpty() && it.length <= 40 }
         val who = name ?: "the person you work for"
         appendLine("You are Obi, an AI assistant, answering a phone call for ${name ?: "the person you assist"}. Speak British English only, in short natural sentences (one or two at a time), warm and calm.")
-        appendLine("Start by saying exactly: \"${ObiCallRules.OPENING}\"" + if (atWork && Knows.BUSY in knows) " Then say $who is at work and can't take the call right now, and ask who's calling and what it's about." else " Then say $who can't take the call right now, and ask who's calling and what it's about.")
+        appendLine("Start by saying exactly: \"${CallRecordingRules.opening(recorded)}\"" + if (atWork && Knows.BUSY in knows) " Then say $who is at work and can't take the call right now, and ask who's calling and what it's about." else " Then say $who can't take the call right now, and ask who's calling and what it's about.")
         appendLine("Your jobs: find out who is calling and what it's about, take their message, and ask whether it is urgent. When you have those (or they won't say), call $TAKE_MESSAGE once, then thank them, say goodbye in one sentence and call $END_CALL.")
         appendLine("If they ask whether you are an AI or a robot, say yes, you are an AI assistant.")
         appendLine("Never offer to put them through, transfer or connect them yourself; do it only when the $TAKE_MESSAGE answer tells you to.")

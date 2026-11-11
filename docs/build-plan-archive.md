@@ -5487,6 +5487,12 @@ The item's board text when it was closed:
 - Apps: the call card shows the They rang back line (accent caption) under the result on the Fold (BookingCallCards.kt) and the Mac (WorkingOnSheet.swift).
 - Tests: BookingCallbackRulesTest, LiveCallRulesTest (the message line), LiveCallsTest.aBusinessRingingBackAboutABookingTalksToObiWhoKnowsIt (CI). No migration.
 
+### Obi on calls: recordings with both voices, slice 1 · live calls (2026-11-11)
+- Core `CallRecordingRules` (CallRecording.kt, pure): `records(keepDays, hasStore)` (only with Keep callers' recordings on and a bucket), `opening(recorded)` (Obi's opening then "This call is recorded."), `completed(status)`, the phone service's `dual` channels and `both` tracks, the 20 s wait for the message. `LiveCallRules.instruction(…, recorded)` makes Obi say it; `CallsSettingsRules.RECORDINGS_NOTE` says live calls are recorded with both voices and Obi tells callers (both apps show it under Recordings).
+- Server: `LiveCallLine` takes `recordsCalls` (the bucket is configured) and marks the ticket `recorded` when the call may be kept; once Google opens Obi's side (`onLive`) the stream route asks Twilio to record the call (`TwilioVoice.startCallRecording`: `Calls/<sid>/Recordings.json`, RecordingChannels dual, RecordingTrack both, status to the new step `call-recorded`); the live stream's end step stops it (`stopCallRecording`, `Recordings/Twilio.CURRENT`) before any put-through, so his own conversation is never recorded. `VoiceEvent.CallRecorded` → `CallAssistant.keepCallRecording` (off the request): waits up to 20 s for the live call's message, fetches the MP3 and keeps it under the message's own key, so ▶ Play, Delete recording, Done and the 7-day sweep cover it; nothing kept for a failed recording, Don't keep, a call that left no message or one already dismissed; Twilio's copy is deleted either way.
+- Tests: CallRecordingRulesTest (core), LiveCallRecordingTest (backend, CI). No migration. Twilio's recording costs about $0.0025 a minute on the existing account (deleted from Twilio once fetched).
+- Left: booking calls recorded the same way (their result card's Listen), then the player showing who's speaking along the words.
+
 
 ## Found and fixing, week 3 (walk-through 2026-11-08)
 

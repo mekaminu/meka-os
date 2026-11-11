@@ -20,12 +20,14 @@ import os.meka.core.domain.BookingDialRules
 import os.meka.core.domain.BookingLiveRules
 import os.meka.core.domain.BookingWords
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.CallRecordingRules
 import os.meka.core.domain.CallsSettingsRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.FreeSlot
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LiveModeRules
+import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
@@ -194,6 +196,8 @@ data class LiveCallTicket(
     /** A business ringing back about this call card ([BookingCallbackRules.match]): its id and business; null = not one. */
     val callbackFor: String? = null,
     val callbackBusiness: String? = null,
+    /** Recordings with both voices: the phone service records this call once Obi is live ([CallRecordingRules.records]). */
+    val recorded: Boolean = false,
 ) {
     val booking: Boolean get() = bookingId != null
     /** How long the ticket may wait for its stream: a booking call rings first. */
@@ -231,7 +235,11 @@ class LiveCallLine(
     private val calendar: LocalCalendar = LondonCalendar,
     /** The household's call cards, so a business ringing back is known ([BookingCallbackRules.match]). */
     private val bookings: (String) -> List<BookingCall> = { emptyList() },
+    /** Recordings with both voices: whether the server has somewhere to keep a call's recording. */
+    private val recordsCalls: () -> Boolean = { false },
 ) {
+    /** Calls the phone service is recording, by call id, so the end step stops it before a put-through. */
+    private val recording = ConcurrentHashMap<String, Long>()
     private val tickets = ConcurrentHashMap<String, LiveCallTicket>()
     /** Calls that went live, by call id, until a few minutes after (the stream's end step asks). */
     private val wentLive = ConcurrentHashMap<String, Long>()
@@ -268,11 +276,13 @@ class LiveCallLine(
         val slots = if (CallsSettingsRules.offersSlots(slotsOn, knows)) callbackSlots(hh, now) else emptyList()
         val labels = slots.map { LiveCallRules.callbackLabel(it, now, calendar) }
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        val instruction = LiveCallRules.instruction(atWork, knows, first, null, null, labels) +
+        val keepDays = VoiceRecordingRules.keepDays((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.RECORDING_DAYS) as? FieldValue.Int64)?.value)
+        val recorded = CallRecordingRules.records(keepDays, runCatching { recordsCalls() }.getOrDefault(false))
+        val instruction = LiveCallRules.instruction(atWork, knows, first, null, null, labels, recorded = recorded) +
             (card?.let { "\n" + BookingCallbackRules.instruction(it, first, now, calendar).trimEnd() } ?: "")
         tickets[token] = LiveCallTicket(
             token, hh, provider, callId, from, atWork, instruction, now, canPutThrough, slots,
-            callbackFor = card?.id, callbackBusiness = card?.business,
+            callbackFor = card?.id, callbackBusiness = card?.business, recorded = recorded,
         )
         token
     }.getOrNull()
@@ -329,6 +339,18 @@ class LiveCallLine(
     fun markLive(callId: String) { wentLive[callId] = nowMs() }
 
     fun wasLive(callId: String): Boolean = wentLive.containsKey(callId)
+
+    /** The phone service started recording [callId] (once Obi went live). */
+    fun markRecording(callId: String) {
+        val now = nowMs()
+        recording.entries.removeIf { now - it.value > KEEP_MS }
+        recording[callId] = now
+    }
+
+    /** Whether [callId]'s recording was started (and not yet stopped by [stoppedRecording]). */
+    fun isRecording(callId: String): Boolean = recording.containsKey(callId)
+
+    fun stoppedRecording(callId: String) { recording.remove(callId) }
 
     /** Kept as soon as the session ends (before the phone side is told), so the end step sees it. */
     fun ended(callId: String, end: LiveCallEnd) { if (end.live) outcomes[callId] = nowMs() to end }
