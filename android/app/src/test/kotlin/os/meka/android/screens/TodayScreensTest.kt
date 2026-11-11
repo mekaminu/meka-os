@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import os.meka.core.domain.DayListRules
 import os.meka.core.domain.EveningCardRules
 import os.meka.android.today.EVENING_CARD_TAG
@@ -114,6 +115,28 @@ class TodayScreensTest {
         event("ev6", COMING_TITLES[2], at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
     }
 
+    /**
+     * Today regression 3's re-shoot (Meka 2026-11-11 06:40: "don't like the oval outline and also the black box"): a day
+     * whose Schedule card holds every kind of row: an all-day event, the earlier fold (an assembly in work hours, a
+     * clash), work as one dim line, the commute home, two evening events from two calendars, Wed 21 Oct at 17:15.
+     */
+    private fun seedSchedule(store: ReplicaStore) {
+        var n = 0
+        val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "sched${n++}" }
+        fun event(id: String, title: String, start: Long, end: Long, calendar: String, place: String? = null, allDay: Boolean = false) =
+            mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
+                put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
+                put(EventFields.CALENDAR, calendar.fv())
+                if (allDay) put(EventFields.ALL_DAY, true.fv())
+                place?.let { put(EventFields.LOCATION, it.fv()) }
+            })
+        event("sd1", SCHEDULE_TITLES[0], utcMidnight(21), utcMidnight(22), "Kids", allDay = true)
+        event("sd2", SCHEDULE_TITLES[1], at(21, 14, 30), at(21, 15, 15), "Kids", place = "Oakfield School")
+        event("sd3", SCHEDULE_TITLES[2], at(21, 18, 30), at(21, 19, 30), "Kids", place = "Oakfield Rec")
+        event("sd4", SCHEDULE_TITLES[3], at(21, 20, 0), at(21, 21, 30), "Personal")
+    }
+
     private fun core(store: ReplicaStore = InMemoryReplicaStore()): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = store, transport = null,
         secureRandom = Random(11), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
@@ -129,6 +152,8 @@ class TodayScreensTest {
         val LONG_TITLES = listOf("Plan Saturday's football run with Alex")
         /** The Calendar screen's coming days (its ev4–ev6), seeded into the full day's shots. */
         val COMING_TITLES = listOf("Quarterly planning with the design and engineering leads", "Inset day", "Football training")
+        /** The Schedule card's day ([seedSchedule]). */
+        val SCHEDULE_TITLES = listOf("Book fair week", "Class assembly", "Training", "Dinner with Sam")
     }
 
     /** The tallest Up next / now card on screen in dp, or null when there is none. */
@@ -138,13 +163,14 @@ class TodayScreensTest {
             .maxOfOrNull { it.boundsInRoot.height / density }
     }
 
-    private enum class Fill { EMPTY, ONE, MANY, FASTING }
+    private enum class Fill { EMPTY, ONE, MANY, FASTING, SCHEDULE }
 
     /** Today's open tasks in each fill (the done one and yesterday's are checked for nonsense, not for their cut). */
     private fun titles(fill: Fill): List<String> = when (fill) {
         Fill.EMPTY -> emptyList()
         Fill.ONE, Fill.FASTING -> listOf("Book the MOT")
         Fill.MANY -> listOf("Book the MOT", "Fix the gate latch", "Pay the window cleaner", "Plan Saturday's football run with Alex")
+        Fill.SCHEDULE -> emptyList()
     }
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
@@ -297,6 +323,7 @@ class TodayScreensTest {
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
         if (fill == Fill.MANY) seedComingDays(store)
+        if (fill == Fill.SCHEDULE) seedSchedule(store)
         val core = core(store)
         context.useCoreForScreens(core)
         runBlocking {
@@ -323,6 +350,11 @@ class TodayScreensTest {
                     core.addHabit("Run", 3, HabitTiming.EVENING, 40, null)
                     done?.let { core.complete(it) }
                 }
+                // An office day, 09:00–17:30 Mon–Fri, 50 min each way: Work's one dim line and the commute home.
+                Fill.SCHEDULE -> {
+                    core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
+                    core.setCommute(50, 50)
+                }
             }
             core.tick()
         }
@@ -339,6 +371,37 @@ class TodayScreensTest {
         compose.waitForIdle()
         return core
     }
+
+    /**
+     * Today regression 3's re-shoot, for the beside check with `TodayNew.dc.html` (docs/screens/today/): the Schedule
+     * card with every kind of row, on the closed Fold (scrolled to it) and the open one (the right column), Dark and
+     * Light. One card, no outline round Work, no black block behind an event: every event row sits on the card's own
+     * surface, and Work and the commute are one line each.
+     */
+    private fun shootSchedule(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
+        val core = show(Fill.SCHEDULE, theme)
+        val label = hasText(EveningCardRules.SCHEDULE.uppercase(), substring = true)
+        if (name.startsWith("cover")) {
+            compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(label)
+            settle()
+        }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
+        ScreenShots.assertSensible(compose, name)
+        if (core.today.value.timeline.head == null) fail("$name: the day has no schedule")
+        ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[2])
+        ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
+        val lines = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_BACKGROUND_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        if (lines.isEmpty()) fail("$name: Work isn't one dim line in the Schedule card")
+    }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverSchedule() = shootSchedule("cover-dark-schedule")
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverScheduleLight() = shootSchedule("cover-light-schedule", ThemeChoice.LIGHT)
+
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun innerSchedule() = shootSchedule("inner-dark-schedule")
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverEmpty() = shoot("cover-dark-empty", Fill.EMPTY)
