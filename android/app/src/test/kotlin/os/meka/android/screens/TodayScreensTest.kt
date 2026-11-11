@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import os.meka.core.domain.DayListRules
 import os.meka.core.domain.EveningCardRules
 import os.meka.android.today.EVENING_CARD_TAG
@@ -393,6 +395,18 @@ class TodayScreensTest {
         if (name.startsWith("cover")) ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
         val lines = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_BACKGROUND_TAG, useUnmergedTree = true).fetchSemanticsNodes()
         if (lines.isEmpty()) fail("$name: Work isn't one dim line in the Schedule card")
+        // The re-shoot's finding: the list's 8 dp item gap showed the screen's black between the card's rows. Between two
+        // rows the card's surface carries on: a point in the gap (clear of the hairline) isn't the screen's background.
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val rows = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_SEGMENT_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.boundsInRoot }.filter { it.top >= 0f && it.bottom <= shot.height }.sortedBy { it.top }
+        if (rows.size < 3) fail("$name: only ${rows.size} Schedule rows on screen")
+        rows.zipWithNext().filter { (a, b) -> b.top - a.bottom >= 4f && kotlin.math.abs(a.left - b.left) < 1f }.forEach { (a, b) ->
+            val y = (a.bottom + (b.top - a.bottom) / 4f).toInt()
+            val inGap = shot.getPixel((a.left + 4f).toInt(), y)
+            val screen = shot.getPixel(2, y)
+            if (inGap == screen) fail("$name: the screen's background shows between two Schedule rows at y=$y px")
+        }
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

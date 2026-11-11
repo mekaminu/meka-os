@@ -564,7 +564,8 @@ struct AllDayRow: View {
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
-                    .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
+                    // In Today's Schedule card the words alone (Meka 2026-11-11: "don't like the oval outline").
+                    .overlay(Capsule().strokeBorder(card ? Color.clear : palette.hairline, lineWidth: 1))
                     .help("Adds it to Today as a task and takes the entry off your day (your calendar is unchanged)")
             }
         }

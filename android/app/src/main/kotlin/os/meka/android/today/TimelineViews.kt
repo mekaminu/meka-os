@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
@@ -118,17 +119,34 @@ internal fun Modifier.scheduleSegment(edge: CardEdge): Modifier {
         bottomStart = if (edge.roundsBottom) r else 0.dp, bottomEnd = if (edge.roundsBottom) r else 0.dp,
     )
     val hair = Meka.colors.hairline
+    val surface = Meka.colors.surface
     val inset = SCHEDULE_INSET
-    return this.fillMaxWidth().clip(shape).background(Meka.colors.surface)
+    val gap = SCHEDULE_ROW_GAP
+    // The re-shoot beside TodayNew (2026-11-11): each row is its own item in Today's list, which spaces its items 8 dp
+    // apart, so the screen's black showed between the rows as stripes and the card read as a stack of black-edged
+    // boxes. A row that isn't the card's last fills the gap under it with the card's surface (drawn before the clip,
+    // so it reaches past the row) and draws the hairline in the gap's middle: one card, rows parted by a hairline.
+    return this.fillMaxWidth()
         .drawBehind {
             if (!edge.roundsBottom) {
+                val g = gap.toPx()
+                drawRect(surface, Offset(0f, size.height - 1f), Size(size.width, g + 2f))
                 val x = inset.toPx()
-                drawLine(hair, Offset(x, size.height - 0.5f), Offset(size.width - x, size.height - 0.5f), strokeWidth = 1f)
+                val y = size.height + g / 2f
+                drawLine(hair, Offset(x, y), Offset(size.width - x, y), strokeWidth = 1f)
             }
         }
+        .clip(shape).background(surface)
+        .testTag(SCHEDULE_SEGMENT_TAG)
         .padding(horizontal = inset)
         .padding(top = if (edge.roundsTop) MekaSpace.xxs else 0.dp, bottom = if (edge.roundsBottom) MekaSpace.xxs else 0.dp)
 }
+
+/** The space Today's lists put between items ([Arrangement.spacedBy] in TodayRoute); the card's rows bridge it. */
+internal val SCHEDULE_ROW_GAP = MekaSpace.xs
+
+/** Each row of Today's Schedule card (the screen tests check the card is one surface between them). */
+internal const val SCHEDULE_SEGMENT_TAG = "schedule-segment"
 
 /** The Schedule card's side inset (the mockup's 14 px). */
 internal val SCHEDULE_INSET = 14.dp
@@ -388,11 +406,13 @@ internal fun AllDayRow(
                 item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
             }
             if (item.todo && handlers != null) {
-                // Quiet: no fill, a hairline outline and secondary text, so it doesn't compete with the titles.
+                // Quiet: no fill, a hairline outline and secondary text, so it doesn't compete with the titles. In
+                // Today's Schedule card no outline (Meka 2026-11-11: "don't like the oval outline"): the words alone.
+                val outlined = !LocalScheduleCard.current
                 Text(
                     "Make it a task", style = MekaType.caption, color = Meka.colors.textSecondary,
                     modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
-                        .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
+                        .then(if (outlined) Modifier.border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill)) else Modifier)
                         .clickable(role = Role.Button) { haptics.light(); handlers.makeTask(item.event) }
                         .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                 )
