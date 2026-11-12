@@ -185,4 +185,23 @@ class HabitsScreensTest {
         assertEquals(true, h.avoid)
         assertEquals("Night time", os.meka.core.domain.HabitBoardRules.listName(h))
     }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun aHabitsTapShowsItsFourWeeksAndTheReminderTurnsOnAndOff() {
+        // Slice 3: the unfolded row shows the history and the reminder; Every day sets the list's time, Off clears it.
+        val core = prepared(true, ThemeChoice.DARK)
+        show(core)
+        val teeth = ids.getValue("Brush teeth")
+        compose.onNodeWithTag("habits-row-$teeth").performClick(); settle()
+        compose.onNodeWithTag("habits-row-history-$teeth").assertExists()
+        ScreenShots.assertShows(compose, "history", "Done 7 of 7 days since you added it")
+        ScreenShots.assertShows(compose, "history", "Best run 7 days")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("habits", "cover-dark-open"))
+        ScreenShots.assertNoBrokenWords(compose, "history")
+        compose.onNodeWithTag("habits-row-remind-on-$teeth").performClick(); settle()
+        awaitCore("the reminder on") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == 7 * 60 + 30 }
+        ScreenShots.assertShows(compose, "history", "07:30")
+        compose.onNodeWithTag("habits-row-remind-off-$teeth").performClick(); settle()
+        awaitCore("the reminder off") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == null }
+    }
 }

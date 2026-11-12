@@ -71,10 +71,12 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
+import os.meka.android.work.TimeStepper
 import os.meka.core.domain.GoalRules
 import os.meka.core.domain.HabitBoardGroup
 import os.meka.core.domain.HabitBoardRow
 import os.meka.core.domain.HabitBoardRules
+import os.meka.core.domain.HabitHistory
 import os.meka.core.domain.HabitMark
 import os.meka.core.facade.MekaCore
 
@@ -203,6 +205,11 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                     onMark = mark,
                     onAvoid = { r, avoid -> haptics.tick(); scope.launch { runCatching { core.setHabitAvoid(r.id, avoid) } } },
                     onList = { r, l -> haptics.tick(); scope.launch { runCatching { core.setHabitList(r.id, l) } } },
+                    onRemind = { r, minute ->
+                        haptics.tick()
+                        toast = HabitBoardRules.reminderLine(minute)
+                        scope.launch { runCatching { core.setHabitReminder(r.id, minute) } }
+                    },
                     onRemove = { r ->
                         haptics.tick()
                         if (removing != r.id) removing = r.id else {
@@ -231,6 +238,7 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             var into by rememberSaveable(a) { mutableStateOf(a.list) }
             var own by rememberSaveable(a) { mutableStateOf("") }
             var perWeek by rememberSaveable(a) { mutableIntStateOf(7) }
+            var remind by rememberSaveable(a) { mutableStateOf<Int?>(null) }
             var problem by remember(a) { mutableStateOf<String?>(null) }
             if (a.newList) Field("Name the list, like Weekend or Gym days", value = own, onValue = { own = it }, description = "List name", keep = true) { }
             Field(if (avoid) "Like No biscuits" else "Like Drink water", value = name, onValue = { name = it }, description = "Habit name", keep = true) { }
@@ -248,6 +256,15 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 GoalRules.TARGET_CHOICES.forEach { c -> MoneyChip(c.label, on = c.perWeek == perWeek, tag = "habits-add-days-${c.perWeek}") { haptics.tick(); perWeek = c.perWeek } }
             }
+            Text("Reminder", style = MekaType.caption, color = Meka.colors.textSecondary)
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                MoneyChip("Off", on = remind == null, tag = "habits-add-remind-off") { haptics.tick(); remind = null }
+                MoneyChip("Every day", on = remind != null, tag = "habits-add-remind-on") {
+                    haptics.tick()
+                    if (remind == null) remind = HabitBoardRules.defaultReminder(if (a.newList) own else into)
+                }
+            }
+            remind?.let { m -> TimeStepper("Remind me at", m, Modifier.testTag("habits-add-remind-time")) { remind = it } }
             Text("Add habit", style = MekaType.metaStrong, color = Meka.colors.onAccent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                     .clickable(role = Role.Button) {
@@ -256,7 +273,7 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                             target == null -> { haptics.reject(); problem = "Name the list" }
                             name.isBlank() -> { haptics.reject(); problem = "Name the habit" }
                             else -> scope.launch {
-                                val made = runCatching { core.addHabitToList(name, avoid, target, perWeek) }
+                                val made = runCatching { core.addHabitToList(name, avoid, target, perWeek, remind) }
                                 if (made.isSuccess) {
                                     haptics.light(); adding = null; list = if (a.newList) target else list
                                     toast = "Added ${name.trim()}"
@@ -276,7 +293,7 @@ private fun defaultList(list: String): String = if (list == HabitBoardRules.ALL)
 private fun GroupCard(
     g: HabitBoardGroup, open: String?, removing: String?, lists: List<String>, modifier: Modifier,
     onOpen: (String) -> Unit, onMark: (HabitBoardRow) -> Unit, onAvoid: (HabitBoardRow, Boolean) -> Unit,
-    onList: (HabitBoardRow, String) -> Unit, onRemove: (HabitBoardRow) -> Unit,
+    onList: (HabitBoardRow, String) -> Unit, onRemind: (HabitBoardRow, Int?) -> Unit, onRemove: (HabitBoardRow) -> Unit,
 ) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
@@ -296,6 +313,15 @@ private fun GroupCard(
             HabitRow(r, onOpen = { onOpen(r.id) }, onMark = { onMark(r) })
             AnimatedVisibility(open == r.id, enter = unfold(), exit = fold()) {
                 Column(Modifier.padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    HistoryGrid(r.history, r.avoid, Modifier.testTag("habits-row-history-${r.id}"))
+                    Text("Reminder", style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        MoneyChip("Off", on = r.remindAt == null, tag = "habits-row-remind-off-${r.id}") { if (r.remindAt != null) onRemind(r, null) }
+                        MoneyChip("Every day", on = r.remindAt != null, tag = "habits-row-remind-on-${r.id}") {
+                            if (r.remindAt == null) onRemind(r, HabitBoardRules.defaultReminder(r.list))
+                        }
+                    }
+                    r.remindAt?.let { m -> TimeStepper("Remind me at", m, Modifier.testTag("habits-row-remind-time-${r.id}")) { onRemind(r, it) } }
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         MoneyChip("Do", on = !r.avoid, tag = "habits-row-do-${r.id}") { onAvoid(r, false) }
                         MoneyChip("Avoid", on = r.avoid, tag = "habits-row-avoid-${r.id}") { onAvoid(r, true) }
@@ -308,6 +334,46 @@ private fun GroupCard(
                         style = MekaType.itemMeta, color = if (asking) Meka.colors.accent else Meka.colors.textSecondary,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onRemove(r) }.minTouch()
                             .testTag("habits-row-remove-${r.id}"))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Slice 3: a habit's four weeks, Monday to Sunday under M T W T F S S: a green square done (kept off, for Avoid), red
+ * missed, grey not marked, faint before it was added or still to come; today outlined. Then "Done 18 of the last 28
+ * days · 2 missed" and "Best run 12 days".
+ */
+@Composable
+private fun HistoryGrid(h: HabitHistory, avoid: Boolean, modifier: Modifier) {
+    if (h.weeks.isEmpty()) return
+    val green = Meka.colors.success
+    val red = Meka.colors.critical
+    Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(h.doneLine, style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            h.bestLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            HabitBoardRules.HISTORY_HEADS.forEach { d ->
+                Text(d, style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.width(22.dp))
+            }
+        }
+        h.weeks.forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                week.forEach { c ->
+                    val fill = when (c.mark) {
+                        HabitMark.DONE -> green.copy(alpha = 0.7f)
+                        HabitMark.MISSED -> red.copy(alpha = 0.7f)
+                        HabitMark.CLEAR -> Meka.colors.surfaceRaised
+                        null -> Meka.colors.surfaceRaised.copy(alpha = 0.35f)
+                    }
+                    Box(
+                        Modifier.size(22.dp).clip(RoundedCornerShape(5.dp)).background(fill)
+                            .let { if (c.isToday) it.border(1.dp, Meka.colors.accent, RoundedCornerShape(5.dp)) else it }
+                            .semantics { contentDescription = c.label },
+                    )
                 }
             }
         }

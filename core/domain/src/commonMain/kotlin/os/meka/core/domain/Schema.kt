@@ -417,6 +417,8 @@ object HabitFields {
     const val KIND = "kind"
     /** Habits rebuilt (additive, LWW): a list of his own ("Weekend"); absent for Morning, All day or Night time (from [PREFERRED_TIMING]). */
     const val LIST = "list"
+    /** Habits screen, slice 3 (additive, LWW): the daily reminder, minutes after local midnight (0–1439); absent or Null for none. */
+    const val REMIND_AT = "remindAt"
 }
 
 /** One habit on one local day. Id `<habitId>.d<epochDay>` so two devices ticking the same day write one entity. */

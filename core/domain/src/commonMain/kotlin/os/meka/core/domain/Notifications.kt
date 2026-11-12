@@ -283,6 +283,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * "Step 1 of 4: Show the week ahead of bills · Have a look". Opens Routines with the Running now card.
      */
     ROUTINES("Routines starting at their time", NoticeTier.HEADS_UP),
+    /** Habits screen, slice 3: a habit's own reminder at its time, while the day is unmarked ([HabitBoardRules.reminderNotices]). */
+    HABITS("Habit reminders", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jordan · due today"). */
@@ -757,6 +759,7 @@ object Governor {
         NoticeSource.PROTECTED_MAIL -> "work mail that waited"
         NoticeSource.PRESSURE -> "tomorrow stacking up"
         NoticeSource.ROUTINES -> if (n == 1) "a routine started" else "$n routines started"
+        NoticeSource.HABITS -> plural(n, "habit") + " to mark"
         NoticeSource.REPLIED -> if (n == 1) "a reply you were waiting for" else "$n replies you were waiting for"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
@@ -1029,6 +1032,8 @@ object NoticeSources {
         out += LeaveRules.notices(school, leave, leaveWork, nowMs, cal)
         out += AppointmentRules.notices(appointments, nowMs, cal)
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
+        // Habits screen, slice 3: each habit's own reminder while today is unmarked.
+        out += HabitBoardRules.reminderNotices(goals, nowMs, cal)
         if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
         out += BinRules.notices(bins, nowMs, cal, holidays, binRemindMinute)
         out += GiftRules.notices(occasions, nowMs, cal)

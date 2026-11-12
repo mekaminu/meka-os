@@ -67,6 +67,12 @@ data class HabitItem(
     val recent: List<HabitMark> = emptyList(),
     /** Habits rebuilt: the local epoch day it was added. */
     val createdDay: Long = 0,
+    /** Habits screen, slice 3: the daily reminder, minutes after local midnight; null for none. */
+    val remindAt: Int? = null,
+    /** Habits screen, slice 3: the last [HabitBoardRules.HISTORY_DAYS] days, oldest first, ending on the view's today. */
+    val history: List<HabitMark> = emptyList(),
+    /** Habits screen, slice 3: the longest run of days in a row it was done (kept off, for Avoid), ever. */
+    val bestRun: Int = 0,
 ) {
     /** "Hevy"; null without a link. */
     val appName: String? get() = appLink?.let { SessionRules.appName(it) }
@@ -529,6 +535,13 @@ class Goals(
             changes[HabitFields.LIST] = FieldValue.Null
         } else changes[HabitFields.LIST] = name.fv()
         replica.commitLocal(EntityTypes.HABIT, id, changes)
+    }
+
+    /** Habits screen, slice 3: the daily reminder at [minute] after local midnight (0–1439); null turns it off. */
+    fun setHabitReminder(id: String, minute: Int?) {
+        requireHabit(id)
+        if (minute != null && minute !in 0 until 24 * 60) throw ValidationException("Pick a time of day")
+        replica.commitLocal(EntityTypes.HABIT, id, mapOf(HabitFields.REMIND_AT to (minute?.fv() ?: FieldValue.Null)))
     }
 
     /** Gym: MEKA books (or stops booking) this habit's sessions into the week. */
@@ -1021,6 +1034,16 @@ class Goals(
                     }
                 },
                 createdDay = createdDay,
+                remindAt = s[HabitFields.REMIND_AT].longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 },
+                history = (HabitBoardRules.HISTORY_DAYS - 1 downTo 0).map { back ->
+                    val d = today - back
+                    when {
+                        d in days -> HabitMark.DONE
+                        d in missed[id].orEmpty() -> HabitMark.MISSED
+                        else -> HabitMark.CLEAR
+                    }
+                },
+                bestRun = HabitBoardRules.bestRun(days.filter { it <= today }),
             )
         }.sortedWith(
             compareBy<HabitItem> { paceOrder(it.pace) }

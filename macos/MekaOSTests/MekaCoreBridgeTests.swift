@@ -4616,8 +4616,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         let empty = core.habitBoard(view: core.goalsView.value, selected: 6, list: HabitBoardRules.shared.ALL)
         XCTAssertEqual(empty.doneLine, "No habits yet")
         XCTAssertTrue(empty.empty)
-        let biscuits = try await core.addHabitToList(title: "No biscuits", avoid: true, list: "All day", perWeek: 7)
-        _ = try await core.addHabitToList(title: "Long walk", avoid: false, list: "Weekend", perWeek: 2)
+        let biscuits = try await core.addHabitToList(title: "No biscuits", avoid: true, list: "All day", perWeek: 7, remindAt: nil)
+        _ = try await core.addHabitToList(title: "Long walk", avoid: false, list: "Weekend", perWeek: 2, remindAt: KotlinInt(int: 540))
         let today = core.goalsView.value.today
         _ = try await core.setHabitMark(id: biscuits, day: today, mark: HabitMark.clear.next())
         let b = core.habitBoard(view: core.goalsView.value, selected: 6, list: HabitBoardRules.shared.ALL)
@@ -4635,5 +4635,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         let drawn = core.habitBoard(view: shown, selected: 6, list: "All day")
         XCTAssertEqual(drawn.groups.first?.rows.first?.mark.name, HabitMark.missed.name)
         XCTAssertEqual(HabitBoardRules.shared.cleanList(raw: "  night TIME "), HabitBoardRules.shared.NIGHT)
+        // Slice 3: the reminder set on + Add reaches the row, Off clears it, and the four weeks are there.
+        let walk = try XCTUnwrap(b.groups.last?.rows.first)
+        XCTAssertEqual(walk.remindAt?.intValue, 540)
+        XCTAssertEqual(walk.reminderLine, "Reminder 09:00")
+        XCTAssertEqual(row.reminderLine, HabitBoardRules.shared.NO_REMINDER)
+        XCTAssertEqual(row.history.weeks.count, 4)
+        XCTAssertEqual(row.history.weeks.first?.count, 7)
+        XCTAssertEqual(row.history.doneLine, "Added today · its days build up here")
+        _ = try await core.setHabitReminder(id: walk.id, minute: nil)
+        let off = core.habitBoard(view: core.goalsView.value, selected: 6, list: "Weekend")
+        XCTAssertNil(off.groups.first?.rows.first?.remindAt)
+        XCTAssertEqual(NoticeSource.habits.label, "Habit reminders")
     }
 }

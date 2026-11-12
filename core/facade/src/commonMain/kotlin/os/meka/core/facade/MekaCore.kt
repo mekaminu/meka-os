@@ -6689,20 +6689,23 @@ class MekaCore(
 
     /**
      * + Add on the Habits screen: [title], Do or [avoid], the [list] it sits in (Morning, All day, Night time or his
-     * own) and how many days a week. Returns its id.
+     * own), how many days a week and an optional daily reminder ([remindAt], minutes after midnight). Returns its id.
      */
-    suspend fun addHabitToList(title: String, avoid: Boolean, list: String, perWeek: Int = 7): String = onCore {
+    suspend fun addHabitToList(title: String, avoid: Boolean, list: String, perWeek: Int = 7, remindAt: Int? = null): String = onCore {
         val name = os.meka.core.domain.HabitBoardRules.cleanList(list) ?: os.meka.core.domain.HabitBoardRules.ALL_DAY
         val timing = os.meka.core.domain.HabitBoardRules.timingOf(name) ?: HabitTiming.ANYTIME
         val id = goals.addHabit(title, perWeek, timing, os.meka.core.domain.GoalRules.DEFAULT_MINUTES, null)
         if (avoid) goals.setHabitAvoid(id, true)
         if (os.meka.core.domain.HabitBoardRules.timingOf(name) == null) goals.setHabitList(id, name)
+        if (remindAt != null) goals.setHabitReminder(id, remindAt)
         id
     }
     /** The circle on the Habits screen: [day] (one of the last seven) marked done, missed or clear. */
     suspend fun setHabitMark(id: String, day: Long, mark: os.meka.core.domain.HabitMark) = onCore { goals.setHabitMark(id, day, mark) }
     suspend fun setHabitAvoid(id: String, avoid: Boolean) = onCore { goals.setHabitAvoid(id, avoid) }
     suspend fun setHabitList(id: String, list: String) = onCore { goals.setHabitList(id, list) }
+    /** Habits screen, slice 3: a habit's daily reminder at [minute] after midnight; null turns it off. */
+    suspend fun setHabitReminder(id: String, minute: Int?) = onCore { goals.setHabitReminder(id, minute) }
     /** The Habits screen for the habits as shown ([view], with any taps on their way), [selected] 0–6 and a [list] chip. Pure. */
     fun habitBoard(view: GoalsView = _goals.value, selected: Int = 6, list: String = os.meka.core.domain.HabitBoardRules.ALL): os.meka.core.domain.HabitBoard =
         os.meka.core.domain.HabitBoardRules.board(view, selected, list)

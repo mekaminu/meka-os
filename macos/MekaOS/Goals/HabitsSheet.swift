@@ -201,9 +201,30 @@ struct HabitsSheet: View {
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
     }
 
-    /// A habit's settings: Do or Avoid, its list, and Remove (a second click removes it and its days).
+    /// A habit's settings: its four weeks, the reminder, Do or Avoid, its list, and Remove (a second click removes it
+    /// and its days).
     private func settings(_ r: HabitBoardRow, lists: [String]) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HabitHistoryGrid(history: r.history, palette: palette)
+            Text("Reminder").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            HStack(spacing: MekaSpace.xxs) {
+                HabitChip(label: "Off", lit: r.remindAt == nil, palette: palette) {
+                    if r.remindAt != nil { model.setHabitReminder(r.id, nil); show(HabitBoardRules.shared.NO_REMINDER) }
+                }
+                HabitChip(label: "Every day", lit: r.remindAt != nil, palette: palette) {
+                    if r.remindAt == nil {
+                        let m = Int(HabitBoardRules.shared.defaultReminder(list: r.list))
+                        model.setHabitReminder(r.id, m)
+                        show(HabitTime.line(m))
+                    }
+                }
+                if let at = r.remindAt?.intValue {
+                    HabitTimeStepper(minute: at, palette: palette) { m in
+                        model.setHabitReminder(r.id, m)
+                        show(HabitTime.line(m))
+                    }
+                }
+            }
             HStack(spacing: MekaSpace.xxs) {
                 HabitChip(label: "Do", lit: !r.avoid, palette: palette) { if r.avoid { model.setHabitAvoid(r.id, false) } }
                 HabitChip(label: "Avoid", lit: r.avoid, palette: palette) { if !r.avoid { model.setHabitAvoid(r.id, true) } }
@@ -255,6 +276,82 @@ struct HabitsSheet: View {
         Task {
             try? await Task.sleep(for: .milliseconds(2200))
             if toastSeq == seq { toast = nil }
+        }
+    }
+}
+
+/// "Reminder 07:30" for a minute of the day.
+private enum HabitTime {
+    static func hhmm(_ m: Int) -> String { String(format: "%02d:%02d", m / 60, m % 60) }
+    static func line(_ m: Int) -> String { "Reminder \(hhmm(m))" }
+    /// 15 minutes either way, round the clock.
+    static func step(_ m: Int, by: Int) -> Int { ((m + by) % 1440 + 1440) % 1440 }
+}
+
+/// "−  07:30  +": the reminder time, 15 minutes a click.
+private struct HabitTimeStepper: View {
+    let minute: Int
+    let palette: MekaPalette
+    let change: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: MekaSpace.xs) {
+            Button("−") { MekaHaptics.tick(); change(HabitTime.step(minute, by: -15)) }
+                .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent)
+                .accessibilityLabel("Remind me 15 minutes earlier")
+            Text(HabitTime.hhmm(minute)).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                .monospacedDigit().contentTransition(.numericText())
+            Button("+") { MekaHaptics.tick(); change(HabitTime.step(minute, by: 15)) }
+                .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent)
+                .accessibilityLabel("Remind me 15 minutes later")
+        }
+        .font(MekaType.metaStrong)
+    }
+}
+
+/// Slice 3: a habit's four weeks, Monday to Sunday: green done (kept off, for Avoid), red missed, grey not marked,
+/// faint before it was added or still to come; today outlined. Then the done line and the best run.
+private struct HabitHistoryGrid: View {
+    let history: HabitHistory
+    let palette: MekaPalette
+
+    var body: some View {
+        if !history.weeks.isEmpty {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                HStack {
+                    Text(history.doneLine).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    if let best = history.bestLine { Text(best).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                }
+                HStack(spacing: MekaSpace.xxs) {
+                    ForEach(Array(HabitBoardRules.shared.HISTORY_HEADS.enumerated()), id: \.offset) { _, d in
+                        Text(d).font(MekaType.micro).foregroundStyle(palette.textTertiary).frame(width: 18)
+                    }
+                }
+                ForEach(Array(history.weeks.enumerated()), id: \.offset) { _, week in
+                    HStack(spacing: MekaSpace.xxs) {
+                        ForEach(week, id: \.day) { c in
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(fill(c.mark))
+                                .frame(width: 18, height: 18)
+                                .overlay {
+                                    if c.isToday { RoundedRectangle(cornerRadius: 4).stroke(palette.accent, lineWidth: 1) }
+                                }
+                                .accessibilityLabel(c.label)
+                        }
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func fill(_ m: HabitMark?) -> Color {
+        guard let m else { return palette.surfaceRaised.opacity(0.35) }
+        switch m.name {
+        case HabitMark.done.name: return palette.success.opacity(0.7)
+        case HabitMark.missed.name: return palette.critical.opacity(0.7)
+        default: return palette.surfaceRaised
         }
     }
 }
@@ -328,7 +425,7 @@ private struct HabitBoardRowView: View {
             }
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel("\(row.name), \(row.meta)")
-            .accessibilityHint("Shows Do or Avoid, its list and Remove")
+            .accessibilityHint("Shows its four weeks, the reminder, Do or Avoid, its list and Remove")
             HabitMarkCircle(mark: row.mark, label: row.markLabel, palette: palette, action: onMark)
         }
         .frame(minHeight: 60)
@@ -435,6 +532,7 @@ private struct HabitAddForm: View {
     @State private var into: String
     @State private var own = ""
     @State private var perWeek: Int32 = 7
+    @State private var remind: Int?
     @State private var problem: String?
     @State private var saving = false
 
@@ -478,6 +576,14 @@ private struct HabitAddForm: View {
                     }
                 }
             }
+            Text("Reminder").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            HStack(spacing: MekaSpace.xxs) {
+                HabitChip(label: "Off", lit: remind == nil, palette: palette) { remind = nil }
+                HabitChip(label: "Every day", lit: remind != nil, palette: palette) {
+                    if remind == nil { remind = Int(HabitBoardRules.shared.defaultReminder(list: newList ? own : into)) }
+                }
+                if let m = remind { HabitTimeStepper(minute: m, palette: palette) { remind = $0 } }
+            }
             Button("Add habit") { save() }
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.metaStrong)
@@ -502,7 +608,7 @@ private struct HabitAddForm: View {
         saving = true
         let made = newList ? target : nil
         Task {
-            let why = await model.addHabitToList(title, avoid: avoid, list: target, perWeek: perWeek)
+            let why = await model.addHabitToList(title, avoid: avoid, list: target, perWeek: perWeek, remindAt: remind)
             saving = false
             if let why { problem = why } else { added(title, made) }
         }

@@ -3477,12 +3477,19 @@ final class CoreModel {
 
     func setHabitAvoid(_ id: String, _ avoid: Bool) { MekaHaptics.tick(); run { _ = try await $0.setHabitAvoid(id: id, avoid: avoid) } }
     func setHabitList(_ id: String, _ list: String) { MekaHaptics.tick(); run { _ = try await $0.setHabitList(id: id, list: list) } }
+    /// Habits, slice 3: a habit's daily reminder at `minute` after midnight; nil turns it off. The KotlinInt is made
+    /// inside the call, so nothing made here crosses to the core twice.
+    func setHabitReminder(_ id: String, _ minute: Int?) {
+        MekaHaptics.tick()
+        run { _ = try await $0.setHabitReminder(id: id, minute: minute.map { KotlinInt(int: Int32($0)) }) }
+    }
 
     /// + Add on the Habits sheet: a name, Do or Avoid, its list and days a week. Returns nil when added, else why not.
-    func addHabitToList(_ title: String, avoid: Bool, list: String, perWeek: Int32) async -> String? {
+    func addHabitToList(_ title: String, avoid: Bool, list: String, perWeek: Int32, remindAt: Int? = nil) async -> String? {
         guard let core else { return "Navilife is still starting" }
         do {
-            _ = try await core.addHabitToList(title: title, avoid: avoid, list: list, perWeek: perWeek)
+            let remind = remindAt.map { KotlinInt(int: Int32($0)) }
+            _ = try await core.addHabitToList(title: title, avoid: avoid, list: list, perWeek: perWeek, remindAt: remind)
             MekaHaptics.light()
             return nil
         } catch {
