@@ -7656,6 +7656,63 @@ final class CoreModel {
         }
     }
 
+    /// Spending plans, slice 5: Choose a photo… for a thing: an open panel for one JPEG or PNG, prepared off the main
+    /// actor (upright, re-encoded, no camera metadata) and handed to the core as Strings, which seals it with the Vault key.
+    func chooseSpendThingPhoto(_ id: String) async -> SpendPlanSaid? {
+        NSApp.activate()
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.jpeg, .png]
+        panel.allowsMultipleSelection = false
+        panel.message = "Pick a photo of it · it's locked with your Vault key on this Mac before it leaves"
+        panel.prompt = "Add photo"
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        let picked = await MacVaultCopy.prepare(url: url)
+        guard let core else { return nil }
+        guard let b64 = picked.base64, picked.type != VaultFileRules.shared.PDF else {
+            MekaHaptics.tick()
+            let line = picked.type == VaultFileRules.shared.PDF ? SpendPlanRules.shared.PHOTO_NOT_PICTURE
+                : SpendPlanRules.shared.photoProblem(line: picked.problem ?? VaultFileRules.shared.COULDNT_READ)
+            return SpendPlanSaid(line: line, refused: true, id: nil)
+        }
+        let type = picked.type
+        let name = url.lastPathComponent
+        do {
+            return spendSaid(try await core.addSpendThingPhoto(id: id, type: type, base64: b64, name: name))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 5: a thing's photo opened by the core, as plain Swift values (the page is already behind Touch ID with
+    /// Money); or the line saying why it didn't open.
+    func openSpendThingPhoto(_ id: String) async -> (ViewedCopy?, SpendPlanSaid?) {
+        guard let core else { return (nil, nil) }
+        do {
+            let o = try await core.openSpendThingPhoto(id: id)
+            if let b64 = o.base64, let data = Data(base64Encoded: b64) {
+                MekaHaptics.light()
+                return (ViewedCopy(title: o.title, isPdf: false, data: data), nil)
+            }
+            MekaHaptics.tick()
+            return (nil, SpendPlanSaid(line: o.problem ?? VaultFileRules.shared.OFFLINE, refused: true, id: nil))
+        } catch {
+            lastError = error.localizedDescription
+            return (nil, nil)
+        }
+    }
+
+    /// Slice 5: Remove photo, from every device and the server.
+    func removeSpendThingPhoto(_ id: String) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.removeSpendThingPhoto(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func setSpendThingDone(_ id: String, _ done: Bool) { MekaHaptics.light(); run { _ = try await $0.setSpendThingDone(id: id, done: done) } }
 
     func removeSpendThing(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeSpendThing(id: id) } }

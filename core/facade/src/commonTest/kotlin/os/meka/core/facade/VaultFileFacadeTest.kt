@@ -191,4 +191,74 @@ class VaultFileFacadeTest {
         assertTrue(fold.removeDocument(id))
         assertTrue(server.copies.isEmpty())
     }
+
+    /** Spending plans, slice 5: a thing's photo is a sealed copy like the Vault's, opened on the Mac with no second unlock. */
+    @Test
+    fun aThingsPhotoIsSealedOnTheFoldAndOpensOnTheMac() = runTest {
+        val (fold, mac) = pair()
+        fold.lockVault(); mac.lockVault()
+        val plan = fold.addSpendPlan("Christmas gifts 20 Dec", "GBP").id!!
+        val boots = fold.addSpendThing(plan, "Football boots", "", "45", 0).id!!
+        assertEquals(os.meka.core.domain.SpendPlanRules.PHOTO_TAKE, fold.spendPlansView.value.plan(plan)!!.rows.single().photoLabel)
+        // A PDF or anything but a picture is refused before it's sealed.
+        val pdf = fold.addSpendThingPhoto(boots, "application/pdf", photo64, "boots.pdf")
+        assertTrue(pdf.refused); assertEquals(os.meka.core.domain.SpendPlanRules.PHOTO_NOT_PICTURE, pdf.line)
+        assertTrue(server.copies.isEmpty())
+        val said = fold.addSpendThingPhoto(boots, "image/jpeg", photo64)
+        assertFalse(said.refused, said.line)
+        assertEquals("Photo saved · only your devices can open it", said.line)
+        val box = server.copies.values.single()
+        assertFalse(Base64.decode(box).toList().windowed(photo.size).any { it == photo.toList() })
+        assertTrue(fold.spendPlansView.value.plan(plan)!!.rows.single().hasPhoto)
+
+        fold.syncNow(); mac.syncNow()
+        val row = mac.spendPlansView.value.plan(plan)!!.rows.single()
+        assertTrue(row.hasPhoto)
+        assertEquals(os.meka.core.domain.SpendPlanRules.PHOTO_SEE, row.photoLabel)
+        val opened = mac.openSpendThingPhoto(boots)
+        assertNull(opened.problem)
+        assertEquals("Football boots", opened.title)
+        assertTrue(Base64.decode(opened.base64!!).contentEquals(photo))
+        // Kept sealed on the Mac after a sync, so it opens with no signal.
+        mac.syncNow()
+        server.offline = true
+        assertTrue(Base64.decode(mac.openSpendThingPhoto(boots).base64!!).contentEquals(photo))
+        server.offline = false
+
+        // Changing it deletes the old box; removing the thing deletes the new one everywhere.
+        assertEquals("Photo changed · only your devices can open it", mac.addSpendThingPhoto(boots, "image/png", photo64, "b.png").line)
+        assertEquals(1, server.copies.size)
+        assertTrue(server.copies.values.single() != box)
+        mac.syncNow(); fold.syncNow()
+        assertTrue(fold.removeSpendThing(boots))
+        assertTrue(server.copies.isEmpty())
+    }
+
+    @Test
+    fun aThingsPhotoNeedsTheKeyAndRemovePhotoTakesItEverywhere() = runTest {
+        val fold = core("android", AboutYouDevice.FOLD, FakeCrypto("pk-fold"))
+        val mac = core("mac", AboutYouDevice.MAC, FakeCrypto("pk-mac"))
+        fold.syncNow(); mac.syncNow()
+        val plan = mac.addSpendPlan("Holiday", "GBP").id!!
+        val bag = mac.addSpendThing(plan, "Suitcase", "", "80", 0).id!!
+        // The Mac doesn't hold the key yet: nothing kept, and the line points at where the key is set up.
+        val no = mac.addSpendThingPhoto(bag, "image/jpeg", photo64)
+        assertTrue(no.refused)
+        assertEquals(os.meka.core.domain.SpendPlanRules.PHOTO_NO_KEY, no.line)
+        assertTrue(server.copies.isEmpty())
+        mac.syncNow(); fold.syncNow()
+        assertFalse(fold.addSpendThingPhoto(bag, "image/jpeg", photo64).refused)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(os.meka.core.domain.SpendPlanRules.PHOTO_NO_KEY, mac.openSpendThingPhoto(bag).problem)
+        assertEquals(os.meka.core.domain.SpendPlanRules.PHOTO_REMOVED, fold.removeSpendThingPhoto(bag).line)
+        assertTrue(server.copies.isEmpty())
+        assertTrue(fold.removeSpendThingPhoto(bag).refused)
+        fold.syncNow(); mac.syncNow()
+        assertFalse(mac.spendPlansView.value.plan(plan)!!.rows.single().hasPhoto)
+        // Removing a plan takes its things' photos with it.
+        assertFalse(fold.addSpendThingPhoto(bag, "image/jpeg", photo64).refused)
+        assertEquals(1, server.copies.size)
+        assertTrue(fold.removeSpendPlan(plan))
+        assertTrue(server.copies.isEmpty())
+    }
 }

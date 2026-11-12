@@ -1,6 +1,9 @@
 package os.meka.android.ask
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -37,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -55,6 +59,9 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.capture.PictureReader
+import os.meka.android.export.VaultCopies
+import os.meka.android.export.VaultCopyViewer
 import os.meka.android.lists.Field
 import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.SpendPlanDetail
@@ -62,6 +69,8 @@ import os.meka.core.domain.SpendPlanRules
 import os.meka.core.domain.SpendRow
 import os.meka.core.domain.SpendSaid
 import os.meka.core.domain.SpendTone
+import os.meka.core.domain.VaultFileOpened
+import os.meka.core.domain.VaultFileRules
 import os.meka.core.facade.MekaCore
 
 /** The page's own list, for the hand tests' bounded scrolls. */
@@ -81,6 +90,10 @@ private sealed interface SpendSheet {
  * Can I afford it? (This month · Over 2 months · Over 3 months) from Money's average month, three month tiles, Same for
  * everyone with − / + for a plan in another currency, and the people or things five a page (tick = bought or sent, tap
  * = change it). A calculator only: nothing here sends or moves money.
+ * Slice 5: a thing's photo. Each thing (not a person on a plan in another currency) has a 36 dp tile beside its tick:
+ * a camera (Take a photo) or, with one kept, a lit brass tile (tap to see it). The change sheet has Take a photo ·
+ * Choose a photo, and See photo · Remove photo once there is one. The picture is turned upright, re-encoded (no camera
+ * metadata), sealed with the Vault key in the core and kept on his devices; the camera's scratch file is deleted.
  *
  * Motion: the page slides in from the right over Money (the pane's push); its cards stagger in 40 ms apart; the bar
  * grows on the replan spring and the verdict cross-fades between Fits and short (its colour blends); a tick fills its
@@ -105,6 +118,47 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
     val uri = LocalUriHandler.current
     val open: (String) -> Unit = { link -> if (link.isNotEmpty()) { haptics.light(); runCatching { uri.openUri(link) } } }
     BackHandler(enabled = sheet == null, onBack = onBack)
+    // Slice 5: the thing a photo is being taken or picked for, and the photo shown over the page.
+    val context = LocalContext.current
+    var photoFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var viewing by remember { mutableStateOf<VaultFileOpened?>(null) }
+    val keep: (String, android.net.Uri) -> Unit = { id, picked ->
+        scope.launch {
+            val read = VaultCopies.read(context, picked)
+            PictureReader.forgetCameraPhoto(context)
+            val r = if (read.base64 == null || read.type == VaultFileRules.PDF) {
+                SpendSaid(if (read.type == VaultFileRules.PDF) SpendPlanRules.PHOTO_NOT_PICTURE else SpendPlanRules.photoProblem(read.problem ?: VaultFileRules.COULDNT_READ), refused = true)
+            } else runCatching { core.addSpendThingPhoto(id, read.type, read.base64!!, read.name) }.getOrNull()
+                ?: SpendSaid(VaultFileRules.COULDNT_SEAL, refused = true)
+            say(r)
+        }
+    }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val id = photoFor
+        photoFor = null
+        if (id == null) return@rememberLauncherForActivityResult
+        if (!ok) { PictureReader.forgetCameraPhoto(context); return@rememberLauncherForActivityResult }
+        keep(id, PictureReader.cameraUri(context, fresh = false))
+    }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked ->
+        val id = photoFor
+        photoFor = null
+        if (id != null && picked != null) keep(id, picked)
+    }
+    val takePhoto: (String) -> Unit = { id ->
+        haptics.light(); photoFor = id
+        runCatching { camera.launch(PictureReader.cameraUri(context)) }.onFailure { photoFor = null; say(SpendSaid(SpendPlanRules.NO_CAMERA, refused = true)) }
+    }
+    val pickPhoto: (String) -> Unit = { id ->
+        haptics.light(); photoFor = id
+        runCatching { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }.onFailure { photoFor = null }
+    }
+    val seePhoto: (String) -> Unit = { id ->
+        scope.launch {
+            val o = runCatching { core.openSpendThingPhoto(id) }.getOrNull()
+            if (o?.base64 != null) { haptics.light(); viewing = o } else say(SpendSaid(o?.problem ?: VaultFileRules.OFFLINE, refused = true))
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
         LazyColumn(
@@ -200,10 +254,11 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
                                 style = MekaType.caption, color = Meka.colors.textSecondary)
                         }
                         plan.rows.drop(p * SpendPlanRules.PAGE).take(SpendPlanRules.PAGE).forEach { r ->
-                            ThingRow(r,
+                            ThingRow(r, photo = plan.foreign == null,
                                 onTick = { haptics.light(); scope.launch { runCatching { core.setSpendThingDone(r.id, !r.done) } } },
                                 onOpen = { haptics.tick(); said = null; sheet = SpendSheet.Edit(r) },
-                                onLink = { open(r.link) })
+                                onLink = { open(r.link) },
+                                onPhoto = { said = null; if (r.hasPhoto) seePhoto(r.id) else takePhoto(r.id) })
                         }
                         if (pages > 1) Row(verticalAlignment = Alignment.CenterVertically) {
                             val from = p * SpendPlanRules.PAGE + 1
@@ -213,6 +268,8 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
                             Spacer(Modifier.size(MekaSpace.xs))
                             StepButton("›", "Next five") { if (p < pages - 1) { haptics.tick(); page = p + 1 } }
                         }
+                        // Slice 5: what a photo taken from a row's tile said (the sheets show their own).
+                        if (sheet == null) SpendSaidLine(said?.let { MoneySaved(it.line, refused = it.refused) })
                     }
                 }
                 item(key = "remove-${plan.id}") {
@@ -302,6 +359,19 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
             if (row != null && row.link.isNotEmpty()) Text("${SpendPlanRules.OPEN_LINK} · ${row.linkLabel}", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { open(row.link) }
                     .minTouch().testTag("spend-thing-open-link"))
+            // Slice 5: its photo (things only), sealed with the Vault key and kept on his devices.
+            if (row != null && !foreign) {
+                val live = plan?.rows?.firstOrNull { it.id == row.id } ?: row
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                    SheetLink(if (live.hasPhoto) SpendPlanRules.PHOTO_REPLACE else SpendPlanRules.PHOTO_TAKE, "spend-thing-photo-take") { takePhoto(row.id) }
+                    SheetLink(SpendPlanRules.PHOTO_PICK, "spend-thing-photo-pick") { pickPhoto(row.id) }
+                    if (live.hasPhoto) SheetLink("See photo", "spend-thing-photo-see") { seePhoto(row.id) }
+                    if (live.hasPhoto) SheetLink(SpendPlanRules.PHOTO_REMOVE, "spend-thing-photo-remove") {
+                        haptics.tick(); scope.launch { say(runCatching { core.removeSpendThingPhoto(row.id) }.getOrNull()) }
+                    }
+                }
+                Text(SpendPlanRules.PHOTO_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
             if (row != null) Text("Remove", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
                     haptics.tick(); sheet = null; scope.launch { runCatching { core.removeSpendThing(row.id) } }
@@ -339,6 +409,16 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
             SpendSaidLine(asMoney(said))
         }
     }
+    viewing?.let { VaultCopyViewer(it, onClose = { viewing = null }) }
+    // The photo shown goes when the app goes to the background.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { viewing = null }
+}
+
+/** A quiet accent action in a sheet (slice 5's photo actions). */
+@Composable
+private fun SheetLink(label: String, tag: String, onClick: () -> Unit) {
+    Text(label, style = MekaType.itemMeta, color = Meka.colors.accent,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClick).minTouch().testTag(tag))
 }
 
 @Composable
@@ -436,7 +516,7 @@ private fun AffordCard(plan: SpendPlanDetail, months: Int, modifier: Modifier, o
 }
 
 @Composable
-private fun ThingRow(r: SpendRow, onTick: () -> Unit, onOpen: () -> Unit, onLink: () -> Unit) {
+private fun ThingRow(r: SpendRow, photo: Boolean, onTick: () -> Unit, onOpen: () -> Unit, onLink: () -> Unit, onPhoto: () -> Unit) {
     val reduced = Meka.reducedMotion
     val fill by animateColorAsState(if (r.done) Meka.colors.success else androidx.compose.ui.graphics.Color.Transparent, MekaMotion.appear(reduced), label = "spend-tick")
     Row(
@@ -456,6 +536,18 @@ private fun ThingRow(r: SpendRow, onTick: () -> Unit, onOpen: () -> Unit, onLink
                 if (r.done) Text("✓", style = MekaType.caption, color = Meka.colors.onAccent)
             }
         }
+        // Slice 5: the photo tile: a camera to take one, or lit brass when one is kept (a tap shows it).
+        if (photo) {
+            val tile by animateColorAsState(if (r.hasPhoto) Meka.colors.accent.copy(alpha = 0.28f) else Meka.colors.surfaceRaised,
+                MekaMotion.appear(reduced), label = "spend-photo")
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(9.dp)).background(tile).clickable(role = Role.Button, onClick = onPhoto)
+                    .semantics { contentDescription = r.photoLabel }.testTag("spend-photo-${r.id}"),
+                contentAlignment = Alignment.Center,
+            ) {
+                CameraGlyph(if (r.hasPhoto) Meka.colors.textPrimary else Meka.colors.accent)
+            }
+        }
         Column(Modifier.weight(1f)) {
             Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1)
             if (r.note.isNotEmpty()) Text(r.note, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1)
@@ -468,5 +560,21 @@ private fun ThingRow(r: SpendRow, onTick: () -> Unit, onOpen: () -> Unit, onLink
             Text(r.gbp, style = MekaType.body, color = Meka.colors.textPrimary)
             if (r.local.isNotEmpty()) Text(r.local, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
+    }
+}
+
+/** The mockup's camera, 15 dp: a body with its bump and the lens (stroked, as the other line icons). */
+@Composable
+private fun CameraGlyph(color: androidx.compose.ui.graphics.Color) {
+    androidx.compose.foundation.Canvas(Modifier.size(15.dp)) {
+        val u = size.minDimension / 24f
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.8f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            join = androidx.compose.ui.graphics.StrokeJoin.Round)
+        val body = androidx.compose.ui.graphics.Path().apply {
+            moveTo(4 * u, 8 * u); lineTo(7 * u, 8 * u); lineTo(9 * u, 5 * u); lineTo(15 * u, 5 * u); lineTo(17 * u, 8 * u)
+            lineTo(20 * u, 8 * u); lineTo(20 * u, 19 * u); lineTo(4 * u, 19 * u); close()
+        }
+        drawPath(body, color, style = stroke)
+        drawCircle(color, radius = 3.5f * u, center = androidx.compose.ui.geometry.Offset(12 * u, 13 * u), style = stroke)
     }
 }

@@ -314,4 +314,31 @@ class SpendPlansTest {
         assertEquals("", r.link)
         assertEquals("", r.linkLabel)
     }
+
+    @Test
+    fun aThingsPhotoSyncsAsASealedCopyAndOnlyAPictureCounts() {
+        val plan = pFold.add("Gifts", "GBP").id!!
+        val t = pFold.addThing(plan, "Lamp", "", "20", nov).id!!
+        assertFalse(view().plan(plan)!!.rows.single().hasPhoto)
+        val ref = VaultFileRef("a".repeat(32), VaultFileRules.JPEG, 3_000, "k1", 1L, "Fold")
+        assertNull(pFold.setPhoto(t, ref).getOrThrow())
+        sync()
+        val r = view(pMac).plan(plan)!!.rows.single()
+        assertTrue(r.hasPhoto)
+        assertEquals(SpendPlanRules.PHOTO_SEE, r.photoLabel)
+        assertEquals(setOf(ref.id), pMac.photoIds())
+        // Changing it hands back the old one (its copy is then let go); null takes it off.
+        val png = ref.copy(id = "b".repeat(32), type = VaultFileRules.PNG)
+        assertEquals(ref, pMac.setPhoto(t, png).getOrThrow())
+        assertEquals(png, pMac.setPhoto(t, null).getOrThrow())
+        assertFalse(view(pMac).plan(plan)!!.rows.single().hasPhoto)
+        assertTrue(pFold.setPhoto("nope", ref).isFailure)
+        // A PDF written elsewhere is never offered as a thing's photo.
+        fold.replica.commitLocal(EntityTypes.SPEND_PLAN_ITEM, t, mapOf(SpendItemFields.PHOTO to
+            os.meka.core.sync.FieldValue.Text(VaultFileRules.encode(ref.copy(type = VaultFileRules.PDF)))))
+        assertFalse(view().plan(plan)!!.rows.single().hasPhoto)
+        assertTrue(pFold.photoIds().isEmpty())
+        assertEquals(SpendPlanRules.PHOTO_NO_KEY, SpendPlanRules.photoProblem(VaultFileRules.NO_KEY))
+        assertEquals(VaultFileRules.OFFLINE, SpendPlanRules.photoProblem(VaultFileRules.OFFLINE))
+    }
 }

@@ -57,10 +57,11 @@ object PictureReader {
      * Where the camera app writes a letter's photo (Photo of a letter): one scratch file in the cache, shared through
      * the FileProvider so the camera needs no storage access and nothing lands in the gallery. Read, then deleted.
      */
-    fun cameraUri(context: Context): Uri {
+    fun cameraUri(context: Context, fresh: Boolean = true): Uri {
         val dir = java.io.File(context.cacheDir, SCRATCH_DIR).apply { mkdirs() }
         val f = java.io.File(dir, SCRATCH)
-        runCatching { f.delete() }
+        // [fresh] = false: the picture just taken, to read it back (Spending plans' photo of a thing).
+        if (fresh) runCatching { f.delete() }
         return androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.updates", f)
     }
 

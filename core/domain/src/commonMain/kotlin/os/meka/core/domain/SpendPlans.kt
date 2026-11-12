@@ -57,6 +57,11 @@ object SpendItemFields {
     const val DONE = "done"
     /** Slice 4: the shop's page for it, a plain https link ([SpendPlanRules.link]); absent or "" for none. */
     const val LINK = "link"
+    /**
+     * Slice 5: its photo, a sealed copy like the Vault's ([VaultFileRules.encode]: `1|id|type|bytes|keyId|atMs|by`,
+     * a JPEG or PNG only); absent or Null for none. The picture itself never syncs as an op.
+     */
+    const val PHOTO = "photo"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
 }
@@ -82,6 +87,8 @@ data class SpendThing(
     val done: Boolean, val addedAtMs: Long,
     /** Slice 4: the shop's page, a checked https link; "" for none. */
     val link: String = "",
+    /** Slice 5: its photo's sealed copy (a JPEG or PNG); null for none. */
+    val photo: VaultFileRef? = null,
 ) {
     val sameForEveryone: Boolean get() = amountMinor < 0
 }
@@ -113,6 +120,8 @@ data class SpendRow(
     val month: Int, val amountText: String, val noteText: String,
     /** Slice 4: the link to open ("" for none) and the shop it goes to, "argos.co.uk" ("" for none). */
     val link: String = "", val linkLabel: String = "",
+    /** Slice 5: it has a photo (the tile is lit; a tap shows it), and the tile's spoken label. */
+    val hasPhoto: Boolean = false, val photoLabel: String = SpendPlanRules.PHOTO_TAKE,
 )
 
 /**
@@ -211,6 +220,32 @@ object SpendPlanRules {
     const val LINK_HINT = "Link to the shop (optional)"
     const val BAD_LINK = "That isn't a web link Navilife can open. Paste the shop's link, starting https://"
     const val OPEN_LINK = "Open link"
+
+    /** Slice 5: a photo on a thing, sealed with the Vault key like the Vault's copies and kept on his devices. */
+    const val PHOTO_TAKE = "Take a photo"
+    const val PHOTO_PICK = "Choose a photo"
+    const val PHOTO_SEE = "Photo saved, tap to see"
+    const val PHOTO_REPLACE = "Change photo"
+    const val PHOTO_REMOVE = "Remove photo"
+    const val PHOTO_REMOVED = "Photo removed from every device"
+    const val PHOTO_NOT_PICTURE = "A thing's photo is a picture (JPEG or PNG)."
+    const val PHOTO_NONE = "No photo on this one"
+    const val NO_CAMERA = "No camera app to take the photo"
+    const val PHOTO_NO_KEY = "Photos are locked with your Vault key, and this device doesn't hold it yet: set it up in Ask → Settings → Vault."
+    /** A Vault line about a copy, said the Spending plans way (the Vault's own key line points at a section not here). */
+    fun photoProblem(line: String): String = when (line) {
+        VaultFileRules.NO_KEY -> PHOTO_NO_KEY
+        VaultFileRules.TOO_BIG -> "That photo is too big (1.4 MB at most). Take it again or pick a smaller one."
+        else -> line
+    }
+    const val PHOTO_NOTE = "Photos are locked with your Vault key on this device before they leave it; only your devices can open them."
+
+    /** A synced photo field as a sealed copy; null for none, a PDF or anything unreadable. */
+    fun photo(text: String?): VaultFileRef? = VaultFileRules.decode(text)?.takeIf { it.type == VaultFileRules.JPEG || it.type == VaultFileRules.PNG }
+
+    /** After saving: "Photo saved · only your devices can open it" (or that it goes up when this device is online). */
+    fun photoSavedLine(r: VaultFileRef, uploaded: Boolean, replaced: Boolean): String =
+        (if (replaced) "Photo changed" else "Photo saved") + " · " + (if (uploaded) "only your devices can open it" else "it goes up when this ${r.by} is next online")
     /** A looked-up rate older than this many days is called by its day ("rate from 3 Nov"). */
     const val STALE_DAYS = 3
     /** The highest rate believed (a million to £1). */
@@ -358,6 +393,7 @@ object SpendPlanRules {
             s.f(SpendItemFields.DONE).boolOrNull ?: false, s.f(SpendItemFields.ADDED_AT).longOrNull ?: 0L,
             // A link that doesn't pass the check now (written elsewhere, or by an older rule) is never offered.
             (s.f(SpendItemFields.LINK).textOrNull ?: "").let { l -> link(l)?.takeIf { it == l.trim() } ?: "" },
+            photo(s.f(SpendItemFields.PHOTO).textOrNull),
         )
     }.sortedWith(compareBy<SpendThing> { it.addedAtMs }.thenBy { it.id })
 
@@ -459,6 +495,7 @@ object SpendPlanRules {
                 t.id, t.name, noteLine, pn?.let { pounds(it) } ?: "—", if (p.foreign) local(minor, p.currency) else "", t.done, t.month,
                 if (t.sameForEveryone) "" else amountText(t.amountMinor), t.note,
                 t.link, if (t.link.isEmpty()) "" else linkHost(t.link) ?: "",
+                t.photo != null, if (t.photo != null) PHOTO_SEE else PHOTO_TAKE,
             )
         }
         return SpendPlanDetail(
@@ -683,6 +720,19 @@ class SpendPlans(
         replica.commitLocal(EntityTypes.SPEND_PLAN_ITEM, id, mapOf(SpendItemFields.LINK to l.fv()))
         return SpendSaid(if (l.isEmpty()) "Link removed" else "Link saved · ${SpendPlanRules.linkHost(l)}", refused = false)
     }
+
+    /**
+     * Slice 5: puts [ref] (a sealed photo already kept on this device) on a person or thing, or takes it off with null.
+     * Returns the photo it had before (its copy is then let go), or null; [GONE] when there's no such thing.
+     */
+    fun setPhoto(id: String, ref: VaultFileRef?): Result<VaultFileRef?> {
+        val t = things().firstOrNull { it.id == id } ?: return Result.failure(NoSuchElementException(SpendPlanRules.GONE))
+        replica.commitLocal(EntityTypes.SPEND_PLAN_ITEM, id, mapOf(SpendItemFields.PHOTO to (ref?.let { VaultFileRules.encode(it).fv() } ?: FieldValue.Null)))
+        return Result.success(t.photo)
+    }
+
+    /** Slice 5: every photo a live person or thing points at (their sealed copies are kept; the rest are let go). */
+    fun photoIds(): Set<String> = things().mapNotNull { it.photo?.id }.toSet()
 
     fun removeThing(id: String): Boolean {
         things().firstOrNull { it.id == id } ?: return false

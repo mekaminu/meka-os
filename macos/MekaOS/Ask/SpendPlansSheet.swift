@@ -33,6 +33,8 @@ struct SpendPlansSheet: View {
     @State private var rateOpen = false
     @State private var rateText = ""
     @State private var removing: String?
+    /// Slice 5: a thing's photo shown over the sheet.
+    @State private var viewing: ViewedCopy?
 
     var body: some View {
         let v = model.spendPlans
@@ -94,6 +96,22 @@ struct SpendPlansSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 560)
         .background(palette.surface)
+        .sheet(item: $viewing) { copy in
+            VaultCopyViewer(copy: copy, palette: palette) { viewing = nil }
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.screensDidSleepNotification)) { _ in viewing = nil }
+    }
+
+    /// Slice 5: shows a thing's photo, or says why it didn't open. Only the id String crosses.
+    private func seePhoto(_ id: String) {
+        Task {
+            let (copy, s) = await model.openSpendThingPhoto(id)
+            if let copy { viewing = copy } else if let s { said = s }
+        }
+    }
+
+    private func choosePhoto(_ id: String) {
+        Task { if let s = await model.chooseSpendThingPhoto(id) { said = s } }
     }
 
     private func pill(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -324,7 +342,9 @@ struct SpendPlansSheet: View {
                 Text(plan.foreign != nil ? "Add the people you're sending to." : "Add what you'll buy, with how much and the month.")
                     .font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
-            ForEach(shown, id: \.id) { r in thingRow(r).transition(.opacity) }
+            ForEach(shown, id: \.id) { r in thingRow(r, photo: plan.foreign == nil).transition(.opacity) }
+            // Slice 5: what a photo chosen from a row's tile said (the popover shows its own).
+            if editing == nil && !addOpen { saidLine() }
             if pages > 1 {
                 HStack {
                     let from = p * size + 1
@@ -348,7 +368,7 @@ struct SpendPlansSheet: View {
         if let r { editing = r } else { addOpen = true }
     }
 
-    private func thingRow(_ r: SpendRow) -> some View {
+    private func thingRow(_ r: SpendRow, photo: Bool) -> some View {
         HStack(spacing: MekaSpace.m) {
             Button { model.setSpendThingDone(r.id, !r.done) } label: {
                 ZStack {
@@ -361,6 +381,19 @@ struct SpendPlansSheet: View {
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel(r.done ? "Done, click to untick" : "Tick when done")
             .animation(MekaMotion.appear(reduced: reduceMotion), value: r.done)
+            // Slice 5: the photo tile: a camera to choose one, or lit brass when one is kept (a click shows it).
+            if photo {
+                Button { if r.hasPhoto { seePhoto(r.id) } else { choosePhoto(r.id) } } label: {
+                    Image(systemName: "camera")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(r.hasPhoto ? palette.textPrimary : palette.accent)
+                        .frame(width: 36, height: 36)
+                        .background(r.hasPhoto ? palette.accent.opacity(0.28) : palette.surfaceRaised, in: RoundedRectangle(cornerRadius: 9))
+                }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityLabel(r.hasPhoto ? SpendPlanRules.shared.PHOTO_SEE : SpendPlanRules.shared.PHOTO_PICK)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: r.hasPhoto)
+            }
             Button { MekaHaptics.tick(); openThing(r) } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
@@ -416,6 +449,23 @@ struct SpendPlansSheet: View {
                         ForEach(choices, id: \.key) { m in pill(m.label, on: m.key == month) { month = m.key } }
                     }
                 }
+            }
+            // Slice 5: its photo (things only), locked with the Vault key and kept on his devices.
+            if let row, !foreign {
+                let live = plan.rows.first { $0.id == row.id } ?? row
+                HStack(spacing: MekaSpace.m) {
+                    Button(live.hasPhoto ? "\(SpendPlanRules.shared.PHOTO_REPLACE)…" : "\(SpendPlanRules.shared.PHOTO_PICK)…") { choosePhoto(row.id) }
+                    if live.hasPhoto {
+                        Button("See photo") { seePhoto(row.id) }
+                        Button(SpendPlanRules.shared.PHOTO_REMOVE) {
+                            let id = row.id
+                            Task { if let s = await model.removeSpendThingPhoto(id) { said = s } }
+                        }
+                    }
+                }
+                .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+                Text(SpendPlanRules.shared.PHOTO_NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             saidLine()
             HStack {

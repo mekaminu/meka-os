@@ -6412,7 +6412,13 @@ class MekaCore(
     suspend fun renameSpendPlan(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.rename(id, text) }
 
     /** Removes a plan and everything on it. */
-    suspend fun removeSpendPlan(id: String): Boolean = onCore { spendPlans.remove(id) }
+    suspend fun removeSpendPlan(id: String): Boolean {
+        // Slice 5: the photos on its people and things go from every device and the server with it.
+        val photos = onCore { spendPlans.things().filter { it.planId == id }.mapNotNull { it.photo?.id } }
+        val ok = onCore { spendPlans.remove(id).also { if (it) photos.forEach { p -> forgetVaultCopy(p, deleteOnServer = true) } } }
+        if (ok && photos.isNotEmpty()) { requestSync(); deleteVaultCopiesGone() }
+        return ok
+    }
 
     /** The same-for-everyone amount on a plan in another currency ("50,000"; "" clears it). */
     suspend fun setSpendPlanEach(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setEach(id, text) }
@@ -6445,8 +6451,78 @@ class MekaCore(
     /** Spending plans, slice 4: the shop's link on a person or thing ("argos.co.uk/…" or https://…; "" removes it). */
     suspend fun setSpendThingLink(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setLink(id, text) }
 
-    /** Removes one person or thing. */
-    suspend fun removeSpendThing(id: String): Boolean = onCore { spendPlans.removeThing(id) }
+    /** Removes one person or thing (slice 5: its photo goes from every device and the server too). */
+    suspend fun removeSpendThing(id: String): Boolean {
+        val photo = onCore { spendPlans.things().firstOrNull { it.id == id }?.photo }
+        val ok = onCore { spendPlans.removeThing(id).also { if (it && photo != null) forgetVaultCopy(photo.id, deleteOnServer = true) } }
+        if (ok && photo != null) { requestSync(); deleteVaultCopiesGone() }
+        return ok
+    }
+
+    /**
+     * Spending plans, slice 5: puts a photo on person or thing [id] (or changes it): [base64] a picture the app already
+     * re-encoded to [os.meka.core.domain.VaultFileRules.PHOTO_LONG_SIDE] ([type] what the system called it, [name] its
+     * file name). Sealed here with the household's Vault key exactly like a Vault copy, kept on this device and sent up
+     * as locked bytes only; offline it goes up after the next sync. Refused (nothing kept) without the key, too big or
+     * not a JPEG or PNG.
+     */
+    suspend fun addSpendThingPhoto(id: String, type: String?, base64: String, name: String? = null): os.meka.core.domain.SpendSaid {
+        val r = os.meka.core.domain.VaultFileRules
+        val sr = os.meka.core.domain.SpendPlanRules
+        fun no(line: String) = os.meka.core.domain.SpendSaid(sr.photoProblem(line), refused = true)
+        class Made(val ref: os.meka.core.domain.VaultFileRef, val sealed: String, val old: os.meka.core.domain.VaultFileRef?)
+        val made = onCore {
+            spendPlans.things().firstOrNull { it.id == id } ?: return@onCore no(sr.GONE)
+            val kind = r.typeOf(type, name)?.takeIf { it == r.JPEG || it == r.PNG } ?: return@onCore no(sr.PHOTO_NOT_PICTURE)
+            val bytes = runCatching { kotlin.io.encoding.Base64.decode(base64) }.getOrNull() ?: return@onCore no(r.COULDNT_READ)
+            r.refusal(kind, bytes.size.toLong())?.let { return@onCore no(it) }
+            when (val s = sealVaultFile(kind, bytes)) {
+                is String -> no(s)
+                is Pair<*, *> -> {
+                    val ref = s.first as os.meka.core.domain.VaultFileRef
+                    val sealed = s.second as String
+                    keepVaultCopy(ref.id, sealed)
+                    setLocalIds(r.LOCAL_PENDING, localIds(r.LOCAL_PENDING) + ref.id)
+                    val old = spendPlans.setPhoto(id, ref).getOrNull()
+                    old?.let { forgetVaultCopy(it.id, deleteOnServer = true) }
+                    Made(ref, sealed, old)
+                }
+                else -> no(r.COULDNT_SEAL)
+            }
+        }
+        if (made !is Made) return made as os.meka.core.domain.SpendSaid
+        requestSync()
+        val uploaded = uploadVaultCopy(made.ref.id, made.sealed)
+        if (made.old != null) deleteVaultCopiesGone()
+        return os.meka.core.domain.SpendSaid(sr.photoSavedLine(made.ref, uploaded, replaced = made.old != null), refused = false, id = id)
+    }
+
+    /**
+     * Slice 5: opens person or thing [id]'s photo for the screen (from this device's sealed copy, else fetched and kept
+     * sealed for offline), opened with the Vault key and checked it is this photo. The page is already behind Money's
+     * fingerprint, so no second unlock; the picture goes only to the app's memory.
+     */
+    suspend fun openSpendThingPhoto(id: String): os.meka.core.domain.VaultFileOpened {
+        val found = onCore { spendPlans.things().firstOrNull { it.id == id } }
+            ?: return os.meka.core.domain.VaultFileOpened.problem("", os.meka.core.domain.SpendPlanRules.GONE)
+        val ref = found.photo ?: return os.meka.core.domain.VaultFileOpened.problem(found.name, os.meka.core.domain.SpendPlanRules.PHOTO_NONE)
+        return openSealedCopy(found.name, ref).let { o -> o.problem?.let { o.copy(problem = os.meka.core.domain.SpendPlanRules.photoProblem(it)) } ?: o }
+    }
+
+    /** Slice 5: takes the photo off person or thing [id], from every device and Navilife's server. */
+    suspend fun removeSpendThingPhoto(id: String): os.meka.core.domain.SpendSaid {
+        val sr = os.meka.core.domain.SpendPlanRules
+        val ok = onCore {
+            val old = spendPlans.things().firstOrNull { it.id == id }?.photo ?: return@onCore false
+            spendPlans.setPhoto(id, null)
+            forgetVaultCopy(old.id, deleteOnServer = true)
+            true
+        }
+        if (!ok) return os.meka.core.domain.SpendSaid(sr.PHOTO_NONE, refused = true)
+        requestSync()
+        deleteVaultCopiesGone()
+        return os.meka.core.domain.SpendSaid(sr.PHOTO_REMOVED, refused = false, id = id)
+    }
 
     /**
      * Bin days, slice 3: takes back a one-off ("Black bin Sat 2 Jan instead of 29 Dec", typed through [addBin]), so
@@ -12549,6 +12625,23 @@ class MekaCore(
         if (deleteOnServer) setLocalIds(r.LOCAL_GONE, localIds(r.LOCAL_GONE) + id)
     }
 
+    /**
+     * Seals [bytes] (of Vault type [kind]) with the household's Vault key under a new copy id (caller on the core):
+     * the copy's [os.meka.core.domain.VaultFileRef] and the sealed box as a Pair, or the line saying why not as a String.
+     * Shared by the Vault's copies and, since Spending plans slice 5, a thing's photo.
+     */
+    private fun sealVaultFile(kind: String, bytes: ByteArray): Any {
+        val r = os.meka.core.domain.VaultFileRules
+        val crypto = vaultCrypto ?: return r.NO_KEY
+        val by = vaultName() ?: return r.NO_KEY
+        val (keyId, key) = heldVaultKey()?.takeIf { it.first == vaultKeys.canonical() } ?: return r.NO_KEY
+        val id = newVaultFileId()
+        val sealed = runCatching { crypto.sealBox(kotlin.io.encoding.Base64.encode(key), kotlin.io.encoding.Base64.encode(r.frame(id, bytes))) }
+            .getOrNull() ?: return r.COULDNT_SEAL
+        if (sealed.length / 4 * 3 > r.MAX_SEALED_BYTES) return r.TOO_BIG
+        return os.meka.core.domain.VaultFileRef(id, kind, bytes.size.toLong(), keyId, nowMs(), by) to sealed
+    }
+
     /** A copy's random id: 32 hex characters from the secure random. */
     private fun newVaultFileId(): String = keyRandom.nextBytes(16).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 
@@ -12567,14 +12660,11 @@ class MekaCore(
             val kind = r.typeOf(type, name)
             val bytes = runCatching { kotlin.io.encoding.Base64.decode(base64) }.getOrNull() ?: return@onCore no(r.COULDNT_READ)
             r.refusal(kind, bytes.size.toLong())?.let { return@onCore no(it) }
-            val crypto = vaultCrypto ?: return@onCore no(r.NO_KEY)
-            val by = vaultName() ?: return@onCore no(r.NO_KEY)
-            val (keyId, key) = heldVaultKey()?.takeIf { it.first == vaultKeys.canonical() } ?: return@onCore no(r.NO_KEY)
-            val id = newVaultFileId()
-            val sealed = runCatching { crypto.sealBox(kotlin.io.encoding.Base64.encode(key), kotlin.io.encoding.Base64.encode(r.frame(id, bytes))) }
-                .getOrNull() ?: return@onCore no(r.COULDNT_SEAL)
-            if (sealed.length / 4 * 3 > r.MAX_SEALED_BYTES) return@onCore no(r.TOO_BIG)
-            val ref = os.meka.core.domain.VaultFileRef(id, kind!!, bytes.size.toLong(), keyId, nowMs(), by)
+            val sealedPair = sealVaultFile(kind!!, bytes)
+            if (sealedPair is String) return@onCore no(sealedPair)
+            val ref = (sealedPair as Pair<*, *>).first as os.meka.core.domain.VaultFileRef
+            val sealed = sealedPair.second as String
+            val id = ref.id
             keepVaultCopy(id, sealed)
             setLocalIds(r.LOCAL_PENDING, localIds(r.LOCAL_PENDING) + id)
             documents.setFile(docId, ref)
@@ -12616,7 +12706,8 @@ class MekaCore(
         val api = vaultFileApi
         class Plan(val upload: List<Pair<String, String>>, val fetch: List<String>)
         val plan = onCore {
-            val live = documents.items().mapNotNull { it.file?.id }.toSet()
+            // Spending plans slice 5: a thing's photo is a sealed copy too.
+            val live = documents.items().mapNotNull { it.file?.id }.toSet() + spendPlans.photoIds()
             localIds(r.LOCAL_KEPT).filter { it !in live }.forEach { forgetVaultCopy(it, deleteOnServer = false) }
             val upload = localIds(r.LOCAL_PENDING).mapNotNull { id -> vaultLocal(r.localKey(id))?.let { id to it } }
             // Only a device that can open them keeps them (a watch, or a device still waiting for the key, doesn't).
@@ -12631,7 +12722,7 @@ class MekaCore(
         for (id in plan.fetch) {
             val sealed = runCatchingNotCancel { api.vaultFileGet(id) } ?: continue
             if (sealed.length / 4 * 3 > r.MAX_SEALED_BYTES) continue
-            onCore { if (documents.items().any { it.file?.id == id }) keepVaultCopy(id, sealed) }
+            onCore { if (documents.items().any { it.file?.id == id } || id in spendPlans.photoIds()) keepVaultCopy(id, sealed) }
         }
     }
 
@@ -12691,6 +12782,15 @@ class MekaCore(
         val (title, ref) = found
         // Slice 4: nothing is read, fetched or opened until his fingerprint unlocked the copies.
         if (vaultCopiesLocked()) return os.meka.core.domain.VaultFileOpened.locked(title)
+        return openSealedCopy(title, ref)
+    }
+
+    /**
+     * Opens sealed copy [ref] (titled [title]) from this device's kept box, else fetched from the server (and kept,
+     * sealed, for offline), with the Vault key, checked it is this copy. Shared by the Vault and a thing's photo.
+     */
+    private suspend fun openSealedCopy(title: String, ref: os.meka.core.domain.VaultFileRef): os.meka.core.domain.VaultFileOpened {
+        val r = os.meka.core.domain.VaultFileRules
         var sealed = onCore { vaultLocal(r.localKey(ref.id)) }
         var fetched = false
         if (sealed == null) {
