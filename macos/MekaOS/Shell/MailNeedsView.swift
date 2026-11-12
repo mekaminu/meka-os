@@ -744,7 +744,7 @@ private struct MailChaseRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                if head { HStack(spacing: MekaSpace.xs) {
+                HStack(spacing: MekaSpace.xs) {
                     Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                     if row.business {
                         Text(MailNeedsRules.shared.BUSINESS_CHIP)
