@@ -79,4 +79,34 @@ class CountdownsFacadeTest {
         assertEquals("Sam's birthday", f.hero?.name)
         assertEquals(listOf("Christmas"), f.rows.map { it.name })
     }
+
+    @Test
+    fun theHomeScreenWidgetShowsTheOneOnTodayElseTheSoonest() = runTest {
+        val fold = core("android")
+        // Countdowns, slice 4: Christmas before anything is typed.
+        val w0 = fold.countdownWidget()!!
+        assertEquals("Christmas", w0.name)
+        assertEquals("43", w0.number)
+        assertEquals("days", w0.unit)
+        assertEquals("Fri 25 Dec", w0.dateLine)
+        assertTrue(w0.next.isEmpty())
+        fold.addCountdown("Holiday 13 Feb")
+        fold.addCountdown("Pancake day 17 Feb every year")
+        val w1 = fold.countdownWidget()!!
+        assertEquals("Christmas", w1.name)
+        assertEquals(listOf("Holiday" to "93 days", "Pancake day" to "97 days"), w1.next.map { it.name to it.count })
+        // The one chosen with Show on Today leads the widget, and Sleeps counts sleeps.
+        val holiday = fold.countdownsView.value.rows.first { it.name == "Holiday" }.key
+        fold.showCountdownOnToday(holiday)
+        fold.setCountdownSleeps(true)
+        val w2 = fold.countdownWidget()!!
+        assertEquals("Holiday", w2.name)
+        assertEquals("93 sleeps", "${w2.number} ${w2.unit}")
+        assertEquals(listOf("Christmas" to "43 sleeps", "Pancake day" to "97 sleeps"), w2.next.map { it.name to it.count })
+        assertEquals(
+            "Countdown. Holiday, 93 sleeps to go, Sat 13 Feb. Then Christmas, 43 sleeps. Then Pancake day, 97 sleeps. Opens Countdowns.",
+            w2.spoken,
+        )
+        assertFalse(w2.empty)
+    }
 }

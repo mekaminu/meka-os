@@ -327,6 +327,13 @@ open class MekaApplication : Application() {
                 .distinctUntilChanged()
                 .collect { runCatching { os.meka.android.widgets.DayListWidget.update(this@MekaApplication, it) } }
         }
+        // The Countdowns widget (Countdowns, slice 4) follows Countdowns, redrawn only when what it shows changes
+        // (and so at midnight, when the days move on).
+        appScope.launch {
+            core.countdownsView.map { core.countdownWidget() }
+                .distinctUntilChanged()
+                .collect { w -> if (w != null) runCatching { os.meka.android.widgets.CountdownWidget.update(this@MekaApplication, w) } }
+        }
         // Errands by location, slice 2: Android watches the saved places with errands waiting (only with the near-me
         // switch on and location allowed), re-armed when that set changes and at every process start (after a reboot).
         appScope.launch {

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Countdowns widget's ring (Countdowns, slice 4): a faint track and the brass arc, drawn from 12 o'clock by the
+     progress level (the core's ringPercent, fuller as the day gets closer). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape
+            android:innerRadiusRatio="2.6"
+            android:shape="ring"
+            android:thicknessRatio="18"
+            android:useLevel="false">
+            <solid android:color="@color/widget_tile" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <rotate
+            android:fromDegrees="270"
+            android:pivotX="50%"
+            android:pivotY="50%"
+            android:toDegrees="270">
+            <shape
+                android:innerRadiusRatio="2.6"
+                android:shape="ring"
+                android:thicknessRatio="18"
+                android:useLevel="true">
+                <solid android:color="@color/widget_accent" />
+            </shape>
+        </rotate>
+    </item>
+</layer-list>

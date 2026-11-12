@@ -262,4 +262,28 @@ class CountdownsTest {
         assertTrue(cFold.showHidden())
         assertTrue((listOfNotNull(v().hero) + v().rows).any { it.key == key })
     }
+
+    @Test
+    fun theWidgetSaysTodayTomorrowAndAsksWhenThereIsNothing() {
+        // Countdowns, slice 4: the home-screen widget.
+        cFold.add("Bonfire 13 Nov")
+        cFold.add("Fair 12 Nov")
+        val w = CountdownWidgetRules.view(view())
+        assertEquals("Fair", w.name)
+        assertEquals("Today", w.number)
+        assertEquals("", w.unit)
+        assertTrue(w.lit)
+        assertEquals(100, w.ringPercent)
+        assertEquals(listOf("Bonfire" to "tomorrow", "Christmas" to "43 days"), w.next.map { it.name to it.count })
+        assertTrue(w.spoken.startsWith("Countdown. Fair, today. Then Bonfire, tomorrow."))
+        assertEquals(1, CountdownWidgetRules.view(view(), next = 1).next.size)
+        // With Sleeps on, the day before is "1 sleep".
+        cFold.setSleeps(true)
+        assertEquals("1 sleep", CountdownWidgetRules.view(view()).next.first().count)
+        // Nothing at all (Christmas hidden, nothing typed): the widget asks for one.
+        val none = CountdownWidgetRules.view(CountdownsView.EMPTY)
+        assertTrue(none.empty)
+        assertEquals("Countdowns. ${CountdownWidgetRules.EMPTY}. ${CountdownRules.OPENS}", none.spoken)
+        assertEquals(CountdownWidgetRules.DESK_EMPTY_HINT, CountdownWidgetRules.emptyHint(desk = true))
+    }
 }

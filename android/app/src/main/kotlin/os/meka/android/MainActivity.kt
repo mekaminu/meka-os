@@ -107,6 +107,11 @@ class MainActivity : ComponentActivity() {
                 app.openDayListToLook.value = true
                 app.openDestination.value = ShellDestination.TODAY
             }
+            // The Countdowns widget (Countdowns, slice 4): Ask with Countdowns up.
+            open == OPEN_COUNTDOWNS -> {
+                app.openPane.value = os.meka.android.shell.MoreItem.COUNTDOWNS
+                app.openDestination.value = ShellDestination.ASK
+            }
             // A school holiday with nothing booked (annual leave, slice 2): Ask with the Annual leave pane up.
             // "Near Tesco · milk, batteries" (errands by location, slice 2): Ask with Errands up.
             open == OPEN_ERRANDS -> {
@@ -215,6 +220,8 @@ class MainActivity : ComponentActivity() {
         /** Add tasks, the app icon's shortcut: today's Day list with the add bar focused. */
         const val OPEN_DAY_LIST_ADD = "day_list_add"
         const val OPEN_DAY_LIST = "day_list"
+        /** The Countdowns widget (Countdowns, slice 4): Ask with Countdowns up. */
+        const val OPEN_COUNTDOWNS = "countdowns"
         /** Ask → More → Annual leave, its pane up (the leave heads-up). */
         const val OPEN_LEAVE = "leave"
         /** Ask → More → Week ahead, its pane up (Sunday's week-ahead heads-up). */

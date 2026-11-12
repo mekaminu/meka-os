@@ -33,4 +33,10 @@
     <string name="widget_day_list_title">Today</string>
     <string name="widget_day_list_empty">Nothing planned yet</string>
     <string name="widget_day_list_add">+ Add tasks</string>
+    <string name="widget_countdown_label">Countdown</string>
+    <string name="widget_countdown_description">Days or sleeps to Christmas, a holiday or a birthday, and the next ones</string>
+    <string name="widget_countdown_preview_name">Christmas</string>
+    <string name="widget_countdown_preview_number">43</string>
+    <string name="widget_countdown_preview_unit">days</string>
+    <string name="widget_countdown_preview_date">Fri 25 Dec</string>
 </resources>

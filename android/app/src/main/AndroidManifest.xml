@@ -263,6 +263,16 @@
         <receiver
             android:name=".widgets.DayListWidgetTickReceiver"
             android:exported="false" />
+        <!-- The Countdowns widget (Countdowns, slice 4): the one on Today (else the soonest) and the next two. -->
+        <receiver
+            android:name=".widgets.CountdownWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_countdown_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/countdown_widget_info" />
+        </receiver>
         <!-- Talk widget (Talk without tapping the mic, slice 2): a tap opens Ask already listening. No data, no refresh. -->
         <receiver
             android:name=".ask.TalkWidgetProvider"

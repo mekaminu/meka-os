@@ -8347,6 +8347,14 @@ class MekaCore(
     }
 
     /**
+     * The Countdowns home-screen widget (Countdowns, slice 4): the one on Today, else the soonest, and the next two.
+     * Null until Countdowns has been worked out once since the app started (so a widget isn't redrawn empty while the
+     * core is still loading).
+     */
+    fun countdownWidget(): os.meka.core.domain.WidgetCountdown? =
+        _countdowns.value.takeIf { it !== os.meka.core.domain.CountdownsView.EMPTY }?.let { os.meka.core.domain.CountdownWidgetRules.view(it) }
+
+    /**
      * Whether [taskId] is still open on today's Day list: the Mac's desktop widget ticks only such a task (its click
      * arrives as a link, so the app checks before marking anything done).
      */
