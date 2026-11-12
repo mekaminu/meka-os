@@ -8,6 +8,7 @@
 	<array>
 		<string>/Library/Application Support/MekaOS/NewsWidget/</string>
 		<string>/Library/Application Support/MekaOS/DayListWidget/</string>
+		<string>/Library/Application Support/MekaOS/CountdownWidget/</string>
 	</array>
 </dict>
 </plist>

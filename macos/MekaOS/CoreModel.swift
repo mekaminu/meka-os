@@ -954,6 +954,11 @@ final class CoreModel {
             if let link = DeskDayListLink.parse(url) { handleDayListLink(link) }
             return
         }
+        // The desktop Countdown widget (Countdowns, slice 6): mekaos://countdowns opens Countdowns.
+        if DeskCountdownLink.matches(url) {
+            showCountdowns = true
+            return
+        }
         guard url.host == "publish-fold-update" else { return }
         let apk = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "apk" }?.value
         prepareFoldUpdate(path: apk)
@@ -2651,6 +2656,10 @@ final class CoreModel {
 
     /// The Mac's desktop Day list widget (the Day list, slice 6b): today's open tasks as the core cuts them for a widget.
     func deskDayListWidget() -> WidgetDayList? { core?.dayListWidget() }
+
+    /// The Mac's desktop Countdown widget (Countdowns, slice 6): the one on Today, else the soonest, and the next two, as
+    /// the core cuts them for the Fold's widget. Nil while Countdowns hasn't been worked out yet.
+    func deskCountdownWidget() -> WidgetCountdown? { core?.countdownWidget() }
 
     /// A click on the desktop Day list widget (`mekaos://day-list…`): the header or a title opens today's Day list, + Add
     /// tasks opens it ready to type, a tick marks that task done (only one still open on today's list) with Undo on the bar.

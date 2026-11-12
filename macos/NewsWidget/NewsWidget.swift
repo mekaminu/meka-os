@@ -14,6 +14,8 @@ struct MekaNewsWidgetBundle: WidgetBundle {
         MekaNewsWidget()
         // The Day list, slice 6b: today's tasks on the desktop (DayListWidget.swift).
         MekaDayListWidget()
+        // Countdowns, slice 6: the next holiday or birthday on the desktop (CountdownWidget.swift).
+        MekaCountdownWidget()
     }
 }
 

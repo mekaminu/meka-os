@@ -36,6 +36,8 @@ struct MekaOSApp: App {
                     DeskNewsWidgetWriter.shared.attach(model)
                     // The desktop Day list widget (the Day list, slice 6b) reads what this writes.
                     DeskDayListWidgetWriter.shared.attach(model)
+                    // The desktop Countdown widget (Countdowns, slice 6) reads what this writes.
+                    DeskCountdownWidgetWriter.shared.attach(model)
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
                     CaptureInbox.shared.attach { text, subject, kind in

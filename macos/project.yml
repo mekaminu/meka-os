@@ -32,7 +32,7 @@ targets:
     platform: macOS
     sources:
       - path: MekaOS
-      - path: NewsWidgetShared   # also compiled into the widget (DeskNewsSnapshot, DeskDayListSnapshot)
+      - path: NewsWidgetShared   # also compiled into the widget (DeskNewsSnapshot, DeskDayListSnapshot, DeskCountdownSnapshot)
     info:
       path: MekaOS/Info.plist
       properties:
@@ -136,6 +136,7 @@ targets:
         com.apple.security.temporary-exception.files.home-relative-path.read-only:
           - /Library/Application Support/MekaOS/NewsWidget/
           - /Library/Application Support/MekaOS/DayListWidget/   # the Day list widget (slice 6b)
+          - /Library/Application Support/MekaOS/CountdownWidget/   # the Countdown widget (Countdowns, slice 6)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac.news-widget
