@@ -200,4 +200,66 @@ class CountdownsTest {
         cFold.pin("")
         assertNull(CountdownRules.alsoTile(view()))
     }
+
+    private fun off(id: String, title: String, start: Long, end: Long, who: String = "") =
+        SchoolItem(id, SchoolKind.OFF, title, who, start, end, 0, null, emptyList(), 0L)
+
+    @Test
+    fun theNextSchoolHolidayAppearsWithItsBreakingUpDay() {
+        // An INSET day doesn't count; the holiday from Mon 21 Dec breaks up the Friday before; the one after waits.
+        val school = listOf(
+            off("inset", "INSET day", d(11, 27), d(11, 27)),
+            off("xmas", "Christmas holidays", d(12, 21), d(1, 1, 2027)),
+            off("feb", "February half term", d(2, 15, 2027), d(2, 19, 2027)),
+            SchoolItem("pe", SchoolKind.WEEKLY, "PE", "Alex", thu, thu, 2, null, emptyList(), 0L),
+        )
+        val v = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), thu, school)
+        val all = listOfNotNull(v.hero) + v.rows
+        val hol = all.single { it.source == CountdownSource.SCHOOL }
+        assertEquals(CountdownRules.schoolKey("xmas"), hol.key)
+        assertEquals("Christmas holidays", hol.name)
+        assertEquals("Mon 21 Dec", hol.dateLine)
+        assertEquals(39L, hol.days)
+        assertEquals("breaks up Fri 18 Dec", hol.extra)
+        assertFalse(hol.canRemove)
+        assertEquals(CountdownIcon.GIFT, hol.icon)
+        // It leads (sooner than Christmas) and Christmas is still there.
+        assertEquals(hol.key, v.hero!!.key)
+        assertTrue(v.rows.any { it.key == CountdownRules.CHRISTMAS_KEY })
+
+        // Once it has started, the next holiday takes its place; on its first day, breaking up has passed.
+        val later = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), d(12, 22), school)
+        val next = (listOfNotNull(later.hero) + later.rows).single { it.source == CountdownSource.SCHOOL }
+        assertEquals("February half term", next.name)
+        assertEquals("breaks up Fri 12 Feb", next.extra)
+        val first = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), d(2, 15, 2027), school)
+        val onIt = (listOfNotNull(first.hero) + first.rows).single { it.source == CountdownSource.SCHOOL }
+        assertEquals("Today", onIt.number)
+        assertNull(onIt.extra)
+    }
+
+    @Test
+    fun oneBoysHolidayIsNamedAndBothBoysWinOnTheSameDay() {
+        val one = listOf(off("u7", "Trip week", d(12, 7), d(12, 11), who = "Sam"))
+        val v = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), thu, one)
+        assertEquals("breaks up Fri 4 Dec · Sam only", v.hero!!.extra)
+        val both = one + off("both", "Winter break", d(12, 7), d(12, 18))
+        val v2 = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), thu, both)
+        assertEquals(CountdownRules.schoolKey("both"), v2.hero!!.key)
+    }
+
+    @Test
+    fun theSchoolHolidayCanBeHiddenShownAgainAndPutOnToday() {
+        val school = listOf(off("xmas", "Christmas holidays", d(12, 21), d(1, 1, 2027)))
+        fun v() = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), thu, school)
+        val key = CountdownRules.schoolKey("xmas")
+        cFold.pin(key)
+        assertEquals("39 days to go · Mon 21 Dec · breaks up Fri 18 Dec", CountdownRules.alsoTile(v())!!.line)
+        assertTrue(cFold.remove(key))
+        assertTrue((listOfNotNull(v().hero) + v().rows).none { it.key == key })
+        assertNull(CountdownRules.alsoTile(v()))
+        assertEquals(1, v().hiddenCount)
+        assertTrue(cFold.showHidden())
+        assertTrue((listOfNotNull(v().hero) + v().rows).any { it.key == key })
+    }
 }

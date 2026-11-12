@@ -88,7 +88,7 @@ const val COUNTDOWNS_LIST_TAG = "countdowns-list"
  * Ask → Life → Countdowns (Countdowns, slice 1; the approved design `docs/design/countdowns/Countdowns.dc.html`): the
  * days, or sleeps for the boys, to a holiday, a birthday, an anniversary or Christmas. The one on Today (else the
  * soonest) sits large with a ring and its number; the rest are two-column cards, soonest first. + Add opens a field
- * ("Holiday 13 Feb", "… every year"); birthdays in Gifts, trips and Christmas appear by themselves. A tap shows one full
+ * ("Holiday 13 Feb", "… every year"); birthdays in Gifts, trips, the next school holiday and Christmas appear by themselves. A tap shows one full
  * screen (its name, a huge number, twinkling dots) with Show on Today, Remove (or Hide for an automatic one) and Done.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the hero, switch and cards stagger in 40 ms

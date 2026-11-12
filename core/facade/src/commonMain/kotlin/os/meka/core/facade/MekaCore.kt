@@ -14061,8 +14061,9 @@ class MekaCore(
         // Also today has the one he chose with Show on Today: slice 2).
         val countdownItems = countdowns.items()
         val countdownSettings = countdowns.settings()
-        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, todayDay)) {
-            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay)
+        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, schoolItems, todayDay)) {
+            // Slice 3: the boys' next school holiday from School too.
+            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay, schoolItems)
         } }
         val countdownsNow = _countdowns.value
         // Car completeness slice 2: each car's view now (the brief and the week ahead lead with what ran out).

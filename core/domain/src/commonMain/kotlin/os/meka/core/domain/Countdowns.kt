@@ -39,7 +39,8 @@ object CountdownSettingFields {
 enum class CountdownIcon { STAR, GIFT, CAKE, PLANE, HEART }
 
 /** Where a countdown comes from: typed in Countdowns, a birthday or anniversary in Gifts, a trip, or Christmas. */
-enum class CountdownSource { OWN, GIFTS, TRIP, CHRISTMAS }
+/** [SCHOOL]: the boys' next school holiday from School (slice 3). */
+enum class CountdownSource { OWN, GIFTS, TRIP, CHRISTMAS, SCHOOL }
 
 /** One typed countdown as stored. */
 data class CountdownItem(
@@ -111,7 +112,7 @@ object CountdownRules {
     const val NO_NAME = "Give it a name as well, like \"Holiday 13 Feb\"."
     const val PASSED = "That date has already passed."
     const val TOO_MANY = "That's as many countdowns as Navilife keeps. Remove one first."
-    const val NOTE = "Tap one to show it big for the kids. Birthdays and anniversaries in Gifts, trips and Christmas appear here on their own. Type \"every year\" for one that comes round each year."
+    const val NOTE = "Tap one to show it big for the kids. Birthdays and anniversaries in Gifts, trips, the next school holiday and Christmas appear here on their own. Type \"every year\" for one that comes round each year."
 
     private val YEARLY_WORDS = setOf("every", "yearly", "annually", "annual", "each")
     private val FILLER = setOf(
@@ -274,6 +275,35 @@ object CountdownRules {
     fun ownKey(id: String) = "c:$id"
     fun giftKey(id: String) = "g:$id"
     fun tripKey(id: String) = "t:$id"
+    fun schoolKey(id: String) = "s:$id"
+
+    /** A day off this long or longer (first to last day) is a holiday the children count down to; an INSET day isn't. */
+    const val SCHOOL_HOLIDAY_MIN_DAYS = 3
+
+    /**
+     * Countdowns, slice 3: the boys' next school holiday from School, so they can count the sleeps to breaking up.
+     * The next day off of at least [SCHOOL_HOLIDAY_MIN_DAYS] days that hasn't started yet (today counts), for both boys
+     * if there is one that soon, else one boy's (named under it). Counted to its first day off; [CountdownRow.extra]
+     * "breaks up Fri 18 Dec" (the last weekday before it), with "· <name> only" for one boy. Null for none.
+     */
+    fun nextSchoolHoliday(school: List<SchoolItem>, today: Long): SchoolItem? = school
+        .filter { it.kind == SchoolKind.OFF && it.endDay - it.startDay + 1 >= SCHOOL_HOLIDAY_MIN_DAYS && it.startDay >= today && it.startDay - today <= MAX_AHEAD_DAYS }
+        .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.who.isNotEmpty() }.thenBy { it.id })
+        .firstOrNull()
+
+    /** The last weekday before [startDay]: "breaks up" (a holiday from Monday breaks up the Friday before). */
+    fun breaksUpDay(startDay: Long): Long {
+        var d = startDay - 1
+        while (CivilDate.isoDayOfWeek(d) > 5) d--
+        return d
+    }
+
+    private fun schoolExtra(s: SchoolItem, today: Long): String? {
+        val up = breaksUpDay(s.startDay)
+        val first = if (up >= today) "breaks up ${CivilDate.shortLabel(up)}" else null
+        val whose = s.who.takeIf { it.isNotEmpty() }?.let { "$it only" }
+        return listOfNotNull(first, whose).joinToString(" · ").ifEmpty { null }
+    }
 
     /** "day"/"days", or "sleep"/"sleeps". */
     fun unitWord(n: Long, sleeps: Boolean): String = when {
@@ -306,8 +336,16 @@ object CountdownRules {
     /** Everything counted down to from [today], soonest first (hidden automatic ones left out). */
     private fun found(
         own: List<CountdownItem>, occasions: List<Occasion>, trips: List<TripItem>, settings: CountdownSettings, today: Long,
+        school: List<SchoolItem>,
     ): List<Found> {
         val out = mutableListOf<Found>()
+        nextSchoolHoliday(school, today)?.let { s ->
+            val key = schoolKey(s.id)
+            if (key !in settings.hidden) {
+                val span = maxOf(1L, s.startDay - (if (s.addedAtMs > 0) s.addedAtMs.floorDiv(CivilDate.DAY_MS) else today), 42L)
+                out += Found(key, s.title, s.startDay, span, iconFor(s.title), CountdownSource.SCHOOL, schoolExtra(s, today))
+            }
+        }
         for (c in own) {
             val d = next(c, today)
             if (d < today || d - today > MAX_AHEAD_DAYS) continue
@@ -339,22 +377,24 @@ object CountdownRules {
     }
 
     /** The automatic ones that are hidden and would still show (so "Show hidden" only appears when it brings something back). */
-    private fun hiddenCount(occasions: List<Occasion>, trips: List<TripItem>, settings: CountdownSettings, today: Long): Int =
+    private fun hiddenCount(occasions: List<Occasion>, trips: List<TripItem>, settings: CountdownSettings, today: Long, school: List<SchoolItem>): Int =
         settings.hidden.count { k ->
             when {
                 k == CHRISTMAS_KEY -> true
                 k.startsWith("g:") -> occasions.any { giftKey(it.id) == k }
                 k.startsWith("t:") -> trips.any { tripKey(it.id) == k && it.startDay >= today }
+                k.startsWith("s:") -> nextSchoolHoliday(school, today)?.let { schoolKey(it.id) == k } == true
                 else -> false
             }
         }
 
-    /** The screen from what's typed, Gifts and Trips, the settings and [today]. */
+    /** The screen from what's typed, Gifts, Trips and School, the settings and [today]. */
     fun view(
         own: List<CountdownItem>, occasions: List<Occasion>, trips: List<TripItem>, settings: CountdownSettings, today: Long,
+        school: List<SchoolItem> = emptyList(),
     ): CountdownsView {
-        val all = found(own, occasions, trips, settings, today).map { row(it, today, settings.sleeps) }
-        val hidden = hiddenCount(occasions, trips, settings, today)
+        val all = found(own, occasions, trips, settings, today, school).map { row(it, today, settings.sleeps) }
+        val hidden = hiddenCount(occasions, trips, settings, today, school)
         if (all.isEmpty()) return CountdownsView.EMPTY.copy(sleeps = settings.sleeps, hiddenCount = hidden)
         val pinned = all.firstOrNull { it.key == settings.pinnedKey }
         val hero = pinned ?: all.first()
@@ -452,7 +492,7 @@ class Countdowns(
             if (unpin.isNotEmpty()) replica.commitLocal(EntityTypes.COUNTDOWN_SETTING, SETTING_ID, unpin)
             return true
         }
-        if (key != CountdownRules.CHRISTMAS_KEY && !key.startsWith("g:") && !key.startsWith("t:")) return false
+        if (key != CountdownRules.CHRISTMAS_KEY && !key.startsWith("g:") && !key.startsWith("t:") && !key.startsWith("s:")) return false
         if (key in s.hidden) return false
         replica.commitLocal(EntityTypes.COUNTDOWN_SETTING, SETTING_ID, unpin + mapOf(
             CountdownSettingFields.HIDDEN to (s.hidden + key).sorted().joinToString("\n").fv(),

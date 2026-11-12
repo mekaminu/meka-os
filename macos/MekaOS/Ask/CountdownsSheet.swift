@@ -4,7 +4,7 @@ import SwiftUI
 /// Ask → Life → Countdowns on the Mac (Countdowns, slice 1), like the Fold's CountdownsPane and the approved design
 /// (`docs/design/countdowns/Countdowns.dc.html`): the days, or sleeps for the boys, to a holiday, a birthday, an
 /// anniversary or Christmas. The one on Today (else the soonest) sits large with a ring; the rest are two-column cards.
-/// + Add opens a field ("Holiday 13 Feb", "… every year"); birthdays in Gifts, trips and Christmas appear by
+/// + Add opens a field ("Holiday 13 Feb", "… every year"); birthdays in Gifts, trips, the next school holiday and Christmas appear by
 /// themselves. Click one to show it big (name, a huge number, twinkling dots) with Show on Today, Remove or Hide, and
 /// Done. Only Strings and Bools cross to the core.
 ///
