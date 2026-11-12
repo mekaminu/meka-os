@@ -14,3 +14,4 @@ tip: Type "every year" for one that comes round each year.
 tip: On the Fold, add the Countdown widget to the home screen: it shows the one on Today (else the soonest) and the next two.
 tip: On the Mac, add the Navilife Countdown widget to the desktop (right-click the desktop → Edit Widgets): the same countdown with its ring; a click opens Countdowns.
 tip: Hide takes a birthday, trip or Christmas off; Show hidden brings them back.
+tip: A spending plan for it shows under the one at the top ("Christmas gifts plan · £185 to go"): give the plan the same word, or the same needed-by day, in Money → Plan → Spending plans.

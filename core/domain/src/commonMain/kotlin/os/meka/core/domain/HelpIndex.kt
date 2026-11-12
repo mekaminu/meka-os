@@ -170,7 +170,7 @@ internal object HelpIndex {
             keywords = listOf("countdowns", "countdown", "countdown widget", "days to go", "how many days until", "how many sleeps", "sleeps to go", "sleeps"),
             what = "the days, or sleeps for the kids, to a holiday, a birthday, an anniversary or Christmas.",
             how = "Type one like \"Holiday 13 Feb\"; birthdays in Gifts, trips, the boys' next school holiday and Christmas appear by themselves. Tap one to show it big, and Show on Today to keep it at the top and on Today's Also today.",
-            tips = listOf("Type \"every year\" for one that comes round each year.", "On the Fold, add the Countdown widget to the home screen: it shows the one on Today (else the soonest) and the next two.", "On the Mac, add the Navilife Countdown widget to the desktop (right-click the desktop → Edit Widgets): the same countdown with its ring; a click opens Countdowns.", "Hide takes a birthday, trip or Christmas off; Show hidden brings them back."),
+            tips = listOf("Type \"every year\" for one that comes round each year.", "On the Fold, add the Countdown widget to the home screen: it shows the one on Today (else the soonest) and the next two.", "On the Mac, add the Navilife Countdown widget to the desktop (right-click the desktop → Edit Widgets): the same countdown with its ring; a click opens Countdowns.", "Hide takes a birthday, trip or Christmas off; Show hidden brings them back.", "A spending plan for it shows under the one at the top (\"Christmas gifts plan · £185 to go\"): give the plan the same word, or the same needed-by day, in Money → Plan → Spending plans."),
             fold = HelpPlace.COUNTDOWNS,
             foldWhere = "Ask → Life → Countdowns",
             mac = HelpPlace.COUNTDOWNS,

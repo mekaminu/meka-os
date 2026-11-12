@@ -14131,9 +14131,11 @@ class MekaCore(
         val countdownSettings = countdowns.settings()
         // Spending plans, slice 1: the plans added up (Can I afford it? only while Money is open).
         timed("SpendPlans") { publishSpendPlans() }
-        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, schoolItems, todayDay)) {
+        // The spending plan under a countdown ("Christmas gifts plan · £185 to go"): the plans' own totals, no Money figures.
+        val planLinks = os.meka.core.domain.SpendPlanRules.countdownLinks(spendPlans.plans(), spendPlans.things(), todayDay)
+        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, schoolItems, planLinks, todayDay)) {
             // Slice 3: the boys' next school holiday from School too.
-            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay, schoolItems)
+            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay, schoolItems, planLinks)
         } }
         val countdownsNow = _countdowns.value
         // Car completeness slice 2: each car's view now (the brief and the week ahead lead with what ran out).

@@ -74,7 +74,15 @@ data class CountdownRow(
     val extra: String?,
     val canRemove: Boolean,
     val spoken: String,
+    /**
+     * The spending plan for it (2026-11-12): "Christmas gifts plan · £185 to go", shown on the Countdowns screen's hero
+     * card only (never on Today, the widgets or Obi's lines, so a plan's money stays in the app); null for none.
+     */
+    val planLine: String? = null,
 )
+
+/** A spending plan as Countdowns sees it: its [name], the day it's needed by (-1 for none) and [toGo] "£185 to go". */
+data class CountdownPlanLink(val name: String, val byDay: Long, val toGo: String?)
 
 /**
  * The Countdowns screen: [hero] (the one on Today, else the soonest) and the rest as cards, soonest first; [sleeps]
@@ -316,6 +324,35 @@ object CountdownRules {
         val source: CountdownSource, val extra: String?,
     )
 
+    /** Words that say nothing about which countdown a plan is for. */
+    private val PLAN_FILLER = setOf("gift", "gifts", "present", "presents", "plan", "plans", "money", "shopping", "spend", "spending", "budget", "fund", "the", "and", "for", "day")
+
+    private fun planWords(name: String): Set<String> = words(name).map { it.lowercase().trimEnd('\'', '’').removeSuffix("'s").removeSuffix("’s") }
+        .filter { it.length >= 3 && it !in PLAN_FILLER && !it.all(Char::isDigit) }.toSet()
+
+    /** How long before a countdown a plan's needed-by day may fall and still be for it (gifts bought ahead). */
+    const val PLAN_LEAD_DAYS = 31L
+
+    /**
+     * The spending plan for a countdown named [name] on [day]: one needed by that very day, else one sharing a word with
+     * its name ("Christmas gifts" for Christmas, "Holiday" for Holiday; "gifts", "plan" and the like don't count) whose
+     * needed-by day is none or up to [PLAN_LEAD_DAYS] before it. The nearest needed-by day wins. Null for none.
+     */
+    fun planFor(name: String, day: Long, plans: List<CountdownPlanLink>): CountdownPlanLink? {
+        plans.firstOrNull { it.byDay == day }?.let { return it }
+        val mine = planWords(name)
+        if (mine.isEmpty()) return null
+        return plans.filter { p -> (p.byDay < 0 || p.byDay in day - PLAN_LEAD_DAYS..day) && planWords(p.name).any { it in mine } }
+            .sortedWith(compareBy<CountdownPlanLink> { if (it.byDay < 0) Long.MAX_VALUE else day - it.byDay }.thenBy { it.name.lowercase() })
+            .firstOrNull()
+    }
+
+    /** "Christmas gifts plan · £185 to go" ("Holiday plan" with nothing priced yet; no second "plan"). */
+    fun planLine(p: CountdownPlanLink): String {
+        val n = if (p.name.lowercase().endsWith("plan")) p.name else "${p.name} plan"
+        return listOfNotNull(n, p.toGo).joinToString(" · ")
+    }
+
     private fun row(f: Found, today: Long, sleeps: Boolean): CountdownRow {
         val n = f.day - today
         val number = if (n == 0L) "Today" else n.toString()
@@ -392,8 +429,16 @@ object CountdownRules {
     fun view(
         own: List<CountdownItem>, occasions: List<Occasion>, trips: List<TripItem>, settings: CountdownSettings, today: Long,
         school: List<SchoolItem> = emptyList(),
+        plans: List<CountdownPlanLink> = emptyList(),
     ): CountdownsView {
-        val all = found(own, occasions, trips, settings, today, school).map { row(it, today, settings.sleeps) }
+        // Each plan sits under one countdown at most: the soonest it fits.
+        val claimed = mutableSetOf<String>()
+        val all = found(own, occasions, trips, settings, today, school).map { f ->
+            val r = row(f, today, settings.sleeps)
+            val p = planFor(f.name, f.day, plans.filter { it.name !in claimed }) ?: return@map r
+            claimed += p.name
+            r.copy(planLine = planLine(p))
+        }
         val hidden = hiddenCount(occasions, trips, settings, today, school)
         if (all.isEmpty()) return CountdownsView.EMPTY.copy(sleeps = settings.sleeps, hiddenCount = hidden)
         val pinned = all.firstOrNull { it.key == settings.pinnedKey }

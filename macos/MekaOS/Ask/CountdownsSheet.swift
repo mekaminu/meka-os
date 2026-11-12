@@ -194,6 +194,11 @@ private struct HeroCard: View {
                     if let extra = row.extra {
                         Text(extra).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
+                    // Its spending plan ("Christmas gifts plan · £185 to go"), on this screen only.
+                    if let plan = row.planLine {
+                        Text(plan).font(MekaType.caption).foregroundStyle(palette.accent)
+                            .accessibilityIdentifier("countdown-plan")
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -204,7 +209,7 @@ private struct HeroCard: View {
         }
         .buttonStyle(MekaPressStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(row.spoken + (onToday ? ". On Today" : ""))
+        .accessibilityLabel(row.spoken + (row.planLine.map { ". \($0)" } ?? "") + (onToday ? ". On Today" : ""))
     }
 }
 

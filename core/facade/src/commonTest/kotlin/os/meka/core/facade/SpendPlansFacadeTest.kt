@@ -52,4 +52,29 @@ class SpendPlansFacadeTest {
         assertTrue(fold.removeSpendPlan(id))
         assertTrue(fold.spendPlansView.value.plans.isEmpty())
     }
+
+    @Test
+    fun christmasOnCountdownsCarriesItsPlanOnBothAppsButNotOnTodayOrTheWidget() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertEquals(null, fold.countdownsView.value.hero?.planLine)
+        val id = fold.addSpendPlan("Christmas gifts 20 Dec", "GBP").id!!
+        assertFalse(fold.addSpendThing(id, "Football boots", "", "45", 0).refused)
+        assertFalse(fold.addSpendThing(id, "Lego set", "", "140", 0).refused)
+        val hero = fold.countdownsView.value.hero!!
+        assertEquals("Christmas", hero.name)
+        assertEquals("Christmas gifts plan · £185 to go", hero.planLine)
+        // The plan's money stays off Today's tile, the widget and what Obi reads.
+        fold.showCountdownOnToday(hero.key)
+        val widget = fold.countdownWidget()!!
+        assertFalse(widget.toString().contains("£"))
+        fold.syncNow(); mac.syncNow()
+        val row = mac.spendPlansView.value.plan(id)!!.rows.first { it.name == "Lego set" }
+        assertTrue(mac.setSpendThingDone(row.id, true))
+        assertEquals("Christmas gifts plan · £45 to go", mac.countdownsView.value.hero!!.planLine)
+        mac.syncNow(); fold.syncNow()
+        assertEquals("Christmas gifts plan · £45 to go", fold.countdownsView.value.hero!!.planLine)
+        assertTrue(fold.removeSpendPlan(id))
+        assertEquals(null, fold.countdownsView.value.hero!!.planLine)
+    }
 }

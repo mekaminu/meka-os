@@ -385,6 +385,22 @@ object SpendPlanRules {
         )
     }
 
+    /**
+     * The plans as Countdowns sees them ([CountdownRules.planFor]): name, needed-by day and "£185 to go" ("all bought" /
+     * "all sent" once nothing is left; null with nothing priced). Totals only: no Money figures go with it.
+     */
+    fun countdownLinks(plans: List<SpendPlanItem>, things: List<SpendThing>, today: Long): List<CountdownPlanLink> = plans.map { p ->
+        val d = detail(p, things, null, today)
+        val mine = things.filter { it.planId == p.id }
+        val priced = mine.isNotEmpty() && mine.all { penceOf(minorOf(it, p), p) != null }
+        val toGo = when {
+            !priced -> null
+            mine.all { it.done } -> if (p.foreign) "all sent" else "all bought"
+            else -> d.spentLine.substringAfter(" · ", "").takeIf { it.endsWith(" to go") }
+        }
+        CountdownPlanLink(p.name, p.byDay, toGo)
+    }
+
     /** His average month from Money's forecast, or null when it has none ready (no pay in, or not two months yet). */
     fun money(f: MoneyForecastView?): SpendMonthMoney? =
         f?.takeIf { it.notReady == null && it.inRounded > 0 }?.let { SpendMonthMoney(it.inRounded, it.outRounded) }

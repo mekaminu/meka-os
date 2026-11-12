@@ -319,4 +319,42 @@ class CountdownsTest {
             .forEach { assertTrue(CountdownAskRules.asked(it, names), it) }
         listOf("Why is the sky blue?", "What's on today?").forEach { assertFalse(CountdownAskRules.asked(it, names), it) }
     }
+
+    @Test
+    fun aSpendingPlanSitsUnderTheCountdownItIsFor() {
+        val xmas = d(12, 25)
+        val gifts = CountdownPlanLink("Christmas gifts", d(12, 20), "£185 to go")
+        val holiday = CountdownPlanLink("Holiday", -1L, null)
+        val home = CountdownPlanLink("Money home", d(12, 1), "£300 to go")
+        assertEquals(gifts, CountdownRules.planFor("Christmas", xmas, listOf(home, gifts, holiday)))
+        assertEquals(holiday, CountdownRules.planFor("Holiday", d(2, 13, 2027), listOf(home, gifts, holiday)))
+        // Needed by the very day wins whatever its name; "gifts" alone matches nothing; too early doesn't count.
+        assertEquals(home, CountdownRules.planFor("Lunch", d(12, 1), listOf(gifts, home)))
+        assertNull(CountdownRules.planFor("Birthday gifts", d(12, 2), listOf(gifts)))
+        assertNull(CountdownRules.planFor("Christmas", xmas, listOf(CountdownPlanLink("Christmas gifts", d(10, 1), null))))
+        assertEquals("Christmas gifts plan · £185 to go", CountdownRules.planLine(gifts))
+        assertEquals("Holiday plan", CountdownRules.planLine(holiday))
+        assertEquals("Trip plan · all bought", CountdownRules.planLine(CountdownPlanLink("Trip plan", -1, "all bought")))
+
+        cFold.add("Holiday 13 Feb")
+        val v = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), thu, plans = listOf(gifts, holiday))
+        assertEquals("Christmas gifts plan · £185 to go", v.hero!!.planLine)
+        assertEquals("Holiday plan", v.rows.single { it.name == "Holiday" }.planLine)
+        // Only on the screen: the Today tile and Obi's lines say nothing of it.
+        cFold.pin(CountdownRules.CHRISTMAS_KEY)
+        val pinned = CountdownRules.view(cFold.items(), emptyList(), emptyList(), cFold.settings(), thu, plans = listOf(gifts))
+        assertFalse(CountdownRules.alsoTile(pinned)!!.line.contains("£"))
+        assertTrue(CountdownAskRules.askLines(pinned, full = true).none { "£" in it })
+        assertFalse(CountdownWidgetRules.view(pinned).toString().contains("£"))
+    }
+
+    @Test
+    fun aPlansCountdownLinkIsItsTotalsOnly() {
+        val p = SpendPlanItem("p1", "Christmas gifts", d(12, 20), SpendPlanRules.GBP, 0, 0, 0)
+        val boots = SpendThing("t1", "p1", "Boots", "", 4500, 0, done = true, addedAtMs = 0)
+        val lego = SpendThing("t2", "p1", "Lego", "", 14000, 0, done = false, addedAtMs = 0)
+        assertEquals(listOf(CountdownPlanLink("Christmas gifts", d(12, 20), "£140 to go")), SpendPlanRules.countdownLinks(listOf(p), listOf(boots, lego), thu))
+        assertEquals("all bought", SpendPlanRules.countdownLinks(listOf(p), listOf(boots), thu).single().toGo)
+        assertNull(SpendPlanRules.countdownLinks(listOf(p), emptyList(), thu).single().toGo)
+    }
 }

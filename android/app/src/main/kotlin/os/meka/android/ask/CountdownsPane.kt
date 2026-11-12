@@ -257,7 +257,7 @@ private fun HeroCard(row: CountdownRow, onToday: Boolean, modifier: Modifier, on
             .border(1.dp, Meka.colors.accent.copy(alpha = 0.18f), RoundedCornerShape(20.dp))
             .background(Meka.colors.accent.copy(alpha = 0.06f))
             .clickable(role = Role.Button, onClick = onTap)
-            .semantics(mergeDescendants = true) { contentDescription = row.spoken + if (onToday) ". On Today" else "" }
+            .semantics(mergeDescendants = true) { contentDescription = row.spoken + (row.planLine?.let { ". $it" } ?: "") + if (onToday) ". On Today" else "" }
             .padding(MekaSpace.m),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
@@ -276,6 +276,8 @@ private fun HeroCard(row: CountdownRow, onToday: Boolean, modifier: Modifier, on
             Text(row.name, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
             Text(row.dateLine, style = MekaType.caption, color = Meka.colors.textSecondary)
             row.extra?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            // Its spending plan ("Christmas gifts plan · £185 to go"), on this screen only.
+            row.planLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.testTag("countdown-plan")) }
         }
     }
 }
