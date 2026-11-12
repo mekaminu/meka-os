@@ -285,7 +285,7 @@ private fun GroupCard(
         Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
             Text(g.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.width(MekaSpace.xs))
-            Text(g.count, style = MekaType.micro, color = Meka.colors.textSecondary,
+            if (g.count.isNotEmpty()) Text(g.count, style = MekaType.micro, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
             Spacer(Modifier.weight(1f))

@@ -51,7 +51,7 @@ data class HabitBoardRow(
 
 data class HabitBoardGroup(
     val title: String,
-    /** "2 of 3" done on the selected day. */
+    /** "2 of 3" done on the selected day; empty when none of its habits had started by then. */
     val count: String,
     /** "before work", "any time", "before bed"; empty for his own lists. */
     val whenLine: String,
@@ -60,7 +60,7 @@ data class HabitBoardGroup(
 
 data class HabitBoard(
     val days: List<HabitBoardDay>,
-    /** "3 of 8 done today", "5 of 8 done · Tue 10". */
+    /** "3 of 8 done today", "5 of 8 done · Tue 10", "No habits yet" (never "0 of 0"). */
     val doneLine: String,
     /** "best streak 9 days"; null when no habit has a streak of 2 yet. */
     val streakLine: String?,
@@ -92,6 +92,7 @@ object HabitBoardRules {
     val DEFAULT_LISTS = listOf(MORNING, ALL_DAY, NIGHT)
     const val MAX_LIST = 24
     const val HINT = "Tap the circle: done, then missed, then clear · tap a day to mark an earlier day"
+    const val NO_HABITS = "No habits yet"
     const val EMPTY_LINE = "Add a habit to do (Drink water) or one to keep off (No biscuits). Tap its circle each day."
     private val WEEKDAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -162,22 +163,29 @@ object HabitBoardRules {
             val done = habits.count { countsOn(it, i) && markOn(it, i) == HabitMark.DONE }
             val wd = WEEKDAYS[CivilDate.isoDayOfWeek(d) - 1]
             val dom = CivilDate.fromEpochDay(d).day
-            HabitBoardDay(d, wd, dom, done, total, i == sel, i == DAYS - 1, "$wd $dom, $done of $total done")
+            HabitBoardDay(d, wd, dom, done, total, i == sel, i == DAYS - 1, if (total == 0) "$wd $dom, no habits yet" else "$wd $dom, $done of $total done")
         }
         val shown = habits.filter { chosen == ALL || listName(it) == chosen }
         val counted = shown.filter { countsOn(it, sel) }
         val done = counted.count { markOn(it, sel) == HabitMark.DONE }
         val selDay = days[sel]
-        val doneLine = "$done of ${counted.size} done" + if (sel == DAYS - 1) " today" else " · ${selDay.weekday} ${selDay.dayOfMonth}"
+        val on = if (sel == DAYS - 1) " today" else " · ${selDay.weekday} ${selDay.dayOfMonth}"
+        // Never "0 of 0": no habits at all, or none yet on that day (all added later).
+        val doneLine = when {
+            habits.isEmpty() -> NO_HABITS
+            counted.isEmpty() -> "No habits yet$on"
+            else -> "$done of ${counted.size} done$on"
+        }
         val best = shown.maxByOrNull { it.streak }?.takeIf { it.streak >= 2 }
         val groups = lists.filter { chosen == ALL || it == chosen }.mapNotNull { name ->
             val rows = shown.filter { listName(it) == name }
                 .sortedWith(compareBy<HabitItem> { it.createdDay }.thenBy { it.title.lowercase() }.thenBy { it.id })
             if (rows.isEmpty()) return@mapNotNull null
             val d = rows.count { countsOn(it, sel) && markOn(it, sel) == HabitMark.DONE }
+            val n = rows.count { countsOn(it, sel) }
             HabitBoardGroup(
                 title = name,
-                count = "$d of ${rows.count { countsOn(it, sel) }}",
+                count = if (n == 0) "" else "$d of $n",
                 whenLine = whenLine(name),
                 rows = rows.map { h ->
                     val m = markOn(h, sel)

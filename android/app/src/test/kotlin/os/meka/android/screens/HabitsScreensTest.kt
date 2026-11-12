@@ -78,7 +78,7 @@ class HabitsScreensTest {
                     Triple("Floss", false, "Night time"), Triple("Read 10 pages", false, "Night time"),
                 ).forEach { (name, avoid, list) -> ids[name] = core.addHabitToList(name, avoid, list) }
                 clock = now
-                val today = core.goalsView.value.today
+                val today = now / dayMs // 10:00 in London is 10:00 UTC in November
                 for (back in 0..6) {
                     core.setHabitMark(ids.getValue("Brush teeth"), today - back, HabitMark.DONE)
                     core.setHabitMark(ids.getValue("No shop coffee"), today - back, HabitMark.DONE)
@@ -123,6 +123,7 @@ class HabitsScreensTest {
             ScreenShots.assertShows(compose, name, "Avoid · 7 day streak")
         } else {
             ScreenShots.assertShows(compose, name, "Add a habit to do")
+            ScreenShots.assertShows(compose, name, "No habits yet")
         }
     }
 

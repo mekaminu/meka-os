@@ -138,6 +138,11 @@ class HabitBoardTest {
         assertEquals(1, b.days[0].total)
         assertEquals(2, b.days[6].total)
         assertEquals("0 of 1 done · Fri 6", board(sel = 0).doneLine)
+        // A list whose habits all started later: no "0 of 0".
+        g.setHabitList(view().habits.first { it.title == "New one" }.id, "Weekend")
+        val fri = board(sel = 0, list = "Weekend")
+        assertEquals("No habits yet · Fri 6", fri.doneLine)
+        assertEquals("", fri.groups.single().count)
     }
 
     @Test
@@ -169,7 +174,8 @@ class HabitBoardTest {
     fun noHabitsIsAnEmptyBoard() {
         val b = board()
         assertTrue(b.empty)
-        assertEquals("0 of 0 done today", b.doneLine)
+        assertEquals("No habits yet", b.doneLine)
+        assertEquals("Thu 12, no habits yet", b.days[6].label)
         assertTrue(b.groups.isEmpty())
         assertNull(b.streakLine)
     }
