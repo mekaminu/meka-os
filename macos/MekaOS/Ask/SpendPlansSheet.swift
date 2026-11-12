@@ -385,7 +385,7 @@ struct SpendPlansSheet: View {
             if photo {
                 Button { if r.hasPhoto { seePhoto(r.id) } else { choosePhoto(r.id) } } label: {
                     Image(systemName: "camera")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(MekaType.metaStrong)
                         .foregroundStyle(r.hasPhoto ? palette.textPrimary : palette.accent)
                         .frame(width: 36, height: 36)
                         .background(r.hasPhoto ? palette.accent.opacity(0.28) : palette.surfaceRaised, in: RoundedRectangle(cornerRadius: 9))
