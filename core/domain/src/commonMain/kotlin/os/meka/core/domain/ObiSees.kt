@@ -49,7 +49,9 @@ enum class ObiArea(val key: String, val kind: AskItemKind, val label: String, va
     // Ada plans with you, part 3 slice 1 ([WorkingOnRules]): the standing errands, his own renewals, birthdays and waiting-fors.
     WORKING_ON("working_on", AskItemKind.WORKING_ON, "What Obi is working on", "Ask → Daily → Obi is working on", WorkingOnRules.ASK_MAX),
     // Your team, slice 3 ([TeamAskRules]): each helper's day and what waits on him, the screen's own words.
-    TEAM("team", AskItemKind.TEAM, "Your team", "Ask → Daily → Your team", TeamAskRules.ASK_MAX);
+    TEAM("team", AskItemKind.TEAM, "Your team", "Ask → Daily → Your team", TeamAskRules.ASK_MAX),
+    // Countdowns, Obi reads them ([CountdownAskRules]): every countdown with its day and how long to go.
+    COUNTDOWNS("countdowns", AskItemKind.COUNTDOWNS, "Countdowns", "Ask → Life → Countdowns", CountdownAskRules.ASK_MAX);
 
     companion object {
         fun of(key: String?): ObiArea? = key?.trim()?.lowercase()?.let { k -> entries.firstOrNull { it.key == k } }

@@ -89,7 +89,7 @@ class ObiSeesFacadeTest {
         // An area that sends one counts line unless asked about is compared on a question about it.
         val about = mapOf(ObiArea.BOARD to "What's on Someday?", ObiArea.DECISIONS to "What did I decide?", ObiArea.READING to "Which book should I take on holiday?", ObiArea.KIDS to "What do the kids need?",
             ObiArea.EMERGENCY to "Who do I call in an emergency?", ObiArea.NEWS to "Anything in the news?", ObiArea.VOICE_NOTES to "What did I say in my voice notes?",
-            ObiArea.HEALTH to "Is the app connected properly?", ObiArea.VAULT to "Is anything expiring soon?", ObiArea.WORKING_ON to "What are you working on?", ObiArea.TEAM to "What did my team do today?")
+            ObiArea.HEALTH to "Is the app connected properly?", ObiArea.VAULT to "Is anything expiring soon?", ObiArea.WORKING_ON to "What are you working on?", ObiArea.TEAM to "What did my team do today?", ObiArea.COUNTDOWNS to "How many sleeps till Christmas?")
         c.askMeka(q)
         val context = server.asked.last().second
         ObiArea.entries.forEach { area ->
@@ -157,5 +157,24 @@ class ObiSeesFacadeTest {
         assertEquals(0, server.asked.last().second.items.count { it.kind == AskItemKind.TEAM })
         // The orb's look-up reads the same lines.
         assertTrue(c.liveNavilife("team", "").lines().first().startsWith("team: Your team · 5 helpers"))
+    }
+
+    /** Countdowns: Obi reads them; asked about one (a word or its name) every one, else one counts line. */
+    @Test
+    fun obiReadsTheCountdowns() = runTest {
+        val c = core()
+        c.addCountdown("Holiday 13 Feb")
+        c.tick()
+        c.askMeka("Why is the sky blue?")
+        val brief = server.asked.last().second.items.filter { it.kind == AskItemKind.COUNTDOWNS }.map { it.line }
+        assertEquals(listOf("Countdowns · 2 · the soonest: Christmas in 58 days"), brief)
+        c.askMeka("When's the holiday?")
+        val full = server.asked.last().second.items.filter { it.kind == AskItemKind.COUNTDOWNS }.map { it.line }
+        assertEquals(listOf(
+            "Countdowns · 2 · the soonest: Christmas in 58 days",
+            "Christmas · Fri 25 Dec · in 58 days",
+            "Holiday · Sat 13 Feb · in 108 days · typed",
+        ), full)
+        assertTrue(c.liveNavilife("countdowns", "how many sleeps?").lines().last().startsWith("countdowns: Holiday · Sat 13 Feb"))
     }
 }

@@ -11380,6 +11380,8 @@ class MekaCore(
                 workingOnFromWeb = os.meka.core.domain.WorkingOnRules.fromWeb(workingOnNow(), os.meka.core.domain.WorkingOnRules.asked(q)),
                 // Your team, slice 3: each helper's day, all of it when asked about (or from Ask the team…), else one line.
                 team = obiSeesLines(os.meka.core.domain.ObiArea.TEAM, q, cal, full = teamAsked(q)),
+                // Countdowns, Obi reads them: every countdown when asked ("how many sleeps till Christmas?"), else one line.
+                countdowns = obiSeesLines(os.meka.core.domain.ObiArea.COUNTDOWNS, q, cal, full = countdownsAsked(q)),
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
@@ -13039,9 +13041,14 @@ class MekaCore(
             os.meka.core.domain.ObiArea.VAULT -> os.meka.core.domain.ObiRestRules.vaultLines(_documents.value, full)
             os.meka.core.domain.ObiArea.WORKING_ON -> os.meka.core.domain.WorkingOnRules.askLines(workingOnNow(), full)
             os.meka.core.domain.ObiArea.TEAM -> os.meka.core.domain.TeamAskRules.askLines(teamNow(), full)
+            os.meka.core.domain.ObiArea.COUNTDOWNS -> os.meka.core.domain.CountdownAskRules.askLines(_countdowns.value, full)
         }
         return lines.take(area.max)
     }
+
+    /** Countdowns: whether [q] is about a countdown (a countdown word or one of their names). Caller is on the core. */
+    private fun countdownsAsked(q: String): Boolean =
+        os.meka.core.domain.CountdownAskRules.asked(q, os.meka.core.domain.CountdownAskRules.names(_countdowns.value))
 
     /** Your team, slice 3: whether [q] is about the team, or was asked from Ask the team… a moment ago. Caller is on the core. */
     private fun teamAsked(q: String): Boolean = os.meka.core.domain.TeamAskRules.asked(q) || nowMs() < teamAskUntilMs

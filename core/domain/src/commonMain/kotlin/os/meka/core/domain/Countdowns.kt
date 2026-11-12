@@ -446,6 +446,66 @@ object CountdownRules {
     }
 }
 
+/**
+ * Countdowns, Obi reads them (2026-11-12): Ask's and Live's lines for [ObiArea.COUNTDOWNS], so "how many sleeps till
+ * Christmas?" or "when's the holiday?" has an answer. With a question about a countdown (a countdown word, "how many
+ * days/sleeps till", or one of their names) every one, soonest first: "Holiday · Sat 13 Feb · in 93 days · typed ·
+ * on Today"; otherwise the one counts line. His own names and Navilife's own words, never untrusted.
+ */
+object CountdownAskRules {
+    /** Countdowns described one a line. */
+    const val ASK_ROWS = 10
+    const val ASK_MAX = 1 + ASK_ROWS
+
+    private val WORDS = Regex("""\b(count ?downs?|sleeps?|how many (more )?(days|weeks|sleeps)|how long (until|till|til|to|before)|days? (until|till|til|to go)|(until|till|til) (christmas|xmas))\b""")
+
+    /** Whether [q] is about a countdown: a countdown word, or one of their [names] (four letters or more). */
+    fun asked(q: String, names: List<String> = emptyList()): Boolean {
+        val l = q.lowercase()
+        if (WORDS.containsMatchIn(l)) return true
+        return names.any { n -> n.trim().length >= 4 && Regex("""\b${Regex.escape(n.trim().lowercase())}\b""").containsMatchIn(l) }
+    }
+
+    /** Every name shown in [v] (for [asked]). */
+    fun names(v: CountdownsView): List<String> = (listOfNotNull(v.hero) + v.rows).map { it.name }
+
+    private fun whence(r: CountdownRow): String = when {
+        r.days == 0L -> "today"
+        r.days == 1L -> "tomorrow"
+        else -> "in ${r.days} days"
+    }
+
+    private fun source(s: CountdownSource): String = when (s) {
+        CountdownSource.OWN -> "typed"
+        CountdownSource.GIFTS -> "from Gifts"
+        CountdownSource.TRIP -> "a trip"
+        CountdownSource.CHRISTMAS -> "Christmas"
+        CountdownSource.SCHOOL -> "school holiday"
+    }
+
+    /**
+     * "Countdowns · 4 · on Today: Christmas in 43 days" ("the soonest: …" when none is chosen; "· counted in sleeps (a
+     * sleep a day)" with Sleeps on), then, when [full], each one soonest first. Empty with none.
+     */
+    fun askLines(v: CountdownsView, full: Boolean): List<String> {
+        val hero = v.hero ?: return emptyList()
+        val all = (listOf(hero) + v.rows).sortedWith(compareBy<CountdownRow> { it.days }.thenBy { it.name.lowercase() })
+        val lead = CountdownRules.tileLine(hero, sleeps = false).text
+        val head = listOfNotNull(
+            "Countdowns · ${all.size}",
+            (if (v.heroOnToday) "on Today: " else "the soonest: ") + lead,
+            if (v.sleeps) "counted in sleeps (a sleep a day)" else null,
+        ).joinToString(" · ")
+        if (!full) return listOf(head)
+        return listOf(head) + all.take(ASK_ROWS).map { r ->
+            listOfNotNull(
+                r.name, r.dateLine, whence(r), source(r.source).takeIf { r.source != CountdownSource.CHRISTMAS }, r.extra,
+                if (v.heroOnToday && r.key == hero.key) "on Today" else null,
+            ).joinToString(" · ")
+        }
+    }
+}
+
 /** The countdowns typed on a replica, and the Countdowns setting. */
 class Countdowns(
     private val replica: Replica,

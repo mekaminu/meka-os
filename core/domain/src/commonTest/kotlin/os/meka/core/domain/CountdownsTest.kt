@@ -286,4 +286,34 @@ class CountdownsTest {
         assertEquals("Countdowns. ${CountdownWidgetRules.EMPTY}. ${CountdownRules.OPENS}", none.spoken)
         assertEquals(CountdownWidgetRules.DESK_EMPTY_HINT, CountdownWidgetRules.emptyHint(desk = true))
     }
+
+    /** Obi reads them: a question about a countdown carries every one, soonest first; anything else the counts line. */
+    @Test
+    fun obiReadsEveryCountdownWhenAskedAndOneLineOtherwise() {
+        assertEquals(emptyList(), CountdownAskRules.askLines(CountdownsView.EMPTY, full = true))
+        cFold.add("Holiday 13 Feb")
+        val sam = Occasion("o1", "Sam", OccasionKind.BIRTHDAY, 12, 2, 2017, 3, 0, 0)
+        var v = view(occasions = listOf(sam))
+        val soonest = v.hero!!.name
+        assertEquals(listOf("Countdowns · 3 · the soonest: $soonest in 20 days"), CountdownAskRules.askLines(v, full = false))
+        assertEquals(listOf(
+            "Countdowns · 3 · the soonest: $soonest in 20 days",
+            "$soonest · Wed 2 Dec · in 20 days · from Gifts · turns 9",
+            "Christmas · Fri 25 Dec · in 43 days",
+            "Holiday · Sat 13 Feb · in 93 days · typed",
+        ), CountdownAskRules.askLines(v, full = true))
+        // The one on Today leads the counts line and is marked; Sleeps is said.
+        cFold.pin(v.rows.first { it.name == "Holiday" }.key)
+        cFold.setSleeps(true)
+        v = view(occasions = listOf(sam))
+        val lines = CountdownAskRules.askLines(v, full = true)
+        assertEquals("Countdowns · 3 · on Today: Holiday in 93 days · counted in sleeps (a sleep a day)", lines.first())
+        assertEquals("Holiday · Sat 13 Feb · in 93 days · typed · on Today", lines.last())
+        assertEquals(4, lines.size)
+        // What counts as asked.
+        val names = CountdownAskRules.names(v)
+        listOf("How many sleeps till Christmas?", "how many days until the holiday", "Show my countdowns", "When's the holiday?", "how long until we go?")
+            .forEach { assertTrue(CountdownAskRules.asked(it, names), it) }
+        listOf("Why is the sky blue?", "What's on today?").forEach { assertFalse(CountdownAskRules.asked(it, names), it) }
+    }
 }

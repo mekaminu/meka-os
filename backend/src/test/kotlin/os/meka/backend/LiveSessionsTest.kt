@@ -353,6 +353,8 @@ class LiveSessionsTest {
         // Slice 4: the places that were Later.
         listOf("Its emergency lines", "Its news lines", "Its voice_notes lines", "Its health lines", "Its vault lines").forEach { assertTrue(it in AskService.SYSTEM, it) }
         assertTrue(listOf("emergency", "news", "voice_notes", "health", "vault").all { it in areas })
+        // Countdowns: the prompt explains them and the Live look-up names them.
+        assertTrue("Its countdowns lines" in AskService.SYSTEM && "countdowns" in areas)
     }
 
     @Test

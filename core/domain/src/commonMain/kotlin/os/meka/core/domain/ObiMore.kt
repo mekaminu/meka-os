@@ -119,8 +119,8 @@ object ObiCoverage {
         HelpPlace.APPOINTMENTS -> ObiReach.Areas(listOf(ObiArea.APPOINTMENTS))
         HelpPlace.LEAVE -> ObiReach.Areas(listOf(ObiArea.LEAVE))
         HelpPlace.GIFTS -> ObiReach.Areas(listOf(ObiArea.GIFTS))
-        // Countdowns: the birthdays, trips and school holidays it counts down to are Gifts', Trips' and School's (its own lines are next).
-        HelpPlace.COUNTDOWNS -> ObiReach.Areas(listOf(ObiArea.GIFTS, ObiArea.TRIPS, ObiArea.SCHOOL))
+        // Countdowns: its own lines ([CountdownAskRules]), and the birthdays, trips and school holidays behind them.
+        HelpPlace.COUNTDOWNS -> ObiReach.Areas(listOf(ObiArea.COUNTDOWNS, ObiArea.GIFTS, ObiArea.TRIPS, ObiArea.SCHOOL))
         HelpPlace.TRIPS -> ObiReach.Areas(listOf(ObiArea.TRIPS))
         HelpPlace.ERRANDS -> ObiReach.Areas(listOf(ObiArea.ERRANDS))
         HelpPlace.CAR -> ObiReach.Areas(listOf(ObiArea.CAR))

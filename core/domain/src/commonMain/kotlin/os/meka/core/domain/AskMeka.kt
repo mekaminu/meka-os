@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study"), BOARD("board"), DECISIONS("decisions"), READING("reading"), EMERGENCY("emergency"), NEWS("news"), VOICE_NOTES("voice_notes"), HEALTH("health"), VAULT("vault"), WORKING_ON("working_on"), TEAM("team") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study"), BOARD("board"), DECISIONS("decisions"), READING("reading"), EMERGENCY("emergency"), NEWS("news"), VOICE_NOTES("voice_notes"), HEALTH("health"), VAULT("vault"), WORKING_ON("working_on"), TEAM("team"), COUNTDOWNS("countdowns") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -325,7 +325,7 @@ object AskRules {
                 barca: List<String> = emptyList(), study: List<String> = emptyList(),
                 board: List<String> = emptyList(), decisions: List<String> = emptyList(), reading: List<String> = emptyList(),
                 emergency: List<String> = emptyList(), news: List<String> = emptyList(), voiceNotes: List<String> = emptyList(),
-                health: List<String> = emptyList(), vault: List<String> = emptyList(), workingOn: List<String> = emptyList(), workingOnFromWeb: Boolean = false, team: List<String> = emptyList(),
+                health: List<String> = emptyList(), vault: List<String> = emptyList(), workingOn: List<String> = emptyList(), workingOnFromWeb: Boolean = false, team: List<String> = emptyList(), countdowns: List<String> = emptyList(),
                 days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
                 movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
@@ -458,6 +458,8 @@ object AskRules {
             workingOn.take(ObiArea.WORKING_ON.max).map { AskItem("", AskItemKind.WORKING_ON, line(it)) },
             // Your team, slice 3 ([TeamAskRules]): the helpers' day in counts and fixed words; never untrusted.
             team.take(ObiArea.TEAM.max).map { AskItem("", AskItemKind.TEAM, line(it)) },
+            // Countdowns ([CountdownAskRules]): his own names and dates; never untrusted.
+            countdowns.take(ObiArea.COUNTDOWNS.max).map { AskItem("", AskItemKind.COUNTDOWNS, line(it)) },
         )
         val moreFull = more.filter { it.size > 1 }.flatten()
         val moreCounts = more.filter { it.size == 1 }.flatten()
