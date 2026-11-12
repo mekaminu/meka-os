@@ -271,7 +271,7 @@ object HabitBoardRules {
     /** The longest run of days in a row among [days] (each a local epoch day); 0 for none. */
     fun bestRun(days: Collection<Long>): Int {
         if (days.isEmpty()) return 0
-        val sorted = days.toSortedSet().toList()
+        val sorted = days.distinct().sorted()
         var best = 1
         var run = 1
         for (i in 1 until sorted.size) {

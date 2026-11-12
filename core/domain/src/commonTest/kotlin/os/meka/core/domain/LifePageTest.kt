@@ -82,9 +82,10 @@ class LifePageTest {
     }
 
     @Test
-    fun anEmptyCarPageSaysSoWithDashes() {
+    fun anEmptyCarPageSaysSoInWordsNeverALoneDash() {
         val p = CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
-        assertEquals(listOf("—", "—", "—"), p.tiles.map { it.number })
+        assertEquals(listOf("No dates", "Fuel", "Not parked"), p.tiles.map { it.number })
+        assertTrue(ScreenSenseRules.problems(p.tiles.flatMap { listOf(it.number, it.label) }).isEmpty())
         assertTrue(p.cards.all { it.rows.isEmpty() && it.empty != null })
         assertNull(p.cards[1].more)
     }
@@ -108,7 +109,7 @@ class LifePageTest {
     fun theMacPageCountsDatesAndShowsTheTimerWithNoParkingOrFuel() {
         val cars = CarsView(listOf(car(CarRules.ENTITY_ID, "Car", row("mot", "MOT", day + 21), row("tax", "Car tax", day + 40))), true)
         val p = CarPageRules.macPage(cars, TimersView.EMPTY, day)
-        assertEquals(listOf("3 wks", "2", "—"), p.tiles.map { it.number })
+        assertEquals(listOf("3 wks", "2", "No timer"), p.tiles.map { it.number })
         assertEquals("dates on the radar", p.tiles[1].label)
         assertEquals(listOf("Dates"), p.cards.map { it.title })
         assertEquals(listOf("timer", "date"), p.addChoices.map { it.key })

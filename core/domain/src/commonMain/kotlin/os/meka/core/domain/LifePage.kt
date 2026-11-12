@@ -8,7 +8,7 @@ package os.meka.core.domain
  * own (each is named by a key). Non-AI, pure.
  */
 data class PageTile(
-    /** "3 wks", "£1.38", "Level 2"; "—" while there is nothing to count. */
+    /** "3 wks", "£1.38", "Level 2"; a word while there is nothing to count ("No dates": never a lone dash, the quality gate). */
     val number: String,
     /** "to the MOT", "cheapest unleaded near", "parked · 08:10". */
     val label: String,
@@ -71,7 +71,6 @@ object LifePageRules {
     const val MAX_ROWS = 5
     const val SEE_ALL = "See all"
     const val ADD = "+ Add"
-    const val NONE = "—"
     /** The ⓘ's spoken name. */
     const val INFO_LABEL = "What this page does"
 
@@ -132,7 +131,7 @@ object CarPageRules {
         return when {
             lapsed != null -> lapseTile(lapsed.lapses.first(), if (many) ParkingRules.heading(lapsed.title) else null)
             next != null -> PageTile(LifePageRules.until(next.day, today), "to the ${shortName(next.row)}${if (many) " · ${ParkingRules.heading(next.car.title)}" else ""}", next.day - today <= SOON_DAYS)
-            else -> PageTile(LifePageRules.NONE, "no dates yet", false)
+            else -> PageTile("No dates", "added yet", false)
         }
     }
 
@@ -164,7 +163,7 @@ object CarPageRules {
             listOf(
                 dateTile(cars, dates, today),
                 PageTile("${dates.size}", if (dates.size == 1) "date on the radar" else "dates on the radar", false),
-                timerTile(timers, cars.cars.size > 1) ?: PageTile(LifePageRules.NONE, "no parking timer", false),
+                timerTile(timers, cars.cars.size > 1) ?: PageTile("No timer", "for parking", false),
             ),
             listOf(datesCard(cars, dates, today)),
             ADD_TITLE, ADD_CHOICES.filter { it.key != ADD_PARKED },
@@ -177,14 +176,14 @@ object CarPageRules {
         val dateTile = dateTile(cars, dates, today)
         val cheapest = fuel.blocks.flatMap { b -> b.rows.filter { it.cheapest }.map { b to it } }.firstOrNull()
         val fuelTile = cheapest?.let { (b, r) -> PageTile(r.price, "cheapest ${b.fuel.short} near", false) }
-            ?: PageTile(LifePageRules.NONE, "fuel prices near", false)
+            ?: PageTile("Fuel", "prices near you below", false)
         val parkTile = timerTile(timers, many) ?: when {
             parked.size > 1 -> PageTile("${parked.size} cars", "parked", false)
             parked.size == 1 -> parked.first().let { p ->
                 val at = LocalClock.formatMinute(cal.minuteOfDay(p.spot.savedAtMs))
                 PageTile(p.label ?: "Parked", "parked · $at", false)
             }
-            else -> PageTile(LifePageRules.NONE, "not parked", false)
+            else -> PageTile("Not parked", "right now", false)
         }
         val parkedRows = parked.map { p ->
             PageRow(
