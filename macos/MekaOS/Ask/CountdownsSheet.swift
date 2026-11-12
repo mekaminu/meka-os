@@ -29,7 +29,7 @@ struct CountdownsSheet: View {
         let rows = v?.rows ?? []
         let all = (hero.map { [$0] } ?? []) + rows
         ZStack {
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.m) {
                 HStack {
                     Text(CountdownRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
                     Spacer()
@@ -125,20 +125,20 @@ private struct UnitSwitch: View {
     let onChange: (Bool) -> Void
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: MekaSpace.xxs) {
             ForEach([false, true], id: \.self) { s in
                 let on = s == sleeps
                 Button(s ? "Sleeps" : "Days") { if !on { onChange(s) } }
                     .buttonStyle(MekaPressStyle())
                     .font(on ? MekaType.captionStrong : MekaType.caption)
                     .foregroundStyle(on ? palette.textPrimary : palette.textSecondary)
-                    .padding(.horizontal, MekaSpace.m).padding(.vertical, 6)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                     .background(on ? palette.surfaceRaised : Color.clear, in: Capsule())
                     .accessibilityLabel("Count in \(s ? "sleeps" : "days")")
                     .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .padding(3)
+        .padding(MekaSpace.xxs)
         .background(palette.background, in: Capsule())
         .animation(MekaMotion.appear(reduced: reduceMotion), value: sleeps)
     }
@@ -177,7 +177,7 @@ private struct HeroCard: View {
                 ZStack {
                     CountdownRing(fill: row.fill, palette: palette)
                     VStack(spacing: 0) {
-                        Text(row.number).font(.system(size: row.number.count > 3 ? 22 : 34, weight: .bold))
+                        Text(row.number).font(row.number.count > 3 ? MekaType.greetingCompact : MekaType.greeting)
                             .foregroundStyle(palette.textPrimary).contentTransition(.numericText())
                         if !row.unit.isEmpty {
                             Text(row.unit).font(MekaType.micro).foregroundStyle(palette.textSecondary)
@@ -185,7 +185,7 @@ private struct HeroCard: View {
                     }
                 }
                 .frame(width: 96, height: 96)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(onToday ? "NEXT UP · ON TODAY" : "NEXT UP")
                         .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                         .foregroundStyle(palette.accent)
@@ -197,7 +197,7 @@ private struct HeroCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, 16)
+            .padding(MekaSpace.m)
             .background(palette.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(palette.accent.opacity(0.18), lineWidth: 1))
             .contentShape(Rectangle())
@@ -229,15 +229,15 @@ private struct SmallCard: View {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 HStack {
                     Image(systemName: countdownSymbol(row.icon))
-                        .font(.system(size: 12))
+                        .font(MekaType.caption)
                         .foregroundStyle(palette.accent)
                         .frame(width: 26, height: 26)
                         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: 8))
                     Spacer()
                     Text(row.dateLine).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
-                HStack(alignment: .lastTextBaseline, spacing: 6) {
-                    Text(row.number).font(.system(size: row.number.count > 3 ? 20 : 26, weight: .bold))
+                HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
+                    Text(row.number).font(row.number.count > 3 ? MekaType.upNextTitle : MekaType.greetingCompact)
                         .foregroundStyle(palette.textPrimary).contentTransition(.numericText())
                     if !row.unit.isEmpty {
                         Text(row.unit).font(MekaType.micro).foregroundStyle(palette.textSecondary)
@@ -245,7 +245,7 @@ private struct SmallCard: View {
                 }
                 Text(row.name).font(MekaType.captionStrong).foregroundStyle(palette.textPrimary).lineLimit(2)
             }
-            .padding(MekaSpace.s)
+            .padding(MekaSpace.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(Rectangle())
@@ -286,9 +286,9 @@ private struct BigCountdown: View {
                             .position(x: g.size.width * star.0, y: g.size.height * star.1)
                     }
                 }
-                VStack(spacing: 10) {
-                    Text(row.name.uppercased()).font(.system(size: 15)).tracking(2).foregroundStyle(palette.accent)
-                    Text(row.number).font(.system(size: row.number.count > 3 ? 64 : 120, weight: .bold))
+                VStack(spacing: MekaSpace.xs) {
+                    Text(row.name.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.accent)
+                    Text(row.number).font(row.number.count > 3 ? MekaType.clock : .system(size: 120, weight: .bold)) // type: ok, the design's huge number
                         .foregroundStyle(palette.textPrimary)
                     if !row.unit.isEmpty {
                         Text("\(row.unit) to go").font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
@@ -309,7 +309,7 @@ private struct BigCountdown: View {
                             .background(palette.accent, in: Capsule())
                             .keyboardShortcut(.cancelAction)
                     }
-                    .padding(.top, 18)
+                    .padding(.top, MekaSpace.m)
                     Button(row.canRemove ? "Remove" : "Hide", action: onRemove)
                         .buttonStyle(MekaPressStyle())
                         .font(MekaType.caption)

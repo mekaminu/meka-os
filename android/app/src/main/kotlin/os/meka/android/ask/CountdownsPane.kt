@@ -115,7 +115,7 @@ fun CountdownsPane(core: MekaCore, onClose: () -> Unit) {
         LazyColumn(
             Modifier.fillMaxSize().testTag(COUNTDOWNS_LIST_TAG),
             contentPadding = PaddingValues(MekaSpace.gutter),
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
         ) {
             item(key = "close") {
                 Text("‹ Ask", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -183,7 +183,7 @@ fun CountdownsPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "note") {
                 Text(CountdownRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.s))
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.xs))
             }
         }
 
@@ -214,8 +214,8 @@ fun CountdownsPane(core: MekaCore, onClose: () -> Unit) {
 private fun UnitSwitch(sleeps: Boolean, modifier: Modifier, onChange: (Boolean) -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
-        modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(MekaSpace.xxs),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         listOf(false to "Days", true to "Sleeps").forEach { (s, label) ->
             val on = s == sleeps
@@ -258,7 +258,7 @@ private fun HeroCard(row: CountdownRow, onToday: Boolean, modifier: Modifier, on
             .background(Meka.colors.accent.copy(alpha = 0.06f))
             .clickable(role = Role.Button, onClick = onTap)
             .semantics(mergeDescendants = true) { contentDescription = row.spoken + if (onToday) ". On Today" else "" }
-            .padding(horizontal = MekaSpace.m, vertical = 18.dp),
+            .padding(MekaSpace.m),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
@@ -266,13 +266,12 @@ private fun HeroCard(row: CountdownRow, onToday: Boolean, modifier: Modifier, on
             Ring(row.fill, Modifier.fillMaxSize(), stroke = 18f)
             Crossfade(row.number to row.unit, animationSpec = MekaMotion.appear(reduced), label = "hero-number") { (n, u) ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(n, style = MekaType.greeting.copy(fontSize = if (n.length > 3) 26.sp else 40.sp, fontWeight = FontWeight.Bold),
-                        color = Meka.colors.textPrimary, maxLines = 1)
+                    Text(n, style = if (n.length > 3) MekaType.greetingCompact else MekaType.greeting, color = Meka.colors.textPrimary, maxLines = 1)
                     if (u.isNotEmpty()) Text(u, style = MekaType.micro, color = Meka.colors.textSecondary)
                 }
             }
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(if (onToday) "NEXT UP · ON TODAY" else "NEXT UP", style = MekaType.sectionLabel, color = Meka.colors.accent)
             Text(row.name, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
             Text(row.dateLine, style = MekaType.caption, color = Meka.colors.textSecondary)
@@ -288,7 +287,7 @@ private fun SmallCard(row: CountdownRow, modifier: Modifier, onTap: () -> Unit) 
         modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onTap)
             .semantics(mergeDescendants = true) { contentDescription = row.spoken }
-            .padding(MekaSpace.s),
+            .padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -299,10 +298,9 @@ private fun SmallCard(row: CountdownRow, modifier: Modifier, onTap: () -> Unit) 
             Text(row.dateLine, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
         }
         Crossfade(row.number to row.unit, animationSpec = MekaMotion.appear(reduced), label = "card-number") { (n, u) ->
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(n, style = MekaType.greeting.copy(fontSize = if (n.length > 3) 22.sp else 30.sp, fontWeight = FontWeight.Bold),
-                    color = Meka.colors.textPrimary, maxLines = 1)
-                if (u.isNotEmpty()) Text(u, style = MekaType.micro, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = 4.dp))
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(n, style = if (n.length > 3) MekaType.nowTitle else MekaType.greetingCompact, color = Meka.colors.textPrimary, maxLines = 1)
+                if (u.isNotEmpty()) Text(u, style = MekaType.micro, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
             }
         }
         Text(row.name, style = MekaType.captionStrong, color = Meka.colors.textPrimary, maxLines = 2)
@@ -373,14 +371,15 @@ private fun BigCountdown(row: CountdownRow, onToday: Boolean, onShow: () -> Unit
             Modifier.fillMaxSize().padding(MekaSpace.l)
                 .semantics(mergeDescendants = true) { contentDescription = row.spoken },
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.CenterVertically),
         ) {
-            Text(row.name.uppercase(), style = MekaType.sectionLabel.copy(fontSize = 15.sp), color = Meka.colors.accent, textAlign = TextAlign.Center)
-            Text(row.number, style = MekaType.clock.copy(fontSize = if (row.number.length > 3) 72.sp else 140.sp, fontWeight = FontWeight.Bold, lineHeight = 150.sp),
-                color = Meka.colors.textPrimary, maxLines = 1)
+            Text(row.name.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent, textAlign = TextAlign.Center)
+            // The approved design's kid-sized number, read across the room; "Today" on the day sits smaller.
+            val bigStyle = if (row.number.length > 3) MekaType.clock else MekaType.clock.copy(fontSize = 140.sp, fontWeight = FontWeight.Bold, lineHeight = 150.sp) // type: ok, the design's huge number
+            Text(row.number, style = bigStyle, color = Meka.colors.textPrimary, maxLines = 1)
             if (row.unit.isNotEmpty()) Text("${row.unit} to go", style = MekaType.nowTitle, color = Meka.colors.textPrimary)
             Text(row.dateLine + (row.extra?.let { " · $it" } ?: ""), style = MekaType.caption, color = Meka.colors.textSecondary)
-            Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(
                     if (onToday) "Take off Today" else "Show on Today", style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
