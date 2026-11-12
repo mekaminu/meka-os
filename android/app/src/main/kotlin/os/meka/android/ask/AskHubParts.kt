@@ -81,7 +81,7 @@ internal fun AskTabSwitch(tab: AskTab, modifier: Modifier = Modifier, onPick: (A
         val third = maxWidth / tabs.size
         val x by animateDpAsState(third * tabs.indexOf(tab), MekaMotion.expand(reduced), label = "ask-tab-pill")
         Box(
-            Modifier.offset(x = x).width(third).height(MekaSpace.touch).padding(4.dp)
+            Modifier.offset(x = x).width(third).height(MekaSpace.touch).padding(MekaSpace.xxs)
                 .clip(RoundedCornerShape(MekaRadius.pill))
                 .background(Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surface)),
         )
@@ -117,7 +117,7 @@ internal fun LifePageTurner(page: Int, count: Int, columns: Int, modifier: Modif
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
             repeat(pages) { i ->
                 val w by animateDpAsState(if (i == shown) 14.dp else 5.dp, MekaMotion.expand(reduced), label = "life-dot-$i")
                 Box(Modifier.width(w).height(5.dp).clip(RoundedCornerShape(3.dp))

@@ -661,7 +661,7 @@ private struct AskTabSwitch: View {
                 let lit = t == tab
                 Button { pick(t) } label: {
                     Text(t.label)
-                        .font(MekaType.itemMeta).fontWeight(lit ? .semibold : .regular)
+                        .font(lit ? MekaType.metaStrong : MekaType.itemMeta)
                         .foregroundStyle(lit ? palette.accent : palette.textSecondary)
                         .frame(maxWidth: .infinity, minHeight: 30)
                         .background {
