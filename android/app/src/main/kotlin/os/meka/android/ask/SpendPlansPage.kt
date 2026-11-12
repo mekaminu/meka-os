@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -100,6 +101,9 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
     var removing by remember { mutableStateOf<String?>(null) }
     val plan = v.plan(chosen)
     val say: (SpendSaid?) -> Unit = { r -> if (r == null || r.refused) haptics.tick() else haptics.light(); said = r }
+    // Slice 4: a thing's shop link opens in the browser; only links the core checked (plain https) ever reach here.
+    val uri = LocalUriHandler.current
+    val open: (String) -> Unit = { link -> if (link.isNotEmpty()) { haptics.light(); runCatching { uri.openUri(link) } } }
     BackHandler(enabled = sheet == null, onBack = onBack)
 
     Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
@@ -198,7 +202,8 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
                         plan.rows.drop(p * SpendPlanRules.PAGE).take(SpendPlanRules.PAGE).forEach { r ->
                             ThingRow(r,
                                 onTick = { haptics.light(); scope.launch { runCatching { core.setSpendThingDone(r.id, !r.done) } } },
-                                onOpen = { haptics.tick(); said = null; sheet = SpendSheet.Edit(r) })
+                                onOpen = { haptics.tick(); said = null; sheet = SpendSheet.Edit(r) },
+                                onLink = { open(r.link) })
                         }
                         if (pages > 1) Row(verticalAlignment = Alignment.CenterVertically) {
                             val from = p * SpendPlanRules.PAGE + 1
@@ -260,11 +265,13 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
             var note by rememberSaveable(s) { mutableStateOf(row?.noteText ?: "") }
             var amount by rememberSaveable(s) { mutableStateOf(row?.amountText ?: "") }
             var month by rememberSaveable(s) { mutableIntStateOf(row?.month ?: 0) }
+            var link by rememberSaveable(s) { mutableStateOf(row?.link ?: "") }
             val foreign = plan?.foreign != null
             Field(if (foreign) "Mum" else "Football boots", value = name, onValue = { name = it }, description = "Name", keep = true) { }
             Field(if (foreign) "Note (optional)" else "For Sam (optional)", value = note, onValue = { note = it }, description = "Note", keep = true) { }
             Field(if (foreign) "Amount (blank = same for everyone)" else "How much, like 45", value = amount, onValue = { amount = it },
                 description = "Amount", keep = true) { }
+            Field(SpendPlanRules.LINK_HINT, value = link, onValue = { link = it }, description = "Link", keep = true) { }
             if (!foreign) {
                 Text("Buy in", style = MekaType.caption, color = Meka.colors.textSecondary)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -275,16 +282,26 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
             }
             GoldPill(if (row == null) "Add" else "Save", "spend-thing-save") {
                 scope.launch {
+                    // Slice 4: a link that isn't one Navilife opens is refused before anything is saved.
+                    if (SpendPlanRules.link(link) == null) { say(SpendSaid(SpendPlanRules.BAD_LINK, refused = true)); return@launch }
                     val r = runCatching {
-                        if (row == null) core.addSpendThing((s as SpendSheet.Add).planId, name, note, amount, month)
-                        else core.editSpendThing(row.id, name, note, amount, month)
+                        val saved = if (row == null) core.addSpendThing((s as SpendSheet.Add).planId, name, note, amount, month)
+                            else core.editSpendThing(row.id, name, note, amount, month)
+                        val id = row?.id ?: saved.id
+                        if (!saved.refused && id != null && (row == null && link.isNotBlank() || row != null && link.trim() != row.link)) {
+                            core.setSpendThingLink(id, link)
+                        }
+                        saved
                     }.getOrNull()
                     say(r)
                     if (r != null && !r.refused) {
-                        if (row == null) { name = ""; note = ""; amount = "" } else sheet = null
+                        if (row == null) { name = ""; note = ""; amount = ""; link = "" } else sheet = null
                     }
                 }
             }
+            if (row != null && row.link.isNotEmpty()) Text("${SpendPlanRules.OPEN_LINK} · ${row.linkLabel}", style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { open(row.link) }
+                    .minTouch().testTag("spend-thing-open-link"))
             if (row != null) Text("Remove", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
                     haptics.tick(); sheet = null; scope.launch { runCatching { core.removeSpendThing(row.id) } }
@@ -419,7 +436,7 @@ private fun AffordCard(plan: SpendPlanDetail, months: Int, modifier: Modifier, o
 }
 
 @Composable
-private fun ThingRow(r: SpendRow, onTick: () -> Unit, onOpen: () -> Unit) {
+private fun ThingRow(r: SpendRow, onTick: () -> Unit, onOpen: () -> Unit, onLink: () -> Unit) {
     val reduced = Meka.reducedMotion
     val fill by animateColorAsState(if (r.done) Meka.colors.success else androidx.compose.ui.graphics.Color.Transparent, MekaMotion.appear(reduced), label = "spend-tick")
     Row(
@@ -442,6 +459,10 @@ private fun ThingRow(r: SpendRow, onTick: () -> Unit, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1)
             if (r.note.isNotEmpty()) Text(r.note, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1)
+            // Slice 4: the shop it's from, a tap opens the page.
+            if (r.linkLabel.isNotEmpty()) Text("↗ ${r.linkLabel}", style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button, onClick = onLink)
+                    .semantics { contentDescription = "${SpendPlanRules.OPEN_LINK}, ${r.linkLabel}" }.minTouch().testTag("spend-link-${r.id}"))
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(r.gbp, style = MekaType.body, color = Meka.colors.textPrimary)

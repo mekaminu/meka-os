@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import AppKit
 import SwiftUI
 
 /// Money → Plan → Spending plans on the Mac (slice 1), like the Fold's SpendPlansPage and the approved design
@@ -28,6 +29,7 @@ struct SpendPlansSheet: View {
     @State private var note = ""
     @State private var amount = ""
     @State private var month: Int32 = 0
+    @State private var link = ""
     @State private var rateOpen = false
     @State private var rateText = ""
     @State private var removing: String?
@@ -342,6 +344,7 @@ struct SpendPlansSheet: View {
         note = r?.noteText ?? ""
         amount = r?.amountText ?? ""
         month = r?.month ?? 0
+        link = r?.link ?? ""
         if let r { editing = r } else { addOpen = true }
     }
 
@@ -363,6 +366,14 @@ struct SpendPlansSheet: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                         if !r.note.isEmpty { Text(r.note).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1) }
+                        // Slice 4: the shop it's from; a click opens the page (only links the core checked reach here).
+                        if !r.linkLabel.isEmpty {
+                            Button { openLink(r.link) } label: {
+                                Text("↗ \(r.linkLabel)").font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(SpendPlanRules.shared.OPEN_LINK), \(r.linkLabel)")
+                        }
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 0) {
@@ -379,6 +390,12 @@ struct SpendPlansSheet: View {
         }
     }
 
+    private func openLink(_ link: String) {
+        guard !link.isEmpty, let url = URL(string: link), url.scheme == "https" else { return }
+        MekaHaptics.light()
+        NSWorkspace.shared.open(url)
+    }
+
     private func thingPopover(_ plan: SpendPlanDetail) -> some View {
         let foreign = plan.foreign != nil
         let row = editing
@@ -387,6 +404,11 @@ struct SpendPlansSheet: View {
             TextField(foreign ? "Mum" : "Football boots", text: $name).textFieldStyle(.roundedBorder)
             TextField(foreign ? "Note (optional)" : "For Sam (optional)", text: $note).textFieldStyle(.roundedBorder)
             TextField(foreign ? "Amount (blank = same for everyone)" : "How much, like 45", text: $amount).textFieldStyle(.roundedBorder)
+            TextField(SpendPlanRules.shared.LINK_HINT, text: $link).textFieldStyle(.roundedBorder)
+            if let row, !row.link.isEmpty {
+                Button("\(SpendPlanRules.shared.OPEN_LINK) · \(row.linkLabel)") { openLink(row.link) }
+                    .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+            }
             if !foreign, let choices = model.spendPlans?.monthChoices {
                 Text("Buy in").font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -403,14 +425,27 @@ struct SpendPlansSheet: View {
                 Button(SpendPlanRules.shared.DONE) { addOpen = false; editing = nil }
                 Spacer()
                 Button(row == nil ? "Add" : "Save") {
-                    let n = name, t = note, a = amount, m = month, planId = plan.id
+                    let n = name, t = note, a = amount, m = month, planId = plan.id, l = link
+                    // Slice 4: a link Navilife wouldn't open is refused before anything is saved.
+                    if SpendPlanRules.shared.link(text: l) == nil {
+                        MekaHaptics.tick()
+                        said = CoreModel.SpendPlanSaid(line: SpendPlanRules.shared.BAD_LINK, refused: true, id: nil)
+                        return
+                    }
+                    let oldLink = row?.link
                     Task {
                         if let row {
                             said = await model.editSpendThing(row.id, name: n, note: t, amount: a, month: m)
-                            if let s = said, !s.refused { editing = nil }
+                            if let s = said, !s.refused {
+                                if l.trimmingCharacters(in: .whitespaces) != oldLink { _ = await model.setSpendThingLink(row.id, l) }
+                                editing = nil
+                            }
                         } else {
                             said = await model.addSpendThing(planId, name: n, note: t, amount: a, month: m)
-                            if let s = said, !s.refused { name = ""; note = ""; amount = "" }
+                            if let s = said, !s.refused {
+                                if let id = s.id, !l.trimmingCharacters(in: .whitespaces).isEmpty { _ = await model.setSpendThingLink(id, l) }
+                                name = ""; note = ""; amount = ""; link = ""
+                            }
                         }
                     }
                 }

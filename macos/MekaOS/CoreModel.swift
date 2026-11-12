@@ -7645,6 +7645,17 @@ final class CoreModel {
         }
     }
 
+    /// Spending plans, slice 4: the shop's link on a person or thing ("" removes it); only Strings cross.
+    func setSpendThingLink(_ id: String, _ text: String) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.setSpendThingLink(id: id, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func setSpendThingDone(_ id: String, _ done: Bool) { MekaHaptics.light(); run { _ = try await $0.setSpendThingDone(id: id, done: done) } }
 
     func removeSpendThing(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeSpendThing(id: id) } }

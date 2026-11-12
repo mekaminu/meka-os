@@ -55,6 +55,8 @@ object SpendItemFields {
     const val MONTH = "month"
     /** Bought, or sent. */
     const val DONE = "done"
+    /** Slice 4: the shop's page for it, a plain https link ([SpendPlanRules.link]); absent or "" for none. */
+    const val LINK = "link"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
 }
@@ -78,6 +80,8 @@ data class SpendPlanItem(
 data class SpendThing(
     val id: String, val planId: String, val name: String, val note: String, val amountMinor: Long, val month: Int,
     val done: Boolean, val addedAtMs: Long,
+    /** Slice 4: the shop's page, a checked https link; "" for none. */
+    val link: String = "",
 ) {
     val sameForEveryone: Boolean get() = amountMinor < 0
 }
@@ -107,6 +111,8 @@ data class SpendMonthChoice(val key: Int, val label: String)
 data class SpendRow(
     val id: String, val name: String, val note: String, val gbp: String, val local: String, val done: Boolean,
     val month: Int, val amountText: String, val noteText: String,
+    /** Slice 4: the link to open ("" for none) and the shop it goes to, "argos.co.uk" ("" for none). */
+    val link: String = "", val linkLabel: String = "",
 )
 
 /**
@@ -200,6 +206,11 @@ object SpendPlanRules {
     const val USE_TODAY = "Use today's rate"
     const val RATE_SOURCE = "Rates by Exchange Rate API"
     const val NO_RATE = "Type a rate to see it in pounds"
+    /** Slice 4: a link on a thing. */
+    const val MAX_LINK = 500
+    const val LINK_HINT = "Link to the shop (optional)"
+    const val BAD_LINK = "That isn't a web link Navilife can open. Paste the shop's link, starting https://"
+    const val OPEN_LINK = "Open link"
     /** A looked-up rate older than this many days is called by its day ("rate from 3 Nov"). */
     const val STALE_DAYS = 3
     /** The highest rate believed (a million to £1). */
@@ -262,6 +273,34 @@ object SpendPlanRules {
         return grouped(milli / 1_000) + if (rest == 0L) "" else "." + rest.toString().padStart(3, '0').trimEnd('0')
     }
 
+    /**
+     * Slice 4: a pasted or typed link as Navilife keeps it: a plain https address with a real host ("argos.co.uk/boots"
+     * gains https://); "" for none; null when it isn't one it will open (http://, another scheme, a user name or port in
+     * the address, spaces, longer than [MAX_LINK]).
+     */
+    fun link(text: String): String? {
+        val t = text.trim()
+        if (t.isEmpty()) return ""
+        val u = when {
+            t.startsWith("https://", ignoreCase = true) -> "https://" + t.substring(8)
+            t.contains("://") || t.startsWith("http:", ignoreCase = true) -> return null
+            else -> "https://$t"
+        }
+        if (u.length > MAX_LINK || u.any { it.isWhitespace() || it < ' ' }) return null
+        return u.takeIf { linkHost(it) != null }
+    }
+
+    /** The shop a link goes to: its host, lower case, without "www." ("argos.co.uk"); null when it has none we trust. */
+    fun linkHost(url: String): String? {
+        if (!url.startsWith("https://")) return null
+        val authority = url.substring(8).substringBefore('/').substringBefore('?').substringBefore('#')
+        if (authority.isEmpty() || '@' in authority || ':' in authority) return null
+        val host = authority.lowercase().trimEnd('.')
+        if (!host.all { it.isLetterOrDigit() || it == '.' || it == '-' } || '.' !in host) return null
+        if (host.split('.').any { it.isEmpty() }) return null
+        return host.removePrefix("www.")
+    }
+
     /** The plan's amount for [t] in hundredths of its currency. */
     fun minorOf(t: SpendThing, p: SpendPlanItem): Long = if (t.sameForEveryone) p.eachMinor else t.amountMinor
 
@@ -317,6 +356,8 @@ object SpendPlanRules {
             (s.f(SpendItemFields.AMOUNT).longOrNull ?: -1L).coerceAtMost(MAX_MINOR),
             (s.f(SpendItemFields.MONTH).longOrNull ?: 0L).toInt(),
             s.f(SpendItemFields.DONE).boolOrNull ?: false, s.f(SpendItemFields.ADDED_AT).longOrNull ?: 0L,
+            // A link that doesn't pass the check now (written elsewhere, or by an older rule) is never offered.
+            (s.f(SpendItemFields.LINK).textOrNull ?: "").let { l -> link(l)?.takeIf { it == l.trim() } ?: "" },
         )
     }.sortedWith(compareBy<SpendThing> { it.addedAtMs }.thenBy { it.id })
 
@@ -417,6 +458,7 @@ object SpendPlanRules {
             SpendRow(
                 t.id, t.name, noteLine, pn?.let { pounds(it) } ?: "—", if (p.foreign) local(minor, p.currency) else "", t.done, t.month,
                 if (t.sameForEveryone) "" else amountText(t.amountMinor), t.note,
+                t.link, if (t.link.isEmpty()) "" else linkHost(t.link) ?: "",
             )
         }
         return SpendPlanDetail(
@@ -631,6 +673,15 @@ class SpendPlans(
         if (t.done == done) return false
         replica.commitLocal(EntityTypes.SPEND_PLAN_ITEM, id, mapOf(SpendItemFields.DONE to done.fv()))
         return true
+    }
+
+    /** Slice 4: the shop's link on a person or thing ("" removes it). */
+    fun setLink(id: String, text: String): SpendSaid {
+        val t = things().firstOrNull { it.id == id } ?: return SpendSaid(SpendPlanRules.GONE, refused = true)
+        val l = SpendPlanRules.link(text) ?: return SpendSaid(SpendPlanRules.BAD_LINK, refused = true)
+        if (l == t.link) return SpendSaid("Saved", refused = false)
+        replica.commitLocal(EntityTypes.SPEND_PLAN_ITEM, id, mapOf(SpendItemFields.LINK to l.fv()))
+        return SpendSaid(if (l.isEmpty()) "Link removed" else "Link saved · ${SpendPlanRules.linkHost(l)}", refused = false)
     }
 
     fun removeThing(id: String): Boolean {

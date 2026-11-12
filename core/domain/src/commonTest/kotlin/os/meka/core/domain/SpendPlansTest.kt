@@ -267,4 +267,51 @@ class SpendPlansTest {
         // A pound plan has no rate to go back to.
         assertTrue(pFold.useTodaysRate(pFold.add("Gifts", "GBP").id!!).refused)
     }
+
+    @Test
+    fun aThingCarriesTheShopsLinkAndOnlySafeOnes() {
+        assertEquals("https://www.argos.co.uk/boots", SpendPlanRules.link("www.argos.co.uk/boots"))
+        assertEquals("https://shop.example/a?b=1", SpendPlanRules.link(" https://shop.example/a?b=1 "))
+        assertEquals("https://shop.example/x", SpendPlanRules.link("HTTPS://shop.example/x"))
+        assertEquals("", SpendPlanRules.link("  "))
+        assertNull(SpendPlanRules.link("http://shop.example/x"))
+        assertNull(SpendPlanRules.link("javascript:alert(1)"))
+        assertNull(SpendPlanRules.link("ftp://shop.example"))
+        assertNull(SpendPlanRules.link("https://me@shop.example/x"))
+        assertNull(SpendPlanRules.link("https://shop.example:8080/x"))
+        assertNull(SpendPlanRules.link("football boots"))
+        assertNull(SpendPlanRules.link("https://shop.example/a b"))
+        assertNull(SpendPlanRules.link("https://shop..example"))
+        assertNull(SpendPlanRules.link("https://shop.example/" + "a".repeat(SpendPlanRules.MAX_LINK)))
+        assertEquals("argos.co.uk", SpendPlanRules.linkHost("https://www.Argos.co.uk/boots"))
+
+        val plan = pFold.add("Christmas gifts 20 Dec", "GBP").id!!
+        val boots = pFold.addThing(plan, "Football boots", "For Sam", "45", dec).id!!
+        assertEquals("", view().plan(plan)!!.rows.single().link)
+        assertEquals("Link saved · argos.co.uk", pFold.setLink(boots, "www.argos.co.uk/boots").line)
+        val r = view().plan(plan)!!.rows.single()
+        assertEquals("https://www.argos.co.uk/boots", r.link)
+        assertEquals("argos.co.uk", r.linkLabel)
+        // A bad link is refused and the old one kept; changing the thing keeps its link.
+        assertTrue(pFold.setLink(boots, "http://argos.co.uk").refused)
+        assertFalse(pFold.editThing(boots, "Boots", "For Sam", "50", dec).refused)
+        assertEquals("https://www.argos.co.uk/boots", view().plan(plan)!!.rows.single().link)
+        // It reaches the Mac; a blank link removes it.
+        sync()
+        assertEquals("argos.co.uk", view(pMac).plan(plan)!!.rows.single().linkLabel)
+        assertEquals("Link removed", pMac.setLink(boots, "").line)
+        sync()
+        assertEquals("", view().plan(plan)!!.rows.single().link)
+        assertTrue(pFold.setLink("nope", "argos.co.uk").refused)
+    }
+
+    @Test
+    fun aLinkWrittenElsewhereThatFailsTheCheckIsNeverOffered() {
+        val plan = pFold.add("Gifts", "GBP").id!!
+        val t = pFold.addThing(plan, "Lamp", "", "20", nov).id!!
+        fold.replica.commitLocal(EntityTypes.SPEND_PLAN_ITEM, t, mapOf(SpendItemFields.LINK to os.meka.core.sync.FieldValue.Text("javascript:alert(1)")))
+        val r = view().plan(plan)!!.rows.single()
+        assertEquals("", r.link)
+        assertEquals("", r.linkLabel)
+    }
 }

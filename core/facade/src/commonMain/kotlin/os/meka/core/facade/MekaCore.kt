@@ -6442,6 +6442,9 @@ class MekaCore(
     /** Ticks one as bought or sent, or back. */
     suspend fun setSpendThingDone(id: String, done: Boolean): Boolean = onCore { spendPlans.setDone(id, done) }
 
+    /** Spending plans, slice 4: the shop's link on a person or thing ("argos.co.uk/…" or https://…; "" removes it). */
+    suspend fun setSpendThingLink(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setLink(id, text) }
+
     /** Removes one person or thing. */
     suspend fun removeSpendThing(id: String): Boolean = onCore { spendPlans.removeThing(id) }
 

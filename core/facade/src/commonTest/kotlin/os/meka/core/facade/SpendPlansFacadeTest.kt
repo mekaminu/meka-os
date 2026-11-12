@@ -129,4 +129,18 @@ class SpendPlansFacadeTest {
         assertEquals(SpendPlanRules.NO_RATE, p.spentLine)
         assertFalse(p.foreign!!.rateSet)
     }
+
+    @Test
+    fun aShopsLinkSavedOnTheFoldOpensOnTheMac() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addSpendPlan("Christmas gifts 20 Dec", "GBP").id!!
+        val boots = fold.addSpendThing(id, "Football boots", "", "45", 0).id!!
+        assertTrue(fold.setSpendThingLink(boots, "javascript:alert(1)").refused)
+        assertEquals("Link saved · argos.co.uk", fold.setSpendThingLink(boots, "argos.co.uk/boots").line)
+        fold.syncNow(); mac.syncNow()
+        val row = mac.spendPlansView.value.plan(id)!!.rows.single()
+        assertEquals("https://argos.co.uk/boots", row.link)
+        assertEquals("argos.co.uk", row.linkLabel)
+    }
 }
