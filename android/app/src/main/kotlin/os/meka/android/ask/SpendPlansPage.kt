@@ -300,7 +300,7 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
                 modifier = Modifier.testTag("spend-rate-today"))
             Text(SpendPlanRules.RATE_HELP, style = MekaType.caption, color = Meka.colors.textSecondary)
             Field("2,000", value = text, onValue = { text = it }, description = "Your own rate, how many to one pound", keep = true) { }
-            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
                 GoldPill("Save rate", "spend-rate-save") {
                     scope.launch {
                         val r = runCatching { core.setSpendPlanRate(s.planId, text) }.getOrNull()
