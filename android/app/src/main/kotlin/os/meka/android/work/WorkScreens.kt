@@ -80,6 +80,7 @@ import os.meka.android.designsystem.MekaHaptics
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkDone
 import os.meka.core.domain.GroupChatRules
+import os.meka.core.domain.HandleForMeRules
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BlockedCallersView
@@ -135,6 +136,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val lists by store.lists.collectAsState()
     val watch by store.watch.collectAsState()
     val notify by core.notificationSettings.collectAsState()
+    val about by core.aboutYouView.collectAsState()
     val leaving by core.leavingView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -311,6 +313,12 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             lists, watch, listening, 7, store::setWatch,
             notifiesNow = { notify.notifiesNow(it) },
             setNotifyNow = { name, on -> scope.launch { core.setRequestNotifyNow(name, on) } },
+            // Handle their requests for me: his partner's row is About you's switch, anyone else's off until he turns it on.
+            handles = { name ->
+                if (HandleForMeRules.isPartnerName(name, about.partnerName)) about.partnerWatch && about.partnerHandle
+                else notify.handlesFor(name)
+            },
+            setHandle = { name, on -> scope.launch { core.setRequestHandle(name, on) } },
         )
         Spacer(Modifier.height(MekaSpace.m))
         MessagesSetupSection(core, store, listening, 8)

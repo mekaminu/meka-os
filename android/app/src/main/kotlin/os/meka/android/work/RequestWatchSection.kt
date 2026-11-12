@@ -53,6 +53,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.HandleForMeRules
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.RequestWatch
 import os.meka.core.domain.RequestWatchRules
@@ -71,6 +72,8 @@ internal fun RequestWatchSection(
     setWatch: (RequestWatch) -> Unit,
     notifiesNow: (String) -> Boolean = { false },
     setNotifyNow: (String, Boolean) -> Unit = { _, _ -> },
+    handles: (String) -> Boolean = { false },
+    setHandle: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val haptics = rememberMekaHaptics()
@@ -98,13 +101,17 @@ internal fun RequestWatchSection(
         val now: (String) -> NotifyNowState = { name ->
             NotifyNowState(notifiesNow(name)) { on -> haptics.tick(); setNotifyNow(name, on) }
         }
+        val handle: (String) -> NotifyNowState = { name ->
+            NotifyNowState(handles(name)) { on -> haptics.tick(); setHandle(name, on) }
+        }
         lists.family.sortedBy { it.lowercase() }.forEach { name ->
-            WatchRow(name, "Family", action = null, notify = now(name)) {}
+            WatchRow(name, "Family", action = null, notify = now(name), handle = handle(name)) {}
         }
         watch.people.sortedBy { it.lowercase() }.forEach { name ->
-            WatchRow(name, null, action = "Remove", notify = now(name)) { haptics.tick(); setWatch(RequestWatchRules.removePerson(watch, name)) }
+            WatchRow(name, null, action = "Remove", notify = now(name), handle = handle(name)) { haptics.tick(); setWatch(RequestWatchRules.removePerson(watch, name)) }
         }
         Text(RequestWatchRules.NOTIFY_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(HandleForMeRules.PERSON_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
         Text("Add from contacts", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) {
                 runCatching { pick.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
@@ -139,11 +146,16 @@ internal fun RequestWatchSection(
 private class NotifyNowState(val on: Boolean, val set: (Boolean) -> Unit)
 
 @Composable
-private fun WatchRow(name: String, tag: String?, action: String?, notify: NotifyNowState? = null, onAction: () -> Unit) {
+private fun WatchRow(
+    name: String, tag: String?, action: String?, notify: NotifyNowState? = null, handle: NotifyNowState? = null, onAction: () -> Unit,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(name, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
             if (tag != null) Text(tag, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        if (handle != null) {
+            StatePill(HandleForMeRules.personLabel(handle.on), HandleForMeRules.personSpoken(name, handle.on), handle)
         }
         if (notify != null) NotifyNowPill(name, notify)
         if (action != null) {
@@ -159,17 +171,25 @@ private fun WatchRow(name: String, tag: String?, action: String?, notify: Notify
  * pill's colour blends across with a tick haptic (motion catalogue: Request cards).
  */
 @Composable
-private fun NotifyNowPill(name: String, state: NotifyNowState) {
+private fun NotifyNowPill(name: String, state: NotifyNowState) =
+    StatePill(RequestWatchRules.notifyLabel(state.on), RequestWatchRules.notifySpoken(name, state.on), state)
+
+/**
+ * A lit-or-quiet pill switch beside a watched person ("Straight away" / "In digest", "Handle for me" / "Ask me"); its
+ * colour blends across with a tick haptic (motion catalogue: Request cards).
+ */
+@Composable
+private fun StatePill(label: String, spoken: String, state: NotifyNowState) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (state.on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "now-bg")
     val fg by animateColorAsState(if (state.on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "now-fg")
     Text(
-        RequestWatchRules.notifyLabel(state.on), style = MekaType.caption, color = fg,
+        label, style = MekaType.caption, color = fg,
         modifier = Modifier.padding(end = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
             .clickable(role = Role.Switch) { state.set(!state.on) }
             .semantics {
-                contentDescription = RequestWatchRules.notifySpoken(name, state.on)
-                stateDescription = RequestWatchRules.notifyLabel(state.on)
+                contentDescription = spoken
+                stateDescription = label
             }
             .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )

@@ -121,8 +121,11 @@ object HandleForMeRules {
      * Whether a message's sender is his partner: the notification's name is About you's partner name, or starts with
      * her first name ("Ada", "Ada Smith", "Ada 💛"). Case and spacing don't matter. False with no partner named.
      */
-    fun isPartner(person: String, about: AboutYou): Boolean {
-        val name = about.partnerName?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    fun isPartner(person: String, about: AboutYou): Boolean = isPartnerName(person, about.partnerName)
+
+    /** [isPartner] from the partner's name alone (the Fold's watch list asks it per row). */
+    fun isPartnerName(person: String, partnerName: String?): Boolean {
+        val name = partnerName?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         val who = People.key(person)
         if (who.isEmpty() || who.startsWith("tel:")) return false
         if (who == People.key(name)) return true
@@ -130,8 +133,29 @@ object HandleForMeRules {
         return first.length >= 2 && who.substringBefore(' ') == first
     }
 
-    /** Whether [person]'s requests are handled for him: his partner, watched, and the switch on. */
-    fun handles(person: String, about: AboutYou): Boolean = about.partnerWatch && about.partnerHandle && isPartner(person, about)
+    /**
+     * Whether [person]'s requests are handled for him: his partner, watched, and About you's switch on; or anyone else
+     * he turned "Handle their requests for me" on for beside their name ([others], Work mode → Watch for requests
+     * from). His partner follows About you's switch only, whatever [others] holds.
+     */
+    fun handles(person: String, about: AboutYou, others: Set<String> = emptySet()): Boolean {
+        if (isPartner(person, about)) return about.partnerWatch && about.partnerHandle
+        val k = People.key(person)
+        if (k.isEmpty() || k.startsWith("tel:")) return false
+        return others.any { People.key(it) == k }
+    }
+
+    /** The pill beside a watched person: lit "Handle for me", else "Ask me" (a card waits in Needs you). */
+    const val PERSON_ON = "Handle for me"
+    const val PERSON_OFF = "Ask me"
+    const val PERSON_HINT = "\"Handle for me\" does what that person asks at once (a task on its day, a reminder, the steps " +
+        "to get ready) and tells you what was done, with Undo. Nothing is ever sent to them. Off: their requests wait in " +
+        "Needs you. For your partner it's the same switch as About you's."
+
+    fun personLabel(on: Boolean): String = if (on) PERSON_ON else PERSON_OFF
+
+    /** For TalkBack / VoiceOver: "Handle Sam's requests for me, on". */
+    fun personSpoken(name: String, on: Boolean): String = "Handle ${name.trim()}'s requests for me, ${if (on) "on" else "off"}"
 
     /**
      * Whether [p] is certain enough to act on without asking: a task, reminder, event or work-from-home day with a day

@@ -126,6 +126,35 @@ class HandleForMeFacadeTest {
     }
 
     @Test
+    fun someoneElsesRequestsAreHandledOnceHeTurnsTheirSwitchOn() = runTest {
+        val c = core()
+        c.setAboutYouField("partnerName", "Alex")
+        val family = PeopleLists(family = setOf("Alex", "Sam"))
+        assertFalse(c.notificationSettings.value.handlesFor("Sam"))
+        assertTrue(c.setRequestHandle("Sam", true))
+        assertTrue(c.notificationSettings.value.handlesFor("sam"))
+        assertFalse(c.setRequestHandle("Sam", true), "already on")
+
+        server.reply = MessageRequestCodec.Response("answered", listOf(MessageRequestCodec.Proposal("task", "call the garage", words = "tomorrow")))
+        val read = assertIs<RequestRead.Read>(c.readRequest(msg("Sam", "call the garage tomorrow"), family, emptySet()))
+        assertTrue(read.cards.isEmpty(), "done for him, no card")
+        val row = read.handled.single()
+        assertEquals("From Sam · 14:02", row.from)
+        assertEquals(listOf("call the garage"), titles(c, row.taskIds).map { it.lowercase() })
+        assertEquals("Copy reply to Sam", row.drafts.first().label)
+
+        // Off again: back to today's card. Her switch stays About you's.
+        assertTrue(c.setRequestHandle("Sam", false))
+        server.reply = MessageRequestCodec.Response("answered", listOf(MessageRequestCodec.Proposal("task", "book the MOT", words = "tomorrow")))
+        val off = assertIs<RequestRead.Read>(c.readRequest(msg("Sam", "book the MOT tomorrow", at = now - 30_000), family, emptySet()))
+        assertEquals(1, off.cards.size)
+        assertTrue(c.setRequestHandle("Alex", false))
+        assertFalse(c.aboutYouView.value.partnerHandle)
+        assertEquals("Alex", c.aboutYouView.value.partnerName)
+        assertTrue(c.notificationSettings.value.handleFor.isEmpty(), "her switch never lands in the per-person set")
+    }
+
+    @Test
     fun herTaskGetsItsDayAndAReminderAndClearKeepsIt() = runTest {
         val c = core()
         c.setAboutYouField("partnerName", "Alex")

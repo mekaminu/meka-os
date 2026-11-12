@@ -410,12 +410,20 @@ data class NotificationSettings(
     val tiers: Map<NoticeSource, NoticeTier> = emptyMap(),
     /** Watched people whose requests are a heads-up straight away rather than digest items (names as Meka set them). */
     val requestNow: Set<String> = emptySet(),
+    /**
+     * Handle her requests for me, the per-person switch (Take first 2026-11-11, point 1): watched people other than his
+     * partner whose certain requests are done for him at once ([HandleForMeRules.handles]); off for everyone until he
+     * turns it on beside their name. Names as Meka set them.
+     */
+    val handleFor: Set<String> = emptySet(),
 ) {
     val digestsOn: Boolean get() = digestMinutes.isNotEmpty()
     fun tierFor(source: NoticeSource): NoticeTier = tiers[source] ?: source.defaultTier
     fun hasDigest(minute: Int): Boolean = minute in digestMinutes
     /** Whether a request from [name] is a heads-up straight away (spelling and case don't matter). */
     fun notifiesNow(name: String): Boolean = People.key(name).let { k -> requestNow.any { People.key(it) == k } }
+    /** Whether [name]'s requests are handled for him (the per-person switch; his partner's is About you's). */
+    fun handlesFor(name: String): Boolean = People.key(name).let { k -> k.isNotEmpty() && handleFor.any { People.key(it) == k } }
 
     companion object {
         const val MIDDAY = 12 * 60 + 30
@@ -1101,6 +1109,8 @@ object NotificationFields {
     const val TIERS = "noticeTiers"
     /** Watched people whose requests notify straight away, one name per line (V1, requests; ADR-008 addendum). */
     const val REQUEST_NOW = "requestNotifyNow"
+    /** Watched people whose requests are handled for him, one name per line (Handle their requests for me; ADR-008 addendum, additive). */
+    const val REQUEST_HANDLE = "requestHandleFor"
 }
 
 class NotificationPrefs(private val replica: Replica) {
@@ -1111,7 +1121,20 @@ class NotificationPrefs(private val replica: Replica) {
         digestMinutes = NotificationSettings.decodeDigests(field(NotificationFields.DIGESTS)) ?: NotificationSettings.DEFAULT_DIGESTS,
         tiers = NotificationSettings.decodeTiers(field(NotificationFields.TIERS)),
         requestNow = NotificationSettings.decodeRequestNow(field(NotificationFields.REQUEST_NOW)),
+        handleFor = NotificationSettings.decodeRequestNow(field(NotificationFields.REQUEST_HANDLE)),
     )
+
+    /** "Handle their requests for me" beside a watched person (Work mode → Watch for requests from), on every device. */
+    fun setRequestHandle(name: String, on: Boolean): Boolean {
+        val n = RequestWatchRules.clean(name) ?: return false
+        val current = settings().handleFor
+        if (on && current.any { People.key(it) == People.key(n) }) return false
+        val without = current.filterNot { People.key(it) == People.key(n) }.toSet()
+        val encoded = NotificationSettings.encodeRequestNow(if (on) without + n else without)
+        if ((field(NotificationFields.REQUEST_HANDLE) ?: "") == encoded) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NotificationFields.REQUEST_HANDLE to encoded.fv()))
+        return true
+    }
 
     /** "Notify straight away" beside a watched person (Work mode → Watch for requests from), on every device. */
     fun setRequestNow(name: String, on: Boolean) {

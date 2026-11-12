@@ -245,6 +245,8 @@ data class AboutYouView(
     /** "Handle her requests for me" ([HandleForMeRules.TITLE]): its state and line (null: no partner, or not watched). */
     val partnerHandle: Boolean = true,
     val handleLine: String? = null,
+    /** The partner's name as typed (null: none), so the Fold's watch list can show her row's switch as About you's. */
+    val partnerName: String? = null,
 ) {
     companion object {
         val EMPTY: AboutYouView = AboutYouRules.view(AboutYou.EMPTY, LocalCalendar.UTC, 0L)
@@ -663,6 +665,7 @@ object AboutYouRules {
             // Only while her messages are watched: handling needs them read.
             handleLine = a.partnerName?.takeIf { a.partnerWatch }?.let { if (a.partnerHandle) HandleForMeRules.ON else HandleForMeRules.OFF },
             callName = CallNameRules.called(a.shownName),
+            partnerName = a.partnerName?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
 

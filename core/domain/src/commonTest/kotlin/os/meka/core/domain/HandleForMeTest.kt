@@ -31,6 +31,25 @@ class HandleForMeTest {
     }
 
     @Test
+    fun anyoneElseOnlyWhenTheirOwnSwitchIsOn() {
+        val others = setOf("Sam Jones")
+        assertTrue(HandleForMeRules.handles("Sam Jones", about, others))
+        assertTrue(HandleForMeRules.handles("sam  jones", about, others), "spelling and spacing don't matter")
+        assertFalse(HandleForMeRules.handles("Sam", about, others), "a first name alone isn't them")
+        assertFalse(HandleForMeRules.handles("Sam Jones", about), "off until he turns it on")
+        assertFalse(HandleForMeRules.handles("", about, setOf("")))
+        // His partner follows About you's switch only.
+        assertFalse(HandleForMeRules.handles("Alex Smith", about.copy(partnerHandle = false), setOf("Alex Smith")))
+        assertTrue(HandleForMeRules.handles("Alex Smith", about, emptySet()))
+        assertTrue(HandleForMeRules.isPartnerName("alex", "Alex Smith"))
+        assertFalse(HandleForMeRules.isPartnerName("Sam", "Alex Smith"))
+        assertFalse(HandleForMeRules.isPartnerName("Alex", null))
+        assertEquals("Handle for me", HandleForMeRules.personLabel(true))
+        assertEquals("Ask me", HandleForMeRules.personLabel(false))
+        assertEquals("Handle Sam's requests for me, on", HandleForMeRules.personSpoken("Sam", true))
+    }
+
+    @Test
     fun uncertainRequestsStayCards() {
         assertTrue(HandleForMeRules.certain(wfhThu, wed))
         assertFalse(HandleForMeRules.certain(RequestProposal(RequestKind.TASK, "Sort the garden", null, null), wed), "no clear day")

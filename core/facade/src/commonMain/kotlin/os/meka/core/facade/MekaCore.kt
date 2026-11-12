@@ -4765,6 +4765,7 @@ class MekaCore(
         if (made.isEmpty()) return emptyList()
         val rules = os.meka.core.domain.HandleForMeRules
         val about = aboutYou.profile()
+        val others = notifyPrefs.settings().handleFor
         val cal = ZoneCalendar(timeZone)
         val today = todayEpochDay()
         val nowMinute = cal.minuteOfDay(nowMs())
@@ -4773,7 +4774,7 @@ class MekaCore(
         val off = leave.days()
         val isWorkDay: (Long) -> Boolean = { d -> os.meka.core.domain.WorkModeRules.isWorkDay(schedule, holidays, d) && d !in off }
         val ids = mutableListOf<String>()
-        made.filter { it.person.isNotEmpty() && rules.handles(it.person, about) && rules.certain(it.proposal, today) }.forEach { card ->
+        made.filter { it.person.isNotEmpty() && rules.handles(it.person, about, others) && rules.certain(it.proposal, today) }.forEach { card ->
             val p = card.proposal
             val plan = rules.plan(p, today, nowMinute, isWorkDay)
             val taskIds = mutableListOf<String>()
@@ -7035,6 +7036,15 @@ class MekaCore(
      * [notificationSettings]'s `requestNow`). "Requests from people you watch" set lower still wins.
      */
     suspend fun setRequestNotifyNow(name: String, on: Boolean) = onCore { notifyPrefs.setRequestNow(name, on) }
+
+    /**
+     * Work mode → Watch for requests from → "Handle for me" beside a person (Handle their requests for me): his
+     * partner's is About you's switch; anyone else's is the synced per-person set (off until he turns it on).
+     */
+    suspend fun setRequestHandle(name: String, on: Boolean): Boolean = onCore {
+        if (os.meka.core.domain.HandleForMeRules.isPartner(name, aboutYou.profile())) aboutYou.setPartnerHandle(on)
+        else notifyPrefs.setRequestHandle(name, on)
+    }
 
     /**
      * What this device should post now. [state] is what the last call returned ([GovernorResult.stateEncoded]),
