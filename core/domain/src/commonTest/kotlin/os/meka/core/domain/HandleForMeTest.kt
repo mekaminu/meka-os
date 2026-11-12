@@ -239,4 +239,54 @@ class HandleForMeTest {
         assertEquals(HandleForMeRules.drafts(RequestKind.WORK_FROM_HOME, "Work from home", thu, null, "Alex"), row.drafts)
         assertFalse(row.drafts.any { "Can you" in it.text }, "never the message's own words")
     }
+
+    private val cal = LocalCalendar.UTC
+    private val nine2five = WorkSchedule(setOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60)
+    private fun step(id: String, title: String, remindAt: Long?, done: Boolean = false) = Task(
+        id, title, null, if (done) Lifecycle.DONE else Lifecycle.ACTIVE, null, null, null, 0, null, null, 0, null, false,
+        remindAtMs = remindAt,
+    )
+    private fun wfhRow(atMs: Long, home: Long = thu) = DoneForYou(
+        "m1#0", "From Alex · 10:00", "Work from home Thu 12 Nov · added", "x", atMs, listOf("s1", "s2", "s3"), home, person = "Alex",
+    )
+    private val remind16 = cal.toEpochMs(wed, 16 * 60)
+    private val steps = listOf(
+        step("s1", "Tell your manager", remind16), step("s2", "Get approval", remind16),
+        step("s3", "Put the request in at work", remind16),
+    )
+
+    @Test
+    fun theStepsStillOpenRemindAgainAtTheEndOfWork() {
+        val now = cal.toEpochMs(wed, 12 * 60)
+        val n = HandleForMeRules.endOfWorkNotices(listOf(wfhRow(cal.toEpochMs(wed, 10 * 60))), steps, nine2five, HolidayCalendar.NONE, now, cal).single()
+        assertEquals(cal.toEpochMs(wed, 17 * 60), n.atMs, "his hours end at 17:00")
+        assertEquals(HandleForMeRules.END_OF_WORK_TITLE, n.title)
+        assertEquals("Still open for working from home Thu 12 Nov: tell your manager, get approval and put the request in at work.", n.text)
+        assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+        // Two done: only the one left is named.
+        val one = steps.mapIndexed { i, t -> if (i < 2) t.copy(lifecycle = Lifecycle.DONE) else t }
+        assertEquals(
+            "Still open for working from home Thu 12 Nov: put the request in at work.",
+            HandleForMeRules.endOfWorkNotices(listOf(wfhRow(cal.toEpochMs(wed, 10 * 60))), one, nine2five, HolidayCalendar.NONE, now, cal).single().text,
+        )
+        // No hours known: 17:30.
+        assertEquals(cal.toEpochMs(wed, 17 * 60 + 30), HandleForMeRules.endOfWorkNotices(listOf(wfhRow(cal.toEpochMs(wed, 10 * 60))), steps, null, HolidayCalendar.NONE, now, cal).single().atMs)
+    }
+
+    @Test
+    fun noEndOfWorkReminderWhenNothingIsLeftOrItWouldNagTwice() {
+        val row = wfhRow(cal.toEpochMs(wed, 10 * 60))
+        val now = cal.toEpochMs(wed, 12 * 60)
+        fun none(rows: List<DoneForYou>, ts: List<Task>, at: Long = now, sched: WorkSchedule? = nine2five) =
+            assertTrue(HandleForMeRules.endOfWorkNotices(rows, ts, sched, HolidayCalendar.NONE, at, cal).isEmpty())
+        none(listOf(row), steps.map { it.copy(lifecycle = Lifecycle.DONE) })
+        none(listOf(row), emptyList())
+        // Handled at 17:10: its steps already remind at 18:00, so no second one this evening.
+        none(listOf(wfhRow(cal.toEpochMs(wed, 17 * 60 + 10))), steps.map { it.copy(remindAtMs = cal.toEpochMs(wed, 18 * 60)) }, cal.toEpochMs(wed, 17 * 60 + 15))
+        // The home day itself, or a day off from work.
+        none(listOf(row), steps, cal.toEpochMs(thu, 12 * 60))
+        none(listOf(wfhRow(cal.toEpochMs(mon - 2, 10 * 60), home = mon)), steps.map { it.copy(remindAtMs = null) }, cal.toEpochMs(mon - 2, 12 * 60))
+        // A task or event request has no steps and no home day: nothing.
+        none(listOf(row.copy(homeDay = null)), steps)
+    }
 }

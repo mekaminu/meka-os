@@ -322,6 +322,51 @@ object HandleForMeRules {
         else -> items.dropLast(1).joinToString(", ") + " and " + items.last()
     }
 
+    /** The end of work when his hours don't say (no schedule, or hours that cross midnight). */
+    const val END_OF_WORK_DEFAULT_MINUTE = 17 * 60 + 30
+    const val END_OF_WORK_TITLE = "Before you finish work"
+
+    /**
+     * Slice 4 (Meka 2026-11-11: "a reminder at a sensible hour and again at the end of work if still open"): on a work
+     * day, one heads-up at the end of his work hours (his hours that day, else 17:30) naming the prep steps still open
+     * for a home day that hasn't come yet: "Still open for working from home Thu 12 Nov: tell your manager and get
+     * approval." Only steps that show today, only while the row is shown, and only when that time is at least
+     * [LEAD_MIN] after the steps' own reminder and after the request was handled (a late request isn't nagged twice in
+     * one evening). Gone once the steps are done or deleted, or after [LATEST_MINUTE]. Never the message's text.
+     */
+    fun endOfWorkNotices(
+        rows: List<DoneForYou>,
+        tasks: List<Task>,
+        schedule: WorkSchedule?,
+        holidays: HolidayCalendar,
+        nowMs: Long,
+        cal: LocalCalendar,
+    ): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        if (schedule != null && !WorkModeRules.isWorkDay(schedule, holidays, today)) return emptyList()
+        val end = schedule?.hoursOn(CivilDate.isoDayOfWeek(today))?.takeUnless { it.crossesMidnight }?.endMinute
+            ?: END_OF_WORK_DEFAULT_MINUTE
+        if (end > LATEST_MINUTE) return emptyList()
+        val atMs = cal.toEpochMs(today, end)
+        val byId = tasks.associateBy { it.id }
+        return shown(rows, nowMs).mapNotNull { r ->
+            val home = r.homeDay ?: return@mapNotNull null
+            if (home <= today || atMs < r.atMs + LEAD_MIN * 60_000L) return@mapNotNull null
+            val open = r.taskIds.mapNotNull { byId[it] }
+                .filter { !it.lifecycle.isTerminal && TaskWhenRules.dayOf(it, today, cal) == today }
+            if (open.isEmpty()) return@mapNotNull null
+            if (open.any { t -> t.remindAtMs?.let { atMs < it + LEAD_MIN * 60_000L } == true }) return@mapNotNull null
+            val steps = open.map { t -> t.title.trim().replaceFirstChar { it.lowercase() } }
+            Notice(
+                key = "handled-eow:${r.id}:$today", source = NoticeSource.REQUEST, tier = NoticeTier.HEADS_UP,
+                title = END_OF_WORK_TITLE,
+                text = "Still open for working from home ${CivilDate.shortLabel(home)}: ${listing(steps)}.",
+                atMs = atMs, target = NoticeTarget.NEEDS_YOU, expiresAtMs = cal.toEpochMs(today, LATEST_MINUTE),
+                precision = NoticePrecision.CLOCK,
+            )
+        }
+    }
+
     /** One heads-up per row as it is handled: "Done for you · from Ada" · the line. Never the message's text. */
     fun notices(rows: List<DoneForYou>): List<Notice> = rows.map { r ->
         Notice(

@@ -1062,6 +1062,8 @@ object NoticeSources {
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
         out += HandleForMeRules.notices(doneForYou)
+        // Handle her requests for me, slice 4: the prep steps still open, again at the end of work.
+        out += HandleForMeRules.endOfWorkNotices(doneForYou, tasks, workSchedule, holidays, nowMs, cal)
         // The approvals inbox: Needs a decision when a request arrives, Critical in its last 15 minutes.
         out += ApprovalRules.notices(approvals, cal)
         return out
