@@ -3,17 +3,22 @@ import SwiftUI
 
 /// ASK on the Mac (build plan M1, Four tabs, one front door): the front door to everything that isn't a tab. The field
 /// asks MEKA in your own words (`AskMekaSection`, V1 AI layer slice 3b), with Search Everything (⌘F) beside it. Below it
-/// (Fold review 2026-10-12, item 7): one status row when Setup or Health needs a look; LIFE, a grid of tiles (an SF
-/// Symbol, the name and a live line each; Lists and Goals open their places with the shell's push, the rest their
-/// sheets); DAILY, a few rows; and one Settings row that unfolds every setting in place under it (the Mac's simpler
-/// layout: no sheet over a sheet). Motion: title, field, status row and each part stagger in, a part a step after the
-/// one before began, tiles a row at a time; rows and tiles lift 2 pt on hover; lines cross-fade and lit ones blend to
-/// the accent; Settings unfolds on the expand spring with its rows staggering in.
+/// one status row when Setup or Health needs a look, then the Ask hub (approved 2026-11-11, docs/design/look/AskHub.dc.html):
+/// a Life · Daily · Settings switch, remembered on this Mac. LIFE: the tiles (an SF Symbol, the name and a live line each)
+/// eight a page, today's first, ‹ › and a dot a page, "Places to set up" folded under them naming what's in it; DAILY: one
+/// card of rows; SETTINGS: four boxes that fold open (You and your day the first time; remembered). Motion: title,
+/// field, status row, switch and tab stagger in; the switch's pill slides across on the expand spring; a page's tiles
+/// and a box's rows arrive on the expand spring; rows and tiles lift 2 pt on hover; lines cross-fade and lit ones blend
+/// to the accent. Reduce Motion: fades.
 struct AskScreen: View {
     let palette: MekaPalette
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    @State private var settingsOpen = false
+    /// The Ask hub's tab on this Mac (a tab's name; Life until he picks another).
+    @AppStorage(AskHub.tabKey) private var tabRaw = ""
+    /// Settings' open boxes on this Mac, as the core stores them; nil until he first folds or unfolds one.
+    @AppStorage(AskHub.boxesKey) private var boxesRaw: String?
+    @State private var lifePageAsked = 0
     /// "To set up" open or closed on this Mac (Ask polish, slice 1); empty until he first clicks it.
     @AppStorage(AskSetUp.key) private var setUpChoice = ""
 
@@ -40,50 +45,19 @@ struct AskScreen: View {
                         .padding(.bottom, MekaSpace.xs)
                         .staggeredAppear(ShellNav.statusStep)
                 }
-                sectionLabel(MoreGroup.life.label, first: true).staggeredAppear(ShellNav.moreLabelStep(0))
-                // Ask polish, slice 1: on the first run one welcome line; tiles still to set up sink under "To set up".
-                if let lines = model.lifeLines, let welcome = LifeTileRules.shared.welcome(lines: lines) {
-                    Text(welcome).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .padding(.bottom, MekaSpace.xxs)
-                        .staggeredAppear(ShellNav.tileStep(0))
-                }
-                tileGrid(ShellNav.lifeLive(model.lifeLines), first: 0)
-                    .animation(MekaMotion.expand(reduced: reduceMotion), value: ShellNav.lifeLive(model.lifeLines))
-                setUpSection()
-                sectionLabel(MoreGroup.daily.label, first: false).staggeredAppear(ShellNav.moreLabelStep(1))
-                ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
-                    // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
-                    let line = ShellNav.dailyLine(item, lines: model.dailyLines, voiceNotes: model.voiceNotesLine(MacVoiceNoteStore.shared.notes))
-                    MoreRow(item: item, line: line.text, lit: line.lit, palette: palette) { open(item) }
-                        .staggeredAppear(ShellNav.moreRowStep(1, i))
-                }
-                MoreRow(item: .settings, line: MoreItem.settings.line, lit: false, palette: palette, unfolded: settingsOpen) {
-                    MekaHaptics.tick()
-                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { settingsOpen.toggle() }
-                }
-                .padding(.top, MekaSpace.m)
-                .staggeredAppear(ShellNav.settingsStep)
-                if settingsOpen {
-                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                        ForEach(Array(ShellNav.settings(connected: connected).enumerated()), id: \.element) { i, item in
-                            Group {
-                                if ShellNav.unfoldsInPlace(item) {
-                                    AppearanceRow(palette: palette)
-                                } else if item == .ai {
-                                    AiSpendRow(ai: model.aiStatus, palette: palette)
-                                } else {
-                                    MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true,
-                                                                                health: model.health?.summary, setup: model.setup?.summary),
-                                            lit: ShellNav.moreLit(item, listsDue: model.listsDue, healthAttention: Int(model.health?.attention ?? 0),
-                                                                  setupLeft: Int(model.setup?.toDo ?? 0)), palette: palette) { open(item) }
-                                }
-                            }
-                            .staggeredAppear(i)
-                        }
+                // The Ask hub (approved 2026-11-11): Life · Daily · Settings in place of one long page.
+                AskTabSwitch(tab: tab, palette: palette) { pick($0) }
+                    .padding(.vertical, MekaSpace.xs)
+                    .staggeredAppear(ShellNav.moreLabelStep(0))
+                Group {
+                    switch tab {
+                    case AskTab.daily: dailyCard()
+                    case AskTab.settings: settingsBoxes()
+                    default: lifePage()
                     }
-                    .padding(.leading, MekaSpace.m)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
+                .transition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: tabRaw)
             }
             .frame(maxWidth: 560, alignment: .leading)
             .padding(.horizontal, MekaSpace.gutterWide)
@@ -112,6 +86,11 @@ struct AskScreen: View {
                     Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .rotationEffect(.degrees(setUpOpen ? 90 : 0))
                         .accessibilityHidden(true)
+                    // The Ask hub: folded, the places' names follow ("Bins, Gifts, Annual leave").
+                    if !setUpOpen {
+                        Text(AskHubRules.shared.setUpPeek(names: toSetUp.map(\.label)))
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
                 }
                 .padding(.top, MekaSpace.xs)
                 .contentShape(Rectangle())
@@ -138,21 +117,102 @@ struct AskScreen: View {
         }
     }
 
-    private func sectionLabel(_ label: String, first: Bool) -> some View {
-        Text(label.uppercased())
-            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-            .foregroundStyle(palette.textTertiary)
-            .padding(.top, first ? 0 : MekaSpace.m)
-            .accessibilityAddTraits(.isHeader)
+    private var tab: AskTab { AskHubRules.shared.TABS.first { $0.name == tabRaw } ?? AskTab.life }
+
+    private func pick(_ t: AskTab) {
+        guard t.name != tabRaw else { return }
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { tabRaw = t.name }
+    }
+
+    /// Life: the tiles a page at a time (eight, two to a row), today's first; ‹ › and a dot a page under them when they
+    /// run past one page; "Places to set up" folded under them.
+    @ViewBuilder
+    private func lifePage() -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            // Ask polish, slice 1: on the first run one welcome line; tiles still to set up sink under "To set up".
+            if let lines = model.lifeLines, let welcome = LifeTileRules.shared.welcome(lines: lines) {
+                Text(welcome).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .padding(.bottom, MekaSpace.xxs)
+                    .staggeredAppear(ShellNav.tileStep(0))
+            }
+            let live = ShellNav.lifeLive(model.lifeLines)
+            let count = Int32(live.count)
+            let start = Int(AskHubRules.shared.pageStart(page: Int32(lifePageAsked), count: count, columns: 2))
+            let end = Int(AskHubRules.shared.pageEnd(page: Int32(lifePageAsked), count: count, columns: 2))
+            tileGrid(Array(live[start..<end]), first: 0)
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: Array(live[start..<end]))
+            if let line = AskHubRules.shared.pageLine(page: Int32(lifePageAsked), count: count, columns: 2) {
+                LifePageTurner(line: line, page: Int(AskHubRules.shared.page(asked: Int32(lifePageAsked), count: count, columns: 2)),
+                               pages: Int(AskHubRules.shared.pages(count: count, columns: 2)),
+                               canPrev: AskHubRules.shared.canTurn(page: Int32(lifePageAsked), by: -1, count: count, columns: 2),
+                               canNext: AskHubRules.shared.canTurn(page: Int32(lifePageAsked), by: 1, count: count, columns: 2),
+                               palette: palette) { by in
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                        lifePageAsked = Int(AskHubRules.shared.turn(page: Int32(lifePageAsked), by: Int32(by), count: count, columns: 2))
+                    }
+                }
+            }
+            setUpSection()
+        }
+    }
+
+    /// Daily: one card of rows, parted by a faint line.
+    private func dailyCard() -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
+                if i > 0 { Rectangle().fill(palette.hairline).frame(height: 1).padding(.horizontal, MekaSpace.m) }
+                // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
+                let line = ShellNav.dailyLine(item, lines: model.dailyLines, voiceNotes: model.voiceNotesLine(MacVoiceNoteStore.shared.notes))
+                MoreRow(item: item, line: line.text, lit: line.lit, palette: palette) { open(item) }
+            }
+        }
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .staggeredAppear(ShellNav.moreRowStep(0, 0))
+    }
+
+    /// Settings: four boxes that fold open, You and your day open the first time; remembered on this Mac.
+    private func settingsBoxes() -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            ForEach(Array(AskHubRules.shared.BOXES.enumerated()), id: \.offset) { i, box in
+                let rows = ShellNav.settingsRows(box, connected: connected)
+                if !rows.isEmpty {
+                    SettingsBoxView(box: box, rows: rows, open: AskHubRules.shared.isOpen(stored: boxesRaw, box: box), palette: palette) {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { boxesRaw = AskHubRules.shared.toggled(stored: boxesRaw, box: box) }
+                    } row: { item in settingRow(item) }
+                    .staggeredAppear(ShellNav.moreRowStep(0, i))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func settingRow(_ item: MoreItem) -> some View {
+        if ShellNav.unfoldsInPlace(item) {
+            AppearanceRow(palette: palette)
+        } else if item == .ai {
+            AiSpendRow(ai: model.aiStatus, palette: palette)
+        } else {
+            MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true,
+                                                        health: model.health?.summary, setup: model.setup?.summary),
+                    lit: ShellNav.moreLit(item, listsDue: model.listsDue, healthAttention: Int(model.health?.attention ?? 0),
+                                          setupLeft: Int(model.setup?.toDo ?? 0)), palette: palette) { open(item) }
+        }
     }
 
     /// Take me there under a help answer: the sheet or place whose `MoreItem` case is the place's key; Appearance,
-    /// Navilife's AI and Settings unfold Settings in place.
+    /// Navilife's AI and Settings switch to the Settings tab with their box open.
     private func openHelp(_ place: HelpPlace) {
         guard let item = MoreItem.allCases.first(where: { "\($0)" == place.key }) else { return }
         switch item {
         case .appearance, .ai, .settings:
-            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { settingsOpen = true }
+            // The Settings tab, with the box that holds it open.
+            pick(AskTab.settings)
+            if let box = AskHubRules.shared.settingsTarget(place: place), !AskHubRules.shared.isOpen(stored: boxesRaw, box: box) {
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { boxesRaw = AskHubRules.shared.toggled(stored: boxesRaw, box: box) }
+            }
         default:
             open(item)
         }
@@ -580,6 +640,137 @@ private struct MotionCheckView: View {
 }
 
 /// "To set up" on this Mac (Ask polish, slice 1): "" until he first clicks it (the core opens it on the first run only).
+/// The Ask hub's choices remembered on this Mac.
+enum AskHub {
+    static let tabKey = "meka.ask.tab"
+    static let boxesKey = "meka.ask.settingsBoxes"
+}
+
+/// The Ask hub's Life · Daily · Settings switch: one rounded track, the lit pill (the brass tint) slides across to the
+/// tab picked on the expand spring (matched geometry); labels' colours blend. Reduce Motion: the pill moves at once.
+private struct AskTabSwitch: View {
+    let tab: AskTab
+    let palette: MekaPalette
+    let pick: (AskTab) -> Void
+    @Namespace private var pill
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(AskHubRules.shared.TABS, id: \.name) { t in
+                let lit = t == tab
+                Button { pick(t) } label: {
+                    Text(t.label)
+                        .font(MekaType.itemMeta).fontWeight(lit ? .semibold : .regular)
+                        .foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                        .background {
+                            if lit {
+                                Capsule().fill(palette.accent.opacity(0.16))
+                                    .matchedGeometryEffect(id: "ask-tab-pill", in: pill)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(lit ? [.isSelected, .isButton] : .isButton)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+            }
+        }
+        .padding(MekaSpace.xxs)
+        .background(palette.surface, in: Capsule())
+    }
+}
+
+/// Under Life's tiles when they run past a page: "1–8 of 15 · today’s first", a dot a page (the one showing long and
+/// lit) and ‹ › (dimmed at the ends).
+private struct LifePageTurner: View {
+    let line: String
+    let page: Int
+    let pages: Int
+    let canPrev: Bool
+    let canNext: Bool
+    let palette: MekaPalette
+    let turn: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: MekaSpace.xs) {
+            Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+            Spacer(minLength: MekaSpace.xs)
+            HStack(spacing: MekaSpace.xxs) {
+                ForEach(0..<pages, id: \.self) { i in
+                    Capsule().fill(i == page ? palette.accent : palette.hairline)
+                        .frame(width: i == page ? 14 : 5, height: 5)
+                }
+            }
+            .accessibilityHidden(true)
+            arrow("chevron.left", can: canPrev, label: "Previous page of places") { turn(-1) }
+            arrow("chevron.right", can: canNext, label: "Next page of places") { turn(1) }
+        }
+    }
+
+    private func arrow(_ symbol: String, can: Bool, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(MekaType.caption)
+                .foregroundStyle(can ? palette.accent : palette.textTertiary)
+                .frame(width: 28, height: 28)
+                .background(palette.surfaceRaised, in: Circle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .disabled(!can)
+        .accessibilityLabel(label)
+    }
+}
+
+/// A Settings box (the Ask hub): its title, and while folded the names in it on one line; a click unfolds its rows on
+/// the expand spring, the chevron turning with it. Reduce Motion: it fades.
+private struct SettingsBoxView<Row: View>: View {
+    let box: SettingsBox
+    let rows: [MoreItem]
+    let open: Bool
+    let palette: MekaPalette
+    let toggle: () -> Void
+    @ViewBuilder let row: (MoreItem) -> Row
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: toggle) {
+                HStack {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(box.title).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        if !open {
+                            Text(AskHubRules.shared.peek(labels: rows.map(\.label)))
+                                .font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(open ? "Open" : "Closed")
+            if open {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(rows, id: \.self) { item in
+                        Rectangle().fill(palette.hairline).frame(height: 1).padding(.horizontal, MekaSpace.m)
+                        row(item)
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .clipShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+}
+
 enum AskSetUp {
     static let key = "meka.ask.setUpOpen"
     static let open = "open"

@@ -58,6 +58,21 @@ final class ShellNavTests: XCTestCase {
     }
 
     @MainActor
+    func testTheAskHubsSettingsBoxesHoldEverySettingOnce() {
+        // The Ask hub (approved 2026-11-11): the Fold's four boxes, every setting in exactly one, in the design's order.
+        let boxed = AskHubRules.shared.BOXES.flatMap { ShellNav.settingsRows($0, connected: true) }
+        XCTAssertEqual(Set(boxed), Set(ShellNav.settings(connected: true)))
+        XCTAssertEqual(boxed.count, Set(boxed).count)
+        XCTAssertEqual(AskHubRules.shared.BOXES.map(\.title), ["You and your day", "Obi", "Phone, watch and look", "Privacy and data"])
+        XCTAssertEqual(ShellNav.settingsRows(SettingsBox.you, connected: true), [.aboutYou, .work, .protectedTime, .calendars, .mail, .family])
+        XCTAssertEqual(ShellNav.settingsRows(SettingsBox.you, connected: false), [.aboutYou, .work, .protectedTime])
+        XCTAssertEqual(ShellNav.settingsBox(.appearance), SettingsBox.device)
+        XCTAssertNil(ShellNav.settingsBox(.car))
+        XCTAssertEqual(AskHubRules.shared.TABS.map(\.label), ["Life", "Daily", "Settings"])
+        XCTAssertEqual(AskHubRules.shared.pageLine(page: 0, count: 15, columns: 2), "1–8 of 15 · today’s first")
+    }
+
+    @MainActor
     func testAskIsALifeGridDailyAndOneSettingsRow() {
         // Fold review 2026-10-12, item 7: the same parts as the Fold's.
         XCTAssertEqual(ShellNav.lifeTiles().map(\.label),

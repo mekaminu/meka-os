@@ -98,13 +98,15 @@ import os.meka.core.facade.MekaCore
  * ASK (build plan M1, Four tabs, one front door). The fourth tab and the front door to everything that isn't a tab.
  * One field asks MEKA in your own words (Return; [AskMekaSection], V1 AI layer slice 3b) and searches as you type, the
  * best matches under it and "See all" opening Search everything (Fold review 2026-10-09 07:26, item 8). Below it
- * (Fold review 2026-10-12, item 7): one status row when Setup or Health needs a look; LIFE, a 2-column grid of tiles
- * with an icon and a live line each (Lists and Goals open their places with the shell's forward slide and keep Ask
- * lit; the rest spring up as panes); DAILY, a few rows; and one Settings row that opens the Settings pane, where every
- * setting lives (the panes it opens spring up over it and drop back to it). Motion: the title, field, status row and
- * each part stagger in 40 ms apart (a part a step after the one before began, its label leading; tiles a row at a
- * time); lines cross-fade and lit ones blend to the accent; a row's or tile's label travels into the title of what it
- * opens (and back). Reduced motion cross-fades.
+ * one status row when Setup or Health needs a look, then the Ask hub (approved 2026-11-11, `docs/design/look/AskHub.dc.html`):
+ * a **Life · Daily · Settings** switch (remembered on this phone) in place of one long page. LIFE: the tiles with an
+ * icon and a live line each, a page at a time (eight folded, twelve open; ‹ › and a dot a page; today's first; Lists and
+ * Goals open their places with the shell's forward slide and keep Ask lit, the rest spring up as panes), with "Places to
+ * set up" folded under them naming what's in it. DAILY: one card of rows. SETTINGS: four boxes that fold open (You and
+ * your day open the first time; remembered), every setting in one of them. Motion: the title, field, status row, switch
+ * and tab stagger in 40 ms apart (tiles a row at a time); the switch's lit pill springs across with a tick; a page turn's
+ * tiles fade into place; a box unfolds on the expand spring; lines cross-fade and lit ones blend to the accent; a row's
+ * or tile's label travels into the title of what it opens (and back). Reduced motion cross-fades.
  */
 @Composable
 fun AskRoute(
@@ -162,14 +164,27 @@ fun AskRoute(
             java.time.LocalDate.now(zone).toEpochDay(),
         )
     }
-    // The Settings pane (Fold review 2026-10-12, item 7): every setting behind one row on Ask.
-    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    // The Ask hub (approved 2026-11-11, docs/design/look/AskHub.dc.html): Life · Daily · Settings, remembered on this
+    // device; Life's page and Settings' open boxes too (the boxes per device, the page for this visit).
+    val hubContext = LocalContext.current.applicationContext
+    var tab by rememberSaveable { mutableStateOf(AskPrefs.tab(hubContext)) }
+    val pickTab: (os.meka.core.domain.AskTab) -> Unit = { t -> tab = t; AskPrefs.saveTab(hubContext, t) }
+    var lifePage by rememberSaveable { mutableStateOf(0) }
+    var boxes by remember { mutableStateOf(os.meka.core.domain.AskHubRules.openBoxes(AskPrefs.boxes(hubContext))) }
+    val openBox: (os.meka.core.domain.SettingsBox) -> Unit = { b ->
+        if (b !in boxes) { boxes = boxes + b; AskPrefs.saveBoxes(hubContext, boxes) }
+    }
+    val toggleBox: (os.meka.core.domain.SettingsBox) -> Unit = { b ->
+        boxes = os.meka.core.domain.AskHubRules.toggle(boxes, b); AskPrefs.saveBoxes(hubContext, boxes)
+    }
+    var ai by remember { mutableStateOf<os.meka.core.domain.AiStatusView?>(null) }
+    LaunchedEffect(tab) { if (tab == os.meka.core.domain.AskTab.SETTINGS) ai = runCatching { core.aiStatus() }.getOrNull() }
     val bedsideApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
     val open: (MoreItem) -> Unit = { item ->
         val d = item.destination
         when {
-            d != null -> { settingsOpen = false; openPlace(d) }
-            item == MoreItem.SETTINGS -> settingsOpen = true
+            d != null -> openPlace(d)
+            item == MoreItem.SETTINGS -> pickTab(os.meka.core.domain.AskTab.SETTINGS)
             // Bedside clock slice 1: the clock takes the screen, ‹ Back returns here.
             item == MoreItem.BEDSIDE -> bedsideApp?.openBedside?.value = true
             ShellNav.opens(item) -> pane = item
@@ -180,8 +195,12 @@ fun AskRoute(
     val openHelp: (os.meka.core.domain.HelpPlace) -> Unit = { p ->
         when {
             p.system -> HelpSettingsPages.open(helpContext, p)
-            p == os.meka.core.domain.HelpPlace.APPEARANCE -> { settingsOpen = true; appearanceOpen = true }
-            p == os.meka.core.domain.HelpPlace.SETTINGS || p == os.meka.core.domain.HelpPlace.AI -> settingsOpen = true
+            // Settings, Navilife's AI and Appearance: the Settings tab with their box open (Appearance unfolded too).
+            os.meka.core.domain.AskHubRules.settingsTarget(p) != null -> {
+                pickTab(os.meka.core.domain.AskTab.SETTINGS)
+                os.meka.core.domain.AskHubRules.settingsTarget(p)?.let(openBox)
+                if (p == os.meka.core.domain.HelpPlace.APPEARANCE) appearanceOpen = true
+            }
             else -> MoreItem.entries.firstOrNull { it.name == p.name }?.let { open(it) }
         }
     }
@@ -280,11 +299,10 @@ fun AskRoute(
         }
     }
     // Back closes whatever sprang up over Ask before it leaves the app.
-    BackHandler(enabled = pane != null || showSearch || settingsOpen) {
+    BackHandler(enabled = pane != null || showSearch) {
         when {
             showSearch -> closeSearch()
-            pane != null -> pane = null
-            else -> settingsOpen = false
+            else -> pane = null
         }
     }
 
@@ -337,54 +355,65 @@ fun AskRoute(
                     }
                 }
             }
-            // LIFE: the home-and-family places as 2-column tiles, each with its live line; they arrive a row at a time.
-            item(key = "label-life") { SectionLabel(MoreGroup.LIFE.label, first = true, step = ShellNav.moreLabelStep(0)) }
-            // Today's tiles float to the top (Fold review 17:56, item 2); a row keyed by its tiles glides to its new
-            // place. Ask polish, slice 1: 3 columns on the open Fold; tiles still to set up sink under "To set up".
-            val live = ShellNav.lifeLive(lifeLines)
-            val toSetUp = ShellNav.lifeToSetUp(lifeLines)
-            val welcome = os.meka.core.domain.LifeTileRules.welcome(lifeLines)
-            if (welcome != null) {
-                item(key = "life-welcome") {
-                    Text(welcome, style = MekaType.caption, color = Meka.colors.textSecondary,
-                        modifier = Modifier.padding(bottom = MekaSpace.xxs).animateItem().appear(rememberAppearance(ShellNav.tileStep(0))))
-                }
+            // The Ask hub's switch: Life · Daily · Settings in place of one long page.
+            item(key = "tabs") {
+                AskTabSwitch(tab, Modifier.testTag(ASK_TABS_TAG).padding(vertical = MekaSpace.xs)
+                    .appear(rememberAppearance(ShellNav.moreLabelStep(0))), onPick = pickTab)
             }
-            tileRows(live, columns, "tiles", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
-            if (toSetUp.isNotEmpty()) {
-                val setUpOpen = os.meka.core.domain.LifeTileRules.setUpOpen(setUpChoice, lifeLines)
-                item(key = "label-setup") {
-                    SetUpLabel(
-                        os.meka.core.domain.LifeTileRules.setUpLabel(toSetUp.size), setUpOpen,
-                        Modifier.animateItem().appear(rememberAppearance(ShellNav.tileStep(live.size, columns) + 1)),
-                    ) {
-                        setUpChoice = !setUpOpen
-                        AskPrefs.saveSetUpOpen(context, !setUpOpen)
+            when (tab) {
+                os.meka.core.domain.AskTab.LIFE -> {
+                    // LIFE: the places as tiles, a page at a time (eight on the phone, twelve on the open Fold), today's
+                    // first; a row keyed by its tiles glides to its new place. Tiles still to set up fold under them.
+                    val live = ShellNav.lifeLive(lifeLines)
+                    val toSetUp = ShellNav.lifeToSetUp(lifeLines)
+                    val welcome = os.meka.core.domain.LifeTileRules.welcome(lifeLines)
+                    if (welcome != null) {
+                        item(key = "life-welcome") {
+                            Text(welcome, style = MekaType.caption, color = Meka.colors.textSecondary,
+                                modifier = Modifier.padding(bottom = MekaSpace.xxs).animateItem().appear(rememberAppearance(ShellNav.tileStep(0))))
+                        }
+                    }
+                    val start = os.meka.core.domain.AskHubRules.pageStart(lifePage, live.size, columns)
+                    val end = os.meka.core.domain.AskHubRules.pageEnd(lifePage, live.size, columns)
+                    tileRows(live.subList(start, end), columns, "tiles", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
+                    if (os.meka.core.domain.AskHubRules.pageLine(lifePage, live.size, columns) != null) {
+                        item(key = "life-pages") {
+                            LifePageTurner(lifePage, live.size, columns,
+                                Modifier.animateItem().appear(rememberAppearance(ShellNav.tileStep(end - start, columns) + 1))) { lifePage = it }
+                        }
+                    }
+                    if (toSetUp.isNotEmpty()) {
+                        val setUpOpen = os.meka.core.domain.LifeTileRules.setUpOpen(setUpChoice, lifeLines)
+                        item(key = "label-setup") {
+                            SetUpLabel(
+                                os.meka.core.domain.LifeTileRules.setUpLabel(toSetUp.size), setUpOpen,
+                                Modifier.animateItem().appear(rememberAppearance(ShellNav.tileStep(end - start, columns) + 1)),
+                                peek = os.meka.core.domain.AskHubRules.setUpPeek(toSetUp.map { it.label }),
+                            ) {
+                                setUpChoice = !setUpOpen
+                                AskPrefs.saveSetUpOpen(context, !setUpOpen)
+                            }
+                        }
+                        if (setUpOpen) tileRows(toSetUp, columns, "setup", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
                     }
                 }
-                if (setUpOpen) tileRows(toSetUp, columns, "setup", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
+                // DAILY: the things you run through a day or a week, as one card of rows.
+                os.meka.core.domain.AskTab.DAILY -> item(key = "daily-card") {
+                    RowsCard(Modifier.animateItem().appear(rememberAppearance(ShellNav.moreRowStep(0, 0)))) {
+                        ShellNav.daily().forEachIndexed { i, item ->
+                            if (i > 0) CardHairline()
+                            // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
+                            val line = ShellNav.dailyLine(item, dailyLines, screenSaver, voiceNotesLine)
+                            MoreRow(item, line.text, line.lit, pane == item) { open(item) }
+                        }
+                    }
+                }
+                // SETTINGS: four boxes that fold open (You and your day, Obi, Phone watch and look, Privacy and data).
+                os.meka.core.domain.AskTab.SETTINGS -> settingsBoxes(connected, boxes, toggleBox, ShellNav.moreRowStep(0, 0)) { item ->
+                    SettingRow(item, core, ai, pane, appearanceOpen, { appearanceOpen = !appearanceOpen },
+                        openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening, open = { open(it) })
+                }
             }
-            // DAILY: the things you run through a day or a week.
-            item(key = "label-daily") { SectionLabel(MoreGroup.DAILY.label, first = false, step = ShellNav.moreLabelStep(1)) }
-            itemsIndexed(ShellNav.daily(), key = { _, it -> it.name }) { i, item ->
-                // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
-                val line = ShellNav.dailyLine(item, dailyLines, screenSaver, voiceNotesLine)
-                MoreRow(item, line.text, line.lit, pane == item,
-                    modifier = Modifier.appear(rememberAppearance(ShellNav.moreRowStep(1, i)))) { open(item) }
-            }
-            // Every setting behind one row.
-            item(key = "settings") {
-                MoreRow(MoreItem.SETTINGS, ShellNav.moreLine(MoreItem.SETTINGS, 0), false, settingsOpen,
-                    modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(ShellNav.SETTINGS_STEP))) { open(MoreItem.SETTINGS) }
-            }
-        }
-        // The Settings pane sits under the panes it opens, so they spring up over it and drop back to it.
-        MekaPane(visible = settingsOpen) {
-            SettingsPane(
-                core, connected, pane, onClose = { settingsOpen = false }, open = { open(it) },
-                appearanceOpen = appearanceOpen, toggleAppearance = { appearanceOpen = !appearanceOpen },
-                openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening,
-            )
         }
         MekaPane(visible = pane == MoreItem.BRIEF) {
             // Slice 7: the read ran to its end: the pane drops and Ask's orb listens for 8 s.
@@ -847,7 +876,7 @@ private fun LazyListScope.tileRows(
  * chevron turns on the expand spring (reduced motion: at once). TalkBack reads it as a button with its state.
  */
 @Composable
-private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, toggle: () -> Unit) {
+private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, peek: String? = null, toggle: () -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.expand(reduced), label = "setup-chevron")
@@ -865,6 +894,11 @@ private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, toggle: 
     ) {
         Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
         Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.rotate(if (reduced) (if (open) 90f else 0f) else turn))
+        // The Ask hub: folded, the places' names follow ("Bins, Gifts, Annual leave").
+        if (!open && !peek.isNullOrEmpty()) {
+            Text(peek, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
     }
 }
 
@@ -872,6 +906,25 @@ private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, toggle: 
 internal object AskPrefs {
     private const val PREFS = "meka.ask"
     private const val SET_UP_OPEN = "setUpOpen"
+    private const val TAB = "tab"
+    private const val BOXES = "settingsBoxes"
+
+    /** The Ask hub's tab last picked on this device (Life the first time). */
+    fun tab(context: android.content.Context): os.meka.core.domain.AskTab =
+        os.meka.core.domain.AskTab.of(context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(TAB, null))
+
+    fun saveTab(context: android.content.Context, tab: os.meka.core.domain.AskTab) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString(TAB, tab.name).apply()
+    }
+
+    /** Settings' open boxes on this device, as stored (null until he first folds or unfolds one). */
+    fun boxes(context: android.content.Context): String? =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(BOXES, null)
+
+    fun saveBoxes(context: android.content.Context, open: Set<os.meka.core.domain.SettingsBox>) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+            .putString(BOXES, os.meka.core.domain.AskHubRules.stored(open)).apply()
+    }
 
     fun setUpOpen(context: android.content.Context): Boolean? {
         val p = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)

@@ -124,6 +124,8 @@ class AskScreensTest {
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Ask")
+        // The Ask hub: Life · Daily · Settings, Life first.
+        os.meka.core.domain.AskHubRules.TABS.forEach { ScreenShots.assertShows(compose, name, it.label) }
         when (fill) {
             // Nothing set up: one line says so over the open set-up group, never an empty grid.
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, LifeTileRules.WELCOME)
@@ -131,7 +133,22 @@ class AskScreensTest {
             Fill.MANY -> {
                 ScreenShots.assertShows(compose, name, "3 to buy")
                 // Slice 8 (the Ask re-shot's findings): the errand counts, and a two-line name keeps its icon on top.
-                ScreenShots.assertShows(compose, name, "1 errand at")
+                // The Ask hub pages the tiles: Errands may be on the next page folded.
+                val errands = hasText("1 errand at", substring = true)
+                if (!shows(errands)) {
+                    val next = hasContentDescription(os.meka.android.ask.ASK_NEXT_PAGE) and hasClickAction()
+                    if (!shows(next)) fail("$name: Errands isn't on the first page and there's no next page")
+                    compose.onAllNodes(next)[0].performSemanticsAction(SemanticsActions.OnClick)
+                    compose.mainClock.advanceTimeBy(SETTLE_MS)
+                    compose.waitForIdle()
+                    compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "$name-page-2"))
+                    ScreenShots.assertNoBrokenWords(compose, "$name-page-2")
+                    ScreenShots.assertShows(compose, "$name-page-2", "1 errand at")
+                    compose.onAllNodes(hasContentDescription(os.meka.android.ask.ASK_PREV_PAGE) and hasClickAction())[0]
+                        .performSemanticsAction(SemanticsActions.OnClick)
+                    compose.mainClock.advanceTimeBy(SETTLE_MS)
+                    compose.waitForIdle()
+                }
                 // A8: Ask's habits line is the Day ring's count on Today (one rule, DayTileRules), for the same habits.
                 val goals = core.goalsView.value
                 val total = os.meka.core.domain.DayTileRules.habitsToday(goals.habits)
@@ -308,7 +325,24 @@ class AskScreensTest {
             }
             reach(name, tile(toSetUp.first()), "${toSetUp.first().label} under To set up")
         }
-        (live + toSetUp).forEach { opens(name, it, tile(it), places) }
+        toSetUp.forEach { opens(name, it, tile(it), places) }
+        // The Ask hub: the live tiles a page at a time; › turns to the next, whose first tile then shows.
+        val width = ApplicationProvider.getApplicationContext<ShotApplication>().resources.configuration.screenWidthDp
+        val columns = LifeTileRules.columns(width.toFloat())
+        val pages = os.meka.core.domain.AskHubRules.pages(live.size, columns)
+        val next = hasContentDescription(os.meka.android.ask.ASK_NEXT_PAGE) and hasClickAction()
+        for (p in 0 until pages) {
+            val from = os.meka.core.domain.AskHubRules.pageStart(p, live.size, columns)
+            val to = os.meka.core.domain.AskHubRules.pageEnd(p, live.size, columns)
+            live.subList(from, to).forEach { opens(name, it, tile(it), places) }
+            if (p < pages - 1) {
+                tap(name, "Next page", next)
+                until { shows(tile(live[to])) }
+                if (!shows(tile(live[to]))) fail("$name: › didn't turn to page ${p + 2} (${live[to].label})")
+                if (shows(tile(live[from]))) fail("$name: page ${p + 2} still shows ${live[from].label}")
+            }
+        }
+        if (pages > 1 && shows(next)) fail("$name: › still turns on the last page")
         assertTouchTargets(name)
     }
 
@@ -358,9 +392,40 @@ class AskScreensTest {
         // The status row (Setup or Health), when it shows.
         val status = ShellNav.statusItem(core.healthView.value?.attention ?: 0, core.setupView.value?.toDo ?: 0)
         if (status != null) opens(name, status, hasText(status.label) and hasClickAction(), places)
-        // Each Daily row, then Settings.
+        // The Ask hub: Daily's tab, then each of its rows.
+        fun tab(t: os.meka.core.domain.AskTab) = hasText(t.label) and hasClickAction() and
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+        tap(name, "Daily", tab(os.meka.core.domain.AskTab.DAILY))
+        val firstDaily = ShellNav.daily().first()
+        until { shows(hasText(firstDaily.label) and hasClickAction()) }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "cover-dark-daily-by-hand"))
         ShellNav.daily().filter { it != MoreItem.BEDSIDE }.forEach { opens(name, it, hasText(it.label) and hasClickAction(), places) }
-        opens(name, MoreItem.SETTINGS, hasText(MoreItem.SETTINGS.label) and hasClickAction(), places)
+        // Settings' tab: You and your day open the first time, its rows open their panes; another box unfolds and folds.
+        tap(name, "Settings", tab(os.meka.core.domain.AskTab.SETTINGS))
+        val you = ShellNav.settingsRows(os.meka.core.domain.SettingsBox.YOU, connected = true)
+        until { shows(hasText(you.first().label) and hasClickAction()) }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "cover-dark-settings-by-hand"))
+        assertTouchTargets(name)
+        // Every row's own pane is checked by SettingsScreensTest; here the first one opens over Ask and Close drops it.
+        you.forEach { reach(name, hasText(it.label), "${it.label} in ${os.meka.core.domain.SettingsBox.YOU.title}") }
+        opens(name, you.first(), hasText(you.first().label) and hasClickAction(), places)
+        val data = os.meka.core.domain.SettingsBox.DATA
+        val vault = hasText(MoreItem.VAULT.label) and hasClickAction()
+        if (shows(vault)) fail("$name: ${data.title} is open before it's tapped")
+        tap(name, data.title, hasText(data.title))
+        until { shows(vault) }
+        if (!shows(vault)) fail("$name: ${data.title} didn't unfold")
+        // Every row of the box is drawn once it's open (scrolled to as needed), and Vault opens its place.
+        ShellNav.settingsRows(data, connected = true).forEach { reach(name, hasText(it.label), "${it.label} in ${data.title}") }
+        opens(name, MoreItem.VAULT, vault, places)
+        tap(name, data.title, hasText(data.title))
+        until { !shows(vault) }
+        if (shows(vault)) fail("$name: a second tap on ${data.title} left it open")
+        // Back to Life: the tiles are there again.
+        tap(name, "Life", tab(os.meka.core.domain.AskTab.LIFE))
+        val firstTile = ShellNav.lifeLive(core.lifeLines.value).first()
+        until { shows(hasContentDescription("${firstTile.label}, ", substring = true)) }
+        if (!shows(hasContentDescription("${firstTile.label}, ", substring = true))) fail("$name: Life didn't come back")
         assertTouchTargets(name)
     }
 

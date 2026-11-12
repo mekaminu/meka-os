@@ -89,6 +89,24 @@ class ShellNavTest {
     }
 
     @Test
+    fun theAskHubsSettingsBoxesHoldEverySettingOnce() {
+        // The Ask hub (approved 2026-11-11): four boxes, every setting in one of them, in the design's order.
+        val boxed = os.meka.core.domain.AskHubRules.BOXES.flatMap { ShellNav.settingsRows(it, connected = true) }
+        assertEquals(ShellNav.settings(connected = true).toSet(), boxed.toSet())
+        assertEquals(boxed.size, boxed.toSet().size)
+        assertEquals(
+            listOf(MoreItem.ABOUT_YOU, MoreItem.WORK, MoreItem.PROTECTED, MoreItem.CALENDARS, MoreItem.MAIL, MoreItem.FAMILY),
+            ShellNav.settingsRows(os.meka.core.domain.SettingsBox.YOU, connected = true),
+        )
+        assertEquals(listOf(MoreItem.ABOUT_YOU, MoreItem.WORK, MoreItem.PROTECTED),
+            ShellNav.settingsRows(os.meka.core.domain.SettingsBox.YOU, connected = false))
+        assertEquals(os.meka.core.domain.SettingsBox.DEVICE, ShellNav.settingsBox(MoreItem.APPEARANCE))
+        assertNull(ShellNav.settingsBox(MoreItem.CAR))
+        // Every item has a help place of the same name (the Mac matches the same place by its key).
+        MoreItem.entries.forEach { assertEquals(it.name, ShellNav.place(it)?.name, "${it.name} has no help place") }
+    }
+
+    @Test
     fun theStatusRowShowsOnlyWhenSomethingNeedsALook() {
         assertNull(ShellNav.statusItem(0, 0))
         assertEquals(MoreItem.SETUP, ShellNav.statusItem(0, 3))

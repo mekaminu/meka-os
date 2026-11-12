@@ -5978,3 +5978,13 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Facade: `setHabitReminder`, `addHabitToList(…, remindAt)`.
 - Fold: `HabitsPage` row unfold shows `HistoryGrid` and the reminder (Off · Every day, `TimeStepper`); + Add has the reminder too. Mac: `HabitsSheet` `HabitHistoryGrid`, `HabitTimeStepper`, `CoreModel.setHabitReminder`.
 - Tests: `HabitHistoryTest` (grid, done lines, Avoid, newer habits, best run, reminder set/sync/off, notices and when they stop), `HabitsScreensTest.aHabitsTapShowsItsFourWeeksAndTheReminderTurnsOnAndOff`, `MekaCoreBridgeTests.testHabitsScreenOnTheMac` (reminder and history through the bridge).
+
+
+## Ask hub (Take first, approved 2026-11-11, `docs/design/look/AskHub.dc.html`)
+
+### Slice 1 (2026-11-12, both apps; Mac checked nightly)
+- Core: `AskHub.kt` (new): `AskTab` (Life · Daily · Settings, `of(stored)`), `SettingsBox` (You and your day · Obi · Phone, watch and look · Privacy and data, each with its `HelpPlace` rows in the design's order), `AskHubRules` (four rows of tiles a page: 8 with two columns, 12 with three; `pages/page/pageStart/pageEnd/pageLine` "1–8 of 15 · today’s first", `turn/canTurn`, `setUpPeek`, `boxOf`, `openBoxes/toggle/stored/isOpen/toggled` with You and your day open the first time, `settingsTarget` for help's Take me there).
+- Fold: `AskHubParts.kt` (new): `AskTabSwitch` (the lit pill springs across, Role.Tab, 48 dp), `LifePageTurner` (line, dots, ‹ › 48 dp), `RowsCard`/`CardHairline`, `SettingsBoxCard` + `settingsBoxes` + `SettingRow` (shared with `SettingsPane`, which now shows the four boxes all open). `AskRoute`: the switch after the status row; Life paged with "Places to set up" naming what's folded; Daily one card; Settings the boxes (Navilife's AI read when the tab shows); the Settings pane is no longer opened from Ask (MoreItem.SETTINGS and help's Settings/AI/Appearance switch tab and open the box). `AskPrefs` keeps the tab and the open boxes. `ShellNav.place/settingsBox/settingsRows`.
+- Mac: `AskScreen` the same switch (`AskTabSwitch`, matched-geometry pill), `lifePage` (eight a page, `LifePageTurner`), `dailyCard`, `settingsBoxes` (`SettingsBoxView`), `AskHub` keys in AppStorage; `ShellNav.settingsBox/settingsRows` by help key.
+- Motion catalogue row "Ask hub".
+- Tests: `AskHubTest` (core), `ShellNavTest.theAskHubsSettingsBoxesHoldEverySettingOnce`, `AskScreensTest` (the switch on every shot, Errands on page 2 when folded, tiles a page at a time with › turning, Daily's tab and rows, Settings' boxes open/fold and a row's pane, back to Life), `ShellNavTests.testTheAskHubsSettingsBoxesHoldEverySettingOnce` (Mac).

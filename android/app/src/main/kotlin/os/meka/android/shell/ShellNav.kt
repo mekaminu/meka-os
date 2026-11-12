@@ -198,8 +198,22 @@ object ShellNav {
     fun settings(connected: Boolean): List<MoreItem> =
         more(connected).filter { it.group == MoreGroup.SETTINGS && it != MoreItem.SETTINGS }
 
+    /** The help place that names [item] (the same name), so the core's Ask hub rules can place it. */
+    fun place(item: MoreItem): os.meka.core.domain.HelpPlace? =
+        os.meka.core.domain.HelpPlace.entries.firstOrNull { it.name == item.name }
+
+    /** The Ask hub's Settings box [item] sits in (null for anything that isn't a setting). */
+    fun settingsBox(item: MoreItem): os.meka.core.domain.SettingsBox? =
+        place(item)?.let { os.meka.core.domain.AskHubRules.boxOf(it) }
+
+    /** A Settings box's rows, in the design's order; the server-only ones only once this device is connected. */
+    fun settingsRows(box: os.meka.core.domain.SettingsBox, connected: Boolean): List<MoreItem> {
+        val shown = settings(connected)
+        return box.rows.mapNotNull { p -> shown.firstOrNull { it.name == p.name } }
+    }
+
     /**
-     * The status row at the top of More: Health when something needs a look, else Setup while steps are left, else
+     * The status row at the top of More:Health when something needs a look, else Setup while steps are left, else
      * nothing (both stay in Settings either way).
      */
     fun statusItem(healthAttention: Int, setupLeft: Int): MoreItem? = when {

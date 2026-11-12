@@ -29,13 +29,15 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.ShellNav
 import os.meka.core.domain.AiStatusView
+import os.meka.core.domain.AskHubRules
 import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val SETTINGS_LIST_TAG = "settings-list"
 
 /**
- * Ask → Settings (Fold review 2026-10-12, item 7): every setting, behind one row on Ask. Work mode, Protected time,
+ * Every setting on its own page, in the Ask hub's four boxes (all open here; Ask's Settings tab draws the same boxes
+ * with only the ones he opened). Formerly Ask → Settings (Fold review 2026-10-12, item 7). Work mode, Protected time,
  * Notifications, Appearance (unfolds in place), MEKA's voice, Talk, Calendars, Family and Watch (once connected), What
  * MEKA may do, MEKA's AI (whether it's on and the month's spend, moved here from under Ask's field), Activity, Setup,
  * Health, Vault and Your data. Each row opens its pane over this one, and back drops to here.
@@ -49,10 +51,7 @@ fun SettingsPane(
     core: MekaCore, connected: Boolean, pane: MoreItem?, onClose: () -> Unit, open: (MoreItem) -> Unit,
     appearanceOpen: Boolean, toggleAppearance: () -> Unit, openTopics: () -> Unit, playOpening: () -> Unit,
 ) {
-    val lists by core.listsView.collectAsState()
-    val work by core.workMode.collectAsState()
-    val health by core.healthView.collectAsState()
-    val setup by core.setupView.collectAsState()
+    var boxes by remember { mutableStateOf(AskHubRules.BOXES.toSet()) }
     var ai by remember { mutableStateOf<AiStatusView?>(null) }
     LaunchedEffect(Unit) { ai = runCatching { core.aiStatus() }.getOrNull() }
     LazyColumn(
@@ -69,16 +68,9 @@ fun SettingsPane(
                 modifier = Modifier.padding(bottom = MekaSpace.xs).sharedTitleInPane(SharedMotion.paneKey(MoreItem.SETTINGS))
                     .appear(rememberAppearance(0)))
         }
-        itemsIndexed(ShellNav.settings(connected), key = { _, it -> it.name }) { i, item ->
-            val step = Modifier.appear(rememberAppearance(i + 1))
-            when {
-                ShellNav.unfoldsInPlace(item) -> AppearanceRow(appearanceOpen, step, openTopics = openTopics, playOpening = playOpening, toggle = toggleAppearance, core = core)
-                item == MoreItem.AI -> AiSpendRow(ai, step)
-                else -> MoreRow(
-                    item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary, setup?.summary),
-                    ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0, setup?.toDo ?: 0), pane == item, step,
-                ) { open(item) }
-            }
+        // The Ask hub's four boxes, all open here (this pane is every setting at once).
+        settingsBoxes(connected, boxes, { boxes = AskHubRules.toggle(boxes, it) }, firstStep = 1) { item ->
+            SettingRow(item, core, ai, pane, appearanceOpen, toggleAppearance, openTopics = openTopics, playOpening = playOpening, open = open)
         }
     }
 }

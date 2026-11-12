@@ -346,6 +346,17 @@ enum ShellNav {
         more(connected: connected).filter { $0.group == .settings && $0 != .settings }
     }
 
+    /// The Ask hub's Settings box a setting sits in (the core's grouping, matched by the help place's key).
+    static func settingsBox(_ item: MoreItem) -> SettingsBox? {
+        AskHubRules.shared.BOXES.first { box in box.rows.contains { $0.key == "\(item)" } }
+    }
+
+    /// A Settings box's rows in the design's order; the server-only ones only once this Mac is connected.
+    static func settingsRows(_ box: SettingsBox, connected: Bool) -> [MoreItem] {
+        let shown = settings(connected: connected)
+        return box.rows.compactMap { place in shown.first { "\($0)" == place.key } }
+    }
+
     /// The status row at the top of More: Health when something needs a look, else Setup while steps are left.
     static func statusItem(healthAttention: Int, setupLeft: Int) -> MoreItem? {
         if healthAttention > 0 { return .health }
