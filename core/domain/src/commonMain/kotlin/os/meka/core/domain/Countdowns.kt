@@ -450,7 +450,7 @@ object CountdownRules {
  * Countdowns, Obi reads them (2026-11-12): Ask's and Live's lines for [ObiArea.COUNTDOWNS], so "how many sleeps till
  * Christmas?" or "when's the holiday?" has an answer. With a question about a countdown (a countdown word, "how many
  * days/sleeps till", or one of their names) every one, soonest first: "Holiday · Sat 13 Feb · in 93 days · typed ·
- * on Today"; otherwise the one counts line. His own names and Navilife's own words, never untrusted.
+ * on Today"; otherwise the one counts line (none while only the built-in Christmas is there). His own names and Navilife's own words, never untrusted.
  */
 object CountdownAskRules {
     /** Countdowns described one a line. */
@@ -485,11 +485,14 @@ object CountdownAskRules {
 
     /**
      * "Countdowns · 4 · on Today: Christmas in 43 days" ("the soonest: …" when none is chosen; "· counted in sleeps (a
-     * sleep a day)" with Sleeps on), then, when [full], each one soonest first. Empty with none.
+     * sleep a day)" with Sleeps on), then, when [full], each one soonest first. Empty with none, and not [full] with only
+     * the built-in Christmas.
      */
     fun askLines(v: CountdownsView, full: Boolean): List<String> {
         val hero = v.hero ?: return emptyList()
         val all = (listOf(hero) + v.rows).sortedWith(compareBy<CountdownRow> { it.days }.thenBy { it.name.lowercase() })
+        // Christmas alone, built in and not chosen for Today, isn't worth a line on every question.
+        if (!full && !v.heroOnToday && all.all { it.source == CountdownSource.CHRISTMAS }) return emptyList()
         val lead = CountdownRules.tileLine(hero, sleeps = false).text
         val head = listOfNotNull(
             "Countdowns · ${all.size}",

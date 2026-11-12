@@ -291,6 +291,9 @@ class CountdownsTest {
     @Test
     fun obiReadsEveryCountdownWhenAskedAndOneLineOtherwise() {
         assertEquals(emptyList(), CountdownAskRules.askLines(CountdownsView.EMPTY, full = true))
+        // Christmas alone sends nothing unless asked; asked, it's there.
+        assertEquals(emptyList(), CountdownAskRules.askLines(view(), full = false))
+        assertEquals("Christmas · Fri 25 Dec · in 43 days", CountdownAskRules.askLines(view(), full = true).last())
         cFold.add("Holiday 13 Feb")
         val sam = Occasion("o1", "Sam", OccasionKind.BIRTHDAY, 12, 2, 2017, 3, 0, 0)
         var v = view(occasions = listOf(sam))
