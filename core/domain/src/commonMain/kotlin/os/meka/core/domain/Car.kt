@@ -77,6 +77,8 @@ data class CarRow(
     val dvlaDay: Long? = null,
     /** "Use the DVLA's date · Thu 12 Nov" when the radar's date differs from the DVLA's; null otherwise. */
     val dvlaOffer: String? = null,
+    /** The radar item's day (the page shape, 2026-11-12), or null while it isn't tracked. */
+    val dueDay: Long? = null,
 ) {
     val tracked: Boolean get() = trackedId != null
 }
@@ -246,7 +248,7 @@ object CarRules {
                 else -> "${RenewalRules.repeatLabel(p.repeat)} · reminders a month and a week before · you set the date"
             }
             val offer = if (differs) "Use the DVLA's date · ${CarCheckRules.dayLabel(dvla!!, today)}" else null
-            CarRow(p.id, p.title, p.note, line, item?.id, dvla, offer)
+            CarRow(p.id, p.title, p.note, line, item?.id, dvla, offer, item?.dueDay)
         }
         val lapsed = lapses(items, k, today)
         val n = rows.count { it.tracked }

@@ -3443,6 +3443,14 @@ final class CoreModel {
     func setHabitGoal(_ id: String, _ goalID: String?) { run { try await $0.setHabitGoal(id: id, goalId: goalID) } }
     func deleteHabit(_ id: String) { run { try await $0.deleteHabit(id: id) } }
 
+    // MARK: Every page under Ask in one shape (approved 2026-11-11, docs/design/look/LifePage.dc.html; Car first)
+
+    /// The Mac's Car page: three numbers, the Dates card and + Add's choices, from the cars and timers already here.
+    func carPage() -> LifePageView? {
+        guard let core, let cars else { return nil }
+        return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)
+    }
+
     // MARK: The Habits screen (approved 2026-11-11, docs/design/habits/Habits.dc.html; slice 2, the Mac)
 
     /// The Habits sheet for [selected] 0–6 along the strip (6 = today) and a list chip, with any circles on their way.

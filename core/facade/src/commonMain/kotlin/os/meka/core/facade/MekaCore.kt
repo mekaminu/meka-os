@@ -5232,6 +5232,16 @@ class MekaCore(
     }
 
     /**
+     * The Mac's Car page in the page shape (every page under Ask in one shape, 2026-11-12): the next date, the dates on
+     * the radar and the parking timer, one Dates card, + Add's timer and date ([os.meka.core.domain.CarPageRules.macPage]).
+     */
+    fun carPageForMac(
+        cars: os.meka.core.domain.CarsView = _cars.value,
+        timers: os.meka.core.domain.TimersView = _parkingTimers.value,
+    ): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.CarPageRules.macPage(cars, timers, ZoneCalendar(timeZone).epochDayOf(nowMs()))
+
+    /**
      * Car and parking, slice 5: what the share sheet offers for shared text that is a parking confirmation (RingGo,
      * JustPark, PayByPhone…), read on the device: "Parking timer until 15:30 · RingGo 81234", the car (from its
      * registration in the text, or the only car) or the choices, or "That parking ended at 15:30 …". Null when the

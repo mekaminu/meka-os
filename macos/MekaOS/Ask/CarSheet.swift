@@ -1,14 +1,16 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Life → Car on the Mac (car and parking, slice 2). Where the car is parked stays on the Fold (never synced), so
-/// the Mac shows the parking timer only, like the item says: each car's timer ("Paid until 15:30 · 1 h 20 left", brass
-/// in its last ten minutes), +15 min / +30 min / +1 h and Ended (with Undo), and a field to start one ("2 h", "until
-/// 15:30", or a parking app's confirmation pasted in: slice 5); with two cars, chips pick which. Each car's dates open Lists → Renewals. Only Strings and an Int32 cross to
-/// the core.
+/// Ask → Life → Car on the Mac (car and parking, slice 2; the page shape, 2026-11-12). Where the car is parked stays on
+/// the Fold (never synced), so the Mac's page is the shape every page under Ask shares (docs/design/look/LifePage.dc.html):
+/// the title with its ⓘ, one gold + Add, three numbers (the next date, the dates on the radar, the parking timer) and the
+/// Dates card (a row or All dates opens Lists → Renewals); a running timer keeps its card with +15 min / +30 min / +1 h
+/// and Stop timer (with Undo). + Add unfolds its choices: A parking timer ("2 h", "until 15:30", or a parking app's
+/// confirmation pasted in; with two cars, chips pick which) or A date. Only Strings and an Int32 cross to the core.
 ///
-/// Motion: the sheet scale-fades (system); sections stagger in; a timer's line cross-fades as the minutes go and its
-/// colour blends to brass; rows arrive and leave on the expand spring; chips blend as chosen. Reduce Motion: cross-fades.
+/// Motion: the sheet scale-fades (system); sections stagger in; + Add's choices and the ⓘ unfold on the expand spring; a
+/// timer's line cross-fades as the minutes go and its colour blends to brass; chips blend as chosen. Reduce Motion:
+/// cross-fades.
 struct CarSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -19,99 +21,115 @@ struct CarSheet: View {
     @State private var said: String?
     @State private var refused = false
     @State private var undoCar: String?
+    @State private var infoOpen = false
+    @State private var adding = false
+    @State private var addChoice: String?
 
     var body: some View {
         let rules = ParkingTimerRules.shared
+        let page = CarPageRules.shared
         let timers = model.parkingTimers?.rows ?? []
         let cars = model.cars?.cars ?? []
         let forCar = chosen ?? cars.first?.carId ?? CarRules.shared.ENTITY_ID
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(ParkingRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            label(rules.HEADING).staggeredAppear(1)
-            if timers.isEmpty {
-                Text(rules.EMPTY_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity)
-            }
-            ForEach(timers, id: \.carId) { row in
-                timerRow(row, showTitle: cars.count > 1)
-                    .transition(.opacity)
-            }
-            if cars.count > 1 {
-                HStack(spacing: MekaSpace.xs) {
-                    ForEach(cars, id: \.carId) { c in
-                        chip(ParkingRules.shared.heading(title: c.title), lit: c.carId == forCar) { chosen = c.carId }
-                    }
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            if let view = model.carPage() {
+                LifePageHeader(title: view.title, info: view.info, palette: palette, infoOpen: $infoOpen) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding.toggle(); addChoice = nil }
                 }
-            }
-            TextField(rules.HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    let typed = text
-                    guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    text = ""
-                    undoCar = nil
-                    let notRead = rules.NOT_READ
-                    model.setParkingTimer(forCar, typed) { line in
-                        said = line ?? notRead
-                        refused = line == nil
-                    }
-                }
-                .staggeredAppear(2)
-            // Slice 5: a RingGo/JustPark confirmation pasted into the field is read on the Mac too.
-            Text(ParkingConfirmationRules.shared.PASTE_HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            if let said {
-                HStack {
-                    Text(said).font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-                    if let id = undoCar {
-                        Button("Undo") {
-                            model.undoEndParkingTimer(id)
-                            undoCar = nil
-                            self.said = nil
+                .staggeredAppear(0)
+                if adding {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        Text(view.addTitle).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                        HStack(spacing: MekaSpace.xs) {
+                            ForEach(0..<Int(view.addChoiceCount), id: \.self) { i in
+                                let c = view.addChoiceAt(index: Int32(i))
+                                chip(c.label, lit: addChoice == c.key) {
+                                    if c.key == page.ADD_DATE {
+                                        dismiss()
+                                        model.go(to: .lists, reduced: reduceMotion)
+                                    } else {
+                                        addChoice = c.key
+                                    }
+                                }
+                                .help(c.hint)
+                            }
                         }
-                        .buttonStyle(.link)
-                    }
-                }
-            }
-            label("DATES").staggeredAppear(3)
-            ForEach(cars, id: \.carId) { c in
-                Button {
-                    dismiss()
-                    model.go(to: .lists, reduced: reduceMotion)
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                            Text(ParkingRules.shared.heading(title: c.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                            Text(c.summary.isEmpty ? ParkingRules.shared.DATES_LINE : c.summary)
-                                .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        if addChoice == page.ADD_TIMER {
+                            if cars.count > 1 {
+                                HStack(spacing: MekaSpace.xs) {
+                                    ForEach(cars, id: \.carId) { c in
+                                        chip(ParkingRules.shared.heading(title: c.title), lit: c.carId == forCar) { chosen = c.carId }
+                                    }
+                                }
+                            }
+                            TextField(rules.HINT, text: $text)
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit {
+                                    let typed = text
+                                    guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                                    text = ""
+                                    undoCar = nil
+                                    let notRead = rules.NOT_READ
+                                    model.setParkingTimer(forCar, typed) { line in
+                                        said = line ?? notRead
+                                        refused = line == nil
+                                        if line != nil { adding = false; addChoice = nil }
+                                    }
+                                }
+                            // Slice 5: a RingGo/JustPark confirmation pasted into the field is read on the Mac too.
+                            Text(ParkingConfirmationRules.shared.PASTE_HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        Spacer()
-                        Text(ParkingRules.shared.DATES_ACTION).font(MekaType.caption).foregroundStyle(palette.accent)
                     }
-                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .padding(MekaSpace.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                    .transition(.opacity)
                 }
-                .buttonStyle(MekaPressStyle())
+                LifeNumberTiles(page: view, palette: palette).staggeredAppear(1)
+                if let said {
+                    HStack {
+                        Text(said).font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                        if let id = undoCar {
+                            Button("Undo") {
+                                model.undoEndParkingTimer(id)
+                                undoCar = nil
+                                self.said = nil
+                            }
+                            .buttonStyle(.link)
+                        }
+                    }
+                }
+                ForEach(0..<Int(view.cardCount), id: \.self) { i in
+                    LifePageCardView(card: view.cardAt(index: Int32(i)), palette: palette, onMore: openDates, onRow: { _ in openDates() })
+                        .staggeredAppear(2 + i)
+                }
             }
-            .staggeredAppear(4)
-            Text("Where you parked is kept on the phone only; the timer is shared with the Mac.")
-                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, MekaSpace.xs)
-                .staggeredAppear(5)
+            if !timers.isEmpty {
+                label(rules.HEADING)
+                ForEach(timers, id: \.carId) { row in
+                    timerRow(row, showTitle: cars.count > 1)
+                        .transition(.opacity)
+                }
+            }
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.m)
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: timers.map(\.carId))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: adding)
         .padding(MekaSpace.l)
         .frame(width: 560)
         .background(palette.surface)
+    }
+
+    /// A date's row or All dates: every car's dates in Lists → Renewals.
+    private func openDates() {
+        dismiss()
+        model.go(to: .lists, reduced: reduceMotion)
     }
 
     private func timerRow(_ row: TimerRow, showTitle: Bool) -> some View {

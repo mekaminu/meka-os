@@ -15,6 +15,7 @@ import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -33,11 +34,14 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.CAR_LIST_TAG
+import os.meka.android.ask.CAR_PARKED_SHEET_TAG
+import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.android.ask.CarPane
 import os.meka.android.ask.ParkingStore
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.CarPageRules
 import os.meka.core.domain.CarRules
 import os.meka.core.domain.FuelKind
 import os.meka.core.domain.ParkedSpot
@@ -143,7 +147,7 @@ class CarScreensTest {
         val cars = core.carsView.value
         ScreenShots.assertReadable(compose, name, cars.cars.flatMap { listOf(it.title, it.summary) }.filter { it.isNotBlank() }, mustShow = false)
         when (fill) {
-            Fill.EMPTY -> ScreenShots.assertShows(compose, name, ParkingRules.NOT_PARKED)
+            Fill.EMPTY -> ScreenShots.assertShows(compose, name, CarPageRules.PARKED_EMPTY)
             else -> {
                 val spots = ParkingStore.spots(context)
                 if (spots.size != (if (fill == Fill.MANY) 2 else 1)) fail("$name: ${spots.size} parked spots kept")
@@ -245,6 +249,12 @@ class CarScreensTest {
         until { core.parkingTimersView.value.rows.any { it.carId == car } }
         if (core.parkingTimersView.value.rows.none { it.carId == car }) fail("$name: Undo didn't bring the timer back")
 
+        // The parked car's row opens its sheet (the page shape: Find my car, the photo, the bay and Drove off live there).
+        reach(name, hasText("Level 3", substring = true) and hasClickAction(), "parked row")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(hasTestTag(CAR_PARKED_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasTestTag(CAR_PARKED_SHEET_TAG)).fetchSemanticsNodes().isEmpty()) fail("$name: the parked row opened no sheet")
+        assertTouchTargets(name)
+
         // The bay: typed, then Done on the keyboard.
         val bay = hasContentDescription(ParkingRules.LABEL_HINT) and hasSetTextAction()
         reach(name, bay, "bay field")[0].performTextInput("level 2 row b")
@@ -264,12 +274,23 @@ class CarScreensTest {
         until { ParkingStore.spots(context)[car] != null }
         if (ParkingStore.spots(context)[car] == null) fail("$name: Undo didn't put the spot back")
 
-        // DATES opens the dates.
+        // The Dates card's All dates opens the dates.
         val tapsBefore = datesTapped
-        reach(name, hasText(ParkingRules.DATES_ACTION, substring = true) and hasClickAction(), "Dates row")[0]
+        reach(name, hasText(CarPageRules.ALL_DATES, substring = true) and hasClickAction(), "All dates")[0]
             .performSemanticsAction(SemanticsActions.OnClick)
         until { datesTapped > tapsBefore }
-        if (datesTapped == tapsBefore) fail("$name: the DATES row's tap opened nothing")
+        if (datesTapped == tapsBefore) fail("$name: the Dates card's All dates opened nothing")
+
+        // + Add opens its sheet with the three choices; A date opens the dates too.
+        reach(name, hasContentDescription("Add") and hasClickAction(), "+ Add")[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(hasTestTag(LIFE_ADD_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        CarPageRules.ADD_CHOICES.forEach { c -> reach(name, hasText(c.label), "+ Add's ${c.label}") }
+        assertTouchTargets(name)
+        val tapsBeforeAdd = datesTapped
+        compose.onAllNodes(hasText(CarPageRules.ADD_CHOICES.first { it.key == CarPageRules.ADD_DATE }.label))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { datesTapped > tapsBeforeAdd }
+        if (datesTapped == tapsBeforeAdd) fail("$name: + Add → A date opened nothing")
 
         // Fuel: Change unfolds the four, Diesel is kept.
         reach(name, hasContentDescription("Change fuel for ", substring = true) and hasClickAction(), "Change fuel")[0]

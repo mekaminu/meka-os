@@ -82,6 +82,7 @@ import os.meka.android.today.HereLocation
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CarBluetoothRules
 import os.meka.core.domain.CarLink
+import os.meka.core.domain.CarPageRules
 import os.meka.core.domain.DeviceChoice
 import os.meka.core.domain.FindView
 import os.meka.core.domain.FuelKind
@@ -144,7 +145,6 @@ fun CarPane(
     var said by remember { mutableStateOf<String?>(null) }
     var refused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
-    var choosing by remember { mutableStateOf(false) }
     var pendingCar by remember { mutableStateOf<String?>(null) }
     var finding by remember { mutableStateOf<String?>(null) }
     var undo by remember { mutableStateOf<ParkedSpot?>(null) }
@@ -169,7 +169,6 @@ fun CarPane(
         saving = true
         refused = false
         said = ParkingRules.SAVING
-        choosing = false
         scope.launch {
             val r = ParkingStore.parkHere(context, carId, title)
             saving = false
@@ -267,6 +266,18 @@ fun CarPane(
     }
     val askCoarse = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { fuelTick++ }
 
+    // Every page under Ask in one shape, slice 1 (approved 2026-11-11, LifePage.dc.html): the title with its ⓘ and
+    // + Add, three numbers, the Dates and Parked cards; parking, a timer and a date are behind + Add, a parked car's
+    // Find my car, photo, bay and Drove off behind its row.
+    val page = CarPageRules.page(cars, rows, timers, fuel, cal.epochDayOf(now), now, cal)
+    var infoOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var addChosen by remember { mutableStateOf<String?>(null) }
+    var parkedSheet by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(findFirst, findCar) { if (findFirst) finding?.let { parkedSheet = it } }
+    LaunchedEffect(photoFirst) { photoFirst?.let { parkedSheet = it } }
+    val carChoices = ParkingRules.choices(cars)
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().testTag(CAR_LIST_TAG),
         contentPadding = PaddingValues(MekaSpace.gutter),
@@ -277,34 +288,16 @@ fun CarPane(
                 modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         }
         item(key = "title") {
-            Text(ParkingRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.CAR)).appear(rememberAppearance(0)))
+            LifePageHeader(
+                page.title, "${page.info}\n\n${ParkingRules.PRIVACY}", infoOpen,
+                titleModifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.CAR)).appear(rememberAppearance(0)),
+                onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                onAdd = { haptics.tick(); addChosen = null; addOpen = true },
+            )
         }
-        item(key = "summary") {
-            val summary = ParkingRules.tileLine(rows, now)?.text ?: ParkingRules.NOT_PARKED
-            Crossfade(summary, animationSpec = MekaMotion.appear(reduced), label = "park-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
-            }
-        }
-        item(key = "park") {
-            Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                val choices = ParkingRules.choices(cars)
-                PillAction(if (saving) ParkingRules.SAVING else ParkingRules.PARK, enabled = !saving) {
-                    haptics.tick()
-                    if (choices.isEmpty()) startPark(ParkingRules.onlyCar(cars)) else choosing = !choosing
-                }
-                AnimatedVisibility(
-                    choosing && choices.isNotEmpty(),
-                    enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
-                    exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        Text(ParkingRules.WHICH_CAR, style = MekaType.caption, color = Meka.colors.textTertiary)
-                        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            choices.forEach { (id, title) -> Chip(ParkingRules.heading(title), false) { startPark(id) } }
-                        }
-                    }
-                }
+        item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(1))) }
+        item(key = "said") {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "park-said-line") { s ->
                     s?.let { Text(it, style = MekaType.caption, color = saidColor, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
                 }
@@ -323,8 +316,31 @@ fun CarPane(
                 }
             }
         }
+        page.cards.forEachIndexed { i, c ->
+            item(key = "card-${c.key}") {
+                LifePageCard(
+                    c, Modifier.animateItem().appear(rememberAppearance(2 + i)),
+                    onMore = {
+                        haptics.tick()
+                        when (c.key) {
+                            CarPageRules.DATES -> onDates()
+                            CarPageRules.PARKED -> rows.firstOrNull()?.let { finding = it.carId; parkedSheet = it.carId }
+                        }
+                    },
+                    onRow = { r ->
+                        haptics.tick()
+                        when {
+                            r.key.startsWith("date:") -> onDates()
+                            r.key.startsWith("parked:") -> parkedSheet = r.key.removePrefix("parked:")
+                        }
+                    },
+                )
+            }
+        }
         // Car and parking, slice 2: the parking timer (synced; the Mac shows it too).
-        item(key = "timer-label") { SectionLabel(ParkingTimerRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
+        if (timers.rows.isNotEmpty()) {
+            item(key = "timer-label") { SectionLabel(ParkingTimerRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
+        }
         itemsIndexed(timers.rows, key = { _, t -> "timer-${t.carId}" }) { _, t ->
             TimerCard(
                 t, showTitle = cars.cars.size > 1, modifier = Modifier.animateItem(),
@@ -338,29 +354,8 @@ fun CarPane(
                 },
             )
         }
-        item(key = "timer-add") {
+        item(key = "timer-said") {
             Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                if (timers.rows.isEmpty()) Text(ParkingTimerRules.EMPTY_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
-                val choices = ParkingRules.choices(cars)
-                val forCar = timerCar?.takeIf { id -> choices.any { it.first == id } }
-                    ?: rows.singleOrNull()?.carId?.takeIf { id -> choices.any { it.first == id } }
-                    ?: ParkingRules.onlyCar(cars).takeIf { choices.isEmpty() } ?: choices.firstOrNull()?.first ?: ParkingRules.onlyCar(cars)
-                if (choices.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        choices.forEach { (id, title) -> Chip(ParkingRules.heading(title), id == forCar) { timerCar = id } }
-                    }
-                }
-                Field(ParkingTimerRules.HINT) { text ->
-                    scope.launch {
-                        val line = core.setParkingTimer(forCar, text)
-                        timerSaid = line ?: ParkingTimerRules.NOT_READ
-                        timerRefused = line == null
-                        timerUndo = null
-                        if (line != null) haptics.light() else haptics.tick()
-                    }
-                }
-                // Slice 5: a RingGo/JustPark confirmation pasted into the field (or shared to Navilife) is read here too.
-                Text(os.meka.core.domain.ParkingConfirmationRules.PASTE_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
                 Crossfade(timerSaid, animationSpec = MekaMotion.appear(reduced), label = "timer-said") { s ->
                     s?.let { Text(it, style = MekaType.caption, color = timerSaidColor, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
                 }
@@ -371,54 +366,6 @@ fun CarPane(
                             scope.launch { if (core.undoEndParkingTimer(id)) timerSaid = null; timerUndo = null }
                         }.minTouch().padding(MekaSpace.xs))
                 }
-            }
-        }
-        if (rows.isNotEmpty()) {
-            item(key = "parked-label") { SectionLabel("PARKED", Modifier.animateItem().padding(top = MekaSpace.m)) }
-        }
-        itemsIndexed(rows, key = { _, r -> "parked-${r.carId}" }) { i, r ->
-            ParkedCard(
-                r, open = finding == r.carId, photoTick = photoTick,
-                modifier = Modifier.animateItem().appear(rememberAppearance(3 + i)),
-                onFind = { haptics.tick(); finding = if (finding == r.carId) null else r.carId },
-                onLabel = { text ->
-                    spots = ParkingRules.withLabel(spots, r.carId, text)
-                    ParkingStore.store(context, spots)
-                    haptics.light()
-                },
-                onPhoto = { haptics.tick(); takePhoto(r.carId) },
-                onRemovePhoto = {
-                    haptics.tick()
-                    spots = ParkingRules.withoutPhoto(spots, r.carId)
-                    ParkingStore.store(context, spots)
-                    ParkingStore.tidyPhotos(context, spots, undo)
-                    photoTick++
-                    said = ParkingRules.PHOTO_REMOVED; refused = false
-                },
-                onDroveOff = {
-                    haptics.tick()
-                    undo = spots[r.carId]
-                    spots = ParkingRules.droveOff(spots, r.carId)
-                    ParkingStore.store(context, spots)
-                    ParkingStore.tidyPhotos(context, spots, undo)
-                    if (finding == r.carId) finding = null
-                    said = null
-                },
-            )
-        }
-        item(key = "dates-label") { SectionLabel("DATES", Modifier.animateItem().padding(top = MekaSpace.m)) }
-        itemsIndexed(cars.cars, key = { _, c -> "dates-${c.carId}" }) { _, c ->
-            Row(
-                Modifier.animateItem().fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                    .clickable(role = Role.Button) { onDates() }.minTouch()
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(ParkingRules.heading(c.title), style = MekaType.body, color = Meka.colors.textPrimary)
-                    Text(c.summary.ifEmpty { ParkingRules.DATES_LINE }, style = MekaType.caption, color = Meka.colors.textSecondary)
-                }
-                Text(ParkingRules.DATES_ACTION, style = MekaType.caption, color = Meka.colors.accent)
             }
         }
         // Car and parking, slice 6: the cheapest fuel nearby (Fuel Finder, via Navilife's server; nothing kept).
@@ -520,10 +467,79 @@ fun CarPane(
                 )
             }
         }
-        item(key = "privacy") {
-            Text(ParkingRules.PRIVACY, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+    }
+    // + Add: where I parked (which car, with two), a parking timer (its field and the pasted confirmation), a date.
+    LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+        AddChoiceRows(page.addChoices, addChosen) { c ->
+            haptics.tick()
+            when (c.key) {
+                CarPageRules.ADD_PARKED -> if (carChoices.isEmpty()) { addOpen = false; startPark(ParkingRules.onlyCar(cars)) } else addChosen = c.key
+                CarPageRules.ADD_TIMER -> addChosen = c.key
+                CarPageRules.ADD_DATE -> { addOpen = false; onDates() }
+            }
         }
+        if (addChosen == CarPageRules.ADD_PARKED) {
+            Text(ParkingRules.WHICH_CAR, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                carChoices.forEach { (id, title) -> Chip(ParkingRules.heading(title), false) { addOpen = false; startPark(id) } }
+            }
+        }
+        if (addChosen == CarPageRules.ADD_TIMER) {
+            val forCar = timerCar?.takeIf { id -> carChoices.any { it.first == id } }
+                ?: rows.singleOrNull()?.carId?.takeIf { id -> carChoices.any { it.first == id } }
+                ?: ParkingRules.onlyCar(cars).takeIf { carChoices.isEmpty() } ?: carChoices.firstOrNull()?.first ?: ParkingRules.onlyCar(cars)
+            if (carChoices.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    carChoices.forEach { (id, title) -> Chip(ParkingRules.heading(title), id == forCar) { timerCar = id } }
+                }
+            }
+            Field(ParkingTimerRules.HINT) { text ->
+                scope.launch {
+                    val line = core.setParkingTimer(forCar, text)
+                    timerSaid = line ?: ParkingTimerRules.NOT_READ
+                    timerRefused = line == null
+                    timerUndo = null
+                    if (line != null) { haptics.light(); addOpen = false } else haptics.tick()
+                }
+            }
+            // Slice 5: a RingGo/JustPark confirmation pasted into the field (or shared to Navilife) is read here too.
+            Text(os.meka.core.domain.ParkingConfirmationRules.PASTE_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+            if (timerRefused) timerSaid?.let { Text(it, style = MekaType.caption, color = timerSaidColor) }
+        }
+    }
+    // A parked car's row: Find my car, the bay's photo, the bay typed from the sign and Drove off.
+    val sheetRow = rows.firstOrNull { it.carId == parkedSheet }
+    LifeSheet(sheetRow != null, ParkingRules.heading(sheetRow?.title ?: ParkingRules.TITLE), CAR_PARKED_SHEET_TAG, onClose = { parkedSheet = null }) {
+        val r = sheetRow ?: return@LifeSheet
+        ParkedCard(
+            r, open = finding == r.carId, photoTick = photoTick, modifier = Modifier,
+            onFind = { haptics.tick(); finding = if (finding == r.carId) null else r.carId },
+            onLabel = { text ->
+                spots = ParkingRules.withLabel(spots, r.carId, text)
+                ParkingStore.store(context, spots)
+                haptics.light()
+            },
+            onPhoto = { haptics.tick(); takePhoto(r.carId) },
+            onRemovePhoto = {
+                haptics.tick()
+                spots = ParkingRules.withoutPhoto(spots, r.carId)
+                ParkingStore.store(context, spots)
+                ParkingStore.tidyPhotos(context, spots, undo)
+                photoTick++
+                said = ParkingRules.PHOTO_REMOVED; refused = false
+            },
+            onDroveOff = {
+                haptics.tick()
+                undo = spots[r.carId]
+                spots = ParkingRules.droveOff(spots, r.carId)
+                ParkingStore.store(context, spots)
+                ParkingStore.tidyPhotos(context, spots, undo)
+                if (finding == r.carId) finding = null
+                parkedSheet = null
+                said = null
+            },
+        )
+    }
     }
 }
 
@@ -584,6 +600,8 @@ private fun BluetoothRow(
 
 /** The pane's own list, so a test scrolls it and nothing else on screen. */
 internal const val CAR_LIST_TAG = "car-list"
+/** A parked car's sheet. */
+internal const val CAR_PARKED_SHEET_TAG = "car-parked-sheet"
 private const val FUEL_HEADING = "FUEL NEARBY"
 private const val FUEL_ALLOW = "Allow"
 private const val FUEL_AGAIN = "Look again"
@@ -633,18 +651,6 @@ private fun FuelCarRow(title: String, fuel: FuelKind, open: Boolean, modifier: M
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PillAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick).minTouch()
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, style = MekaType.metaStrong, color = if (enabled) Meka.colors.accent else Meka.colors.textTertiary)
     }
 }
 
