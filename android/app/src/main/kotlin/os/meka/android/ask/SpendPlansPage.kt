@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -48,6 +49,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.SlideSwitch
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
@@ -134,6 +136,30 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
                 item(key = "total-${plan.id}") { TotalCard(plan, Modifier.animateItem().appear(rememberAppearance(2))) }
                 item(key = "afford-${plan.id}") {
                     AffordCard(plan, months, Modifier.animateItem().appear(rememberAppearance(3))) { m -> haptics.tick(); months = m }
+                }
+                item(key = "count-${plan.id}") {
+                    // Count in my forecast: off until he turns it on for this plan; Money's forecast then takes off
+                    // what's still to buy in the month he'll buy it.
+                    MoneyCard(Modifier.animateItem().appear(rememberAppearance(4)), tag = "spend-count") {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Switch) {
+                                    haptics.tick(); scope.launch { runCatching { core.setSpendPlanCounted(plan.id, !plan.counted) } }
+                                }
+                                .semantics(mergeDescendants = true) { contentDescription = "${SpendPlanRules.COUNT_LABEL}, ${plan.countLine}"; selected = plan.counted }
+                                .minTouch().testTag("spend-count-switch"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(SpendPlanRules.COUNT_LABEL, style = MekaType.body, color = Meka.colors.textPrimary)
+                                Crossfade(plan.countLine, animationSpec = MekaMotion.appear(reduced), label = "spend-count-line") { l ->
+                                    Text(l, style = MekaType.caption, color = if (plan.counted) Meka.colors.accent else Meka.colors.textSecondary)
+                                }
+                            }
+                            Spacer(Modifier.size(MekaSpace.m))
+                            SlideSwitch(plan.counted)
+                        }
+                    }
                 }
                 plan.foreign?.let { f ->
                     item(key = "same-${plan.id}") {

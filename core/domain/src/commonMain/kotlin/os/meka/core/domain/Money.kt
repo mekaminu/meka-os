@@ -638,6 +638,8 @@ object MoneyRules {
         own: List<MoneyOwnCategory> = emptyList(), ownRules: Map<String, String> = emptyMap(),
         /** Needs and wants: the payers he marked a need (true) or a want (false), by merchant key ([MoneyNeeds]). */
         needMerchants: Map<String, Boolean> = emptyMap(),
+        /** Spending plans he counts in his forecast ([SpendPlanRules.forecastPlans]). */
+        planned: List<MoneyPlanned> = emptyList(),
         /** Obi's money check: the ideas he put away (Not for me) or asked to be reminded of. */
         ideaState: MoneyIdeaState = MoneyIdeaState(),
         /** Obi's wording of the money check ([MoneyCheckWords]). */
@@ -832,7 +834,7 @@ object MoneyRules {
         val cardLines = if (partial) mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) } else emptyList()
         // His own categories in Plan: Obi's money check and the forecast's what-ifs see them (2026-10-28).
         val ownPlan = MoneyOwnPlan(own, ownRules, needMerchants)
-        val forecastView = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }, ownPlan) else null
+        val forecastView = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }, ownPlan, planned) else null
         return MoneyView(
             false, summary, null, month.copy(spending = spending), accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
             tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),

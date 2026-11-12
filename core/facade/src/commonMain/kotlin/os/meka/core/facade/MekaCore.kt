@@ -1356,6 +1356,8 @@ class MekaCore(
         val challenges = money.challenges(); val abroad = moneyAbroadNow()
         val own = money.ownCategories(); val ownRules = money.ownRules(); val needMerchants = money.needMerchants()
         val ideaState = money.ideaState(); val checkWords = money.checkWords()
+        // Spending plans he counts in his forecast: what's still to buy, month by month.
+        val planned = os.meka.core.domain.SpendPlanRules.forecastPlans(spendPlans.plans(), spendPlans.things(), today)
         val inputs = listOf(
             accounts, txns, rules, today, tz, offset, hiddenTips, fineAlerts,
             whatIf, waiting, bills, holidays, cards, worth,
@@ -1364,7 +1366,7 @@ class MekaCore(
             now / os.meka.core.domain.MoneyViewMemo.MINUTE_MS, wallets,
             bizAccounts, bizMerchants, setAside,
             sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner,
-            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules, needMerchants, ideaState, checkWords,
+            challenges, abroad, tripItems, tidies, alerts, goalList, businessFinds, own, ownRules, needMerchants, ideaState, checkWords, planned,
         )
         // The same build is already on its way.
         if (moneyJob?.isActive == true && moneyPendingFrom == inputs) return
@@ -1391,6 +1393,7 @@ class MekaCore(
                 // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
                 receipts = os.meka.core.domain.MoneyReceipts.fromTidies(tidies, cal),
                 own = own, ownRules = ownRules, needMerchants = needMerchants, ideaState = ideaState, checkWords = checkWords,
+                planned = planned,
             )
             v.copy(
                 trading = os.meka.core.domain.TradingTracker.view(wallets, now, cal, alerts).let { t ->
@@ -6416,6 +6419,9 @@ class MekaCore(
 
     /** The Same for everyone − / + stepper. */
     suspend fun stepSpendPlanEach(id: String, up: Boolean): Boolean = onCore { spendPlans.stepEach(id, up) }
+
+    /** Count in my forecast for the plan: what's still to buy comes off Money's forecast. False when nothing changed. */
+    suspend fun setSpendPlanCounted(id: String, on: Boolean): Boolean = onCore { spendPlans.setCounted(id, on).also { if (it) refreshMoney() } }
 
     /** His rate for a plan in another currency: how many to £1 ("2,000"). */
     suspend fun setSpendPlanRate(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setRate(id, text) }

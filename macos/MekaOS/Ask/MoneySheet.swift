@@ -1444,6 +1444,10 @@ struct MoneySheet: View {
                     } else {
                         forecastRows(f)
                     }
+                    // Spending plans he counts in his forecast, and what they still have to buy.
+                    if let l = f.plansLine {
+                        Text(l).font(MekaType.caption).foregroundStyle(palette.accent).contentTransition(.opacity)
+                    }
                     linkRow(MoneyPlanLayout.shared.WHAT_IF_ROW, line: MoneyPlanLayout.shared.whatIfBrief(f: f),
                             lit: MoneyPlanLayout.shared.whatIfOn(f: f)) { whatIfOpen = true }
                         .popover(isPresented: $whatIfOpen, arrowEdge: .trailing) {

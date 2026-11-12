@@ -11,12 +11,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 /** Spending plans through the facade (slice 1): made on the Fold, ticked on the Mac; no Can I afford it? while Money is locked. */
 class SpendPlansFacadeTest {
     private var now = 1_794_477_600_000L // Thu 12 Nov 2026, 10:00 in London
 
     private val ops = InMemoryServerOpStore()
+    private companion object { val SLOW_RUNNER = 5.minutes }
 
     private fun core(device: String) = MekaCore(
         householdId = "hh", deviceId = device, store = InMemoryReplicaStore(),
@@ -76,5 +78,40 @@ class SpendPlansFacadeTest {
         assertEquals("Christmas gifts plan · £45 to go", fold.countdownsView.value.hero!!.planLine)
         assertTrue(fold.removeSpendPlan(id))
         assertEquals(null, fold.countdownsView.value.hero!!.planLine)
+    }
+
+    @Test
+    fun countInMyForecastTakesWhatsStillToBuyOffMoneysForecast() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Aug–Oct: £2,500 in, £300 eating out and £150 groceries out each month: about £2,050 left over.
+        val csv = "Date,Description,Amount\n" + listOf("08", "09", "10").joinToString("") { m ->
+            "01/$m/2026,SALARY OAKFIELD LTD,2500.00\n10/$m/2026,NANDOS,-300.00\n12/$m/2026,TESCO STORES 2041,-150.00\n28/$m/2026,TESCO STORES 2041,-0.50\n"
+        }
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        assertEquals("+£12,300", fold.moneyView.value.forecast!!.rows[0].amount)
+        val id = fold.addSpendPlan("Christmas gifts 20 Dec", "GBP").id!!
+        val dec = 2026 * 12 + 11
+        val boots = fold.addSpendThing(id, "Football boots", "", "450", dec).id!!
+        // Off until he turns it on: the forecast is as it was.
+        assertEquals("+£12,300", fold.moneyView.value.forecast!!.rows[0].amount)
+        assertEquals(null, fold.moneyView.value.forecast!!.plansLine)
+        assertTrue(fold.setSpendPlanCounted(id, true))
+        val f = fold.moneyView.value.forecast!!
+        assertEquals("+£11,850", f.rows[0].amount)
+        assertEquals("all that's left over, at your pace · after £450 planned", f.rows[0].line)
+        assertEquals("Counting Christmas gifts · £450 still to buy", f.plansLine)
+        // Can I afford it? still reads the plain average month.
+        assertEquals("Fits · £1,600 left this month", fold.spendPlansView.value.plan(id)!!.afford.first().verdict)
+        // The switch syncs to the Mac.
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.spendPlansView.value.plan(id)!!.counted)
+        // Bought: nothing left to take off.
+        assertTrue(fold.setSpendThingDone(boots, true))
+        assertEquals("+£12,300", fold.moneyView.value.forecast!!.rows[0].amount)
+        assertEquals("Counting Christmas gifts · nothing left to buy", fold.moneyView.value.forecast!!.plansLine)
+        assertTrue(fold.setSpendPlanCounted(id, false))
+        assertEquals(null, fold.moneyView.value.forecast!!.plansLine)
     }
 }

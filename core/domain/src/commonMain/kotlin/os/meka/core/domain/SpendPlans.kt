@@ -30,6 +30,8 @@ object SpendPlanFields {
     const val EACH = "eachMinor"
     /** His rate: units of the plan's currency to £1, × 1,000 (₦2,000 to £1 = 2,000,000); 0 = not typed yet. */
     const val RATE = "rateMilli"
+    /** Count in my forecast: what's still to buy comes off Money's forecast in the month he'll buy it (absent = off). */
+    const val COUNTED = "counted"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
 }
@@ -55,7 +57,7 @@ data class SpendCurrency(val code: String, val symbol: String, val name: String,
 
 data class SpendPlanItem(
     val id: String, val name: String, val byDay: Long, val currency: String, val eachMinor: Long, val rateMilli: Long,
-    val addedAtMs: Long,
+    val addedAtMs: Long, val counted: Boolean = false,
 ) {
     val foreign: Boolean get() = currency != SpendPlanRules.GBP
 }
@@ -107,6 +109,8 @@ data class SpendPlanDetail(
     val id: String, val name: String, val total: String, val totalSub: String, val by: String?, val bar: Float,
     val spentLine: String, val afford: List<SpendAfford>, val affordNote: String?, val months: List<SpendMonthTile>,
     val foreign: SpendForeign?, val listTitle: String, val rows: List<SpendRow>, val canAdd: Boolean, val byText: String,
+    /** Count in my forecast: [counted] the switch, [countLine] what it does now. */
+    val counted: Boolean = false, val countLine: String = SpendPlanRules.COUNT_OFF,
 )
 
 /**
@@ -166,6 +170,10 @@ object SpendPlanRules {
     const val TOO_MANY_PLANS = "That's as many plans as Navilife keeps. Remove one first."
     const val TOO_MANY_ITEMS = "That's as many as one plan holds. Remove one first."
     const val GONE = "That plan isn't there any more."
+    const val COUNT_LABEL = "Count in my forecast"
+    const val COUNT_OFF = "Off · Money's forecast leaves this plan out"
+    const val COUNT_ON = "On · what's still to buy comes off Money's forecast in the month you'll buy it"
+    const val COUNT_UNPRICED = "On · type today's rate and it comes off Money's forecast"
 
     val CURRENCIES: List<SpendCurrency> = listOf(
         SpendCurrency(GBP, "£", "Pounds", 5),
@@ -251,6 +259,7 @@ object SpendPlanRules {
             (s.f(SpendPlanFields.EACH).longOrNull ?: 0L).coerceIn(0L, MAX_MINOR),
             (s.f(SpendPlanFields.RATE).longOrNull ?: 0L).coerceAtLeast(0L),
             s.f(SpendPlanFields.ADDED_AT).longOrNull ?: 0L,
+            s.f(SpendPlanFields.COUNTED).boolOrNull ?: false,
         )
     }.sortedWith(compareBy<SpendPlanItem> { it.addedAtMs }.thenBy { it.id })
 
@@ -366,6 +375,7 @@ object SpendPlanRules {
             if (total > 0) (spent.toFloat() / total).coerceIn(0f, 1f) else 0f, spentLine, affords, note, tiles, foreign,
             if (sent) "People" else "Things", rows, things.size < MAX_ITEMS,
             p.byDay.takeIf { it >= 0 }?.let { "${p.name} ${dayLabel(it)}" } ?: p.name,
+            p.counted, when { !p.counted -> COUNT_OFF; !priced -> COUNT_UNPRICED; else -> COUNT_ON },
         )
     }
 
@@ -399,6 +409,23 @@ object SpendPlanRules {
             else -> d.spentLine.substringAfter(" · ", "").takeIf { it.endsWith(" to go") }
         }
         CountdownPlanLink(p.name, p.byDay, toGo)
+    }
+
+    /**
+     * Count in my forecast: the plans he switched on, each with what's still to buy in each month (pence; a month gone
+     * by counts as this one). A thing without a pound figure (another currency, no rate yet) is left out.
+     */
+    fun forecastPlans(plans: List<SpendPlanItem>, things: List<SpendThing>, today: Long): List<MoneyPlanned> {
+        val now = monthKey(today)
+        return plans.filter { it.counted }.map { p ->
+            val byMonth = HashMap<Int, Long>()
+            things.filter { it.planId == p.id && !it.done }.forEach { t ->
+                val pence = penceOf(minorOf(t, p), p) ?: return@forEach
+                val m = t.month.coerceAtLeast(now)
+                byMonth[m] = (byMonth[m] ?: 0L) + pence
+            }
+            MoneyPlanned(p.name, byMonth)
+        }
     }
 
     /** His average month from Money's forecast, or null when it has none ready (no pay in, or not two months yet). */
@@ -456,6 +483,14 @@ class SpendPlans(
     fun remove(id: String): Boolean {
         plan(id) ?: return false
         replica.commitLocal(EntityTypes.SPEND_PLAN, id, mapOf(SpendPlanFields.DELETED to true.fv()))
+        return true
+    }
+
+    /** Count in my forecast, on or off for the plan. */
+    fun setCounted(id: String, on: Boolean): Boolean {
+        val p = plan(id) ?: return false
+        if (p.counted == on) return false
+        replica.commitLocal(EntityTypes.SPEND_PLAN, id, mapOf(SpendPlanFields.COUNTED to on.fv()))
         return true
     }
 

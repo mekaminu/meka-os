@@ -195,4 +195,32 @@ class MoneyForecastTest {
         assertEquals(listOf("+£13,320", "+£26,640"), f.rows.map { it.amount })
         assertEquals("all that's left over, at your pace · +£60 with your what-ifs", f.rows[0].line)
     }
+
+    @Test
+    fun aCountedSpendingPlanComesOffTheHorizonsInItsMonths() {
+        val nov = 2026 * 12 + 10
+        val planned = listOf(MoneyPlanned("Christmas gifts", mapOf(nov to 4_500L, nov + 1 to 14_000L)))
+        val f = MoneyForecast.view(months(7, 8, 9, 10), oct16, planned = planned)!!
+        // £440 a month left over: by Apr 2027 £2,640 less £185 planned (£190, rounded to £10 like the rest).
+        assertEquals(listOf("+£2,450", "+£5,090"), f.rows.map { it.amount })
+        assertEquals("all that's left over, at your pace · after £190 planned", f.rows[0].line)
+        assertEquals("Counting Christmas gifts · £190 still to buy", f.plansLine)
+        assertEquals(0L, f.plannedAt(0))
+        // Today is in October: November's £45 is spent by the end of November (2 months on), rounded to £50.
+        assertEquals(0L, f.plannedAt(1))
+        assertEquals(5_000L, f.plannedAt(2))
+        assertEquals(19_000L, f.plannedAt(3))
+        // Left over a month and Can I afford it?'s figures don't change.
+        assertEquals("About £440 a month left over", f.left)
+        assertEquals(44_000L, f.leftRounded)
+        // Nothing counted: as before, no line.
+        val none = MoneyForecast.view(months(7, 8, 9, 10), oct16)!!
+        assertEquals(listOf("+£2,640", "+£5,280"), none.rows.map { it.amount })
+        assertNull(none.plansLine)
+        // Two plans named, all bought said plainly.
+        assertEquals("Counting Christmas gifts and Holiday · nothing left to buy",
+            MoneyForecast.plansLine(listOf(MoneyPlanned("Christmas gifts", emptyMap()), MoneyPlanned("Holiday", emptyMap())), 0L))
+        assertEquals("Counting 3 spending plans · £50 still to buy",
+            MoneyForecast.plansLine(List(3) { MoneyPlanned("P$it", emptyMap()) }, 5_000L))
+    }
 }

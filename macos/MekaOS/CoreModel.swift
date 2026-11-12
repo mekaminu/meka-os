@@ -7608,6 +7608,9 @@ final class CoreModel {
         }
     }
 
+    /// Count in my forecast on or off for the plan (only Strings and a Bool cross).
+    func setSpendPlanCounted(_ id: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setSpendPlanCounted(id: id, on: on) } }
+
     func stepSpendPlanEach(_ id: String, up: Bool) { MekaHaptics.tick(); run { _ = try await $0.stepSpendPlanEach(id: id, up: up) } }
 
     /// Adds a person or thing; [month] year × 12 + month − 1, 0 for the plan's own month.

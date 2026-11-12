@@ -164,16 +164,18 @@ object MoneyPlanMore {
             MoneyPlanTile(LEFT, if (month < 0) "−" + fmt(-month) else fmt(month), lit = !leftAlarm, alarm = leftAlarm,
                 spoken = if (month < 0) "More out than in, ${fmt(-month)} a month" else "Left over, ${fmt(month)} a month"),
         )
-        val tallest = abs(month * s).coerceAtLeast(1)
+        // Spending plans he counts come off in the months he'll buy their things.
+        fun at(i: Int) = month * i - f.plannedAt(i)
+        val tallest = (1..s).maxOf { abs(at(it)) }.coerceAtLeast(1)
         val bars = (1..s).map { i ->
-            val total = month * i
+            val total = at(i)
             val key = i == 6 || i == 12
             MoneyPlanBar(Recurrence.MONTH_SHORT[(f.thisMonth + i) % 12], (abs(total).toFloat() / tallest).coerceIn(0.04f, 1f),
                 if (key) short(total) else null, key, total < 0)
         }
         val by = SPANS.map { h ->
-            MoneyPlanTile("BY ${monthYear(f.thisMonth + h)}", signed(month * h), alarm = month < 0,
-                spoken = "By ${Recurrence.MONTH_SHORT[(f.thisMonth + h) % 12]} ${(f.thisMonth + h) / 12}, ${signed(month * h)}")
+            MoneyPlanTile("BY ${monthYear(f.thisMonth + h)}", signed(at(h)), alarm = at(h) < 0,
+                spoken = "By ${Recurrence.MONTH_SHORT[(f.thisMonth + h) % 12]} ${(f.thisMonth + h) / 12}, ${signed(at(h))}")
         }
         val end = f.thisMonth + 12
         val cutLabel = if (cut == 0L) CUT_NONE else "${fmt(cut)} a month"

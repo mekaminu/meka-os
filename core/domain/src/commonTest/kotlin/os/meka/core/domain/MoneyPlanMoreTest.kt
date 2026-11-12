@@ -186,4 +186,20 @@ class MoneyPlanMoreTest {
         assertFalse(clean.lit)
         assertTrue(clean.payments.isEmpty())
     }
+
+    @Test
+    fun aCountedPlanLowersTheBarsAndTheByTiles() {
+        val nov = 2026 * 12 + 10
+        val f = MoneyForecast.view(months(7, 8, 9), oct16, planned = listOf(MoneyPlanned("Holiday", mapOf(nov + 2 to 300_000L))))!!
+        val t = MoneyPlanMore.forecast(f, 12, 0)!!
+        // £440 a month; £3,000 in January: by Apr £2,640 − £3,000 = −£360, by Oct +£2,280.
+        assertEquals(listOf("−£360", "+£2,280"), t.by.map { it.value })
+        assertTrue(t.by[0].alarm)
+        assertFalse(t.by[1].alarm)
+        // January's £3,000 is gone by the bar after it (Feb): below the line; December's bar isn't.
+        assertTrue(t.bars[3].below)
+        assertFalse(t.bars[2].below)
+        // The tiles of the average month don't move.
+        assertEquals(listOf("£2,500", "£2,060", "£440"), t.tiles.map { it.value })
+    }
 }

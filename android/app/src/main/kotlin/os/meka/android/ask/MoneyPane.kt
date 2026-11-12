@@ -902,6 +902,8 @@ fun MoneyPane(
                         if (tiles != null) {
                             MoneyForecastTilesBlock(tiles, onSpan = { forecastSpan = it }, onCut = { cutPounds = it }, onTick = { haptics.tick() })
                         } else ForecastBlock(f, Modifier)
+                        // Spending plans he counts in his forecast, and what they still have to buy.
+                        f.plansLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.testTag("money-forecast-plans")) }
                         MoneyLinkRow(MoneyPlanLayout.WHAT_IF_ROW, MoneyPlanLayout.whatIfBrief(f), MoneyPlanLayout.whatIfOn(f), "money-whatif-row") {
                             haptics.tick(); said = null; whatIfOpen = true
                         }

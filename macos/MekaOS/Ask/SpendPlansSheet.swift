@@ -64,6 +64,7 @@ struct SpendPlansSheet: View {
                     if let plan {
                         totalCard(plan).staggeredAppear(2)
                         affordCard(plan).staggeredAppear(3)
+                        countCard(plan).staggeredAppear(4)
                         if let f = plan.foreign { sameCard(plan, f).staggeredAppear(4) }
                         listCard(plan).staggeredAppear(5)
                         let asking = removing == plan.id
@@ -214,6 +215,25 @@ struct SpendPlansSheet: View {
                 }
                 .padding(.top, MekaSpace.xs)
             }
+        }
+        .moneyCard(palette)
+    }
+
+    /// Count in my forecast: off until he turns it on; Money's forecast then takes off what's still to buy in its month.
+    private func countCard(_ plan: SpendPlanDetail) -> some View {
+        let id = plan.id
+        return HStack(spacing: MekaSpace.m) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(SpendPlanRules.shared.COUNT_LABEL).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(plan.countLine).font(MekaType.caption)
+                    .foregroundStyle(plan.counted ? palette.accent : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: plan.countLine)
+            }
+            Spacer(minLength: MekaSpace.xs)
+            Toggle(SpendPlanRules.shared.COUNT_LABEL, isOn: Binding(get: { plan.counted }, set: { model.setSpendPlanCounted(id, on: $0) }))
+                .labelsHidden().toggleStyle(.switch).tint(palette.accent)
         }
         .moneyCard(palette)
     }

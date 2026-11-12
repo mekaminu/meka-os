@@ -42,7 +42,23 @@ data class MoneyForecastView(
      */
     val inRounded: Long = 0L, val outRounded: Long = 0L, val leftRounded: Long = 0L, val whatIfPence: Long = 0L,
     val thisMonth: Int = 0,
-)
+    /**
+     * Spending plans, Count in my forecast (2026-11-12): what the plans he counts still have to buy, added up month by
+     * month and rounded like the rest: [plannedBy] index 0 is by the end of this month, index 11 by twelve months on
+     * (pence, never negative); empty with no plan counted. [plansLine] says which plans and how much
+     * ("Counting Christmas gifts · £530 still to buy"); null with none.
+     */
+    val plannedBy: List<Long> = emptyList(), val plansLine: String? = null,
+) {
+    /** What the counted plans take by [months] months on (0 with none counted). */
+    fun plannedAt(months: Int): Long = if (months <= 0) 0L else plannedBy.getOrNull(months - 1) ?: plannedBy.lastOrNull() ?: 0L
+}
+
+/**
+ * Spending plans, Count in my forecast: one plan he counts, its [name] and what it still has to buy in each month
+ * (year × 12 + month − 1 → pence; a month gone by is already this one).
+ */
+data class MoneyPlanned(val name: String, val byMonth: Map<Int, Long>)
 
 /**
  * Trading tracker, slice 11: his actual trading result a month in pence (after fees and funding, at the ECB's dollar rate)
@@ -149,7 +165,7 @@ object MoneyForecast {
     /** The forecast for [today] from every line, with [whatIf] applied; null with no lines at all. */
     fun view(
         lines: List<MoneyLine>, today: Long, whatIf: MoneyWhatIf = MoneyWhatIf(), trading: MoneyTradingPace? = null,
-        plan: MoneyOwnPlan = MoneyOwnPlan(),
+        plan: MoneyOwnPlan = MoneyOwnPlan(), planned: List<MoneyPlanned> = emptyList(),
     ): MoneyForecastView? {
         if (lines.isEmpty()) return null
         val months = wholeMonths(lines, today)
@@ -191,8 +207,11 @@ object MoneyForecast {
         val saved = cuttable.filter { it.first in whatIf.cuts }.sumOf { roundTen(it.third / 2) } + whatIf.extraPence +
             (if (tradingOn) roundTen(trading!!.pencePerMonth) else 0L)
         val thisMonth = MoneyRules.monthOf(today)
+        val plannedBy = plannedBy(planned, thisMonth)
+        fun plannedAt(h: Int) = plannedBy.getOrNull(h - 1) ?: 0L
         val rows = listOf(6, 12).map { h ->
-            val at = leftRounded * h
+            val takes = if (income > 0) plannedAt(h) else 0L
+            val at = leftRounded * h - takes
             val label = "By ${monthShort(thisMonth + h)} · $h months"
             val base = when {
                 income <= 0 -> "spent at this pace"
@@ -200,7 +219,8 @@ object MoneyForecast {
                 else -> "more out than in at your pace"
             }
             val shown = if (income <= 0) "−" + fmt(roundTen(out) * h) else signed(at)
-            val more = if (saved != 0L) " · ${signed(saved * h)} with your what-ifs" else ""
+            val more = (if (takes > 0) " · after ${fmt(takes)} planned" else "") +
+                if (saved != 0L) " · ${signed(saved * h)} with your what-ifs" else ""
             MoneyForecastRow(label, shown, base + more, lit = income > 0 && at < 0, spoken = "$label, $shown, $base$more")
         }
         val span = if (n == 1) monthShort(months.first()) else "${Recurrence.MONTH_SHORT[months.first() % 12]} – ${monthShort(months.last())}"
@@ -209,6 +229,28 @@ object MoneyForecast {
         return MoneyForecastView(HEAD, null, pace, left, income > 0 && leftRounded <= -1_000, rows, cuts, extraLine, basis,
             tradingChip, trading?.let { tradingLine(it) }, leftPence = net.takeIf { income > 0 },
             inRounded = roundTen(income.coerceAtLeast(0)), outRounded = roundTen(out), leftRounded = leftRounded,
-            whatIfPence = saved, thisMonth = thisMonth)
+            whatIfPence = saved, thisMonth = thisMonth,
+            plannedBy = if (income > 0) plannedBy else emptyList(), plansLine = plansLine(planned, plannedBy.lastOrNull() ?: 0L))
+    }
+
+    const val PLANS_ALL_BOUGHT = "nothing left to buy"
+
+    /** Each month's running total of what the counted [planned] plans still have to buy, by 1 to 12 months on, rounded. */
+    fun plannedBy(planned: List<MoneyPlanned>, thisMonth: Int): List<Long> {
+        if (planned.isEmpty()) return emptyList()
+        return (1..12).map { i ->
+            roundTen(planned.sumOf { p -> p.byMonth.filter { (m, pence) -> m < thisMonth + i && pence > 0 }.values.sum() })
+        }
+    }
+
+    /** "Counting Christmas gifts · £530 still to buy" (two named, more counted); null with no plan counted. */
+    fun plansLine(planned: List<MoneyPlanned>, total: Long): String? {
+        if (planned.isEmpty()) return null
+        val names = when (planned.size) {
+            1 -> planned[0].name
+            2 -> "${planned[0].name} and ${planned[1].name}"
+            else -> "${planned.size} spending plans"
+        }
+        return "Counting $names · " + if (total > 0) "${fmt(total)} still to buy" else PLANS_ALL_BOUGHT
     }
 }

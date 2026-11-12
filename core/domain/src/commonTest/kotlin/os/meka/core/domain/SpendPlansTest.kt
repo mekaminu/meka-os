@@ -182,4 +182,40 @@ class SpendPlansTest {
         assertEquals(12, view().monthChoices.size)
         assertEquals("Nov", view().monthChoices.first().label)
     }
+
+    @Test
+    fun countInMyForecastIsOffUntilHeTurnsItOnAndSyncs() {
+        val id = pFold.add("Christmas gifts 20 Dec", "GBP").id!!
+        pFold.addThing(id, "Football boots", "", "45", nov)
+        pFold.addThing(id, "Lego set", "", "140", dec)
+        val bought = pFold.addThing(id, "Card", "", "5", dec).id!!
+        pFold.setDone(bought, true)
+        assertFalse(view().plan(id)!!.counted)
+        assertEquals(SpendPlanRules.COUNT_OFF, view().plan(id)!!.countLine)
+        assertTrue(SpendPlanRules.forecastPlans(pFold.plans(), pFold.things(), thu).isEmpty())
+        assertTrue(pFold.setCounted(id, true))
+        assertFalse(pFold.setCounted(id, true))
+        sync()
+        val onMac = SpendPlanRules.view(pMac.plans(), pMac.things(), money, thu).plan(id)!!
+        assertTrue(onMac.counted)
+        assertEquals(SpendPlanRules.COUNT_ON, onMac.countLine)
+        // What's still to buy, month by month; the bought card isn't counted.
+        val planned = SpendPlanRules.forecastPlans(pMac.plans(), pMac.things(), thu)
+        assertEquals(listOf(MoneyPlanned("Christmas gifts", mapOf(nov to 4_500L, dec to 14_000L))), planned)
+        assertTrue(pMac.setCounted(id, false))
+        sync()
+        assertFalse(view().plan(id)!!.counted)
+    }
+
+    @Test
+    fun anotherCurrencyWithoutARateIsLeftOutOfTheForecast() {
+        val id = pFold.add("Money home", "NGN").id!!
+        pFold.setEach(id, "50,000")
+        pFold.addThing(id, "Aunt", "", "", nov)
+        pFold.setCounted(id, true)
+        assertEquals(SpendPlanRules.COUNT_UNPRICED, view().plan(id)!!.countLine)
+        assertEquals(emptyMap(), SpendPlanRules.forecastPlans(pFold.plans(), pFold.things(), thu).single().byMonth)
+        pFold.setRate(id, "2,000")
+        assertEquals(mapOf(nov to 2_500L), SpendPlanRules.forecastPlans(pFold.plans(), pFold.things(), thu).single().byMonth)
+    }
 }
