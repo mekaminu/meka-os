@@ -221,6 +221,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/goals/inner-light-many.png](docs/screens/fold/goals/inner-light-many.png)
 - [fold/habits/cover-dark-empty.png](docs/screens/fold/habits/cover-dark-empty.png)
 - [fold/habits/cover-dark-full.png](docs/screens/fold/habits/cover-dark-full.png)
+- [fold/habits/cover-dark-open.png](docs/screens/fold/habits/cover-dark-open.png)
 - [fold/habits/cover-light-full.png](docs/screens/fold/habits/cover-light-full.png)
 - [fold/habits/inner-dark-full.png](docs/screens/fold/habits/inner-dark-full.png)
 - [fold/health/cover-dark-many.png](docs/screens/fold/health/cover-dark-many.png)
