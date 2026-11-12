@@ -66,4 +66,12 @@ final class MacAlsoTodayTests: XCTestCase {
         XCTAssertEqual(AlsoTodayRules.shared.place(tile: tile), AlsoPlace.needsYou)
         XCTAssertEqual(AlsoTodayRules.shared.hint(tile: tile), "Opens Needs you")
     }
+
+    /// Countdowns, slice 2: the countdown chosen with Show on Today is a COUNTDOWN tile whose click opens Countdowns.
+    func testTheCountdownTileOpensCountdowns() {
+        let tile = AlsoTile(kind: AlsoKind.countdown, key: "COUNTDOWN", value: "Christmas",
+                            line: "43 days to go · Fri 25 Dec", spoken: "Countdown: Christmas.", lit: false, targetId: "christmas")
+        XCTAssertEqual(AlsoTodayRules.shared.place(tile: tile), AlsoPlace.countdowns)
+        XCTAssertEqual(AlsoTodayRules.shared.hint(tile: tile), "Opens Countdowns")
+    }
 }

@@ -162,4 +162,42 @@ class CountdownsTest {
         assertEquals(CountdownIcon.PLANE, CountdownRules.iconFor("Holiday"))
         assertEquals(CountdownIcon.STAR, CountdownRules.iconFor("Sports day"))
     }
+
+    /** Slice 2: the one chosen with Show on Today is an Also today tile; nothing is on Today until one is chosen. */
+    @Test
+    fun theChosenCountdownIsAnAlsoTodayTile() {
+        assertNull(CountdownRules.alsoTile(view()), "the soonest only leads Countdowns; Today waits to be asked")
+        cFold.add("Holiday 13 Feb")
+        assertNull(CountdownRules.alsoTile(view()))
+        assertTrue(cFold.pin(CountdownRules.CHRISTMAS_KEY))
+        val t = CountdownRules.alsoTile(view())!!
+        assertEquals(AlsoKind.COUNTDOWN, t.kind)
+        assertEquals("COUNTDOWN", t.key)
+        assertEquals("Christmas", t.value)
+        assertEquals("43 days to go · Fri 25 Dec", t.line)
+        assertFalse(t.lit)
+        assertEquals("Countdown: Christmas, 43 days to go, Fri 25 Dec. Opens Countdowns.", t.spoken)
+        assertEquals(AlsoPlace.COUNTDOWNS, AlsoTodayRules.place(t))
+        assertEquals("Opens Countdowns", AlsoTodayRules.hint(t))
+
+        // Sleeps for the boys; the day before; on the day it's lit.
+        cFold.setSleeps(true)
+        assertEquals("43 sleeps to go · Fri 25 Dec", CountdownRules.alsoTile(view())!!.line)
+        assertEquals("1 sleep to go · Fri 25 Dec", CountdownRules.alsoTile(view(today = d(12, 24)))!!.line)
+        cFold.setSleeps(false)
+        assertEquals("tomorrow · Fri 25 Dec", CountdownRules.alsoTile(view(today = d(12, 24)))!!.line)
+        val onTheDay = CountdownRules.alsoTile(view(today = d(12, 25)))!!
+        assertEquals("today", onTheDay.line)
+        assertTrue(onTheDay.lit)
+        assertEquals("Countdown: Christmas, today. Opens Countdowns.", onTheDay.spoken)
+
+        // A birthday says the age after the date.
+        val o = Occasion("o1", "Sam", OccasionKind.BIRTHDAY, 12, 2, 2017, 3, 0, 0)
+        cFold.pin(CountdownRules.giftKey("o1"))
+        assertEquals("20 days to go · Wed 2 Dec · turns 9", CountdownRules.alsoTile(view(occasions = listOf(o)))!!.line)
+
+        // Set back to none: Today has no countdown again.
+        cFold.pin("")
+        assertNull(CountdownRules.alsoTile(view()))
+    }
 }

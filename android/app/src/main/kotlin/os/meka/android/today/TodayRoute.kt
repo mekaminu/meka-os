@@ -1160,6 +1160,8 @@ private fun TodayPane(
                             os.meka.core.domain.AlsoKind.LIFE_ADMIN -> os.meka.android.shell.MoreItem.LIFE_ADMIN
                             os.meka.core.domain.AlsoKind.SCHOOL -> os.meka.android.shell.MoreItem.SCHOOL
                             os.meka.core.domain.AlsoKind.REPLIES -> os.meka.android.shell.MoreItem.MAIL
+                            // Countdowns, slice 2: the one on Today opens Countdowns.
+                            os.meka.core.domain.AlsoKind.COUNTDOWN -> os.meka.android.shell.MoreItem.COUNTDOWNS
                             else -> null
                         }
                     }

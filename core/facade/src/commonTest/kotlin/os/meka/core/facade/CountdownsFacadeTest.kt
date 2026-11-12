@@ -34,6 +34,7 @@ class CountdownsFacadeTest {
         assertEquals("Christmas", fold.countdownsView.value.hero?.name)
         assertEquals("43", fold.countdownsView.value.hero?.number)
         assertEquals("Christmas in 43 days", fold.lifeLines.value.of(LifeTile.COUNTDOWNS)?.text)
+        assertTrue(fold.today.value.alsoToday.none { it.kind == os.meka.core.domain.AlsoKind.COUNTDOWN })
 
         assertEquals("Added Holiday · Sat 13 Feb · 93 days to go", fold.addCountdown("Holiday 13 Feb").line)
         assertTrue(fold.addCountdown("Holiday soon").refused)
@@ -55,6 +56,10 @@ class CountdownsFacadeTest {
         assertTrue(m.sleeps)
         assertEquals("93 sleeps", "${m.hero?.number} ${m.hero?.unit}")
         assertEquals("Holiday in 93 sleeps", mac.lifeLines.value.of(LifeTile.COUNTDOWNS)?.text)
+        // Slice 2: the one chosen for Today is Today's COUNTDOWN tile on both apps (none before it was chosen).
+        val tile = mac.today.value.alsoToday.first { it.kind == os.meka.core.domain.AlsoKind.COUNTDOWN }
+        assertEquals("Holiday", tile.value)
+        assertEquals("93 sleeps to go · Sat 13 Feb", tile.line)
 
         // The next day it's one fewer.
         now += day
@@ -70,6 +75,7 @@ class CountdownsFacadeTest {
         mac.syncNow(); fold.syncNow()
         val f = fold.countdownsView.value
         assertFalse(f.heroOnToday)
+        assertTrue(fold.today.value.alsoToday.none { it.kind == os.meka.core.domain.AlsoKind.COUNTDOWN }, "removed: off Today")
         assertEquals("Sam's birthday", f.hero?.name)
         assertEquals(listOf("Christmas"), f.rows.map { it.name })
     }

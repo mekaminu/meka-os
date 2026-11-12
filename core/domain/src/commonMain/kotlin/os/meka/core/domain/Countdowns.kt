@@ -371,6 +371,28 @@ object CountdownRules {
         else -> LifeTileLine("${r.name} in ${r.days} ${unitWord(r.days, sleeps)}", lit = false)
     }
 
+    /** What a tap on the Today tile does, said after it. */
+    const val OPENS = "Opens Countdowns."
+
+    /**
+     * Countdowns, slice 2: the one he chose with Show on Today as an Also today tile: "Christmas" · "43 days to go ·
+     * Fri 25 Dec" ("43 sleeps to go" with Sleeps on; "tomorrow" or "1 sleep to go" the day before; "today", lit, on the
+     * day; a birthday's "turns 9" after the date). Null when none is chosen (the soonest only leads the Countdowns
+     * screen; Today shows a countdown only when he asked for it) or the chosen one has passed.
+     */
+    fun alsoTile(v: CountdownsView): AlsoTile? {
+        val h = v.hero?.takeIf { v.heroOnToday } ?: return null
+        val count = when {
+            h.days == 0L -> "today"
+            h.days == 1L && !v.sleeps -> "tomorrow"
+            else -> "${h.days} ${unitWord(h.days, v.sleeps)} to go"
+        }
+        val line = listOfNotNull(count, h.dateLine.takeIf { h.days != 0L }, h.extra).joinToString(" · ")
+        val spoken = "Countdown: ${h.name}, " + (if (h.days == 0L) "today" else "$count, ${h.dateLine}") +
+            (h.extra?.let { ", $it" } ?: "") + ". $OPENS"
+        return AlsoTile(AlsoKind.COUNTDOWN, AlsoTodayRules.key(AlsoKind.COUNTDOWN), h.name, line, spoken, lit = h.days == 0L, targetId = h.key)
+    }
+
     /** "Added Holiday · Sat 13 Feb · 93 days to go", "… · every year". */
     fun addedLine(c: CountdownItem, today: Long, replaced: Boolean): String {
         val d = next(c, today)

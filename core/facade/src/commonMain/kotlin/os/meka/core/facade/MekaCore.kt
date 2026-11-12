@@ -14057,6 +14057,14 @@ class MekaCore(
         val occasionItems = gifts.items()
         // Travel mode, slice 1: the trips with their bookings.
         val tripItems = trips.items()
+        // Countdowns, slice 1: what he typed, the birthdays, the trips ahead and Christmas (worked out before Today, whose
+        // Also today has the one he chose with Show on Today: slice 2).
+        val countdownItems = countdowns.items()
+        val countdownSettings = countdowns.settings()
+        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, todayDay)) {
+            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay)
+        } }
+        val countdownsNow = _countdowns.value
         // Car completeness slice 2: each car's view now (the brief and the week ahead lead with what ran out).
         val carsNow = os.meka.core.domain.CarRules.views(car.cars(), listsNow.renewals.all, carCheck(), todayDay, cal)
         val carLapses = os.meka.core.domain.CarLapseRules.lines(carsNow)
@@ -14206,7 +14214,7 @@ class MekaCore(
             listOf(
                 all, dayEvents, marks.clubChildren, sessionsNow, fastingNow, goalsNow, listsNow, shutdownNow, forecast, workForecast,
                 office, rideNow, weekAheadNow, schoolToday, binItems, occasionItems, tripItems, lifeAdminNow, lifeAdminViewNow,
-                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, studyToday, studyNudgeNow, studyCheckinNow, minuteNow(), timeZone(),
+                adminThis, dateNightNow, todayReplies, todayPrep, todayUnread, studyToday, studyNudgeNow, studyCheckinNow, countdownsNow, minuteNow(), timeZone(),
             ),
         ) {
             val projected = project(all, dayEvents, marks.clubChildren)
@@ -14260,6 +14268,8 @@ class MekaCore(
                     t, listsNow.renewals.attention, todayDay,
                     // Handle her requests for me: what was done for him, as a tile that opens Needs you.
                     doneForYou = alsoDoneForYou(all, todayDay, cal),
+                    // Countdowns, slice 2: the one he chose with Show on Today.
+                    countdown = os.meka.core.domain.CountdownRules.alsoTile(countdownsNow),
                 ))
             }
         } }
@@ -14563,12 +14573,6 @@ class MekaCore(
         // documents, which the replica hands out unchanged until written), the day and the time zone are unchanged.
         _gifts.value = timed("Gifts") { viewMemo.keep("Gifts", listOf(occasionItems, todayDay)) {
             os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
-        } }
-        // Countdowns, slice 1: what he typed, the birthdays, the trips ahead and Christmas.
-        val countdownItems = countdowns.items()
-        val countdownSettings = countdowns.settings()
-        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, todayDay)) {
-            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay)
         } }
         val docItems = documents.items()
         _trips.value = timed("Trips") { viewMemo.keep("Trips", listOf(tripItems, todayDay, docItems, timeZone())) {

@@ -11,6 +11,8 @@ enum class AlsoKind {
     STUDY_WEEK, REVIEW,
     // Handle her requests for me (Take first 2026-11-11), what remains: what was done for him, as a tile on Today.
     DONE_FOR_YOU,
+    // Countdowns, slice 2 (2026-11-12): the countdown he chose with Show on Today.
+    COUNTDOWN,
 }
 
 /** Where an Also today tile's tap goes ([AlsoTodayRules.place]). */
@@ -22,6 +24,8 @@ enum class AlsoPlace {
     GOALS, MONEY_TRADING, CALENDAR,
     /** The Done for you tile opens Needs you, where its rows (Undo · Change · the drafts) are. */
     NEEDS_YOU,
+    /** The countdown tile opens Countdowns. */
+    COUNTDOWNS,
 }
 
 /**
@@ -60,7 +64,7 @@ object AlsoTodayRules {
 
     val ORDER: List<AlsoKind> = listOf(
         AlsoKind.PREP, AlsoKind.CLASH, AlsoKind.DONE_FOR_YOU, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE, AlsoKind.SCHOOL, AlsoKind.PRESSURE,
-        AlsoKind.REVIEW, AlsoKind.STUDY_WEEK, AlsoKind.STUDY, AlsoKind.RENEWAL, AlsoKind.WEEK_AHEAD, AlsoKind.BINS, AlsoKind.TRIP, AlsoKind.GIFTS,
+        AlsoKind.REVIEW, AlsoKind.STUDY_WEEK, AlsoKind.STUDY, AlsoKind.RENEWAL, AlsoKind.WEEK_AHEAD, AlsoKind.BINS, AlsoKind.TRIP, AlsoKind.COUNTDOWN, AlsoKind.GIFTS,
         AlsoKind.PARCELS, AlsoKind.DINNER, AlsoKind.DATE_NIGHT, AlsoKind.LIFE_ADMIN, AlsoKind.REFLECTION,
         AlsoKind.REPLIES, AlsoKind.TRADING, AlsoKind.GOALS,
     )
@@ -89,6 +93,7 @@ object AlsoTodayRules {
         AlsoKind.STUDY_WEEK -> "STUDY WEEK"
         AlsoKind.REVIEW -> "REVIEW"
         AlsoKind.DONE_FOR_YOU -> "DONE FOR YOU"
+        AlsoKind.COUNTDOWN -> "COUNTDOWN"
     }
 
     /** What a tap on a [AlsoKind.PREP] or [AlsoKind.PRESSURE] tile does: it unfolds the detail under the row. */
@@ -136,6 +141,7 @@ object AlsoTodayRules {
         AlsoKind.REFLECTION -> AlsoPlace.REVIEW
         AlsoKind.CLASH -> AlsoPlace.CALENDAR
         AlsoKind.DONE_FOR_YOU -> AlsoPlace.NEEDS_YOU
+        AlsoKind.COUNTDOWN -> AlsoPlace.COUNTDOWNS
     }
 
     /** What a screen reader hears after the tile: "Opens Renewals", "Shows the check-in"; empty for a tile that only tells. */
@@ -157,6 +163,7 @@ object AlsoTodayRules {
         AlsoPlace.MONEY_TRADING -> "Opens Trading"
         AlsoPlace.CALENDAR -> "Opens the Calendar"
         AlsoPlace.NEEDS_YOU -> "Opens Needs you"
+        AlsoPlace.COUNTDOWNS -> "Opens Countdowns"
         AlsoPlace.UNFOLD -> when (tile.kind) {
             AlsoKind.PREP -> UNFOLD_PREP.removeSuffix(".")
             AlsoKind.PRESSURE -> UNFOLD_PRESSURE.removeSuffix(".")
@@ -170,10 +177,14 @@ object AlsoTodayRules {
     /**
      * The tiles for [today]; [renewals] are the renewals needing him (overdue, cancel-by, due soon), first first.
      * [doneForYou] is what was done for him from his wife's requests ([HandleForMeRules.alsoTile]), or null.
+     * [countdown] is the countdown he chose with Show on Today ([CountdownRules.alsoTile]), or null.
      */
-    fun tiles(today: Today, renewals: List<RenewalItem>, todayDay: Long, doneForYou: AlsoTile? = null): List<AlsoTile> {
+    fun tiles(
+        today: Today, renewals: List<RenewalItem>, todayDay: Long, doneForYou: AlsoTile? = null, countdown: AlsoTile? = null,
+    ): List<AlsoTile> {
         val found = listOfNotNull(
             doneForYou,
+            countdown,
             today.study?.let { split(AlsoKind.STUDY, it.text, it.spoken, it.lit, drop = "Study today", id = it.courseId) },
             renewal(renewals, todayDay),
             today.weekAhead?.let { split(AlsoKind.WEEK_AHEAD, it.text, it.spoken, lit = false, drop = "Your week ahead") },

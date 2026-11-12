@@ -577,6 +577,8 @@ struct TodayView: View {
         case .calendar: model.go(to: .calendar, reduced: reduceMotion)
         // Handle her requests for me: the Done for you tile opens Needs you, where its rows are.
         case .needsYou: model.go(to: .needsYou, reduced: reduceMotion)
+        // Countdowns, slice 2: the one on Today opens Countdowns.
+        case .countdowns: model.showCountdowns = true
         case .moneyTrading:
             model.moneyStartTab = MoneyTab.trading
             model.showMoney = true
