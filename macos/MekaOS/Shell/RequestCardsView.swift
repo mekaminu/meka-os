@@ -115,6 +115,9 @@ struct DoneForYouRow: View {
     let palette: MekaPalette
     /// Slice 3: shows "Copied · paste it and send it yourself" once a draft is on the pasteboard.
     @State private var copied = false
+    /// Obi's suggested steps taken off in this row (hidden at once; the core deletes their tasks).
+    @State private var gone: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let id = row.id
@@ -131,6 +134,21 @@ struct DoneForYouRow: View {
                 pill(HandleForMeRules.shared.CLEAR, quiet: true, spoken: "\(HandleForMeRules.shared.CLEAR): \(row.line)") { model.clearDoneForYou(id) }
             }
             .padding(.top, MekaSpace.m)
+            // Obi's suggested steps for a new kind of request: each is on his list; a click takes it off (hidden at once).
+            let steps = row.suggestions.filter { !gone.contains($0.taskId) }
+            if !steps.isEmpty {
+                Text(HandleForMeRules.shared.SUGGESTED_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .padding(.top, MekaSpace.xs)
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(steps, id: \.taskId) { step in
+                        let taskId = step.taskId
+                        pill("✓ \(step.title)", quiet: false, spoken: step.spoken) {
+                            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { _ = gone.insert(taskId) }
+                            model.untickDoneForYouStep(id, taskId: taskId)
+                        }
+                    }
+                }
+            }
             // Slice 3: the drafted reply to her (and the note to his manager) go on the pasteboard; he sends them.
             if !row.drafts.isEmpty {
                 HStack(spacing: MekaSpace.xs) {

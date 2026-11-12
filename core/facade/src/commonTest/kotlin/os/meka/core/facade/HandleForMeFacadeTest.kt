@@ -167,4 +167,29 @@ class HandleForMeFacadeTest {
         assertTrue(c.doneForYou.value.isEmpty())
         assertEquals(listOf("Pick up the dry cleaning"), titles(c, row.taskIds), "Clear keeps what it made")
     }
+
+    @Test
+    fun aNewKindGetsObisStepsAsSuggestionsHeCanUntick() = runTest {
+        val c = core()
+        c.setAboutYouField("partnerName", "Alex")
+        server.reply = MessageRequestCodec.Response("answered", listOf(MessageRequestCodec.Proposal("task", "buy a present for Sam's birthday", words = "tomorrow")))
+        val row = assertIs<RequestRead.Read>(c.readRequest(msg("Alex", "can you buy a present for Sam's birthday tomorrow?"), lists, emptySet())).handled.single()
+        assertEquals("“Buy a present for Sam's birthday” · Tomorrow · added to Tomorrow, Obi suggests 2 steps, reminder Tomorrow 09:00", row.line)
+        assertEquals(listOf("Buy a present for Sam's birthday", "Get a card", "Wrap it"), titles(c, row.taskIds))
+        assertEquals(listOf("Get a card", "Wrap it"), row.suggestions.map { it.title })
+        assertEquals(row.taskIds.drop(1), row.suggestions.map { it.taskId })
+
+        // Untick "Wrap it": its task is gone, the row keeps the rest, and Undo no longer counts it.
+        val wrap = row.suggestions.last()
+        assertTrue(c.untickDoneForYouStep(row.id, wrap.taskId))
+        assertEquals(null, c.taskForDetail(wrap.taskId))
+        val after = c.doneForYou.value.single()
+        assertEquals(listOf("Get a card"), after.suggestions.map { it.title })
+        assertEquals(2, after.taskIds.size)
+        assertFalse(c.untickDoneForYouStep(row.id, wrap.taskId), "already off")
+        assertFalse(c.untickDoneForYouStep(row.id, row.taskIds.first()), "the request's own task isn't a suggestion")
+
+        assertTrue(c.undoDoneForYou(row.id))
+        assertTrue(titles(c, row.taskIds).isEmpty(), "Undo takes back the rest")
+    }
 }

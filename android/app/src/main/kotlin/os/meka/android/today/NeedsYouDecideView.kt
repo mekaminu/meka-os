@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -155,6 +157,7 @@ private fun DecideIcon(icon: NeedsYouDecideIcon) {
 
 internal const val DONE_FOR_YOU_TAG = "done-for-you"
 internal const val DONE_FOR_YOU_DRAFT_TAG = "done-for-you-draft"
+internal const val DONE_FOR_YOU_SUGGESTION_TAG = "done-for-you-suggestion"
 
 /**
  * "Handle her requests for me" (2026-11-11): one Done for you row at the top of Needs you — the gold DONE FOR YOU label,
@@ -171,10 +174,12 @@ internal fun DoneForYouRow(
     onChange: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    onUntick: (String) -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .animateContentSize(MekaMotion.expand(Meka.reducedMotion))
             .testTag(DONE_FOR_YOU_TAG).padding(horizontal = MekaSpace.m, vertical = MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -187,6 +192,27 @@ internal fun DoneForYouRow(
             DecidePill(row.undoLabel, DecideTone.PLAIN, "${row.undoLabel}: ${row.line}") { haptics.light(); onUndo() }
             row.changeLabel?.let { label -> DecidePill(label, DecideTone.PLAIN, "$label: ${row.line}") { haptics.light(); onChange() } }
             DecidePill(os.meka.core.domain.HandleForMeRules.CLEAR, DecideTone.QUIET, "${os.meka.core.domain.HandleForMeRules.CLEAR}: ${row.line}") { haptics.tick(); onClear() }
+        }
+        // Obi's suggested steps for a new kind of request: each is on his list; a tap takes it off (instant: hidden this frame).
+        if (row.suggestions.isNotEmpty()) {
+            var gone by remember(row.id) { mutableStateOf(emptySet<String>()) }
+            val shown = row.suggestions.filter { it.taskId !in gone }
+            if (shown.isNotEmpty()) {
+                Text(os.meka.core.domain.HandleForMeRules.SUGGESTED_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary)
+                FlowRow(
+                    Modifier.testTag(DONE_FOR_YOU_SUGGESTION_TAG),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    shown.forEach { s ->
+                        DecidePill("✓ ${s.title}", DecideTone.PLAIN, s.spoken) {
+                            haptics.tick()
+                            gone = gone + s.taskId
+                            onUntick(s.taskId)
+                        }
+                    }
+                }
+            }
         }
         if (row.drafts.isNotEmpty()) {
             val context = LocalContext.current

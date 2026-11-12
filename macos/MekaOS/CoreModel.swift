@@ -7701,6 +7701,15 @@ final class CoreModel {
         }
     }
 
+    /// One of Obi's suggested steps unticked on a Done for you row: its task is deleted (only the two ids cross).
+    func untickDoneForYouStep(_ id: String, taskId: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do { _ = try await core.untickDoneForYouStep(id: id, taskId: taskId) } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Clear on a Done for you row: seen; what it made stays.
     func clearDoneForYou(_ id: String) {
         guard let core else { return }

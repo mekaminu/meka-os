@@ -212,6 +212,20 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
         return true
     }
 
+    /**
+     * One of Obi's suggested steps unticked on a handled row: [taskId] leaves the row's made tasks on every device (so
+     * Undo no longer counts it). False when the row isn't handled, is gone, or didn't make it.
+     */
+    fun dropHandledTask(cardId: String, taskId: String): Boolean {
+        val id = entityId(cardId)
+        val e = replica.entity(EntityTypes.REQUEST_CARD, id) ?: return false
+        if (e[RequestCardFields.RESOLUTION].textOrNull != RequestResolution.HANDLED.wire) return false
+        val ids = e[RequestCardFields.HANDLED_TASKS].textOrNull.orEmpty().split(',').filter { it.isNotBlank() }
+        if (taskId !in ids) return false
+        replica.commitLocal(EntityTypes.REQUEST_CARD, id, mapOf(RequestCardFields.HANDLED_TASKS to ids.filter { it != taskId }.joinToString(",").fv()))
+        return true
+    }
+
     private class Stored(val message: RequestMessage, val index: Int, val proposal: RequestProposal, val atMs: Long, val resolved: Boolean)
 
     private fun stored(): List<Pair<String, Stored>> = replica.entities(EntityTypes.REQUEST_CARD).mapNotNull { e ->

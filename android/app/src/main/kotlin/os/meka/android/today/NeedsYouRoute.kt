@@ -1357,6 +1357,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.doneForYouItems(
                     moves.hide(listOf(row.id))
                     scope.launch { if (!runCatching { core.clearDoneForYou(row.id) }.getOrDefault(false)) moves.restore(listOf(row.id)) }
                 },
+                onUntick = { taskId -> scope.launch { runCatching { core.untickDoneForYouStep(row.id, taskId) } } },
                 modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)),
             )
         }

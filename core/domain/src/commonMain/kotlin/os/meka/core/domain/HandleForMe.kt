@@ -16,7 +16,20 @@ package os.meka.core.domain
  * card rather than being guessed. Untrusted content never raises its own autonomy (ADR-006): what can be done here is
  * fixed by these rules, not by the message.
  */
-data class PrepStep(val title: String, val day: Long, val remindDay: Long?, val remindMinute: Int?)
+data class PrepStep(
+    val title: String,
+    val day: Long,
+    val remindDay: Long?,
+    val remindMinute: Int?,
+    /** What remains (Take first 2026-11-11): one of Obi's best steps for a kind with no fixed steps, which he can untick. */
+    val suggested: Boolean = false,
+)
+
+/**
+ * One of Obi's suggested steps on a Done for you row (a task it made, still open): a tap unticks it, which deletes that
+ * task ([HandleForMeRules.suggestions]).
+ */
+data class HandleSuggestion(val taskId: String, val title: String, val spoken: String)
 
 /** What handling one request makes: the main task (null for a work-from-home day), the home day and the prep steps. */
 data class HandlePlan(
@@ -68,6 +81,8 @@ data class DoneForYou(
      * to her, and for a work-from-home day a note to his manager ([HandleForMeRules.drafts]).
      */
     val drafts: List<HandleDraft> = emptyList(),
+    /** Obi's suggested steps still on his list, each unticked with one tap ([HandleForMeRules.suggestions]). */
+    val suggestions: List<HandleSuggestion> = emptyList(),
 ) {
     val undoLabel: String get() = HandleForMeRules.UNDO
     val changeLabel: String? get() = if (taskIds.isEmpty()) null else HandleForMeRules.CHANGE
@@ -169,6 +184,90 @@ object HandleForMeRules {
     /** The prep steps a kind of request has (only a work-from-home day for now). */
     fun stepsFor(kind: RequestKind): List<String> = if (kind == RequestKind.WORK_FROM_HOME) WORK_FROM_HOME_STEPS else emptyList()
 
+    /** The most suggested steps one request gets. */
+    const val SUGGESTION_MAX = 3
+    const val SUGGESTED_HEAD = "Obi's steps to get ready · tap one to take it off"
+    const val SUGGESTION_GONE = "Taken off your list"
+
+    /** One entry in Obi's step library: what in a request's title it answers, and its steps (each skipped when the title already says it). */
+    private class StepRule(val match: Regex, val steps: List<Pair<String, Regex?>>, val needsChildren: Boolean = false)
+
+    private fun rx(s: String) = Regex(s, RegexOption.IGNORE_CASE)
+
+    /**
+     * Obi's best steps for the common kinds of request (generic, no names; words from the title only pick a rule, they
+     * never become a step). Kept small on purpose: a request that matches nothing gets no steps rather than a guess.
+     */
+    private val STEP_LIBRARY = listOf(
+        StepRule(rx("\\b(wedding|christening|baby shower|engagement)\\b"), listOf(
+            "RSVP" to rx("\\brsvp"), "Buy a gift" to rx("\\b(gift|present)"),
+        )),
+        StepRule(rx("\\b(birthday|bday|party)\\b"), listOf(
+            "Buy a present" to rx("\\b(gift|present)"), "Get a card" to rx("\\bcard"),
+        )),
+        StepRule(rx("\\b(gift|present)s?\\b"), listOf(
+            "Get a card" to rx("\\bcard"), "Wrap it" to rx("\\bwrap"),
+        )),
+        StepRule(rx("\\b(dinner|restaurant|brunch|lunch out|date night|meal out)\\b"), listOf(
+            "Book a table" to rx("\\b(book|booked|reservation|table)"),
+        )),
+        StepRule(rx("\\b(date night|night out|theatre|cinema|concert|gig|wedding|dinner)\\b"), listOf(
+            "Sort a babysitter" to rx("\\b(babysit|sitter|kids|boys|children)"),
+        ), needsChildren = true),
+        StepRule(rx("\\b(school trip|trip form|permission slip|consent form)\\b"), listOf(
+            "Sign the form" to rx("\\bsign"), "Pay for it online" to rx("\\bpa(y|id)"),
+        )),
+        StepRule(rx("\\bparents'? ?evening\\b|\\bparent[- ]teacher\\b"), listOf(
+            "Book a slot" to rx("\\b(book|booked|slot)"),
+        )),
+        StepRule(rx("\\b(world book day|dress[- ]up|non[- ]uniform|costume)\\b"), listOf(
+            "Sort the outfit" to rx("\\b(outfit|costume)"),
+        )),
+        StepRule(rx("\\b(bake sale|bake|cake)\\b"), listOf(
+            "Buy the ingredients" to rx("\\b(buy|ingredients)"),
+        )),
+        StepRule(rx("\\b(holiday|flight|airport|abroad)\\b"), listOf(
+            "Check the passports" to rx("\\bpassport"), "Pack" to rx("\\bpack"),
+        )),
+        StepRule(rx("\\b(guests|visitors|coming over|coming to stay|staying with us|hosting)\\b"), listOf(
+            "Do a food shop" to rx("\\b(shop|groceries|food)"),
+        )),
+    )
+
+    /**
+     * What remains of Take first 2026-11-11 ("a new kind gets Obi's best steps, shown as suggestions he can untick"):
+     * the steps for a task, reminder or event with no fixed steps, from [STEP_LIBRARY] by its title (a babysitter only
+     * when About you has children), each skipped when the title already covers it, at most [SUGGESTION_MAX], in order.
+     * A work-from-home day keeps its own three; any other kind gets none. Never the message's text: only its title.
+     */
+    fun suggestedSteps(kind: RequestKind, title: String, hasChildren: Boolean): List<String> {
+        if (kind !in SUGGESTING_KINDS) return emptyList()
+        val t = title.trim()
+        if (t.isEmpty()) return emptyList()
+        val out = LinkedHashSet<String>()
+        STEP_LIBRARY.forEach { r ->
+            if (r.needsChildren && !hasChildren) return@forEach
+            if (!r.match.containsMatchIn(t)) return@forEach
+            r.steps.forEach { (step, skip) ->
+                if (skip == null || !skip.containsMatchIn(t)) out += step
+            }
+        }
+        return out.take(SUGGESTION_MAX)
+    }
+
+    private val SUGGESTING_KINDS = setOf(RequestKind.TASK, RequestKind.REMINDER, RequestKind.EVENT)
+
+    /**
+     * The suggestion chips on a row: of the steps it made (a row that isn't a work-from-home day: every task after the
+     * request's own), the ones still on his list and not done, by [open] (id → title, null when gone or done).
+     */
+    fun suggestions(row: DoneForYou, open: (String) -> String?): List<HandleSuggestion> {
+        if (row.homeDay != null) return emptyList()
+        return row.taskIds.drop(1).mapNotNull { id ->
+            open(id)?.trim()?.takeIf { it.isNotEmpty() }?.let { HandleSuggestion(id, it, "Take “$it” off your list") }
+        }
+    }
+
     /**
      * The day the prep steps land on for a request on [day]: today when it is today or tomorrow, otherwise the last
      * working day before it ([isWorkDay]), never before today (today when none is found in the week before).
@@ -201,15 +300,16 @@ object HandleForMeRules {
      * gets its steps (each reminding at 16:00 on the step day, or the next sensible time); a task, reminder or event is
      * a task on its day (an event at its time), reminding at its time, an hour before an event, or 09:00 on its day.
      */
-    fun plan(p: RequestProposal, today: Long, nowMinute: Int, isWorkDay: (Long) -> Boolean): HandlePlan {
+    fun plan(p: RequestProposal, today: Long, nowMinute: Int, isWorkDay: (Long) -> Boolean, hasChildren: Boolean = false): HandlePlan {
         val day = p.day ?: today
-        val names = stepsFor(p.kind)
+        val fixed = stepsFor(p.kind)
+        val names = fixed.ifEmpty { suggestedSteps(p.kind, p.title, hasChildren) }
         val steps = if (names.isEmpty()) emptyList() else {
             val sd = stepDay(day, today, isWorkDay)
             val r = remindAt(sd, STEP_REMIND_MINUTE, today, nowMinute, day)
             // Too late tonight for a step due today: it moves to the morning it reminds on (never past the day itself).
             val on = r?.first?.coerceAtMost(day) ?: sd
-            names.map { PrepStep(it, on, r?.first, r?.second) }
+            names.map { PrepStep(it, on, r?.first, r?.second, suggested = fixed.isEmpty()) }
         }
         if (p.kind == RequestKind.WORK_FROM_HOME) return HandlePlan(null, day, steps)
         val wanted = when {
@@ -242,11 +342,14 @@ object HandleForMeRules {
         val head = if (p.kind == RequestKind.WORK_FROM_HOME) "Work from home ${CivilDate.shortLabel(day)}"
         else "“${p.title}” · ${TaskWhenRules.label(day, p.minute, today)}"
         val parts = mutableListOf("added to ${dayWord(day, today)}")
-        plan.steps.firstOrNull()?.let { s ->
-            val n = plan.steps.size
+        val fixedSteps = plan.steps.filterNot { it.suggested }
+        fixedSteps.firstOrNull()?.let { s ->
+            val n = fixedSteps.size
             parts += "$n ${if (n == 1) "step" else "steps"} for ${dayWord(s.day, today).let { if (it == "Today" || it == "Tomorrow") it.lowercase() else it }}"
         }
-        val remind = plan.steps.firstOrNull()?.let { s -> s.remindDay?.let { d -> d to s.remindMinute!! } }
+        val nSuggested = plan.steps.size - fixedSteps.size
+        if (nSuggested > 0) parts += "Obi suggests $nSuggested ${if (nSuggested == 1) "step" else "steps"}"
+        val remind = fixedSteps.firstOrNull()?.let { s -> s.remindDay?.let { d -> d to s.remindMinute!! } }
             ?: plan.task?.let { t -> t.remindDay?.let { d -> d to t.remindMinute!! } }
         remind?.let { (d, m) ->
             parts += "reminder " + (if (d == today) "" else dayWord(d, today) + " ") + TaskWhenRules.timeLabel(m)

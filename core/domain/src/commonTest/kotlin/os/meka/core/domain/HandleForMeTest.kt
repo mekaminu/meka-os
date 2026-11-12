@@ -354,4 +354,33 @@ class HandleForMeTest {
         assertEquals(listOf(AlsoKind.DONE_FOR_YOU), tiles.map { it.kind })
         assertEquals(emptyList(), AlsoTodayRules.tiles(Today(needsYou = emptyList(), upNext = null, yourDay = emptyList(), doneToday = emptyList()), emptyList(), wed).map { it.kind })
     }
+
+    @Test
+    fun obisBestStepsForANewKind() {
+        val r = HandleForMeRules
+        assertEquals(listOf("Get a card", "Wrap it"), r.suggestedSteps(RequestKind.TASK, "Buy a present for Sam's birthday", false))
+        assertEquals(listOf("Buy a present", "Get a card"), r.suggestedSteps(RequestKind.EVENT, "Sam's birthday party", false))
+        assertEquals(listOf("Book a table"), r.suggestedSteps(RequestKind.EVENT, "Dinner with the Joneses", false))
+        assertEquals(listOf("Book a table", "Sort a babysitter"), r.suggestedSteps(RequestKind.EVENT, "Dinner with the Joneses", true), "a sitter only with children")
+        assertEquals(emptyList(), r.suggestedSteps(RequestKind.EVENT, "Dinner at Luca's, table booked", false), "the title already says it")
+        assertEquals(listOf("Sign the form", "Pay for it online"), r.suggestedSteps(RequestKind.TASK, "School trip to the museum", true))
+        assertEquals(listOf("RSVP", "Buy a gift", "Sort a babysitter"), r.suggestedSteps(RequestKind.EVENT, "Wedding in Bath", true), "at most three")
+        assertEquals(emptyList(), r.suggestedSteps(RequestKind.TASK, "Pick up the dry cleaning", true), "nothing matched: no guess")
+        assertEquals(emptyList(), r.suggestedSteps(RequestKind.RENEWAL, "Birthday card subscription", true), "only tasks, reminders and events")
+        assertEquals(emptyList(), r.suggestedSteps(RequestKind.WORK_FROM_HOME, "Party at work", true))
+
+        // In the plan: dated like the work-from-home steps, marked suggested, and counted apart in the line.
+        val party = RequestProposal(RequestKind.EVENT, "Sam's birthday party", mon, 15 * 60)
+        val plan = r.plan(party, wed, 10 * 60, weekdays)
+        assertEquals(listOf("Buy a present", "Get a card"), plan.steps.map { it.title })
+        assertTrue(plan.steps.all { it.suggested && it.day == CivilDate.toEpochDay(2026, 11, 13) && it.remindMinute == 16 * 60 })
+        assertTrue(r.plan(wfhThu, wed, 10 * 60, weekdays).steps.none { it.suggested })
+        assertTrue(r.line(party, plan, wed).contains("Obi suggests 2 steps"))
+        assertFalse(r.line(party, plan, wed).contains("steps for"))
+
+        // The chips: the open steps after the request's own task; none on a work-from-home row.
+        val row = DoneForYou("m#0", "From Alex · 10:00", "x", "x", 0L, listOf("own", "a", "b"), null)
+        assertEquals(listOf("Get a card"), r.suggestions(row) { if (it == "a") "Get a card" else null }.map { it.title })
+        assertEquals(emptyList(), r.suggestions(row.copy(homeDay = thu)) { "Tell your manager" })
+    }
 }

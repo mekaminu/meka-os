@@ -4776,7 +4776,7 @@ class MekaCore(
         val ids = mutableListOf<String>()
         made.filter { it.person.isNotEmpty() && rules.handles(it.person, about, others) && rules.certain(it.proposal, today) }.forEach { card ->
             val p = card.proposal
-            val plan = rules.plan(p, today, nowMinute, isWorkDay)
+            val plan = rules.plan(p, today, nowMinute, isWorkDay, hasChildren = about.children.isNotEmpty())
             val taskIds = mutableListOf<String>()
             plan.task?.let { t ->
                 val id = needsTask(t.title)
@@ -4795,7 +4795,7 @@ class MekaCore(
             if (requestCards.handled(card.id, taskIds, plan.homeDay, rules.line(p, plan, today))) ids += card.id
         }
         if (ids.isEmpty()) return emptyList()
-        val rows = requestCards.doneForYou()
+        val rows = doneForYouRows()
         _doneForYou.value = rows
         return rows.filter { it.id in ids }
     }
@@ -4849,6 +4849,26 @@ class MekaCore(
             )
         }
         return items
+    }
+
+    /** The Done for you rows with Obi's suggested steps still open on each (its chips). Caller is on the core. */
+    private fun doneForYouRows(): List<os.meka.core.domain.DoneForYou> = requestCards.doneForYou().map { r ->
+        if (r.homeDay != null || r.taskIds.size < 2) r
+        else r.copy(suggestions = os.meka.core.domain.HandleForMeRules.suggestions(r) { id ->
+            tasks.get(id)?.takeIf { !it.lifecycle.isTerminal }?.title
+        })
+    }
+
+    /**
+     * Handle her requests for me: unticks one of Obi's suggested steps on a Done for you row: its task is deleted and it
+     * leaves the row on both apps (Undo no longer counts it). False when the row or the step is gone.
+     */
+    suspend fun untickDoneForYouStep(id: String, taskId: String): Boolean = onCore {
+        val row = requestCards.doneForYou().firstOrNull { it.id == id } ?: return@onCore false
+        if (row.homeDay != null || taskId !in row.taskIds.drop(1)) return@onCore false
+        if (tasks.get(taskId) != null) tasks.delete(taskId)
+        followBlocks(listOf(taskId))
+        requestCards.dropHandledTask(id, taskId).also { refresh() }
     }
 
     /** Clear on a Done for you row: seen, gone from Needs you on both apps; what it made stays. */
@@ -14494,7 +14514,7 @@ class MekaCore(
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary().without(afterWorkHiding)
         _requests.value = requestCards.open()
-        _doneForYou.value = requestCards.doneForYou()
+        _doneForYou.value = doneForYouRows()
         _approvals.value = approvalStore.cards()
         _tradingKestrel.value = os.meka.core.domain.TradingKestrel.view(approvalStore.all(), nowMs(), cal)
         // Taps feel instant, slice 12: School is kept while his work hours, the minute and every record type it reads
