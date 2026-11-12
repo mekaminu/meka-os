@@ -171,6 +171,9 @@ final class CoreModel {
     private(set) var dailyLines: DailyLines?
     /// Gift planner (V1, slice 1): birthdays and anniversaries, their ideas and order-by days (Ask → More → Gifts).
     private(set) var gifts: GiftsView?
+    /// Countdowns (slice 1): the hero and the cards, Days or Sleeps.
+    private(set) var countdowns: CountdownsView?
+    var showCountdowns = false
     /// Ask → More → Gifts.
     var showGifts = false
     /// People (V1, slice 2): one row per person in a promise either way or a birthday (Ask → More → People).
@@ -632,6 +635,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await g in core.giftsView { self?.gifts = g }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.countdownsView { self?.countdowns = c }
         })
         observers.append(Task { [weak self] in
             for await p in core.peopleView { self?.people = p }
@@ -7521,6 +7527,32 @@ final class CoreModel {
     func removeGiftIdea(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeGiftIdea(id: id) } }
 
     func setGiftSorted(_ id: String, _ sorted: Bool) { MekaHaptics.light(); run { _ = try await $0.setGiftSorted(id: id, sorted: sorted) } }
+
+    // MARK: Countdowns (slice 1)
+
+    /// Adds "Holiday 13 Feb" (the same name again updates it); only a String crosses. Reuses GiftSaid's shape.
+    func addCountdown(_ text: String) async -> GiftSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addCountdown(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return GiftSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Removes one typed here, or hides a birthday, trip or Christmas; only the key String crosses.
+    func removeCountdown(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.removeCountdown(key: key) } }
+
+    func showHiddenCountdowns() { MekaHaptics.light(); run { _ = try await $0.showHiddenCountdowns() } }
+
+    /// Makes one the one on Today ("" for none).
+    func showCountdownOnToday(_ key: String) { MekaHaptics.light(); run { _ = try await $0.showCountdownOnToday(key: key) } }
+
+    func setCountdownSleeps(_ sleeps: Bool) { MekaHaptics.light(); run { _ = try await $0.setCountdownSleeps(sleeps: sleeps) } }
 
     /// Takes back a bin one-off (slice 3): that collection goes on its usual day again; only the id String crosses.
     func removeBinMove(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBinMove(id: id) } }

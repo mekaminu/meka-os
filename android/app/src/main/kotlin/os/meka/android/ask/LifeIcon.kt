@@ -106,6 +106,11 @@ private fun DrawScope.drawLifeGlyph(tile: LifeTile, color: Color) {
             path { moveTo(w * 0.5f, w * 0.4f); quadraticTo(w * 0.26f, w * 0.12f, w * 0.34f, w * 0.38f) }
             path { moveTo(w * 0.5f, w * 0.4f); quadraticTo(w * 0.74f, w * 0.12f, w * 0.66f, w * 0.38f) }
         }
+        LifeTile.COUNTDOWNS -> {
+            // An hourglass.
+            line(0.24f, 0.12f, 0.76f, 0.12f); line(0.24f, 0.88f, 0.76f, 0.88f)
+            line(0.3f, 0.12f, 0.7f, 0.88f); line(0.7f, 0.12f, 0.3f, 0.88f)
+        }
         LifeTile.TRIPS -> {
             // A suitcase.
             box(0.12f, 0.32f, 0.76f, 0.52f, 0.08f); box(0.36f, 0.16f, 0.28f, 0.16f, 0.04f)

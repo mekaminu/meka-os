@@ -190,6 +190,7 @@ struct AskScreen: View {
         case .car: model.showCar = true
         case .money: model.showMoney = true
         case .gifts: model.showGifts = true
+        case .countdowns: model.showCountdowns = true
         case .people: model.showPeople = true
         case .trips: model.showTrips = true
         case .facts: model.showFacts = true

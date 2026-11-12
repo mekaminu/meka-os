@@ -65,6 +65,7 @@ enum class MoreItem(
     APPOINTMENTS("Appointments", "Dentist, optician, haircut · a nudge when one's due", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.APPOINTMENTS),
     LEAVE("Annual leave", "Days booked, days left and the school holidays", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.LEAVE),
     GIFTS("Gifts", "Birthdays, anniversaries and gift ideas", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.GIFTS),
+    COUNTDOWNS(os.meka.core.domain.CountdownRules.TITLE, os.meka.core.domain.CountdownRules.ROW_LINE, null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.COUNTDOWNS),
     TRIPS("Trips", "Trips and bookings, day by day", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.TRIPS),
     ERRANDS("Errands", "Things to get or do when you're at a place", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.ERRANDS),
     CAR(os.meka.core.domain.ParkingRules.TITLE, os.meka.core.domain.ParkingRules.ROW_LINE, null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.CAR),

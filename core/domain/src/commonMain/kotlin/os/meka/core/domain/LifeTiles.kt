@@ -12,7 +12,11 @@ enum class LifeTile {
 
     /** Kids' admin, slice 1: a check of the children's sizes when due, else the first child's shoe size. */
     KIDS,
-    APPOINTMENTS, LEAVE, GIFTS, TRIPS, ERRANDS,
+    APPOINTMENTS, LEAVE, GIFTS,
+
+    /** Countdowns, slice 1: the one on Today, else the soonest ("Christmas in 43 days"; lit on the day). */
+    COUNTDOWNS,
+    TRIPS, ERRANDS,
 
     /** Car and parking, slice 1: where the car is parked (the Fold), else the next of the cars' dates. */
     CAR,
@@ -68,6 +72,8 @@ data class LifeTileInputs(
     val giftsToday: String? = null,
     val giftsLit: Boolean = false,
     val giftsSummary: String? = null,
+    /** Countdowns ([CountdownsView.tileLine]); null with nothing to count down to. */
+    val countdownLine: LifeTileLine? = null,
     val tripToday: String? = null,
     val tripLit: Boolean = false,
     val tripsSummary: String? = null,
@@ -106,6 +112,7 @@ object LifeTileRules {
         LifeTile.APPOINTMENTS -> "Add the dentist and others"
         LifeTile.LEAVE -> "Add your leave"
         LifeTile.GIFTS -> "Add a birthday"
+        LifeTile.COUNTDOWNS -> "Add a countdown"
         LifeTile.TRIPS -> "No trips planned"
         LifeTile.ERRANDS -> "No errands waiting"
         LifeTile.CAR -> "Add your car's dates"
@@ -127,7 +134,7 @@ object LifeTileRules {
      * Tiles whose empty prompt asks him to set something up (Ask polish, slice 1, Meka 2026-10-12 20:53). Lists, People,
      * Trips and Errands say "nothing yet" when empty — that's a live state, so they stay in the grid.
      */
-    val SET_UP_TILES: Set<LifeTile> = ORDER.toSet() - setOf(LifeTile.LISTS, LifeTile.PEOPLE, LifeTile.TRIPS, LifeTile.ERRANDS)
+    val SET_UP_TILES: Set<LifeTile> = ORDER.toSet() - setOf(LifeTile.LISTS, LifeTile.PEOPLE, LifeTile.TRIPS, LifeTile.ERRANDS, LifeTile.COUNTDOWNS)
 
     /** The grid's tiles: lit ones first, then the rest with something in them; set-up tiles are left out. */
     fun live(lines: LifeLines): List<LifeTile> = ordered(lines).filter { !lines.needsSetUp(it) }
@@ -246,6 +253,7 @@ object LifeTileRules {
         put(LifeTile.LEAVE, i.leaveSummary?.let { if (it.endsWith(" left")) capitalise(it.substringAfterLast(" · ")) else it })
         if (i.giftsToday != null) put(LifeTile.GIFTS, i.giftsToday, lit = i.giftsLit)
         else put(LifeTile.GIFTS, i.giftsSummary?.removePrefix("Next: "))
+        i.countdownLine?.let { put(LifeTile.COUNTDOWNS, it.text, lit = it.lit) }
         if (i.tripToday != null) put(LifeTile.TRIPS, i.tripToday, lit = i.tripLit) else put(LifeTile.TRIPS, i.tripsSummary)
         put(LifeTile.ERRANDS, i.errandsSummary)
         i.carLine?.let { put(LifeTile.CAR, it.text, lit = it.lit) }

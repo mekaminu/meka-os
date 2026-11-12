@@ -171,6 +171,10 @@ object EntityTypes {
     const val ROUTINE = "routine"
     /** Obi on calls, slice 2a (2026-11-07): one call card for a booking Obi rings a business about (see [BookingCalls]). */
     const val BOOKING_CALL = "booking_call"
+    /** Countdowns, slice 1 (2026-11-12): one countdown typed in Countdowns, "Holiday 13 Feb" (see [Countdowns]). */
+    const val COUNTDOWN = "countdown"
+    /** Countdowns, slice 1 (2026-11-12): the one on Today, Days or Sleeps and the hidden automatic ones (one entity). */
+    const val COUNTDOWN_SETTING = "countdown_setting"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -183,7 +187,7 @@ object EntityTypes {
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
         TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM, TRIP_TEMPLATE,
-        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB, ROUTINE, BOOKING_CALL,
+        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB, ROUTINE, BOOKING_CALL, COUNTDOWN, COUNTDOWN_SETTING,
     )
 }
 
@@ -634,6 +638,10 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.BOOKING_CALL -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
+        // Countdowns: one removed on any device is gone for good; the rest and the setting, the latest edit wins.
+        entityType == EntityTypes.COUNTDOWN && field == CountdownFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.COUNTDOWN -> MergePolicy.Lww
+        entityType == EntityTypes.COUNTDOWN_SETTING -> MergePolicy.Lww
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins
         field in userVisible -> MergePolicy.UserVisible
         else -> MergePolicy.Lww

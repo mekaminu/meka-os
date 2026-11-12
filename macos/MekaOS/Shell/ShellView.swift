@@ -494,6 +494,8 @@ private struct ShellSheetsC: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showMoney }, set: { model.showMoney = $0 })) { MoneySheet(palette: palette) }
             // Gifts (Ask → More): birthdays and anniversaries, gift ideas and the order-by days.
             .sheet(isPresented: Binding(get: { model.showGifts }, set: { model.showGifts = $0 })) { GiftsSheet(palette: palette) }
+            // Countdowns (Ask → Life): days or sleeps to holidays, birthdays and Christmas.
+            .sheet(isPresented: Binding(get: { model.showCountdowns }, set: { model.showCountdowns = $0 })) { CountdownsSheet(palette: palette) }
             // People (Ask → More): promises both ways, birthdays and last contact, by person.
             .sheet(isPresented: Binding(get: { model.showPeople }, set: { model.showPeople = $0 })) { PeopleSheet(palette: palette) }
             // Trips (Ask → More): trips and their bookings, day by day.

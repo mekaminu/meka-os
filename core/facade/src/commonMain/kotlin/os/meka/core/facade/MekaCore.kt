@@ -197,6 +197,8 @@ class MekaCore(
     private val schoolTerms = os.meka.core.domain.SchoolTermsStore(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    /** Countdowns, slice 1 (2026-11-12): the countdowns typed, and which one shows on Today. */
+    private val countdowns = os.meka.core.domain.Countdowns(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     /** Trip lists, slice 1 (2026-10-26): To buy, To pack and Before we leave on each trip. */
     private val tripLists = os.meka.core.domain.TripLists(replica, ids::next, nowMs, shopping)
@@ -644,6 +646,14 @@ class MekaCore(
      * and the order-by day; a heads-up two weeks ahead and on the order-by day, Today's line and the week ahead.
      */
     val giftsView: StateFlow<os.meka.core.domain.GiftsView> = _gifts.asStateFlow()
+
+    private val _countdowns = MutableStateFlow(os.meka.core.domain.CountdownsView.EMPTY)
+
+    /**
+     * Countdowns (V1, slice 1; Ask → Life → Countdowns): the days or sleeps to what he typed ("Holiday 13 Feb"), the
+     * birthdays and anniversaries in Gifts, the trips ahead and Christmas; the one on Today leads, else the soonest.
+     */
+    val countdownsView: StateFlow<os.meka.core.domain.CountdownsView> = _countdowns.asStateFlow()
 
     private val _people = MutableStateFlow(os.meka.core.domain.PeopleView.EMPTY)
 
@@ -6350,6 +6360,26 @@ class MekaCore(
 
     /** Marks the gift for its next occurrence sorted (the reminders stop) or not. */
     suspend fun setGiftSorted(id: String, sorted: Boolean): Boolean = onCore { gifts.setSorted(id, sorted) }
+
+    // ---- Countdowns (V1, slice 1; Ask → Life → Countdowns) ----
+
+    /**
+     * Adds one typed countdown ("Holiday 13 Feb", "Pancake day 17 Feb every year"; [os.meka.core.domain.CountdownRules.read]);
+     * the same name again updates it. Refused (nothing written) without a date, a name, or for a date gone by.
+     */
+    suspend fun addCountdown(text: String): os.meka.core.domain.CountdownAdded = onCore { countdowns.add(text) }
+
+    /** Removes a typed countdown for good, or hides a birthday, trip or Christmas ([os.meka.core.domain.CountdownRow.key]). */
+    suspend fun removeCountdown(key: String): Boolean = onCore { countdowns.remove(key) }
+
+    /** Brings back every birthday, trip or Christmas that was hidden. */
+    suspend fun showHiddenCountdowns(): Boolean = onCore { countdowns.showHidden() }
+
+    /** Makes one countdown the one on Today ("" for none: the soonest leads). */
+    suspend fun showCountdownOnToday(key: String): Boolean = onCore { countdowns.pin(key) }
+
+    /** Counts in sleeps (the children's way) or days, on both apps. */
+    suspend fun setCountdownSleeps(sleeps: Boolean): Boolean = onCore { countdowns.setSleeps(sleeps) }
 
     /**
      * Bin days, slice 3: takes back a one-off ("Black bin Sat 2 Jan instead of 29 Dec", typed through [addBin]), so
@@ -14534,6 +14564,12 @@ class MekaCore(
         _gifts.value = timed("Gifts") { viewMemo.keep("Gifts", listOf(occasionItems, todayDay)) {
             os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         } }
+        // Countdowns, slice 1: what he typed, the birthdays, the trips ahead and Christmas.
+        val countdownItems = countdowns.items()
+        val countdownSettings = countdowns.settings()
+        _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, todayDay)) {
+            os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay)
+        } }
         val docItems = documents.items()
         _trips.value = timed("Trips") { viewMemo.keep("Trips", listOf(tripItems, todayDay, docItems, timeZone())) {
             os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
@@ -14602,7 +14638,7 @@ class MekaCore(
         val lifeViews = listOf(
             _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
             _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
-            _people.value, _kids.value, _cars.value, _parkingTimers.value,
+            _people.value, _kids.value, _cars.value, _parkingTimers.value, _countdowns.value,
         )
         val lifeAccounts = money.accounts()
         val lifeCards = money.cards()
@@ -14616,6 +14652,8 @@ class MekaCore(
             ).copy(
                 // Kids' admin, slice 1: a due size check (lit), else the first child's shoe size.
                 kidsLine = _kids.value.tile,
+                // Countdowns, slice 1: the one on Today, else the soonest.
+                countdownLine = _countdowns.value.tileLine,
                 // Money manager, slice 1: the accounts and the last import, never an amount.
                 moneyLine = os.meka.core.domain.MoneyRules.tile(lifeAccounts, ZoneCalendar(timeZone), lifeCards, todayDay),
                 // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).

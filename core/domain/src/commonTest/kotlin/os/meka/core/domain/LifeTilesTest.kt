@@ -109,7 +109,7 @@ class LifeTilesTest {
     @Test
     fun tilesArriveARowAtATime() {
         assertEquals(listOf(3, 3, 4, 4, 5), (0..4).map { LifeTileRules.step(3, it) })
-        assertEquals(17, LifeTileRules.ORDER.size) // Car and parking, slice 1: the Car tile; Kids' admin, slice 1: the Kids tile; Money manager, slice 1: Money
+        assertEquals(18, LifeTileRules.ORDER.size) // Countdowns, slice 1: the Countdowns tile; Car and parking, slice 1: the Car tile; Kids' admin, slice 1: the Kids tile; Money manager, slice 1: Money
         assertEquals(LifeTile.LISTS, LifeTileRules.ORDER.first())
     }
 

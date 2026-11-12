@@ -30,6 +30,7 @@ enum class HelpPlace(val key: String) {
     APPOINTMENTS("appointments"),
     LEAVE("leave"),
     GIFTS("gifts"),
+    COUNTDOWNS("countdowns"),
     TRIPS("trips"),
     ERRANDS("errands"),
     CAR("car"),
