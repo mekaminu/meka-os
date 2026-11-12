@@ -7608,6 +7608,17 @@ final class CoreModel {
         }
     }
 
+    /// Spending plans, slice 3: drops his typed rate so the plan uses today's looked-up one.
+    func useSpendPlanTodaysRate(_ id: String) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.useSpendPlanTodaysRate(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Count in my forecast on or off for the plan (only Strings and a Bool cross).
     func setSpendPlanCounted(_ id: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setSpendPlanCounted(id: id, on: on) } }
 

@@ -6424,7 +6424,12 @@ class MekaCore(
     suspend fun setSpendPlanCounted(id: String, on: Boolean): Boolean = onCore { spendPlans.setCounted(id, on).also { if (it) refreshMoney() } }
 
     /** His rate for a plan in another currency: how many to £1 ("2,000"). */
-    suspend fun setSpendPlanRate(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setRate(id, text) }
+    suspend fun setSpendPlanRate(id: String, text: String): os.meka.core.domain.SpendSaid =
+        onCore { spendPlans.setRate(id, text).also { if (!it.refused) refreshMoney() } }
+
+    /** Spending plans, slice 3: drops his typed rate so the plan uses today's looked-up one. */
+    suspend fun useSpendPlanTodaysRate(id: String): os.meka.core.domain.SpendSaid =
+        onCore { spendPlans.useTodaysRate(id).also { if (!it.refused) refreshMoney() } }
 
     /** Adds a person or thing (blank [amountText] on a plan in another currency = the same for everyone); [month] year × 12 + month − 1, 0 for the plan's. */
     suspend fun addSpendThing(planId: String, name: String, note: String, amountText: String, month: Int): os.meka.core.domain.SpendSaid =

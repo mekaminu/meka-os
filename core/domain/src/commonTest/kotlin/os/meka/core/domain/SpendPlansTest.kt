@@ -122,9 +122,10 @@ class SpendPlansTest {
         assertFalse(pFold.setEach(id, "50,000").refused)
         var p = view().plan(id)!!
         assertEquals("₦250,000", p.total)
-        assertEquals("Type today's rate to see it in pounds", p.spentLine)
+        assertEquals(SpendPlanRules.NO_RATE, p.spentLine)
         assertTrue(p.afford.isEmpty())
-        assertEquals("₦50,000 each · type today's rate to see it in pounds", p.foreign!!.rateLine)
+        assertEquals("₦50,000 each · type a rate to see it in pounds", p.foreign!!.rateLine)
+        assertEquals(SpendPlanRules.TODAY_NONE, p.foreign!!.todayLine)
         assertTrue(pFold.setRate(id, "nonsense").refused)
         assertEquals("₦2,000 to £1", pFold.setRate(id, "2,000").line)
         p = view().plan(id)!!
@@ -217,5 +218,53 @@ class SpendPlansTest {
         assertEquals(emptyMap(), SpendPlanRules.forecastPlans(pFold.plans(), pFold.things(), thu).single().byMonth)
         pFold.setRate(id, "2,000")
         assertEquals(mapOf(nov to 2_500L), SpendPlanRules.forecastPlans(pFold.plans(), pFold.things(), thu).single().byMonth)
+    }
+
+    /** What the server writes once it has looked up today's rate (slice 3). */
+    private fun lookedUp(id: String, milli: Long, day: Long, code: String = "NGN") = fold.replica.commitLocal(EntityTypes.SPEND_PLAN, id, mapOf(
+        SpendPlanFields.DAY_RATE to os.meka.core.sync.FieldValue.Int64(milli),
+        SpendPlanFields.DAY_RATE_DAY to os.meka.core.sync.FieldValue.Int64(day),
+        SpendPlanFields.DAY_RATE_CODE to os.meka.core.sync.FieldValue.Text(code),
+    ))
+
+    @Test
+    fun todaysRateIsUsedUntilHeTypesHisOwnAndHeCanGoBackToIt() {
+        val id = pFold.add("Money home", "NGN").id!!
+        pFold.setEach(id, "50,000")
+        listOf("Mum", "Aunty").forEach { pFold.addThing(id, it, "", "", nov) }
+        // A rate looked up for another currency is never used.
+        lookedUp(id, 1_600_000, thu, code = "GHS")
+        assertEquals(SpendPlanRules.NO_RATE, view().plan(id)!!.spentLine)
+        lookedUp(id, 2_000_000, thu)
+        var p = view().plan(id)!!
+        assertEquals("£50", p.total)
+        assertEquals("₦50,000 ≈ £25 each · today's rate, ₦2,000 to £1", p.foreign!!.rateLine)
+        assertEquals("Today's rate · ₦2,000 to £1, 12 Nov", p.foreign!!.todayLine)
+        assertTrue(p.foreign!!.onToday)
+        assertFalse(p.foreign!!.canUseToday)
+        assertEquals("", p.foreign!!.rateText)
+        // It reaches the Mac through sync, and Count in my forecast prices it.
+        pFold.setCounted(id, true)
+        sync()
+        assertEquals("£50", view(pMac).plan(id)!!.total)
+        assertEquals(mapOf(nov to 5_000L), SpendPlanRules.forecastPlans(pMac.plans(), pMac.things(), thu).single().byMonth)
+        // His own rate wins; Use today's rate (or a blank rate) goes back.
+        pFold.setRate(id, "2,500")
+        p = view().plan(id)!!
+        assertEquals("£40", p.total)
+        assertEquals("₦50,000 ≈ £20 each · your rate, ₦2,500 to £1", p.foreign!!.rateLine)
+        assertTrue(p.foreign!!.canUseToday)
+        assertEquals("Using today's rate, ₦2,000 to £1", pFold.useTodaysRate(id).line)
+        assertEquals("£50", view().plan(id)!!.total)
+        pFold.setRate(id, "2,500")
+        assertFalse(pFold.setRate(id, " ").refused)
+        assertTrue(view().plan(id)!!.foreign!!.onToday)
+        // A rate days old is called by its day; an unbelievable one is ignored.
+        lookedUp(id, 2_000_000, thu - 5)
+        assertEquals("₦50,000 ≈ £25 each · rate from 7 Nov, ₦2,000 to £1", view().plan(id)!!.foreign!!.rateLine)
+        lookedUp(id, SpendPlanRules.MAX_RATE_MILLI + 1, thu)
+        assertEquals(SpendPlanRules.NO_RATE, view().plan(id)!!.spentLine)
+        // A pound plan has no rate to go back to.
+        assertTrue(pFold.useTodaysRate(pFold.add("Gifts", "GBP").id!!).refused)
     }
 }

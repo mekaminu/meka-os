@@ -294,15 +294,31 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
         MoneyDetailSheet(sheet as? SpendSheet.Rate, title = { SpendPlanRules.RATE_SHEET }, tag = "spend-rate-sheet", done = SpendPlanRules.DONE,
             onClose = { sheet = null }) { s ->
             var text by rememberSaveable(s) { mutableStateOf(s.start) }
-            Text("How many to £1, from your bank or a rate you trust.", style = MekaType.caption, color = Meka.colors.textSecondary)
-            Field("2,000", value = text, onValue = { text = it }, description = "How many to one pound", keep = true) { }
-            GoldPill("Save rate", "spend-rate-save") {
-                scope.launch {
-                    val r = runCatching { core.setSpendPlanRate(s.planId, text) }.getOrNull()
-                    say(r)
-                    if (r != null && !r.refused) sheet = null
+            // Slice 3: today's looked-up rate first, his own below it (his wins while it's typed).
+            val f = v.plan(s.planId)?.foreign
+            Text(f?.todayLine ?: SpendPlanRules.TODAY_NONE, style = MekaType.body, color = Meka.colors.textPrimary,
+                modifier = Modifier.testTag("spend-rate-today"))
+            Text(SpendPlanRules.RATE_HELP, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Field("2,000", value = text, onValue = { text = it }, description = "Your own rate, how many to one pound", keep = true) { }
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalAlignment = Alignment.CenterVertically) {
+                GoldPill("Save rate", "spend-rate-save") {
+                    scope.launch {
+                        val r = runCatching { core.setSpendPlanRate(s.planId, text) }.getOrNull()
+                        say(r)
+                        if (r != null && !r.refused) sheet = null
+                    }
                 }
+                if (f?.canUseToday == true) Text(SpendPlanRules.USE_TODAY, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                        haptics.tick()
+                        scope.launch {
+                            val r = runCatching { core.useSpendPlanTodaysRate(s.planId) }.getOrNull()
+                            say(r)
+                            if (r != null && !r.refused) sheet = null
+                        }
+                    }.minTouch().testTag("spend-rate-today-use"))
             }
+            Text(SpendPlanRules.RATE_SOURCE, style = MekaType.caption, color = Meka.colors.textTertiary)
             SpendSaidLine(asMoney(said))
         }
     }
@@ -364,7 +380,7 @@ private fun AffordCard(plan: SpendPlanDetail, months: Int, modifier: Modifier, o
         Text(SpendPlanRules.AFFORD_HEAD, style = MekaType.body, color = Meka.colors.textPrimary)
         val a = plan.afford.firstOrNull { it.months == months } ?: plan.afford.firstOrNull()
         if (a == null) {
-            Text(plan.affordNote ?: "Type today's rate to see it in pounds.", style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(plan.affordNote ?: SpendPlanRules.NO_RATE + ".", style = MekaType.caption, color = Meka.colors.textSecondary)
         } else {
             a.rows.forEach { r ->
                 Row(Modifier.fillMaxWidth().padding(top = if (r.ruled) MekaSpace.xxs else 0.dp)) {

@@ -193,7 +193,7 @@ struct SpendPlansSheet: View {
                     ForEach(plan.afford, id: \.months) { s in pill(s.label, on: s.months == a.months) { months = s.months } }
                 }
             } else {
-                Text(plan.affordNote ?? "Type today's rate to see it in pounds.").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(plan.affordNote ?? SpendPlanRules.shared.NO_RATE + ".").font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if plan.foreign == nil {
@@ -254,12 +254,26 @@ struct SpendPlansSheet: View {
                 .popover(isPresented: $rateOpen, arrowEdge: .trailing) {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         Text(SpendPlanRules.shared.RATE_SHEET).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                        Text("How many to £1, from your bank or a rate you trust.").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        // Slice 3: today's looked-up rate first, his own below it (his wins while it's typed).
+                        Text(f.todayLine).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(SpendPlanRules.shared.RATE_HELP).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         TextField("2,000", text: $rateText).textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Your own rate, how many to one pound")
+                        Text(SpendPlanRules.shared.RATE_SOURCE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         saidLine()
                         HStack {
                             Button(SpendPlanRules.shared.DONE) { rateOpen = false }
                             Spacer()
+                            if f.canUseToday {
+                                Button(SpendPlanRules.shared.USE_TODAY) {
+                                    let id = plan.id
+                                    Task {
+                                        said = await model.useSpendPlanTodaysRate(id)
+                                        if let s = said, !s.refused { rateOpen = false }
+                                    }
+                                }
+                            }
                             Button("Save rate") {
                                 let text = rateText
                                 let id = plan.id

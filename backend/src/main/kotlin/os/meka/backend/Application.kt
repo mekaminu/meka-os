@@ -1464,6 +1464,14 @@ fun main(args: Array<String>) {
                     rate = os.meka.backend.integrations.EcbDollarRate.network(),
                 ))
             }
+            // Spending plans, slice 3: today's rate for plans in another currency (a free public rate service, nothing sent).
+            if (System.getenv("MEKA_SPEND_RATES") != "off") {
+                val devices = PostgresDeviceRegistry(ds)
+                startSpendPlanRates(SpendPlanRates(
+                    opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
+                    rates = os.meka.backend.integrations.OpenPoundRates.network(), onWritten = { hh -> push?.serverChanged(hh) },
+                ))
+            }
             val verifier = RequestVerifier()
             // his wife's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
             // and the dinners, written as server ops, and the emergency card, read only. FamilyShare only ever asks for its

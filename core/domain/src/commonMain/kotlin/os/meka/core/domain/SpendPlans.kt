@@ -13,7 +13,8 @@ import os.meka.core.sync.fv
  * bank feed and statements), what's left over, minus what's still to buy on this plan, this month or spread over two or
  * three months: "Fits · £x left" or "£x short · spread it or trim it". Three month tiles show each month's still-to-buy
  * total against what's left. A plan in another currency has a "Same for everyone" amount (₦50,000 each) with a stepper
- * and the pound figure at the rate he types (the daily rate lookup is a later slice).
+ * and the pound figure at today's rate (slice 3: looked up once a day on the server from a free public rate service,
+ * nothing about him sent; written onto the plan as [SpendPlanFields.DAY_RATE]), or at the rate he types, which wins.
  *
  * **A calculator only** (hard rule): Navilife never sends or moves money, and nothing here is an instruction to pay.
  * Plain, non-AI rules; nothing is sent anywhere. Synced entities `spend_plan` and `spend_plan_item` (ADR-008 addendum
@@ -32,6 +33,12 @@ object SpendPlanFields {
     const val RATE = "rateMilli"
     /** Count in my forecast: what's still to buy comes off Money's forecast in the month he'll buy it (absent = off). */
     const val COUNTED = "counted"
+    /** Slice 3, written by the server: today's rate for [DAY_RATE_CODE], units to £1 × 1,000; absent = not looked up. */
+    const val DAY_RATE = "dayRateMilli"
+    /** The epoch day today's rate is for. */
+    const val DAY_RATE_DAY = "dayRateDay"
+    /** The currency today's rate was looked up for (used only while it's still the plan's currency). */
+    const val DAY_RATE_CODE = "dayRateCode"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
 }
@@ -58,8 +65,14 @@ data class SpendCurrency(val code: String, val symbol: String, val name: String,
 data class SpendPlanItem(
     val id: String, val name: String, val byDay: Long, val currency: String, val eachMinor: Long, val rateMilli: Long,
     val addedAtMs: Long, val counted: Boolean = false,
+    /** Today's rate as the server looked it up (0 = none yet) and the day it's for (-1 = none). */
+    val dayRateMilli: Long = 0L, val dayRateDay: Long = -1L,
 ) {
     val foreign: Boolean get() = currency != SpendPlanRules.GBP
+    /** His typed rate when he has one, else today's; 0 when neither. */
+    val rateInUse: Long get() = if (rateMilli > 0) rateMilli else dayRateMilli
+    /** Using the looked-up rate (he hasn't typed his own). */
+    val onTodaysRate: Boolean get() = rateMilli <= 0 && dayRateMilli > 0
 }
 
 data class SpendThing(
@@ -96,8 +109,15 @@ data class SpendRow(
     val month: Int, val amountText: String, val noteText: String,
 )
 
-/** A plan in another currency: [each] "₦50,000", [rateLine] "₦50,000 ≈ £25 each · your rate, ₦2,000 to £1". */
-data class SpendForeign(val code: String, val symbol: String, val each: String, val rateLine: String, val rateSet: Boolean, val rateText: String)
+/**
+ * A plan in another currency: [each] "₦50,000", [rateLine] "₦50,000 ≈ £25 each · today's rate, ₦2,000 to £1" (or "your
+ * rate"). Slice 3: [todayLine] for the rate sheet ("Today's rate · ₦2,050 to £1, 12 Nov", or that it's looked up once
+ * a day), [canUseToday] when he has typed his own and a looked-up one is there to go back to.
+ */
+data class SpendForeign(
+    val code: String, val symbol: String, val each: String, val rateLine: String, val rateSet: Boolean, val rateText: String,
+    val todayLine: String = SpendPlanRules.TODAY_NONE, val canUseToday: Boolean = false, val onToday: Boolean = false,
+)
 
 /**
  * One plan in full: the THIS PLAN card ([total], [totalSub] "₦600,000 · 12 people" or "6 things", [by] "needed by 20
@@ -173,7 +193,17 @@ object SpendPlanRules {
     const val COUNT_LABEL = "Count in my forecast"
     const val COUNT_OFF = "Off · Money's forecast leaves this plan out"
     const val COUNT_ON = "On · what's still to buy comes off Money's forecast in the month you'll buy it"
-    const val COUNT_UNPRICED = "On · type today's rate and it comes off Money's forecast"
+    const val COUNT_UNPRICED = "On · once there's a rate it comes off Money's forecast"
+    /** Slice 3: the rate sheet. */
+    const val RATE_HELP = "Today's rate is looked up once a day. Type your own, from your bank or a transfer service, to use it instead."
+    const val TODAY_NONE = "Today's rate · looked up within the hour, or type your own"
+    const val USE_TODAY = "Use today's rate"
+    const val RATE_SOURCE = "Rates by Exchange Rate API"
+    const val NO_RATE = "Type a rate to see it in pounds"
+    /** A looked-up rate older than this many days is called by its day ("rate from 3 Nov"). */
+    const val STALE_DAYS = 3
+    /** The highest rate believed (a million to £1). */
+    const val MAX_RATE_MILLI = 1_000_000_000L
 
     val CURRENCIES: List<SpendCurrency> = listOf(
         SpendCurrency(GBP, "£", "Pounds", 5),
@@ -235,11 +265,18 @@ object SpendPlanRules {
     /** The plan's amount for [t] in hundredths of its currency. */
     fun minorOf(t: SpendThing, p: SpendPlanItem): Long = if (t.sameForEveryone) p.eachMinor else t.amountMinor
 
-    /** In pence: the amount itself for a pound plan, else at his rate; null for another currency without a rate. */
+    /** In pence: the amount itself for a pound plan, else at his rate or today's; null for another currency without one. */
     fun penceOf(minor: Long, p: SpendPlanItem): Long? = when {
         !p.foreign -> minor
-        p.rateMilli <= 0 -> null
-        else -> (minor * 1_000 + p.rateMilli / 2) / p.rateMilli
+        p.rateInUse <= 0 -> null
+        else -> (minor * 1_000 + p.rateInUse / 2) / p.rateInUse
+    }
+
+    /** "today's rate" / "rate from 3 Nov" (looked up), or "your rate" (typed). */
+    private fun rateWho(p: SpendPlanItem, today: Long): String = when {
+        !p.onTodaysRate -> "your rate"
+        p.dayRateDay < 0 || today - p.dayRateDay <= STALE_DAYS -> "today's rate"
+        else -> "rate from ${dayLabel(p.dayRateDay)}"
     }
 
     fun monthKey(day: Long): Int = CivilDate.fromEpochDay(day).let { it.year * 12 + it.month - 1 }
@@ -260,8 +297,16 @@ object SpendPlanRules {
             (s.f(SpendPlanFields.RATE).longOrNull ?: 0L).coerceAtLeast(0L),
             s.f(SpendPlanFields.ADDED_AT).longOrNull ?: 0L,
             s.f(SpendPlanFields.COUNTED).boolOrNull ?: false,
+            dayRate(s), s.f(SpendPlanFields.DAY_RATE_DAY).longOrNull ?: -1L,
         )
     }.sortedWith(compareBy<SpendPlanItem> { it.addedAtMs }.thenBy { it.id })
+
+    /** Today's rate, only while it was looked up for the plan's own currency and is believable. */
+    private fun dayRate(s: Map<String, FieldValue>): Long {
+        val code = currency(s.f(SpendPlanFields.CURRENCY).textOrNull ?: GBP).code
+        if (code == GBP || s.f(SpendPlanFields.DAY_RATE_CODE).textOrNull != code) return 0L
+        return (s.f(SpendPlanFields.DAY_RATE).longOrNull ?: 0L).takeIf { it in 1..MAX_RATE_MILLI } ?: 0L
+    }
 
     fun things(entities: Map<String, Map<String, FieldValue>>): List<SpendThing> = entities.mapNotNull { (id, s) ->
         if (s.f(SpendItemFields.DELETED).boolOrNull == true) return@mapNotNull null
@@ -329,7 +374,7 @@ object SpendPlanRules {
         val count = "${things.size} ${if (things.size == 1) one else noun}"
         val totalMinor = things.sumOf { minorOf(it, p) }
         val totalSub = if (p.foreign) "${local(totalMinor, p.currency)} · $count" else count
-        val spentLine = if (!priced) "Type today's rate to see it in pounds"
+        val spentLine = if (!priced) NO_RATE
             else "${pounds(spent)} ${if (sent) "sent" else "bought"} · ${pounds(toGo)} to go"
         val left = money?.let { it.inPence - it.outPence }
         val affords = if (money == null || !priced) emptyList() else (1..3).map { afford(left!!, money, toGo, it, sent) }
@@ -354,10 +399,15 @@ object SpendPlanRules {
             val eachPence = penceOf(p.eachMinor, p)
             val rateLine = when {
                 p.eachMinor <= 0 -> "Set an amount for everyone, or give each their own"
-                eachPence == null -> "${local(p.eachMinor, p.currency)} each · type today's rate to see it in pounds"
-                else -> "${local(p.eachMinor, p.currency)} ≈ ${pounds(eachPence)} each · your rate, ${c.symbol}${rateText(p.rateMilli)} to £1"
+                eachPence == null -> "${local(p.eachMinor, p.currency)} each · type a rate to see it in pounds"
+                else -> "${local(p.eachMinor, p.currency)} ≈ ${pounds(eachPence)} each · ${rateWho(p, today)}, ${c.symbol}${rateText(p.rateInUse)} to £1"
             }
-            SpendForeign(c.code, c.symbol, local(p.eachMinor, p.currency), rateLine, p.rateMilli > 0, rateText(p.rateMilli))
+            val todayLine = if (p.dayRateMilli <= 0) TODAY_NONE
+                else "Today's rate · ${c.symbol}${rateText(p.dayRateMilli)} to £1" + (p.dayRateDay.takeIf { it >= 0 }?.let { ", ${dayLabel(it)}" } ?: "")
+            SpendForeign(
+                c.code, c.symbol, local(p.eachMinor, p.currency), rateLine, p.rateInUse > 0, rateText(p.rateMilli),
+                todayLine, canUseToday = p.rateMilli > 0 && p.dayRateMilli > 0, onToday = p.onTodaysRate,
+            )
         }
         val rows = things.map { t ->
             val minor = minorOf(t, p)
@@ -516,9 +566,23 @@ class SpendPlans(
     fun setRate(id: String, text: String): SpendSaid {
         val p = plan(id) ?: return SpendSaid(SpendPlanRules.GONE, refused = true)
         if (!p.foreign) return SpendSaid(SpendPlanRules.GONE, refused = true)
-        val milli = SpendPlanRules.rate(text) ?: return SpendSaid(SpendPlanRules.BAD_RATE, refused = true)
+        // Slice 3: a blank rate goes back to today's looked-up one.
+        if (text.isBlank()) return useTodaysRate(id)
+        val milli = SpendPlanRules.rate(text)?.takeIf { it <= SpendPlanRules.MAX_RATE_MILLI } ?: return SpendSaid(SpendPlanRules.BAD_RATE, refused = true)
         replica.commitLocal(EntityTypes.SPEND_PLAN, id, mapOf(SpendPlanFields.RATE to milli.fv()))
         return SpendSaid("${SpendPlanRules.currency(p.currency).symbol}${SpendPlanRules.rateText(milli)} to £1", refused = false)
+    }
+
+    /** Slice 3: drops his typed rate so the plan uses today's looked-up one. */
+    fun useTodaysRate(id: String): SpendSaid {
+        val p = plan(id) ?: return SpendSaid(SpendPlanRules.GONE, refused = true)
+        if (!p.foreign) return SpendSaid(SpendPlanRules.GONE, refused = true)
+        if (p.rateMilli > 0) replica.commitLocal(EntityTypes.SPEND_PLAN, id, mapOf(SpendPlanFields.RATE to 0L.fv()))
+        val c = SpendPlanRules.currency(p.currency)
+        return SpendSaid(
+            if (p.dayRateMilli > 0) "Using today's rate, ${c.symbol}${SpendPlanRules.rateText(p.dayRateMilli)} to £1"
+            else "Today's rate is used once it's looked up", refused = false,
+        )
     }
 
     /**

@@ -114,4 +114,19 @@ class SpendPlansFacadeTest {
         assertTrue(fold.setSpendPlanCounted(id, false))
         assertEquals(null, fold.moneyView.value.forecast!!.plansLine)
     }
+
+    @Test
+    fun hisOwnRateCanBeDroppedForTodaysOne() = runTest {
+        val fold = core("android")
+        val id = fold.addSpendPlan("Money home", "NGN").id!!
+        fold.setSpendPlanEach(id, "50,000")
+        fold.addSpendThing(id, "Mum", "", "", 0)
+        assertFalse(fold.setSpendPlanRate(id, "2,000").refused)
+        assertEquals("£25", fold.spendPlansView.value.plan(id)!!.total)
+        // Nothing looked up yet: back to no rate, and he's told it comes once it's looked up.
+        assertEquals("Today's rate is used once it's looked up", fold.useSpendPlanTodaysRate(id).line)
+        val p = fold.spendPlansView.value.plan(id)!!
+        assertEquals(SpendPlanRules.NO_RATE, p.spentLine)
+        assertFalse(p.foreign!!.rateSet)
+    }
 }
