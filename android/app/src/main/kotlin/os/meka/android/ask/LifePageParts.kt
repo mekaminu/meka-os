@@ -30,6 +30,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -123,11 +126,15 @@ internal fun LifeNumberTiles(tiles: List<PageTile>, modifier: Modifier = Modifie
             Column(
                 Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
                     .semantics(mergeDescendants = true) {}
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    .padding(MekaSpace.xs),
             ) {
-                Text(t.number, style = MekaType.metaStrong, color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(t.label, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // One line, whole ("Not parked", "Level 3 · Row F"), stepping down on the closed Fold's narrow tiles.
+                BasicText(
+                    t.number, style = MekaType.metaStrong.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary),
+                    maxLines = 1, softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.metaStrong.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
+                )
+                Text(t.label, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
     }

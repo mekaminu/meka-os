@@ -176,7 +176,7 @@ object CarPageRules {
         val dateTile = dateTile(cars, dates, today)
         val cheapest = fuel.blocks.flatMap { b -> b.rows.filter { it.cheapest }.map { b to it } }.firstOrNull()
         val fuelTile = cheapest?.let { (b, r) -> PageTile(r.price, "cheapest ${b.fuel.short} near", false) }
-            ?: PageTile("Fuel", "prices near you below", false)
+            ?: PageTile("Fuel", "prices below", false)
         val parkTile = timerTile(timers, many) ?: when {
             parked.size > 1 -> PageTile("${parked.size} cars", "parked", false)
             parked.size == 1 -> parked.first().let { p ->
