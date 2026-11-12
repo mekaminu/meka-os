@@ -199,6 +199,8 @@ class MekaCore(
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     /** Countdowns, slice 1 (2026-11-12): the countdowns typed, and which one shows on Today. */
     private val countdowns = os.meka.core.domain.Countdowns(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    /** Spending plans, slice 1 (2026-11-12): plans under Money → Plan, a calculator only. */
+    private val spendPlans = os.meka.core.domain.SpendPlans(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     /** Trip lists, slice 1 (2026-10-26): To buy, To pack and Before we leave on each trip. */
     private val tripLists = os.meka.core.domain.TripLists(replica, ids::next, nowMs, shopping)
@@ -655,6 +657,22 @@ class MekaCore(
      */
     val countdownsView: StateFlow<os.meka.core.domain.CountdownsView> = _countdowns.asStateFlow()
 
+    private val _spendPlans = MutableStateFlow(os.meka.core.domain.SpendPlansView.EMPTY)
+
+    /**
+     * Spending plans (V1, slice 1; Money → Plan → Spending plans): each plan's people or things added up, bought or sent,
+     * and Can I afford it? from Money's average month while Money is open (none while it's locked). A calculator only.
+     */
+    val spendPlansView: StateFlow<os.meka.core.domain.SpendPlansView> = _spendPlans.asStateFlow()
+
+    /** Works the plans out again: Money's average month only while Money is open, behind his fingerprint. */
+    private fun publishSpendPlans() {
+        val f = if (moneyOpen && !_money.value.locked) (moneyLast.value ?: _money.value).forecast else null
+        _spendPlans.value = os.meka.core.domain.SpendPlanRules.view(
+            spendPlans.plans(), spendPlans.things(), os.meka.core.domain.SpendPlanRules.money(f), ZoneCalendar(timeZone).epochDayOf(nowMs()),
+        )
+    }
+
     private val _people = MutableStateFlow(os.meka.core.domain.PeopleView.EMPTY)
 
     /**
@@ -850,7 +868,7 @@ class MekaCore(
     internal fun launchOnCoreForTest(block: suspend () -> Unit) { scope.launch { block() } }
 
     /** Locks Money again (the pane closed or the app went away). */
-    suspend fun closeMoney() = onCore { dropMoneyBuild(); moneyOpen = false; moneyChatTurns = emptyList(); moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
+    suspend fun closeMoney() = onCore { dropMoneyBuild(); moneyOpen = false; moneyChatTurns = emptyList(); moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED; publishSpendPlans() }
 
     // ---- Money manager (16), slice 1: money questions in Ask and Talk, answered on the device ----
 
@@ -1408,6 +1426,7 @@ class MekaCore(
                         moneyBuiltFrom = inputs
                         moneyBuilt = v
                         if (os.meka.core.domain.MoneyOpenRules.keep(v, offset, whatIf)) moneyLast.value = v
+                        publishSpendPlans()
                     },
                     onFailure = { e ->
                         lastBackgroundError = e.toString().take(300)
@@ -6380,6 +6399,40 @@ class MekaCore(
 
     /** Counts in sleeps (the children's way) or days, on both apps. */
     suspend fun setCountdownSleeps(sleeps: Boolean): Boolean = onCore { countdowns.setSleeps(sleeps) }
+
+    // ---- Spending plans (V1, slice 1; Money → Plan → Spending plans; a calculator only) ----
+
+    /** A new plan from "Christmas gifts 20 Dec" in [currency] ("GBP", "NGN", …); [os.meka.core.domain.SpendSaid.id] is the new plan's. */
+    suspend fun addSpendPlan(text: String, currency: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.add(text, currency) }
+
+    /** Renames a plan and its needed-by day from one line ("Holiday 1 Feb"). */
+    suspend fun renameSpendPlan(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.rename(id, text) }
+
+    /** Removes a plan and everything on it. */
+    suspend fun removeSpendPlan(id: String): Boolean = onCore { spendPlans.remove(id) }
+
+    /** The same-for-everyone amount on a plan in another currency ("50,000"; "" clears it). */
+    suspend fun setSpendPlanEach(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setEach(id, text) }
+
+    /** The Same for everyone − / + stepper. */
+    suspend fun stepSpendPlanEach(id: String, up: Boolean): Boolean = onCore { spendPlans.stepEach(id, up) }
+
+    /** His rate for a plan in another currency: how many to £1 ("2,000"). */
+    suspend fun setSpendPlanRate(id: String, text: String): os.meka.core.domain.SpendSaid = onCore { spendPlans.setRate(id, text) }
+
+    /** Adds a person or thing (blank [amountText] on a plan in another currency = the same for everyone); [month] year × 12 + month − 1, 0 for the plan's. */
+    suspend fun addSpendThing(planId: String, name: String, note: String, amountText: String, month: Int): os.meka.core.domain.SpendSaid =
+        onCore { spendPlans.addThing(planId, name, note, amountText, month) }
+
+    /** Changes a person or thing. */
+    suspend fun editSpendThing(id: String, name: String, note: String, amountText: String, month: Int): os.meka.core.domain.SpendSaid =
+        onCore { spendPlans.editThing(id, name, note, amountText, month) }
+
+    /** Ticks one as bought or sent, or back. */
+    suspend fun setSpendThingDone(id: String, done: Boolean): Boolean = onCore { spendPlans.setDone(id, done) }
+
+    /** Removes one person or thing. */
+    suspend fun removeSpendThing(id: String): Boolean = onCore { spendPlans.removeThing(id) }
 
     /**
      * Bin days, slice 3: takes back a one-off ("Black bin Sat 2 Jan instead of 29 Dec", typed through [addBin]), so
@@ -14076,6 +14129,8 @@ class MekaCore(
         // Also today has the one he chose with Show on Today: slice 2).
         val countdownItems = countdowns.items()
         val countdownSettings = countdowns.settings()
+        // Spending plans, slice 1: the plans added up (Can I afford it? only while Money is open).
+        timed("SpendPlans") { publishSpendPlans() }
         _countdowns.value = timed("Countdowns") { viewMemo.keep("Countdowns", listOf(countdownItems, countdownSettings, occasionItems, tripItems, schoolItems, todayDay)) {
             // Slice 3: the boys' next school holiday from School too.
             os.meka.core.domain.CountdownRules.view(countdownItems, occasionItems, tripItems, countdownSettings, todayDay, schoolItems)

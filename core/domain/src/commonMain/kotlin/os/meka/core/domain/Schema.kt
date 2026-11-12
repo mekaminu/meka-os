@@ -175,6 +175,10 @@ object EntityTypes {
     const val COUNTDOWN = "countdown"
     /** Countdowns, slice 1 (2026-11-12): the one on Today, Days or Sleeps and the hidden automatic ones (one entity). */
     const val COUNTDOWN_SETTING = "countdown_setting"
+    /** Spending plans, slice 1 (2026-11-12): one plan under Money's Plan tab, "Christmas gifts" (see [SpendPlans]). */
+    const val SPEND_PLAN = "spend_plan"
+    /** Spending plans, slice 1 (2026-11-12): one person or thing on a plan, with its amount and month. */
+    const val SPEND_PLAN_ITEM = "spend_plan_item"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -187,7 +191,7 @@ object EntityTypes {
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
         TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN, TRIP_ITEM, TRIP_TEMPLATE,
-        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB, ROUTINE, BOOKING_CALL, COUNTDOWN, COUNTDOWN_SETTING,
+        STUDY_COURSE, STUDY_LESSON, MONEY_CATEGORY, OBI_JOB, ROUTINE, BOOKING_CALL, COUNTDOWN, COUNTDOWN_SETTING, SPEND_PLAN, SPEND_PLAN_ITEM,
     )
 }
 
@@ -642,6 +646,9 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.COUNTDOWN && field == CountdownFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.COUNTDOWN -> MergePolicy.Lww
         entityType == EntityTypes.COUNTDOWN_SETTING -> MergePolicy.Lww
+        // Spending plans: a plan or thing removed on any device is gone for good; ticks and amounts, the latest edit wins.
+        (entityType == EntityTypes.SPEND_PLAN || entityType == EntityTypes.SPEND_PLAN_ITEM) && field == ActionableFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.SPEND_PLAN || entityType == EntityTypes.SPEND_PLAN_ITEM -> MergePolicy.Lww
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins
         field in userVisible -> MergePolicy.UserVisible
         else -> MergePolicy.Lww

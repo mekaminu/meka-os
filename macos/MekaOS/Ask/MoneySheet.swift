@@ -112,6 +112,8 @@ struct MoneySheet: View {
     @State private var obiLooking = false
     @State private var ideaOpenId: String? = nil
     @State private var whatIfOpen = false
+    /// Spending plans (slice 1): its sheet over Money, behind the same Touch ID.
+    @State private var plansOpen = false
     /// Plan's lower half: the forecast's 6 · 12 months, What if I cut… (in memory only), Add a £ goal's popover and its
     /// fields, and the part a start tile scrolls to.
     @State private var forecastSpan: Int32 = 12
@@ -288,6 +290,16 @@ struct MoneySheet: View {
             if let m = v.month, tabOfMonth { month(m, v, col).staggeredAppear(2) }
             if let g = v.goals, has(.goals, v), on("goals", col) { moneyGoals(g, v).staggeredAppear(3) }
             if let ch = v.challenges, has(.challenges, v), on("challenges", col) { challenges(ch).staggeredAppear(3) }
+            // Spending plans (slice 1, approved design SpendPlan.dc.html): one row opening its sheet over Money.
+            if tab == MoneyTab.plan, !v.locked, !v.skeleton, on("spend-plans", col) {
+                VStack(alignment: .leading, spacing: 0) {
+                    linkRow(SpendPlanRules.shared.TITLE, line: model.spendPlans?.rowLine ?? SpendPlanRules.shared.ROW_EMPTY,
+                            lit: model.spendPlans?.rowLit ?? false) { plansOpen = true }
+                }
+                .moneyCard(palette)
+                .staggeredAppear(3)
+                .sheet(isPresented: $plansOpen) { SpendPlansSheet(palette: palette).environment(model) }
+            }
             if let tv = v.travel, has(.travel, v), on("travel", col) { travel(tv).transition(.opacity) }
             // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part is worked
             // out behind ⓘ.

@@ -130,6 +130,8 @@ object DataExport {
         EntityTypes.ROUTINE to ("routine" to "routines"),
         EntityTypes.BOOKING_CALL to ("call card" to "call cards"),
         EntityTypes.COUNTDOWN to ("countdown" to "countdowns"),
+        EntityTypes.SPEND_PLAN to ("spending plan" to "spending plans"),
+        EntityTypes.SPEND_PLAN_ITEM to ("thing on a spending plan" to "things on spending plans"),
     )
 
     /** Summary order: what Meka made first, then the rest as "settings". */
@@ -138,7 +140,7 @@ object DataExport {
         EntityTypes.OBLIGATION, EntityTypes.GOAL, EntityTypes.HABIT, EntityTypes.HABIT_COMPLETION, EntityTypes.FAST,
         EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.REFLECTION, EntityTypes.KID_ADMIN, EntityTypes.KID_CHORE, EntityTypes.KID_CHORE_TICK, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.APPOINTMENT, EntityTypes.CHECKLIST_TEMPLATE, EntityTypes.GOAL_MILESTONE, EntityTypes.GOAL_ENTRY, EntityTypes.BIN, EntityTypes.BIN_MOVE, EntityTypes.OCCASION, EntityTypes.GIFT_IDEA, EntityTypes.TRIP, EntityTypes.TRIP_BOOKING, EntityTypes.TRIP_ITEM, EntityTypes.TRIP_TEMPLATE, EntityTypes.STUDY_COURSE, EntityTypes.STUDY_LESSON, EntityTypes.VAULT_DOC, EntityTypes.AGENT_ACTION,
         EntityTypes.MONEY_ACCOUNT, EntityTypes.MONEY_TXN, EntityTypes.MONEY_RULE, EntityTypes.MONEY_TIPS, EntityTypes.MONEY_ALERT, EntityTypes.MONEY_WORTH, EntityTypes.MONEY_SHARED, EntityTypes.MONEY_CATEGORY,
-        EntityTypes.TRADING_WALLET, EntityTypes.READING_ITEM, EntityTypes.OBI_JOB, EntityTypes.ROUTINE, EntityTypes.BOOKING_CALL, EntityTypes.COUNTDOWN,
+        EntityTypes.TRADING_WALLET, EntityTypes.READING_ITEM, EntityTypes.OBI_JOB, EntityTypes.ROUTINE, EntityTypes.BOOKING_CALL, EntityTypes.COUNTDOWN, EntityTypes.SPEND_PLAN, EntityTypes.SPEND_PLAN_ITEM,
     )
 
     fun summary(data: ExportData): ExportSummary {

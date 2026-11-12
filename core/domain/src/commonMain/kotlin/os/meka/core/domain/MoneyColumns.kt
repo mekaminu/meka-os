@@ -50,7 +50,7 @@ object MoneyColumns {
         // Bills
         "bills-list", "refunds", "regular",
         // Plan
-        "save", "clear", "goals",
+        "save", "clear", "goals", "spend-plans",
         // Trading
         "trading-positions", "trading-kestrel", "trading-trades", "trading-addresses", "trading-alerts", "trading-export",
         // Accounts

@@ -239,6 +239,9 @@ fun MoneyPane(
     var busy by remember { mutableStateOf(false) }
     // Money redesign (B), slice 1: the tab shown; Money opens on Spending each time the pane opens.
     var tab by rememberSaveable { mutableStateOf(MoneyTabs.FIRST) }
+    // Spending plans (slice 1): the page drawn over Money's Plan tab, behind the same fingerprint.
+    var plansOpen by rememberSaveable { mutableStateOf(false) }
+    val plans by core.spendPlansView.collectAsState()
     // Meka 2026-11-11: Today's TRADING tile opens Money on its Trading tab (the app's openMoneyTab, cleared once taken).
     val tabApp = context.applicationContext as? os.meka.android.MekaApplication
     val askedTab by remember(tabApp) { tabApp?.openMoneyTab ?: kotlinx.coroutines.flow.MutableStateFlow(null) }.collectAsState()
@@ -946,6 +949,14 @@ fun MoneyPane(
             }
             // Layout rule (c): Plan says "read-only · not financial advice" once, at its foot; how each part is worked
             // out behind ⓘ.
+            // Spending plans (slice 1, approved design SpendPlan.dc.html): one row opening the page over Money.
+            if (tab == MoneyTab.PLAN) item(key = "spend-plans") {
+                MoneyCard(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(4)), tag = "money-spend-plans-card") {
+                    MoneyLinkRow(os.meka.core.domain.SpendPlanRules.TITLE, plans.rowLine, plans.rowLit, "money-spend-plans-row") {
+                        haptics.tick(); said = null; plansOpen = true
+                    }
+                }
+            }
             if (has(MoneySection.PLAN_FOOT)) item(key = "plan-foot") {
                 MoneyTabFoot(Modifier.animateItem()) {
                     haptics.tick(); MoneyTabs.info(MoneyTab.PLAN, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, it) }
@@ -1151,6 +1162,14 @@ fun MoneyPane(
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) { moneyList(body, wide) }
+    // Spending plans: slides in from the right over Money (the pane's push), and goes when Money locks.
+    androidx.compose.animation.AnimatedVisibility(
+        visible = plansOpen && !v.locked,
+        enter = if (reduced) androidx.compose.animation.fadeIn() else androidx.compose.animation.slideInHorizontally(MekaMotion.expand(false)) { w -> w / 3 } + androidx.compose.animation.fadeIn(),
+        exit = if (reduced) androidx.compose.animation.fadeOut() else androidx.compose.animation.slideOutHorizontally(MekaMotion.expand(false)) { w -> w / 3 } + androidx.compose.animation.fadeOut(),
+    ) {
+        SpendPlansPage(core, onBack = { plansOpen = false })
+    }
     PaymentSheet(
         row = sheetRow, order = v.categoryOrder, said = said,
         onCategory = { key -> sheetRow?.let { t -> payTap(InstantPaymentRules.categoryTap(t.id, key)) { core.setMoneyCategory(t.id, key) } } },

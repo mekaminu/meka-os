@@ -173,6 +173,8 @@ final class CoreModel {
     private(set) var gifts: GiftsView?
     /// Countdowns (slice 1): the hero and the cards, Days or Sleeps.
     private(set) var countdowns: CountdownsView?
+    /// Spending plans (slice 1): each plan added up, and Can I afford it? while Money is open (Money → Plan).
+    private(set) var spendPlans: SpendPlansView?
     var showCountdowns = false
     /// Ask → More → Gifts.
     var showGifts = false
@@ -638,6 +640,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.countdownsView { self?.countdowns = c }
+        })
+        observers.append(Task { [weak self] in
+            for await p in core.spendPlansView { self?.spendPlans = p }
         })
         observers.append(Task { [weak self] in
             for await p in core.peopleView { self?.people = p }
@@ -7562,6 +7567,73 @@ final class CoreModel {
     func showCountdownOnToday(_ key: String) { MekaHaptics.light(); run { _ = try await $0.showCountdownOnToday(key: key) } }
 
     func setCountdownSleeps(_ sleeps: Bool) { MekaHaptics.light(); run { _ = try await $0.setCountdownSleeps(sleeps: sleeps) } }
+
+    // MARK: Spending plans (slice 1; a calculator only, nothing is sent or moved)
+
+    /// What a Spending plans change said, and the new plan's id after New plan.
+    struct SpendPlanSaid: Equatable {
+        let line: String
+        let refused: Bool
+        let id: String?
+    }
+
+    /// Copies a Spending plans answer into a Swift value (the haptic for a yes or a no).
+    private func spendSaid(_ r: SpendSaid) -> SpendPlanSaid {
+        let said = SpendPlanSaid(line: r.line, refused: r.refused, id: r.id)
+        if said.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+        return said
+    }
+
+    /// A new plan from "Christmas gifts 20 Dec" in [currency] ("GBP", "NGN", …); only Strings cross.
+    func addSpendPlan(_ text: String, currency: String) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.addSpendPlan(text: text, currency: currency))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeSpendPlan(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeSpendPlan(id: id) } }
+
+    /// His rate for a plan in another currency: how many to £1 ("2,000").
+    func setSpendPlanRate(_ id: String, _ text: String) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.setSpendPlanRate(id: id, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func stepSpendPlanEach(_ id: String, up: Bool) { MekaHaptics.tick(); run { _ = try await $0.stepSpendPlanEach(id: id, up: up) } }
+
+    /// Adds a person or thing; [month] year × 12 + month − 1, 0 for the plan's own month.
+    func addSpendThing(_ planId: String, name: String, note: String, amount: String, month: Int32) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.addSpendThing(planId: planId, name: name, note: note, amountText: amount, month: month))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func editSpendThing(_ id: String, name: String, note: String, amount: String, month: Int32) async -> SpendPlanSaid? {
+        guard let core else { return nil }
+        do {
+            return spendSaid(try await core.editSpendThing(id: id, name: name, note: note, amountText: amount, month: month))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func setSpendThingDone(_ id: String, _ done: Bool) { MekaHaptics.light(); run { _ = try await $0.setSpendThingDone(id: id, done: done) } }
+
+    func removeSpendThing(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeSpendThing(id: id) } }
 
     /// Takes back a bin one-off (slice 3): that collection goes on its usual day again; only the id String crosses.
     func removeBinMove(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBinMove(id: id) } }
