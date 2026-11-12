@@ -4816,7 +4816,23 @@ class MekaCore(
      * start of yesterday, with the request's own task as it is now and its steps still open by today. Caller is on the core.
      */
     private fun briefDoneForYou(all: List<os.meka.core.domain.Task>, today: Long, cal: ZoneCalendar): List<String> {
-        val rows = requestCards.doneForYou()
+        val items = doneForYouItems(all, today, cal)
+        if (items.isEmpty()) return emptyList()
+        return os.meka.core.domain.HandleForMeRules.briefSentences(items, today, cal.toEpochMs(today - 1, 0))
+    }
+
+    /** Today's DONE FOR YOU tile, from the rows still shown in Needs you. Caller is on the core. */
+    private fun alsoDoneForYou(all: List<os.meka.core.domain.Task>, today: Long, cal: ZoneCalendar): os.meka.core.domain.AlsoTile? {
+        val rows = os.meka.core.domain.HandleForMeRules.shown(requestCards.doneForYou(), nowMs()).map { it.id }.toSet()
+        val items = doneForYouItems(all, today, cal, rows)
+        return os.meka.core.domain.HandleForMeRules.alsoTile(items, today)
+    }
+
+    /** The handled rows as the brief and the tile read them: the request's own task as it is now and its steps still open by today. */
+    private fun doneForYouItems(
+        all: List<os.meka.core.domain.Task>, today: Long, cal: ZoneCalendar, only: Set<String>? = null,
+    ): List<os.meka.core.domain.DoneForYouBrief> {
+        val rows = requestCards.doneForYou().filter { only == null || it.id in only }
         if (rows.isEmpty()) return emptyList()
         val byId = all.associateBy { it.id }
         fun open(id: String) = byId[id]?.takeIf { !it.lifecycle.isTerminal }
@@ -4831,7 +4847,7 @@ class MekaCore(
                     .map { it.title },
             )
         }
-        return os.meka.core.domain.HandleForMeRules.briefSentences(items, today, cal.toEpochMs(today - 1, 0))
+        return items
     }
 
     /** Clear on a Done for you row: seen, gone from Needs you on both apps; what it made stays. */
@@ -14180,7 +14196,11 @@ class MekaCore(
                 trading = os.meka.core.domain.TradingTodayRules.todayLine(trading.wallets(), tradingAlertSetting(), nowMs()),
             ).let { t ->
                 // The Today rebuild, slice 2b-2: the one-line notes and the first renewal needing him as Also today's tiles.
-                t.copy(alsoToday = os.meka.core.domain.AlsoTodayRules.tiles(t, listsNow.renewals.attention, todayDay))
+                t.copy(alsoToday = os.meka.core.domain.AlsoTodayRules.tiles(
+                    t, listsNow.renewals.attention, todayDay,
+                    // Handle her requests for me: what was done for him, as a tile that opens Needs you.
+                    doneForYou = alsoDoneForYou(all, todayDay, cal),
+                ))
             }
         } }
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))

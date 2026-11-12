@@ -81,7 +81,13 @@ class HandleForMeFacadeTest {
             c.briefView.value.story.doneForYou,
         )
         assertTrue(os.meka.core.domain.BriefScriptRules.script(c.briefView.value).contains("Done for you: Alex asked you to work from home on Monday"))
+        // Today's ALSO TODAY carries it too, and its tap opens Needs you.
+        val tile = c.today.value.alsoToday.first { it.kind == os.meka.core.domain.AlsoKind.DONE_FOR_YOU }
+        assertEquals("Work from home Monday", tile.value)
+        assertEquals("from Alex · 3 steps to do today", tile.line)
+        assertTrue(tile.lit)
         c.complete(row.taskIds[0])
+        assertEquals("from Alex · 2 steps to do today", c.today.value.alsoToday.first { it.kind == os.meka.core.domain.AlsoKind.DONE_FOR_YOU }.line)
         assertEquals(
             "Still to do today: Get approval and put the request in at work.",
             c.briefView.value.story.doneForYou.last(),
@@ -91,6 +97,7 @@ class HandleForMeFacadeTest {
         assertTrue(c.undoDoneForYou(row.id))
         assertTrue(c.doneForYou.value.isEmpty())
         assertTrue(c.briefView.value.story.doneForYou.isEmpty(), "Undo: nothing to say")
+        assertTrue(c.today.value.alsoToday.none { it.kind == os.meka.core.domain.AlsoKind.DONE_FOR_YOU }, "Undo: no tile")
         assertTrue(titles(c, row.taskIds).isEmpty())
         assertFalse(c.calendarView.value.sections.first { it.title == "Mon 12 Oct" }.workLine.orEmpty().startsWith("Work from home"))
         assertFalse(c.undoDoneForYou(row.id), "only once")

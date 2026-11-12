@@ -230,5 +230,5 @@ private fun dotColour(tile: AlsoTile): Color = if (tile.lit) Meka.colors.accent 
     AlsoKind.RENEWAL, AlsoKind.PARCELS, AlsoKind.CLASH, AlsoKind.PRESSURE -> Meka.colors.calendar3
     AlsoKind.WEEK_AHEAD, AlsoKind.TRIP, AlsoKind.LIFE_ADMIN, AlsoKind.TRAINS, AlsoKind.TRAIN_QUEUE -> Meka.colors.calendar2
     AlsoKind.BINS, AlsoKind.DINNER, AlsoKind.SCHOOL -> Meka.colors.calendar4
-    AlsoKind.GIFTS, AlsoKind.DATE_NIGHT, AlsoKind.REPLIES, AlsoKind.TRADING -> Meka.colors.calendar5
+    AlsoKind.GIFTS, AlsoKind.DATE_NIGHT, AlsoKind.REPLIES, AlsoKind.TRADING, AlsoKind.DONE_FOR_YOU -> Meka.colors.calendar5
 }

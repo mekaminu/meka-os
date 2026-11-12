@@ -289,4 +289,50 @@ class HandleForMeTest {
         // A task or event request has no steps and no home day: nothing.
         none(listOf(row.copy(homeDay = null)), steps)
     }
+
+    @Test
+    fun todaysTileSaysWhatWasDoneAndOpensNeedsYou() {
+        val wfh = DoneForYouBrief("Alex", atMs = 2_000, homeDay = thu, title = null, day = null,
+            openToday = listOf("Tell your manager", "Get approval"))
+        val tile = HandleForMeRules.alsoTile(listOf(wfh), wed)!!
+        assertEquals(AlsoKind.DONE_FOR_YOU, tile.kind)
+        assertEquals("DONE FOR YOU", tile.key)
+        assertEquals("Work from home tomorrow", tile.value)
+        assertEquals("from Alex · 2 steps to do today", tile.line)
+        assertTrue(tile.lit, "something to do today")
+        assertEquals(AlsoPlace.NEEDS_YOU, AlsoTodayRules.place(tile))
+        assertEquals("Opens Needs you", AlsoTodayRules.hint(tile))
+        assertTrue(tile.spoken.startsWith("Done for you, from Alex: Work from home tomorrow, 2 steps to do today."))
+
+        val done = HandleForMeRules.alsoTile(listOf(wfh.copy(openToday = emptyList())), wed)!!
+        assertEquals("from Alex · steps done", done.line)
+        assertFalse(done.lit)
+
+        // Newest first, the rest counted.
+        val task = DoneForYouBrief("Alex", atMs = 3_000, homeDay = null, title = "Pick up the dry cleaning", day = mon, openToday = emptyList())
+        val two = HandleForMeRules.alsoTile(listOf(wfh, task), wed)!!
+        assertEquals("Pick up the dry cleaning", two.value)
+        assertEquals("from Alex · on your list for Monday · 1 more", two.line)
+        assertTrue(two.spoken.contains("1 more request done for you."))
+        assertEquals("on today's list", HandleForMeRules.alsoTile(listOf(task.copy(day = wed)), wed)!!.line.substringAfter(" · "))
+    }
+
+    @Test
+    fun noTileOnceTheDayHasGoneAndNothingIsOpen() {
+        val gone = DoneForYouBrief("Alex", atMs = 1, homeDay = wed, title = null, day = null, openToday = emptyList())
+        assertNull(HandleForMeRules.alsoTile(listOf(gone), thu))
+        assertNull(HandleForMeRules.alsoTile(emptyList(), wed))
+        val taskGone = DoneForYouBrief("Alex", atMs = 1, homeDay = null, title = null, day = null, openToday = emptyList())
+        assertNull(HandleForMeRules.alsoTile(listOf(taskGone), wed), "the task was deleted or done")
+        val long = DoneForYouBrief("Alex", atMs = 1, homeDay = null, title = "x".repeat(60), day = wed, openToday = emptyList())
+        assertEquals(HandleForMeRules.TILE_TITLE_MAX, HandleForMeRules.alsoTile(listOf(long), wed)!!.value.length)
+    }
+
+    @Test
+    fun theTileComesFirstAmongTodaysQuietTiles() {
+        val tile = HandleForMeRules.alsoTile(listOf(DoneForYouBrief("Alex", 1, thu, null, null, listOf("Get approval"))), wed)!!
+        val tiles = AlsoTodayRules.tiles(Today(needsYou = emptyList(), upNext = null, yourDay = emptyList(), doneToday = emptyList()), emptyList(), wed, doneForYou = tile)
+        assertEquals(listOf(AlsoKind.DONE_FOR_YOU), tiles.map { it.kind })
+        assertEquals(emptyList(), AlsoTodayRules.tiles(Today(needsYou = emptyList(), upNext = null, yourDay = emptyList(), doneToday = emptyList()), emptyList(), wed).map { it.kind })
+    }
 }

@@ -309,6 +309,50 @@ object HandleForMeRules {
         return out
     }
 
+    /** The Done for you tile quotes a task's title up to this long. */
+    const val TILE_TITLE_MAX = 40
+
+    /**
+     * What remains of Take first 2026-11-11 ("on Today's heads-up"): what was done for him as one Also today tile, from
+     * the rows still shown in Needs you ([shown]), newest first. "Work from home tomorrow" · "from Alex · 2 steps to do
+     * today" (lit: there's something to do today), "Work from home Thursday" · "from Alex · steps done", "Pick up the
+     * dry cleaning" · "from Alex · on your list for Thursday"; with "· 1 more" when more were done. A request whose day
+     * has gone and left nothing open isn't shown. A tap opens Needs you. Never the message's own words: only the title.
+     */
+    fun alsoTile(items: List<DoneForYouBrief>, today: Long): AlsoTile? {
+        val live = items
+            .filter { b -> (b.homeDay != null && b.homeDay >= today) || (b.title != null && (b.day ?: today) >= today) || b.openToday.isNotEmpty() }
+            .sortedByDescending { it.atMs }
+        val b = live.firstOrNull() ?: return null
+        val who = b.who.trim().take(40)
+        val dayLow = { d: Long -> dayWord(d, today).let { if (it == "Today" || it == "Tomorrow") it.lowercase() else it } }
+        val value = when {
+            b.homeDay != null && b.homeDay >= today -> "Work from home ${dayLow(b.homeDay)}"
+            b.title != null -> b.title.trim().let { if (it.length > TILE_TITLE_MAX) it.take(TILE_TITLE_MAX - 1).trimEnd() + "…" else it }
+            else -> "Work from home"
+        }
+        val n = b.openToday.size
+        val state = when {
+            n > 0 -> "$n ${if (n == 1) "step" else "steps"} to do today"
+            b.homeDay != null -> "steps done"
+            b.title != null -> (b.day ?: today).let { d -> if (d == today) "on today's list" else "on your list for ${dayLow(d)}" }
+            else -> "done"
+        }
+        val more = live.size - 1
+        val line = listOfNotNull(who.takeIf { it.isNotEmpty() }?.let { "from $it" }, state, more.takeIf { it > 0 }?.let { "$it more" })
+            .joinToString(" · ")
+        val spoken = buildString {
+            append("Done for you")
+            if (who.isNotEmpty()) append(", from $who")
+            append(": $value, ")
+            append(state.replace(" · ", ", "))
+            append(".")
+            if (more > 0) append(" $more more ${if (more == 1) "request" else "requests"} done for you.")
+            append(" Opens Needs you.")
+        }
+        return AlsoTile(AlsoKind.DONE_FOR_YOU, AlsoTodayRules.key(AlsoKind.DONE_FOR_YOU), value, line, spoken, lit = n > 0)
+    }
+
     /** "today", "tomorrow", "on Thursday" within the week ahead, else "on Thu 19 Nov". */
     fun daySaid(day: Long, today: Long): String = when (val w = dayWord(day, today)) {
         "Today" -> "today"

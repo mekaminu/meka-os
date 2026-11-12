@@ -575,6 +575,8 @@ struct TodayView: View {
         // Meka 2026-11-11: no tile is a dead end.
         case .goals: model.go(to: .goals, reduced: reduceMotion)
         case .calendar: model.go(to: .calendar, reduced: reduceMotion)
+        // Handle her requests for me: the Done for you tile opens Needs you, where its rows are.
+        case .needsYou: model.go(to: .needsYou, reduced: reduceMotion)
         case .moneyTrading:
             model.moneyStartTab = MoneyTab.trading
             model.showMoney = true

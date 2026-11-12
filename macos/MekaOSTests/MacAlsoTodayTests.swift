@@ -58,4 +58,12 @@ final class MacAlsoTodayTests: XCTestCase {
         XCTAssertEqual(d?.rows.first?.status, "Out for delivery")
         XCTAssertEqual(d?.rows.first?.meta, "10:15–11:15 · with Evri")
     }
+
+    /// Handle her requests for me: what was done for him is a DONE FOR YOU tile whose click opens Needs you.
+    func testTheDoneForYouTileOpensNeedsYou() {
+        let tile = AlsoTile(kind: AlsoKind.doneForYou, key: "DONE FOR YOU", value: "Work from home tomorrow",
+                            line: "from Alex · 2 steps to do today", spoken: "Done for you.", lit: true, targetId: nil)
+        XCTAssertEqual(AlsoTodayRules.shared.place(tile: tile), AlsoPlace.needsYou)
+        XCTAssertEqual(AlsoTodayRules.shared.hint(tile: tile), "Opens Needs you")
+    }
 }

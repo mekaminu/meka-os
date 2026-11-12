@@ -1178,7 +1178,8 @@ private fun TodayPane(
                                 // this week's one thing and a clash open Goals, Money's Trading, Review and the Calendar.
                                 os.meka.core.domain.AlsoKind.PARCELS -> today.parcelDetail != null
                                 os.meka.core.domain.AlsoKind.GOALS, os.meka.core.domain.AlsoKind.TRADING,
-                                os.meka.core.domain.AlsoKind.REFLECTION, os.meka.core.domain.AlsoKind.CLASH -> alsoApp != null
+                                os.meka.core.domain.AlsoKind.REFLECTION, os.meka.core.domain.AlsoKind.CLASH,
+                                os.meka.core.domain.AlsoKind.DONE_FOR_YOU -> alsoApp != null
                                 else -> alsoApp != null && paneFor(t.kind) != null
                             }
                         },
@@ -1199,6 +1200,9 @@ private fun TodayPane(
                                     alsoApp?.openDestination?.value = os.meka.android.shell.ShellDestination.REVIEW
                                 os.meka.core.domain.AlsoKind.CLASH ->
                                     alsoApp?.openDestination?.value = os.meka.android.shell.ShellDestination.CALENDAR
+                                // Handle her requests for me: the Done for you tile opens Needs you, where its rows are.
+                                os.meka.core.domain.AlsoKind.DONE_FOR_YOU ->
+                                    alsoApp?.openDestination?.value = os.meka.android.shell.ShellDestination.NEEDS_YOU
                                 os.meka.core.domain.AlsoKind.TRADING -> alsoApp?.let { app ->
                                     app.openMoneyTab.value = os.meka.core.domain.MoneyTab.TRADING
                                     app.openMoney.value = true
