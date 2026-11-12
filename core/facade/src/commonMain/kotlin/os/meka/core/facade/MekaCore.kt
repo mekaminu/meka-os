@@ -6685,6 +6685,28 @@ class MekaCore(
     suspend fun setHabitGoal(id: String, goalId: String?) = onCore { goals.setHabitGoal(id, goalId) }
     suspend fun deleteHabit(id: String) = onCore { goals.deleteHabit(id) }
 
+    // ---- The Habits screen (approved 2026-11-11, docs/design/habits/Habits.dc.html) ----
+
+    /**
+     * + Add on the Habits screen: [title], Do or [avoid], the [list] it sits in (Morning, All day, Night time or his
+     * own) and how many days a week. Returns its id.
+     */
+    suspend fun addHabitToList(title: String, avoid: Boolean, list: String, perWeek: Int = 7): String = onCore {
+        val name = os.meka.core.domain.HabitBoardRules.cleanList(list) ?: os.meka.core.domain.HabitBoardRules.ALL_DAY
+        val timing = os.meka.core.domain.HabitBoardRules.timingOf(name) ?: HabitTiming.ANYTIME
+        val id = goals.addHabit(title, perWeek, timing, os.meka.core.domain.GoalRules.DEFAULT_MINUTES, null)
+        if (avoid) goals.setHabitAvoid(id, true)
+        if (os.meka.core.domain.HabitBoardRules.timingOf(name) == null) goals.setHabitList(id, name)
+        id
+    }
+    /** The circle on the Habits screen: [day] (one of the last seven) marked done, missed or clear. */
+    suspend fun setHabitMark(id: String, day: Long, mark: os.meka.core.domain.HabitMark) = onCore { goals.setHabitMark(id, day, mark) }
+    suspend fun setHabitAvoid(id: String, avoid: Boolean) = onCore { goals.setHabitAvoid(id, avoid) }
+    suspend fun setHabitList(id: String, list: String) = onCore { goals.setHabitList(id, list) }
+    /** The Habits screen for the habits as shown ([view], with any taps on their way), [selected] 0–6 and a [list] chip. Pure. */
+    fun habitBoard(view: GoalsView = _goals.value, selected: Int = 6, list: String = os.meka.core.domain.HabitBoardRules.ALL): os.meka.core.domain.HabitBoard =
+        os.meka.core.domain.HabitBoardRules.board(view, selected, list)
+
     // ---- The Gym (booked habits) ----
 
     /** Adds "Gym": three times a week, evenings, an hour, its sessions booked into the week. Returns its id. */

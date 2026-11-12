@@ -413,6 +413,10 @@ object HabitFields {
     const val ROTATION = "rotation"
     /** Gym (2026-10-08, additive, LWW): a link to the workout app ("https://hevy.com"), opened from Today's card; http(s) only. */
     const val APP_LINK = "appLink"
+    /** Habits rebuilt (2026-11-12, additive, LWW): "avoid" for a habit he keeps off (No biscuits); absent or "do" otherwise. */
+    const val KIND = "kind"
+    /** Habits rebuilt (additive, LWW): a list of his own ("Weekend"); absent for Morning, All day or Night time (from [PREFERRED_TIMING]). */
+    const val LIST = "list"
 }
 
 /** One habit on one local day. Id `<habitId>.d<epochDay>` so two devices ticking the same day write one entity. */

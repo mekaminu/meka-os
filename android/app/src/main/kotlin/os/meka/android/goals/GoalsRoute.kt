@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
+import os.meka.android.designsystem.minTouch
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -125,6 +127,7 @@ fun GoalsRoute(core: MekaCore) {
     // Fasting rebuild slice 2: Goals' tile opens the Fasting screen as a pane; back drops it.
     var fastingOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = fastingOpen) { fastingOpen = false }
+    var habitsOpen by rememberSaveable { mutableStateOf(false) }
     // Study plan, slice 1: a course opens as a pane like Fasting; a removed course offers Undo here.
     val study by core.studyView.collectAsState()
     var studyOpen by rememberSaveable { mutableStateOf<String?>(null) }
@@ -188,7 +191,14 @@ fun GoalsRoute(core: MekaCore) {
         item(key = "fasting") {
             FastingTile(core, Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(2))) { haptics.light(); fastingOpen = true }
         }
-        item(key = "habits-label") { SectionLabel("Habits", Modifier.appear(rememberAppearance(2))) }
+        item(key = "habits-label") {
+            // The Habits screen (approved 2026-11-11): the day strip, lists, Do and Avoid, done → missed → clear.
+            Row(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel("Habits", Modifier.weight(1f))
+                Text("Open Habits ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { haptics.light(); habitsOpen = true }.minTouch().testTag("goals-open-habits"))
+            }
+        }
         items(view.habits, key = { "h-${it.id}" }) { h ->
             HabitRow(
                 h, view.goals, open == h.id, { toggle(h.id) }, Modifier.animateItem(),
@@ -341,6 +351,7 @@ fun GoalsRoute(core: MekaCore) {
         }
     }
     MekaPane(visible = fastingOpen) { FastingPane(core, onClose = { fastingOpen = false }) }
+    MekaPane(visible = habitsOpen) { HabitsPage(core, onClose = { habitsOpen = false }) }
     MekaPane(visible = studyOpen != null) {
         studyShown?.let { id -> StudyPane(core, id, onClose = { studyOpen = null }, onRemoved = { studyRemoved = it }) }
     }

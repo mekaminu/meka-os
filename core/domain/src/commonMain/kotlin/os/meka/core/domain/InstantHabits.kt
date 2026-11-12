@@ -58,6 +58,8 @@ object InstantHabitRules {
             doneThisWeek = count,
             pace = pace,
             week = week,
+            // The Habits screen's last dot is today.
+            recent = if (h.recent.isEmpty()) h.recent else h.recent.dropLast(1) + (if (done) HabitMark.DONE else HabitMark.CLEAR),
             meta = GoalRules.habitMeta(pace, count, h.weekTarget, h.targetPerWeek, today.takeIf { it > 0 }),
         )
     }

@@ -1,7 +1,7 @@
 ---
 id: goals
 title: Goals and habits
-keywords: goals, goals and habits, study, study plan, study this week, study session, study nudge, nudge before a session, study reminder, sunday check-in, study check-in, study week, start a session, session done, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
+keywords: goals, goals and habits, study, study plan, study this week, study session, study nudge, nudge before a session, study reminder, sunday check-in, study check-in, study week, start a session, session done, reorder lessons, reorder modules, move a lesson up, plan a lesson, study today, study on the week board, add a lesson, add a module, rename a lesson, recently deleted, restore a lesson, finish date, sessions a week, on track, behind, my courses, course lessons, course modules, habits, habit, habits screen, avoid habit, morning habits, night time habits, missed habit, fasting, fast, weekly goals, money streaks, no-spend streak, spending streak
 data: yes
 fold: GOALS
 fold_where: Ask → Life → Goals and habits
@@ -10,6 +10,7 @@ mac_where: Ask → Life → Goals and habits
 ---
 what: your habits with the week so far, your goals with their milestones, and fasting.
 how: Add a habit or a goal there; Navilife can suggest milestones and first steps for a goal, and nothing is added until you tick the ones to keep.
+tip: Open Habits › (beside HABITS) for the Habits screen: the last seven days along the top, "3 of 8 done today", and your habits in Morning, All day, Night time or a list of your own. Tap a habit's circle: done, then missed, then clear; tap an earlier day first to mark that day. + Add makes a habit to do (Drink water) or one to avoid (No biscuits). On the Fold now; the Mac follows.
 tip: Start a fast there, or ask "start a 16-hour fast".
 tip: While a fast runs, Today shows its card: the ring with your time, the stage you're in and when it ends. Tap it for the Fasting screen, or End to finish (with Undo).
 tip: Say or type "start my fast" (or "start a 16-hour fast") to start one, "how long left on my fast?" (or "am I fasting?", "when can I eat?") for how long you're in, the stage you're in and how long to go, and "end my fast" to end it; "resume my fast" within 10 minutes takes an ending back. These work without the AI, offline too.

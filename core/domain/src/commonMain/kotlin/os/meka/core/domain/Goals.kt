@@ -59,6 +59,14 @@ data class HabitItem(
     val sessionLine: String? = null,
     /** Gym: the workout app's link, opened from Today's card ([SessionRules.cleanAppLink]); null for none. */
     val appLink: String? = null,
+    /** Habits rebuilt: a habit he keeps off ("No biscuits"); its done means a day kept clear. */
+    val avoid: Boolean = false,
+    /** Habits rebuilt: his own list's name ("Weekend"); null for Morning, All day or Night time (from [timing]). */
+    val list: String? = null,
+    /** Habits rebuilt: the last [HabitBoardRules.DAYS] days, oldest first, ending on the view's today. */
+    val recent: List<HabitMark> = emptyList(),
+    /** Habits rebuilt: the local epoch day it was added. */
+    val createdDay: Long = 0,
 ) {
     /** "Hevy"; null without a link. */
     val appName: String? get() = appLink?.let { SessionRules.appName(it) }
@@ -478,6 +486,49 @@ class Goals(
                 HabitCompletionFields.AT to nowMs().fv(),
             ),
         )
+    }
+
+    /**
+     * Habits rebuilt: marks one of the last [HabitBoardRules.DAYS] days done (a tick), missed (a cross) or clear. Done
+     * and missed are one completion row, so two devices marking the same day end on the latest mark.
+     */
+    fun setHabitMark(id: String, day: Long, mark: HabitMark) {
+        requireHabit(id)
+        val today = today()
+        if (day > today) throw ValidationException("That day hasn't happened yet")
+        if (day < today - (HabitBoardRules.DAYS - 1)) throw ValidationException("Mark a day from the last week")
+        replica.commitLocal(
+            EntityTypes.HABIT_COMPLETION, completionId(id, day),
+            linkedMapOf(
+                HabitCompletionFields.HABIT_ID to id.fv(),
+                HabitCompletionFields.DAY to day.fv(),
+                HabitCompletionFields.DONE to (mark == HabitMark.DONE).fv(),
+                HabitCompletionFields.MISSED to (mark == HabitMark.MISSED).fv(),
+                HabitCompletionFields.AT to nowMs().fv(),
+            ),
+        )
+    }
+
+    /** Habits rebuilt: Do or Avoid. */
+    fun setHabitAvoid(id: String, avoid: Boolean) {
+        requireHabit(id)
+        replica.commitLocal(EntityTypes.HABIT, id, mapOf(HabitFields.KIND to (if (avoid) HabitBoardRules.AVOID else HabitBoardRules.DO).fv()))
+    }
+
+    /**
+     * Habits rebuilt: which list it sits in. Morning, All day or Night time set its part of the day (so the planner
+     * follows) and clear any list of his own; any other name is his own list, the part of the day left as it was.
+     */
+    fun setHabitList(id: String, list: String) {
+        requireHabit(id)
+        val name = HabitBoardRules.cleanList(list) ?: throw ValidationException("Name the list")
+        val timing = HabitBoardRules.timingOf(name)
+        val changes = linkedMapOf<String, FieldValue>()
+        if (timing != null) {
+            changes[HabitFields.PREFERRED_TIMING] = timing.name.fv()
+            changes[HabitFields.LIST] = FieldValue.Null
+        } else changes[HabitFields.LIST] = name.fv()
+        replica.commitLocal(EntityTypes.HABIT, id, changes)
     }
 
     /** Gym: MEKA books (or stops booking) this habit's sessions into the week. */
@@ -926,6 +977,7 @@ class Goals(
         val today = today()
         val ws = GoalRules.weekStart(today)
         val doneByHabit = completedDays()
+        val missed = missedDays()
         return replica.entities(EntityTypes.HABIT).map { s ->
             val id = s.ref.entityId
             val target = (s[HabitFields.TARGET_PER_WEEK].longOrNull?.toInt() ?: 7).coerceIn(1, 7)
@@ -958,6 +1010,17 @@ class Goals(
                 booked = s[HabitFields.BOOK_SLOTS].boolOrNull == true,
                 rotation = SessionRules.decodeRotation(s[HabitFields.ROTATION].textOrNull),
                 appLink = SessionRules.cleanAppLink(s[HabitFields.APP_LINK].textOrNull),
+                avoid = s[HabitFields.KIND].textOrNull == HabitBoardRules.AVOID,
+                list = HabitBoardRules.cleanList(s[HabitFields.LIST].textOrNull),
+                recent = (HabitBoardRules.DAYS - 1 downTo 0).map { back ->
+                    val d = today - back
+                    when {
+                        d in days -> HabitMark.DONE
+                        d in missed[id].orEmpty() -> HabitMark.MISSED
+                        else -> HabitMark.CLEAR
+                    }
+                },
+                createdDay = createdDay,
             )
         }.sortedWith(
             compareBy<HabitItem> { paceOrder(it.pace) }
@@ -1186,6 +1249,18 @@ class Goals(
     private fun completedDays(): Map<String, Set<Long>> =
         replica.entities(EntityTypes.HABIT_COMPLETION)
             .filter { it[HabitCompletionFields.DONE].boolOrNull == true }
+            .mapNotNull { s ->
+                val h = s[HabitCompletionFields.HABIT_ID].textOrNull ?: return@mapNotNull null
+                val d = s[HabitCompletionFields.DAY].longOrNull ?: return@mapNotNull null
+                h to d
+            }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { it.value.toSet() }
+
+    /** Days marked missed and not done (Gym's "Didn't go", the Habits screen's cross). */
+    private fun missedDays(): Map<String, Set<Long>> =
+        replica.entities(EntityTypes.HABIT_COMPLETION)
+            .filter { it[HabitCompletionFields.DONE].boolOrNull != true && it[HabitCompletionFields.MISSED].boolOrNull == true }
             .mapNotNull { s ->
                 val h = s[HabitCompletionFields.HABIT_ID].textOrNull ?: return@mapNotNull null
                 val d = s[HabitCompletionFields.DAY].longOrNull ?: return@mapNotNull null
