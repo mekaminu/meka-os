@@ -205,4 +205,38 @@ class HandleForMeTest {
         assertEquals(listOf(wfhThu), checked)
         assertTrue(HandleForMeRules.certain(checked.single(), wed))
     }
+
+    @Test
+    fun theRepliesAreDraftedForHimToSendNeverSent() {
+        // Slice 3: a reply to her and, for a work-from-home day, a note to his manager; dates as dates, never "tomorrow".
+        val wfh = HandleForMeRules.drafts(RequestKind.WORK_FROM_HOME, "Work from home", thu, null, "Alex Smith")
+        assertEquals(listOf("Copy reply to Alex", HandleForMeRules.MANAGER_LABEL), wfh.map { it.label })
+        assertEquals("Okay, I'll ask work about working from home on Thu 12 Nov.", wfh[0].text)
+        assertEquals("Hi, would it be okay if I work from home on Thu 12 Nov? I'll be online and reachable as usual.", wfh[1].text)
+        assertTrue(wfh[1].spoken.endsWith(wfh[1].text))
+        val task = HandleForMeRules.drafts(RequestKind.TASK, "  Pick up   the dry cleaning. ", thu, null, "Alex")
+        assertEquals(listOf("Okay, I've put “Pick up the dry cleaning” on my list for Thu 12 Nov."), task.map { it.text })
+        val event = HandleForMeRules.drafts(RequestKind.EVENT, "Dinner with Sam", thu, 18 * 60 + 30, "Alex")
+        assertEquals("Okay, “Dinner with Sam” is in my diary for Thu 12 Nov at 18:30.", event.single().text)
+        assertTrue(HandleForMeRules.drafts(RequestKind.TASK, "Sort the garden", null, null, "Alex").isEmpty(), "no day: no draft")
+        assertTrue(HandleForMeRules.drafts(RequestKind.REPLY, "Reply", thu, null, "Alex").isEmpty())
+        val long = HandleForMeRules.drafts(RequestKind.TASK, "x".repeat(300), thu, null, "Alex").single().text
+        assertEquals(HandleForMeRules.DRAFT_TITLE_MAX, long.substringAfter("“").substringBefore("”").length)
+    }
+
+    @Test
+    fun theRowCarriesItsDraftsOnEveryDevice() {
+        val world = SyncWorld()
+        val fold = world.device("fold")
+        val mac = world.device("mac")
+        world.clock.nowMs = LocalCalendar.UTC.toEpochMs(wed, 22 * 60 + 15)
+        val foldCards = RequestCards(fold.replica, { world.clock.nowMs }, LocalCalendar.UTC)
+        val macCards = RequestCards(mac.replica, { world.clock.nowMs }, LocalCalendar.UTC)
+        val made = foldCards.save(RequestMessage("m1", "Alex", "Can you work from home tomorrow?", world.clock.nowMs), listOf(wfhThu))
+        foldCards.handled(made[0].id, listOf("t1"), thu, "Work from home Thu 12 Nov · added")
+        fold.sync(); mac.sync()
+        val row = macCards.doneForYou().single()
+        assertEquals(HandleForMeRules.drafts(RequestKind.WORK_FROM_HOME, "Work from home", thu, null, "Alex"), row.drafts)
+        assertFalse(row.drafts.any { "Can you" in it.text }, "never the message's own words")
+    }
 }

@@ -189,6 +189,13 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
                     HandleForMeRules.stepsFor(k).firstOrNull()?.takeIf { k == RequestKind.WORK_FROM_HOME }
                 } ?: e[RequestCardFields.TITLE].textOrNull,
                 person = person,
+                drafts = e[RequestCardFields.KIND].textOrNull?.let(RequestKind::of)?.let { k ->
+                    HandleForMeRules.drafts(
+                        k, e[RequestCardFields.TITLE].textOrNull.orEmpty(),
+                        e[RequestCardFields.HANDLED_HOME_DAY].longOrNull ?: e[RequestCardFields.DAY].longOrNull,
+                        e[RequestCardFields.MINUTE].longOrNull?.toInt(), person,
+                    )
+                }.orEmpty(),
             )
         }
         return HandleForMeRules.shown(rows, nowMs())

@@ -63,12 +63,24 @@ data class DoneForYou(
     val changeTitle: String? = null,
     /** Who asked, as the notification named her ("Ada", "Ada Smith"); said in the morning brief. */
     val person: String = "",
+    /**
+     * Slice 3: the words drafted for him to send himself, each copied with one tap and never sent by Navilife: a reply
+     * to her, and for a work-from-home day a note to his manager ([HandleForMeRules.drafts]).
+     */
+    val drafts: List<HandleDraft> = emptyList(),
 ) {
     val undoLabel: String get() = HandleForMeRules.UNDO
     val changeLabel: String? get() = if (taskIds.isEmpty()) null else HandleForMeRules.CHANGE
     /** The task Change opens: the request's own, else the first step. */
     val changeTaskId: String? get() = taskIds.firstOrNull()
 }
+
+/**
+ * Slice 3: one drafted message on a Done for you row. [label] is its pill ("Copy reply to Ada"); a tap copies [text] to
+ * the clipboard and shows [COPIED][HandleForMeRules.COPIED]. Navilife never sends it, opens a chat with it or messages
+ * anyone (hard rule: personal sending is "ask me, then send" at most, and here he sends it himself).
+ */
+data class HandleDraft(val label: String, val text: String, val spoken: String)
 
 object HandleForMeRules {
     const val TITLE = "Handle her requests for me"
@@ -95,6 +107,12 @@ object HandleForMeRules {
     const val SHOWN_MS = 36 * 60 * 60_000L
     /** Its heads-up is stale after this. */
     const val NOTICE_STALE_MS = 3 * 60 * 60_000L
+
+    /** Shown after a draft is copied: he sends it himself. */
+    const val COPIED = "Copied · paste it and send it yourself"
+    const val MANAGER_LABEL = "Copy note to your manager"
+    /** The longest title a draft quotes. */
+    const val DRAFT_TITLE_MAX = 80
 
     /** The steps to get ready for a work-from-home day (Meka's words, 2026-11-11). */
     val WORK_FROM_HOME_STEPS = listOf("Tell your manager", "Get approval", "Put the request in at work")
@@ -210,6 +228,34 @@ object HandleForMeRules {
             parts += "reminder " + (if (d == today) "" else dayWord(d, today) + " ") + TaskWhenRules.timeLabel(m)
         }
         return "$head · ${parts.joinToString(", ")}"
+    }
+
+    /**
+     * Slice 3 (Meka 2026-11-11: "a reply to her and a note to his manager are drafted for his tap, never sent"): the
+     * drafts on a handled request's row. Dates are said as dates ("Thu 12 Nov"), never "tomorrow", since the row lives
+     * a day and a half. A work-from-home day gets a reply that promises only the asking ("Okay, I'll ask work about
+     * working from home on Thu 12 Nov.") and a note to his manager; a task or reminder "Okay, I've put “…” on my list
+     * for Thu 12 Nov."; an event "Okay, “…” is in my diary for Thu 12 Nov at 18:00.". Only the request's title is
+     * quoted, never the message's text. Nothing when the kind isn't handled or the day is unknown.
+     */
+    fun drafts(kind: RequestKind, title: String, day: Long?, minute: Int?, person: String): List<HandleDraft> {
+        val d = day ?: return emptyList()
+        if (kind !in HANDLED_KINDS) return emptyList()
+        val first = person.trim().substringBefore(' ').take(20).ifEmpty { "her" }
+        val date = CivilDate.shortLabel(d)
+        val what = title.trim().replace(Regex("\\s+"), " ").take(DRAFT_TITLE_MAX).trimEnd('.', ' ')
+        val reply = when (kind) {
+            RequestKind.WORK_FROM_HOME -> "Okay, I'll ask work about working from home on $date."
+            RequestKind.EVENT -> "Okay, “$what” is in my diary for $date" + (minute?.let { " at ${TaskWhenRules.timeLabel(it)}" } ?: "") + "."
+            else -> "Okay, I've put “$what” on my list for $date."
+        }
+        val replyLabel = "Copy reply to $first"
+        val out = mutableListOf(HandleDraft(replyLabel, reply, "$replyLabel: $reply"))
+        if (kind == RequestKind.WORK_FROM_HOME) {
+            val note = "Hi, would it be okay if I work from home on $date? I'll be online and reachable as usual."
+            out += HandleDraft(MANAGER_LABEL, note, "$MANAGER_LABEL: $note")
+        }
+        return out
     }
 
     /** "From Ada · 22:14" (her first name as the notification named her, at most 40 characters). */

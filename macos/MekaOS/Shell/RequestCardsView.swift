@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 @preconcurrency import MekaKit
 
 /// Requests from people Meka watches (V1, requests slice 4), in Needs you above the stack: "From Wife · 14:02", the
@@ -112,6 +113,8 @@ struct DoneForYouRow: View {
     @Environment(CoreModel.self) private var model
     let row: DoneForYou
     let palette: MekaPalette
+    /// Slice 3: shows "Copied · paste it and send it yourself" once a draft is on the pasteboard.
+    @State private var copied = false
 
     var body: some View {
         let id = row.id
@@ -128,6 +131,19 @@ struct DoneForYouRow: View {
                 pill(HandleForMeRules.shared.CLEAR, quiet: true, spoken: "\(HandleForMeRules.shared.CLEAR): \(row.line)") { model.clearDoneForYou(id) }
             }
             .padding(.top, MekaSpace.m)
+            // Slice 3: the drafted reply to her (and the note to his manager) go on the pasteboard; he sends them.
+            if !row.drafts.isEmpty {
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(Array(row.drafts.enumerated()), id: \.offset) { _, draft in
+                        let words = draft.text
+                        pill(draft.label, quiet: false, spoken: draft.spoken) { copyDraft(words) }
+                    }
+                }
+                .padding(.top, MekaSpace.xs)
+                if copied {
+                    Text(HandleForMeRules.shared.COPIED).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+            }
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,6 +151,14 @@ struct DoneForYouRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(row.spoken)
         .mekaHoverLift()
+    }
+
+    private func copyDraft(_ words: String) {
+        MekaHaptics.light()
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(words, forType: .string)
+        copied = true
     }
 
     private func pill(_ label: String, quiet: Bool, spoken: String, action: @escaping () -> Void) -> some View {

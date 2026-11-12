@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -14,7 +16,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +30,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -148,12 +154,16 @@ private fun DecideIcon(icon: NeedsYouDecideIcon) {
 }
 
 internal const val DONE_FOR_YOU_TAG = "done-for-you"
+internal const val DONE_FOR_YOU_DRAFT_TAG = "done-for-you-draft"
 
 /**
  * "Handle her requests for me" (2026-11-11): one Done for you row at the top of Needs you — the gold DONE FOR YOU label,
  * what was done, who asked and when, then Undo · Change · Clear. Undo and Change press in with a light haptic, Clear a
- * tick. Nothing here sends anything.
+ * tick. Nothing here sends anything. Slice 3: the drafted reply to her (and for a work-from-home day the note to his
+ * manager) are pills that copy the words to the clipboard, with "Copied · paste it and send it yourself" under them;
+ * he sends them himself.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DoneForYouRow(
     row: os.meka.core.domain.DoneForYou,
@@ -177,6 +187,24 @@ internal fun DoneForYouRow(
             DecidePill(row.undoLabel, DecideTone.PLAIN, "${row.undoLabel}: ${row.line}") { haptics.light(); onUndo() }
             row.changeLabel?.let { label -> DecidePill(label, DecideTone.PLAIN, "$label: ${row.line}") { haptics.light(); onChange() } }
             DecidePill(os.meka.core.domain.HandleForMeRules.CLEAR, DecideTone.QUIET, "${os.meka.core.domain.HandleForMeRules.CLEAR}: ${row.line}") { haptics.tick(); onClear() }
+        }
+        if (row.drafts.isNotEmpty()) {
+            val context = LocalContext.current
+            var copied by remember(row.id) { mutableStateOf(false) }
+            FlowRow(
+                Modifier.testTag(DONE_FOR_YOU_DRAFT_TAG),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                row.drafts.forEach { d ->
+                    DecidePill(d.label, DecideTone.PLAIN, d.spoken) {
+                        haptics.tick()
+                        os.meka.android.work.LiveReplies.copyText(context, d.text, label = "Navilife draft")
+                        copied = true
+                    }
+                }
+            }
+            if (copied) Text(os.meka.core.domain.HandleForMeRules.COPIED, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
     }
 }
