@@ -36,7 +36,15 @@ struct GoalsScreen: View {
 
                 SectionLabel("Fasting", palette).staggeredAppear(2)
                 FastingSection(palette: palette).padding(.bottom, MekaSpace.l).staggeredAppear(2)
-                SectionLabel("Habits", palette).staggeredAppear(2)
+                // The Habits screen (approved 2026-11-11): the day strip, lists, Do and Avoid, done → missed → clear.
+                HStack(alignment: .firstTextBaseline) {
+                    SectionLabel("Habits", palette)
+                    Spacer()
+                    Button("Open Habits ›") { MekaHaptics.light(); model.showHabits = true }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .accessibilityHint("Mark each habit done or missed, and earlier days")
+                }
+                .staggeredAppear(2)
                 ForEach(model.goals?.habits ?? [], id: \.id) { h in
                     HabitRowView(habit: h, goals: model.goals?.goals ?? [], expanded: open == h.id, palette: palette) { toggle(h.id) }
                 }

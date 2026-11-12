@@ -5968,3 +5968,7 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Facade: `addHabitToList`, `setHabitMark`, `setHabitAvoid`, `setHabitList`, `habitBoard`.
 - Fold: `HabitsPage` (pane from Goals' "Open Habits ›"), + Add / + New list sheets, a row's unfold (Do/Avoid, list chips, Remove twice), toast; help tip in docs/help/goals.md; motion catalogue row "Habits screen".
 - Tests: `HabitBoardTest` (strip, cycle, earlier day, lists, Avoid streak, added today, sync, instant taps, empty), `HabitsFacadeTest`, `HabitsScreensTest` (cover/inner, Dark/Light, empty; the circle cycles; a day marks that day; + Add an Avoid habit into Night time).
+
+### Slice 2 (2026-11-12, the Mac; Mac checked nightly)
+- Mac: `HabitsSheet` (new, Goals/HabitsSheet.swift), opened by Goals' "Open Habits ›" beside HABITS (`CoreModel.showHabits`, ShellSheetsC): the day strip, summary bar and best streak, chips with + New list, the boxed lists with Do/Avoid icons, the week's dots and the 44 pt circle, a row's unfold (Do/Avoid, list chips, Remove on a second click), + Add / + New list as an inline form (name, Do or Avoid, list, days), the toast. `CoreModel.habitBoard/markHabit/setHabitAvoid/setHabitList/addHabitToList`; a click's mark is drawn at once (`habitMarks` over the goals via `HabitBoardRules.shown`) and the core gets a value of its own, sent once. Help tip now says the Mac has it.
+- Tests: `MekaCoreBridgeTests.testHabitsScreenOnTheMac` (empty board, + Add into a list, a mark, the words and chips, a mark drawn before the core's view).

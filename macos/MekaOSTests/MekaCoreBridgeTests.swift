@@ -4604,4 +4604,36 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(after.jobs.first?.youSaid)
         XCTAssertEqual(ObiJobRules.shared.ANSWER_GO, "Tell Obi")
     }
+
+    func testHabitsScreenOnTheMac() async throws {
+        // Habits screen, slice 2: + Add into a list, the circle's done → missed → clear and the board's words reach
+        // the Mac through the bridge; the mark crosses to the core once per click.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "habits-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let empty = core.habitBoard(view: core.goalsView.value, selected: 6, list: HabitBoardRules.shared.ALL)
+        XCTAssertEqual(empty.doneLine, "No habits yet")
+        XCTAssertTrue(empty.empty)
+        let biscuits = try await core.addHabitToList(title: "No biscuits", avoid: true, list: "All day", perWeek: 7)
+        _ = try await core.addHabitToList(title: "Long walk", avoid: false, list: "Weekend", perWeek: 2)
+        let today = core.goalsView.value.today
+        _ = try await core.setHabitMark(id: biscuits, day: today, mark: HabitMark.clear.next())
+        let b = core.habitBoard(view: core.goalsView.value, selected: 6, list: HabitBoardRules.shared.ALL)
+        XCTAssertEqual(b.groups.map(\.title), ["All day", "Weekend"])
+        XCTAssertEqual(b.doneLine, "1 of 2 done today")
+        let row = try XCTUnwrap(b.groups.first?.rows.first)
+        XCTAssertTrue(row.avoid)
+        XCTAssertEqual(row.mark.name, HabitMark.done.name)
+        XCTAssertEqual(row.markLabel, "Done, tap for missed")
+        XCTAssertEqual(b.chips.map(\.name), ["All", "Morning", "All day", "Night time", "Weekend"])
+        XCTAssertEqual(HabitBoardRules.shared.markedLine(m: row.mark.next()), "Marked missed")
+        // A circle on its way is drawn over the goals before the core's view comes back.
+        let key = HabitBoardRules.shared.key(habitId: biscuits, day: today)
+        let shown = HabitBoardRules.shared.shown(view: core.goalsView.value, pending: [key: HabitMark.missed])
+        let drawn = core.habitBoard(view: shown, selected: 6, list: "All day")
+        XCTAssertEqual(drawn.groups.first?.rows.first?.mark.name, HabitMark.missed.name)
+        XCTAssertEqual(HabitBoardRules.shared.cleanList(raw: "  night TIME "), HabitBoardRules.shared.NIGHT)
+    }
 }

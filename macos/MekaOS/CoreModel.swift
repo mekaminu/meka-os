@@ -121,6 +121,11 @@ final class CoreModel {
     var showReading = false
     /// Goals → the Fasting tile (Fasting rebuild slice 3): the Fasting sheet in the approved design.
     var showFasting = false
+    /// Goals → Open Habits › (Habits screen, slice 2): the approved Habits sheet.
+    var showHabits = false
+    /// The Habits sheet's circles on their way ("<habit id>@<day>" → mark), drawn over the goals in the same frame
+    /// until each call returns (taps feel instant).
+    private(set) var habitMarks: [String: HabitMark] = [:]
     /// Voice notes into actions, slice 3: the voice note sheet (recording one) and Ask → Daily → Voice notes.
     var showVoiceNote = false
     var showVoiceNotes = false
@@ -3437,6 +3442,53 @@ final class CoreModel {
     func setHabitMinutes(_ id: String, _ minutes: Int32) { run { try await $0.setHabitMinutes(id: id, minutes: minutes) } }
     func setHabitGoal(_ id: String, _ goalID: String?) { run { try await $0.setHabitGoal(id: id, goalId: goalID) } }
     func deleteHabit(_ id: String) { run { try await $0.deleteHabit(id: id) } }
+
+    // MARK: The Habits screen (approved 2026-11-11, docs/design/habits/Habits.dc.html; slice 2, the Mac)
+
+    /// The Habits sheet for [selected] 0–6 along the strip (6 = today) and a list chip, with any circles on their way.
+    func habitBoard(selected: Int, list: String) -> HabitBoard? {
+        guard let core, let goals else { return nil }
+        let shown = HabitBoardRules.shared.shown(view: goals, pending: habitMarks)
+        return core.habitBoard(view: shown, selected: Int32(selected), list: list)
+    }
+
+    /// The circle: done → missed → clear on [day], shown at once (light haptic for done, a tick otherwise). Returns the
+    /// toast's words ("Done · nice", "Marked missed"), nil when cleared.
+    func markHabit(_ id: String, day: Int64, from mark: HabitMark) -> String? {
+        guard let core else { return nil }
+        let shown = mark.next()
+        let said = HabitBoardRules.shared.markedLine(m: shown)
+        let landed = shown.name
+        let key = HabitBoardRules.shared.key(habitId: id, day: day)
+        if landed == HabitMark.done.name { MekaHaptics.light() } else { MekaHaptics.tick() }
+        habitMarks[key] = shown
+        // The core gets a value of its own, so the one drawn here never crosses to it (sent once, never twice).
+        let sent = mark.next()
+        Task {
+            do {
+                _ = try await core.setHabitMark(id: id, day: day, mark: sent)
+            } catch {
+                offerEventUndo(InstantTapRules.shared.failedLine(what: "Mark", reason: error.localizedDescription), nil)
+            }
+            if habitMarks[key]?.name == landed { habitMarks[key] = nil }
+        }
+        return said
+    }
+
+    func setHabitAvoid(_ id: String, _ avoid: Bool) { MekaHaptics.tick(); run { _ = try await $0.setHabitAvoid(id: id, avoid: avoid) } }
+    func setHabitList(_ id: String, _ list: String) { MekaHaptics.tick(); run { _ = try await $0.setHabitList(id: id, list: list) } }
+
+    /// + Add on the Habits sheet: a name, Do or Avoid, its list and days a week. Returns nil when added, else why not.
+    func addHabitToList(_ title: String, avoid: Bool, list: String, perWeek: Int32) async -> String? {
+        guard let core else { return "Navilife is still starting" }
+        do {
+            _ = try await core.addHabitToList(title: title, avoid: avoid, list: list, perWeek: perWeek)
+            MekaHaptics.light()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
 
     // MARK: The Gym (booked habits)
 

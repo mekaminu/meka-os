@@ -10,7 +10,7 @@ mac_where: Ask → Life → Goals and habits
 ---
 what: your habits with the week so far, your goals with their milestones, and fasting.
 how: Add a habit or a goal there; Navilife can suggest milestones and first steps for a goal, and nothing is added until you tick the ones to keep.
-tip: Open Habits › (beside HABITS) for the Habits screen: the last seven days along the top, "3 of 8 done today", and your habits in Morning, All day, Night time or a list of your own. Tap a habit's circle: done, then missed, then clear; tap an earlier day first to mark that day. + Add makes a habit to do (Drink water) or one to avoid (No biscuits). On the Fold now; the Mac follows.
+tip: Open Habits › (beside HABITS) for the Habits screen: the last seven days along the top, "3 of 8 done today", and your habits in Morning, All day, Night time or a list of your own. Tap a habit's circle: done, then missed, then clear; tap an earlier day first to mark that day. + Add makes a habit to do (Drink water) or one to avoid (No biscuits). On the Mac, click instead of tap.
 tip: Start a fast there, or ask "start a 16-hour fast".
 tip: While a fast runs, Today shows its card: the ring with your time, the stage you're in and when it ends. Tap it for the Fasting screen, or End to finish (with Undo).
 tip: Say or type "start my fast" (or "start a 16-hour fast") to start one, "how long left on my fast?" (or "am I fasting?", "when can I eat?") for how long you're in, the stage you're in and how long to go, and "end my fast" to end it; "resume my fast" within 10 minutes takes an ending back. These work without the AI, offline too.
