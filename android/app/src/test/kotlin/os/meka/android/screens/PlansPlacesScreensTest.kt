@@ -40,6 +40,7 @@ import os.meka.android.ask.BinsPane
 import os.meka.android.ask.GIFTS_LIST_TAG
 import os.meka.android.ask.GiftsPane
 import os.meka.android.ask.READING_LIST_TAG
+import os.meka.android.ask.READING_ROW_SHEET_TAG
 import os.meka.android.ask.ReadingPane
 import os.meka.android.ask.TRIPS_LIST_TAG
 import os.meka.android.ask.TripsPane
@@ -52,6 +53,7 @@ import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.GiftRules
 import os.meka.core.domain.GiftsPageRules
 import os.meka.core.domain.ReadingGoalRules
+import os.meka.core.domain.ReadingPageRules
 import os.meka.core.domain.ReadingRules
 import os.meka.core.domain.TripRules
 import os.meka.core.facade.MekaCore
@@ -230,6 +232,12 @@ class PlansPlacesScreensTest {
                     if ("moved on" in month || "next up: Dune" !in month) fail("$name: the month line reads \"$month\"")
                     if (v.upNext.firstOrNull()?.title != "Dune") fail("$name: up next starts ${v.upNext.map { it.title }}")
                 }
+                // The page shape (slice 6): the three numbers, and On the go's first row (or its empty line).
+                val page = core.readingPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, ReadingPageRules.GO_EMPTY)
             }
         }
         return core
@@ -428,8 +436,10 @@ class PlansPlacesScreensTest {
     }
 
     /**
-     * Works by hand, Reading: how far moves a book on; Start, Finished, Undo, Put down, Pick up and Remove each move a
-     * row; the goal field sets the year's goal and Clear takes it off; the field adds a book up next.
+     * Works by hand, Reading (the page shape, slice 6): a book's row opens its sheet and how far moves it on; in Dune's
+     * sheet Start, Finished, Undo, Put down and Pick up each move it (the sheet stays on it); the long book's sheet
+     * Removes it; the Reading goal row's sheet sets the year's goal and Clear takes it off; + Add → A book, podcast or
+     * course adds one up next.
      */
     private fun readingByHand(core: MekaCore) {
         val name = "reading-by-hand"
@@ -437,10 +447,19 @@ class PlansPlacesScreensTest {
         assertTouchTargets(name)
         fun v() = core.readingView.value
         val book = v().onTheGo.firstOrNull() ?: fail("$name: nothing on the go")
+        val sheet = hasAnyAncestor(hasTestTag(READING_ROW_SHEET_TAG))
+        fun closeSheet() {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(hasAnyAncestor(hasTestTag(READING_ROW_SHEET_TAG))) }
+        }
+        tap(p, name, book.title, hasText(book.title))
         type(p, name, ReadingRules.PROGRESS_HINT, "200")
         until { v().onTheGo.first { it.id == book.id }.progress.contains("200") }
         if (!v().onTheGo.first { it.id == book.id }.progress.contains("200")) fail("$name: how far left \"${book.title}\" at ${book.progress}")
+        assertTouchTargets(name)
+        closeSheet()
         val dune = v().upNext.firstOrNull { it.title == "Dune" } ?: fail("$name: Dune isn't up next")
+        tap(p, name, "Dune", hasText("Dune"))
         tap(p, name, "Start", hasContentDescription("Start: Dune"))
         until { v().onTheGo.any { it.id == dune.id } }
         if (v().onTheGo.none { it.id == dune.id }) fail("$name: Start didn't put Dune on the go")
@@ -457,16 +476,23 @@ class PlansPlacesScreensTest {
         tap(p, name, "Pick up", hasContentDescription("Pick up: Dune"))
         until { v().onTheGo.any { it.id == dune.id } }
         if (v().onTheGo.none { it.id == dune.id }) fail("$name: Pick up didn't put Dune on the go")
+        closeSheet()
         val long = v().upNext.firstOrNull { it.title.startsWith("The Very Long Book") } ?: fail("$name: the long book isn't up next")
+        tap(p, name, long.title, hasText(long.title))
         tap(p, name, "Remove", hasContentDescription("Remove ${long.title}"))
         until { (v().onTheGo + v().upNext).none { it.id == long.id } }
         if ((v().onTheGo + v().upNext).any { it.id == long.id }) fail("$name: Remove left \"${long.title}\"")
+        until { !shows(sheet) }
+        tap(p, name, ReadingPageRules.GOAL, hasText(v().goal?.title ?: ReadingPageRules.NO_GOAL))
         type(p, name, ReadingGoalRules.HINT, "20 books")
         until { v().goalTarget == 20 }
         if (v().goalTarget != 20) fail("$name: the goal field set ${v().goalTarget} books, not 20")
         tap(p, name, "Clear the goal", hasContentDescription("Clear the reading goal"))
         until { v().goalTarget == 0 }
         if (v().goalTarget != 0) fail("$name: Clear left a goal of ${v().goalTarget}")
+        closeSheet()
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        tap(p, name, "A book, podcast or course", hasText("A book, podcast or course"))
         type(p, name, ReadingRules.HINT, "Project Hail Mary by Andy Weir, 480 pages")
         until { v().upNext.any { it.title == "Project Hail Mary" } }
         if (v().upNext.none { it.title == "Project Hail Mary" }) fail("$name: Done on the field added nothing up next")

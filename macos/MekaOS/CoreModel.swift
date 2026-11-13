@@ -3464,6 +3464,12 @@ final class CoreModel {
         return core.binsPage(view: bins)
     }
 
+    /// Ask → Daily → Reading in the page shape (every page under Ask in one shape, slice 6).
+    func readingPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.readingPage(view: reading ?? ReadingView.companion.EMPTY)
+    }
+
     func carPage() -> LifePageView? {
         guard let core, let cars else { return nil }
         return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)

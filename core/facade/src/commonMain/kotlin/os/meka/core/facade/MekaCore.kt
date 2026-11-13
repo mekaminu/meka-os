@@ -5263,6 +5263,13 @@ class MekaCore(
         os.meka.core.domain.BinsPageRules.page(view, ZoneCalendar(timeZone).epochDayOf(nowMs()))
 
     /**
+     * Ask → Daily → Reading in the page shape (every page under Ask in one shape, slice 6): on the go, up next and the
+     * year's goal, then On the go, Up next, Finished lately and Reading goal ([os.meka.core.domain.ReadingPageRules.page]).
+     */
+    fun readingPage(view: os.meka.core.domain.ReadingView = _reading.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.ReadingPageRules.page(view)
+
+    /**
      * Car and parking, slice 5: what the share sheet offers for shared text that is a parking confirmation (RingGo,
      * JustPark, PayByPhone…), read on the device: "Parking timer until 15:30 · RingGo 81234", the car (from its
      * registration in the text, or the only car) or the choices, or "That parking ended at 15:30 …". Null when the

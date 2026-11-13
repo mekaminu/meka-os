@@ -1,138 +1,261 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Daily → Reading on the Mac (reading and learning, slice 1), like the Fold's ReadingPane: one field adds a
-/// book, podcast or course; ON THE GO with how far (a brass bar) and a field for progress, Finished and Put down; UP
-/// NEXT with Start; FINISHED LATELY and PUT DOWN with Again / Pick up; Remove on each; every answer with Undo. Only
-/// Strings cross to the core.
+/// Ask → Daily → Reading on the Mac in the page shape (every page under Ask in one shape, slice 6; approved
+/// 2026-11-11, docs/design/look/LifePage.dc.html), like the Fold's ReadingPane: the title with its ⓘ, one gold + Add
+/// (A book, podcast or course · A reading goal, each a field), three numbers (on the go, up next, the year's goal or
+/// what finished lately), then On the go (how far on the right), Up next, Finished lately and Reading goal. A row opens
+/// in place with ‹ Reading back: a book's how far and bar, the how-far field while on the go, Start / Finished / Put
+/// down / Again / Pick up (it stays open as the book moves, with Undo) and Remove; the goal's books a year and Clear.
+/// Only Strings cross to the core.
 ///
-/// Motion: the sheet scale-fades (system); the summary, the month line and the answer cross-fade; rows move between
-/// sections on the expand spring; a bar grows to its new length on the same spring; a save, Start or Finished gives a
-/// light haptic, the rest a tick. READING GOAL (slice 4): its pace line cross-fades and turns brass while on pace, its
-/// bar grows on the expand spring. Reduce Motion: cross-fades, the bar jumps.
+/// Motion: the sheet scale-fades (system); sections stagger in; + Add's choices and the ⓘ unfold on the expand spring;
+/// a row opens and closes with a cross-fade and slide from the trailing edge; the answer line cross-fades (a refused
+/// line lit in the accent); a bar grows to its new length on the expand spring; the goal's pace line turns brass while
+/// on pace. Reduce Motion: cross-fades, the bar jumps.
 struct ReadingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    @State private var infoOpen = false
+    @State private var adding = false
+    @State private var addChoice: String?
     @State private var text = ""
-    @State private var said: CoreModel.ReadingSaidLine?
+    @State private var progressText = ""
     @State private var goalText = ""
+    @State private var said: CoreModel.ReadingSaidLine?
+    /// The row that's open, if any (its key: "item:…" or "set:goal").
+    @State private var open: String?
+    /// The card whose rows are all shown (See all), if any.
+    @State private var showAll: String?
 
     var body: some View {
+        let rules = ReadingPageRules.shared
         let v = model.reading ?? ReadingView.companion.EMPTY
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(ReadingRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
-                .staggeredAppear(1)
-            if let month = v.month {
-                Text(month).font(MekaType.caption).foregroundStyle(palette.accent)
-                    .transition(.opacity)
-            }
-            TextField(ReadingRules.shared.HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { add() }
-                .staggeredAppear(2)
-            if let said { saidLine(said) }
-            ScrollView {
-                VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    section("On the go", v.onTheGo, actions: goActions, progress: true)
-                    section("Up next", v.upNext, actions: startAction("Start"), progress: false)
-                    section("Finished lately", v.finished, actions: startAction("Again"), progress: false)
-                    section("Put down", v.putDown, actions: startAction("Pick up"), progress: false)
-                    goalBlock(v)
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            if let key = open {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil; said = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                rowDetail(key, v)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
+            } else if let card = showAll {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                Text(card).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(rules.allRows(view: v, cardKey: card), id: \.key) { r in
+                            let key = r.key
+                            Button { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; showAll = nil; said = nil } } label: {
+                                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                    Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                    Text([r.line, r.whenText].filter { !$0.isEmpty }.joined(separator: " · "))
+                                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
                 }
-                .animation(MekaMotion.expand(reduced: reduceMotion), value: ids(v))
+                .frame(maxHeight: 400)
+                .transition(.opacity)
+            } else if let page = model.readingPage() {
+                LifePageHeader(title: page.title, info: page.info, palette: palette, infoOpen: $infoOpen) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding.toggle(); addChoice = nil; said = nil }
+                }
+                .staggeredAppear(0)
+                if adding { addForm(page) }
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    if let month = v.month {
+                        Text(month).font(MekaType.caption).foregroundStyle(palette.accent).transition(.opacity)
+                    }
+                    if !adding, let said { saidLine(said) }
+                }
+                .staggeredAppear(1)
+                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        ForEach(0..<Int(page.cardCount), id: \.self) { i in
+                            let card = page.cardAt(index: Int32(i))
+                            let cardKey = card.key
+                            LifePageCardView(card: card, palette: palette, onMore: {
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = cardKey }
+                            }, onRow: { r in
+                                let key = r.key
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { said = nil; open = key }
+                            })
+                            .staggeredAppear(3 + i)
+                        }
+                        Text(ReadingRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxHeight: 420)
             }
-            .frame(maxHeight: 460)
-            .staggeredAppear(3)
-            Text(ReadingRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
-        .frame(width: 500)
+        .frame(width: 480)
         .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showAll)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: v.month)
     }
 
-    /// One button on a row: its label and what it asks the core (with the row's id).
-    typealias RowAct = (label: String, run: (String) async -> CoreModel.ReadingSaidLine?)
-
-    private var goActions: [RowAct] {
-        let m = model
-        let finish: RowAct = (label: "Finished", run: { id in await m.finishReading(id) })
-        let down: RowAct = (label: "Put down", run: { id in await m.putDownReading(id) })
-        return [finish, down]
-    }
-
-    private func startAction(_ label: String) -> [RowAct] {
-        let m = model
-        let start: RowAct = (label: label, run: { id in await m.startReading(id) })
-        return [start]
-    }
-
-    private func ids(_ v: ReadingView) -> [String] {
-        let groups: [[ReadingRow]] = [v.onTheGo, v.upNext, v.finished, v.putDown]
-        return groups.flatMap { rows in rows.map { $0.id + $0.state + $0.progress } }
-    }
-
-    /// READING GOAL (slice 4): the year's goal with its pace and bar, a field for the books a year, Clear while set.
+    /// What an open row shows: a book, podcast or course wherever it has moved to, or the reading goal.
     @ViewBuilder
-    private func goalBlock(_ v: ReadingView) -> some View {
-        Text(ReadingGoalRules.shared.HEAD)
-            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-            .foregroundStyle(palette.textTertiary)
-            .padding(.top, MekaSpace.l)
-        if let g = v.goal {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                HStack {
-                    Text(g.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Spacer()
-                    Text(g.count).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+    private func rowDetail(_ key: String, _ v: ReadingView) -> some View {
+        let rules = ReadingPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let item = rules.item(view: v, key: key) {
+                let id = item.id
+                Text(item.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(item.meta).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(item.progress).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: item.progress)
                 }
-                Text(g.line).font(MekaType.caption)
-                    .foregroundStyle(g.lit ? palette.accent : palette.textSecondary)
-                    .contentTransition(.opacity)
-                ProgressBar(fraction: Double(g.fraction), palette: palette)
-                    .animation(MekaMotion.expand(reduced: reduceMotion), value: g.fraction)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(item.spoken)
+                if let f = item.fraction?.doubleValue {
+                    ProgressBar(fraction: f, palette: palette)
+                        .animation(MekaMotion.expand(reduced: reduceMotion), value: f)
+                }
+                if rules.takesProgress(row: item) {
+                    TextField(ReadingRules.shared.PROGRESS_HINT, text: $progressText)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit {
+                            let t = progressText
+                            progressText = ""
+                            act { m in await m.readingProgress(id, t) }
+                        }
+                    Text(rules.PROGRESS_NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(rules.acts(row: item), id: \.key) { a in
+                        let finish = a.key == rules.ACT_FINISH
+                        let down = a.key == rules.ACT_DOWN
+                        Button(a.label) {
+                            act { m in
+                                if finish { return await m.finishReading(id) }
+                                if down { return await m.putDownReading(id) }
+                                return await m.startReading(id)
+                            }
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel("\(a.label): \(item.title)")
+                    }
+                    Button("Remove") {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil }
+                        act { m in await m.removeReading(id) }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.textTertiary)
+                    .accessibilityLabel("Remove \(item.title)")
+                }
+                if let said { saidLine(said) }
+            } else if key == rules.KEY_GOAL {
+                Text(rules.GOAL).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
+                if let g = v.goal {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        HStack {
+                            Text(g.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Spacer()
+                            Text(g.count).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                        }
+                        Text(g.line).font(MekaType.caption)
+                            .foregroundStyle(g.lit ? palette.accent : palette.textSecondary)
+                            .contentTransition(.opacity)
+                        ProgressBar(fraction: Double(g.fraction), palette: palette)
+                            .animation(MekaMotion.expand(reduced: reduceMotion), value: g.fraction)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(g.spoken)
+                    .transition(.opacity)
+                }
+                TextField(ReadingGoalRules.shared.HINT, text: $goalText)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        let t = goalText
+                        goalText = ""
+                        act { m in await m.setReadingGoal(t) }
+                    }
+                Text(ReadingGoalRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                if v.goalTarget > 0 {
+                    Button("Clear the goal") { act { m in await m.setReadingGoal("none") } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.textTertiary)
+                }
+                if let said {
+                    Text(said.line).font(MekaType.caption)
+                        .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                // Removed while it was open.
+                Text(rules.GONE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(g.spoken)
-            .padding(.horizontal, MekaSpace.m)
-            .padding(.vertical, MekaSpace.xs)
-            .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-            .transition(.opacity)
         }
-        TextField(ReadingGoalRules.shared.HINT, text: $goalText)
-            .textFieldStyle(.roundedBorder)
-            .onSubmit {
-                let t = goalText
-                goalText = ""
-                act { await model.setReadingGoal(t) }
-            }
-        if v.goalTarget > 0 {
-            Button("Clear the goal") { act { await model.setReadingGoal("none") } }
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.caption)
-                .foregroundStyle(palette.textTertiary)
-        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
     }
 
-    private func add() {
-        let typed = text
-        text = ""
+    @ViewBuilder
+    private func addForm(_ page: LifePageView) -> some View {
+        let rules = ReadingPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(page.addTitle).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(0..<Int(page.addChoiceCount), id: \.self) { i in
+                    let c = page.addChoiceAt(index: Int32(i))
+                    let key = c.key
+                    chip(c.label, lit: addChoice == key) { said = nil; addChoice = key }
+                        .help(c.hint)
+                }
+            }
+            if let choice = addChoice {
+                TextField(rules.hint(choice: choice), text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { submit(choice) }
+                if let said, said.refused {
+                    Text(said.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func submit(_ choice: String) {
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return }
+        let goal = choice == ReadingPageRules.shared.ADD_GOAL
+        let m = model
         Task {
-            guard let r = await model.addReading(typed) else { return }
+            let answer: CoreModel.ReadingSaidLine?
+            if goal { answer = await m.setReadingGoal(typed) } else { answer = await m.addReading(typed) }
+            guard let r = answer else { return }
             said = r
-            if r.refused { text = typed } // keep the words to fix
+            if !r.refused { text = ""; adding = false; addChoice = nil }
         }
     }
 
@@ -143,8 +266,9 @@ struct ReadingSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             if let token = s.undo {
                 Button("Undo") {
+                    let m = model
                     Task {
-                        let ok = await model.undoReading(token)
+                        let ok = await m.undoReading(token)
                         said = CoreModel.ReadingSaidLine(line: ok ? "Taken back" : "Too late to undo · change it by hand", refused: !ok, undo: nil)
                     }
                 }
@@ -157,96 +281,24 @@ struct ReadingSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: s)
     }
 
-    @ViewBuilder
-    private func section(
-        _ title: String, _ rows: [ReadingRow],
-        actions: [RowAct], progress: Bool
-    ) -> some View {
-        if !rows.isEmpty {
-            Text(title.uppercased())
-                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(palette.textTertiary)
-                .padding(.top, MekaSpace.xs)
-            ForEach(rows, id: \.id) { row in
-                ReadingRowView(
-                    row: row, palette: palette, progress: progress,
-                    actions: buttons(actions, row.id),
-                    onProgress: { typed in act { await model.readingProgress(row.id, typed) } },
-                    onRemove: { act { await model.removeReading(row.id) } }
-                )
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-            }
+    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(MekaType.caption).lineLimit(1)
+                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
         }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityAddTraits(lit ? .isSelected : [])
     }
 
-    private func buttons(_ acts: [RowAct], _ id: String) -> [(String, () -> Void)] {
-        acts.map { a -> (String, () -> Void) in
-            let run = a.run
-            return (a.label, { act { await run(id) } })
-        }
-    }
-
-    private func act(_ body: @escaping () async -> CoreModel.ReadingSaidLine?) {
+    /// Runs one reading command on the model (only Strings cross to the core) and shows what it said.
+    private func act(_ body: @escaping (CoreModel) async -> CoreModel.ReadingSaidLine?) {
+        let m = model
         Task {
-            if let r = await body() { said = r }
+            if let r = await body(m) { said = r }
         }
-    }
-}
-
-private struct ReadingRowView: View {
-    let row: ReadingRow
-    let palette: MekaPalette
-    let progress: Bool
-    let actions: [(String, () -> Void)]
-    let onProgress: (String) -> Void
-    let onRemove: () -> Void
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-    @State private var typed = ""
-
-    var body: some View {
-        let ended = row.state == "finished" || row.state == "put_down"
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body)
-                    .foregroundStyle(ended ? palette.textSecondary : palette.textPrimary)
-                    .lineLimit(2)
-                Text(row.meta).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
-                Text(row.progress).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(row.spoken)
-            if let f = row.fraction?.doubleValue {
-                ProgressBar(fraction: f, palette: palette)
-                    .animation(MekaMotion.expand(reduced: reduceMotion), value: f)
-            }
-            if progress {
-                TextField(ReadingRules.shared.PROGRESS_HINT, text: $typed)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        let t = typed
-                        typed = ""
-                        onProgress(t)
-                    }
-            }
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(actions.indices, id: \.self) { i in
-                    Button(actions[i].0, action: actions[i].1)
-                        .buttonStyle(MekaPressStyle())
-                        .font(MekaType.caption)
-                        .foregroundStyle(palette.accent)
-                        .accessibilityLabel("\(actions[i].0): \(row.title)")
-                }
-                Button("Remove", action: onRemove)
-                    .buttonStyle(MekaPressStyle())
-                    .font(MekaType.caption)
-                    .foregroundStyle(palette.textTertiary)
-                    .accessibilityLabel("Remove \(row.title)")
-            }
-        }
-        .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.xs)
-        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .mekaHoverLift()
     }
 }
 

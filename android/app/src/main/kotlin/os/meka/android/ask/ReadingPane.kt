@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -19,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,11 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -52,234 +55,238 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
-import os.meka.android.today.SectionLabel
 import os.meka.core.domain.ReadingGoalRules
-import os.meka.core.domain.ReadingGoalView
-import os.meka.core.domain.ReadingRow
+import os.meka.core.domain.ReadingPageRules
 import os.meka.core.domain.ReadingRules
 import os.meka.core.domain.ReadingSaid
 import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val READING_LIST_TAG = "reading-list"
+const val READING_ROW_SHEET_TAG = "reading-row-sheet"
+const val READING_ALL_SHEET_TAG = "reading-all-sheet"
 
 /**
- * Ask → Daily → Reading (reading and learning, slice 1): one field adds a book, podcast or course; ON THE GO lists
- * the ones started with how far (a brass bar) and a field for how far he's got, with Finished and Put down; UP NEXT
- * with Start; FINISHED LATELY and PUT DOWN with Pick up again; Remove on every row; each answer with Undo.
+ * Ask → Daily → Reading in the page shape (every page under Ask in one shape, slice 6; approved 2026-11-11,
+ * `docs/design/look/LifePage.dc.html`): the title with its ⓘ, one gold + Add (A book, podcast or course · A reading
+ * goal, each a field in the sheet), three numbers (on the go, up next, the year's goal or what finished lately), then
+ * On the go (how far on the right), Up next, Finished lately and Reading goal. A book's row opens its sheet: what it
+ * is and how far, its bar, the how-far field while on the go, Start / Finished / Put down / Again / Pick up (the
+ * sheet stays on it as it moves, with Undo) and Remove; the goal's row the books a year and Clear the goal.
  *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, the month line and the
- * answer line cross-fade (the answer blends to the accent when refused, with a tick haptic; a save gives a light
- * haptic); READING GOAL's pace line cross-fades and blends to the accent while on pace, its bar grows on the expand
- * spring (slice 4); rows stagger in 40 ms apart and move between sections with the list's item motion; a bar's fill grows on
- * the expand spring to its new length. Reduced motion: cross-fades, the bar jumps.
+ * Motion: the title travels in from Ask's tile (shared title); the header, summary, tiles and cards appear in turn;
+ * cards move with the list's item motion; the ⓘ's words unfold and the sheets rise on the expand spring
+ * (LifePageParts); the answer line cross-fades (lit in the accent when refused, with a tick haptic; a save, Start or
+ * Finished a light haptic); a bar grows on the expand spring to its new length. Reduced motion: cross-fades, the bar jumps.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReadingPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val v by core.readingView.collectAsState()
-    var text by remember { mutableStateOf("") }
+    val page = remember(v) { core.readingPage(v) }
+    var infoOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var addChosen by remember { mutableStateOf<String?>(null) }
+    var allCard by remember { mutableStateOf<String?>(null) }
+    var rowKey by remember { mutableStateOf<String?>(null) }
     var said by remember { mutableStateOf<ReadingSaid?>(null) }
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "reading-said",
     )
-    fun act(block: suspend () -> ReadingSaid, light: Boolean = false) {
+    fun act(light: Boolean = false, after: (ReadingSaid) -> Unit = {}, block: suspend () -> ReadingSaid) {
         scope.launch {
             val r = runCatching { block() }.getOrNull() ?: return@launch
             said = r
             if (r.refused) haptics.tick() else if (light) haptics.light() else haptics.tick()
+            after(r)
         }
     }
 
-    LazyColumn(
-        Modifier.fillMaxSize().testTag(READING_LIST_TAG),
-        contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        item(key = "close") {
-            Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        }
-        item(key = "title") {
-            Text(ReadingRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.READING)).appear(rememberAppearance(0)))
-        }
-        item(key = "summary") {
-            Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "reading-summary") { s ->
-                    Text(s, style = MekaType.body, color = Meka.colors.textSecondary)
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().testTag(READING_LIST_TAG),
+            contentPadding = PaddingValues(MekaSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            item(key = "close") {
+                Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
+            }
+            item(key = "title") {
+                LifePageHeader(
+                    page.title, page.info, infoOpen,
+                    titleModifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.READING)).appear(rememberAppearance(0)),
+                    onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                    onAdd = { haptics.tick(); addChosen = null; said = null; addOpen = true },
+                )
+            }
+            item(key = "summary") {
+                Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "reading-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    }
+                    Crossfade(v.month, animationSpec = MekaMotion.appear(reduced), label = "reading-month") { m ->
+                        m?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+                    }
+                    // The last thing done from + Add or a sheet, with its Undo, while no sheet is open.
+                    if (!addOpen && rowKey == null) SaidLine(said, saidColor) { token -> undo(core, token, scope) { said = it } }
                 }
-                Crossfade(v.month, animationSpec = MekaMotion.appear(reduced), label = "reading-month") { m ->
-                    m?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+            }
+            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            page.cards.forEachIndexed { i, c ->
+                item(key = "card-${c.key}") {
+                    LifePageCard(
+                        c, Modifier.animateItem().appear(rememberAppearance(3 + i)),
+                        onMore = { haptics.tick(); allCard = c.key },
+                        onRow = { r -> haptics.tick(); said = null; rowKey = r.key },
+                    )
+                }
+            }
+            item(key = "note") {
+                Text(ReadingRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+            }
+        }
+        // + Add: a book, podcast or course typed once, or the year's goal.
+        LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+            AddChoiceRows(page.addChoices, addChosen) { c -> haptics.tick(); said = null; addChosen = c.key }
+            addChosen?.let { choice ->
+                Field(ReadingPageRules.hint(choice)) { typed ->
+                    act(light = true, after = { if (!it.refused) addOpen = false }) {
+                        if (choice == ReadingPageRules.ADD_GOAL) core.setReadingGoal(typed) else core.addReading(typed)
+                    }
+                }
+                said?.takeIf { it.refused }?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
+            }
+        }
+        // See all: every row of one card, a tap opens its sheet.
+        val all = allCard
+        LifeSheet(all != null, all ?: ReadingPageRules.TITLE, READING_ALL_SHEET_TAG, onClose = { allCard = null }) {
+            if (all != null) ReadingPageRules.allRows(v, all).forEach { r ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { haptics.tick(); allCard = null; said = null; rowKey = r.key }
+                        .semantics(mergeDescendants = true) {}
+                        .minTouch().padding(vertical = MekaSpace.xs),
+                ) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(listOf(r.line, r.whenText).filter { it.isNotEmpty() }.joinToString(" · "), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
-        item(key = "field") {
-            Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(ReadingRules.HINT, value = text, onValue = { text = it }) { typed ->
-                    scope.launch {
-                        val r = runCatching { core.addReading(typed) }.getOrNull() ?: return@launch
-                        said = r
-                        if (r.refused) { haptics.tick(); text = typed } else haptics.light()
-                    }
-                }
-                Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "reading-line") { s ->
-                    if (s != null) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
-                        Text(s.line, style = MekaType.caption, color = saidColor, modifier = Modifier.weight(1f, fill = false))
-                        s.undo?.let { token ->
-                            Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                                    haptics.tick()
-                                    scope.launch {
-                                        val ok = runCatching { core.undoReading(token) }.getOrDefault(false)
-                                        said = ReadingSaid(if (ok) "Taken back" else "Too late to undo · change it by hand", !ok)
-                                    }
-                                }.minTouch().semantics { contentDescription = "Undo: ${s.line}" })
+        // A row's sheet: a book, podcast or course wherever it has moved to, or the reading goal.
+        val key = rowKey
+        val item = key?.let { ReadingPageRules.item(v, it) }
+        val isGoal = key == ReadingPageRules.KEY_GOAL
+        LifeSheet(key != null, item?.title ?: if (isGoal) ReadingPageRules.GOAL else ReadingPageRules.TITLE, READING_ROW_SHEET_TAG,
+            onClose = { rowKey = null }) {
+            when {
+                item != null -> {
+                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = item.spoken },
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text(item.meta, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Crossfade(item.progress, animationSpec = MekaMotion.appear(reduced), label = "reading-progress") { p ->
+                            Text(p, style = MekaType.caption, color = Meka.colors.textSecondary)
                         }
                     }
+                    ProgressBar(item.fraction, Meka.colors.accent)
+                    if (ReadingPageRules.takesProgress(item)) {
+                        var typed by remember(item.id) { mutableStateOf("") }
+                        Field(ReadingRules.PROGRESS_HINT, value = typed, onValue = { typed = it }) { t ->
+                            act(light = true, after = { if (!it.refused) typed = "" }) { core.readingProgress(item.id, t) }
+                        }
+                        Text(ReadingPageRules.PROGRESS_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        ReadingPageRules.acts(item).forEach { a ->
+                            SheetLink(a.label, Meka.colors.accent, "${a.label}: ${item.title}") {
+                                when (a.key) {
+                                    ReadingPageRules.ACT_FINISH -> act(light = true) { core.finishReading(item.id) }
+                                    ReadingPageRules.ACT_DOWN -> act { core.putDownReading(item.id) }
+                                    else -> act(light = true) { core.startReading(item.id) }
+                                }
+                            }
+                        }
+                        SheetLink("Remove", Meka.colors.textTertiary, "Remove ${item.title}") {
+                            rowKey = null
+                            act { core.removeReading(item.id) }
+                        }
+                    }
+                    SaidLine(said, saidColor) { token -> undo(core, token, scope) { said = it } }
                 }
+                isGoal -> {
+                    v.goal?.let { g ->
+                        val lineColor by animateColorAsState(if (g.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "goal-line")
+                        Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = g.spoken },
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(g.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                                Text(g.count, style = MekaType.caption, color = Meka.colors.textSecondary)
+                            }
+                            Crossfade(g.line, animationSpec = MekaMotion.appear(reduced), label = "goal-pace") { line ->
+                                Text(line, style = MekaType.caption, color = lineColor)
+                            }
+                        }
+                        ProgressBar(g.fraction, Meka.colors.accent)
+                    }
+                    Field(ReadingGoalRules.HINT) { t -> act(light = true) { core.setReadingGoal(t) } }
+                    Text(ReadingGoalRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    if (v.goalTarget > 0) {
+                        SheetLink("Clear the goal", Meka.colors.textTertiary, "Clear the reading goal") { act { core.setReadingGoal("none") } }
+                    }
+                    said?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
+                }
+                key != null -> Text(ReadingPageRules.GONE, style = MekaType.caption, color = Meka.colors.textSecondary)
             }
-        }
-        section("go", "On the go", v.onTheGo, 3) { i, r ->
-            ReadingCard(
-                r, Modifier.animateItem().appear(rememberAppearance(4 + i)),
-                actions = listOf("Finished" to { act({ core.finishReading(r.id) }, light = true) }, "Put down" to { act({ core.putDownReading(r.id) }) }),
-                onProgress = { typed -> act({ core.readingProgress(r.id, typed) }, light = true) },
-                onRemove = { act({ core.removeReading(r.id) }) },
-            )
-        }
-        section("next", "Up next", v.upNext, 4 + v.onTheGo.size) { i, r ->
-            ReadingCard(
-                r, Modifier.animateItem().appear(rememberAppearance(5 + v.onTheGo.size + i)),
-                actions = listOf("Start" to { act({ core.startReading(r.id) }, light = true) }),
-                onProgress = null,
-                onRemove = { act({ core.removeReading(r.id) }) },
-            )
-        }
-        section("finished", "Finished lately", v.finished, 5 + v.onTheGo.size + v.upNext.size) { i, r ->
-            ReadingCard(
-                r, Modifier.animateItem(),
-                actions = listOf("Again" to { act({ core.startReading(r.id) }) }),
-                onProgress = null,
-                onRemove = { act({ core.removeReading(r.id) }) },
-            )
-        }
-        section("down", "Put down", v.putDown, 6 + v.onTheGo.size + v.upNext.size) { i, r ->
-            ReadingCard(
-                r, Modifier.animateItem(),
-                actions = listOf("Pick up" to { act({ core.startReading(r.id) }) }),
-                onProgress = null,
-                onRemove = { act({ core.removeReading(r.id) }) },
-            )
-        }
-        // Slice 4: the reading goal for the year, tracked in Goals too.
-        item(key = "goal") {
-            ReadingGoalBlock(v.goal, v.goalTarget > 0, Modifier.animateItem().padding(top = MekaSpace.l),
-                onSet = { typed -> act({ core.setReadingGoal(typed) }, light = true) },
-                onClear = { act({ core.setReadingGoal("none") }) })
-        }
-        item(key = "note") {
-            Text(ReadingRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.section(
-    key: String, label: String, rows: List<ReadingRow>, step: Int,
-    row: @Composable androidx.compose.foundation.lazy.LazyItemScope.(Int, ReadingRow) -> Unit,
-) {
-    if (rows.isEmpty()) return
-    item(key = "label-$key") {
-        SectionLabel(label, Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(step)))
+private fun undo(core: MekaCore, token: String, scope: kotlinx.coroutines.CoroutineScope, onSaid: (ReadingSaid) -> Unit) {
+    scope.launch {
+        val ok = runCatching { core.undoReading(token) }.getOrDefault(false)
+        onSaid(ReadingSaid(if (ok) "Taken back" else "Too late to undo · change it by hand", !ok))
     }
-    itemsIndexed(rows, key = { _, r -> "r-${r.id}" }) { i, r -> row(i, r) }
+}
+
+/** What the last command said, with Undo when it can be taken back. */
+@Composable
+private fun SaidLine(said: ReadingSaid?, color: Color, onUndo: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "reading-line") { s ->
+        if (s != null) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+            Text(s.line, style = MekaType.caption, color = color, modifier = Modifier.weight(1f, fill = false))
+            s.undo?.let { token ->
+                Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { haptics.tick(); onUndo(token) }
+                        .minTouch().semantics { contentDescription = "Undo: ${s.line}" })
+            }
+        }
+    }
 }
 
 @Composable
-private fun ReadingCard(
-    row: ReadingRow,
-    modifier: Modifier,
-    actions: List<Pair<String, () -> Unit>>,
-    onProgress: ((String) -> Unit)?,
-    onRemove: () -> Unit,
-) {
-    val reduced = Meka.reducedMotion
-    val ended = row.state == "finished" || row.state == "put_down"
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-    ) {
-        Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(row.title, style = MekaType.body, color = if (ended) Meka.colors.textSecondary else Meka.colors.textPrimary,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(row.meta, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(row.progress, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        val f = row.fraction
-        AnimatedVisibility(f != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
-            val shown by animateFloatAsState(f ?: 0f, MekaMotion.expand(reduced), label = "reading-bar")
-            Box(Modifier.padding(vertical = MekaSpace.xxs).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
-                Box(Modifier.fillMaxHeight().fillMaxWidth(shown.coerceIn(0f, 1f)).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
-            }
-        }
-        if (onProgress != null) {
-            var typed by remember(row.id) { mutableStateOf("") }
-            Field(ReadingRules.PROGRESS_HINT, value = typed, onValue = { typed = it }) { onProgress(it) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-            actions.forEach { (label, go) ->
-                Text(label, style = MekaType.caption, color = Meka.colors.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = go)
-                        .minTouch().semantics { contentDescription = "$label: ${row.title}" }.padding(MekaSpace.xs))
-            }
-            Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
-                    .minTouch().semantics { contentDescription = "Remove ${row.title}" }.padding(MekaSpace.xs))
-        }
-    }
+private fun SheetLink(label: String, color: Color, description: String, onClick: () -> Unit) {
+    Text(label, style = MekaType.caption, color = color,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description }
+            // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+            .minTouch().padding(horizontal = MekaSpace.xs))
 }
 
-/**
- * READING GOAL (slice 4): "Read 12 books in 2026", "4 of 12", the pace in brass while on pace or ahead, a bar, and a
- * field for the books a year ("12", "none" clears it), with Clear while one is set.
- */
+/** How far, in brass; it fades in and out with a fraction and grows on the expand spring. */
 @Composable
-private fun ReadingGoalBlock(goal: ReadingGoalView?, set: Boolean, modifier: Modifier, onSet: (String) -> Unit, onClear: () -> Unit) {
+private fun ProgressBar(fraction: Float?, fill: Color) {
     val reduced = Meka.reducedMotion
-    var typed by remember { mutableStateOf("") }
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        SectionLabel(ReadingGoalRules.HEAD)
-        AnimatedVisibility(goal != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
-            val g = goal ?: return@AnimatedVisibility
-            val lineColor by animateColorAsState(if (g.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "goal-line")
-            val shown by animateFloatAsState(g.fraction, MekaMotion.expand(reduced), label = "goal-bar")
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-                    .semantics(mergeDescendants = true) { contentDescription = g.spoken },
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(g.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                    Text(g.count, style = MekaType.caption, color = Meka.colors.textSecondary)
-                }
-                Crossfade(g.line, animationSpec = MekaMotion.appear(reduced), label = "goal-pace") { line ->
-                    Text(line, style = MekaType.caption, color = lineColor)
-                }
-                Box(Modifier.padding(vertical = MekaSpace.xxs).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(shown.coerceIn(0f, 1f)).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
-                }
-            }
-        }
-        Field(ReadingGoalRules.HINT, value = typed, onValue = { typed = it }) { onSet(it); typed = "" }
-        if (set) {
-            Text("Clear the goal", style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClear)
-                    .minTouch().semantics { contentDescription = "Clear the reading goal" }.padding(MekaSpace.xs))
+    AnimatedVisibility(fraction != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+        val shown by animateFloatAsState(fraction ?: 0f, MekaMotion.expand(reduced), label = "reading-bar")
+        Box(Modifier.padding(vertical = MekaSpace.xxs).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(shown.coerceIn(0f, 1f)).clip(RoundedCornerShape(MekaRadius.pill)).background(fill))
         }
     }
 }
