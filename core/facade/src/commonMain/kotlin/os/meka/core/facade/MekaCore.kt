@@ -6098,6 +6098,13 @@ class MekaCore(
      */
     suspend fun addTrip(text: String): os.meka.core.domain.TripAdded = onCore { trips.add(text) }
 
+    /**
+     * Every page under Ask in one shape, slice 16: Ask → Trips as the page shape (both apps). + Add's two choices
+     * (A trip · A booking) both go to [addTrip], which tells one from the other.
+     */
+    fun tripsPage(view: os.meka.core.domain.TripsView = _trips.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.TripsPageRules.page(view, todayEpochDay())
+
     /** Removes a trip and its bookings for good. */
     suspend fun removeTrip(id: String): Boolean = onCore { trips.remove(id) }
 

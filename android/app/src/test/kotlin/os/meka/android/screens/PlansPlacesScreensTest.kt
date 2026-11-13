@@ -44,6 +44,7 @@ import os.meka.android.ask.READING_ROW_SHEET_TAG
 import os.meka.android.ask.ReadingPane
 import os.meka.android.ask.TRIPS_LIST_TAG
 import os.meka.android.ask.TripsPane
+import os.meka.android.ask.TRIPS_ROW_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
@@ -56,6 +57,7 @@ import os.meka.core.domain.ReadingGoalRules
 import os.meka.core.domain.ReadingPageRules
 import os.meka.core.domain.ReadingRules
 import os.meka.core.domain.TripRules
+import os.meka.core.domain.TripsPageRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -180,12 +182,18 @@ class PlansPlacesScreensTest {
         when (place) {
             Place.TRIPS -> {
                 val v = core.tripsView.value
-                ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.name, it.line) }, mustShow = false)
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != TripRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with no trips")
                 if (fill == Fill.MANY && v.rows.size != 3) fail("$name: ${v.rows.size} rows for three trips")
                 if (fill == Fill.MANY && v.rows.none { it.name == "Seville" }) fail("$name: Seville, the trip Trip lists packs for, isn't on Trips")
-                ScreenShots.assertShows(compose, name, TripRules.addHint(hasTrips = !v.isEmpty))
+                // The page shape (slice 16): the three numbers, and Your trips' first row (or its empty line).
+                val page = core.tripsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                val first = page.cards.first()
+                ScreenShots.assertReadable(compose, name, first.rows.flatMap { listOf(it.name, it.line) }, mustShow = false)
+                first.rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, TripsPageRules.TRIPS_EMPTY)
             }
             Place.GIFTS -> {
                 val v = core.giftsView.value
@@ -319,8 +327,9 @@ class PlansPlacesScreensTest {
     }
 
     /**
-     * Works by hand, Trips: a tap on a trip opens its timeline; × takes a booking off and Undo puts it back; Remove trip
-     * takes the trip and its bookings; the field adds a trip.
+     * Works by hand, Trips (the page shape, slice 16): a trip's row opens its sheet with its timeline; × takes a booking
+     * off and Undo (in the sheet) puts it back; Remove trip takes the trip and its bookings; a booking's row opens its
+     * sheet and Remove takes it; + Add → A trip adds one.
      */
     private fun tripsByHand(core: MekaCore) {
         val name = "trips-by-hand"
@@ -330,7 +339,7 @@ class PlansPlacesScreensTest {
         val line = trip.timeline.flatMap { it.lines }.firstOrNull() ?: fail("$name: Barcelona has no bookings")
         fun bookings() = core.tripsView.value.rows.firstOrNull { it.id == trip.id }?.timeline?.flatMap { it.lines }.orEmpty()
         val remove = hasContentDescription("Remove ${line.text}")
-        tap(p, name, "Barcelona", hasContentDescription(trip.spoken))
+        tap(p, name, "Barcelona", hasText("Barcelona") and !hasAnyAncestor(hasTestTag(TRIPS_ROW_SHEET_TAG)))
         until { shows(remove) }
         if (!shows(remove)) fail("$name: tapping Barcelona didn't open its timeline")
         assertTouchTargets(name)
@@ -343,7 +352,23 @@ class PlansPlacesScreensTest {
         tap(p, name, "Remove trip", hasContentDescription("Remove Barcelona and its bookings"))
         until { core.tripsView.value.rows.none { it.id == trip.id } }
         if (core.tripsView.value.rows.any { it.id == trip.id }) fail("$name: Remove trip left Barcelona")
-        type(p, name, TripRules.ADD_DESCRIPTION, "Rome 20–22 Nov")
+        // A booking's own row: the next trip's first booking, opened from Booked and removed from its sheet.
+        val v = core.tripsView.value
+        val booked = core.tripsPage(v).cards.firstOrNull { it.key == TripsPageRules.BOOKED }?.rows?.firstOrNull()
+        if (booked != null) {
+            val b = TripsPageRules.booking(v, booked.key) ?: fail("$name: ${booked.name} has no booking behind it")
+            fun gone() = core.tripsView.value.rows.none { t -> t.timeline.any { d -> d.lines.any { it.bookingId == b.bookingId } } }
+            tap(p, name, booked.name, hasText(booked.name) and !hasAnyAncestor(hasTestTag(TRIPS_ROW_SHEET_TAG)))
+            val rm = hasContentDescription("Remove ${b.text}") and hasAnyAncestor(hasTestTag(TRIPS_ROW_SHEET_TAG))
+            reach(p, name, rm, "booking's Remove")
+            assertTouchTargets(name)
+            tap(p, name, "Remove", rm)
+            until { gone() }
+            if (!gone()) fail("$name: Remove left \"${b.text}\"")
+        }
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        tap(p, name, "A trip", hasText("A trip"))
+        type(p, name, TripsPageRules.spokenHint(TripsPageRules.ADD_TRIP), "Rome 20–22 Nov")
         until { core.tripsView.value.rows.any { it.name == "Rome" } }
         if (core.tripsView.value.rows.none { it.name == "Rome" }) fail("$name: Done on the field added no trip")
         reach(p, name, hasText("Rome"), "new trip on screen")

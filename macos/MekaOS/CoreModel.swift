@@ -6146,6 +6146,12 @@ final class CoreModel {
         }
     }
 
+    /// Every page under Ask in one shape, slice 16: Ask → Trips as the page shape (+ Add's two choices both go to addTrip).
+    func tripsPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.tripsPage(view: trips ?? TripsView.companion.EMPTY)
+    }
+
     /// Every page under Ask in one shape, slice 15: Ask → Kids as the page shape.
     func kidsPage() -> LifePageView? {
         guard let core else { return nil }

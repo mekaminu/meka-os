@@ -128,6 +128,9 @@ data class TripRow(
     val spoken: String,
     /** Travel documents from the Vault ([TripDocRules]); null once the trip is over or when the Vault wasn't read. */
     val documents: TripDocs? = null,
+    /** The trip's first and last day (the page shape's numbers and Booked card); 0 when built elsewhere. */
+    val startDay: Long = 0,
+    val endDay: Long = 0,
 )
 
 data class TripsView(
@@ -469,6 +472,7 @@ object TripRules {
             return TripRow(
                 t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t, clocks), "${t.name}. $line. $status",
                 if (withDocs) docs?.let { TripDocRules.forTrip(t, it, today) } else null,
+                t.startDay, t.endDay,
             )
         }
         val rows = ordered.map { row(it, withDocs = true) }
