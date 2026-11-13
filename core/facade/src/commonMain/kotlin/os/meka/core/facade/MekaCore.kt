@@ -6620,6 +6620,10 @@ class MekaCore(
     /** Removes a school line for good (typed by mistake). */
     suspend fun removeSchool(id: String): Boolean = onCore { school.remove(id).also { mailFindsChanged() } }
 
+    /** Every page under Ask in one shape, slice 14: Ask → School as the page shape (both apps). */
+    fun schoolPage(view: os.meka.core.domain.SchoolView = _school.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.SchoolPageRules.page(view, todayEpochDay())
+
     /**
      * School dates filled in (slice 1): fills in [councilId]'s holidays still to come (the council card's choice,
      * [os.meka.core.domain.SchoolTerms.councils], from his profile) as days off for both boys, marked with the council and the day its page

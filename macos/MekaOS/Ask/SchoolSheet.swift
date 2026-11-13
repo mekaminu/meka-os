@@ -1,31 +1,36 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → More → School on the Mac (school rhythm, slice 1), like the Fold's SchoolPane: Theo's and Finn's school year,
-/// typed once, one line each ("INSET 27 Oct", "Half term 26–30 Oct", "Theo PE Tue"), in three groups — days off, dates
-/// and every week — each row with Remove. Only Strings cross to the core.
+/// Ask → School on the Mac in the page shape (every page under Ask in one shape, slice 14; approved 2026-11-11,
+/// docs/design/look/LifePage.dc.html), like the Fold's SchoolPane: the title with its ⓘ, one gold + Add (A day off ·
+/// A school date · Every week, each one typed line; The school's INSET days, pasted dates or a letter, with School's
+/// website › from About you), three numbers (how soon the next day off is, the days off to cover or the dates ahead,
+/// the weekly things), then Days off, Dates, Every week and Holidays from the council (five rows each, See all for
+/// the rest). A row opens in place with ‹ School back: its day and who, the cover answer or reminder, where it came
+/// from, I'll work from home / Covered while the question is open, To a day… for a date, and Remove; a council's row
+/// opens the council card (Fill in or Remove all, Add them, each with Undo). Only Strings, Bools and Int64s cross to
+/// the core; nothing is sent to the school.
 ///
-/// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (the "couldn't read"
-/// line lit in the accent); rows stagger in and arrive or leave on the expand spring; Add gives a light haptic, Remove
-/// a tick. Reduce Motion: cross-fades.
-///
-/// School dates filled in (slice 1): the council card under the summary (Fill in a council's holidays, or Remove all,
-/// each followed by a line with Undo) and a second field for the school's INSET days pasted as dates or a letter.
-/// Slice 3: over that field, where INSET days are and **School's website ›** once About you holds it.
-///
-/// Slice 2, the yearly look: the card's brass line for new dates from the council (Add them, then Undo) or, from June,
-/// next school year's holidays not in yet (Council's page when the council's dates are in); it cross-fades.
+/// Motion: the sheet scale-fades (system); sections stagger in; + Add's choices and field and the ⓘ unfold on the
+/// expand spring; a row opens and closes with a cross-fade and slide from the trailing edge; the answer line
+/// cross-fades (a line nothing could be read from lit in the accent); an add gives a light haptic, Remove a tick.
+/// Reduce Motion: cross-fades.
 struct SchoolSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    @State private var infoOpen = false
+    @State private var adding = false
+    @State private var addChoice: String?
     @State private var text = ""
-    /// What the last Add said, while the sheet is open.
+    /// What the last add said, while the sheet is open.
     @State private var said: String?
-    @State private var inset = ""
-    @State private var insetSaid: String?
+    /// The row that's open, if any (its key, "item:…" or "council:…").
+    @State private var open: String?
+    /// The card whose rows are all shown (See all), if any.
+    @State private var showAll: String?
     /// The council card's last action for Undo: the council's id and whether it was Fill in.
     @State private var termsDone: (id: String, filled: Bool)?
     @State private var termsSaid: String?
@@ -33,90 +38,225 @@ struct SchoolSheet: View {
     @State private var addedIds: [String]?
 
     var body: some View {
-        let v = model.school
-        let off = v?.off ?? []
-        let dates = v?.dates ?? []
-        let weekly = v?.weekly ?? []
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text("School").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v?.summary ?? SchoolRules.shared.EMPTY_LINE).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.summary)
-                .staggeredAppear(1)
-            if let card = v?.terms {
-                termsCard(card).staggeredAppear(2)
-            }
-            TextField(SchoolRules.shared.ADD_HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    let typed = text
-                    text = ""
-                    Task { said = await model.addSchool(typed) }
-                }
-                .padding(.top, MekaSpace.xs)
-                .staggeredAppear(2)
-            if let said {
-                Text(said).font(MekaType.caption)
-                    .foregroundStyle(said == SchoolRules.shared.NOT_READ ? palette.accent : palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-            }
-            if let link = v?.inset {
-                // Slice 3: where the INSET days are, and the school's website from About you.
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-                    Text(link.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let act = link.action, let u = link.url, let url = URL(string: u) {
-                        Spacer(minLength: MekaSpace.xs)
-                        Button("\(act) ›") { openURL(url) }
-                            .buttonStyle(MekaPressStyle())
-                            .font(MekaType.itemMeta)
-                            .foregroundStyle(palette.accent)
-                            .accessibilityLabel("\(act). \(link.line)")
+        let rules = SchoolPageRules.shared
+        let v = model.school ?? SchoolView.companion.EMPTY
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            if let key = open {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil; said = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                Group {
+                    if rules.isCouncil(key: key) {
+                        if let card = v.terms { termsCard(card) } else { Text(rules.GONE).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    } else {
+                        rowDetail(key, v)
                     }
                 }
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: link.url)
-                .padding(.top, MekaSpace.xs)
-                .staggeredAppear(3)
-            }
-            TextField(SchoolTerms.shared.INSET_HINT, text: $inset)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    let pasted = inset
-                    inset = ""
-                    Task { insetSaid = await model.addSchoolInset(pasted) }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
+            } else if let card = showAll {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                Text(rules.cardTitle(cardKey: card)).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(rules.allRows(view: v, cardKey: card, today: model.todayEpochDay), id: \.key) { r in
+                            let key = r.key
+                            Button { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; showAll = nil; said = nil } } label: {
+                                HStack(spacing: MekaSpace.xs) {
+                                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                    }
+                                    Spacer(minLength: MekaSpace.xs)
+                                    Text(r.whenText).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textTertiary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
                 }
-                .staggeredAppear(3)
-            if let insetSaid {
-                Text(insetSaid).font(MekaType.caption)
-                    .foregroundStyle(insetSaid == SchoolTerms.shared.INSET_NONE ? palette.accent : palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: insetSaid)
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    group("Days off", off, first: 3)
-                    group("Dates", dates, first: 3 + off.count)
-                    group("Every week", weekly, first: 3 + off.count + dates.count)
+                .frame(maxHeight: 400)
+                .transition(.opacity)
+            } else if let page = model.schoolPage() {
+                LifePageHeader(title: page.title, info: page.info, palette: palette, infoOpen: $infoOpen) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding.toggle(); said = nil }
                 }
-                .animation(MekaMotion.expand(reduced: reduceMotion), value: (off + dates + weekly).map(\.id))
+                .staggeredAppear(0)
+                if adding { addForm(page, v) }
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    if !adding, let said {
+                        Text(said).font(MekaType.caption)
+                            .foregroundStyle(rules.isNotRead(line: said) ? palette.accent : palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                    }
+                }
+                .staggeredAppear(1)
+                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        ForEach(0..<Int(page.cardCount), id: \.self) { i in
+                            let card = page.cardAt(index: Int32(i))
+                            let cardKey = card.key
+                            LifePageCardView(card: card, palette: palette, onMore: {
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = cardKey }
+                            }, onRow: { r in
+                                let key = r.key
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; said = nil }
+                            })
+                            .staggeredAppear(3 + i)
+                        }
+                        Text(SchoolRules.shared.SHARED).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxHeight: 420)
             }
-            .frame(maxHeight: 360)
-            Text(SchoolRules.shared.SHARED).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
-        .frame(width: 460)
+        .frame(width: 480)
         .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showAll)
+    }
+
+    /// An open row as it is now: its part, day and who, notes, the cover taps while asked, To a day… and Remove.
+    @ViewBuilder
+    private func rowDetail(_ key: String, _ v: SchoolView) -> some View {
+        let rules = SchoolPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let row = rules.row(view: v, key: key) {
+                let id = row.id
+                let title = row.title
+                Text(title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
+                Text(rules.partLabel(view: v, row: row)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(row.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    if let note = row.note {
+                        Text(note).font(MekaType.caption).foregroundStyle(palette.accent)
+                            .contentTransition(.opacity)
+                    }
+                    if let source = row.source {
+                        Text(source).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(row.spoken)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: row.note)
+                if let cover = rules.cover(view: v, key: key) {
+                    Text(cover.question).font(MekaType.body).foregroundStyle(palette.accent)
+                    HStack(spacing: MekaSpace.xs) {
+                        Button(cover.homeLabel) { model.answerSchoolCover(id, home: true) }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityLabel("\(cover.homeLabel): \(cover.title)")
+                        Button(cover.coveredLabel) { model.answerSchoolCover(id, home: false) }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("\(cover.coveredLabel): \(cover.title)")
+                    }
+                    Text(cover.detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                // Week board item (5) part 4: getting ready for a school date as a task on a day of the Board.
+                if let date = row.day?.int64Value {
+                    DateToDayView(kind: .school, id: id, title: title, date: date, palette: palette)
+                }
+                Button("Remove") {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil }
+                    model.removeSchool(id)
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.textTertiary)
+                .accessibilityLabel("Remove \(title)")
+            } else {
+                // Removed (here or on the Fold) while it was open.
+                Text(rules.GONE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+
+    @ViewBuilder
+    private func addForm(_ page: LifePageView, _ v: SchoolView) -> some View {
+        let rules = SchoolPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(page.addTitle).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(0..<Int(page.addChoiceCount), id: \.self) { i in
+                    let c = page.addChoiceAt(index: Int32(i))
+                    let key = c.key
+                    chip(c.label, lit: addChoice == key) { addChoice = key; said = nil }
+                        .help(c.hint)
+                }
+            }
+            if let choice = addChoice {
+                if rules.isInset(choice: choice), let link = v.inset {
+                    // Where the INSET days are, and the school's website from About you.
+                    HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                        Text(link.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let act = link.action, let u = link.url, let url = URL(string: u) {
+                            Spacer(minLength: MekaSpace.xs)
+                            Button("\(act) ›") { openURL(url) }
+                                .buttonStyle(MekaPressStyle())
+                                .font(MekaType.itemMeta)
+                                .foregroundStyle(palette.accent)
+                                .accessibilityLabel("\(act). \(link.line)")
+                        }
+                    }
+                }
+                TextField(rules.hint(choice: choice), text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(rules.spokenHint(choice: choice))
+                    .onSubmit { submit(choice) }
+                if let said, rules.isNotRead(line: said) {
+                    Text(said).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func submit(_ choice: String) {
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return }
+        let rules = SchoolPageRules.shared
+        let inset = rules.isInset(choice: choice)
+        let m = model
+        Task {
+            let line: String?
+            if inset { line = await m.addSchoolInset(typed) } else { line = await m.addSchool(typed) }
+            let shown = line ?? (inset ? SchoolTerms.shared.INSET_NONE : SchoolRules.shared.NOT_READ)
+            said = shown
+            // A line nothing could be read from keeps its words to fix.
+            if !rules.isNotRead(line: shown) { text = ""; adding = false; addChoice = nil }
+        }
+    }
+
+    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(MekaType.caption).lineLimit(1)
+                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityAddTraits(lit ? .isSelected : [])
     }
 
     /// The council card: councils to pick from with Fill in, or what's in with Remove all; then the last action's line
@@ -235,28 +375,6 @@ struct SchoolSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: card.filled?.id)
     }
 
-    @ViewBuilder
-    private func group(_ label: String, _ rows: [SchoolRow], first: Int) -> some View {
-        if !rows.isEmpty {
-            Text(label.uppercased())
-                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(palette.textTertiary)
-                .padding(.top, MekaSpace.m)
-                .staggeredAppear(first)
-            ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    SchoolRowView(row: row, palette: palette) { model.removeSchool(row.id) }
-                    // Week board item (5) part 4: getting ready for a school date as a task on a day of the Board.
-                    if let date = row.day?.int64Value {
-                        DateToDayView(kind: .school, id: row.id, title: row.title, date: date, palette: palette)
-                            .padding(.leading, MekaSpace.m)
-                    }
-                }
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                .staggeredAppear(first + 1 + i)
-            }
-        }
-    }
 }
 
 /// Week board item (5) part 4: **To a day…** under a school date (School) or a birthday (Gifts), like the Fold's
@@ -321,39 +439,6 @@ struct DateToDayView: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: choosing)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-    }
-}
-
-private struct SchoolRowView: View {
-    let row: SchoolRow
-    let palette: MekaPalette
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: MekaSpace.xs) {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                if let note = row.note {
-                    Text(note).font(MekaType.caption).foregroundStyle(palette.accent)
-                }
-                if let source = row.source {
-                    Text(source).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(row.spoken)
-            Spacer()
-            Button("Remove", action: onRemove)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.caption)
-                .foregroundStyle(palette.textTertiary)
-                .accessibilityLabel("Remove \(row.title)")
-        }
-        .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.xs)
-        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .mekaHoverLift()
     }
 }
 

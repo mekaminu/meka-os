@@ -98,6 +98,8 @@ data class SchoolRow(
     val source: String? = null,
     /** A one-off date's day (epoch day), for its To a day… chips (Week board item (5) part 4); null on other rows. */
     val day: Long? = null,
+    /** The first day still to come of a day off or a date (a day off under way: today), for the page shape's "5 days"; null for a weekly row. */
+    val startDay: Long? = null,
 )
 
 /**
@@ -462,13 +464,13 @@ object SchoolRules {
             val line = "${spanLabel(o.startDay, o.endDay)} · ${whoLabel(o.who)}"
             val note = coverNote(o)
             val source = SchoolTerms.sourceLine(o)
-            SchoolRow(o.id, o.title, line, note, listOfNotNull(o.title, line, note, source).joinToString(". "), source)
+            SchoolRow(o.id, o.title, line, note, listOfNotNull(o.title, line, note, source).joinToString(". "), source, startDay = maxOf(o.startDay, today))
         }
         val dateRows = dates.map { d ->
             val line = "${dayWord(d.startDay, today)} · ${whoLabel(d.who)}"
             val note = reminderNote(d, today)
             val source = SchoolTerms.sourceLine(d)
-            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note, source).joinToString(". "), source, day = d.startDay)
+            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note, source).joinToString(". "), source, day = d.startDay, startDay = d.startDay)
         }
         val weeklyRows = weekly.map { w ->
             val line = "Every ${CivilDate.DAY_LONG[w.weekday - 1]} · ${whoLabel(w.who)}"

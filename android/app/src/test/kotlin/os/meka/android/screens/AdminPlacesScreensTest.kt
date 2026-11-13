@@ -41,7 +41,9 @@ import os.meka.android.ask.AppointmentsPane
 import os.meka.android.ask.KIDS_LIST_TAG
 import os.meka.android.ask.KidsPane
 import os.meka.android.ask.LIFE_ADD_SHEET_TAG
+import os.meka.android.ask.SCHOOL_COUNCIL_SHEET_TAG
 import os.meka.android.ask.SCHOOL_LIST_TAG
+import os.meka.android.ask.SCHOOL_ROW_SHEET_TAG
 import os.meka.android.ask.SchoolPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -52,8 +54,8 @@ import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.KidChoreRules
 import os.meka.core.domain.KidSize
 import os.meka.core.domain.KidsRules
+import os.meka.core.domain.SchoolPageRules
 import os.meka.core.domain.SchoolRules
-import os.meka.core.domain.SchoolTerms
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -212,10 +214,16 @@ class AdminPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != SchoolRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing entered")
                 if (fill != Fill.EMPTY && v.isEmpty) fail("$name: nothing kept from what was typed")
-                // Slice 16's findings: with no council to offer, the council card ends just under its words.
+                // The page shape (slice 14): the three numbers, and Days off's first row (or its empty line).
+                val page = core.schoolPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, SchoolPageRules.OFF_EMPTY)
+                // Slice 16's findings: with no council to offer, the council card never asks him to pick one.
                 v.terms?.takeIf { it.choices.isEmpty() && it.refresh == null && it.filled == null }?.let { t ->
                     if ("Pick" in t.line) fail("$name: \"${t.line}\" asks him to pick a council with none to pick")
-                    ScreenShots.assertHugs(compose, name, "school-terms", t.line.takeLast(14), maxGapDp = 24f)
                 }
             }
         }
@@ -437,8 +445,10 @@ class AdminPlacesScreensTest {
     }
 
     /**
-     * Works by hand, School: Fill in (when a council is offered) and Undo; Remove takes a row off; the field adds one;
-     * the INSET field adds days off; To a day… on a date unfolds its chips, a chip makes the task and Undo takes it back.
+     * Works by hand, School (the page shape, slice 14): every button a 48 dp touch; a council's row opens the council
+     * card, Fill in and Undo; half term's row opens its sheet and Remove takes it off; + Add → Every week adds one from
+     * the field; + Add → The school's INSET days adds a day off; a date's sheet unfolds To a day…, a chip makes the task
+     * and Undo takes it back.
      */
     private fun schoolByHand(core: MekaCore) {
         val name = "school-by-hand"
@@ -446,30 +456,49 @@ class AdminPlacesScreensTest {
         assertTouchTargets(name)
         fun v() = core.schoolView.value
         val undo = hasText("Undo") and hasClickAction()
+        val sheet = hasAnyAncestor(hasTestTag(SCHOOL_ROW_SHEET_TAG))
+        val addSheet = hasAnyAncestor(hasTestTag(LIFE_ADD_SHEET_TAG))
+        val council = hasAnyAncestor(hasTestTag(SCHOOL_COUNCIL_SHEET_TAG))
         v().terms?.choices?.firstOrNull()?.let { c ->
+            tap(p, name, c.name, hasText(c.name) and !council)
+            until { shows(hasContentDescription("Fill in ${c.name}'s holidays")) }
             tap(p, name, "Fill in", hasContentDescription("Fill in ${c.name}'s holidays"))
             until { v().terms?.filled != null }
             if (v().terms?.filled == null) fail("$name: Fill in didn't fill ${c.name}'s holidays")
-            tap(p, name, "Undo", undo)
+            tap(p, name, "Undo", undo and council)
             until { v().terms?.filled == null }
             if (v().terms?.filled != null) fail("$name: Undo left ${c.name}'s holidays in")
+            tap(p, name, "the council's Close", hasText("Close") and council)
+            until { !shows(hasTestTag(SCHOOL_COUNCIL_SHEET_TAG)) }
         }
         val half = v().off.firstOrNull { it.title.startsWith("Half term") } ?: fail("$name: no half term")
-        tap(p, name, "Remove", hasContentDescription("Remove ${half.title}"))
+        tap(p, name, half.title, hasText(half.title) and !sheet)
+        until { shows(hasContentDescription("Remove ${half.title}")) }
+        assertTouchTargets(name)
+        tap(p, name, "Remove", hasContentDescription("Remove ${half.title}") and sheet)
         until { v().off.none { it.id == half.id } }
         if (v().off.any { it.id == half.id }) fail("$name: Remove left ${half.title}")
-        val weekly = v().weekly.size
-        type(p, name, SchoolRules.ADD_HINT, "Sam PE Thu")
-        until { v().weekly.size > weekly }
-        if (v().weekly.size <= weekly) fail("$name: Done on the field added nothing")
-        val off = v().off.size
-        type(p, name, SchoolTerms.INSET_HINT, "4 Dec 2026")
-        until { v().off.size > off }
-        if (v().off.size <= off) fail("$name: Done on the INSET field added no day off")
+        until { !shows(hasTestTag(SCHOOL_ROW_SHEET_TAG)) }
+        fun add(choice: String, typed: String, grew: () -> Int) {
+            val before = grew()
+            tap(p, name, "+ Add", hasContentDescription("Add"))
+            until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+            val label = SchoolPageRules.ADD_CHOICES.first { it.key == choice }.label
+            tap(p, name, label, hasText(label) and addSheet)
+            until { shows(hasContentDescription(SchoolPageRules.spokenHint(choice)) and hasSetTextAction()) }
+            type(p, name, SchoolPageRules.spokenHint(choice), typed)
+            until { grew() > before }
+            if (grew() <= before) fail("$name: + Add → $label added nothing from \"$typed\"")
+            until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        }
+        add(SchoolPageRules.ADD_WEEKLY, "Sam PE Thu") { v().weekly.size }
+        add(SchoolPageRules.ADD_INSET, "4 Dec 2026") { v().off.size }
         assertTouchTargets(name)
         val row = v().dates.firstOrNull { it.day != null } ?: fail("$name: no dated row for To a day…")
         val day = core.dateFeedDays(row.day!!).firstOrNull() ?: fail("$name: no day chips up to ${row.title}")
         val chip = hasContentDescription("${day.spoken}: ${row.title}")
+        tap(p, name, row.title, hasText(row.title) and !sheet)
+        until { shows(hasContentDescription(BoardFeedRules.dateSpoken(row.title))) }
         tap(p, name, BoardFeedRules.TO_DAY, hasContentDescription(BoardFeedRules.dateSpoken(row.title)))
         until { shows(chip) }
         if (!shows(chip)) fail("$name: To a day… didn't unfold its day chips")

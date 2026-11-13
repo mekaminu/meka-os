@@ -3488,6 +3488,12 @@ final class CoreModel {
         return core.emergencyPage(view: emergency ?? EmergencyView.companion.EMPTY)
     }
 
+    /// Ask → School in the page shape (slice 14).
+    func schoolPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.schoolPage(view: school ?? SchoolView.companion.EMPTY)
+    }
+
     /// Ask → Date night in the page shape (slice 11).
     func dateNightPage() -> LifePageView? {
         guard let core else { return nil }

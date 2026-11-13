@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,8 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,8 +44,8 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
-import os.meka.android.today.SectionLabel
-import os.meka.core.domain.SchoolRow
+import os.meka.core.domain.SchoolCoverDone
+import os.meka.core.domain.SchoolPageRules
 import os.meka.core.domain.SchoolRules
 import os.meka.core.domain.SchoolTermCard
 import os.meka.core.domain.SchoolTerms
@@ -55,25 +54,25 @@ import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val SCHOOL_LIST_TAG = "school-list"
+const val SCHOOL_ROW_SHEET_TAG = "school-row-sheet"
+const val SCHOOL_ALL_SHEET_TAG = "school-all-sheet"
+const val SCHOOL_COUNCIL_SHEET_TAG = "school-council-sheet"
 
 /**
- * Ask → More → School (school rhythm, slice 1): Theo's and Finn's school year, typed once, one line each — "INSET
- * 27 Oct", "Half term 26–30 Oct", "Theo PE Tue", "Finn's trip 20 Nov" — in three groups: days off, dates and every
- * week, each row with Remove. A week before a day off that falls on an office day, Needs you asks who's covering.
+ * Ask → School in the page shape (every page under Ask in one shape, slice 14; approved 2026-11-11,
+ * `docs/design/look/LifePage.dc.html`): the title with its ⓘ, one gold + Add (A day off · A school date · Every week,
+ * each one typed line: "INSET 2 Nov", "Alex's trip 20 Nov", "Alex PE Tue"; The school's INSET days, pasted dates or the
+ * school's letter, with School's website › from About you), three numbers (how soon the next day off is, the days off
+ * to cover or the dates ahead, the weekly things), then Days off, Dates, Every week and Holidays from the council (five
+ * rows each, See all for the rest). A day off waiting on "who's covering?" says so in brass. A row opens its sheet: its
+ * day and who, the cover answer or reminder, where it came from, I'll work from home / Covered (with Undo) while the
+ * question is open, To a day… for a date, and Remove; a council's row opens the council card (Fill in or Remove all,
+ * Add them for new dates, each with Undo). Nothing is sent to the school.
  *
- * School dates filled in (slice 1): a card under the summary offers the councils whose holidays Navilife knows; Fill in
- * writes them as days off (each row says "Council dates · checked … · check with the school"), Remove all takes them out,
- * and the line after either has Undo. Under it a second field takes the school's INSET days pasted as dates or a letter.
- * Slice 3: over that field, where INSET days are and **School's website ›** (opened in the browser) once About you holds
- * the school's website, else how to add it; the line cross-fades when it changes.
- *
- * Slice 2, the yearly look: the card's brass line says when a later Navilife carries new dates from the council ("New
- * dates from … · 2028–29 · 6 holidays" with Add them, Undo after) or, from June, that next school year's holidays aren't
- * in yet (with Council's page when the council's dates are in); it cross-fades in and out with the card's line.
- *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
- * cross-fade (the "couldn't read" line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with
- * the list's item motion; Add gives a light haptic, Remove a tick. Reduced motion: cross-fades.
+ * Motion: the title travels in from Ask's tile (shared title); the header, summary, tiles and cards appear in turn;
+ * cards move with the list's item motion; the ⓘ's words unfold and the sheets rise on the expand spring
+ * (LifePageParts); the answer line cross-fades and blends to the accent when nothing could be read (tick haptic; an
+ * add a light haptic); the council card's lines cross-fade as before. Reduced motion: cross-fades.
  */
 @Composable
 fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
@@ -81,48 +80,205 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val v by core.schoolView.collectAsState()
-    // The line under the field after Add: what was added, or that nothing could be read (kept while the pane is open).
+    val page = remember(v) { core.schoolPage(v) }
+    val uri = LocalUriHandler.current
+    // The last add's answer: what was added, or that nothing could be read (lit, the words kept in the field).
     var said by remember { mutableStateOf<String?>(null) }
     val saidColor by animateColorAsState(
-        if (said == SchoolRules.NOT_READ) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "school-said",
+        if (SchoolPageRules.isNotRead(said)) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "school-said",
     )
-
+    var infoOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var addChosen by remember { mutableStateOf<String?>(null) }
+    var addText by remember { mutableStateOf("") }
+    var allCard by remember { mutableStateOf<String?>(null) }
+    var rowKey by remember { mutableStateOf<String?>(null) }
+    var councilOpen by remember { mutableStateOf(false) }
+    // A cover answered from a row's sheet, for its Undo.
+    var coverDone by remember { mutableStateOf<SchoolCoverDone?>(null) }
     // The council card's last action, for its line and Undo: true after Fill in, false after Remove all.
     var terms by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    // Slice 2: what Add them added, for Undo (exactly those go again).
+    // What Add them added, for Undo (exactly those go again).
     var added by remember { mutableStateOf<SchoolTermsAdded?>(null) }
-    val uri = LocalUriHandler.current
     var termsSaid by remember { mutableStateOf<String?>(null) }
-    var insetSaid by remember { mutableStateOf<String?>(null) }
     // Week board item (5) part 4: the date row To a day… last answered, its line, and whether Undo applies.
     var toDay by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
-    val insetColor by animateColorAsState(
-        if (insetSaid == SchoolTerms.INSET_NONE) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "school-inset",
-    )
+    fun open(key: String) {
+        haptics.tick(); said = null; coverDone = null
+        if (SchoolPageRules.isCouncil(key)) councilOpen = true else rowKey = key
+    }
 
-    LazyColumn(
-        Modifier.fillMaxSize().testTag(SCHOOL_LIST_TAG),
-        contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        item(key = "close") {
-            Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        }
-        item(key = "title") {
-            Text("School", style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.SCHOOL)).appear(rememberAppearance(0)))
-        }
-        item(key = "summary") {
-            Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "school-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().testTag(SCHOOL_LIST_TAG),
+            contentPadding = PaddingValues(MekaSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            item(key = "close") {
+                Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
+            }
+            item(key = "title") {
+                LifePageHeader(
+                    page.title, page.info, infoOpen,
+                    titleModifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.SCHOOL)).appear(rememberAppearance(0)),
+                    onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                    onAdd = { haptics.tick(); said = null; addOpen = true },
+                )
+            }
+            item(key = "summary") {
+                Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "school-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                    // What the last add said, while no sheet is open.
+                    val line = if (addOpen) null else said
+                    Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "school-said-line") { l ->
+                        l?.let { Text(it, style = MekaType.caption, color = saidColor) }
+                    }
+                }
+            }
+            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            page.cards.forEachIndexed { i, c ->
+                item(key = "card-${c.key}") {
+                    LifePageCard(
+                        c, Modifier.animateItem().appear(rememberAppearance(3 + i)),
+                        onMore = { haptics.tick(); allCard = c.key },
+                        onRow = { r -> open(r.key) },
+                    )
+                }
+            }
+            item(key = "shared") {
+                Text(SchoolRules.SHARED, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
             }
         }
-        v.terms?.let { card ->
-            item(key = "terms") {
+        // + Add: which kind, then one typed line (or the school's INSET days pasted).
+        LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+            AddChoiceRows(page.addChoices, addChosen) { c -> haptics.tick(); said = null; addChosen = c.key }
+            addChosen?.let { choice ->
+                if (SchoolPageRules.isInset(choice)) v.inset?.let { l ->
+                    // Where the INSET days are, and the school's website from About you.
+                    Text(l.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    val url = l.url
+                    val action = l.action
+                    if (url != null && action != null) {
+                        Text("$action ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clickable(role = Role.Button) { haptics.light(); runCatching { uri.openUri(url) } }.minTouch())
+                    }
+                }
+                Field(
+                    SchoolPageRules.hint(choice), value = addText, onValue = { addText = it },
+                    description = SchoolPageRules.spokenHint(choice), keep = true,
+                ) { typed ->
+                    scope.launch {
+                        val line = runCatching { if (SchoolPageRules.isInset(choice)) core.addSchoolInset(typed) else core.addSchool(typed) }.getOrNull()
+                        said = line ?: if (SchoolPageRules.isInset(choice)) SchoolTerms.INSET_NONE else SchoolRules.NOT_READ
+                        if (line == null || SchoolPageRules.isNotRead(line)) haptics.tick() else { haptics.light(); addText = ""; addOpen = false }
+                    }
+                }
+                said?.takeIf { SchoolPageRules.isNotRead(it) }?.let { Text(it, style = MekaType.caption, color = saidColor) }
+            }
+        }
+        // See all: every row of one card; a tap opens its sheet.
+        val all = allCard
+        LifeSheet(all != null, all?.let(SchoolPageRules::cardTitle) ?: SchoolPageRules.TITLE, SCHOOL_ALL_SHEET_TAG, onClose = { allCard = null }) {
+            if (all != null) SchoolPageRules.allRows(v, all, core.todayEpochDay()).forEach { r ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { allCard = null; open(r.key) }
+                        .semantics(mergeDescendants = true) {}
+                        .minTouch().padding(vertical = MekaSpace.xs),
+                ) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(listOf(r.line, r.whenText).filter { it.isNotEmpty() }.joinToString(" · "), style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+        }
+        // A row's sheet: its part, day and who, notes, the cover question's taps, To a day… and Remove.
+        val openKey = rowKey
+        val row = openKey?.let { SchoolPageRules.row(v, it) }
+        LifeSheet(openKey != null, row?.title ?: SchoolPageRules.TITLE, SCHOOL_ROW_SHEET_TAG, onClose = { rowKey = null }) {
+            if (row == null) {
+                if (openKey != null) Text(SchoolPageRules.GONE, style = MekaType.caption, color = Meka.colors.textSecondary)
+            } else {
+                Text(SchoolPageRules.partLabel(v, row), style = MekaType.caption, color = Meka.colors.textTertiary)
+                Column(Modifier.semantics(mergeDescendants = true) { contentDescription = row.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(row.line, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Crossfade(row.note, animationSpec = MekaMotion.appear(reduced), label = "school-row-note") { n ->
+                        n?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+                    }
+                    row.source?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                }
+                val cover = openKey?.let { SchoolPageRules.cover(v, it) }
+                if (cover != null) {
+                    Text(cover.question, style = MekaType.body, color = Meka.colors.accent)
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        listOf(true to cover.homeLabel, false to cover.coveredLabel).forEach { (home, label) ->
+                            Text(
+                                label, style = MekaType.metaStrong, color = if (home) Meka.colors.onAccent else Meka.colors.textPrimary,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                    .background(if (home) Meka.colors.accent else Meka.colors.surfaceRaised)
+                                    .clickable(role = Role.Button) {
+                                        haptics.medium()
+                                        scope.launch { coverDone = runCatching { core.coverSchool(cover.id, home) }.getOrNull() }
+                                    }
+                                    .semantics { contentDescription = "$label: ${cover.title}" }
+                                    .minTouch().padding(horizontal = MekaSpace.m),
+                            )
+                        }
+                    }
+                    Text(cover.detail, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+                coverDone?.takeIf { it.id == row.id }?.let { done ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Text(done.line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f, fill = false))
+                        Text(
+                            "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) {
+                                    haptics.tick()
+                                    scope.launch { runCatching { core.undoSchoolCover(done) }; coverDone = null }
+                                }
+                                .minTouch().padding(MekaSpace.xs),
+                        )
+                    }
+                }
+                // Week board item (5) part 4: getting ready for a school date as a task on a day of the Board.
+                val date = row.day
+                if (date != null) DateToDay(
+                    key = row.id, title = row.title, days = { core.dateFeedDays(date) },
+                    said = toDay?.takeIf { it.first == row.id }?.second,
+                    onToDay = { day ->
+                        scope.launch {
+                            val line = runCatching { core.schoolDateToDay(row.id, day) }.getOrNull() ?: return@launch
+                            toDay = Triple(row.id, line, line.startsWith("Task "))
+                        }
+                    },
+                    onUndo = if (toDay?.let { it.first == row.id && it.third } == true) {
+                        { scope.launch { runCatching { core.undoDateToDay() }; toDay = null }; Unit }
+                    } else null,
+                )
+                Text(
+                    "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) {
+                            haptics.tick()
+                            rowKey = null
+                            scope.launch { runCatching { core.removeSchool(row.id) } }
+                        }
+                        .semantics { contentDescription = "Remove ${row.title}" }
+                        // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+                        .minTouch().padding(horizontal = MekaSpace.xs),
+                )
+            }
+        }
+        // A council's row: the council card as before (Fill in or Remove all, Add them, each with Undo).
+        LifeSheet(councilOpen, SchoolTerms.CARD_TITLE, SCHOOL_COUNCIL_SHEET_TAG, onClose = { councilOpen = false }) {
+            v.terms?.let { card ->
                 TermsCard(
                     card, termsSaid, undo = terms != null || added != null,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2)).testTag("school-terms"),
+                    modifier = Modifier.testTag("school-terms"),
                     onFill = { id ->
                         haptics.light()
                         scope.launch {
@@ -161,108 +317,6 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
                 )
             }
         }
-        item(key = "field") {
-            Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(SchoolRules.ADD_HINT) { text ->
-                    haptics.light()
-                    scope.launch { said = runCatching { core.addSchool(text) }.getOrNull() ?: SchoolRules.NOT_READ }
-                }
-                Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "school-added") { line ->
-                    line?.let { Text(it, style = MekaType.caption, color = saidColor) }
-                }
-            }
-        }
-        item(key = "inset") {
-            Column(Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                // Slice 3: where the INSET days are, and the school's website from About you (cross-fades when it's added).
-                v.inset?.let { link ->
-                    Crossfade(link, animationSpec = MekaMotion.appear(reduced), label = "school-inset-site") { l ->
-                        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            Text(l.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-                            val url = l.url
-                            val action = l.action
-                            if (url != null && action != null) {
-                                Text("$action ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-                                    modifier = Modifier.clickable(role = Role.Button) { haptics.light(); runCatching { uri.openUri(url) } }.minTouch())
-                            }
-                        }
-                    }
-                }
-                Field(SchoolTerms.INSET_HINT) { text ->
-                    haptics.light()
-                    scope.launch { insetSaid = runCatching { core.addSchoolInset(text) }.getOrNull() ?: SchoolTerms.INSET_NONE }
-                }
-                Crossfade(insetSaid, animationSpec = MekaMotion.appear(reduced), label = "school-inset-said") { line ->
-                    line?.let { Text(it, style = MekaType.caption, color = insetColor) }
-                }
-            }
-        }
-        val remove: (SchoolRow) -> Unit = { row -> haptics.tick(); scope.launch { runCatching { core.removeSchool(row.id) } } }
-        group("Days off", "off", v.off, 3, remove)
-        group("Dates", "dates", v.dates, 3 + v.off.size, remove) { row ->
-            // Week board item (5) part 4: getting ready for a school date as a task on a day of the Board.
-            val date = row.day
-            if (date != null) DateToDay(
-                key = row.id, title = row.title, days = { core.dateFeedDays(date) },
-                said = toDay?.takeIf { it.first == row.id }?.second,
-                onToDay = { day ->
-                    scope.launch {
-                        val line = runCatching { core.schoolDateToDay(row.id, day) }.getOrNull() ?: return@launch
-                        toDay = Triple(row.id, line, line.startsWith("Task "))
-                    }
-                },
-                onUndo = if (toDay?.let { it.first == row.id && it.third } == true) {
-                    { scope.launch { runCatching { core.undoDateToDay() }; toDay = null }; Unit }
-                } else null,
-            )
-        }
-        group("Every week", "weekly", v.weekly, 3 + v.off.size + v.dates.size, remove)
-        item(key = "shared") {
-            Text(SchoolRules.SHARED, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
-        }
-    }
-}
-
-private fun LazyListScope.group(
-    label: String, key: String, rows: List<SchoolRow>, firstStep: Int, remove: (SchoolRow) -> Unit,
-    under: (@Composable (SchoolRow) -> Unit)? = null,
-) {
-    if (rows.isEmpty()) return
-    item(key = "label-$key") {
-        SectionLabel(label.uppercase(), Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(firstStep)))
-    }
-    itemsIndexed(rows, key = { _, r -> "school-${r.id}" }) { i, r ->
-        Column(Modifier.animateItem().appear(rememberAppearance(firstStep + 1 + i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            SchoolRowView(r, Modifier) { remove(r) }
-            under?.invoke(r)
-        }
-    }
-}
-
-@Composable
-private fun SchoolRowView(row: SchoolRow, modifier: Modifier, onRemove: () -> Unit) {
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.spoken },
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-            row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
-            row.source?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        }
-        Text(
-            "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = "Remove ${row.title}" }
-                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
-                .minTouch().padding(horizontal = MekaSpace.xs),
-        )
     }
 }
 
