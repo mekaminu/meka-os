@@ -194,7 +194,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         val now = live ?: return
         if (now.on == on) return
         haptics.tick()
-        live = now.copy(on = on, showVoices = on) // lit at once; the line follows from the server's meter
+        live = now.copy(on = on, showVoices = on && now.voices.isNotEmpty()) // lit at once; the line follows from the server's meter (one Obi's voice: no Live picker of its own)
         scope.launch {
             runCatching { core.setLiveOn(on) }
             live = runCatching { core.liveSettings() }.getOrNull() ?: live

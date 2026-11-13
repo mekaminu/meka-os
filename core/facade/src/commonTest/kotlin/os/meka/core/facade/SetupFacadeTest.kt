@@ -86,11 +86,11 @@ class SetupFacadeTest {
         assertEquals(v, c.setupView.value)
 
         // Picking a voice ticks its step; Today's open within the quarter hour doesn't ask the server again.
-        c.chooseMekaVoice("Amy")
+        c.chooseMekaVoice("Orus")
         server.macs = 1
         val again = c.refreshSetup(fold, force = false)
         assertEquals(1, server.healthAsked)
-        assertEquals("Speaking as Amy", again.steps.first { it.key == "voice.picked" }.line)
+        assertEquals("Speaking as Orus", again.steps.first { it.key == "voice.picked" }.line)
         assertEquals(SetupState.TODO, again.steps.first { it.key == "mac" }.state)
 
         // The Setup page asks afresh: the Mac is now connected.

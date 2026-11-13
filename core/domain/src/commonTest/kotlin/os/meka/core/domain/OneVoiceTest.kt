@@ -2,23 +2,48 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class OneVoiceTest {
     @Test
-    fun withLiveOnEveryClipAsksForLivesVoice() {
-        assertEquals("Charon", OneVoiceRules.asked(null, liveOn = true, liveVoice = "Charon"))
-        assertEquals("Puck", OneVoiceRules.asked("Arthur", liveOn = true, liveVoice = "Puck"))
-        // A voice the picker doesn't offer is Live's default.
-        assertEquals(LiveModeRules.DEFAULT_VOICE, OneVoiceRules.asked(null, liveOn = true, liveVoice = "Nobody"))
+    fun everyClipAsksForObisVoiceWithLiveOnOrOff() {
+        assertEquals("Charon", OneVoiceRules.asked(null, voice = "Charon"))
+        // An older Polly pick no longer changes the voice.
+        assertEquals("Puck", OneVoiceRules.asked("Arthur", voice = "Puck"))
+        // A voice the picker doesn't offer is Obi's default.
+        assertEquals(LiveModeRules.DEFAULT_VOICE, OneVoiceRules.asked(null, voice = "Nobody"))
     }
 
     @Test
-    fun withLiveOffOrTheDevicesVoiceNothingChanges() {
-        assertNull(OneVoiceRules.asked(null, liveOn = false, liveVoice = "Charon"))
-        assertEquals("Arthur", OneVoiceRules.asked("Arthur", liveOn = false, liveVoice = "Charon"))
-        assertEquals(MekaVoiceRules.DEVICE, OneVoiceRules.asked(MekaVoiceRules.DEVICE, liveOn = true, liveVoice = "Charon"))
+    fun theDevicesOwnVoiceStaysTheDevices() {
+        assertEquals(MekaVoiceRules.DEVICE, OneVoiceRules.asked(MekaVoiceRules.DEVICE, voice = "Charon"))
+    }
+
+    @Test
+    fun settingsShowOneListOfObisVoicesThenTheDevice() {
+        val v = OneVoiceRules.view("Orus", chosen = null, state = SpeechRules.ON, usageLine = "u", mac = false)
+        assertEquals(LiveTalkRules.VOICES.map { it.name } + MekaVoiceRules.DEVICE, v.choices.map { it.id })
+        assertEquals(listOf("Orus"), v.choices.filter { it.selected }.map { it.id })
+        assertTrue(v.choices.dropLast(1).all { it.sample && it.group == OneVoiceRules.GROUP })
+        assertEquals("This phone's own voice", v.choices.last().label)
+        assertNull(v.statusLine)
+        assertEquals("u", v.usageLine)
+        assertEquals(OneVoiceRules.INTRO, v.intro)
+        // No Polly rows any more.
+        assertTrue(v.choices.none { it.id == "Brian" || it.id == "Amy" })
+    }
+
+    @Test
+    fun settingsLightTheDeviceAndSayWhyObiCantBeHeard() {
+        val d = OneVoiceRules.view("Charon", chosen = MekaVoiceRules.DEVICE, state = SpeechRules.ON, usageLine = null, mac = true)
+        assertEquals(listOf(MekaVoiceRules.DEVICE), d.choices.filter { it.selected }.map { it.id })
+        assertEquals("This Mac's own voice", d.choices.last().label)
+        val off = OneVoiceRules.view("Charon", chosen = null, state = null, usageLine = null, mac = false, connected = false)
+        assertTrue(off.statusLine!!.contains("Until this device is connected"))
+        assertTrue(off.choices.none { it.sample && it.id != MekaVoiceRules.DEVICE })
+        assertTrue(OneVoiceRules.view("Charon", null, "failed", null, mac = false).statusLine!!.startsWith("Couldn't reach Obi's voice"))
     }
 
     @Test
@@ -31,5 +56,36 @@ class OneVoiceTest {
             assertTrue(it!!.length <= 40, it)
             assertEquals("Speaking as $it", HealthRules.voiceInUseLine(it))
         }
+    }
+
+    @Test
+    fun oneChoiceSetsObisVoiceEverywhereAndSyncs() {
+        val world = os.meka.core.testing.SyncWorld()
+        val a = world.device("android")
+        val m = world.device("mac")
+        val store = MekaVoiceStore(a.replica)
+        assertTrue(store.choose("Brian")) // an older Polly pick
+        assertTrue(store.chooseObiVoice(" orus "))
+        assertEquals("Orus", store.liveVoice())
+        assertNull(store.chosen()) // the old pick is let go
+        a.syncWithRetry(); m.syncWithRetry()
+        assertEquals("Orus", MekaVoiceStore(m.replica).liveVoice())
+        // The device's own voice keeps Obi's voice for Live.
+        assertTrue(store.chooseObiVoice("device"))
+        assertEquals(MekaVoiceRules.DEVICE, store.chosen())
+        assertEquals("Orus", store.liveVoice())
+        assertEquals(MekaVoiceRules.DEVICE, OneVoiceRules.asked(store.chosen(), store.liveVoice()))
+        // A Polly name isn't offered any more; nothing changes.
+        assertFalse(store.chooseObiVoice("Amy"))
+        assertEquals(MekaVoiceRules.DEVICE, store.chosen())
+        // Null: both back to the defaults.
+        assertTrue(store.chooseObiVoice(null))
+        assertNull(store.chosen())
+        assertEquals(LiveModeRules.DEFAULT_VOICE, store.liveVoice())
+        assertEquals("Charon", OneVoiceRules.asked(store.chosen(), store.liveVoice()))
+        assertNull(store.picked())
+        // Picking the default by name still counts as picked (Setup's "Pick a voice").
+        assertTrue(store.chooseObiVoice("Charon"))
+        assertEquals("Charon", store.picked())
     }
 }

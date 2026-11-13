@@ -1805,7 +1805,7 @@ internal fun io.ktor.server.routing.Route.liveCallStream(voice: VoiceRoutes, liv
         }
         val out = kotlinx.coroutines.channels.Channel<String>(capacity = 2_048)
         val session = LiveCallSession(
-            ticket, streamSid, live.dial, live.model, live.voice,
+            ticket, streamSid, live.dial, live.model, ticket.voice ?: live.voice,
             toCaller = { out.trySend(it) },
             hangUp = { out.close() },
             onLive = {

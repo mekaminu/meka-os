@@ -11095,7 +11095,7 @@ class MekaCore(
             os.meka.core.domain.SetupFacts(
                 device = device, connected = connected, server = server.server, accounts = server.accounts,
                 signIns = signIns.all(), ai = server.ai, callAssistantOn = _workMode.value.callAssistant,
-                voiceMessageSeen = lastVoiceMessageMs() != null, voiceChosen = mekaVoice.chosen(),
+                voiceMessageSeen = lastVoiceMessageMs() != null, voiceChosen = mekaVoice.picked(),
                 homePlace = os.meka.core.domain.WeatherPlaceRules.effective(weatherPlace.wanted(), os.meka.core.domain.WeatherPlaceRules.aboutHome),
                 workPlace = os.meka.core.domain.PlacesRules.effectiveWork(workPlace.wanted(), os.meka.core.domain.PlacesRules.aboutWork),
                 nowMs = nowMs(),
@@ -12103,8 +12103,17 @@ class MekaCore(
     /** The synced "MEKA's voice": a Polly name ("Amy"), "device" for the device's own voice, or null for MEKA's default. */
     suspend fun mekaVoice(): String? = onCore { mekaVoice.chosen() }
 
-    /** Chooses MEKA's voice on every device (null: MEKA's default). False, and nothing saved, for a name that can't be one. */
-    suspend fun chooseMekaVoice(name: String?): Boolean = onCore { mekaVoice.choose(name) }
+    /**
+     * One Obi's voice (slice 2): chooses Obi's voice on every device from Settings → Voice's single list: one of Live's
+     * voices (Live, read-outs and live calls), "device" for the device's own voice, or null for the defaults. False, and
+     * nothing saved, for any other name. The hello's openers are made again in the new voice.
+     */
+    suspend fun chooseMekaVoice(name: String?): Boolean = onCore {
+        val was = os.meka.core.domain.OneVoiceRules.asked(mekaVoice.chosen(), mekaVoice.liveVoice())
+        val ok = mekaVoice.chooseObiVoice(name)
+        if (ok && os.meka.core.domain.OneVoiceRules.asked(mekaVoice.chosen(), mekaVoice.liveVoice()) != was) rewarmHelloForVoice()
+        ok
+    }
 
     /**
      * The companion is called Obi, slice 1: whether this question may let him introduce himself (the first conversation
@@ -13517,7 +13526,7 @@ class MekaCore(
         return onCore {
             val was = mekaVoice.liveVoice()
             val ok = mekaVoice.chooseLiveVoice(name)
-            if (ok && mekaVoice.liveOn() && mekaVoice.liveVoice() != was) rewarmHelloForVoice()
+            if (ok && mekaVoice.liveVoice() != was) rewarmHelloForVoice()
             ok
         }
     }
@@ -13539,7 +13548,7 @@ class MekaCore(
         val v = os.meka.core.domain.LiveTalkRules.view(
             on, voice, meterKnown = m != null, configured = m?.configured == true,
             level = m?.level ?: "ok", spentPence = m?.spentPence ?: 0, capPence = m?.capPence ?: 0,
-        )
+        ).copy(voices = emptyList(), showVoices = false) // One Obi's voice (slice 2): chosen once, in the list above.
         // 2026-10-24: when the server found Google refusing the key (or no usable key), the line says so in Google's words.
         val meter = m ?: return v
         val key = meter.keyState?.let { os.meka.core.domain.LiveDiagnosisRules.KeyState.of(it) } ?: return v
@@ -13741,7 +13750,8 @@ class MekaCore(
         }
         val api = speechApi ?: return null
         val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) { return null }
-        val voice = v.voices.firstOrNull { it.id.equals(chosen, ignoreCase = true) }?.id ?: v.defaultVoice
+        // One Obi's voice (slice 2): the voice named is Obi's, the one every read-out asks for.
+        val voice = onCore { mekaVoice.liveVoice() }
         return os.meka.core.domain.SpeechRules.usageLine(v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = false)
     }
 
@@ -13751,24 +13761,17 @@ class MekaCore(
      * throws: no answer reads as "failed", not connected says so.
      */
     suspend fun voicePicker(mac: Boolean): os.meka.core.domain.VoicePickerView {
-        val chosen = onCore { mekaVoice.chosen() }
-        val api = speechApi ?: return os.meka.core.domain.VoicePickerRules.view(null, emptyList(), null, chosen, null, mac, connected = false)
+        // One Obi's voice (slice 2): one list, Live's voices then the device's own, for Live, read-outs and live calls.
+        val (chosen, voice) = onCore { mekaVoice.chosen() to mekaVoice.liveVoice() }
+        val api = speechApi ?: return os.meka.core.domain.OneVoiceRules.view(voice, chosen, null, null, mac, connected = false)
         val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) {
             os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.FAILED)
         }
-        val offered = v.voices.map { os.meka.core.domain.OfferedVoice(it.id, it.gender, it.engine, it.provider) }
-        val speaking = v.voices.firstOrNull { it.id.equals(chosen, ignoreCase = true) }?.id ?: v.defaultVoice
         val usage = os.meka.core.domain.SpeechRules.usageLine(
-            v.state, v.month, v.usedChars, v.capChars, speaking, deviceChosen = chosen == os.meka.core.domain.MekaVoiceRules.DEVICE,
+            v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = chosen == os.meka.core.domain.MekaVoiceRules.DEVICE,
         )
-        val g = v.google
-        val failedClock = g?.failedAtMs?.let { at ->
-            val cal = ZoneCalendar(timeZone)
-            at.takeIf { cal.epochDayOf(it) == cal.epochDayOf(nowMs()) }?.let { LocalClock.formatMinute(cal.minuteOfDay(it)) }
-        }
-        val google = os.meka.core.domain.VoicePickerRules.googleLine(g?.state, g?.usedChars ?: 0, g?.freeChars ?: 0, g?.fallbackAtChars ?: 0, failedClock, v.month)
-        return os.meka.core.domain.VoicePickerRules.view(v.state, offered, v.defaultVoice, chosen, usage, mac)
-            .copy(googleLine = google, sampleLine = os.meka.core.domain.VoicePickerRules.sampleLine(speechSampleWords()))
+        return os.meka.core.domain.OneVoiceRules.view(voice, chosen, v.state, usage, mac)
+            .copy(sampleLine = os.meka.core.domain.VoicePickerRules.sampleLine(speechSampleWords()))
     }
 
     /**
@@ -13817,10 +13820,10 @@ class MekaCore(
     private fun speechVoiceNow(): SpeechVoice? {
         val chosen = mekaVoice.chosen()
         if (chosen == os.meka.core.domain.MekaVoiceRules.DEVICE || nowMs() < speechQuietUntilMs) return null
-        // One conversation, one voice (Meka 2026-10-25 14:38): while Live is on, the hello and every line ask for Live's voice.
-        val liveOn = mekaVoice.liveOn()
-        speechLiveVoice = if (liveOn) mekaVoice.liveVoice() else null
-        return SpeechVoice(os.meka.core.domain.OneVoiceRules.asked(chosen, liveOn, mekaVoice.liveVoice()))
+        // One Obi's voice (slice 2): Live on or off, the hello and every line ask for Obi's voice, the one Live speaks in.
+        val voice = mekaVoice.liveVoice()
+        speechLiveVoice = voice
+        return SpeechVoice(os.meka.core.domain.OneVoiceRules.asked(chosen, voice))
     }
 
     /** Live's voice when Live was on at the last clip asked for, else null; for Health's "Speaking as …" line. */

@@ -47,18 +47,19 @@ class OneVoiceFacadeTest {
     )
 
     @Test
-    fun aClipFromTheOldDefaultVoiceIsMadeAgainOnceTheServerSpeaksInAnother() = runTest {
+    fun aClipInAStandInVoiceIsMadeAgainOnceTheServerSpeaksInAnother() = runTest {
         val c = core()
+        server.googleUp = false // Obi's voice can't be had: the server's default stands in
         assertNull(c.speechVoiceInUse())
         assertEquals("Amy:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals("Amy:14", c.speechClip("Morning, Meka.", first = true)) // from memory
         assertEquals(1, server.said.size)
-        assertEquals("Amy", c.speechVoiceInUse())
-        // The server's default becomes Brian (a deploy; the phone keeps running): Ask's next answer comes in his voice…
+        assertEquals("Amy · not Live's Charon", c.speechVoiceInUse())
+        // The server's stand-in becomes Brian (a deploy; the phone keeps running): Ask's next answer comes in his voice…
         server.speaker = "Brian"
         assertEquals("Brian:15", c.speechClip("Here's the gist", first = true))
-        assertEquals("Brian", c.speechVoiceInUse())
-        // …and the hello kept from Amy is no longer played: it's asked for again, in Brian.
+        assertEquals("Brian · not Live's Charon", c.speechVoiceInUse())
+        // …and the hello kept from Amy is no longer played: it's asked for again, and Brian says it.
         assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals(3, server.said.size)
         // Brian's clips stay.
@@ -67,50 +68,39 @@ class OneVoiceFacadeTest {
     }
 
     @Test
-    fun theHelloWarmChecksTheDefaultVoiceBeforeTheNextTap() = runTest {
+    fun obisVoiceIsLeftAloneByTheDefaultCheck() = runTest {
         val c = core()
-        c.speechClip("Zebra crossing.", first = true)
-        server.speaker = "Brian"
-        // No answer has come in Brian yet: the 15-minute warm looks at the voice list and drops Amy's clips.
-        c.warmHello()
-        val before = server.said.size
-        assertEquals("Brian:15", c.speechClip("Zebra crossing.", first = true))
-        assertEquals(before + 1, server.said.size)
-    }
-
-    @Test
-    fun aChosenVoiceIsLeftAloneByTheDefaultCheck() = runTest {
-        val c = core()
-        c.chooseMekaVoice("Arthur")
-        c.speechClip("Morning, Meka.", first = true)
+        assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
         server.speaker = "Brian"
         c.warmHello()
         val before = server.said.size
-        assertEquals("Amy:14", c.speechClip("Morning, Meka.", first = true))
-        assertEquals(before, server.said.size, "a chosen voice's clips are kept")
+        assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals(before, server.said.size, "Obi's voice's clips are kept")
     }
 
-    /** Meka 2026-10-25 14:38: the hello came in Brian, then Live answered in Charon. One conversation, one voice. */
+    /**
+     * Meka 2026-10-25 14:38: the hello came in Brian, then Live answered in Charon. One Obi's voice, slice 2
+     * (2026-11-13): every line asks for Obi's voice, the one Live speaks in, with Live on or off.
+     */
     @Test
-    fun withLiveOnTheHelloAndEveryLineAskForLivesVoice() = runTest {
+    fun liveOnOrOffTheHelloAndEveryLineAskForObisVoice() = runTest {
         val c = core()
         server.speaker = "Brian"
-        assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
-        assertEquals("Brian", c.speechVoiceInUse())
+        assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Charon · the same as Live", c.speechVoiceInUse())
         c.setLiveOn(true)
-        // The hello kept in Brian isn't played: it's asked for in Live's voice, and so is normal Obi's line if Live drops.
+        // The same voice with Live on: the kept hello plays, and normal Obi's line if Live drops is in it too.
         assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals("Charon:20", c.speechClip("Here's what I found.", first = false, reading = false, hold = true))
-        assertEquals(listOf(null, "Charon", "Charon"), server.asked)
-        assertEquals("Charon · the same as Live", c.speechVoiceInUse())
-        // A new Live voice: the next lines follow it.
+        assertEquals(listOf<String?>("Charon", "Charon"), server.asked)
+        // A new voice for Obi: the next lines follow it.
         assertEquals(true, c.setLiveVoice("Puck"))
         assertEquals("Puck:14", c.speechClip("Morning, Meka.", first = true))
-        // Live off: back to the server's default, and its clip kept from before is played again.
+        // Live off: still Obi's voice, its clip kept from before.
         c.setLiveOn(false)
         val before = server.said.size
-        assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
-        assertEquals("Brian", c.speechVoiceInUse())
+        assertEquals("Puck:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Puck · the same as Live", c.speechVoiceInUse())
         assertEquals(before, server.said.size)
     }
 

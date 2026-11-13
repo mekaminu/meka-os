@@ -322,7 +322,7 @@ class SpeechTest {
     @Test
     fun obisVoicePageNamesHimAndReadsSensiblyInEveryState() {
         // Quality gate slice 59: the page's title said "Obi's voice" while its intro said "How Navilife sounds".
-        assertTrue(VoicePickerRules.INTRO.startsWith("How Obi sounds"))
+        assertTrue(VoicePickerRules.INTRO.startsWith("One voice for Obi"))
         assertFalse(VoicePickerRules.INTRO.contains("Navilife sounds"))
         val views = listOf(
             VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false),

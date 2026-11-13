@@ -463,6 +463,45 @@ class MekaVoiceStore(private val replica: Replica) {
     }
 
     /**
+     * One Obi's voice (slice 2): the voice he picked for Setup's "Pick a voice": the device's own, an older Polly pick, or
+     * the Live voice picked by name; null while nothing was picked (the defaults).
+     */
+    fun picked(): String? = chosen() ?: LiveTalkRules.VOICES.firstOrNull {
+        it.name == replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(MekaVoiceFields.LIVE_VOICE)?.textOrNull?.trim()
+    }?.name
+
+    /**
+     * One Obi's voice (slice 2): the single choice in Settings → Voice. A Live voice ([LiveTalkRules.VOICES]) becomes
+     * Obi's voice for Live, read-outs and live calls, and the device's own voice is let go; [MekaVoiceRules.DEVICE]
+     * keeps Obi's voice and speaks on the device; null puts both back to the defaults. False, and nothing written, for
+     * any other name (the old Polly picks aren't offered any more).
+     */
+    fun chooseObiVoice(name: String?): Boolean {
+        val n = name?.trim().orEmpty()
+        if (n.isEmpty()) {
+            if (chosen() == null && liveVoice() == LiveModeRules.DEFAULT_VOICE) return true
+            replica.commitLocal(
+                EntityTypes.CONTEXT_MODE, ENTITY_ID,
+                mapOf(MekaVoiceFields.NAME to FieldValue.Null, MekaVoiceFields.LIVE_VOICE to FieldValue.Null, MekaVoiceFields.OBI_VOICE to FieldValue.Text(ObiVoiceRules.DONE)),
+            )
+            return true
+        }
+        if (n.equals(MekaVoiceRules.DEVICE, ignoreCase = true)) return choose(MekaVoiceRules.DEVICE)
+        val wanted = LiveTalkRules.VOICES.firstOrNull { it.name.equals(n, ignoreCase = true) }?.name ?: return false
+        if (wanted == picked() && chosen() == null) return true
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(
+                MekaVoiceFields.NAME to FieldValue.Null,
+                // Written by name even for the default, so Setup's "Pick a voice" knows he picked one.
+                MekaVoiceFields.LIVE_VOICE to FieldValue.Text(wanted),
+                MekaVoiceFields.OBI_VOICE to FieldValue.Text(ObiVoiceRules.DONE),
+            ),
+        )
+        return true
+    }
+
+    /**
      * The Obi plan, slice 2: once, after a clean sync, a woman's voice chosen while the assistant was Ada (Navilife's
      * voice or the Live voice) goes back to the default, Obi's British man's voice. A voice picked with this version
      * ([choose], [chooseLiveVoice]) carries the mark, so his own picks after the switch always stay. Writes nothing
@@ -586,7 +625,9 @@ object VoicePickerRules {
         text.substring(start).trim().takeIf { it.isNotEmpty() }?.let { out += it }
         return out
     }
-    const val INTRO = "How Obi sounds in Talk, the spoken brief and when he answers calls. The choice follows you to every device."
+    /** One Obi's voice (slice 2): the single choice's words ([OneVoiceRules.view]). */
+    const val INTRO = "One voice for Obi: Live, Talk, the brief, reminders and the calls he answers live all use it. " +
+        "The choice follows you to every device."
 
     const val POLLY = "polly"
     const val GOOGLE = "google"

@@ -7,6 +7,9 @@ import os.meka.core.domain.AboutYouFields
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.LiveModeRules
+import os.meka.core.domain.MekaVoiceStore
+import os.meka.core.domain.MekaVoiceFields
 import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.PutThroughRules
@@ -117,6 +120,20 @@ class LiveCallsTest {
         nowMs += LiveCallRules.TICKET_MS + 1
         assertNull(line.claim(t3, "CA9"))
         assertNull(line.claim(null, "CA9"))
+    }
+
+    /** One Obi's voice (slice 2): a call Obi answers live speaks in the voice picked in Settings → Voice. */
+    @Test
+    fun aLiveCallSpeaksInObisPickedVoice() {
+        on()
+        val t = line.claim(line.ticket("hh", "twilio", "CA1", null, true), "CA1")!!
+        assertEquals(LiveModeRules.DEFAULT_VOICE, t.voice)
+        ops.append(Op("v${seq++}", "hh", EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID, MekaVoiceFields.LIVE_VOICE, FieldValue.Text("Orus"), Hlc(nowMs + seq, 0, "fold"), emptyList(), "fold"))
+        assertEquals("Orus", line.claim(line.ticket("hh", "twilio", "CA2", null, true), "CA2")!!.voice)
+        // A name that isn't one of Live's voices: the default.
+        ops.append(Op("v${seq++}", "hh", EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID, MekaVoiceFields.LIVE_VOICE, FieldValue.Text("Brian"), Hlc(nowMs + seq, 0, "fold"), emptyList(), "fold"))
+        assertEquals(LiveModeRules.DEFAULT_VOICE, line.obiVoice("hh"))
+        assertTrue("\"voiceName\":\"Orus\"" in LiveCallSession.setup("m", "Orus", "hi"))
     }
 
     /** Google's side, faked: what the session sent, and a way to answer. */

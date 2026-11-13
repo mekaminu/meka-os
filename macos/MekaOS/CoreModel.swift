@@ -3223,7 +3223,8 @@ final class CoreModel {
     func setLiveOn(_ on: Bool) {
         guard let core, let now = liveSettings, now.on != on else { return }
         MekaHaptics.tick()
-        liveSettings = now.doCopy(on: on, line: now.line, meterLine: now.meterLine, sharing: now.sharing, voices: now.voices, showVoices: on)
+        // One Obi's voice (slice 2): Live has no voice list of its own any more; the core sends none.
+        liveSettings = now.doCopy(on: on, line: now.line, meterLine: now.meterLine, sharing: now.sharing, voices: now.voices, showVoices: on && !now.voices.isEmpty)
         Task {
             try? await core.setLiveOn(on: on)
             await refreshLive()

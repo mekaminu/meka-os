@@ -27,6 +27,9 @@ import os.meka.core.domain.FreeSlot
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.LiveCallRules
 import os.meka.core.domain.LiveModeRules
+import os.meka.core.domain.LiveTalkRules
+import os.meka.core.domain.MekaVoiceFields
+import os.meka.core.domain.MekaVoiceStore
 import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
@@ -198,6 +201,8 @@ data class LiveCallTicket(
     val callbackBusiness: String? = null,
     /** Recordings with both voices: the phone service records this call once Obi is live ([CallRecordingRules.records]). */
     val recorded: Boolean = false,
+    /** One Obi's voice (slice 2): the voice he picked for Obi (Live's list); null = the routes' default. */
+    val voice: String? = null,
 ) {
     val booking: Boolean get() = bookingId != null
     /** How long the ticket may wait for its stream: a booking call rings first. */
@@ -283,10 +288,18 @@ class LiveCallLine(
             (card?.let { "\n" + BookingCallbackRules.instruction(it, first, now, calendar).trimEnd() } ?: "")
         tickets[token] = LiveCallTicket(
             token, hh, provider, callId, from, atWork, instruction, now, canPutThrough, slots,
-            callbackFor = card?.id, callbackBusiness = card?.business, recorded = recorded,
+            callbackFor = card?.id, callbackBusiness = card?.business, recorded = recorded, voice = obiVoice(hh),
         )
         token
     }.getOrNull()
+
+    /**
+     * One Obi's voice (slice 2): the voice he picked in Settings → Voice (synced, one of Live's), so a call Obi answers
+     * live sounds like the orb and the brief; Live's default when none was picked or it can't be read. Never throws.
+     */
+    fun obiVoice(hh: String): String = runCatching {
+        LiveTalkRules.voice((fields.latest(hh, EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID, MekaVoiceFields.LIVE_VOICE) as? FieldValue.Text)?.value)
+    }.getOrDefault(LiveModeRules.DEFAULT_VOICE)
 
     /** The call card a call from [from] is ringing back about, or null. Never throws. */
     fun bookingFor(hh: String, from: String?): BookingCall? =
@@ -311,7 +324,7 @@ class LiveCallLine(
         tickets.entries.removeIf { now - it.value.mintedAtMs > it.value.ttlMs }
         if (tickets.size >= MAX_TICKETS) return null
         val token = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        tickets[token] = LiveCallTicket(token, hh, provider, "", null, false, instruction, now, bookingId = cardId, bookingNumber = e164, recorded = recorded)
+        tickets[token] = LiveCallTicket(token, hh, provider, "", null, false, instruction, now, bookingId = cardId, bookingNumber = e164, recorded = recorded, voice = obiVoice(hh))
         token
     }.getOrNull()
 

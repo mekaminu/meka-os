@@ -41,7 +41,6 @@ import os.meka.core.domain.DeviceVoiceRules
 import os.meka.core.domain.DeviceVoiceSettings
 import os.meka.core.domain.LiveTalkRules
 import os.meka.core.domain.LocalCalendar
-import os.meka.core.domain.OfferedVoice
 import os.meka.core.domain.ServerSpeedRules
 import os.meka.core.domain.ServerTurnTiming
 import os.meka.core.domain.SpeechRules
@@ -54,8 +53,8 @@ import kotlin.test.fail
 /**
  * The quality gate, slice 59 (build plan: "the rest of Ask's places' shots", Voice): Ask → Settings → Obi's voice drawn
  * from invented views: not connected yet (nothing to pick but the phone's own voice, no installed English voice), a
- * first look (Polly's British voices, Brian the default, Live off with its month, one phone voice, one hello timed) and
- * set up (Google's voices and Polly's, Live on with its voices, three kept notes, eight phone voices folded to six,
+ * first look (Obi's voices with Charon lit, Live off with its month, one phone voice, one hello timed) and
+ * set up (Orus picked, Live on with no list of its own (one Obi's voice), three kept notes, eight phone voices folded to six,
  * Speed and the server's timings), on the Fold's cover and inner screens, Dark (and the first look in Light). Saved
  * under `voice/` and read for nonsense, cut lines, broken words, split times and numbers, a grey line leaving a word
  * alone or starting a line with a dot, ▶ Sample whole on one line as a slim 32 dp pill inside a 48 dp touch, and every
@@ -79,15 +78,6 @@ class VoiceScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private val polly = listOf(
-        OfferedVoice("Brian", "Male", "neural"), OfferedVoice("Arthur", "Male", "neural"),
-        OfferedVoice("Amy", "Female", "generative"), OfferedVoice("Emma", "Female", "neural"),
-    )
-    private val google = listOf(
-        OfferedVoice("Charon", "Male", "chirp3hd", VoicePickerRules.GOOGLE), OfferedVoice("Puck", "Male", "chirp3hd", VoicePickerRules.GOOGLE),
-        OfferedVoice("Charon-US", "Male", "chirp3hd", VoicePickerRules.GOOGLE),
-    )
-
     private fun phoneVoice(id: String, lang: String = "en-GB", q: Int = 400) = DeviceVoice(id, "", lang, q, "Speech Services by Google")
 
     private fun screen(fill: Fill): VoiceScreen = when (fill) {
@@ -95,7 +85,7 @@ class VoiceScreensTest {
             sir = false, faceOn = true, faceReady = false, remembers = true, memoryRows = emptyList(),
             live = LiveTalkRules.view(on = false, voice = null, meterKnown = false, configured = false, level = "ok", spentPence = 0, capPence = 500),
             liveSampleFailed = false,
-            view = VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false),
+            view = os.meka.core.domain.OneVoiceRules.view("Charon", null, null, null, mac = false, connected = false),
             deviceVoices = emptyList(), deviceSettings = DeviceVoiceSettings.DEFAULT, showAll = false,
             speed = TurnSpeedRules.view(emptyList(), cal), serverSpeed = null,
         )
@@ -103,7 +93,7 @@ class VoiceScreensTest {
             sir = false, faceOn = true, faceReady = true, remembers = true, memoryRows = emptyList(),
             live = LiveTalkRules.view(on = false, voice = null, meterKnown = true, configured = true, level = "ok", spentPence = 40, capPence = 500),
             liveSampleFailed = false,
-            view = VoicePickerRules.view(SpeechRules.ON, polly, "Brian", null, "Navilife's voice · Brian · 1,240 of 1,000,000 characters in October", mac = false),
+            view = os.meka.core.domain.OneVoiceRules.view("Charon", null, SpeechRules.ON, "Navilife's voice · Charon · 1,240 of 1,000,000 characters in October", mac = false),
             deviceVoices = listOf(phoneVoice("en-gb-x-gba-local")), deviceSettings = DeviceVoiceSettings.DEFAULT, showAll = false,
             speed = TurnSpeedRules.view(listOf(TurnTrace(TurnKind.HELLO, now - 600_000, 520)), cal),
             serverSpeed = ServerSpeedRules.view(emptyList(), now),
@@ -111,13 +101,12 @@ class VoiceScreensTest {
         Fill.MANY -> VoiceScreen(
             sir = true, faceOn = false, faceReady = true, remembers = true,
             memoryRows = listOf("Likes the 07:42 train", "Training for a 10k in spring", "Prefers short answers in the morning"),
-            live = LiveTalkRules.view(on = true, voice = "Charon", meterKnown = true, configured = true, level = "ok", spentPence = 210, capPence = 500),
-            liveSampleFailed = true,
-            view = VoicePickerRules.view(SpeechRules.ON, google + polly, "Brian", "Charon", "Navilife's voice · Charon · 84,120 of 1,000,000 characters in October", mac = false)
-                .copy(
-                    googleLine = VoicePickerRules.googleLine("on", 84_120, 1_000_000, 900_000, null, "2026-10"),
-                    sampleLine = VoicePickerRules.SAMPLE_FROM_BRIEF,
-                ),
+            // One Obi's voice (slice 2): Live has no voice list of its own; the one list below sets it.
+            live = LiveTalkRules.view(on = true, voice = "Orus", meterKnown = true, configured = true, level = "ok", spentPence = 210, capPence = 500)
+                .copy(voices = emptyList(), showVoices = false),
+            liveSampleFailed = false,
+            view = os.meka.core.domain.OneVoiceRules.view("Orus", null, SpeechRules.ON, "Navilife's voice · Orus · 84,120 of 1,000,000 characters in October", mac = false)
+                .copy(sampleLine = VoicePickerRules.SAMPLE_FROM_BRIEF),
             deviceVoices = listOf(
                 phoneVoice("en-gb-x-gba-local", q = 500), phoneVoice("en-gb-x-gbb-local"), phoneVoice("en-gb-x-gbc-local"),
                 phoneVoice("en-gb-x-gbd-local"), phoneVoice("en-gb-x-rjs-local"), phoneVoice("en-us-x-iob-local", "en-US"),
@@ -207,7 +196,7 @@ class VoiceScreensTest {
         ScreenShots.assertClocksWhole(compose, name)
         ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertShows(compose, name, VoicePickerRules.TITLE)
-        if (!onScreen("How Obi sounds")) fail("$name: the intro doesn't say it's Obi's voice")
+        if (!onScreen("One voice for Obi")) fail("$name: the intro doesn't say it's Obi's one voice")
         val v = s.view!!
         val d = DeviceVoiceRules.view(s.deviceVoices!!, s.deviceSettings, mac = false, expanded = s.showAll)
         val lines = listOfNotNull(
@@ -226,26 +215,25 @@ class VoiceScreensTest {
                 if (v.statusLine == null || !onScreen("Until this device is connected")) fail("$name: doesn't say why only the phone's voice is offered")
                 if (!onScreen("No English voice is installed")) fail("$name: doesn't say no phone voice is installed")
                 if (!onScreen(TurnSpeedRules.EMPTY)) fail("$name: Speed doesn't say nothing's timed yet")
-                if (v.choices.size != 1) fail("$name: ${v.choices.size} voices offered while not connected")
+                if (v.choices.any { it.sample && it.id != os.meka.core.domain.MekaVoiceRules.DEVICE }) fail("$name: a server voice offers a sample while not connected")
             }
             Fill.ONE -> {
-                if (!onScreen("Navilife's default")) fail("$name: the default voice isn't marked")
-                if (v.choices.single { it.selected }.id != "Brian") fail("$name: Brian isn't lit as the default")
+                if (!onScreen("Informative · Obi's voice")) fail("$name: Obi's own voice isn't marked")
+                if (v.choices.single { it.selected }.id != "Charon") fail("$name: Charon isn't lit as Obi's voice")
                 if (!onScreen(ServerSpeedRules.EMPTY)) fail("$name: the server's speed doesn't say it has nothing yet")
             }
             Fill.MANY -> {
-                if (!onScreen(VoicePickerRules.GROUP_GOOGLE_GB.uppercase())) fail("$name: Google's British voices have no heading")
-                if (!onScreen(LiveTalkRules.VOICE_TITLE.uppercase())) fail("$name: Live's voices don't show while Live is on")
+                if (!onScreen(os.meka.core.domain.OneVoiceRules.GROUP.uppercase())) fail("$name: Obi's voices have no heading")
+                if (onScreen(LiveTalkRules.VOICE_TITLE.uppercase())) fail("$name: Live still shows a voice list of its own")
                 if (!onScreen("+2 more")) fail("$name: the phone's voices past six aren't folded")
                 if (!onScreen("Speed · 1.1× faster")) fail("$name: the speed line doesn't read the setting")
-                if (!onScreen(LiveTalkRules.SAMPLE_FAILED)) fail("$name: a failed Live sample isn't said")
                 s.memoryRows.forEach { if (!onScreen(it)) fail("$name: kept note \"$it\" isn't shown") }
             }
         }
         return s
     }
 
-    /** Works by hand: Sir, Arthur, Brian's Sample, "+2 more" and Live's On each reach their action. */
+    /** Works by hand: Sir, Orus, Charon's Sample, "+2 more" and Live's On each reach their action. */
     private fun byHand() {
         val name = "voice-by-hand"
         val log = mutableListOf<String>()
@@ -258,8 +246,8 @@ class VoiceScreensTest {
             if (log.lastOrNull() != expect) fail("$name: $what did ${log.lastOrNull()} (wanted $expect)")
         }
         tap("Sir", hasContentDescription("Obi calls you sir"), "sir:true")
-        tap("Arthur", hasText("Arthur"), "choose:Arthur")
-        tap("Brian's Sample", hasContentDescription("Sample · Brian"), "sample:Brian")
+        tap("Orus", hasText("Orus"), "choose:Orus")
+        tap("Charon's Sample", hasContentDescription("Sample · Charon"), "sample:Charon")
         tap("Live's On", hasContentDescription("Live on"), "live:true")
         tap("Remember off", hasContentDescription("Obi doesn't remember your chats"), "remember:false")
         tap("Close", hasText("Close"), "close")

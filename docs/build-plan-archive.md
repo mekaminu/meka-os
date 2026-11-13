@@ -6127,3 +6127,10 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Report: the voice line ends " · Gemini voice (model) on · probe clip in Charon n KB, n ms long, in n ms" or why it failed.
 - Devices unchanged: they ask for Live's voice while Live is on (OneVoiceRules), so those read-outs are Gemini's now; Live off still asks for the chosen/default voice until slice (5).
 - Tests: `GeminiSpeechTest` (the request and key header, the British style, the budget's figure, non-Live voices and no key stay with Polly, a refusal falls back once and rests, timeouts, a spent budget, lenient parsing, the WAV fitting and μ-law points, the report).
+
+### Slice 2 (2026-11-13, core + server + both apps): one Obi's voice setting
+- `OneVoiceRules.asked(chosen, voice)`: every clip asks for Obi's voice (`MekaVoiceStore.liveVoice()`, Live's list, Charon by default) whether Live is on or off; only the device's own voice overrides it. An older Polly pick (`NAME`) no longer changes the voice.
+- `OneVoiceRules.view`: Settings → Voice is one list (Live's voices under "Obi's voice · Google", then the device's own), status lines for not connected / off / unreachable, the usage line naming Obi's voice; `VoicePickerRules.INTRO` reworded. `MekaVoiceStore.chooseObiVoice` writes `LIVE_VOICE` by name and clears `NAME` (device keeps `LIVE_VOICE`; null resets both); `picked()` feeds Setup's "Pick a voice".
+- Facade: `chooseMekaVoice` routes to it and remakes the hello's openers when the voice changes; `setLiveVoice` remakes them whenever the voice changes; `liveSettings()` sends no voice list (both apps show Live's list only when it has rows); `voiceUsageLine` names Obi's voice.
+- Server: `LiveCallLine.obiVoice(hh)` reads the synced pick into each live-call ticket, and the stream sets up Gemini in it (was always Charon).
+- Tests: `OneVoiceTest` (asked, the list, the store and sync), facade speech/one-voice/live/setup/spoken/streamed tests moved to Obi's voice, `LiveCallsTest.aLiveCallSpeaksInObisPickedVoice`, the Fold's Voice screen shots on the new list.

@@ -60,7 +60,7 @@ class SpokenFirstPieceFacadeTest {
     fun aSpokenAnswersFirstPieceComesWithItAndPlaysWithoutAskingAgain() = runTest {
         val c = core()
         assertIs<AskOutcome.Answered>(c.talk("tell me something nice", emptyList()))
-        assertEquals(listOf("spoken:null"), server.asked) // the default voice
+        assertEquals(listOf("spoken:Charon"), server.asked) // Obi's voice (One Obi's voice, slice 2)
         assertEquals("Zmlyc3Q=", c.speechClip("It's on Friday at 10:00.", first = true))
         assertTrue(server.said.isEmpty()) // never asked the voice for it
         assertEquals("bXAz15", c.speechClip("Bring your kit.", first = false)) // the rest as before
@@ -73,10 +73,10 @@ class SpokenFirstPieceFacadeTest {
     @Test
     fun theChosenVoiceIsAskedForAndTypedOrDeviceVoiceQuestionsDont() = runTest {
         val c = core()
-        assertTrue(c.chooseMekaVoice("Brian"))
+        assertTrue(c.chooseMekaVoice("Orus"))
         c.talk("tell me something nice", emptyList())
-        assertEquals("spoken:Brian", server.asked.last())
-        // A clip said in Brian is kept for Brian: it plays straight away.
+        assertEquals("spoken:Orus", server.asked.last())
+        // A clip said in Orus is kept for Orus: it plays straight away.
         assertEquals("Zmlyc3Q=", c.speechClip("It's on Friday at 10:00.", first = true))
         // A typed question isn't spoken: no clip asked for.
         c.askMeka("tell me something nice")

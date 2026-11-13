@@ -78,14 +78,14 @@ class StreamedTalkFacadeTest {
         val out = assertIs<AskOutcome.Answered>(c.talkStreamed("why is the sky blue", emptyList()) { early += it })
         assertEquals(listOf(FIRST), early)
         assertEquals(FIRST, server.heardBeforeEnd) // known while the answer was still coming
-        assertEquals(listOf("streamed:null"), server.asked)
+        assertEquals(listOf("streamed:Charon"), server.asked)
         assertEquals(ANSWER, out.answer.text)
         // Its clip is ready: saying it asks the voice for nothing.
         assertEquals("Zmlyc3Q=", c.speechClip(FIRST, first = true))
         assertTrue(server.said.isEmpty())
         // The next spoken question starts with nothing ahead.
         c.talk("and why are sunsets red", emptyList())
-        assertEquals("streamed:null", server.asked.last())
+        assertEquals("streamed:Charon", server.asked.last())
         assertEquals(FIRST, c.talkEarlyPiece()) // the Mac's talk streams too
     }
 

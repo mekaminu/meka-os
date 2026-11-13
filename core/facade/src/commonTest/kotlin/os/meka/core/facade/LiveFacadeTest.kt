@@ -13,6 +13,7 @@ import os.meka.core.wire.LiveCodec
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
 /** Obi's Live mode, slice 1: the device asks for a session token and reports seconds, never failing. */
@@ -89,7 +90,9 @@ class LiveFacadeTest {
         val on = c.liveSettings()
         assertEquals(true, on.on)
         assertEquals("£0.40 of £15 this month", on.line)
-        assertEquals("Aoede", on.voices.single { it.selected }.name)
+        // One Obi's voice (slice 2): the voice is chosen once, in Settings → Voice's list; Live has no picker of its own.
+        assertEquals("Aoede", c.liveVoice())
+        assertTrue(on.voices.isEmpty() && !on.showVoices)
         server.down = true
         assertEquals(os.meka.core.domain.LiveTalkRules.UNREACHABLE, c.liveSettings().line)
     }

@@ -14,6 +14,7 @@ import os.meka.core.wire.SpeechCodec
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -54,12 +55,15 @@ class SpeechFacadeTest {
         val c = core()
         assertEquals("bXAz30", c.speechClip("You've got three things today.", first = true))
         assertEquals("bXAz30", c.speechClip(" You've got three things today. ", first = false))
-        assertEquals(listOf<Pair<String, String?>>("You've got three things today." to null), server.said) // asked once, then from memory
-        // The chosen voice is asked for (and cached apart from the default's).
-        assertTrue(c.chooseMekaVoice("Brian"))
-        assertEquals("Brian", c.mekaVoice())
+        // One Obi's voice (slice 2): Obi's voice (Live's, Charon by default) is asked for with Live off too.
+        assertEquals(listOf<Pair<String, String?>>("You've got three things today." to "Charon"), server.said) // asked once, then from memory
+        // The chosen voice is asked for (and cached apart from the default's); the old Polly picks aren't offered.
+        assertTrue(c.chooseMekaVoice("Orus"))
+        assertEquals("Orus", c.liveVoice())
+        assertNull(c.mekaVoice())
+        assertFalse(c.chooseMekaVoice("Brian"))
         c.speechClip("You've got three things today.", first = true)
-        assertEquals("Brian", server.said.last().second)
+        assertEquals("Orus", server.said.last().second)
         // The common lines are fetched once when a conversation starts.
         c.warmVoice(); c.warmVoice()
         assertEquals(1 + 1 + os.meka.core.domain.SpeechRules.COMMON.size, server.said.size)
@@ -119,12 +123,13 @@ class SpeechFacadeTest {
             listOf(SpeechCodec.Voice("Amy", "Female", "generative"), SpeechCodec.Voice("Brian", "Male", "neural")),
             "Amy", "2026-10", 12_400, 1_000_000,
         )
-        assertEquals("Navilife's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
-        assertTrue(c.chooseMekaVoice("Brian"))
-        assertEquals("Navilife's voice · Brian · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
-        // A voice this server doesn't offer is said by its default, so that's the one named.
-        assertTrue(c.chooseMekaVoice("Zed"))
-        assertEquals("Navilife's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        // One Obi's voice (slice 2): the voice named is Obi's, the one every read-out asks for.
+        assertEquals("Navilife's voice · Charon · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        assertTrue(c.chooseMekaVoice("Orus"))
+        assertEquals("Navilife's voice · Orus · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        // A name that isn't one of Obi's voices isn't kept.
+        assertFalse(c.chooseMekaVoice("Zed"))
+        assertEquals("Navilife's voice · Orus · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
         server.down = true
         assertNull(c.voiceUsageLine())
         // The device's own voice: said without asking the server.
@@ -137,10 +142,12 @@ class SpeechFacadeTest {
     }
 
     @Test
-    fun thePickerListsTheServersVoicesAndSamplesAnyOfThem() = runTest {
-        // Not connected: only the device's own voice, and why.
+    fun thePickerIsOneListOfObisVoicesAndSamplesAnyOfThem() = runTest {
+        val obi = os.meka.core.domain.LiveTalkRules.VOICES.map { it.name }
+        // Not connected: Obi's voices (nothing to sample) and the device's own, and why.
         val offline = core(transport = null).voicePicker(mac = false)
-        assertEquals(listOf("device"), offline.choices.map { it.id })
+        assertEquals(obi + "device", offline.choices.map { it.id })
+        assertTrue(offline.choices.dropLast(1).none { it.sample })
         assertTrue(offline.statusLine!!.contains("Until this device is connected"))
         assertNull(core(transport = null).speechSample("Amy"))
         val c = core()
@@ -150,12 +157,16 @@ class SpeechFacadeTest {
             "Amy", "2026-10", 12_400, 1_000_000,
         )
         val v = c.voicePicker(mac = true)
-        assertEquals(listOf("Amy", "Brian", "device"), v.choices.map { it.id })
-        assertEquals("Amy", v.choices.single { it.selected }.id)
-        assertEquals("Navilife's voice · Amy · 12,400 of 1,000,000 characters in October", v.usageLine)
-        // Choosing one lights it on the next look (and follows to every device: it's the synced setting).
-        assertTrue(c.chooseMekaVoice("Brian"))
-        assertEquals("Brian", c.voicePicker(mac = true).choices.single { it.selected }.id)
+        // One Obi's voice (slice 2): no Polly rows; Obi's voices then the Mac's own.
+        assertEquals(obi + "device", v.choices.map { it.id })
+        assertEquals("Charon", v.choices.single { it.selected }.id)
+        assertEquals(os.meka.core.domain.OneVoiceRules.INTRO, v.intro)
+        assertEquals("Navilife's voice · Charon · 12,400 of 1,000,000 characters in October", v.usageLine)
+        // Choosing one lights it on the next look (and follows to every device: it's the synced setting), Live's too.
+        assertTrue(c.chooseMekaVoice("Orus"))
+        assertEquals("Orus", c.voicePicker(mac = true).choices.single { it.selected }.id)
+        assertEquals("Orus", c.liveVoice())
+        assertTrue(c.liveSettings().voices.isEmpty()) // Live has no picker of its own any more
         // ▶ Sample asks for that voice whatever is chosen, once, then plays from memory; the device's row isn't sent.
         val words = c.speechSampleWords()
         val sample = c.speechSample("Amy")
@@ -170,8 +181,9 @@ class SpeechFacadeTest {
         server.down = true
         assertNull(c.speechSample("Emma"))
         val unreachable = c.voicePicker(mac = false)
-        assertEquals(listOf("Brian", "device"), unreachable.choices.map { it.id })
-        assertTrue(!unreachable.choices.first().sample && unreachable.choices.first().selected)
+        assertEquals(obi + "device", unreachable.choices.map { it.id })
+        assertTrue(unreachable.statusLine!!.startsWith("Couldn't reach Obi's voice"))
+        assertTrue(unreachable.choices.single { it.id == "Orus" }.let { !it.sample && it.selected })
     }
 
     @Test
