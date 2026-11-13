@@ -70,6 +70,10 @@ data class AppointmentRow(
     val lit: Boolean,
     /** Local epoch day it is next due; null while no visit is noted. */
     val dueDay: Long?,
+    /** The booked visit's day while it is to come (the page shape, slice 10); else null. */
+    val bookedDay: Long? = null,
+    /** "Not yet" asks again on this day (while it is to come); else null. */
+    val laterDay: Long? = null,
 )
 
 /** A common appointment not yet on the list, added in one tap: "Haircut" · "Every 6 weeks". */
@@ -467,6 +471,7 @@ object AppointmentRules {
         // Quality gate slice 16's findings: a date never splits across the row's lines ("last went 1 / Mar 2025").
         return AppointmentRow(
             item.id, item.title, DateGlue.kept(line(item, today)), DateGlue.kept(status(item, today)), s, lit, dueDay(item, today),
+            item.bookedDay?.takeIf { s == AppointmentState.BOOKED }, item.laterDay?.takeIf { it > today },
         )
     }
 

@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -35,15 +36,18 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.APPOINTMENTS_LIST_TAG
+import os.meka.android.ask.APPOINTMENTS_ROW_SHEET_TAG
 import os.meka.android.ask.AppointmentsPane
 import os.meka.android.ask.KIDS_LIST_TAG
 import os.meka.android.ask.KidsPane
+import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.android.ask.SCHOOL_LIST_TAG
 import os.meka.android.ask.SchoolPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.AppointmentRules
+import os.meka.core.domain.AppointmentsPageRules
 import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.KidChoreRules
 import os.meka.core.domain.KidSize
@@ -167,8 +171,6 @@ class AdminPlacesScreensTest {
         when (place) {
             Place.APPOINTMENTS -> {
                 val v = core.appointmentsView.value
-                // Each row's name and how often / last went read whole (on two lines if they must), never "Every 6 mo…".
-                ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.title, it.line) }, mustShow = false)
                 // Slice 16's findings: "last went 1 / Mar 2025" and "was due Mon / 12 Oct" never split.
                 ScreenShots.assertDatesWhole(compose, name)
                 ScreenShots.assertShows(compose, name, v.summary)
@@ -176,7 +178,13 @@ class AdminPlacesScreensTest {
                 // The walk-through 2026-11-08 A8: never "all in hand" over a lit row (due, or asking when he last went).
                 if (v.summary.endsWith("all in hand") && v.rows.any { it.lit }) fail("$name: \"${v.summary}\" over a row that needs him")
                 if (fill == Fill.MANY && v.rows.size != 5) fail("$name: ${v.rows.size} rows for five")
-                v.rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.title) }
+                // The page shape (slice 10): the three numbers, and To book's first row (or its empty line).
+                val page = core.appointmentsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, AppointmentsPageRules.EMPTY)
             }
             Place.KIDS -> {
                 val v = core.kidsView.value
@@ -287,29 +295,60 @@ class AdminPlacesScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
-    /** Works by hand, Appointments: Went notes a visit today, a Common ones chip adds one, Remove takes one off, the field adds one. */
+    /**
+     * Works by hand, Appointments (the page shape, slice 10): every button a 48 dp touch; the dentist's row opens its
+     * sheet, Went notes a visit today and Remove takes it off; + Add → A common one adds one in a tap; + Add →
+     * Something you keep up with adds one from the field; Physio's sheet takes when he last went.
+     */
     private fun appointmentsByHand(core: MekaCore) {
         val name = "appointments-by-hand"
         val p = Place.APPOINTMENTS
         assertTouchTargets(name)
         fun rows() = core.appointmentsView.value.rows
+        val sheet = hasAnyAncestor(hasTestTag(APPOINTMENTS_ROW_SHEET_TAG))
+        val addSheet = hasAnyAncestor(hasTestTag(LIFE_ADD_SHEET_TAG))
+        fun closeSheet() {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(sheet) }
+        }
         val dentist = rows().firstOrNull { it.title.startsWith("Dentist") } ?: fail("$name: no dentist")
         fun cur() = rows().firstOrNull { it.id == dentist.id }
-        tap(p, name, AppointmentRules.WENT_LABEL, hasContentDescription("Went to ${dentist.title} today"))
+        tap(p, name, dentist.title, hasText(dentist.title) and !sheet)
+        val went = hasContentDescription("Went to ${dentist.title} today") and sheet
+        until { shows(went) }
+        assertTouchTargets(name)
+        tap(p, name, AppointmentRules.WENT_LABEL, went)
         until { cur()?.line != dentist.line }
         if (cur()?.line == dentist.line) fail("$name: Went left ${dentist.title} at \"${dentist.line}\"")
-        core.appointmentsView.value.suggestions.firstOrNull()?.let { s ->
-            val before = rows().size
-            tap(p, name, "+ ${s.title}", hasContentDescription("Add ${s.title}, ${s.line}"))
-            until { rows().size > before }
-            if (rows().size <= before) fail("$name: the ${s.title} chip added nothing")
-        }
-        tap(p, name, "Remove", hasContentDescription("Remove ${dentist.title}"))
+        tap(p, name, "Remove", hasContentDescription("Remove ${dentist.title}") and sheet)
         until { cur() == null }
         if (cur() != null) fail("$name: Remove left ${dentist.title}")
-        type(p, name, AppointmentRules.HINT, "Physio every 3 months, last 1 Oct")
+        until { !shows(sheet) }
+        core.appointmentsView.value.suggestions.firstOrNull()?.let { s ->
+            val before = rows().size
+            tap(p, name, "+ Add", hasContentDescription("Add"))
+            until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+            tap(p, name, "A common one", hasText("A common one") and addSheet)
+            until { shows(hasContentDescription("Add ${s.title}, ${s.line}")) }
+            assertTouchTargets(name)
+            tap(p, name, "+ ${s.title}", hasContentDescription("Add ${s.title}, ${s.line}"))
+            until { rows().size > before }
+            if (rows().size <= before) fail("$name: + ${s.title} added nothing")
+            until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        }
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        tap(p, name, "Something you keep up with", hasText("Something you keep up with") and addSheet)
+        type(p, name, AppointmentRules.HINT, "Physio every 3 months")
         until { rows().any { it.title.startsWith("Physio") } }
-        if (rows().none { it.title.startsWith("Physio") }) fail("$name: Done on the field added no appointment")
+        val physio = rows().firstOrNull { it.title.startsWith("Physio") } ?: fail("$name: Done on the field added no appointment")
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        tap(p, name, physio.title, hasText(physio.title) and !sheet)
+        until { shows(hasContentDescription("${AppointmentsPageRules.LAST_WENT} ${physio.title}")) }
+        type(p, name, "${AppointmentsPageRules.LAST_WENT} ${physio.title}", "1 Oct")
+        until { rows().firstOrNull { it.id == physio.id }?.dueDay != null }
+        if (rows().firstOrNull { it.id == physio.id }?.dueDay == null) fail("$name: When did you last go? noted nothing for ${physio.title}")
+        closeSheet()
         assertTouchTargets(name)
     }
 

@@ -1,140 +1,252 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → More → Appointments on the Mac (appointment nudges, slice 1), like the Fold's AppointmentsPane: the dentist,
-/// the optician, a haircut… each with its usual interval, due from the last visit. One field does it all ("Dentist
-/// every 6 months, last 12 Apr", "dentist booked Tue 20 Oct 9:30"); Went notes a visit today (with Undo), Remove takes
-/// one off; Common ones adds the usual ones in one click. Needs you asks when one comes due. Only Strings cross.
+/// Ask → Appointments on the Mac in the page shape (every page under Ask in one shape, slice 10; approved 2026-11-11,
+/// docs/design/look/LifePage.dc.html), like the Fold's AppointmentsPane: the title with its ⓘ, one gold + Add
+/// (Something you keep up with · A visit you've booked, each a field; A common one, the usual ones in one click), three
+/// numbers (due to book, the next booked visit, how many he keeps up with), then To book, Booked and Next due. A row
+/// opens in place with ‹ Appointments back: its status, the gold Went (with Undo on the bar), a Booked for… field, a
+/// When did you last go? field while no visit is noted, and Remove. Needs you asks when one comes due. Only Strings
+/// cross to the core.
 ///
-/// Motion: the sheet scale-fades (system); the summary, the field's line and each row's status cross-fade (status lit
-/// in the accent when due or not noted); rows stagger in and move on the expand spring as they come due; an add or Went
-/// gives a light haptic, a refusal or Remove a tick. Reduce Motion: cross-fades.
+/// Motion: the sheet scale-fades (system); sections stagger in; + Add's form and the ⓘ unfold on the expand spring; a
+/// row opens and closes with a cross-fade and slide from the trailing edge; the summary, the answer line and a row's
+/// status cross-fade (a refusal or a due status lit in the accent); Add, Went and a booking give a light haptic, a
+/// refusal or Remove a tick. Reduce Motion: cross-fades.
 struct AppointmentsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    @State private var infoOpen = false
+    @State private var adding = false
+    @State private var choice: String?
     @State private var text = ""
+    @State private var bookText = ""
+    @State private var lastText = ""
+    /// What the last add or Last went… said, while the sheet is open.
     @State private var said: CoreModel.AppointmentLine?
+    /// The row that's open, if any (its key: "appt:…").
+    @State private var open: String?
+    /// The card whose rows are all shown (See all), if any.
+    @State private var showAll: String?
 
     var body: some View {
+        let rules = AppointmentsPageRules.shared
         let v = model.appointments ?? AppointmentView.companion.EMPTY
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text("Appointments").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
-                .staggeredAppear(1)
-            TextField(AppointmentRules.shared.HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    let typed = text
-                    text = ""
-                    Task {
-                        guard let r = await model.typeAppointment(typed) else { return }
-                        said = r
-                        if r.refused { text = typed } // keep the words to fix
-                    }
-                }
-                .staggeredAppear(2)
-            if let said {
-                Text(said.line).font(MekaType.caption)
-                    .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    if !v.rows.isEmpty { label("Kept up with") }
-                    ForEach(v.rows, id: \.id) { row in
-                        AppointmentRowView(row: row, palette: palette, reduceMotion: reduceMotion,
-                                           onWent: { model.appointmentWent(row.id) },
-                                           onRemove: { model.removeAppointment(row.id) })
-                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                    }
-                    if !v.suggestions.isEmpty {
-                        label("Common ones")
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: MekaSpace.xs) {
-                                ForEach(v.suggestions, id: \.id) { s in
-                                    Button {
-                                        Task { if let r = await model.addAppointmentPreset(s.id) { said = r } }
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                            Text("+ \(s.title)").font(MekaType.itemMeta).foregroundStyle(palette.accent)
-                                            Text(s.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                                        }
-                                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                                        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                                    }
-                                    .buttonStyle(MekaPressStyle())
-                                    .accessibilityLabel("Add \(s.title), \(s.line)")
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            if let key = open {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil; said = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                rowDetail(key, v)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
+            } else if let card = showAll {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                Text(card).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(rules.allRows(view: v, cardKey: card, today: model.todayEpochDay), id: \.key) { r in
+                            let key = r.key
+                            Button { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; showAll = nil } } label: {
+                                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                    Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                    Text([r.line, r.whenText].filter { !$0.isEmpty }.joined(separator: " · "))
+                                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityElement(children: .combine)
                         }
                     }
                 }
-                .animation(MekaMotion.expand(reduced: reduceMotion), value: v.rows.map(\.id) + v.suggestions.map(\.id))
+                .frame(maxHeight: 400)
+                .transition(.opacity)
+            } else if let page = model.appointmentsPage() {
+                LifePageHeader(title: page.title, info: page.info, palette: palette, infoOpen: $infoOpen) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding.toggle(); said = nil; choice = nil }
+                }
+                .staggeredAppear(0)
+                if adding { addForm(page, v) }
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    if !adding, let said {
+                        Text(said.line).font(MekaType.caption)
+                            .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                    }
+                }
+                .staggeredAppear(1)
+                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        ForEach(0..<Int(page.cardCount), id: \.self) { i in
+                            let card = page.cardAt(index: Int32(i))
+                            let cardKey = card.key
+                            LifePageCardView(card: card, palette: palette, onMore: {
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = cardKey }
+                            }, onRow: { r in
+                                let key = r.key
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; said = nil }
+                            })
+                            .staggeredAppear(3 + i)
+                        }
+                        Text(AppointmentRules.shared.NOTE_SHOWN).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxHeight: 420)
             }
-            .frame(maxHeight: 420)
-            .staggeredAppear(3)
-            Text(AppointmentRules.shared.NOTE_SHOWN).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 480)
         .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showAll)
     }
 
-    private func label(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-            .foregroundStyle(palette.textTertiary)
-            .padding(.top, MekaSpace.xs)
-    }
-}
-
-private struct AppointmentRowView: View {
-    let row: AppointmentRow
-    let palette: MekaPalette
-    let reduceMotion: Bool
-    let onWent: () -> Void
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: MekaSpace.xs) {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
-                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+    /// What an open row shows: the appointment as it is now, with Went, Booked for…, Last went… and Remove.
+    @ViewBuilder
+    private func rowDetail(_ key: String, _ v: AppointmentView) -> some View {
+        let rules = AppointmentsPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let row = rules.row(view: v, key: key) {
+                let id = row.id
+                let title = row.title
+                Text(title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
+                Text(row.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 Text(row.status).font(MekaType.caption)
                     .foregroundStyle(row.lit ? palette.accent : palette.textSecondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: row.status)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Button(AppointmentRules.shared.WENT_LABEL, action: onWent)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.caption)
-                .foregroundStyle(palette.accent)
-                .accessibilityLabel("Went to \(row.title) today")
-            Button("Remove", action: onRemove)
+                Button(AppointmentRules.shared.WENT_LABEL) { model.appointmentWent(id) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.onAccent)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(palette.accent, in: Capsule())
+                    .accessibilityLabel("Went to \(title) today")
+                Text(rules.BOOKED_FOR).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                TextField(AppointmentRules.shared.WHEN_HINT, text: $bookText)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("\(rules.BOOKED_FOR) \(title)")
+                    .onSubmit {
+                        model.bookAppointment(id, when: bookText)
+                        bookText = ""
+                    }
+                if let refusal = model.appointmentRefusal, refusal.id == id {
+                    Text(refusal.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if rules.asksLastWent(r: row) {
+                    Text(rules.LAST_WENT).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    TextField(rules.LAST_WENT_HINT, text: $lastText)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("\(rules.LAST_WENT) \(title)")
+                        .onSubmit {
+                            let line = rules.lastWentLine(title: title, typed: lastText)
+                            lastText = ""
+                            let m = model
+                            Task { if let r = await m.typeAppointment(line) { said = r } }
+                        }
+                }
+                if let said {
+                    Text(said.line).font(MekaType.caption)
+                        .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                }
+                Button("Remove") {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil }
+                    model.removeAppointment(id)
+                }
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textTertiary)
-                .accessibilityLabel("Remove \(row.title)")
+                .accessibilityLabel("Remove \(title)")
+            } else {
+                Text(rules.GONE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
         }
-        .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.xs)
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .mekaHoverLift()
+    }
+
+    @ViewBuilder
+    private func addForm(_ page: LifePageView, _ v: AppointmentView) -> some View {
+        let rules = AppointmentsPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(page.addTitle).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            ForEach(0..<Int(page.addChoiceCount), id: \.self) { i in
+                let c = page.addChoiceAt(index: Int32(i))
+                let key = c.key
+                Button { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { choice = key; said = nil } } label: {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(c.label).font(MekaType.body).foregroundStyle(choice == key ? palette.accent : palette.textPrimary)
+                        Text(c.hint).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityElement(children: .combine)
+            }
+            if let key = choice, let hint = rules.hint(choice: key) {
+                TextField(hint, text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { submit() }
+            } else if choice == rules.ADD_COMMON {
+                ForEach(v.suggestions, id: \.id) { s in
+                    let sid = s.id
+                    Button {
+                        let m = model
+                        Task {
+                            guard let r = await m.addAppointmentPreset(sid) else { return }
+                            said = r
+                            if !r.refused { adding = false; choice = nil }
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text("+ \(s.title)").font(MekaType.body).foregroundStyle(palette.accent)
+                            Text(s.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel("Add \(s.title), \(s.line)")
+                }
+            }
+            if let said, said.refused {
+                Text(said.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func submit() {
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return }
+        let m = model
+        Task {
+            guard let r = await m.typeAppointment(typed) else { return }
+            said = r
+            if !r.refused { text = ""; adding = false; choice = nil }
+        }
     }
 }
 

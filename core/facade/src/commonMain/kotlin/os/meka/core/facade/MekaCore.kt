@@ -5589,6 +5589,10 @@ class MekaCore(
         appointmentToCalendar(item, was)?.let { (_, finish) -> said.copy(line = finish(said.line)) } ?: said
     }
 
+    /** Every page under Ask in one shape, slice 10: Ask → Appointments as the page shape (both apps). */
+    fun appointmentsPage(view: os.meka.core.domain.AppointmentView = _appointments.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.AppointmentsPageRules.page(view, todayEpochDay())
+
     /** Adds a common appointment (Dentist, Optician, Haircut…) with its usual interval. */
     suspend fun addAppointmentPreset(presetId: String): os.meka.core.domain.AppointmentSaid = onCore { appointments.addPreset(presetId) }
 
