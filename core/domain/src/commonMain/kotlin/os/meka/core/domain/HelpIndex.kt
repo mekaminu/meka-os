@@ -289,7 +289,7 @@ internal object HelpIndex {
             title = "Gifts",
             keywords = listOf("gifts", "gift ideas", "gift", "anniversaries", "anniversary", "birthdays"),
             what = "birthdays, anniversaries and gift ideas.",
-            how = "Type each birthday or anniversary once; Navilife reminds you two weeks ahead and on the day to order.",
+            how = "Tap + Add for a birthday or an anniversary and type it once; Navilife reminds you two weeks ahead and on the day to order. The three numbers up top are the next one, the gifts to sort soon and the ideas you've noted; tap one to note an idea or mark the gift sorted.",
             tips = listOf(),
             fold = HelpPlace.GIFTS,
             foldWhere = "Ask → Life → Gifts",

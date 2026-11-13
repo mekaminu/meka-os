@@ -5249,6 +5249,13 @@ class MekaCore(
         os.meka.core.domain.PeoplePageRules.page(view, ZoneCalendar(timeZone).epochDayOf(nowMs()))
 
     /**
+     * Ask → Life → Gifts in the page shape (every page under Ask in one shape, slice 3): the next occasion, what to
+     * sort soon and the ideas noted, then Coming up and every occasion ([os.meka.core.domain.GiftsPageRules.page]).
+     */
+    fun giftsPage(view: os.meka.core.domain.GiftsView = _gifts.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.GiftsPageRules.page(view, ZoneCalendar(timeZone).epochDayOf(nowMs()))
+
+    /**
      * Car and parking, slice 5: what the share sheet offers for shared text that is a parking confirmation (RingGo,
      * JustPark, PayByPhone…), read on the device: "Parking timer until 15:30 · RingGo 81234", the car (from its
      * registration in the text, or the only car) or the choices, or "That parking ended at 15:30 …". Null when the

@@ -3452,6 +3452,12 @@ final class CoreModel {
         return core.peoplePage(view: people)
     }
 
+    /// Ask → Life → Gifts in the page shape (slice 3): built from the synced Gifts pane on the main actor (pure).
+    func giftsPage() -> LifePageView? {
+        guard let core, let gifts else { return nil }
+        return core.giftsPage(view: gifts)
+    }
+
     func carPage() -> LifePageView? {
         guard let core, let cars else { return nil }
         return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)

@@ -46,6 +46,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.BinRules
 import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.GiftRules
+import os.meka.core.domain.GiftsPageRules
 import os.meka.core.domain.ReadingGoalRules
 import os.meka.core.domain.ReadingRules
 import os.meka.core.domain.TripRules
@@ -188,6 +189,12 @@ class PlansPlacesScreensTest {
                 if (fill == Fill.MANY && v.rows.size != 4) fail("$name: ${v.rows.size} rows for four occasions")
                 // Slice 19: who it is comes before "birthday", never the party's words jumbled into a name.
                 if (fill == Fill.MANY && v.rows.none { it.title == "Grandma Rose's birthday" }) fail("$name: Grandma Rose's row reads ${v.rows.map { it.title }}")
+                // The page shape (slice 3): the three numbers, and Coming up's first row (or the whole list's when nothing's coming).
+                val page = core.giftsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, GiftsPageRules.COMING_EMPTY)
             }
             Place.BINS -> {
                 val v = core.binsView.value
@@ -325,7 +332,7 @@ class PlansPlacesScreensTest {
     }
 
     /**
-     * Works by hand, Gifts: a tap opens an occasion; × takes an idea off and the field adds one; To a day… unfolds its
+     * Works by hand, Gifts: a tap on a card's row opens the occasion's sheet; × takes an idea off and the field adds one; To a day… unfolds its
      * day chips (48 dp) and one makes the task, Undo takes it back; Gift sorted marks it; Remove takes the occasion off.
      */
     private fun giftsByHand(core: MekaCore) {
@@ -336,9 +343,10 @@ class PlansPlacesScreensTest {
         fun cur() = core.giftsView.value.rows.firstOrNull { it.id == row.id }
         val idea = row.ideas.firstOrNull() ?: fail("$name: ${row.title} has no ideas")
         val removeIdea = hasContentDescription("Remove the idea ${idea.text}")
-        tap(p, name, row.title, hasContentDescription(row.spoken))
+        // The page shape (slice 3): the occasion's row on a card opens its sheet.
+        tap(p, name, row.title, hasText(row.title))
         until { shows(removeIdea) }
-        if (!shows(removeIdea)) fail("$name: tapping ${row.title} didn't open its ideas")
+        if (!shows(removeIdea)) fail("$name: tapping ${row.title} didn't open its sheet with its ideas")
         assertTouchTargets(name)
         tap(p, name, "×", removeIdea)
         until { cur()?.ideas?.none { it.id == idea.id } == true }
