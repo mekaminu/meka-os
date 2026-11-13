@@ -93,12 +93,12 @@ class LeavingNowFacadeTest {
         fold.setWorkArea(true, walkedIn, null)
         now += 7 * 3_600_000L + 30 * 60_000L // 17:30
         assertTrue(fold.governNotifications(null, DeviceAlerts.ALL).post.none { it.source == NoticeSource.LEAVING })
-        // He walks out at 18:05: the draft comes then, and Send carries its words.
-        now += 35 * 60_000L
+        // He walks out at 17:50 (before the 18:00 evening digest): the draft comes then, and Send carries its words.
+        now += 20 * 60_000L
         fold.setWorkArea(true, walkedIn, now)
         val n = fold.governNotifications(null, DeviceAlerts.ALL).post.single { it.source == NoticeSource.LEAVING }
         assertEquals("You've left work · tell Jordan?", n.title)
-        assertEquals("Leaving now, home about 19:25", n.text)
+        assertEquals("Leaving now, home about 19:10", n.text)
         assertEquals(LeavingTap.Send("Jordan", n.text), fold.leavingTap(n.key, n.text, edit = false))
         // Not watched (permission taken away): the end of work stands, as before.
         fold.setWorkArea(false, walkedIn, null)
