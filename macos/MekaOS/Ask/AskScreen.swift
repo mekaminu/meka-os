@@ -433,7 +433,7 @@ private struct LifeTileView: View {
                         let box = CGFloat(LifeTileRules.shared.ICON_BOX)
                         let shape = RoundedRectangle(cornerRadius: CGFloat(LifeTileRules.shared.ICON_BOX_RADIUS))
                         Image(systemName: symbol)
-                            .font(.system(size: CGFloat(LifeTileRules.shared.ICON_GLYPH) - 3))
+                            .font(MekaType.caption)
                             .foregroundStyle(lit ? palette.accent : palette.textSecondary)
                             .frame(width: box, height: box)
                             .background(lit ? AnyShapeStyle(palette.accent.opacity(Double(LifeTileRules.shared.ICON_BOX_LIT_TINT)))
