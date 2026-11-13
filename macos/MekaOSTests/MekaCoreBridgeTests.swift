@@ -769,6 +769,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(HabitChipRules.shared.stripTiles(tiles: tiles).map(\.kind), [.renewals])
     }
 
+    /// Team, simpler (approved 2026-11-11): the box words and the all-clear line reach the Mac's sheet.
+    func testTeamSimplerReachesSwift() {
+        XCTAssertEqual(TeamSimplerRules.shared.WAITING, "Waiting on you")
+        XCTAssertEqual(TeamSimplerRules.shared.subtitle(waiting: 0, on: 5), "All clear · 5 helpers on")
+        XCTAssertEqual(TeamSimplerRules.shared.openTarget(a: .kestrel).name, "TRADING")
+    }
+
     /// Fold review 2026-10-09 07:26, item 9: an account's main calendar is "Personal"; Calendars renames in MEKA only.
     func testCalendarNamesReachSwift() {
         XCTAssertEqual(CalendarRules.shared.PERSONAL, "Personal")

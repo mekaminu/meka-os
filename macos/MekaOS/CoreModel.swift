@@ -1946,16 +1946,26 @@ final class CoreModel {
         return try? await core.setTeamPause(code: code, on: on)
     }
 
-    /// Review on a helper's sheet: the sheet closes, then Needs you or Money opens. Only the target's name crosses.
+    /// Review on a helper's sheet, a Waiting on you row or a helper's Open (Team, simpler): the sheet closes, then Needs
+    /// you, Money (on Trading for Kestrel), Mail or Activity (its calls) opens. Only the target's name crosses.
     func openFromTeam(_ target: String, reduced: Bool) {
         showTeam = false
-        if target == "MONEY" {
+        switch target {
+        case "MONEY", "TRADING", "MAIL", "CALLS":
             go(to: .ask, reduced: reduced)
             Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
-                self?.showMoney = true
+                guard let self else { return }
+                switch target {
+                case "TRADING":
+                    self.moneyStartTab = .trading
+                    self.showMoney = true
+                case "MAIL": self.showMail = true
+                case "CALLS": self.showActivity = true
+                default: self.showMoney = true
+                }
             }
-        } else {
+        default:
             go(to: .needsYou, reduced: reduced)
         }
     }

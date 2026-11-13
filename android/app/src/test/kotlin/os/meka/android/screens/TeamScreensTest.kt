@@ -147,7 +147,7 @@ class TeamScreensTest {
         compose.waitForIdle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", name))
         val v = runBlocking { core.teamView() }
-        val lines = listOf(v.subtitle, TeamRules.FOOT) + v.cards.flatMap { listOf(it.role, it.today, it.wait) }
+        val lines = listOf(v.subtitle, TeamRules.FOOT) + v.cards.map { it.line } + v.waiting.flatMap { listOf(it.what, it.who) }
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertClocksWhole(compose, name)
@@ -160,6 +160,11 @@ class TeamScreensTest {
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         if (count("team-card") != 5) fail("$name: ${count("team-card")} helpers, not 5")
         if (count("team-tile") != 3) fail("$name: ${count("team-tile")} tiles, not 3")
+        // Team, simpler: the Waiting on you box shows only when something waits, a row each.
+        if (count("team-waiting") != (if (v.waiting.isEmpty()) 0 else 1)) fail("$name: the Waiting on you box doesn't match ${v.waiting.size} rows")
+        if (count("team-wait-row") != v.waiting.size) fail("$name: ${count("team-wait-row")} waiting rows, not ${v.waiting.size}")
+        if (count("team-helpers") != 1) fail("$name: no Helpers box")
+        if (count("team-unfolded") != 0) fail("$name: a helper is unfolded before any tap")
         when (fill) {
             Fill.QUIET -> if (!onScreen(TeamRules.NOTHING_YET)) fail("$name: a quiet day doesn't say so")
             Fill.BUSY -> {
@@ -175,12 +180,29 @@ class TeamScreensTest {
         return core
     }
 
-    /** By hand: Obi's card raises his sheet with today's log; Close drops it. */
+    /**
+     * By hand: Obi's row unfolds to his role, his last things, Open · Pause · Whole day ›; Whole day raises his sheet
+     * with today's log; Close drops it.
+     */
     private fun byHand(core: MekaCore) {
         val name = "team-by-hand"
         val v = runBlocking { core.teamView() }
         val obi = v.card("obi")!!
-        compose.onAllNodes(hasContentDescription(obi.spoken) and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        compose.onAllNodes(hasContentDescription(obi.rowSpoken) and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { count("team-unfolded") == 1 && count("team-recent") == 2 }
+        if (count("team-unfolded") != 1) fail("$name: Obi's row didn't unfold")
+        if (count("team-recent") != 2) fail("$name: ${count("team-recent")} recent rows, not Obi's 2")
+        if (count("team-open") != 1 || count("team-pause-short") != 1 || count("team-whole-day") != 1) {
+            fail("$name: the unfolded row lacks Open · Pause · Whole day")
+        }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", "cover-dark-unfolded"))
+        ScreenShots.assertSensible(compose, "$name-unfolded")
+        ScreenShots.assertNoBrokenWords(compose, "$name-unfolded")
+        ScreenShots.assertClocksWhole(compose, "$name-unfolded")
+        ScreenShots.assertNoLoneWords(compose, "$name-unfolded", listOf(obi.roleLine) + obi.recent.map { it.text })
+        assertTouchTargets("$name-unfolded")
+        compose.onAllNodes(hasContentDescription("${os.meka.core.domain.TeamSimplerRules.WHOLE_DAY}: ${obi.title}") and hasClickAction())[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
         until { count("team-sheet") == 1 && count("team-log") == 2 }
         if (count("team-sheet") != 1) fail("$name: the card didn't raise its sheet")
         if (count("team-log") != 2) fail("$name: ${count("team-log")} log rows, not Obi's 2")

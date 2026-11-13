@@ -74,7 +74,7 @@ class TeamTest {
         assertEquals(TeamStatus.IDLE, kestrel.status)
         assertEquals("No trades asked", kestrel.today)
         assertEquals(listOf("Declined: Buy 0.05 BTC"), kestrel.log.map { it.text })
-        assertEquals(listOf("WORKING", "NEED YOU", "DONE TODAY"), v.tiles.map { it.label })
+        assertEquals(listOf("working", "need you", "done today"), v.tiles.map { it.label })
         assertEquals(listOf("4", "3", "8"), v.tiles.map { it.value })
         assertEquals(v.cards.count { it.status.live }.toString(), v.tiles.first().value, "WORKING is the breathing dots below it")
         assertEquals(TeamStatus.WORKING, obi.status)
@@ -201,5 +201,42 @@ class TeamTest {
         listOf("What's in my inbox?", "How much money have I got?", "Why is the sky blue?")
             .forEach { assertFalse(TeamAskRules.asked(it), it) }
     }
-}
 
+    /** "Team, simpler": one Waiting on you box with only what needs him, one line per helper that unfolds. */
+    @Test fun teamSimplerWaitingRowsAndHelperLines() {
+        val v = TeamRules.view(
+            TeamInputs(activity, requestsWaiting = 1, mailWait = "2 emails need you", moneyIdeas = 1, moneyAccounts = 6, tradesWaiting = 1),
+            now, cal,
+        )
+        assertEquals(listOf("1 card to tap", "2 emails to answer", "1 idea to look at", "1 trade to answer"), v.waiting.map { it.what })
+        assertEquals(listOf("Obi · from your messages", "Inbox · in Needs you", "Money · Obi's money check",
+            "Kestrel · answered in Needs you, with your fingerprint"), v.waiting.map { it.who })
+        assertEquals(listOf(TeamTarget.NEEDS_YOU, TeamTarget.NEEDS_YOU, TeamTarget.MONEY, TeamTarget.NEEDS_YOU), v.waiting.map { it.target })
+        assertEquals("Needs you", v.waiting.last().cta, "a trade is only answered in Needs you")
+        assertEquals("4 things wait on you · 5 helpers on", v.subtitle)
+        assertEquals("4", v.tiles[1].value, "need you is the rows in the box")
+        val obi = v.card("obi")!!
+        assertEquals(obi.today, obi.line)
+        assertEquals(listOf("08:05", "08:02"), obi.recent.map { it.time }, "newest first")
+        assertEquals("Your assistant · the orb and Ask · Asks before acting", obi.roleLine)
+        assertEquals(TeamTarget.ASK, obi.openTarget)
+        assertEquals("Pause", obi.pauseShort)
+        assertEquals(TeamTarget.TRADING, v.card("kestrel")!!.openTarget)
+        assertNull(v.card("kestrel")!!.pauseShort, "Kestrel runs outside Navilife")
+        assertEquals(TeamTarget.CALLS, v.card("calls")!!.openTarget)
+        assertEquals(TeamTarget.MAIL, v.card("inbox")!!.openTarget)
+    }
+
+    @Test fun teamSimplerAllClearAndPaused() {
+        val v = TeamRules.view(TeamInputs(emptyList(), paused = setOf(TeamAgent.INBOX)), now, cal)
+        assertTrue(v.waiting.isEmpty(), "the box hides with nothing waiting")
+        assertEquals("All clear · 4 helpers on", v.subtitle)
+        val inbox = v.card("inbox")!!
+        assertEquals("Paused till midnight", inbox.line)
+        assertEquals("Turn back on", inbox.pauseShort)
+        assertTrue(v.card("obi")!!.recent.isEmpty())
+        val one = TeamRules.view(TeamInputs(emptyList(), mailWait = "1 email needs you"), now, cal)
+        assertEquals("1 thing waits on you · 5 helpers on", one.subtitle)
+        assertEquals("1 email to answer", one.waiting.single().what)
+    }
+}

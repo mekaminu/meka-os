@@ -36,10 +36,32 @@ enum class TeamStatus(val label: String, val live: Boolean) {
     PAUSED("Paused till tomorrow", false),
 }
 
-/** Where Review takes him: Needs you (cards, mail, trades) or Money (Obi's money check). */
+/**
+ * Where a tap takes him: Review / a Waiting on you row (Needs you or Money), or, "Team, simpler", a helper's Open
+ * (Ask's field, Mail, Activity's calls, Money's Trading tab).
+ */
 enum class TeamTarget(val label: String) {
     NEEDS_YOU("Review in Needs you"),
     MONEY("Review in Money"),
+    ASK("Open Ask"),
+    MAIL("Open mail"),
+    CALLS("Open calls"),
+    TRADING("Open Trading"),
+}
+
+/**
+ * "Team, simpler" (approved 2026-11-11 21:21, `docs/design/routines/team-simpler.dc.html`): one row of the **Waiting on
+ * you** box: "2 emails to answer" over "Inbox · in Needs you", and where its tap goes ("Open ›", or "Needs you ›" for a
+ * trade, which is only ever answered there, with his fingerprint).
+ */
+data class TeamWaitRow(
+    val agent: TeamAgent,
+    val what: String,
+    val who: String,
+    val cta: String,
+    val target: TeamTarget,
+) {
+    val spoken: String get() = "$what. $who. $cta."
 }
 
 /** One of the three tiles at the top: "WORKING" and "5". */
@@ -67,7 +89,22 @@ data class TeamCard(
     val spoken: String,
     /** Slice 2: paused for the rest of today (Pause for today on its sheet). */
     val paused: Boolean = false,
+    /** "Team, simpler": its Waiting on you row, null with nothing waiting. */
+    val waitRow: TeamWaitRow? = null,
 ) {
+    /** "Team, simpler": the helper's one line under its name: what it did today, or that it's paused. */
+    val line: String get() = if (paused) TeamSimplerRules.PAUSED_LINE else today
+    /** "Team, simpler": the unfolded row's role line ("Sorts and tidies your mail · Tidies by itself · Undo in Activity"). */
+    val roleLine: String get() = "${agent.role} · ${agent.level}"
+    /** "Team, simpler": the unfolded row's last three things, newest first. */
+    val recent: List<TeamLogRow> get() = log.takeLast(TeamSimplerRules.RECENT_MAX).reversed()
+    /** "Team, simpler": where the unfolded row's Open goes, and its words. */
+    val openTarget: TeamTarget get() = TeamSimplerRules.openTarget(agent)
+    val openLabel: String get() = openTarget.label
+    /** "Team, simpler": the unfolded row's short pause button ("Pause" / "Turn back on"), null when it can't pause. */
+    val pauseShort: String? get() = if (!pausable) null else if (paused) TeamSimplerRules.TURN_BACK_ON else TeamSimplerRules.PAUSE
+    /** "Team, simpler": the row's spoken line, folded. */
+    val rowSpoken: String get() = "${agent.title}. ${status.label}. $line."
     /** Slice 2: its sheet offers Pause for today / Resume (Obi, Inbox and Money; Calls and Kestrel don't). */
     val pausable: Boolean get() = agent in TeamPauseRules.PAUSABLE
     /** Slice 2: the sheet's line under the pause button: what pausing does, or that it's paused. */
@@ -88,6 +125,9 @@ data class TeamView(
     val needCount: Int,
 ) {
     fun card(code: String): TeamCard? = cards.firstOrNull { it.agent.code == code }
+
+    /** "Team, simpler": the Waiting on you box's rows (the box hides when empty), in the helpers' order. */
+    val waiting: List<TeamWaitRow> get() = cards.mapNotNull { it.waitRow }
 
     companion object {
         val EMPTY = TeamView(emptyList(), emptyList(), TeamRules.SUBTITLE, 0)
@@ -239,16 +279,16 @@ object TeamRules {
         val cards = listOf(obi, inbox, calls, money, kestrel).map { c ->
             if (c.agent !in input.paused || c.agent !in TeamPauseRules.PAUSABLE) c
             else c.copy(status = TeamStatus.PAUSED, paused = true, spoken = c.spoken.replace(". ${c.status.label}. ", ". ${TeamStatus.PAUSED.label}. "))
-        }
+        }.map { c -> c.copy(waitRow = TeamSimplerRules.waitRow(c, input)) }
         val need = cards.count { it.waits }
         val done = cards.sumOf { by[it.agent].orEmpty().size }
         val working = workingCount(cards)
         val tiles = listOf(
-            TeamTile(WORKING.uppercase(), working.toString(), false, "$working of ${cards.size} working"),
-            TeamTile(NEED_YOU.uppercase(), need.toString(), need > 0, if (need == 0) "Nobody needs you" else "${plural(need, "helper")} need you"),
-            TeamTile(DONE_TODAY.uppercase(), SpeechRules.grouped(done.toLong()), false, "${plural(done, "thing")} done today"),
+            TeamTile(WORKING.lowercase(), working.toString(), false, "$working of ${cards.size} working"),
+            TeamTile(NEED_YOU.lowercase(), need.toString(), need > 0, if (need == 0) "Nobody needs you" else "${plural(need, "thing")} wait on you"),
+            TeamTile(DONE_TODAY.lowercase(), SpeechRules.grouped(done.toLong()), false, "${plural(done, "thing")} done today"),
         )
-        return TeamView(tiles, cards, SUBTITLE, need)
+        return TeamView(tiles, cards, TeamSimplerRules.subtitle(need, cards.count { !it.paused }), need)
     }
 
     /** A helper that did something today is Working (a breathing dot); one that hasn't is Ready. */
@@ -290,6 +330,63 @@ object TeamRules {
  * Calls and Kestrel can't be paused here: Calls has its own switch in Settings → Work mode, and Kestrel runs outside
  * Navilife. Pausing never sends, pays or trades anything; it only makes a helper do less.
  */
+/**
+ * "Team, simpler" (Take first, approved by Meka 2026-11-11 21:21; `docs/design/routines/team-simpler.dc.html`): the
+ * screen is three small number tiles, one **Waiting on you** box with only what needs him (one row each, a tap opens it;
+ * a trade row goes to Needs you), and one **Helpers** box with a single line per helper (icon, name, status dot, what it
+ * did today) that unfolds to its role, its last three things with times, and Open · Pause · Whole day ›. Replaces the
+ * old card per helper with its TODAY and WAITS ON YOU boxes. Words only, from what [TeamRules.view] already counted;
+ * nothing here acts (Open only goes to the place that holds it).
+ */
+object TeamSimplerRules {
+    const val WAITING = "Waiting on you"
+    const val HELPERS = "Helpers"
+    const val HELPERS_HINT = "tap one for its day"
+    const val OPEN = "Open"
+    const val NEEDS_YOU = "Needs you"
+    const val PAUSE = "Pause"
+    const val TURN_BACK_ON = "Turn back on"
+    const val WHOLE_DAY = "Whole day"
+    const val PAUSED_LINE = "Paused till midnight"
+    const val RECENT_MAX = 3
+
+    private fun plural(n: Int, one: String, many: String = one + "s") = "${SpeechRules.grouped(n.toLong())} ${if (n == 1) one else many}"
+
+    /** "2 things wait on you · 4 helpers on", or "All clear · 5 helpers on" (on = not paused). */
+    fun subtitle(waiting: Int, on: Int): String =
+        (if (waiting == 0) "All clear" else "${plural(waiting, "thing")} ${if (waiting == 1) "waits" else "wait"} on you") +
+            " · ${plural(on, "helper")} on"
+
+    fun openTarget(a: TeamAgent): TeamTarget = when (a) {
+        TeamAgent.OBI -> TeamTarget.ASK
+        TeamAgent.INBOX -> TeamTarget.MAIL
+        TeamAgent.CALLS -> TeamTarget.CALLS
+        TeamAgent.MONEY -> TeamTarget.MONEY
+        TeamAgent.KESTREL -> TeamTarget.TRADING
+    }
+
+    /** The helper's Waiting on you row, from the same counts as its card; null with nothing waiting. */
+    fun waitRow(c: TeamCard, input: TeamInputs): TeamWaitRow? {
+        if (!c.waits || c.review == null) return null
+        val a = c.agent
+        return when (a) {
+            TeamAgent.OBI -> TeamWaitRow(a, plural(input.requestsWaiting, "card") + " to tap", "Obi · from your messages", OPEN, TeamTarget.NEEDS_YOU)
+            TeamAgent.INBOX -> {
+                val n = Regex("""^([\d,]+) emails?\b""").find(c.wait)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
+                TeamWaitRow(a, n?.let { plural(it, "email") + " to answer" } ?: c.wait, "Inbox · in Needs you", OPEN, TeamTarget.NEEDS_YOU)
+            }
+            TeamAgent.MONEY -> TeamWaitRow(a, plural(input.moneyIdeas, "idea") + " to look at", "Money · Obi's money check", OPEN, TeamTarget.MONEY)
+            TeamAgent.KESTREL -> {
+                val n = maxOf(input.tradesWaiting, 1)
+                val title = input.kestrel?.waitingTitle?.takeIf { n == 1 }
+                TeamWaitRow(a, plural(n, "trade") + " to answer",
+                    "Kestrel · " + (title ?: "answered in Needs you, with your fingerprint"), NEEDS_YOU, TeamTarget.NEEDS_YOU)
+            }
+            TeamAgent.CALLS -> null
+        }
+    }
+}
+
 object TeamPauseRules {
     const val ENTITY_ID = "team_pause"
     const val PAUSE = "Pause for today"

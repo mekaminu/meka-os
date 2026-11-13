@@ -468,8 +468,18 @@ fun AskRoute(
         // Your team, slice 1: each helper's day and what waits on him; Review opens Needs you or Money.
         MekaPane(visible = pane == MoreItem.TEAM) {
             TeamPane(core, onClose = { pane = null }, onReview = { target ->
-                if (target == os.meka.core.domain.TeamTarget.MONEY) pane = MoreItem.MONEY
-                else { pane = null; openPlace(ShellDestination.NEEDS_YOU) }
+                // "Team, simpler": a helper's Open goes to its place (Mail, Activity's calls, Money's Trading tab).
+                when (target) {
+                    os.meka.core.domain.TeamTarget.MONEY -> pane = MoreItem.MONEY
+                    os.meka.core.domain.TeamTarget.TRADING -> {
+                        healthApp?.openMoneyTab?.value = os.meka.core.domain.MoneyTab.TRADING
+                        pane = MoreItem.MONEY
+                    }
+                    os.meka.core.domain.TeamTarget.MAIL -> pane = MoreItem.MAIL
+                    os.meka.core.domain.TeamTarget.CALLS -> pane = MoreItem.ACTIVITY
+                    os.meka.core.domain.TeamTarget.ASK -> { pane = null; askFocus += 1 }
+                    os.meka.core.domain.TeamTarget.NEEDS_YOU -> { pane = null; openPlace(ShellDestination.NEEDS_YOU) }
+                }
             }, onAsk = { listen ->
                 // Slice 3: Ask the team… is Obi in Ask's field (or listening), the team in what he sees.
                 pane = null
