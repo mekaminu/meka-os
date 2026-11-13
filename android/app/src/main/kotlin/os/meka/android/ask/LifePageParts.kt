@@ -178,7 +178,8 @@ internal fun LifePageCard(card: PageCard, modifier: Modifier = Modifier, onMore:
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // Two lines, so a long title (a book's) is read before it's cut (the quality gate's "cut after 0 characters").
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (r.line.isNotEmpty()) {
                         Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
