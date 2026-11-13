@@ -101,7 +101,7 @@ object ParkingRules {
     const val LOCATION_OFF = "Location is off on the phone · turn it on to save the spot"
     const val NOT_PARKED = "Not parked · tap “I've parked here” when you leave the car"
     const val WHICH_CAR = "Which car?"
-    const val PRIVACY = "Where you park, and the bay's photo, stay on this phone: never synced, sent or backed up. Walk there in Maps hands the spot to your maps app only when you tap it."
+    const val PRIVACY = "Where you park syncs to your watch so it can point to the car, and is forgotten when you drive off. The bay's photo stays on this phone: never synced, sent or backed up. Walk there in Maps hands the spot to your maps app only when you tap it."
     const val DATES_LINE = "MOT, tax, insurance and service · in Lists → Renewals"
     const val DATES_ACTION = "Dates ›"
     const val COMPASS_HINT = "Hold the phone flat and point it ahead"

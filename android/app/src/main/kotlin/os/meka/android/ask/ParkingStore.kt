@@ -20,6 +20,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import os.meka.core.domain.LocationFix
 import os.meka.core.domain.ParkSaved
 import os.meka.core.domain.ParkedSpot
@@ -53,6 +54,17 @@ object ParkingStore {
 
     fun store(context: Context, spots: Map<String, ParkedSpot>) {
         prefs(context).edit().putString(KEY_SPOTS, ParkingRules.encode(spots.values)).apply()
+        share(context, spots)
+    }
+
+    /**
+     * Find my car on the watch (Needs Meka #35 "Yes"): every change here is handed to the core, which keeps the synced
+     * copy the watch points to (the point, how sure, when, the bay; never the photo). Drove off clears it, and the
+     * server then forgets it. Called again on start so a spot saved before this update reaches the watch. Never throws.
+     */
+    fun share(context: Context, spots: Map<String, ParkedSpot> = spots(context)) {
+        val app = context.applicationContext as? os.meka.android.MekaApplication ?: return
+        app.appScope.launch { runCatching { app.core.shareParkedSpots(spots.values.toList()) } }
     }
 
     // ---- slice 4: the bay's photo (files/parking/, never backed up: data_extraction_rules.xml) ----

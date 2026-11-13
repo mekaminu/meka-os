@@ -268,7 +268,10 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
     // Done for the day, completeness 2: the evening glance follows this watch's own shutdown view.
     val shutdown by core.shutdownView.collectAsState()
     val home = remember(today, fasting, tick, mailNeeds, mailMoment, parkingTimers, barca, shutdown) { core.watchHome() }
-    val scope = rememberCoroutineScope()
+    // Find my car on the watch (Needs Meka #35): where each car is parked, synced from the Fold; Find my car opens over the day.
+    val parked by core.parkedSpotsView.collectAsState()
+    val spots = remember(parked, tick) { core.watchSpots() }
+    var finding by remember { mutableStateOf<String?>(null) }
 
     if ((sync as? SyncStatus.Failing)?.reason == MekaCore.SIGNED_OUT_MESSAGE) {
         WatchColumn {
@@ -282,6 +285,31 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         return
     }
 
+    // Find my car slides in over the day (reduced motion: a cross-fade); back (a swipe) slides it away.
+    AnimatedContent(
+        targetState = finding,
+        transitionSpec = {
+            if (reduced) {
+                fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true))
+            } else if (targetState != null) {
+                (slideInHorizontally(MekaMotion.replan(false)) { it / 3 } + fadeIn(MekaMotion.appear(false))) togetherWith fadeOut(MekaMotion.appear(false))
+            } else {
+                fadeIn(MekaMotion.appear(false)) togetherWith (slideOutHorizontally(MekaMotion.replan(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)))
+            }
+        },
+        label = "findCar",
+    ) { carId ->
+        if (carId != null) FindCarScreen(core, carId, spots.firstOrNull { it.carId == carId }?.label, reduced) { finding = null }
+        else DayColumn(app, core, home, spots, sync, reduced, listen, onListen) { finding = it }
+    }
+}
+
+@Composable
+private fun DayColumn(
+    app: WatchApplication, core: MekaCore, home: os.meka.core.domain.WatchHomeView, spots: List<os.meka.core.domain.WatchSpot>, sync: SyncStatus,
+    reduced: Boolean, listen: Int, onListen: () -> Unit, onFind: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
     WatchColumn {
         // The card cross-slides like the cover screen's when what's now changes (old out left, new in from the right).
         AnimatedContent(
@@ -338,6 +366,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         MatchRow(home.match, reduced)
 
         ParkingRows(home.parking, reduced) { carId -> scope.launch { runCatching { core.watchParkingExtend(carId) } } }
+
+        SpotRows(spots, reduced, onFind)
 
         DraftRow(core, home.draft, reduced)
 
@@ -1052,6 +1082,142 @@ private fun ParkingRows(rows: List<os.meka.core.domain.WatchParking>, reduced: B
         }
     }
 }
+
+/**
+ * Find my car on the watch (Needs Meka #35): each parked car — "PARKED" (· THE GOLF), "Level 3 · Row F · parked 14:05"
+ * and **Find my car**. A spot unfolds on the expand spring when the Fold saves one (reduced motion: a fade) and folds
+ * away when he drives off; the line cross-fades as "2 h ago" moves on.
+ */
+@Composable
+private fun SpotRows(rows: List<os.meka.core.domain.WatchSpot>, reduced: Boolean, onFind: (String) -> Unit) {
+    val last = remember { mutableMapOf<String, os.meka.core.domain.WatchSpot>() }
+    rows.forEach { last[it.carId] = it }
+    for (carId in os.meka.core.domain.CarRules.CAR_IDS) {
+        val p = rows.firstOrNull { it.carId == carId }
+        AnimatedVisibility(
+            visible = p != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+            label = "spot",
+        ) {
+            val v = p ?: last[carId] ?: return@AnimatedVisibility
+            Column(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.m),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                Line(v.label, MekaType.captionStrong.copy(color = C.textSecondary), maxLines = 1)
+                AnimatedContent(
+                    targetState = v.line,
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "spotLine",
+                ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary)) }
+                WatchButton(os.meka.core.domain.SharedSpotRules.FIND, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                    onFind(v.carId)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Find my car on the wrist, the Fold's Find my car in small: an arrow that follows the watch's compass (no compass:
+ * pointing from north, said once), the distance under it and how sure, the bay. GPS and the compass run only while
+ * this shows. The arrow turns the shortest way round on a soft, unbouncy spring (reduced motion: it snaps); within
+ * 15 m the arrow and line blend to the accent with one double buzz. Location is asked for here, on its first use.
+ */
+@Composable
+private fun FindCarScreen(core: MekaCore, carId: String, label: String?, reduced: Boolean, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val rules = os.meka.core.domain.SharedSpotRules
+    androidx.activity.compose.BackHandler { onBack() }
+    val parked by core.parkedSpotsView.collectAsState()
+    val spot = parked[carId]
+    var allowed by remember { mutableStateOf(WatchFindCar.precise(context)) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed = it }
+    val compass = remember { WatchFindCar.hasCompass(context) }
+    var here by remember { mutableStateOf<os.meka.core.domain.LocationFix?>(null) }
+    var heading by remember { mutableStateOf<Double?>(null) }
+    var wasClose by remember { mutableStateOf(false) }
+    LaunchedEffect(allowed, spot != null) {
+        if (allowed && spot != null) runCatching { WatchFindCar.whereIAm(context).collect { here = it } }
+    }
+    LaunchedEffect(compass, spot != null) {
+        if (compass && spot != null) runCatching { WatchFindCar.heading(context) { here }.collect { heading = it } }
+    }
+    val view = spot?.let { os.meka.core.domain.ParkingRules.find(it, here, heading) }
+    LaunchedEffect(view?.close) {
+        if (view != null) {
+            if (os.meka.core.domain.ParkingRules.buzz(wasClose, view)) WatchFindCar.buzz(context)
+            wasClose = view.close
+        }
+    }
+    val turn = remember { androidx.compose.animation.core.Animatable(0f) }
+    val arrow = if (spot != null && view != null) rules.arrowDeg(spot, here, view) else null
+    LaunchedEffect(arrow) {
+        val target = arrow?.toFloat() ?: return@LaunchedEffect
+        val from = turn.value
+        val to = from + os.meka.core.domain.ParkingRules.norm180((target - from).toDouble()).toFloat()
+        if (reduced) turn.snapTo(to) else turn.animateTo(
+            to,
+            androidx.compose.animation.core.spring(
+                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
+            ),
+        )
+    }
+    val near = view?.close == true
+    val tint by androidx.compose.animation.animateColorAsState(
+        if (near) C.accent else C.textPrimary, MekaMotion.appear(reduced), label = "findTint",
+    )
+    WatchColumn {
+        Line(label ?: os.meka.core.domain.SharedSpotRules.LABEL, MekaType.captionStrong.copy(color = if (near) C.accent else C.textSecondary), maxLines = 1)
+        when {
+            spot == null -> Line(rules.GONE, MekaType.caption.copy(color = C.textPrimary), maxLines = 3)
+            !allowed -> {
+                Line(rules.NO_PERMISSION, MekaType.caption.copy(color = C.textPrimary), maxLines = 3)
+                WatchButton(rules.ALLOW, primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) {
+                    ask.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                }
+            }
+            !WatchFindCar.locationOn(context) -> Line(rules.LOCATION_OFF, MekaType.caption.copy(color = C.textPrimary), maxLines = 3)
+            else -> {
+                if (arrow != null) {
+                    val ring = C.hairline
+                    Canvas(Modifier.size(FIND_ARROW).graphicsLayer { rotationZ = turn.value }.semantics { }) {
+                        val w = size.minDimension
+                        drawCircle(ring, w * 0.46f, style = Stroke(1.dp.toPx()))
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(w * 0.5f, w * 0.1f); lineTo(w * 0.7f, w * 0.62f); lineTo(w * 0.5f, w * 0.52f); lineTo(w * 0.3f, w * 0.62f); close()
+                        }
+                        drawPath(path, tint)
+                        drawLine(
+                            tint, androidx.compose.ui.geometry.Offset(w * 0.5f, w * 0.56f), androidx.compose.ui.geometry.Offset(w * 0.5f, w * 0.86f),
+                            2.dp.toPx(), cap = StrokeCap.Round,
+                        )
+                    }
+                }
+                val lines = rules.findLines(view!!, compass)
+                AnimatedContent(
+                    targetState = lines.first(),
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "findLine",
+                ) { l ->
+                    Column(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
+                        Line(l, MekaType.metaStrong.copy(color = tint, fontFeatureSettings = "tnum"), maxLines = 2)
+                    }
+                }
+                lines.drop(1).forEach { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 2) }
+                spot.label?.let { Line(it, MekaType.caption.copy(color = C.textSecondary), maxLines = 1) }
+            }
+        }
+        Spacer(Modifier.height(MekaSpace.xxs))
+        WatchButton(rules.BACK, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) { onBack() }
+    }
+}
+
+/** Find my car's arrow on the wrist (the Fold's is 120 dp). */
+private val FIND_ARROW = 76.dp
 
 /**
  * The fast, in the Fasting design (docs/design/fasting/today-card.dc.html): running, a gold ring sweeping over a dark

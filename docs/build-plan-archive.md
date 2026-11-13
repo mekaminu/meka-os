@@ -6148,3 +6148,14 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - The clip route sends `audio/wav` for Gemini's clips and `audio/mpeg` for Chirp's (`CallClips.contentType`), so the phone service's `<Play>` takes either.
 - Tests: `GeminiSpeechTest.theCallAssistantsLinesInLivesVoiceAreGeminisWavAndPollyOtherwise`, `CallAssistantTest.theCallVoiceFallsBackWithoutFailingTheCall`, `SpeechTest.callsPlayAChosenGoogleVoiceOverAPollyVoice` (Charon now Gemini's).
 
+## Meka's answers 2026-11-11, (d): Find my car on the watch
+
+### (d) (2026-11-13, core + server + Fold + watch)
+- Needs Meka #35 "Yes": the spot syncs to the watch through Navilife's server and is deleted when he drives off.
+- Core: `ParkingShare.kt` — `SharedSpotFields.SPOT` ("parkedSpot" on the car's context_mode entity, beside its timer), `SharedSpotRules` (encode/decode one tab-separated line: lat and lon to 6 places, whole-metre accuracy, saved time, the bay; never the photo; `changes` writes only what differs and clears cars no longer parked; `watch` rows "PARKED · THE GOLF" / "Level 3 · Row F · parked 14:05 · 2 h ago"; `findLines`, `arrowDeg` (no compass: bearing from north and "No compass on the watch · the arrow points north-up")), `SharedSpots(replica)`.
+- Sync: `ForgetfulFields` (context_mode/parkedSpot); `SyncService.push` calls `ServerOpStore.forgetEarlier` after storing such an op, blanking every stored value of that field except the newest by HLC (ops stay in the log and in order, so pulls and merges are unchanged); a retried op whose stored copy was blanked is acknowledged. `InMemoryServerOpStore` and `PostgresOpStore` implement it (one UPDATE). No migration.
+- Facade: `shareParkedSpots(spots)`, `parkedSpotsView` (refreshed with the timers), `watchSpots()`.
+- Fold: `ParkingStore.store` hands every change to the core; `MekaApplication` shares once on start so a spot saved before the update reaches the watch. The Car pane's privacy line and Help say the spot syncs to the watch and is forgotten on drive off; the photo still never leaves the phone.
+- Watch: `WatchFindCar` (GPS and the rotation vector, only while Find my car shows), `SpotRows` under the parking timers, `FindCarScreen` (76 dp arrow, the Fold's spring, double buzz within 15 m, Allow on first use, Back and swipe); ACCESS_FINE_LOCATION in the watch manifest.
+- Tests: ParkingShareTest, ForgetfulFieldsTest, ParkingShareFacadeTest, PostgresOpStoreTest.aParkedSpotIsForgottenOnTheServerWhenANewerOneOrADroveOffArrives.
+

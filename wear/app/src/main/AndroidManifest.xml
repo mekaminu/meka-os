@@ -11,6 +11,10 @@
     <!-- Quick capture by voice (slice 4a): asked the first time Capture is tapped; on-device recogniser only (ADR-006). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- Find my car on the watch (Needs Meka #35): asked the first time Find my car opens; used only while it shows. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <!-- Lets MEKA see the watch's speech recogniser (package visibility); it only ever uses the on-device one. -->
     <queries>

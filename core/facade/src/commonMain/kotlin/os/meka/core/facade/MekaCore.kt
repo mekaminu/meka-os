@@ -209,6 +209,8 @@ class MekaCore(
     private val documents = os.meka.core.domain.Documents(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val parkingTimers = os.meka.core.domain.ParkingTimers(replica)
+    /** Find my car on the watch (Needs Meka #35): where each car is parked, synced from the Fold. */
+    private val sharedSpots = os.meka.core.domain.SharedSpots(replica)
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
@@ -707,6 +709,13 @@ class MekaCore(
      * Synced (no location in it), so the Mac shows it too.
      */
     val parkingTimersView: StateFlow<os.meka.core.domain.TimersView> = _parkingTimers.asStateFlow()
+    private val _parkedSpots = MutableStateFlow<Map<String, os.meka.core.domain.ParkedSpot>>(emptyMap())
+    /**
+     * Find my car on the watch (Needs Meka #35 "Yes", 2026-11-13): where each car is parked, as synced from the Fold
+     * (no photo). The watch points to it; the Fold keeps its own store as the source and hands every change to
+     * [shareParkedSpots].
+     */
+    val parkedSpotsView: StateFlow<Map<String, os.meka.core.domain.ParkedSpot>> = _parkedSpots.asStateFlow()
     private val _barcaNear = MutableStateFlow<List<os.meka.core.domain.CalendarEvent>>(emptyList())
     /**
      * Barça match day, slice 4: the Barça matches within a day or so of now (not hidden), with the lines the server
@@ -8446,6 +8455,19 @@ class MekaCore(
         return os.meka.core.domain.WatchHomeRules.parking(timers, now)
     }
 
+    /**
+     * Find my car on the watch (Needs Meka #35): the Fold hands over its parked spots after every change (saved, the
+     * bay typed, drove off) and once on start; the synced copy is made to match (a car no longer parked is cleared, and
+     * the server then forgets it). The bay's photo isn't part of it. How many cars changed. Never throws.
+     */
+    suspend fun shareParkedSpots(spots: List<os.meka.core.domain.ParkedSpot>): Int = onCore {
+        runCatching { sharedSpots.share(spots.associateBy { it.carId }) }.getOrDefault(0)
+    }
+
+    /** Find my car on the watch: the parked cars for the wrist ("PARKED · THE GOLF", "Level 3 · Row F · parked 14:05"). */
+    fun watchSpots(): List<os.meka.core.domain.WatchSpot> =
+        os.meka.core.domain.SharedSpotRules.watch(_parkedSpots.value, _cars.value, nowMs(), ZoneCalendar(timeZone))
+
     /** Car and parking, slice 7: the watch's +15 min on car [carId]'s timer; the new line, or null without a timer. */
     suspend fun watchParkingExtend(carId: String): String? =
         extendParkingTimer(carId, os.meka.core.domain.WatchHomeRules.EXTEND_MIN)
@@ -14996,6 +15018,7 @@ class MekaCore(
         _cars.value = os.meka.core.domain.CarRules.views(car.cars(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _car.value = _cars.value.first
         _parkingTimers.value = os.meka.core.domain.ParkingTimerRules.view(parkingTimers.all(), _cars.value, nowMs(), cal)
+        _parkedSpots.value = sharedSpots.all()
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         // Routines, slice 3b: a routine whose time has come starts by itself (the governor's wake refreshes first).
         routines.startDue()

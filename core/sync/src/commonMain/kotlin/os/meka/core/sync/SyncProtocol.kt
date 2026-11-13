@@ -46,6 +46,27 @@ interface ServerOpStore {
     fun append(op: Op): Long
     fun after(householdId: String, afterSeq: Long, limit: Int): List<SequencedOp>
     fun isDeviceAuthorised(householdId: String, deviceId: String): Boolean
+
+    /**
+     * For a field in [ForgetfulFields]: every stored value of [op]'s field except the newest by HLC becomes null, so
+     * the server keeps only the current one (and nothing once it is cleared). Default: keeps everything.
+     */
+    fun forgetEarlier(op: Op) {}
+}
+
+/**
+ * Fields whose past values the server doesn't keep (Find my car on the watch, 2026-11-13: where a car is parked; Needs
+ * Meka #35, "deleted when you drive off"). Ops stay in the log, in order, so pulls and merges are unchanged; only the
+ * superseded values are blanked. A device retrying an op whose stored copy was blanked is acknowledged as before.
+ */
+object ForgetfulFields {
+    /** (entity type, field). Entity type and field names are wire format: "context_mode" / "parkedSpot". */
+    val ALL: Set<Pair<String, String>> = setOf("context_mode" to "parkedSpot")
+
+    fun forgets(op: Op): Boolean = (op.entityType to op.field) in ALL
+
+    /** [stored] is [sent] with its value forgotten by the server. */
+    fun blanked(stored: Op, sent: Op): Boolean = forgets(sent) && stored.value == FieldValue.Null && stored == sent.copy(value = FieldValue.Null)
 }
 
 /**
@@ -68,8 +89,12 @@ class SyncService(private val store: ServerOpStore) {
                     else -> {
                         val existing = store.find(req.householdId, op.opId)
                         when {
-                            existing == null -> { store.append(op); ack += op.opId }
+                            existing == null -> {
+                                store.append(op); ack += op.opId
+                                if (ForgetfulFields.forgets(op)) store.forgetEarlier(op)
+                            }
                             existing == op -> ack += op.opId // retry of an already stored op: idempotent
+                            ForgetfulFields.blanked(existing, op) -> ack += op.opId // stored, its value since forgotten
                             else -> rejected[op.opId] = "opId reused with different content"
                         }
                     }
@@ -107,6 +132,21 @@ class InMemoryServerOpStore(private val authorised: Set<Pair<String, String>>? =
 
     override fun isDeviceAuthorised(householdId: String, deviceId: String) =
         authorised == null || (householdId to deviceId) in authorised
+
+    override fun forgetEarlier(op: Op) {
+        val same = log.filter {
+            it.op.householdId == op.householdId && it.op.entityType == op.entityType && it.op.entityId == op.entityId && it.op.field == op.field
+        }
+        val newest = same.maxByOrNull { it.op.hlc } ?: return
+        for (i in log.indices) {
+            val s = log[i]
+            if (s !== newest && s in same && s.op.value != FieldValue.Null) {
+                val blank = s.op.copy(value = FieldValue.Null)
+                log[i] = SequencedOp(s.seq, blank)
+                index[blank.householdId to blank.opId] = blank
+            }
+        }
+    }
 
     val size: Int get() = log.size
 }

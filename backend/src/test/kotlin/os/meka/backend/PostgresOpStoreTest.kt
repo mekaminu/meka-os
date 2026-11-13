@@ -77,4 +77,29 @@ class PostgresOpStoreTest {
             check(reg.enrolWithCode("home", "mac", "Mac") is EnrolOutcome.Enrolled)
         }
     }
+
+    @Test
+    fun aParkedSpotIsForgottenOnTheServerWhenANewerOneOrADroveOffArrives() {
+        if (url == null) return
+        ds().use { ds ->
+            Migrations.apply(ds)
+            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household CASCADE") }
+            PostgresDeviceRegistry(ds).enrol("hh-pg", "fold", "fold")
+            val store = PostgresOpStore(ds)
+            val sync = SyncService(store)
+            fun spot(id: String, wall: Long, v: FieldValue) = Op(id, "hh-pg", "context_mode", "car", "parkedSpot", v, Hlc(wall, 0, "fold"), emptyList(), "fold")
+            val first = spot("s1", 1, FieldValue.Text("51.5\t-0.1\t8\t1\t"))
+            val second = spot("s2", 2, FieldValue.Text("51.6\t-0.2\t8\t2\t"))
+            sync.push(PushRequest("hh-pg", "fold", listOf(first, second)))
+            val timer = Op("t1", "hh-pg", "context_mode", "car", "parkingNote", FieldValue.Text("keep"), Hlc(1, 0, "fold"), emptyList(), "fold")
+            sync.push(PushRequest("hh-pg", "fold", listOf(timer)))
+            assertEquals(FieldValue.Null, store.find("hh-pg", "s1")!!.value)
+            assertEquals(second.value, store.find("hh-pg", "s2")!!.value)
+            sync.push(PushRequest("hh-pg", "fold", listOf(spot("s3", 3, FieldValue.Null))))
+            assertEquals(FieldValue.Null, store.find("hh-pg", "s2")!!.value, "drove off: nothing kept")
+            assertEquals(FieldValue.Text("keep"), store.find("hh-pg", "t1")!!.value, "other fields untouched")
+            // A retry of the forgotten op is still acknowledged.
+            assertEquals(listOf("s1"), sync.push(PushRequest("hh-pg", "fold", listOf(first))).acknowledged)
+        }
+    }
 }

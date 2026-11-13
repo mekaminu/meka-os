@@ -229,6 +229,8 @@ open class MekaApplication : Application() {
                 os.meka.android.work.PhoneCallLog.calls(this).value,
             )
         }
+        // Find my car on the watch (Needs Meka #35): a spot saved before this update reaches the watch too.
+        os.meka.android.ask.ParkingStore.share(this)
         // Battery care (Reliability first, slice 1): every process start is a heartbeat.
         os.meka.android.today.BatteryCare.beat(this)
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at

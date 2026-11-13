@@ -125,6 +125,23 @@ class PostgresOpStore(private val ds: DataSource) : ServerOpStore {
         }
     }
 
+    /** [ServerOpStore.forgetEarlier]: blanks the field's stored values older (by HLC) than its newest. */
+    override fun forgetEarlier(op: Op) {
+        conn { c ->
+            c.prepareStatement(
+                """UPDATE op_log SET value_type = 'n', value_text = NULL, value_int = NULL
+                   WHERE household_id = ? AND entity_type = ? AND entity_id = ? AND field_name = ? AND value_type <> 'n'
+                   AND hlc < (SELECT MAX(hlc) FROM op_log WHERE household_id = ? AND entity_type = ? AND entity_id = ? AND field_name = ?)""",
+            ).use { st ->
+                var i = 1
+                repeat(2) {
+                    st.setString(i++, op.householdId); st.setString(i++, op.entityType); st.setString(i++, op.entityId); st.setString(i++, op.field)
+                }
+                st.executeUpdate()
+            }
+        }
+    }
+
     override fun isDeviceAuthorised(householdId: String, deviceId: String): Boolean = conn { c ->
         c.prepareStatement("SELECT 1 FROM device WHERE household_id = ? AND id = ? AND revoked_at IS NULL").use { st ->
             st.setString(1, householdId); st.setString(2, deviceId)
