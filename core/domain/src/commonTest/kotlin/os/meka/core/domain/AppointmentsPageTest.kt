@@ -45,6 +45,8 @@ class AppointmentsPageTest {
         assertEquals(listOf(AppointmentsPageRules.OVERDUE, "Today", AppointmentsPageRules.ADD_A_DATE), toBook.map { it.whenText })
         assertTrue(toBook.all { it.lit })
         assertEquals("appt:a2", toBook[0].key)
+        // Only how often on the page (one line on the cover screen); the last visit is in the sheet.
+        assertEquals(listOf("Every 6 weeks", "Every 6 months", "Every 3 months"), toBook.map { it.line })
     }
 
     @Test

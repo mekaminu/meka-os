@@ -83,7 +83,8 @@ object AppointmentsPageRules {
             AppointmentState.LATER -> false
             else -> r.lit
         }
-        return PageRow(rowKey(r.id), r.title, r.line, whenText(r, today), lit)
+        // The line is how often, on one line on the cover screen; "last went …" is in the row's sheet (ci run 43402124758).
+        return PageRow(rowKey(r.id), r.title, r.line.substringBefore(" · "), whenText(r, today), lit)
     }
 
     /** Every row of the card [cardKey] (See all), not only the first five. */
