@@ -3470,6 +3470,12 @@ final class CoreModel {
         return core.readingPage(view: reading ?? ReadingView.companion.EMPTY)
     }
 
+    /// Ask → Errands in the page shape (slice 7); the Mac has no near-me card (the Fold's location reminders).
+    func errandsPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.errandsPage(view: errands ?? ErrandView.companion.EMPTY, near: nil)
+    }
+
     func carPage() -> LifePageView? {
         guard let core, let cars else { return nil }
         return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)

@@ -5270,6 +5270,15 @@ class MekaCore(
         os.meka.core.domain.ReadingPageRules.page(view)
 
     /**
+     * Every page under Ask in one shape, slice 7: Ask → Errands as the page shape (both apps). [near] is the Fold's
+     * near-me switch (its card); the Mac passes null and has none.
+     */
+    fun errandsPage(
+        view: os.meka.core.domain.ErrandView = _errands.value,
+        near: os.meka.core.domain.ErrandNearSetting? = null,
+    ): os.meka.core.domain.LifePageView = os.meka.core.domain.ErrandsPageRules.page(view, near)
+
+    /**
      * Car and parking, slice 5: what the share sheet offers for shared text that is a parking confirmation (RingGo,
      * JustPark, PayByPhone…), read on the device: "Parking timer until 15:30 · RingGo 81234", the car (from its
      * registration in the text, or the only car) or the choices, or "That parking ended at 15:30 …". Null when the

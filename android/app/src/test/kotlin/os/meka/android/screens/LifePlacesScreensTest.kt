@@ -36,6 +36,7 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.ERRANDS_LIST_TAG
+import os.meka.android.ask.ERRANDS_ROW_SHEET_TAG
 import os.meka.android.ask.ErrandsPane
 import os.meka.android.ask.MEALS_LIST_TAG
 import os.meka.android.ask.MealsPane
@@ -47,6 +48,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.ErrandRules
+import os.meka.core.domain.ErrandsPageRules
 import os.meka.core.domain.MealRules
 import os.meka.core.domain.PeoplePageRules
 import os.meka.core.domain.PeopleRules
@@ -181,7 +183,12 @@ class LifePlacesScreensTest {
                 // (The inner screen is short: rows below it aren't composed, so the first is checked on screen and
                 // nothing on screen may read as a typed lower-case title.)
                 val rows = v.places.flatMap { it.rows }
-                rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.shown) }
+                // The page shape (slice 7): the three numbers, and Waiting's first place (or its empty line).
+                val page = core.errandsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, ErrandsPageRules.WAITING_EMPTY)
                 rows.forEach { r -> if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case") }
                 val raw = rows.map { it.title }.filter { it.first().isLowerCase() }.toSet()
                 ScreenShots.texts(compose).firstOrNull { it in raw }?.let { fail("$name: \"$it\" reads lower case") }
@@ -323,30 +330,49 @@ class LifePlacesScreensTest {
     }
 
     /**
-     * Works by hand, Errands: every button a 48 dp touch; Done moves an errand to Done lately and Back returns it;
-     * Remove takes one off; the field adds a typed line at its place.
+     * Works by hand, Errands (the page shape, slice 7): every button a 48 dp touch; a place's row opens its sheet and
+     * Done there ticks an errand off; its row under Done lately opens a sheet whose Back returns it; Remove in the
+     * pharmacy's sheet takes its errand off; + Add → Things to do at a place adds a typed line at its place.
      */
     private fun errandsByHand(core: MekaCore) {
         val name = "errands-by-hand"
         val p = Place.ERRANDS
         assertTouchTargets(name)
-        val first = core.errandsView.value.places.first().rows.first()
+        val sheet = hasAnyAncestor(hasTestTag(ERRANDS_ROW_SHEET_TAG))
+        fun closeSheet() {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(sheet) }
+        }
+        val firstPlace = core.errandsView.value.places.first()
+        val first = firstPlace.rows.first()
+        tap(p, name, firstPlace.place, hasText(firstPlace.place))
+        until { shows(hasContentDescription("Done: ${first.shown}")) }
+        assertTouchTargets(name)
         tap(p, name, "Done", hasContentDescription("Done: ${first.shown}"))
         until { core.errandsView.value.done.any { it.id == first.id } }
         if (core.errandsView.value.done.none { it.id == first.id }) fail("$name: Done didn't tick \"${first.shown}\"")
-        reach(p, name, hasText("Done lately", ignoreCase = true), "Done lately label")
-        assertTouchTargets(name)
+        closeSheet()
+        reach(p, name, hasText(ErrandsPageRules.DONE), "Done lately card")
+        tap(p, name, first.shown, hasText(first.shown) and !sheet)
+        until { shows(hasContentDescription("Back: ${first.shown}")) }
         tap(p, name, "Back", hasContentDescription("Back: ${first.shown}"))
         until { core.errandsView.value.done.none { it.id == first.id } }
         if (core.errandsView.value.done.any { it.id == first.id }) fail("$name: Back left \"${first.shown}\" in Done lately")
-        val pharmacy = core.errandsView.value.places.flatMap { it.rows }.first { it.title.contains("collect the order") }
-        tap(p, name, "Remove", hasContentDescription("Remove ${pharmacy.shown}"))
-        until { core.errandsView.value.places.flatMap { it.rows }.none { it.id == pharmacy.id } }
-        if (core.errandsView.value.places.flatMap { it.rows }.any { it.id == pharmacy.id }) fail("$name: Remove left \"${pharmacy.shown}\"")
+        closeSheet()
+        val pharmacy = core.errandsView.value.places.first { g -> g.rows.any { it.title.contains("collect the order") } }
+        val order = pharmacy.rows.first()
+        tap(p, name, pharmacy.place, hasText(pharmacy.place))
+        tap(p, name, "Remove", hasContentDescription("Remove ${order.shown}"))
+        until { core.errandsView.value.places.flatMap { it.rows }.none { it.id == order.id } }
+        if (core.errandsView.value.places.flatMap { it.rows }.any { it.id == order.id }) fail("$name: Remove left \"${order.shown}\"")
+        closeSheet()
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         type(p, name, ErrandRules.HINT, "Butcher: sausages for Saturday")
         until { core.errandsView.value.places.any { g -> g.rows.any { it.title.contains("sausages") } } }
         if (core.errandsView.value.places.none { g -> g.rows.any { it.title.contains("sausages") } }) fail("$name: Done on the field added nothing")
-        reach(p, name, hasText("sausages", substring = true, ignoreCase = true), "new errand on screen")
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        reach(p, name, hasText("Butcher"), "the new place on the page")
     }
 
     /**

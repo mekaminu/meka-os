@@ -14,6 +14,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,12 +26,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,41 +61,47 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
-import os.meka.android.today.SectionLabel
 import os.meka.core.domain.ErrandAdded
 import os.meka.core.domain.ErrandGroup
 import os.meka.core.domain.ErrandPlaceRules
 import os.meka.core.domain.ErrandRow
 import os.meka.core.domain.ErrandRules
+import os.meka.core.domain.ErrandsPageRules
 import os.meka.core.facade.MekaCore
 
-/**
- * Ask → More → Errands (V1, errands by location slice 1): things that wait for a place, not a time. Type
- * "Tesco: milk, batteries" or "when I'm near the post office: parcel"; each place is a section with its errands, oldest
- * first. Done ticks one off (it moves to "Done lately", with Back); Remove takes it off for good.
- *
- * Slice 2 (the Fold only): "Near-me reminders" (off by default) asks for precise, then "Allow all the time" location;
- * once on, each place's section says whether its spot is saved, with "I'm here" (one precise fix, kept on this phone)
- * or "Forget spot". Android then reminds "Near Tesco · milk, batteries" on arriving ([ErrandProximity]).
- *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the field's line
- * cross-fade (the line blends to the accent when refused, with a tick haptic; an add gives a light haptic); each
- * place's label and rows stagger in 40 ms apart and move with the list's item motion. The near-me line cross-fades and
- * blends to the accent when it needs a look; each place's spot line unfolds (expand spring) when the switch turns on and
- * cross-fades through "Finding where you are…" to "Saved … here" (light haptic; a tick when refused). Reduced motion:
- * cross-fades.
- */
 /** Errands' list, for the by-hand tests' bounded scroll. */
 const val ERRANDS_LIST_TAG = "errands-list"
+const val ERRANDS_ROW_SHEET_TAG = "errands-row-sheet"
+const val ERRANDS_ALL_SHEET_TAG = "errands-all-sheet"
 
+/**
+ * Ask → Errands in the page shape (every page under Ask in one shape, slice 7; approved 2026-11-11,
+ * `docs/design/look/LifePage.dc.html`): the title with its ⓘ, one gold + Add (Things to do at a place, a field in the
+ * sheet: "Tesco: milk, batteries"), three numbers (errands waiting, places, done this week), then Waiting (a row a
+ * place, what's there and how many), Done lately and Near-me reminders. A place's row opens its sheet with each
+ * errand's Done and Remove and, with near-me on, its spot's I'm here / Forget spot; a done row's sheet has Back and
+ * Remove; the near-me row's sheet has the switch (precise, then "Allow all the time" location) and the privacy line.
+ * Android reminds "Near Tesco · milk, batteries" on arriving ([ErrandProximity]).
+ *
+ * Motion: the title travels in from Ask's tile (shared title); the header, summary, tiles and cards appear in turn;
+ * cards move with the list's item motion; the ⓘ's words unfold and the sheets rise on the expand spring
+ * (LifePageParts); the answer line cross-fades (lit in the accent when refused, with a tick haptic; an add or Done a
+ * light haptic); in a place's sheet the errands move on the expand spring as one is ticked off; the near-me line
+ * cross-fades and blends to the accent when it needs a look; a spot's line cross-fades through "Finding where you
+ * are…" to "Saved … here". Reduced motion: cross-fades.
+ */
 @Composable
 fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val v by core.errandsView.collectAsState()
-    var text by remember { mutableStateOf("") }
     var said by remember { mutableStateOf<ErrandAdded?>(null) }
+    var infoOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var addChosen by remember { mutableStateOf<String?>(null) }
+    var allCard by remember { mutableStateOf<String?>(null) }
+    var rowKey by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     var nearOn by remember { mutableStateOf(ErrandProximity.isOn(context)) }
     var precise by remember { mutableStateOf(ErrandProximity.precise(context)) }
@@ -115,79 +122,108 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
         if (precise && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     }
     val near = ErrandPlaceRules.setting(nearOn, precise, always, spots.size)
+    val page = remember(v, near) { core.errandsPage(v, near) }
     val nearColor by animateColorAsState(
         if (near.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "errand-near",
     )
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "errand-said",
     )
+    fun done(id: String, isDone: Boolean) {
+        if (isDone) haptics.light() else haptics.tick()
+        scope.launch { runCatching { core.errandDone(id, isDone) } }
+    }
+    fun remove(id: String) { haptics.tick(); scope.launch { runCatching { core.removeErrand(id) } } }
 
-    LazyColumn(
-        Modifier.fillMaxSize().testTag(ERRANDS_LIST_TAG),
-        contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        item(key = "close") {
-            Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        }
-        item(key = "title") {
-            Text("Errands", style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ERRANDS)).appear(rememberAppearance(0)))
-        }
-        item(key = "summary") {
-            Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "errand-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().testTag(ERRANDS_LIST_TAG),
+            contentPadding = PaddingValues(MekaSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            item(key = "close") {
+                Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
+            }
+            item(key = "title") {
+                LifePageHeader(
+                    page.title, page.info, infoOpen,
+                    titleModifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ERRANDS)).appear(rememberAppearance(0)),
+                    onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                    onAdd = { haptics.tick(); addChosen = ErrandsPageRules.ADD_CHOICES.singleOrNull()?.key; said = null; addOpen = true },
+                )
+            }
+            item(key = "summary") {
+                Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "errand-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                    // What the last add said, while no sheet is open.
+                    if (!addOpen) Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "errand-line") { l ->
+                        l?.let { Text(it, style = MekaType.caption, color = saidColor) }
+                    }
+                }
+            }
+            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            page.cards.forEachIndexed { i, c ->
+                item(key = "card-${c.key}") {
+                    LifePageCard(
+                        c, Modifier.animateItem().appear(rememberAppearance(3 + i)),
+                        onMore = { haptics.tick(); allCard = c.key },
+                        onRow = { r -> haptics.tick(); spotSaid = null; rowKey = r.key },
+                    )
+                }
+            }
+            item(key = "note") {
+                Text(ErrandRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
             }
         }
-        item(key = "field") {
-            Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(ErrandRules.HINT, value = text, onValue = { text = it }) { typed ->
+        // + Add: the place, a colon, then what to do there.
+        LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+            AddChoiceRows(page.addChoices, addChosen) { c -> haptics.tick(); said = null; addChosen = c.key }
+            addChosen?.let { choice ->
+                Field(ErrandsPageRules.hint(choice)) { typed ->
                     scope.launch {
                         val r = runCatching { core.addErrand(typed) }.getOrNull() ?: return@launch
                         said = r
-                        if (r.refused) { haptics.tick(); text = typed } else haptics.light()
+                        if (r.refused) haptics.tick() else { haptics.light(); addOpen = false }
                     }
                 }
-                Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "errand-line") { l ->
-                    l?.let { Text(it, style = MekaType.caption, color = saidColor) }
+                said?.takeIf { it.refused }?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
+            }
+        }
+        // See all: every row of one card, a tap opens its sheet.
+        val all = allCard
+        LifeSheet(all != null, all ?: ErrandsPageRules.TITLE, ERRANDS_ALL_SHEET_TAG, onClose = { allCard = null }) {
+            if (all != null) ErrandsPageRules.allRows(v, all).forEach { r ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { haptics.tick(); allCard = null; rowKey = r.key }
+                        .semantics(mergeDescendants = true) {}
+                        .minTouch().padding(vertical = MekaSpace.xs),
+                ) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(listOf(r.line, r.whenText).filter { it.isNotEmpty() }.joinToString(" · "), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
-        item(key = "near") {
-            Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Text("Near-me reminders", style = MekaType.caption, color = Meka.colors.textSecondary)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Crossfade(near.statusLine, animationSpec = MekaMotion.appear(reduced), label = "errand-near-line",
-                        modifier = Modifier.weight(1f).then(
-                            if (near.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) }.minTouch() else Modifier,
-                        )) { l -> Text(l, style = MekaType.caption, color = nearColor) }
-                    Box(
-                        // Works by hand (quality gate): the slim pill drawn inside its 48 dp touch.
-                        Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
-                            .clickable(role = Role.Button) {
-                                haptics.tick()
-                                nearOn = !nearOn
-                                ErrandProximity.setOn(context, nearOn)
-                                rearm()
-                                if (nearOn && !precise) {
-                                    askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                                } else if (nearOn && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        // A row's sheet: a place's errands, one done errand, or the near-me switch.
+        val openKey = rowKey
+        val place = openKey?.let { ErrandsPageRules.place(v, it) }
+        val errand = openKey?.let { ErrandsPageRules.errand(v, it) }
+        val isNear = openKey == ErrandsPageRules.KEY_NEAR
+        val sheetTitle = place?.place ?: errand?.shown ?: if (isNear) ErrandsPageRules.NEAR else ErrandsPageRules.TITLE
+        LifeSheet(openKey != null, sheetTitle, ERRANDS_ROW_SHEET_TAG, onClose = { rowKey = null }) {
+            when {
+                place != null -> {
+                    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        place.rows.forEach { r ->
+                            key(r.id) {
+                                ErrandRowView(r, Modifier, primary = "Done", onPrimary = { done(r.id, true) }, onRemove = { remove(r.id) })
                             }
-                            .minTouch()
-                            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                    ) { Text(near.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent) }
-                }
-                Text(near.privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
-            }
-        }
-        var step = 4
-        v.places.forEach { place ->
-            val labelStep = step++
-            item(key = "place-${place.key}") {
-                Column(Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(labelStep))) {
-                    SectionLabel(place.place)
+                        }
+                    }
                     AnimatedVisibility(
                         visible = nearOn,
                         enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
@@ -216,36 +252,41 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
                         )
                     }
                 }
+                errand != null -> {
+                    ErrandRowView(
+                        errand, Modifier,
+                        primary = if (errand.done) "Back" else "Done",
+                        onPrimary = { done(errand.id, !errand.done) },
+                        onRemove = { rowKey = null; remove(errand.id) },
+                    )
+                }
+                isNear -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Crossfade(near.statusLine, animationSpec = MekaMotion.appear(reduced), label = "errand-near-line",
+                            modifier = Modifier.weight(1f).then(
+                                if (near.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) }.minTouch() else Modifier,
+                            )) { l -> Text(l, style = MekaType.caption, color = nearColor) }
+                        Box(
+                            // Works by hand (quality gate): the slim pill drawn inside its 48 dp touch.
+                            Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
+                                .clickable(role = Role.Button) {
+                                    haptics.tick()
+                                    nearOn = !nearOn
+                                    ErrandProximity.setOn(context, nearOn)
+                                    rearm()
+                                    if (nearOn && !precise) {
+                                        askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                    } else if (nearOn && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                                }
+                                .minTouch()
+                                .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                        ) { Text(near.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent) }
+                    }
+                    Text(near.privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+                openKey != null -> Text(ErrandsPageRules.GONE, style = MekaType.caption, color = Meka.colors.textSecondary)
             }
-            val base = step
-            itemsIndexed(place.rows, key = { _, r -> "e-${r.id}" }) { i, r ->
-                ErrandRowView(
-                    r, Modifier.animateItem().appear(rememberAppearance(base + i)),
-                    primary = "Done",
-                    onPrimary = { haptics.light(); scope.launch { runCatching { core.errandDone(r.id, true) } } },
-                    onRemove = { haptics.tick(); scope.launch { runCatching { core.removeErrand(r.id) } } },
-                )
-            }
-            step += place.rows.size
-        }
-        if (v.done.isNotEmpty()) {
-            val labelStep = step++
-            item(key = "label-done") {
-                SectionLabel("Done lately", Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(labelStep)))
-            }
-            val base = step
-            itemsIndexed(v.done, key = { _, r -> "e-${r.id}" }) { i, r ->
-                ErrandRowView(
-                    r, Modifier.animateItem().appear(rememberAppearance(base + i)),
-                    primary = "Back",
-                    onPrimary = { haptics.tick(); scope.launch { runCatching { core.errandDone(r.id, false) } } },
-                    onRemove = { haptics.tick(); scope.launch { runCatching { core.removeErrand(r.id) } } },
-                )
-            }
-        }
-        item(key = "note") {
-            Text(ErrandRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
 }
