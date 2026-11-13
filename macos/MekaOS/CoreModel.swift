@@ -3476,6 +3476,12 @@ final class CoreModel {
         return core.errandsPage(view: errands ?? ErrandView.companion.EMPTY, near: nil)
     }
 
+    /// Ask → Dinners in the page shape (slice 8).
+    func mealsPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.mealsPage(view: meals ?? MealPlanView.companion.EMPTY)
+    }
+
     func carPage() -> LifePageView? {
         guard let core, let cars else { return nil }
         return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)

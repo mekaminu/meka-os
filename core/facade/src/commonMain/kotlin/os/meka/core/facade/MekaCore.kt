@@ -5427,6 +5427,11 @@ class MekaCore(
 
     // ---- Meal plan → shopping (V1, slice 1; Ask → More → Dinners) ----
 
+    /** Every page under Ask in one shape, slice 8: Ask → Dinners as the page shape (both apps). */
+    fun mealsPage(view: os.meka.core.domain.MealPlanView = _meals.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.MealsPageRules.page(view)
+
+
     /**
      * Adds a favourite dinner from one typed line ("Chilli: mince, kidney beans, rice"; [os.meka.core.domain.MealRules.read]);
      * a dinner already a favourite gets the newly typed ingredients. Returns the line to show ("Added Chilli · 3

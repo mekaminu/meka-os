@@ -39,6 +39,7 @@ import os.meka.android.ask.ERRANDS_LIST_TAG
 import os.meka.android.ask.ERRANDS_ROW_SHEET_TAG
 import os.meka.android.ask.ErrandsPane
 import os.meka.android.ask.MEALS_LIST_TAG
+import os.meka.android.ask.MEALS_ROW_SHEET_TAG
 import os.meka.android.ask.MealsPane
 import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.android.ask.PEOPLE_LIST_TAG
@@ -50,6 +51,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.ErrandRules
 import os.meka.core.domain.ErrandsPageRules
 import os.meka.core.domain.MealRules
+import os.meka.core.domain.MealsPageRules
 import os.meka.core.domain.PeoplePageRules
 import os.meka.core.domain.PeopleRules
 import os.meka.core.facade.MekaCore
@@ -195,23 +197,19 @@ class LifePlacesScreensTest {
             }
             Place.DINNERS -> {
                 val v = core.mealsView.value
-                ScreenShots.assertShows(compose, name, v.paneSummary)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, MealRules.NO_FAVOURITES)
-                // Slice 15: tonight's dinner is said once (its row), and the add field's hint sits on one line.
+                ScreenShots.assertShows(compose, name, MealsPageRules.summary(v))
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, MealsPageRules.EMPTY_SUMMARY)
+                // Slice 15: tonight's dinner is said once (its row and its favourite's say it alone).
                 v.week.firstOrNull()?.title?.let { t ->
-                    // Its own row (and its favourite's) say it alone; nothing else on screen repeats it inside a line.
                     ScreenShots.texts(compose).firstOrNull { it != t && it.contains(t) }
                         ?.let { fail("$name: tonight's \"$t\" is said again in \"$it\"") }
                 }
-                // The hint itself (exactly; the no-favourites line quotes it too). Below the fold on the inner screen.
-                val hints = compose.onAllNodes(hasText(MealRules.ADD_HINT, substring = false), useUnmergedTree = true).fetchSemanticsNodes()
-                if (hints.isEmpty() && fill != Fill.MANY) fail("$name: the add field's hint isn't on screen")
-                hints.forEach { n ->
-                    val results = mutableListOf<TextLayoutResult>()
-                    n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-                    val lines = results.firstOrNull()?.lineCount ?: 1
-                    if (lines != 1) fail("$name: the add field's hint takes $lines lines")
-                }
+                // The page shape (slice 8): the three numbers, and This week's first row (or its empty line).
+                val page = core.mealsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, MealsPageRules.WEEK_EMPTY)
                 if (fill == Fill.MANY && v.week.count { it.mealId != null } != 3) fail("$name: the week doesn't hold its three dinners")
             }
         }
@@ -376,39 +374,61 @@ class LifePlacesScreensTest {
     }
 
     /**
-     * Works by hand, Dinners: a tap on an unplanned day opens its favourites (48 dp chips) and one plans it; Add to
-     * shopping puts the week's ingredients on the list and Undo takes them back; Remove takes a favourite off; the field
-     * adds a favourite.
+     * Works by hand, Dinners (the page shape, slice 8): every button a 48 dp touch; an unplanned day's row opens its
+     * sheet of favourites (48 dp chips) and one plans it; Shopping's sheet puts the week's ingredients on the list and
+     * Undo takes them back; a favourite's sheet has Remove; + Add → A favourite dinner adds one (its hint on one line).
      */
     private fun dinnersByHand(core: MekaCore) {
         val name = "dinners-by-hand"
         val p = Place.DINNERS
         assertTouchTargets(name)
+        val sheet = hasAnyAncestor(hasTestTag(MEALS_ROW_SHEET_TAG))
+        fun closeSheet() {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(sheet) }
+        }
         val day = core.mealsView.value.week.first { it.mealId == null }
         val fav = core.mealsView.value.favourites.last()
-        tap(p, name, day.label, hasContentDescription(day.spoken))
-        val chip = hasText(fav.title) and hasClickAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)
+        tap(p, name, day.label, hasText(day.label) and !sheet)
+        val chip = hasText(fav.title) and hasClickAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected) and sheet
         until { shows(chip) }
         if (!shows(chip)) fail("$name: tapping ${day.label} didn't open the favourites")
         assertTouchTargets(name)
         compose.onAllNodes(chip)[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.mealsView.value.week.first { it.day == day.day }.mealId == fav.id }
         if (core.mealsView.value.week.first { it.day == day.day }.mealId != fav.id) fail("$name: the chip didn't plan ${fav.title}")
+        until { !shows(sheet) }
         val label = core.mealsView.value.shoppingLabel ?: fail("$name: no Add to shopping with four dinners planned")
         val before = core.listsView.value.shopping.toBuy.size
-        tap(p, name, label, hasText(label))
+        tap(p, name, "Shopping", hasText(label) and !sheet)
+        until { shows(hasText(label) and sheet) }
+        tap(p, name, label, hasText(label) and sheet)
         until { core.listsView.value.shopping.toBuy.size > before }
         if (core.listsView.value.shopping.toBuy.size <= before) fail("$name: \"$label\" added nothing to shopping")
-        tap(p, name, "Undo", hasText("Undo"))
+        tap(p, name, "Undo", hasText("Undo") and sheet)
         until { core.listsView.value.shopping.toBuy.size == before }
         if (core.listsView.value.shopping.toBuy.size != before) fail("$name: Undo left ${core.listsView.value.shopping.toBuy.size - before} on shopping")
+        closeSheet()
+        // A favourite's row (found by its ingredients: the week's rows say how many) opens its sheet with Remove.
         val gone = core.mealsView.value.favourites.first { it.title.startsWith("Pasta") }
+        tap(p, name, gone.title, hasText(gone.line) and !sheet)
+        until { shows(hasContentDescription("Remove ${gone.title}")) }
         tap(p, name, "Remove", hasContentDescription("Remove ${gone.title}"))
         until { core.mealsView.value.favourites.none { it.id == gone.id } }
         if (core.mealsView.value.favourites.any { it.id == gone.id }) fail("$name: Remove left ${gone.title}")
+        until { !shows(sheet) }
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        compose.onAllNodes(hasText(MealRules.ADD_HINT, substring = false), useUnmergedTree = true).fetchSemanticsNodes().forEach { n ->
+            val results = mutableListOf<TextLayoutResult>()
+            n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+            val lines = results.firstOrNull()?.lineCount ?: 1
+            if (lines != 1) fail("$name: the add field's hint takes $lines lines")
+        }
         type(p, name, MealRules.ADD_HINT, "Leek soup: leeks, potatoes, stock")
         until { core.mealsView.value.favourites.any { it.title.startsWith("Leek soup") } }
         if (core.mealsView.value.favourites.none { it.title.startsWith("Leek soup") }) fail("$name: Done on the field added no favourite")
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverEmpty() { shoot(Place.PEOPLE, "cover-dark-empty", Fill.EMPTY) }

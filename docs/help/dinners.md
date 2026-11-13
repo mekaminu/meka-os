@@ -9,5 +9,7 @@ mac: DINNERS
 mac_where: Ask → Life → Dinners
 ---
 what: your favourite dinners, the week's dinners and the shopping they need.
-how: Add your favourites once, then pick the week's dinners; their ingredients can go straight onto the shopping list.
+how: Tap + Add → A favourite dinner and type its name, a colon, then its ingredients, e.g. "Chilli: mince, beans, rice"; then tap a day under This week and pick one of your favourites.
+tip: The three numbers up top are the dinners planned this week, the ingredients still to add to shopping and your favourites. Tap Shopping and Add … to shopping puts the week's ingredients on the list once each; Undo takes them back.
+tip: Tap a favourite to see its ingredients, plan it on any day this week (tap the day again to clear it) or Remove it.
 tip: In the evening the tile says what's for dinner tonight.
