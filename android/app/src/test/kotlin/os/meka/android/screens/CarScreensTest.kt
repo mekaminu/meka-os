@@ -168,7 +168,9 @@ class CarScreensTest {
         if (fill != Fill.EMPTY) {
             ScreenShots.assertShows(compose, name, ParkingTimerRules.STOP)
             if (ScreenShots.texts(compose).any { it == "Ended" }) fail("$name: an \"Ended\" button beside a running timer")
-            ScreenShots.assertShows(compose, name, "The Golf")
+            // Page shape, Car slice 4: with one car its name is in the Fuel sheet and the Bluetooth card's row (shown
+            // once Nearby devices is allowed); with two the Dates rows name each car.
+            if (fill == Fill.MANY) ScreenShots.assertShows(compose, name, "The Golf")
         }
         return core
     }
@@ -308,6 +310,7 @@ class CarScreensTest {
         if (core.carsView.value.cars.first { it.carId == car }.fuel != FuelKind.B7) fail("$name: picking Diesel didn't keep it")
         assertTouchTargets(name)
         ScreenShots.assertShows(compose, name, CarPageRules.FUEL)
+        ScreenShots.assertShows(compose, name, "The Golf")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverEmpty() { shoot("cover-dark-empty", Fill.EMPTY) }
