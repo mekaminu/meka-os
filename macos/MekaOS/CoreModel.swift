@@ -3476,6 +3476,12 @@ final class CoreModel {
         return core.errandsPage(view: errands ?? ErrandView.companion.EMPTY, near: nil)
     }
 
+    /// Ask → What Navilife knows in the page shape (slice 13).
+    func factsPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.factsPage(view: facts ?? FactsView.companion.EMPTY)
+    }
+
     /// Ask → Emergency card in the page shape (slice 12).
     func emergencyPage() -> LifePageView? {
         guard let core else { return nil }
@@ -6221,12 +6227,14 @@ final class CoreModel {
         let refused: Bool
     }
 
-    /// Adds one typed fact ("Car reg: AB12 CDE"); the same name again changes it. Only a String crosses.
-    func addFact(_ text: String) async -> FactSaid? {
+    /// Adds one typed fact ("Car reg: AB12 CDE"); the same name again changes it. With `keptFromAi` (+ Add → A fact
+    /// kept from the AI, page shape slice 13) the fact goes on the page and MEKA's AI never sees it. Only a String and
+    /// a Bool cross.
+    func addFact(_ text: String, keptFromAi: Bool = false) async -> FactSaid? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let core, !t.isEmpty else { return nil }
         do {
-            let r = try await core.addFact(text: t)
+            let r = keptFromAi ? try await core.addFactKept(text: t) : try await core.addFact(text: t)
             if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
             return FactSaid(line: r.line, refused: r.refused)
         } catch {

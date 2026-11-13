@@ -43,6 +43,7 @@ import os.meka.android.ask.EMERGENCY_LIST_TAG
 import os.meka.android.ask.EMERGENCY_ROW_SHEET_TAG
 import os.meka.android.ask.EmergencyPane
 import os.meka.android.ask.FACTS_LIST_TAG
+import os.meka.android.ask.FACTS_ROW_SHEET_TAG
 import os.meka.android.ask.FactsPane
 import os.meka.android.ask.LEAVE_LIST_TAG
 import os.meka.android.ask.LEAVE_ROW_SHEET_TAG
@@ -57,6 +58,7 @@ import os.meka.core.domain.EmergencyPageRules
 import os.meka.core.domain.EmergencyRules
 import os.meka.core.domain.EmergencySection
 import os.meka.core.domain.FactRules
+import os.meka.core.domain.FactsPageRules
 import os.meka.core.domain.LeavePageRules
 import os.meka.core.domain.LeaveRules
 import os.meka.core.domain.LocalClock
@@ -184,7 +186,7 @@ class KeptPlacesScreensTest {
         // Each add field's hint is one example on one line (the quality gate's rule for hints, slice 20), and each
         // row's buttons keep their words whole.
         ScreenShots.assertEachOneLine(compose, name, listOf(LeaveRules.ADD_HINT, FactRules.HINT, FactRules.COPY_BUTTON,
-            FactRules.KEEP_BUTTON, FactRules.USE_BUTTON, DateNightRules.SKIP_LABEL, DateNightRules.KEEP_LABEL, "Remove") +
+            FactRules.KEEP_BUTTON, FactRules.USE_BUTTON, FactsPageRules.CHANGE_HINT, DateNightRules.SKIP_LABEL, DateNightRules.KEEP_LABEL, "Remove") +
             EmergencySection.entries.flatMap { listOf(it.hint, it.moreHint) })
         when (place) {
             Place.DATE_NIGHT -> {
@@ -236,7 +238,13 @@ class KeptPlacesScreensTest {
             Place.FACTS -> {
                 val v = core.factsView.value
                 ScreenShots.assertShows(compose, name, v.summary)
-                ScreenShots.assertReadable(compose, name, v.groups.flatMap { g -> g.rows.flatMap { listOf(it.label, it.value) } }, mustShow = false)
+                // The page shape (slice 13): the three numbers, and the first group's first row (or its empty line).
+                val page = core.factsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, it) }
                 if (fill == Fill.EMPTY && v.summary != FactRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.count != 6) fail("$name: ${v.count} facts for six")
             }
@@ -486,8 +494,13 @@ class KeptPlacesScreensTest {
         val p = Place.FACTS
         assertTouchTargets(name)
         fun rows() = core.factsView.value.groups.flatMap { it.rows }
+        val sheet = hasAnyAncestor(hasTestTag(FACTS_ROW_SHEET_TAG))
         val car = rows().firstOrNull { it.label.startsWith("Car reg") } ?: fail("$name: no car reg")
         fun cur() = rows().firstOrNull { it.id == car.id }
+        // The fact's row opens its sheet: Copy, Keep from AI, the field and Remove are all in there.
+        tap(p, name, car.label, hasText(car.label) and !sheet)
+        until { shows(hasContentDescription("Remove ${car.label}")) }
+        assertTouchTargets(name)
         tap(p, name, FactRules.COPY_BUTTON, hasContentDescription(car.copySpoken))
         val copied = hasText(FactRules.copiedLine(car))
         until { shows(copied) }
@@ -499,12 +512,36 @@ class KeptPlacesScreensTest {
         tap(p, name, back.aiButton, hasContentDescription("${back.aiButton}: ${back.label}"))
         until { cur()?.keptFromAi == car.keptFromAi }
         if (cur()?.keptFromAi != car.keptFromAi) fail("$name: ${back.aiButton} didn't put ${car.label} back")
+        type(p, name, FactsPageRules.CHANGE_HINT, "XY99 ZZZ")
+        until { cur()?.value == "XY99 ZZZ" }
+        if (cur()?.value != "XY99 ZZZ") fail("$name: the sheet's field didn't change ${car.label}")
         tap(p, name, "Remove", hasContentDescription("Remove ${car.label}"))
         until { cur() == null }
         if (cur() != null) fail("$name: Remove left ${car.label}")
-        type(p, name, FactRules.DESCRIPTION, "Bin day: Tuesday")
-        until { rows().any { it.label == "Bin day" } }
-        if (rows().none { it.label == "Bin day" }) fail("$name: Done on the field added no fact")
+        until { !shows(sheet) }
+        // + Add: a fact, then one kept from the AI (a card number is turned away first).
+        for (choice in FactsPageRules.ADD_CHOICES) {
+            val before = rows().size
+            tap(p, name, "+ Add", hasContentDescription("Add"))
+            until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+            tap(p, name, choice.label, hasText(choice.label) and hasAnyAncestor(hasTestTag(LIFE_ADD_SHEET_TAG)))
+            until { shows(hasContentDescription(FactsPageRules.spokenHint(choice.key)) and hasSetTextAction()) }
+            if (choice.key == FactsPageRules.ADD_FACT) {
+                type(p, name, FactsPageRules.spokenHint(choice.key), "Savings card: 4929 1234 5678 9012")
+                until { shows(hasText(FactRules.REFUSED_BANK)) }
+                if (!shows(hasText(FactRules.REFUSED_BANK))) fail("$name: a card number wasn't turned away")
+                if (rows().size != before) fail("$name: a card number went on the page")
+                compose.onAllNodes(hasContentDescription(FactsPageRules.spokenHint(choice.key)) and hasSetTextAction())[0].performTextClearance()
+                turns(300)
+            }
+            type(p, name, FactsPageRules.spokenHint(choice.key), "Test ${choice.key}: by hand")
+            until { rows().size > before }
+            if (rows().size <= before) fail("$name: + Add → ${choice.label} added nothing")
+            if (FactsPageRules.keepsFromAi(choice.key) && rows().none { it.label.startsWith("Test") && it.keptFromAi }) {
+                fail("$name: + Add → ${choice.label} didn't keep it from the AI")
+            }
+            until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        }
         assertTouchTargets(name)
     }
 

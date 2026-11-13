@@ -329,10 +329,16 @@ class LifeFacts(private val replica: Replica, private val newId: () -> String, p
 
     fun view(): FactsView = FactRules.view(all())
 
-    /** Adds (or updates) a fact from one typed line. */
-    fun add(text: String): FactAdded {
+    /**
+     * Adds (or updates) a fact from one typed line. With [keepFromAi] (+ Add → A fact kept from the AI, page shape
+     * slice 13) the fact goes on the page kept from the AI and the answer says so.
+     */
+    fun add(text: String, keepFromAi: Boolean = false): FactAdded {
         val (added, writes) = FactRules.addPlan(text, all(), nowMs(), newId)
-        writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.LIFE_FACT, id, fields) }
+        writes.forEach { (id, fields) ->
+            replica.commitLocal(EntityTypes.LIFE_FACT, id, if (keepFromAi) fields + (FactFields.AI_OFF to true.fv()) else fields)
+        }
+        if (keepFromAi && !added.refused && writes.isNotEmpty()) return FactAdded("${added.line} · ${FactRules.KEPT_LINE.lowercase()}", false)
         return added
     }
 

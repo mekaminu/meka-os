@@ -34,6 +34,20 @@ class LifeFactsTest {
         assertNull(FactRules.read("   "))
     }
 
+    /** Page shape slice 13: + Add → A fact kept from the AI puts it on the page with the AI never seeing it. */
+    @Test
+    fun aFactAddedKeptFromTheAiIsNeverSentWithAQuestion() {
+        val added = fFold.add("Spare key: with the neighbour", keepFromAi = true)
+        assertFalse(added.refused)
+        assertTrue(added.line.contains("kept from AI", ignoreCase = true), added.line)
+        val fact = fFold.all().single()
+        assertTrue(fact.aiOff)
+        assertTrue(FactAskRules.askLines(fFold.all(), "where is the spare key?").none { it.contains("neighbour") })
+        // It can still be let out from its row.
+        assertTrue(fFold.setAi(fact.id, use = true))
+        assertFalse(fFold.all().single().aiOff)
+    }
+
     @Test
     fun aFactsNameChoosesItsGroup() {
         assertEquals(FactGroup.CAR, FactRules.groupOf("Car reg"))

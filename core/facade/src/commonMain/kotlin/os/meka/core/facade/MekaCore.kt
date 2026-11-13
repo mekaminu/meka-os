@@ -5891,6 +5891,16 @@ class MekaCore(
      */
     suspend fun addFact(text: String): os.meka.core.domain.FactAdded = onCore { lifeFacts.add(text) }
 
+    /**
+     * The same, for + Add → **A fact kept from the AI** (page shape slice 13): the fact goes on the page and MEKA's AI
+     * never sees it (it can be let out again from the fact's row).
+     */
+    suspend fun addFactKept(text: String): os.meka.core.domain.FactAdded = onCore { lifeFacts.add(text, keepFromAi = true) }
+
+    /** Every page under Ask in one shape, slice 13: Ask → What Navilife knows as the page shape (both apps). */
+    fun factsPage(view: os.meka.core.domain.FactsView = _facts.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.FactsPageRules.page(view)
+
     /** Lets MEKA's AI answer from a fact ([use] true) or keeps it from the AI (it stays on the page). */
     suspend fun setFactAi(id: String, use: Boolean): Boolean = onCore { lifeFacts.setAi(id, use) }
 
