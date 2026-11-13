@@ -161,7 +161,7 @@ struct TeamSheet: View {
     private func waitingBox(_ rows: [TeamWaitRow]) -> some View {
         box(TeamSimplerRules.shared.WAITING) {
             Text("\(rows.count)").font(MekaType.caption).foregroundStyle(palette.accent)
-                .padding(.horizontal, MekaSpace.xs).padding(.vertical, 2)
+                .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                 .background(palette.accent.opacity(0.14), in: Capsule())
                 .accessibilityHidden(true)
         } content: {
@@ -173,7 +173,7 @@ struct TeamSheet: View {
                 } label: {
                     HStack(spacing: MekaSpace.xs) {
                         icon(w.agent.code)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                             Text(LoneWordGlue.shared.kept(line: w.what)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                             Text(LoneWordGlue.shared.kept(line: w.who)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         }
@@ -213,7 +213,7 @@ struct TeamSheet: View {
             } label: {
                 HStack(spacing: MekaSpace.xs) {
                     icon(code)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         HStack(spacing: MekaSpace.xs) {
                             Text(c.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                             TeamStatusDot(live: c.status.live, palette: palette)
@@ -268,7 +268,7 @@ struct TeamSheet: View {
                     }
                     .padding(.top, MekaSpace.xxs)
                 }
-                .padding(.leading, 34 + MekaSpace.xs)
+                .padding(.leading, MekaSpace.xl + MekaSpace.xs)
                 .padding(.bottom, MekaSpace.xs)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -281,7 +281,7 @@ struct TeamSheet: View {
             action()
         } label: {
             Text(label).font(MekaType.itemMeta).foregroundStyle(palette.accent)
-                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xs)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .background(filled ? palette.surface : Color.clear, in: Capsule())
         }
         .buttonStyle(MekaPressStyle())

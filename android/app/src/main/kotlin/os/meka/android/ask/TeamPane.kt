@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -292,7 +294,7 @@ private fun WaitingBox(rows: List<TeamWaitRow>, modifier: Modifier, onOpen: (Tea
     TeamBox(TeamSimplerRules.WAITING, modifier.testTag("team-waiting"), trailing = {
         Text(rows.size.toString(), style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent.copy(alpha = 0.14f))
-                .padding(horizontal = MekaSpace.xs, vertical = 2.dp).clearAndSetSemantics { })
+                .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs).clearAndSetSemantics { })
     }) {
         rows.forEach { w ->
             Hairline()
@@ -302,7 +304,7 @@ private fun WaitingBox(rows: List<TeamWaitRow>, modifier: Modifier, onOpen: (Tea
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             ) {
                 AgentIcon(w.agent)
-                Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Text(LoneWordGlue.kept(w.what), style = MekaType.body, color = Meka.colors.textPrimary)
                     Text(LoneWordGlue.kept(w.who), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
@@ -313,6 +315,7 @@ private fun WaitingBox(rows: List<TeamWaitRow>, modifier: Modifier, onOpen: (Tea
 }
 
 /** "Helpers": one line per helper; a tap unfolds its role, its last three things and Open · Pause · Whole day ›. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HelpersBox(
     cards: List<TeamCard>, unfolded: String?, modifier: Modifier,
@@ -335,7 +338,7 @@ private fun HelpersBox(
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             ) {
                 AgentIcon(c.agent)
-                Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                         Text(c.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1)
                         StatusDot(c.status.live)
@@ -353,7 +356,7 @@ private fun HelpersBox(
                 exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
             ) {
                 Column(
-                    Modifier.fillMaxWidth().padding(start = 34.dp + MekaSpace.xs, bottom = MekaSpace.xs).testTag("team-unfolded"),
+                    Modifier.fillMaxWidth().padding(start = MekaSpace.xl + MekaSpace.xs, bottom = MekaSpace.xs).testTag("team-unfolded"),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                 ) {
                     Text(LoneWordGlue.kept(c.roleLine), style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -366,15 +369,20 @@ private fun HelpersBox(
                             Text(LoneWordGlue.kept(l.text), style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                         }
                     }
-                    Row(Modifier.padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    // The pills wrap on the narrow cover screen rather than run off its edge.
+                    FlowRow(
+                        Modifier.fillMaxWidth().padding(top = MekaSpace.xxs),
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                    ) {
                         TouchPill(c.openLabel, Meka.colors.surface, Meka.colors.accent, spoken = "${c.openLabel}: ${c.title}",
-                            pad = MekaSpace.s, modifier = Modifier.testTag("team-open")) { onOpen(c) }
+                            modifier = Modifier.testTag("team-open")) { onOpen(c) }
                         c.pauseShort?.let { p ->
                             TouchPill(p, Meka.colors.surface, Meka.colors.accent, spoken = "$p: ${c.title}",
-                                pad = MekaSpace.s, modifier = Modifier.testTag("team-pause-short")) { onPause(c) }
+                                modifier = Modifier.testTag("team-pause-short")) { onPause(c) }
                         }
                         TouchPill("${TeamSimplerRules.WHOLE_DAY} ›", Color.Transparent, Meka.colors.accent,
-                            spoken = "${TeamSimplerRules.WHOLE_DAY}: ${c.title}", pad = MekaSpace.s,
+                            spoken = "${TeamSimplerRules.WHOLE_DAY}: ${c.title}",
                             modifier = Modifier.testTag("team-whole-day")) { onWholeDay(c) }
                     }
                 }
