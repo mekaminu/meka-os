@@ -6134,3 +6134,11 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Facade: `chooseMekaVoice` routes to it and remakes the hello's openers when the voice changes; `setLiveVoice` remakes them whenever the voice changes; `liveSettings()` sends no voice list (both apps show Live's list only when it has rows); `voiceUsageLine` names Obi's voice.
 - Server: `LiveCallLine.obiVoice(hh)` reads the synced pick into each live-call ticket, and the stream sets up Gemini in it (was always Charon).
 - Tests: `OneVoiceTest` (asked, the list, the store and sync), facade speech/one-voice/live/setup/spoken/streamed tests moved to Obi's voice, `LiveCallsTest.aLiveCallSpeaksInObisPickedVoice`, the Fold's Voice screen shots on the new list.
+
+### Slice 3 (2026-11-13, core + server): which engine spoke, why, and what it costs
+- Wire: `SpeechCodec.HEADER_WHY` / `Response.why` ("resting", "failed", "slow", "budget", "long"), checked like the engine header; JSON `"why"`.
+- Server: `SpeechService.geminiSaid` reports why it handed a clip to Polly (`skipWhy`: timeout → slow, over the clip limit → long, else failed; the latch → resting; the budget → budget); `say` puts it on Polly's answer and the speak route sends it as a header.
+- Core: `OneVoiceRules.spokeHow`/`inUseHow`: "Google Gemini" · "Google Chirp 3 HD" · "Amazon Polly, as …"; no engine sent reads Live's voices as Google; a clip kept on the device says so. The facade keeps the last clip's engine and reason (`speechLastHow`); Health's "Speaking as" line takes up to 140 characters.
+- Settings → Voice: `SpeechRules.voiceCost`/`costLine` from the AI status's month per feature (`voice.gemini`, `voice.polly`): "Navilife's voice · Charon · $0.42 this month, inside your AI budget (Google $0.38 · Amazon $0.04)", or "under 1¢"; Polly's used-up line still comes first; the old 6-argument `usageLine` stays for Swift.
+- Tests: `OneVoiceTest.healthSaysWhichEngineSpokeAndWhy`, `SpeechTest` (cost line), `SpeechCodecTest.whyPollyStoodInTravelsAndIsCheckedLikeTheEngine`, `OneVoiceFacadeTest.healthSaysWhichEngineSpokeLastAndWhy` (and the older lines with the engine), `GeminiSpeechTest` (failed, resting, slow, none for a Gemini clip or a Polly voice).
+

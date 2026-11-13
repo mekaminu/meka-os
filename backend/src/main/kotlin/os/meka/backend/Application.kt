@@ -904,6 +904,7 @@ fun Application.mekaSync(
                     said.response.voice?.let { call.response.header(SpeechCodec.HEADER_VOICE, it) }
                     said.response.engine?.let { call.response.header(SpeechCodec.HEADER_ENGINE, it) }
                     said.visemes?.let { call.response.header(SpeechCodec.HEADER_VISEMES, it) }
+                    said.response.why?.let { call.response.header(SpeechCodec.HEADER_WHY, it) }
                     call.respondBytes(mp3, ContentType.parse(SpeechCodec.AUDIO_TYPE))
                 } else {
                     val spoken = mp3?.let { said.response.copy(audio = java.util.Base64.getEncoder().encodeToString(it)) } ?: said.response

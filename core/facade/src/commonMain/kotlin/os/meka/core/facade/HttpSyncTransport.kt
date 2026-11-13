@@ -1215,6 +1215,7 @@ class HttpSyncTransport(
             if (bytes.size > SpeechCodec.MAX_AUDIO_BYTES) return unusable
             return SpeechCodec.binaryResponse(
                 Base64.encode(bytes), resp.headers[SpeechCodec.HEADER_VOICE], resp.headers[SpeechCodec.HEADER_ENGINE], resp.headers[SpeechCodec.HEADER_VISEMES],
+                resp.headers[SpeechCodec.HEADER_WHY],
             )
         }
         return SpeechCodec.decodeResponse(resp.bodyAsText())

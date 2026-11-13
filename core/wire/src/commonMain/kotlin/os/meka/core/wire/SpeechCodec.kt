@@ -39,6 +39,22 @@ object SpeechCodec {
     const val AUDIO_TYPE = "audio/mpeg"
     const val HEADER_VOICE = "X-Meka-Voice"
     const val HEADER_ENGINE = "X-Meka-Engine"
+
+    /**
+     * One voice for Obi, slice 3: when Obi's (Gemini) voice was asked for but Amazon Polly said the clip, why
+     * ([Response.why]): [WHY_RESTING] · [WHY_FAILED] · [WHY_SLOW] · [WHY_BUDGET] · [WHY_LONG]. Absent otherwise.
+     */
+    const val HEADER_WHY = "X-Meka-Why"
+    /** Gemini is resting after a failure (the 15-minute latch). */
+    const val WHY_RESTING = "resting"
+    /** Gemini refused or failed this clip. */
+    const val WHY_FAILED = "failed"
+    /** Gemini was too slow this time. */
+    const val WHY_SLOW = "slow"
+    /** The month's AI budget is spent. */
+    const val WHY_BUDGET = "budget"
+    /** The words were too long for one Gemini clip. */
+    const val WHY_LONG = "long"
     private const val BINARY = "mp3"
 
     /**
@@ -131,6 +147,8 @@ object SpeechCodec {
         val reason: String? = null,
         /** Obi's face, slice 2: the clip's mouth sounds as [encodeMarks] text, when asked for and the voice gave them. */
         val visemes: String? = null,
+        /** One voice for Obi, slice 3: why Polly said a clip asked for in Obi's Gemini voice ([HEADER_WHY]). */
+        val why: String? = null,
     ) {
         companion object {
             const val SPOKEN = "spoken"
@@ -214,11 +232,11 @@ object SpeechCodec {
      * no difference), [voice] and [engine] from the headers. Empty or oversized audio, or a voice header that isn't a
      * plain name, is a failed answer, never trusted.
      */
-    fun binaryResponse(audioB64: String, voice: String?, engine: String?, visemes: String? = null): Response {
+    fun binaryResponse(audioB64: String, voice: String?, engine: String?, visemes: String? = null, why: String? = null): Response {
         if (audioB64.isEmpty() || audioB64.length > MAX_AUDIO_B64) return Response(Response.FAILED, reason = "Navilife's voice sent an unusable clip")
         val v = voice?.takeIf { VOICE.matches(it) }
         val e = engine?.takeIf { ENGINE.matches(it) }
-        return Response(Response.SPOKEN, audioB64, BINARY, v, e, visemes = checkedMarks(visemes))
+        return Response(Response.SPOKEN, audioB64, BINARY, v, e, visemes = checkedMarks(visemes), why = why?.takeIf { ENGINE.matches(it) })
     }
 
     /** [text] when it reads as marks ([decodeMarks]), else null: a bad header or field is simply not there. */
@@ -238,6 +256,7 @@ object SpeechCodec {
         r.engine?.let { put("engine", it) }
         r.reason?.let { put("reason", it) }
         r.visemes?.let { put("visemes", it) }
+        r.why?.let { put("why", it) }
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("speech response") {
@@ -251,6 +270,7 @@ object SpeechCodec {
             engine = o.optStr("engine"),
             reason = o.optStr("reason", MAX_REASON),
             visemes = checkedMarks(o.optStr("visemes", MAX_MARKS_CHARS)),
+            why = o.optStr("why")?.takeIf { ENGINE.matches(it) },
         )
     }
 

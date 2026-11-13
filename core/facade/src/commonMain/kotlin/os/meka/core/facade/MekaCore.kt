@@ -354,6 +354,8 @@ class MekaCore(
     private val speechClipVoice = HashMap<String, String?>()
     /** The voice the server last said spoke a clip, for Health → Obi's voice ("Voice · Brian"); null before the first. */
     @kotlin.concurrent.Volatile private var speechLastVoice: String? = null
+    /** One voice for Obi, slice 3: the engine that said the last clip, why Polly stood in, and whether it was kept here. */
+    @kotlin.concurrent.Volatile private var speechLastHow: Triple<String?, String?, Boolean> = Triple(null, null, false)
     /** Obi's face, slice 3b: the mouth sounds that came with clips in [speechClips] (same keys), while the face is drawn. */
     private val speechMarkTexts = HashMap<String, String>()
     /** Obi's face, slice 3b: this device draws the face, so clips are asked for with their mouth sounds. */
@@ -12235,7 +12237,7 @@ class MekaCore(
                 speechUnreachable = false
                 speechOfflineSaid = false
                 val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)
-                speechSpokeBy(voice.name, r.voice)
+                speechSpokeBy(voice.name, r.voice, r.engine, r.why)
                 speechClips[key] = audio
                 speechClipVoice[key] = r.voice
                 val marks = r.visemes
@@ -13752,7 +13754,19 @@ class MekaCore(
         val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) { return null }
         // One Obi's voice (slice 2): the voice named is Obi's, the one every read-out asks for.
         val voice = onCore { mekaVoice.liveVoice() }
-        return os.meka.core.domain.SpeechRules.usageLine(v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = false)
+        return os.meka.core.domain.SpeechRules.usageLine(v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = false,
+            cost = if (v.state == os.meka.core.wire.SpeechCodec.Voices.ON) voiceCost() else null,
+        )
+    }
+
+    /**
+     * One voice for Obi, slice 3: what read-outs cost this month, from the AI status's per-feature spend; null when the
+     * device isn't connected, the server didn't answer or is older. Never throws.
+     */
+    private suspend fun voiceCost(): os.meka.core.domain.SpeechRules.VoiceCost? {
+        val api = aiApi ?: return null
+        val r = try { api.aiStatus() } catch (e: CancellationException) { throw e } catch (e: Exception) { return null } ?: return null
+        return os.meka.core.domain.SpeechRules.voiceCost(r.month.map { it.feature to it.cents })
     }
 
     /**
@@ -13767,8 +13781,10 @@ class MekaCore(
         val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) {
             os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.FAILED)
         }
+        val device = chosen == os.meka.core.domain.MekaVoiceRules.DEVICE
         val usage = os.meka.core.domain.SpeechRules.usageLine(
-            v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = chosen == os.meka.core.domain.MekaVoiceRules.DEVICE,
+            v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = device,
+            cost = if (device || v.state != os.meka.core.wire.SpeechCodec.Voices.ON) null else voiceCost(),
         )
         return os.meka.core.domain.OneVoiceRules.view(voice, chosen, v.state, usage, mac)
             .copy(sampleLine = os.meka.core.domain.VoicePickerRules.sampleLine(speechSampleWords()))
@@ -13898,8 +13914,8 @@ class MekaCore(
      * A clip asked for in [asked] came back in [spoke]: older clips for the same choice in another voice are dropped
      * ([os.meka.core.domain.SpeechRules.stale]), so the next hello is made again in the voice Ask uses.
      */
-    private fun speechSpokeBy(asked: String?, spoke: String?) {
-        if (!spoke.isNullOrBlank()) speechLastVoice = spoke.trim()
+    private fun speechSpokeBy(asked: String?, spoke: String?, engine: String? = null, why: String? = null) {
+        if (!spoke.isNullOrBlank()) { speechLastVoice = spoke.trim(); speechLastHow = Triple(engine, why, false) }
         val stale = os.meka.core.domain.SpeechRules.stale(speechClipVoice, asked, spoke)
         if (stale.isEmpty()) return
         stale.forEach { speechClips.remove(it); speechMarkTexts.remove(it); speechAnswerClips.remove(it); speechClipVoice.remove(it) }
@@ -13908,7 +13924,8 @@ class MekaCore(
 
     /** The voice Navilife's server last spoke in ("Brian"), or null before the first clip; for Health → Obi's voice. */
     fun speechVoiceInUse(): String? = speechLastVoice?.let {
-        os.meka.core.domain.OneVoiceRules.inUse(it, speechLiveVoice != null, speechLiveVoice)
+        val (engine, why, kept) = speechLastHow
+        os.meka.core.domain.OneVoiceRules.inUseHow(it, speechLiveVoice != null, speechLiveVoice, engine, why, kept)
     }
 
     private fun speechCached(voice: String?, words: String): String? {
@@ -13916,7 +13933,7 @@ class MekaCore(
         val clip = speechClips.remove(key) ?: return null
         speechClips[key] = clip // newest last
         // Health's "Speaking as …" names the voice of the clip played, a kept one too (Live off again: Brian's hello).
-        speechClipVoice[key]?.takeIf { it.isNotBlank() }?.let { speechLastVoice = it.trim() }
+        speechClipVoice[key]?.takeIf { it.isNotBlank() }?.let { speechLastVoice = it.trim(); speechLastHow = Triple(null, null, true) }
         return clip
     }
 

@@ -94,6 +94,22 @@ class SpeechTest {
         assertNull(SpeechRules.usageLine("failed", "2026-10", 9, 1_000_000, null, false))
         assertNull(SpeechRules.usageLine("on", null, 9, 1_000_000, null, false))
         assertNull(SpeechRules.usageLine("on", "2026-13", 9, 1_000_000, null, false))
+        // One voice for Obi, slice 3: with the AI budget's figures, the line says what read-outs cost instead.
+        assertEquals(
+            "Navilife's voice · Charon · \$0.42 this month, inside your AI budget (Google \$0.38 · Amazon \$0.04)",
+            SpeechRules.usageLine("on", "2026-11", 900, 1_000_000, "Charon", false, SpeechRules.VoiceCost(38, 4)),
+        )
+        assertEquals(
+            "Navilife's voice · Charon · \$1 this month, inside your AI budget",
+            SpeechRules.usageLine("on", "2026-11", 0, 1_000_000, "Charon", false, SpeechRules.VoiceCost(100, 0)),
+        )
+        assertEquals("under 1¢ this month, inside your AI budget", SpeechRules.costLine(SpeechRules.VoiceCost(0, 0)))
+        // Polly's characters used up still says so first; the device's own voice is still free.
+        assertTrue(SpeechRules.usageLine("on", "2026-12", 1_000_250, 1_000_000, "Charon", false, SpeechRules.VoiceCost(5, 5))!!.contains("are used"))
+        assertEquals("Navilife's voice · the device's own voice, nothing is sent", SpeechRules.usageLine("on", "2026-10", 5, 10, null, true, SpeechRules.VoiceCost(5, 5)))
+        assertEquals(SpeechRules.VoiceCost(38, 4), SpeechRules.voiceCost(listOf("voice.gemini" to 38L, "ask" to 90L, "voice.polly" to 4L)))
+        assertEquals(SpeechRules.VoiceCost(0, 0), SpeechRules.voiceCost(listOf("ask" to 90L)))
+        assertNull(SpeechRules.voiceCost(emptyList()))
         assertEquals("999", SpeechRules.grouped(999))
         assertEquals("1,000", SpeechRules.grouped(1_000))
         assertEquals("1,234,567", SpeechRules.grouped(1_234_567))

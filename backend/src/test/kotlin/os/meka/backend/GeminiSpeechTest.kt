@@ -95,24 +95,33 @@ class GeminiSpeechTest {
         val r = s.speak(SpeechCodec.Request("Ten past seven.", "Charon"))
         assertEquals(SpeechCodec.Response.SPOKEN, r.state)
         assertEquals("Brian", r.voice)
+        assertEquals(SpeechCodec.WHY_FAILED, r.why, "the device is told why Polly said it")
         assertEquals(listOf("Ten past seven." to "Brian"), polly.said)
         assertNotNull(s.geminiFailedAtMs)
         assertEquals("refused (429 RESOURCE_EXHAUSTED)", s.geminiFailedWhy)
         assertTrue(s.geminiSwitched())
         // Resting: Polly at once, Google not asked.
         google.status = 200; google.body = answer(pcm)
-        assertEquals("Brian", s.speak(SpeechCodec.Request("Again.", "Charon")).voice)
+        val again = s.speak(SpeechCodec.Request("Again.", "Charon"))
+        assertEquals("Brian", again.voice)
+        assertEquals(SpeechCodec.WHY_RESTING, again.why)
         assertEquals(1, google.sent.size)
         // After the hold, Gemini again.
         now += 16 * 60_000L
-        assertEquals("Charon", s.speak(SpeechCodec.Request("Later.", "Charon")).voice)
+        val later = s.speak(SpeechCodec.Request("Later.", "Charon"))
+        assertEquals("Charon", later.voice)
+        assertNull(later.why)
+        // A voice that isn't Live's was never Gemini's: no reason to give.
+        assertNull(s.speak(SpeechCodec.Request("Plain.", "Brian")).why)
     }
 
     @Test
     fun oneTimeoutTriesAgainTwoInARowRest() {
         val google = Google(throws = java.net.http.HttpTimeoutException("slow"))
         val s = SpeechService(FakePolly(), InMemorySpeechUsageStore(), nowMs = { now }, gemini = GeminiSpeech({ "k" }, google))
-        assertEquals("Brian", s.speak(SpeechCodec.Request("One.", "Charon")).voice)
+        val one = s.speak(SpeechCodec.Request("One.", "Charon"))
+        assertEquals("Brian", one.voice)
+        assertEquals(SpeechCodec.WHY_SLOW, one.why)
         assertEquals("too slow", s.geminiFailedWhy)
         assertFalse(s.geminiSwitched())
         s.speak(SpeechCodec.Request("Two.", "Charon"))

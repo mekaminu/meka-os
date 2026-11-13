@@ -94,4 +94,40 @@ object OneVoiceRules {
         val line = if (s.removeSuffix("-US").equals(live, ignoreCase = true)) "$s · the same as Live" else "$s · not Live's $live"
         return line.takeIf { it.length <= 40 } ?: s
     }
+    /**
+     * One voice for Obi, slice 3: which engine said the last clip and, when Amazon Polly stood in for Obi's Gemini
+     * voice, why; for Health → Obi's voice after the voice's name. [engine] is the server's ("gemini", "chirp3hd",
+     * Polly's "generative"/"neural"/"standard"), null for a clip whose engine wasn't sent (then one of Live's voices
+     * reads as Google, any other as Amazon Polly). [kept]: the clip was made earlier and kept on this device.
+     * "Google Gemini" · "Amazon Polly, as Gemini was too slow on that clip" · "Google, kept on this device".
+     */
+    fun spokeHow(voice: String?, engine: String?, why: String?, kept: Boolean = false): String? {
+        val who = when (engine?.trim()?.lowercase()) {
+            "gemini" -> "Google Gemini"
+            "chirp3hd" -> "Google Chirp 3 HD"
+            "generative", "neural", "standard", "long-form" -> "Amazon Polly"
+            else -> {
+                val v = voice?.trim()?.removeSuffix("-US")?.takeIf { it.isNotEmpty() } ?: return null
+                if (LiveTalkRules.VOICES.any { it.name.equals(v, ignoreCase = true) }) "Google" else "Amazon Polly"
+            }
+        }
+        val because = if (who == "Amazon Polly") WHY[why?.trim()?.lowercase()]?.let { ", as $it" }.orEmpty() else ""
+        return who + because + (if (kept) ", kept on this device" else "")
+    }
+
+    /** What each of the server's short reasons ([os.meka.core.wire.SpeechCodec.HEADER_WHY]) says in Health. */
+    val WHY = mapOf(
+        "resting" to "Gemini is resting after a failure",
+        "failed" to "Gemini failed on that clip",
+        "slow" to "Gemini was too slow on that clip",
+        "budget" to "this month's AI budget is spent",
+        "long" to "it was too long for one Gemini clip",
+    )
+
+    /** "Charon · the same as Live · Google Gemini": [inUse]'s line with [spokeHow] after it. */
+    fun inUseHow(spoke: String?, liveOn: Boolean, liveVoice: String?, engine: String?, why: String?, kept: Boolean): String? {
+        val base = inUse(spoke, liveOn, liveVoice) ?: return null
+        return spokeHow(spoke, engine, why, kept)?.let { "$base · $it" } ?: base
+    }
 }
+

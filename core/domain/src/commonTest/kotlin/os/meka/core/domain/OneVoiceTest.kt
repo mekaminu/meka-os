@@ -88,4 +88,25 @@ class OneVoiceTest {
         assertTrue(store.chooseObiVoice("Charon"))
         assertEquals("Charon", store.picked())
     }
+
+    /** One voice for Obi, slice 3: Health → Obi's voice says which engine spoke last and why Polly stood in. */
+    @Test
+    fun healthSaysWhichEngineSpokeAndWhy() {
+        assertEquals("Google Gemini", OneVoiceRules.spokeHow("Charon", "gemini", null))
+        assertEquals("Google Chirp 3 HD", OneVoiceRules.spokeHow("Charon", "chirp3hd", null))
+        assertEquals("Amazon Polly", OneVoiceRules.spokeHow("Brian", "neural", null))
+        assertEquals("Amazon Polly, as Gemini is resting after a failure", OneVoiceRules.spokeHow("Brian", "generative", "resting"))
+        assertEquals("Amazon Polly, as Gemini was too slow on that clip", OneVoiceRules.spokeHow("Brian", "neural", "slow"))
+        assertEquals("Amazon Polly, as this month's AI budget is spent", OneVoiceRules.spokeHow("Brian", "neural", "budget"))
+        assertEquals("Amazon Polly", OneVoiceRules.spokeHow("Brian", "neural", "odd"), "an unknown reason is left out")
+        assertEquals("Google Gemini", OneVoiceRules.spokeHow("Charon", "gemini", "slow"), "a reason only follows Polly")
+        // No engine sent (an answer's clip, a kept one): Live's voices read as Google, others as Polly.
+        assertEquals("Google, kept on this device", OneVoiceRules.spokeHow("Puck", null, null, kept = true))
+        assertEquals("Amazon Polly", OneVoiceRules.spokeHow("Brian", null, null))
+        assertNull(OneVoiceRules.spokeHow(null, null, null))
+        val line = OneVoiceRules.inUseHow("Brian", true, "Vindemiatrix", "neural", "resting", false)!!
+        assertEquals("Brian · not Live's Vindemiatrix · Amazon Polly, as Gemini is resting after a failure", line)
+        assertEquals("Speaking as $line", HealthRules.voiceInUseLine(line), "Health shows the whole line")
+        assertNull(OneVoiceRules.inUseHow(null, true, "Charon", "gemini", null, false))
+    }
 }

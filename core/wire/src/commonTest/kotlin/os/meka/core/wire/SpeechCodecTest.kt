@@ -108,6 +108,17 @@ class SpeechCodecTest {
         assertEquals("chirp3hd", SpeechCodec.binaryResponse("SUQz", "Aoede", "chirp3hd").engine)
     }
 
+    /** One voice for Obi, slice 3: why Polly said a clip asked for in Obi's Gemini voice, by header or in JSON. */
+    @Test
+    fun whyPollyStoodInTravelsAndIsCheckedLikeTheEngine() {
+        assertEquals("slow", SpeechCodec.binaryResponse("SUQz", "Brian", "neural", why = SpeechCodec.WHY_SLOW).why)
+        assertNull(SpeechCodec.binaryResponse("SUQz", "Brian", "neural", why = "slow\r\nX-Evil: 1").why)
+        assertNull(SpeechCodec.binaryResponse("SUQz", "Charon", "gemini").why)
+        val r = SpeechCodec.Response(SpeechCodec.Response.SPOKEN, "SUQz", "mp3", "Brian", "neural", why = SpeechCodec.WHY_RESTING)
+        assertEquals("resting", SpeechCodec.decodeResponse(SpeechCodec.encodeResponse(r)).why)
+        assertNull(SpeechCodec.decodeResponse(SpeechCodec.encodeResponse(r.copy(why = null))).why)
+    }
+
     @Test
     fun aClipsMouthSoundsTravelCompactAndAreNeverHalfTrusted() {
         // Obi's face, slice 2.

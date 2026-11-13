@@ -430,7 +430,7 @@ object HealthRules {
      */
     /** "Speaking as Brian": the voice the last clip here came in, so the hello and Ask can be seen to match. */
     fun voiceInUseLine(voice: String?): String? =
-        voice?.trim()?.takeIf { it.isNotEmpty() && it.length <= 40 }?.let { "Speaking as $it" }
+        voice?.trim()?.takeIf { it.isNotEmpty() && it.length <= 140 }?.let { "Speaking as $it" }
 
     fun voiceLine(s: ServerHealth, nowMs: Long, cal: LocalCalendar): String {
         val polly = s.speechGooglePollyForMs?.let { EngineLatchRules.duration(it) }?.let {

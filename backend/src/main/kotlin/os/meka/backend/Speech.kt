@@ -471,7 +471,8 @@ class SpeechService(
             }
         }
         // One voice for Obi: one of Live's voices that Chirp didn't say is Gemini's, before Polly stands in.
-        geminiSaid(r, default)?.let { return it }
+        var why: String? = null
+        geminiSaid(r, default) { why = it }?.let { return it }
         val voice = if (wanted.provider == SpeechCodec.POLLY) wanted else default
         if (usage.used(m) + chars > capChars) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER))
         if (budget?.over() == true) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = BUDGET_OVER))
@@ -488,7 +489,7 @@ class SpeechService(
         usage.add(m, chars)
         meterPolly(chars, voice.engine)
         val visemes = marking?.let { f -> markedUp(f, chars, voice.engine, audio) }
-        return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine, visemes = visemes), audio)
+        return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine, visemes = visemes, why = why), audio)
     }
 
     /**
@@ -496,12 +497,12 @@ class SpeechService(
      * the AI budget isn't spent; null hands it to Polly. The mouth sounds, when asked for, are Polly's (neural) for the
      * same words fitted to the clip's length. Never throws.
      */
-    private fun geminiSaid(r: SpeechCodec.Request, polly: SpeechCodec.Voice): Said? {
+    private fun geminiSaid(r: SpeechCodec.Request, polly: SpeechCodec.Voice, skipped: (String) -> Unit = {}): Said? {
         val g = gemini ?: return null
         val name = GeminiSpeech.liveVoice(r.voice) ?: return null
         if (!runCatching { g.configured() }.getOrDefault(false)) return null
-        if (budget?.over() == true) return null
-        if (EngineLatchRules.useFallback(geminiLatch, nowMs())) return null
+        if (budget?.over() == true) return null.also { skipped(SpeechCodec.WHY_BUDGET) }
+        if (EngineLatchRules.useFallback(geminiLatch, nowMs())) return null.also { skipped(SpeechCodec.WHY_RESTING) }
         val chars = r.text.length.toLong()
         val m = month()
         val marker = engine
@@ -519,6 +520,7 @@ class SpeechService(
             marking?.cancel(false)
             geminiFailedAtMs = nowMs()
             geminiFailedWhy = failedWhy(tried.exceptionOrNull())
+            skipped(skipWhy(tried.exceptionOrNull(), tried.getOrNull()))
             return null
         }
         runCatching {
@@ -765,6 +767,17 @@ class SpeechService(
         const val WAV = "wav"
 
         /** Why a Gemini clip didn't come, in a few plain words (never Google's free text). */
+        /**
+         * One voice for Obi, slice 3: the short reason a device is told when Polly stood in for a failed Gemini clip
+         * ([SpeechCodec.HEADER_WHY]): too slow, too long ([bytes] over the clip limit, or Gemini's own "clip too long"),
+         * else failed.
+         */
+        fun skipWhy(e: Throwable?, bytes: ByteArray?): String = when {
+            isTimeout(e) -> SpeechCodec.WHY_SLOW
+            e?.message == "clip too long" || (bytes != null && bytes.size > SpeechCodec.MAX_AUDIO_BYTES) -> SpeechCodec.WHY_LONG
+            else -> SpeechCodec.WHY_FAILED
+        }
+
         fun failedWhy(e: Throwable?): String = when {
             e == null -> "no audio"
             isTimeout(e) -> "too slow"

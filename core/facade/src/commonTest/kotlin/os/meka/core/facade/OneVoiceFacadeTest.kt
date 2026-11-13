@@ -27,6 +27,7 @@ class OneVoiceFacadeTest {
         val asked = mutableListOf<String?>()
         var speaker = "Amy"
         var googleUp = true
+        var why = SpeechCodec.WHY_SLOW
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun speak(text: String, voice: String?): SpeechCodec.Response {
@@ -35,7 +36,11 @@ class OneVoiceFacadeTest {
             // The server speaks a Google voice by name while Google answers, else its default stands in.
             val google = voice == "Charon" || voice == "Puck"
             val by = if (google && googleUp) voice!! else speaker
-            return SpeechCodec.Response(SpeechCodec.Response.SPOKEN, audio = by + ":" + text.length, format = "mp3", voice = if (google) by else voice ?: speaker)
+            val gemini = google && googleUp
+            return SpeechCodec.Response(
+                SpeechCodec.Response.SPOKEN, audio = by + ":" + text.length, format = "mp3", voice = if (google) by else voice ?: speaker,
+                engine = if (gemini) "gemini" else "neural", why = if (google && !gemini) why else null,
+            )
         }
         override suspend fun speechVoices() = SpeechCodec.Voices(SpeechCodec.Voices.ON, defaultVoice = speaker)
     }
@@ -54,11 +59,11 @@ class OneVoiceFacadeTest {
         assertEquals("Amy:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals("Amy:14", c.speechClip("Morning, Meka.", first = true)) // from memory
         assertEquals(1, server.said.size)
-        assertEquals("Amy · not Live's Charon", c.speechVoiceInUse())
+        assertEquals("Amy · not Live's Charon · Amazon Polly, kept on this device", c.speechVoiceInUse())
         // The server's stand-in becomes Brian (a deploy; the phone keeps running): Ask's next answer comes in his voice…
         server.speaker = "Brian"
         assertEquals("Brian:15", c.speechClip("Here's the gist", first = true))
-        assertEquals("Brian · not Live's Charon", c.speechVoiceInUse())
+        assertEquals("Brian · not Live's Charon · Amazon Polly, as Gemini was too slow on that clip", c.speechVoiceInUse())
         // …and the hello kept from Amy is no longer played: it's asked for again, and Brian says it.
         assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals(3, server.said.size)
@@ -87,7 +92,7 @@ class OneVoiceFacadeTest {
         val c = core()
         server.speaker = "Brian"
         assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
-        assertEquals("Charon · the same as Live", c.speechVoiceInUse())
+        assertEquals("Charon · the same as Live · Google Gemini", c.speechVoiceInUse())
         c.setLiveOn(true)
         // The same voice with Live on: the kept hello plays, and normal Obi's line if Live drops is in it too.
         assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
@@ -100,7 +105,7 @@ class OneVoiceFacadeTest {
         c.setLiveOn(false)
         val before = server.said.size
         assertEquals("Puck:14", c.speechClip("Morning, Meka.", first = true))
-        assertEquals("Puck · the same as Live", c.speechVoiceInUse())
+        assertEquals("Puck · the same as Live · Google, kept on this device", c.speechVoiceInUse())
         assertEquals(before, server.said.size)
     }
 
@@ -112,7 +117,23 @@ class OneVoiceFacadeTest {
         c.setLiveOn(true)
         assertEquals("Brian:14", c.speechClip("Morning, Meka.", first = true))
         assertEquals("Charon", server.asked.last())
-        assertEquals("Brian · not Live's Charon", c.speechVoiceInUse())
+        assertEquals("Brian · not Live's Charon · Amazon Polly, as Gemini was too slow on that clip", c.speechVoiceInUse())
+    }
+
+    /** One voice for Obi, slice 3: Health says which engine spoke last and why Polly stood in. */
+    @Test
+    fun healthSaysWhichEngineSpokeLastAndWhy() = runTest {
+        val c = core()
+        assertEquals("Charon:14", c.speechClip("Morning, Meka.", first = true))
+        assertEquals("Charon · the same as Live · Google Gemini", c.speechVoiceInUse())
+        server.googleUp = false
+        server.speaker = "Brian"
+        server.why = SpeechCodec.WHY_BUDGET
+        assertEquals("Brian:15", c.speechClip("Here's the gist", first = true))
+        assertEquals("Brian · not Live's Charon · Amazon Polly, as this month's AI budget is spent", c.speechVoiceInUse())
+        server.googleUp = true
+        assertEquals("Charon:12", c.speechClip("All done now", first = true))
+        assertEquals("Charon · the same as Live · Google Gemini", c.speechVoiceInUse(), "a Gemini clip clears the reason")
     }
 
     @Test

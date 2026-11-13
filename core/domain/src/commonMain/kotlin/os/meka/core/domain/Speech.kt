@@ -273,7 +273,14 @@ object SpeechRules {
      * "MEKA's voice · October's 1,000,000 characters are used; the phone's own voice speaks until 1 Nov" ·
      * "MEKA's voice · the device's own voice, nothing is sent"
      */
-    fun usageLine(state: String, month: String?, usedChars: Long, capChars: Long, voice: String?, deviceChosen: Boolean): String? {
+    fun usageLine(state: String, month: String?, usedChars: Long, capChars: Long, voice: String?, deviceChosen: Boolean): String? =
+        usageLine(state, month, usedChars, capChars, voice, deviceChosen, null)
+
+    /** [usageLine] with this month's [cost] (one voice for Obi, slice 3): said instead of the characters when known. */
+    fun usageLine(
+        state: String, month: String?, usedChars: Long, capChars: Long, voice: String?, deviceChosen: Boolean,
+        cost: VoiceCost?,
+    ): String? {
         if (deviceChosen) return "$USAGE_LABEL · the device's own voice, nothing is sent"
         if (state != ON) return null
         val m = month?.let(MONTH::matchEntire)?.destructured?.let { (_, mm) -> mm.toInt() }?.takeIf { it in 1..12 } ?: return null
@@ -282,8 +289,38 @@ object SpeechRules {
             return "$USAGE_LABEL · $name's ${grouped(capChars)} characters are used; the device's own voice speaks until 1 ${MONTHS[m % 12].take(3)}"
         }
         val who = voice?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+        if (cost != null) return "$USAGE_LABEL$who · ${costLine(cost)}"
         val of = if (capChars > 0) " of ${grouped(capChars)}" else ""
         return "$USAGE_LABEL$who · ${grouped(usedChars.coerceAtLeast(0))}$of characters in $name"
+    }
+
+    /**
+     * One voice for Obi, slice 3: what read-outs cost this month, from the AI budget's per-feature spend in whole cents
+     * ([GEMINI_FEATURE] Google's Gemini voice, [POLLY_FEATURE] Amazon Polly's clips and mouth sounds).
+     */
+    data class VoiceCost(val googleCents: Long, val amazonCents: Long)
+
+    const val GEMINI_FEATURE = "voice.gemini"
+    const val POLLY_FEATURE = "voice.polly"
+
+    /** [VoiceCost] from the AI status's month list; null when the list is empty (an older server, or no status). */
+    fun voiceCost(month: List<Pair<String, Long>>): VoiceCost? {
+        if (month.isEmpty()) return null
+        fun of(f: String) = month.filter { it.first == f }.sumOf { it.second.coerceAtLeast(0) }
+        return VoiceCost(of(GEMINI_FEATURE), of(POLLY_FEATURE))
+    }
+
+    /**
+     * "$0.42 this month, inside your AI budget (Google $0.38 · Amazon $0.04)" · "under 1¢ this month, inside your AI
+     * budget": both engines named only when both cost something.
+     */
+    fun costLine(c: VoiceCost): String {
+        val g = c.googleCents.coerceAtLeast(0)
+        val a = c.amazonCents.coerceAtLeast(0)
+        val total = g + a
+        val head = if (total == 0L) "under 1¢ this month" else "${AskRules.dollars(total)} this month"
+        val split = if (g > 0 && a > 0) " (Google ${AskRules.dollars(g)} · Amazon ${AskRules.dollars(a)})" else ""
+        return "$head, inside your AI budget$split"
     }
 
     /** 1234567 → "1,234,567". */
