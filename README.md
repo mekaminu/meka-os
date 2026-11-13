@@ -566,6 +566,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/team/cover-dark-by-hand.png](docs/screens/fold/team/cover-dark-by-hand.png)
 - [fold/team/cover-dark-quiet.png](docs/screens/fold/team/cover-dark-quiet.png)
 - [fold/team/cover-dark-sheet.png](docs/screens/fold/team/cover-dark-sheet.png)
+- [fold/team/cover-dark-unfolded.png](docs/screens/fold/team/cover-dark-unfolded.png)
 - [fold/team/cover-light-busy.png](docs/screens/fold/team/cover-light-busy.png)
 - [fold/team/inner-dark-busy.png](docs/screens/fold/team/inner-dark-busy.png)
 - [fold/today/cover-dark-empty.png](docs/screens/fold/today/cover-dark-empty.png)
