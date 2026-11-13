@@ -376,6 +376,15 @@ class SpeechService(
     @Volatile private var googleLatch = EngineLatch()
     private val latchLock = Any()
 
+    /** Gemini's voice latch, as Google's: after a failure (or two timeouts in a row) Polly speaks for 15 minutes. */
+    @Volatile private var geminiLatch = EngineLatch()
+
+    /** When a Gemini clip last failed and Polly said it instead (null: not since the server started), and why. */
+    @Volatile var geminiFailedAtMs: Long? = null
+        private set
+    @Volatile var geminiFailedWhy: String? = null
+        private set
+
     fun month(): String = Instant.ofEpochMilli(nowMs()).atOffset(ZoneOffset.UTC).let { "%04d-%02d".format(it.year, it.monthValue) }
 
     /**
