@@ -428,7 +428,7 @@ class SpeechTest {
         // The Polly voice stands behind the Google one: it says any line whose clip isn't ready.
         assertEquals(CallVoice("Amy", "generative", google = "Aoede"), CallVoice.choose("Aoede", offered))
         assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Amy", offered))
-        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Charon", offered)) // not offered: no Google voice
+        assertEquals(CallVoice("Amy", "generative", google = "Charon"), CallVoice.choose("Charon", offered)) // not Chirp here: Live's voice, as Gemini's clips
         assertEquals(CallVoice.DEFAULT, CallVoice.choose("Aoede-US", emptyList()))
     }
 

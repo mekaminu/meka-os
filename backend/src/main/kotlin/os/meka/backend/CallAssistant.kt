@@ -293,8 +293,10 @@ data class CallVoice(val name: String, val engine: String, val google: String? =
         fun choose(chosen: String?, offered: List<SpeechCodec.Voice>): CallVoice {
             val polly = pollyFor(chosen, offered)
             val name = MekaVoiceRules.normalize(chosen)?.takeIf { it != MekaVoiceRules.DEVICE } ?: return polly
-            val google = offered.firstOrNull { it.provider == SpeechCodec.GOOGLE && it.id.equals(name, ignoreCase = true) }
-            return if (google != null) polly.copy(google = google.id) else polly
+            val google = offered.firstOrNull { it.provider == SpeechCodec.GOOGLE && it.id.equals(name, ignoreCase = true) }?.id
+                // One voice for Obi, slice 4: one of Live's voices (Charon, Obi's) is played as Gemini's clips too.
+                ?: GeminiSpeech.liveVoice(name)?.let { live -> return pollyFor(null, offered).copy(google = live) }
+            return if (google != null) polly.copy(google = google) else polly
         }
 
         private fun pollyFor(chosen: String?, offered: List<SpeechCodec.Voice>): CallVoice {
@@ -416,6 +418,10 @@ class CallClips(
         /** A few voices' worth; past it the cache starts again (a voice changed many times). */
         const val MAX_CLIPS = 12 * 6
         private val KEY = Regex("[0-9a-f]{32}")
+
+        /** A clip's type for the phone service: WAV (Gemini's, starting "RIFF") or MP3 (Chirp's). */
+        fun contentType(audio: ByteArray): String =
+            if (audio.size >= 4 && String(audio, 0, 4, Charsets.US_ASCII) == "RIFF") "audio/wav" else "audio/mpeg"
     }
 }
 

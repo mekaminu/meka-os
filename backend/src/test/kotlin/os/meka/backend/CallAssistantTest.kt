@@ -649,6 +649,9 @@ class CallAssistantTest {
         assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("not a voice!", offered))
         // Polly off or unreachable: the chosen name on the neural engine, else Obi's Brian.
         assertEquals(CallVoice("Arthur", "neural"), CallVoice.choose("Arthur", emptyList()))
+        // One voice for Obi, slice 4: Live's voices ride along to be played as Gemini's clips, Polly behind them.
+        assertEquals(CallVoice("Amy", "generative", google = "Charon"), CallVoice.choose("Charon", offered))
+        assertEquals(CallVoice("Brian", "neural", google = "Orus"), CallVoice.choose("Orus", emptyList()))
         assertEquals(CallVoice.DEFAULT, CallVoice.choose("device", emptyList()))
         assertEquals(CallVoice.DEFAULT, CallVoice.choose(null, emptyList()))
         // Twilio's names: generative where Twilio has it, else neural; a voice Twilio lacks speaks as Brian, never fails.

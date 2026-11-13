@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.LiveModeRules
 import os.meka.core.wire.SpeechCodec
 import java.util.Base64
@@ -70,6 +71,25 @@ class GeminiSpeechTest {
         val row = store.month("2026-10").single()
         assertEquals(SpeechService.GEMINI_FEATURE, row.feature)
         assertEquals(510L, row.microUsd)
+    }
+
+    @Test
+    fun theCallAssistantsLinesInLivesVoiceAreGeminisWavAndPollyOtherwise() {
+        val google = Google(body = answer(pcm))
+        val polly = FakePolly()
+        val store = InMemoryAiUsageStore()
+        val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, budget = AiBudget(20_000_000L, store, nowMs = { now }), gemini = GeminiSpeech({ "k" }, google))
+        val clip = assertNotNull(s.callClip(CallAssistantScript.GREETING, "Charon"))
+        assertEquals("audio/wav", CallClips.contentType(clip))
+        assertEquals(1000L, WavClip.ms(clip))
+        assertTrue(polly.said.isEmpty()) // no mouth sounds on a call
+        assertEquals(SpeechService.GEMINI_FEATURE, store.month("2026-10").single().feature)
+        // Not one of Live's voices, or Gemini failing: null, and the phone service's Polly voice says the line.
+        assertNull(s.callClip(CallAssistantScript.GREETING, "Amy"))
+        google.status = 500
+        assertNull(s.callClip(CallAssistantScript.THANKS, "Charon"))
+        assertNull(SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }).callClip(CallAssistantScript.GREETING, "Charon"))
+        assertEquals("audio/mpeg", CallClips.contentType("ID3:Aoede".toByteArray()))
     }
 
     @Test

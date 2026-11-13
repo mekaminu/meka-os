@@ -6142,3 +6142,9 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Settings → Voice: `SpeechRules.voiceCost`/`costLine` from the AI status's month per feature (`voice.gemini`, `voice.polly`): "Navilife's voice · Charon · $0.42 this month, inside your AI budget (Google $0.38 · Amazon $0.04)", or "under 1¢"; Polly's used-up line still comes first; the old 6-argument `usageLine` stays for Swift.
 - Tests: `OneVoiceTest.healthSaysWhichEngineSpokeAndWhy`, `SpeechTest` (cost line), `SpeechCodecTest.whyPollyStoodInTravelsAndIsCheckedLikeTheEngine`, `OneVoiceFacadeTest.healthSaysWhichEngineSpokeLastAndWhy` (and the older lines with the engine), `GeminiSpeechTest` (failed, resting, slow, none for a Gemini clip or a Polly voice).
 
+### Slice 4 (2026-11-13, server): the call assistant's fixed lines in Obi's voice
+- `CallVoice.choose`: one of Live's voices (Charon, Obi's) that Chirp 3 HD doesn't offer rides along as the call's clip voice, the server's default Polly voice behind it (said for any line whose clip isn't ready and every line that isn't fixed).
+- `SpeechService.callClip`: Chirp's clip when the voice is a Google voice offered here, else Gemini's WAV through `geminiSaid` (Gemini's latch, the AI budget as Voice, no mouth sounds), else null (Polly says it). `CallClips` now makes its lines with it; clips stay in the bucket under `voice/clips/<voice>/` so each line is paid for once.
+- The clip route sends `audio/wav` for Gemini's clips and `audio/mpeg` for Chirp's (`CallClips.contentType`), so the phone service's `<Play>` takes either.
+- Tests: `GeminiSpeechTest.theCallAssistantsLinesInLivesVoiceAreGeminisWavAndPollyOtherwise`, `CallAssistantTest.theCallVoiceFallsBackWithoutFailingTheCall`, `SpeechTest.callsPlayAChosenGoogleVoiceOverAPollyVoice` (Charon now Gemini's).
+

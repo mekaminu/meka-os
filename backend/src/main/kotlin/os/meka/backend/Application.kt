@@ -1127,9 +1127,10 @@ fun Application.mekaSync(
             // The call assistant's lines in a chosen Google voice (natural voice, slice 3), fetched by the phone service
             // for <Play>. Only clips this server made of its fixed lines, under an unguessable key; anything else is 404.
             get("${CallClips.PATH}{file}") {
-                val mp3 = voice.clips?.audio(call.parameters["file"].orEmpty())
+                val audio = voice.clips?.audio(call.parameters["file"].orEmpty())
                     ?: return@get call.respondText("not found", status = HttpStatusCode.NotFound)
-                call.respondBytes(mp3, ContentType.parse("audio/mpeg"))
+                // Chirp's clips are MP3, Gemini's (one voice for Obi, slice 4) WAV: the phone service plays either by its type.
+                call.respondBytes(audio, ContentType.parse(CallClips.contentType(audio)))
             }
         }
 
@@ -1670,7 +1671,7 @@ fun voiceFromEnv(
         liveLine = liveCalls?.line,
     )
     // Callers hear a chosen Google voice (natural voice, slice 3): its lines made once, on Google's meter.
-    val clips = speech?.let { sp -> CallClips(synth = { text, v -> sp.googleClip(text, v) }, store = recordings) }
+    val clips = speech?.let { sp -> CallClips(synth = { text, v -> sp.callClip(text, v) }, store = recordings) }
     val twilio = TwilioVoice.fromSecret(secret)
     // Obi on calls, slice 2b: approved call cards are rung from the assistant's number, Obi live on the brief.
     val booking = liveCalls?.takeIf { System.getenv("MEKA_BOOKING_CALLS") != "off" }?.let { live ->

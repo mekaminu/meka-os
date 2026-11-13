@@ -575,6 +575,18 @@ class SpeechService(
     }
 
     /**
+     * One voice for Obi, slice 4: a call assistant line in [voiceId]: Chirp's clip when it's a Google voice offered
+     * here, else Gemini's WAV when it's one of Live's voices (metered in the AI budget, through Gemini's latch), else
+     * null and the phone service's Polly voice says the line. Never throws.
+     */
+    fun callClip(text: String, voiceId: String): ByteArray? {
+        googleClip(text, voiceId)?.let { return it }
+        if (GeminiSpeech.liveVoice(voiceId) == null) return null
+        val stand = SpeechCodec.Voice(DEFAULT_VOICE, "Male", NEURAL)
+        return runCatching { geminiSaid(SpeechCodec.Request(text, voiceId), stand)?.mp3 }.getOrNull()
+    }
+
+    /**
      * Google's clip of [text] in [voice] through the latch (small refinement, Meka 2026-10-19: "engine fallback latches
      * for the session"): while Google is switched off ([EngineLatchRules.useFallback]: a failure, or two timeouts in a
      * row, in the last 15 minutes) Google isn't asked and null comes back at once, so Polly says it with no wait; after
