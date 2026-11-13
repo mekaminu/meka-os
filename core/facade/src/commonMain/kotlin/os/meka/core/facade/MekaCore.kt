@@ -354,6 +354,11 @@ class MekaCore(
     private val speechClipVoice = HashMap<String, String?>()
     /** The voice the server last said spoke a clip, for Health → Obi's voice ("Voice · Brian"); null before the first. */
     @kotlin.concurrent.Volatile private var speechLastVoice: String? = null
+    /**
+     * What the Fold knows about the work area today ("When I leave work"; kept on the phone, never synced or stored by
+     * the core). Declared up here, before anything the constructor runs reads the notices.
+     */
+    @kotlin.concurrent.Volatile private var workArea: os.meka.core.domain.WorkAreaState = os.meka.core.domain.WorkAreaState.NONE
     /** One voice for Obi, slice 3: the engine that said the last clip, why Polly stood in, and whether it was kept here. */
     @kotlin.concurrent.Volatile private var speechLastHow: Triple<String?, String?, Boolean> = Triple(null, null, false)
     /** Obi's face, slice 3b: the mouth sounds that came with clips in [speechClips] (same keys), while the face is drawn. */
@@ -5982,10 +5987,6 @@ class MekaCore(
         refresh()
         os.meka.core.domain.LeavingRules.summary(leavingSetting())
     }
-
-    /** What the Fold knows about the work area today (kept on the phone, never synced or stored by the core). */
-    @kotlin.concurrent.Volatile
-    private var workArea: os.meka.core.domain.WorkAreaState = os.meka.core.domain.WorkAreaState.NONE
 
     /**
      * The Fold's proximity alert on the work spot: whether Android is watching it and when he last walked in and out.
