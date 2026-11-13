@@ -202,6 +202,8 @@ class HabitsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "history")
         compose.onNodeWithTag("habits-row-remind-on-$teeth").performClick(); settle()
         awaitCore("the reminder on") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == 7 * 60 + 30 }
+        // The core holds the time before the row has recomposed with it (ci run 43521258380): settle first.
+        settle()
         ScreenShots.assertShows(compose, "history", "07:30")
         compose.onNodeWithTag("habits-row-remind-off-$teeth").performClick(); settle()
         awaitCore("the reminder off") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == null }
