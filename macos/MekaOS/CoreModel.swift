@@ -3476,6 +3476,12 @@ final class CoreModel {
         return core.errandsPage(view: errands ?? ErrandView.companion.EMPTY, near: nil)
     }
 
+    /// Ask → Annual leave in the page shape (slice 9).
+    func leavePage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.leavePage(view: leave ?? LeaveView.companion.EMPTY)
+    }
+
     /// Ask → Dinners in the page shape (slice 8).
     func mealsPage() -> LifePageView? {
         guard let core else { return nil }

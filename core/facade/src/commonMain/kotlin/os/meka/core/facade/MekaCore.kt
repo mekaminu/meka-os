@@ -6655,6 +6655,10 @@ class MekaCore(
     /** Work hours today without the leave itself, so a stretch's cost is its work days ([os.meka.core.domain.LeaveRules]). */
     private fun leaveWork(): os.meka.core.domain.WorkHours = work.hours(localClock(), todayEpochDay())
 
+    /** Every page under Ask in one shape, slice 9: Ask → Annual leave as the page shape (both apps). */
+    fun leavePage(view: os.meka.core.domain.LeaveView = _leave.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.LeavePageRules.page(view, todayEpochDay())
+
     /**
      * Books one typed stretch ("27–30 Oct", "Spain 18 Dec – 4 Jan"; leave already taken with its year). Returns the
      * line to show ("Booked Spain · Fri 18 Dec – Mon 4 Jan · 7 days", or why nothing was written: no work days in it,

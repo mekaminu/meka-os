@@ -54,6 +54,9 @@ data class LeaveRow(
     val note: String?,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
+    /** The stretch's first and last days (the page shape's "3 wks" on the right; slice 9). */
+    val startDay: Long = 0L,
+    val endDay: Long = 0L,
 ) {
     /** [line] as drawn: "12 days" and dates kept whole (quality gate slice 24). */
     val lineShown: String get() = PhraseGlue.kept(line)
@@ -270,7 +273,7 @@ object LeaveRules {
             it.startDay > yearEnd -> "Next leave year"
             else -> null
         }
-        return LeaveRow(it.id, it.title, line, note, listOfNotNull(it.title, line, note).joinToString(". "))
+        return LeaveRow(it.id, it.title, line, note, listOfNotNull(it.title, line, note).joinToString(". "), it.startDay, it.endDay)
     }
 
     /** "Tomorrow", "In 5 days", "Next week", "In 3 weeks". */

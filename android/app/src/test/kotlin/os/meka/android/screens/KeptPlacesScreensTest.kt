@@ -12,9 +12,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,6 +41,8 @@ import os.meka.android.ask.EmergencyPane
 import os.meka.android.ask.FACTS_LIST_TAG
 import os.meka.android.ask.FactsPane
 import os.meka.android.ask.LEAVE_LIST_TAG
+import os.meka.android.ask.LEAVE_ROW_SHEET_TAG
+import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.android.ask.LeavePane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -47,6 +51,7 @@ import os.meka.core.domain.DateNightRules
 import os.meka.core.domain.EmergencyRules
 import os.meka.core.domain.EmergencySection
 import os.meka.core.domain.FactRules
+import os.meka.core.domain.LeavePageRules
 import os.meka.core.domain.LeaveRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.facade.MekaCore
@@ -187,8 +192,13 @@ class KeptPlacesScreensTest {
             Place.LEAVE -> {
                 val v = core.leaveView.value
                 ScreenShots.assertShows(compose, name, v.summary)
-                ScreenShots.assertReadable(compose, name, (v.booked + v.taken).flatMap { listOf(it.title, it.line) } +
-                    v.holidays.flatMap { listOf(it.title, it.line) }, mustShow = false)
+                // The page shape (slice 9): the three numbers, and Booked's first row (or its empty line).
+                val page = core.leavePage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LeavePageRules.BOOKED_EMPTY)
                 if (fill == Fill.EMPTY && v.summary != LeaveRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing booked")
                 if (fill == Fill.MANY && v.booked.size + v.taken.size != 5) fail("$name: ${v.booked.size + v.taken.size} rows for five stretches")
                 if (fill == Fill.MANY && v.holidays.isEmpty()) fail("$name: no school holidays after typing two")
@@ -326,42 +336,61 @@ class KeptPlacesScreensTest {
     }
 
     /**
-     * Works by hand, Annual leave: Book on a school holiday books its work days; Remove takes a stretch off; the field
-     * adds one; − / + move the allowance and the leave year's start.
+     * Works by hand, Annual leave (the page shape, slice 9): every button a 48 dp touch; a school holiday's row opens
+     * its sheet and Book books its work days; Spain's row opens its sheet and Remove takes it off; + Add → A stretch of
+     * leave adds one; the Allowance row's sheet moves the days a year and the leave year's start with − / +.
      */
     private fun leaveByHand(core: MekaCore) {
         val name = "leave-by-hand"
         val p = Place.LEAVE
         assertTouchTargets(name)
         fun v() = core.leaveView.value
+        val sheet = hasAnyAncestor(hasTestTag(LEAVE_ROW_SHEET_TAG))
+        fun closeSheet() {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(sheet) }
+        }
         val holiday = v().holidays.firstOrNull { it.bookLabel != null } ?: fail("$name: no school holiday to book")
-        val before = v().booked.size
-        tap(p, name, holiday.bookLabel!!, hasContentDescription("${holiday.bookLabel} for ${holiday.title}"))
+        tap(p, name, holiday.title, hasText(holiday.title) and !sheet)
+        val book = hasContentDescription("${holiday.bookLabel} for ${holiday.title}") and sheet
+        until { shows(book) }
+        assertTouchTargets(name)
+        tap(p, name, holiday.bookLabel!!, book)
         until { v().holidays.firstOrNull { it.id == holiday.id }?.bookLabel != holiday.bookLabel }
         if (v().holidays.firstOrNull { it.id == holiday.id }?.bookLabel == holiday.bookLabel) fail("$name: ${holiday.bookLabel} booked nothing for ${holiday.title}")
+        closeSheet()
         val row = v().booked.firstOrNull { it.title == "Spain" } ?: fail("$name: Spain isn't booked")
+        tap(p, name, row.title, hasText(row.title) and !sheet)
+        until { shows(hasContentDescription("Remove ${row.title}")) }
         tap(p, name, "Remove", hasContentDescription("Remove ${row.title}"))
         until { v().booked.none { it.id == row.id } }
         if (v().booked.any { it.id == row.id }) fail("$name: Remove left ${row.title}")
+        until { !shows(sheet) }
         val count = v().booked.size + v().taken.size
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         type(p, name, LeaveRules.ADD_DESCRIPTION, "Mon 16 Nov")
         until { v().booked.size + v().taken.size > count }
-        if (v().booked.size + v().taken.size <= count) fail("$name: Done on the field added no leave (booked was $before)")
+        if (v().booked.size + v().taken.size <= count) fail("$name: Done on the field added no leave")
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         val days = v().allowance
-        tap(p, name, "+", hasContentDescription("Days a year: more"))
+        tap(p, name, LeavePageRules.ALLOWANCE, hasText("${LeaveRules.daysWord(days)} a year") and !sheet)
+        until { shows(hasContentDescription("${LeavePageRules.DAYS_A_YEAR}: more")) }
+        assertTouchTargets(name)
+        tap(p, name, "+", hasContentDescription("${LeavePageRules.DAYS_A_YEAR}: more"))
         until { v().allowance == days + 1 }
         if (v().allowance != days + 1) fail("$name: + left the allowance at ${v().allowance}")
-        tap(p, name, "−", hasContentDescription("Days a year: fewer"))
+        tap(p, name, "−", hasContentDescription("${LeavePageRules.DAYS_A_YEAR}: fewer"))
         until { v().allowance == days }
         if (v().allowance != days) fail("$name: − left the allowance at ${v().allowance}")
         val month = v().yearStartMonth
-        tap(p, name, "+", hasContentDescription("Leave year starts: more"))
+        tap(p, name, "+", hasContentDescription("${LeavePageRules.YEAR_STARTS}: more"))
         until { v().yearStartMonth != month }
         if (v().yearStartMonth == month) fail("$name: + didn't move the leave year's start")
-        assertTouchTargets(name)
-        tap(p, name, "−", hasContentDescription("Leave year starts: fewer"))
+        tap(p, name, "−", hasContentDescription("${LeavePageRules.YEAR_STARTS}: fewer"))
         until { v().yearStartMonth == month }
         if (v().yearStartMonth != month) fail("$name: − didn't put the leave year's start back")
+        closeSheet()
     }
 
     /** Works by hand, Emergency card: Remove takes a line off; each part's field adds a line to that part. */
