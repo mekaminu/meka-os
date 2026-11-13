@@ -5989,6 +5989,12 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Motion catalogue row "Ask hub".
 - Tests: `AskHubTest` (core), `ShellNavTest.theAskHubsSettingsBoxesHoldEverySettingOnce`, `AskScreensTest` (the switch on every shot, Errands on page 2 when folded, tiles a page at a time with › turning, Daily's tab and rows, Settings' boxes open/fold and a row's pane, back to Life), `ShellNavTests.testTheAskHubsSettingsBoxesHoldEverySettingOnce` (Mac).
 
+### Slice 2 (2026-11-13, the colour tint, both apps; Mac checked nightly)
+- Core: `LifeTileRules.ICON_BOX` (26), `ICON_BOX_RADIUS` (8), `ICON_GLYPH` (16), `ICON_BOX_LIT_TINT` (0.14), `iconLit(line)`, `nameInset(lineHeight)`.
+- Fold: `AskRoute.LifeTileCard` draws the icon in the box (accent at 14% over the surface and an accent glyph when lit, `surfaceRaised` and `textSecondary` otherwise; both blend with `animateColorAsState` on the appear curve); the name steps down by the inset so its first line centres on the box; `TILE_ICON_TAG` is on the box (the first-line check still holds).
+- Mac: `AskScreen.LifeTileView` the same box behind the SF symbol, the name padded to centre its first line.
+- Motion catalogue row "Life tile icon tint". Tests: `LifeTilesTest.todaysTilesTakeTheWarmIconBox`; the existing `AskScreensTest` icon-on-first-line shots.
+
 ## Every page under Ask in one shape (Take first, approved 2026-11-11, `docs/design/look/LifePage.dc.html`)
 
 ### Slice 1 (2026-11-12, Car on both apps; Mac checked nightly)

@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
@@ -613,13 +615,28 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
         else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
         // The quality gate's Ask re-shot (2026-10-22): a name on two lines ("Goals and / habits") keeps its icon on the
         // first line, not centred between the two; the icon sits in a box one line of the name tall.
+        // The hub's colour tint (AskHub.dc.html): the icon in a small rounded box, warm with a brass glyph when the tile
+        // is about today, quiet grey otherwise; both colours blend as the line changes.
+        val iconLit = os.meka.core.domain.LifeTileRules.iconLit(line)
+        val boxFill by animateColorAsState(
+            if (iconLit) Meka.colors.accent.copy(alpha = os.meka.core.domain.LifeTileRules.ICON_BOX_LIT_TINT).compositeOver(Meka.colors.surface)
+            else Meka.colors.surfaceRaised,
+            MekaMotion.appear(reduced), label = "tile-icon-box",
+        )
+        val glyph by animateColorAsState(if (iconLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "tile-icon")
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            val lineDp = with(androidx.compose.ui.platform.LocalDensity.current) { MekaType.itemMeta.lineHeight.toDp() }
             item.tile?.let {
-                val lineDp = with(androidx.compose.ui.platform.LocalDensity.current) { MekaType.itemMeta.lineHeight.toDp() }
-                Box(Modifier.height(lineDp).testTag(TILE_ICON_TAG), contentAlignment = Alignment.Center) { LifeIcon(it, Meka.colors.accent, size = 18.dp) }
+                Box(
+                    Modifier.size(os.meka.core.domain.LifeTileRules.ICON_BOX.dp)
+                        .clip(RoundedCornerShape(os.meka.core.domain.LifeTileRules.ICON_BOX_RADIUS.dp))
+                        .background(boxFill).testTag(TILE_ICON_TAG),
+                    contentAlignment = Alignment.Center,
+                ) { LifeIcon(it, glyph, size = os.meka.core.domain.LifeTileRules.ICON_GLYPH.dp) }
             }
+            val inset = if (item.tile != null) os.meka.core.domain.LifeTileRules.nameInset(lineDp.value).dp else 0.dp
             Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = os.meka.core.domain.LifeTileRules.NAME_LINES,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = move)
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = move.padding(top = inset))
         }
         AnimatedContent(
             targetState = line.text,

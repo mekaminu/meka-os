@@ -168,6 +168,17 @@ class LifeTilesTest {
     }
 
     @Test
+    fun todaysTilesTakeTheWarmIconBox() {
+        assertEquals(true, LifeTileRules.iconLit(LifeTileLine("Black bin out tonight", lit = true)))
+        assertEquals(false, LifeTileRules.iconLit(LifeTileLine("MOT due in 3 weeks", lit = false)))
+        assertEquals(false, LifeTileRules.iconLit(null))
+        // The box is taller than a line of the name, so the name steps down to centre on it; never a negative inset.
+        assertEquals(3f, LifeTileRules.nameInset(20f))
+        assertEquals(0f, LifeTileRules.nameInset(30f))
+        assertEquals(true, LifeTileRules.ICON_GLYPH < LifeTileRules.ICON_BOX)
+    }
+
+    @Test
     fun anErrandsPlaceStaysTogether() {
         // The quality gate's re-shot: "1 errand at Post / office" on the cover screen.
         val g = LifeTileRules.GLUE

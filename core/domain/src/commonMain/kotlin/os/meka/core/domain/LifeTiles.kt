@@ -185,6 +185,24 @@ object LifeTileRules {
     const val NAME_LINES = 2
 
     /**
+     * The hub's colour tint (`docs/design/look/AskHub.dc.html`): a tile's icon sits in a small rounded box, warm with a
+     * brass glyph when the tile is about today ([LifeTileLine.lit]), quiet grey otherwise, so today's tiles read at a
+     * glance before their lines do. Both apps draw the box from these numbers.
+     */
+    const val ICON_BOX = 26
+    const val ICON_BOX_RADIUS = 8
+    const val ICON_GLYPH = 16
+
+    /** The accent's share of the box's fill when lit (over the tile's surface); unlit boxes use the raised surface. */
+    const val ICON_BOX_LIT_TINT = 0.14f
+
+    /** Which tint a tile's icon takes: lit for a line about today or wanting a look, none for no line yet. */
+    fun iconLit(line: LifeTileLine?): Boolean = line?.lit == true
+
+    /** The name's top inset so its first line centres on the icon box (the box is taller than one line of the name). */
+    fun nameInset(lineHeight: Float): Float = ((ICON_BOX - lineHeight) / 2f).coerceAtLeast(0f)
+
+    /**
      * The "and [n] more" tail of a tile's line, " · +2", held to the word before it with no-break spaces (the quality
      * gate's Ask re-shot, 2026-10-22: on the cover screen People read "Alex · waiting for 1 ·" with "+1" alone on the
      * next line). A line that must wrap now breaks earlier and keeps "1 · +1" together.

@@ -426,13 +426,25 @@ private struct LifeTileView: View {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 // Ask polish, slice 1: compact — the symbol beside the name, about 30% shorter. The quality gate's
                 // Ask re-shot (2026-10-22): a name on two lines keeps its symbol on the first line, not centred.
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                // The hub's colour tint (AskHub.dc.html): the symbol in a small rounded box, warm with a brass glyph
+                // when the tile is about today, quiet grey otherwise; the name's first line centres on the box.
+                HStack(alignment: .top, spacing: MekaSpace.xs) {
                     if let symbol = item.symbol {
-                        Image(systemName: symbol).font(MekaType.caption).foregroundStyle(palette.accent)
+                        let box = CGFloat(LifeTileRules.shared.ICON_BOX)
+                        let shape = RoundedRectangle(cornerRadius: CGFloat(LifeTileRules.shared.ICON_BOX_RADIUS))
+                        Image(systemName: symbol)
+                            .font(.system(size: CGFloat(LifeTileRules.shared.ICON_GLYPH) - 3))
+                            .foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                            .frame(width: box, height: box)
+                            .background(lit ? AnyShapeStyle(palette.accent.opacity(Double(LifeTileRules.shared.ICON_BOX_LIT_TINT)))
+                                        : AnyShapeStyle(palette.surfaceRaised), in: shape)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
                             .accessibilityHidden(true)
                     }
                     Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                         .lineLimit(Int(LifeTileRules.shared.NAME_LINES))
+                        // About one line of the name (19 pt), stepped down to centre on the icon's box.
+                        .padding(.top, item.symbol == nil ? 0 : CGFloat(LifeTileRules.shared.nameInset(lineHeight: 19)))
                 }
                 Text(text)
                     .font(MekaType.caption)
