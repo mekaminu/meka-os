@@ -6102,6 +6102,10 @@ class MekaCore(
      * Every page under Ask in one shape, slice 16: Ask → Trips as the page shape (both apps). + Add's two choices
      * (A trip · A booking) both go to [addTrip], which tells one from the other.
      */
+    /** Every page under Ask in one shape, slice 17: Ask → Lists' title, ⓘ, + Add and three numbers. */
+    fun listsPage(view: ListsView = _lists.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.ListsPageRules.page(view, todayEpochDay())
+
     fun tripsPage(view: os.meka.core.domain.TripsView = _trips.value): os.meka.core.domain.LifePageView =
         os.meka.core.domain.TripsPageRules.page(view, todayEpochDay())
 

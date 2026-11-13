@@ -91,6 +91,12 @@ import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
+import os.meka.android.ask.AddChoiceRows
+import os.meka.android.ask.LIFE_ADD_SHEET_TAG
+import os.meka.android.ask.LifeNumberTiles
+import os.meka.android.ask.LifePageHeader
+import os.meka.android.ask.LifeSheet
+import os.meka.core.domain.ListsPageRules
 
 /** Test tag of each Lists tab, and whether its label is cut at the slot's edges (read by ListsScreensTest). */
 const val LIST_TAB_TAG = "list-tab"
@@ -101,7 +107,10 @@ val TabLabelCut = SemanticsPropertyKey<Boolean>("TabLabelCut")
 
 /** The lists, in the order of the tabs; [short] is the label when five don't fit (the closed Fold). */
 enum class ListTab(val label: String, val short: String = label) {
-    WAITING("Promises", "Promises"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals"), SHOPPING("Shopping"),
+    WAITING("Promises", "Promises"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals"), SHOPPING("Shopping");
+
+    /** The core's name for this list ([ListsPageRules.tabFor]). */
+    val key: String get() = name.lowercase()
 }
 
 /**
@@ -110,6 +119,11 @@ enum class ListTab(val label: String, val short: String = label) {
  * renewals and bills radar, see RenewalsSection.kt) and Shopping (the shared shopping list, ShoppingSection.kt). One screen with five tabs; the lit tab pill springs across. Tapping a row unfolds its actions in place; "Got it" and "Do it now" make the
  * row leave like a completion (light haptic). Due chases and reviews are lit in the accent colour. Nothing is chased,
  * decided or promoted for you. Reduced motion: cross-fades only.
+ *
+ * In the page shape (every page under Ask in one shape, slice 17, approved 2026-11-11, `LifePage.dc.html`): the title
+ * with its ⓘ, one gold + Add whose sheet holds every way in (each list's own form, no open input boxes on the page),
+ * and three numbers (promises due or to chase, the next renewal, shopping to buy) above the tabs. An add closes the
+ * sheet and shows the tab it landed on. Motion: the ⓘ unfolds and the sheet rises on the expand spring (LifePageParts).
  */
 @Composable
 fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
@@ -136,25 +150,44 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
         app.openItem.value = null
     }
 
+    val page = remember(view) { core.listsPage(view) }
+    var infoOpen by rememberSaveable { mutableStateOf(false) }
+    var addOpen by rememberSaveable { mutableStateOf(false) }
+    var addChosen by rememberSaveable { mutableStateOf<String?>(null) }
+    // An add from the sheet: close it, show the list it landed on, a light haptic.
+    val added: (String, suspend () -> Unit) -> Unit = { choice, body ->
+        haptics.light(); addOpen = false; addChosen = null; open = null
+        ListTab.entries.firstOrNull { it.key == ListsPageRules.tabFor(choice) }?.let { tab = it }
+        act(body)
+    }
+
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background).testTag(LISTS_LIST_TAG),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         item(key = "title") {
-            Text("Lists", style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedPlace(LocalPlaceTitleKey.current).appear(rememberAppearance(0)))
+            LifePageHeader(
+                page.title, page.info, infoOpen,
+                titleModifier = Modifier.sharedPlace(LocalPlaceTitleKey.current).appear(rememberAppearance(0)),
+                onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                onAdd = { haptics.tick(); addOpen = true },
+            )
         }
         item(key = "due") {
             Text(
-                view.dueLine ?: "Nothing to chase, review or renew today.",
+                ListsPageRules.summary(view),
                 style = MekaType.itemMeta,
                 color = if (view.dueLine != null) Meka.colors.accent else Meka.colors.textSecondary,
-                modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1)),
+                modifier = Modifier.animateItem().appear(rememberAppearance(1)),
             )
         }
+        item(key = "tiles") {
+            LifeNumberTiles(page.tiles, Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)))
+        }
         item(key = "tabs") {
-            Tabs(tab, view, Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(2))) { t ->
+            Tabs(tab, view, Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(3))) { t ->
                 if (t != tab) { haptics.tick(); tab = t; open = null }
             }
         }
@@ -168,18 +201,25 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
             ) { haptics.light() }
             ListTab.SHOPPING -> shopping(view.shopping, core, act)
         }
-        item(key = "add-${tab.name}") {
-            when (tab) {
-                ListTab.WAITING -> AddWaiting(
-                    addWaiting = { title, who, days -> act { core.addWaiting(title, who, days) } },
-                    addPromise = { title, to, days -> act { core.addPromise(title, to, days) } },
-                )
-                ListTab.SOMEDAY -> AddSomeday { title, kind -> act { core.addSomeday(title, kind) } }
-                ListTab.DECISIONS -> AddDecision { s, why, days -> act { core.recordDecision(s, why, days) } }
-                ListTab.RENEWALS -> AddRenewal(core.todayEpochDay()) { n -> act { core.addRenewal(n.title, n.kind, n.dueDay, n.repeat, n.cost, n.cancelByDaysBefore) } }
-                ListTab.SHOPPING -> AddShopping { text -> act { core.addShopping(text) } }
+    }
+    // + Add: which list, then that list's own form (what each asked for before, now behind + Add).
+    LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+        AddChoiceRows(page.addChoices, addChosen) { c -> haptics.tick(); addChosen = c.key }
+        addChosen?.let { c -> when (c) {
+            ListsPageRules.ADD_PROMISE, ListsPageRules.ADD_WAITING -> AddWaiting(
+                promise = c == ListsPageRules.ADD_PROMISE,
+                addWaiting = { title, who, days -> added(c) { core.addWaiting(title, who, days) } },
+                addPromise = { title, to, days -> added(c) { core.addPromise(title, to, days) } },
+            )
+            ListsPageRules.ADD_SOMEDAY -> AddSomeday { title, kind -> added(c) { core.addSomeday(title, kind) } }
+            ListsPageRules.ADD_DECISION -> AddDecision { s, why, days -> added(c) { core.recordDecision(s, why, days) } }
+            ListsPageRules.ADD_RENEWAL -> AddRenewal(core.todayEpochDay()) { n ->
+                added(c) { core.addRenewal(n.title, n.kind, n.dueDay, n.repeat, n.cost, n.cancelByDaysBefore) }
             }
-        }
+            ListsPageRules.ADD_SHOPPING -> AddShopping { text -> added(c) { core.addShopping(text) } }
+            else -> Unit
+        } }
+    }
     }
 }
 
@@ -453,12 +493,11 @@ internal fun Field(
 }
 
 /**
- * Add to Promises: first which way ("Waiting for" or "I promised"), then what, then (once typing) who and when —
- * a chase date for waiting, a by-day for a promise. The chosen way's chip is lit; switching keeps what's typed.
+ * Add to Promises (+ Add's Something I promised / Something I'm waiting for): what, then (once typing) who and when —
+ * a chase date for waiting, a by-day for a promise.
  */
 @Composable
-private fun AddWaiting(addWaiting: (String, String?, Int?) -> Unit, addPromise: (String, String?, Int?) -> Unit) {
-    var promise by rememberSaveable { mutableStateOf(false) }
+private fun AddWaiting(promise: Boolean, addWaiting: (String, String?, Int?) -> Unit, addPromise: (String, String?, Int?) -> Unit) {
     var title by rememberSaveable { mutableStateOf("") }
     var who by rememberSaveable { mutableStateOf("") }
     var chase by rememberSaveable { mutableStateOf<Int?>(ListRules.DEFAULT_CHASE_DAYS) }
@@ -470,10 +509,6 @@ private fun AddWaiting(addWaiting: (String, String?, Int?) -> Unit, addPromise: 
         }
     }
     Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Chip("Waiting for", !promise) { promise = false }
-            Chip("I promised", promise) { promise = true }
-        }
         Field(if (promise) "I promised to…" else "Waiting for…", value = title, onValue = { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {

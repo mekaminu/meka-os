@@ -5,6 +5,16 @@ import SwiftUI
 enum ListTab: Int, CaseIterable, Identifiable {
     case waiting, someday, decisions, renewals, shopping
     var id: Int { rawValue }
+    /// The core's name for this list (ListsPageRules.tabFor).
+    var key: String {
+        switch self {
+        case .waiting: "waiting"
+        case .someday: "someday"
+        case .decisions: "decisions"
+        case .renewals: "renewals"
+        case .shopping: "shopping"
+        }
+    }
     var label: String {
         switch self {
         case .waiting: "Promises"
@@ -30,22 +40,31 @@ struct ListsScreen: View {
 
     @State private var tab: ListTab = .waiting
     @State private var open: String?
+    @State private var infoOpen = false
+    @State private var adding = false
+    @State private var addChoice: String?
 
     static let kinds: [SomedayKind] = [.idea, .purchase, .project, .trip, .book, .research, .application, .homeImprovement, .trading, .other]
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: MekaSpace.xs) {
-                Text("Lists")
-                    .font(MekaType.greeting).tracking(MekaType.greetingTracking)
-                    .foregroundStyle(palette.textPrimary)
+                if let page = model.listsPage() {
+                    LifePageHeader(title: page.title, info: page.info, palette: palette, infoOpen: $infoOpen) {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding.toggle() }
+                    }
                     .staggeredAppear(0)
-                Text(model.lists?.dueLine ?? "Nothing to chase, review or renew today.")
-                    .font(MekaType.itemMeta)
-                    .foregroundStyle(model.lists?.dueLine != nil ? palette.accent : palette.textSecondary)
-                    .contentTransition(.opacity)
-                    .padding(.bottom, MekaSpace.m)
-                    .staggeredAppear(1)
+                    if adding { addForm(page) }
+                    Text(model.lists.map { ListsPageRules.shared.summary(view: $0) } ?? ListsPageRules.shared.NOTHING_DUE)
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(model.lists?.dueLine != nil ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .staggeredAppear(1)
+                    LifeNumberTiles(page: page, palette: palette)
+                        .padding(.vertical, MekaSpace.xs)
+                        .staggeredAppear(2)
+                }
                 Picker("List", selection: Binding(get: { tab }, set: { new in
                     MekaHaptics.tick()
                     withAnimation(MekaMotion.replan(reduced: reduceMotion)) { tab = new; open = nil }
@@ -56,7 +75,7 @@ struct ListsScreen: View {
                 .labelsHidden()
                 .frame(maxWidth: 640)
                 .padding(.bottom, MekaSpace.m)
-                .staggeredAppear(2)
+                .staggeredAppear(3)
 
                 Group {
                     switch tab {
@@ -70,27 +89,73 @@ struct ListsScreen: View {
                 .id(tab)
                 .transition(.opacity)
 
-                Group {
-                    switch tab {
-                    case .waiting: AddWaitingRow(palette: palette)
-                    case .someday: AddSomedayRow(palette: palette)
-                    case .decisions: AddDecisionRow(palette: palette)
-                    case .renewals: AddRenewalRow(palette: palette)
-                    case .shopping: AddShoppingRow(palette: palette)
-                    }
-                }
-                .padding(.top, MekaSpace.l)
             }
             .frame(maxWidth: 720, alignment: .leading)
             .padding(.horizontal, MekaSpace.gutterWide)
             .padding(.vertical, MekaSpace.xl)
             .animation(MekaMotion.replan(reduced: reduceMotion), value: rowIDs)
             .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: adding)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: addChoice)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)
         .onAppear { takeOpenItem() }
         .onChange(of: model.openItem) { takeOpenItem() }
+    }
+
+    /// + Add (the page shape, slice 17): which list, then that list's own form; an add folds it away and shows its tab.
+    private func addForm(_ page: LifePageView) -> some View {
+        let rules = ListsPageRules.shared
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(page.addTitle).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: MekaSpace.xs, alignment: .leading), count: 3),
+                      alignment: .leading, spacing: MekaSpace.xs) {
+                ForEach(0..<Int(page.addChoiceCount), id: \.self) { i in
+                    let c = page.addChoiceAt(index: Int32(i))
+                    let key = c.key
+                    Button {
+                        MekaHaptics.tick()
+                        addChoice = key
+                    } label: {
+                        Text(c.label).font(MekaType.caption).lineLimit(1)
+                            .foregroundStyle(addChoice == key ? palette.onAccent : palette.textPrimary)
+                            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                            .background(Capsule().fill(addChoice == key ? palette.accent : palette.surfaceRaised))
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .help(c.hint)
+                    .accessibilityHint(c.hint)
+                }
+            }
+            if let choice = addChoice {
+                Group {
+                    switch choice {
+                    case rules.ADD_PROMISE: AddWaitingRow(palette: palette, promise: true) { added(choice) }
+                    case rules.ADD_WAITING: AddWaitingRow(palette: palette, promise: false) { added(choice) }
+                    case rules.ADD_SOMEDAY: AddSomedayRow(palette: palette) { added(choice) }
+                    case rules.ADD_DECISION: AddDecisionRow(palette: palette) { added(choice) }
+                    case rules.ADD_RENEWAL: AddRenewalRow(palette: palette) { added(choice) }
+                    default: AddShoppingRow(palette: palette) { added(choice) }
+                    }
+                }
+                .id(choice)
+                .transition(.opacity)
+            }
+        }
+        .padding(MekaSpace.m)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .padding(.vertical, MekaSpace.xs)
+        .transition(.opacity)
+    }
+
+    private func added(_ choice: String) {
+        MekaHaptics.light()
+        let target = ListsPageRules.shared.tabFor(choice: choice)
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+            adding = false; addChoice = nil; open = nil
+            if let t = ListTab.allCases.first(where: { $0.key == target }) { tab = t }
+        }
     }
 
     /// A search result opened here: switch to its tab and unfold its row.
@@ -293,12 +358,14 @@ private struct ReplaceField: View {
     }
 }
 
-/// Add to Promises: which way ("Waiting for" or "I promised"), then what, then who and when (a chase date or a by-day).
+/// Add to Promises (+ Add's Something I promised / Something I'm waiting for): what, then who and when (a chase date or a by-day).
 private struct AddWaitingRow: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
-    @State private var promise = false
+    /// Which way (+ Add's Something I promised or Something I'm waiting for).
+    let promise: Bool
+    var onAdded: () -> Void = {}
     @State private var title = ""
     @State private var who = ""
     @State private var chase: Int? = Int(ListRules.shared.DEFAULT_CHASE_DAYS)
@@ -306,15 +373,6 @@ private struct AddWaitingRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Picker("Way", selection: Binding(get: { promise }, set: { new in
-                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { promise = new }
-            })) {
-                Text("Waiting for").tag(false)
-                Text("I promised").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
             TextField(promise ? "I promised to…" : "Waiting for…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
             if !title.isEmpty {
                 HStack(spacing: MekaSpace.m) {
@@ -344,6 +402,7 @@ private struct AddWaitingRow: View {
             model.addWaiting(title, who: who, chaseInDays: chase)
         }
         title = ""; who = ""; chase = Int(ListRules.shared.DEFAULT_CHASE_DAYS); by = nil
+        onAdded()
     }
 }
 
@@ -352,6 +411,7 @@ private struct AddSomedayRow: View {
     let palette: MekaPalette
     @State private var title = ""
     @State private var kind: SomedayKind = .idea
+    var onAdded: () -> Void = {}
 
     var body: some View {
         HStack(spacing: MekaSpace.m) {
@@ -363,7 +423,10 @@ private struct AddSomedayRow: View {
         }
     }
 
-    private func add() { model.addSomeday(title, kind: kind); title = "" }
+    private func add() {
+        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        model.addSomeday(title, kind: kind); title = ""; onAdded()
+    }
 }
 
 private struct AddDecisionRow: View {
@@ -372,6 +435,7 @@ private struct AddDecisionRow: View {
     @State private var statement = ""
     @State private var why = ""
     @State private var review: Int? = nil
+    var onAdded: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -391,8 +455,10 @@ private struct AddDecisionRow: View {
     }
 
     private func add() {
+        guard !statement.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         model.recordDecision(statement, why: why, reviewInDays: review)
         statement = ""; why = ""; review = nil
+        onAdded()
     }
 }
 

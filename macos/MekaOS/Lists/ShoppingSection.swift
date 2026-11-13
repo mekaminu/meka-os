@@ -91,11 +91,16 @@ private struct ShoppingRowView: View {
 struct AddShoppingRow: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
+    /// After an add (Lists' + Add closes and shows Shopping).
+    var onAdded: () -> Void = {}
     @State private var text = ""
 
     var body: some View {
         TextField(ShoppingRules.shared.ADD_HINT, text: $text)
             .textFieldStyle(.roundedBorder)
-            .onSubmit { model.addShopping(text); text = "" }
+            .onSubmit {
+                guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                model.addShopping(text); text = ""; onAdded()
+            }
     }
 }

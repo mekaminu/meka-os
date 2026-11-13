@@ -287,6 +287,8 @@ struct DueDateField: View {
 struct AddRenewalRow: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
+    /// After an add (Lists' + Add closes and shows Renewals).
+    var onAdded: () -> Void = {}
     @State private var title = ""
     @State private var kind: ObligationKind = .other
     @State private var due: Int64?
@@ -332,6 +334,7 @@ struct AddRenewalRow: View {
         guard problem == nil else { return }
         title = ""; cost = ""; cancelBy = nil; due = nil; kind = .other
         repeats = RenewalRules.shared.defaultRepeat(k: .other)
+        onAdded()
     }
 }
 

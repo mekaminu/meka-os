@@ -6146,6 +6146,12 @@ final class CoreModel {
         }
     }
 
+    /// Every page under Ask in one shape, slice 17: Ask → Lists' title, ⓘ, + Add and three numbers (the tabs stay).
+    func listsPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.listsPage(view: lists ?? ListsView.companion.EMPTY)
+    }
+
     /// Every page under Ask in one shape, slice 16: Ask → Trips as the page shape (+ Add's two choices both go to addTrip).
     func tripsPage() -> LifePageView? {
         guard let core else { return nil }

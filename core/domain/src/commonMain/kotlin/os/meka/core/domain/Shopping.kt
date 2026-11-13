@@ -57,7 +57,7 @@ object ShoppingRules {
     const val GOT_DAYS = 7
     const val MAX_GOT = 20
     const val ADD_HINT = "Add to shopping… (milk, eggs)"
-    const val EMPTY_LINE = "Nothing to buy. Add what you need below; separate several with commas."
+    const val EMPTY_LINE = "Nothing to buy. + Add → Shopping puts things here; separate several with commas."
 
     /** "Oat milk" → "oat milk": two items are the same thing when their names match ignoring case and spaces. */
     fun key(title: String): String = tidy(title).lowercase()

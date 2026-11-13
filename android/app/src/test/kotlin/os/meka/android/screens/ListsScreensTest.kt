@@ -46,6 +46,8 @@ import os.meka.core.domain.ListRules
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.ShoppingRules
+import os.meka.core.domain.ListsPageRules
+import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.core.domain.SomedayKind
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -206,6 +208,15 @@ class ListsScreensTest {
         reach(name, matcher and hasClickAction(), "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
     }
 
+    /** The page shape: + Add opens its sheet, then [key]'s choice shows that list's form (no open fields on the page). */
+    private fun addChoice(name: String, key: String) {
+        tap(name, "+ Add", hasContentDescription("Add"))
+        until { compose.onAllNodes(hasTestTag(LIFE_ADD_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        val c = ListsPageRules.ADD_CHOICES.first { it.key == key }
+        tap(name, c.label, hasText(c.hint))
+        turns(500)
+    }
+
     /** Types [text] into the field TalkBack reads as [hint] and presses Done on the keyboard. */
     private fun type(name: String, hint: String, text: String) {
         val field = hasContentDescription(hint) and hasSetTextAction()
@@ -250,6 +261,7 @@ class ListsScreensTest {
         tap(name, "Kept", hasText("Kept"))
         until { core.listsView.value.promised.none { it.id == p.id } }
         if (core.listsView.value.promised.any { it.id == p.id }) fail("$name: Kept left \"${p.title}\" on the list")
+        addChoice(name, ListsPageRules.ADD_WAITING)
         type(name, "Waiting for…", "Parcel from Oakfield Garden Centre")
         until { core.listsView.value.waiting.any { it.title == "Parcel from Oakfield Garden Centre" } }
         if (core.listsView.value.waiting.none { it.title == "Parcel from Oakfield Garden Centre" }) fail("$name: Done on the field added nothing")
@@ -272,6 +284,7 @@ class ListsScreensTest {
         tap(name, "Remove Bread", hasContentDescription("Remove Bread"))
         until { core.listsView.value.shopping.toBuy.none { it.title == "Bread" } }
         if (core.listsView.value.shopping.toBuy.any { it.title == "Bread" }) fail("$name: Remove left Bread")
+        addChoice(name, ListsPageRules.ADD_SHOPPING)
         type(name, ShoppingRules.ADD_HINT, "eggs, butter")
         until { core.listsView.value.shopping.toBuy.size >= 5 }
         val titles = core.listsView.value.shopping.toBuy.map { it.title.lowercase() }
