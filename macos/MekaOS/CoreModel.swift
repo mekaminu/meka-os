@@ -3476,6 +3476,12 @@ final class CoreModel {
         return core.errandsPage(view: errands ?? ErrandView.companion.EMPTY, near: nil)
     }
 
+    /// Ask → Emergency card in the page shape (slice 12).
+    func emergencyPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.emergencyPage(view: emergency ?? EmergencyView.companion.EMPTY)
+    }
+
     /// Ask → Date night in the page shape (slice 11).
     func dateNightPage() -> LifePageView? {
         guard let core else { return nil }

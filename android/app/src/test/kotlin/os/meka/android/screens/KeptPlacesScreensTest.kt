@@ -22,6 +22,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -39,6 +40,7 @@ import os.meka.android.ask.DATE_NIGHT_LIST_TAG
 import os.meka.android.ask.DATE_NIGHT_ROW_SHEET_TAG
 import os.meka.android.ask.DateNightPane
 import os.meka.android.ask.EMERGENCY_LIST_TAG
+import os.meka.android.ask.EMERGENCY_ROW_SHEET_TAG
 import os.meka.android.ask.EmergencyPane
 import os.meka.android.ask.FACTS_LIST_TAG
 import os.meka.android.ask.FactsPane
@@ -51,6 +53,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.DateNightPageRules
 import os.meka.core.domain.DateNightRules
+import os.meka.core.domain.EmergencyPageRules
 import os.meka.core.domain.EmergencyRules
 import os.meka.core.domain.EmergencySection
 import os.meka.core.domain.FactRules
@@ -215,7 +218,13 @@ class KeptPlacesScreensTest {
             Place.EMERGENCY -> {
                 val v = core.emergencyView.value
                 ScreenShots.assertShows(compose, name, v.summary)
-                ScreenShots.assertReadable(compose, name, v.groups.flatMap { g -> g.rows.flatMap { listOfNotNull(it.title, it.detail) } }, mustShow = false)
+                // The page shape (slice 12): the three numbers, and Who to call's first row (or its empty line).
+                val page = core.emergencyPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, it) }
                 if (fill == Fill.EMPTY && v.summary != EmergencyRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing on the card")
                 if (fill == Fill.MANY && v.count != 7) fail("$name: ${v.count} lines for seven")
                 // A part's example never names a line it already holds (walk-through 2026-11-02, A14).
@@ -422,21 +431,48 @@ class KeptPlacesScreensTest {
         closeSheet()
     }
 
-    /** Works by hand, Emergency card: Remove takes a line off; each part's field adds a line to that part. */
+    /**
+     * Works by hand, Emergency card (the page shape, slice 12): every button a 48 dp touch; a line's row opens its
+     * sheet, its field changes the details and Remove takes it off; + Add → each part adds a line to that part, and a
+     * PIN is turned away with the words kept.
+     */
     private fun emergencyByHand(core: MekaCore) {
         val name = "emergency-by-hand"
         val p = Place.EMERGENCY
         assertTouchTargets(name)
         fun v() = core.emergencyView.value
+        fun rows() = v().groups.flatMap { it.rows }
+        val sheet = hasAnyAncestor(hasTestTag(EMERGENCY_ROW_SHEET_TAG))
         val call = v().groups.first { it.section == EmergencySection.CALL.key }.rows.firstOrNull() ?: fail("$name: no one to call")
+        tap(p, name, call.title, hasText(call.title) and !sheet)
+        until { shows(hasContentDescription("Remove ${call.title}")) }
+        assertTouchTargets(name)
+        type(p, name, EmergencyPageRules.CHANGE_HINT, "Dr Shah, 01632 654321")
+        until { rows().firstOrNull { it.id == call.id }?.detail == "Dr Shah, 01632 654321" }
+        if (rows().firstOrNull { it.id == call.id }?.detail != "Dr Shah, 01632 654321") fail("$name: the sheet's field didn't change ${call.title}")
         tap(p, name, "Remove", hasContentDescription("Remove ${call.title}"))
-        until { v().groups.flatMap { it.rows }.none { it.id == call.id } }
-        if (v().groups.flatMap { it.rows }.any { it.id == call.id }) fail("$name: Remove left ${call.title}")
-        for (section in EmergencySection.entries) {
+        until { rows().none { it.id == call.id } }
+        if (rows().any { it.id == call.id }) fail("$name: Remove left ${call.title}")
+        until { !shows(sheet) }
+        for ((i, section) in EmergencySection.entries.withIndex()) {
             val before = v().groups.first { it.section == section.key }.rows.size
-            type(p, name, section.spokenHint, "Test ${section.label}: by hand")
+            tap(p, name, "+ Add", hasContentDescription("Add"))
+            until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+            val choice = EmergencyPageRules.ADD_CHOICES[i]
+            tap(p, name, choice.label, hasText(choice.label) and hasAnyAncestor(hasTestTag(LIFE_ADD_SHEET_TAG)))
+            until { shows(hasContentDescription(EmergencyPageRules.spokenHint(choice.key)) and hasSetTextAction()) }
+            if (section == EmergencySection.ACCOUNTS) {
+                type(p, name, EmergencyPageRules.spokenHint(choice.key), "Bank PIN: 4821")
+                until { shows(hasText(EmergencyRules.REFUSED_NUMBER)) || shows(hasText(EmergencyRules.REFUSED_SECRET)) }
+                if (!shows(hasText(EmergencyRules.REFUSED_NUMBER)) && !shows(hasText(EmergencyRules.REFUSED_SECRET))) fail("$name: a PIN wasn't turned away")
+                if (v().groups.first { it.section == section.key }.rows.size != before) fail("$name: a PIN went on the card")
+                compose.onAllNodes(hasContentDescription(EmergencyPageRules.spokenHint(choice.key)) and hasSetTextAction())[0].performTextClearance()
+                turns(300)
+            }
+            type(p, name, EmergencyPageRules.spokenHint(choice.key), "Test ${section.label}: by hand")
             until { v().groups.first { it.section == section.key }.rows.size > before }
-            if (v().groups.first { it.section == section.key }.rows.size <= before) fail("$name: Done on ${section.label}'s field added nothing")
+            if (v().groups.first { it.section == section.key }.rows.size <= before) fail("$name: + Add → ${choice.label} added nothing")
+            until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         }
         assertTouchTargets(name)
     }

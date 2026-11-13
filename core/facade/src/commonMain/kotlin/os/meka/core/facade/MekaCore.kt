@@ -5490,6 +5490,10 @@ class MekaCore(
     /** Takes a line off the card for good (on both apps and her page). */
     suspend fun removeEmergency(id: String): Boolean = onCore { emergency.remove(id) }
 
+    /** Every page under Ask in one shape, slice 12: Ask → Emergency card as the page shape (both apps). */
+    fun emergencyPage(view: os.meka.core.domain.EmergencyView = _emergency.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.EmergencyPageRules.page(view)
+
     // ---- Train queue (V1, train-time queue slice 1; the share sheet's For the train, Ask → More → Train queue) ----
 
     /**
