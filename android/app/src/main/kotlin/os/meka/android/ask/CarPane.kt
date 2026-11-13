@@ -120,6 +120,10 @@ import os.meka.core.facade.MekaCore
  * (only a point rounded to about 1 km leaves the phone); each car's fuel is picked under the prices (synced); a
  * forecourt opens directions in his maps app on his tap. Nothing is kept.
  *
+ * Page shape slice 4 (2026-11-13): FUEL NEARBY and BLUETOOTH become the Fuel near you and Car Bluetooth cards; a
+ * forecourt row opens its sheet (Directions), the Fuel card's See all opens the line, Allow / Look again, every
+ * forecourt and each car's fuel, a car's Bluetooth row opens its paired devices; the parking timer sits under Parked.
+ *
  * Motion: the pane springs up (MekaPane) with the tile's title travelling in; lines cross-fade ("Finding where you
  * are…" → "Saved where the Golf is · ±6 m", the accent when refused, light haptic on a save, a tick when refused);
  * parked cards arrive and leave with the list's item motion; Find my car unfolds with the expand spring and its arrow
@@ -269,7 +273,10 @@ fun CarPane(
     // Every page under Ask in one shape, slice 1 (approved 2026-11-11, LifePage.dc.html): the title with its ⓘ and
     // + Add, three numbers, the Dates and Parked cards; parking, a timer and a date are behind + Add, a parked car's
     // Find my car, photo, bay and Drove off behind its row.
-    val page = CarPageRules.page(cars, rows, timers, fuel, cal.epochDayOf(now), now, cal)
+    val page = CarPageRules.page(cars, rows, timers, fuel, cal.epochDayOf(now), now, cal, links, btAllowed)
+    // Slice 4: the Fuel card's sheet (every forecourt, Look again, each car's fuel), a forecourt's sheet, a car's Bluetooth sheet.
+    var fuelSheet by remember { mutableStateOf(false) }
+    var forecourt by remember { mutableStateOf<String?>(null) }
     var infoOpen by remember { mutableStateOf(false) }
     var addOpen by remember { mutableStateOf(false) }
     var addChosen by remember { mutableStateOf<String?>(null) }
@@ -325,6 +332,8 @@ fun CarPane(
                         when (c.key) {
                             CarPageRules.DATES -> onDates()
                             CarPageRules.PARKED -> rows.firstOrNull()?.let { finding = it.carId; parkedSheet = it.carId }
+                            CarPageRules.FUEL -> fuelSheet = true
+                            CarPageRules.BLUETOOTH -> askNearby.launch(Manifest.permission.BLUETOOTH_CONNECT)
                         }
                     },
                     onRow = { r ->
@@ -332,139 +341,44 @@ fun CarPane(
                         when {
                             r.key.startsWith("date:") -> onDates()
                             r.key.startsWith("parked:") -> parkedSheet = r.key.removePrefix("parked:")
+                            r.key.startsWith("fuel:") -> forecourt = r.key
+                            r.key.startsWith("bt:") -> picking = r.key.removePrefix("bt:")
                         }
                     },
                 )
             }
-        }
-        // Car and parking, slice 2: the parking timer (synced; the Mac shows it too).
-        if (timers.rows.isNotEmpty()) {
-            item(key = "timer-label") { SectionLabel(ParkingTimerRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
-        }
-        itemsIndexed(timers.rows, key = { _, t -> "timer-${t.carId}" }) { _, t ->
-            TimerCard(
-                t, showTitle = cars.cars.size > 1, modifier = Modifier.animateItem(),
-                onExtend = { m ->
-                    haptics.light()
-                    scope.launch { core.extendParkingTimer(t.carId, m)?.let { timerSaid = it; timerRefused = false } }
-                },
-                onEnd = {
-                    haptics.tick()
-                    scope.launch { core.endParkingTimer(t.carId)?.let { timerSaid = it; timerRefused = false; timerUndo = t.carId } }
-                },
-            )
-        }
-        item(key = "timer-said") {
-            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Crossfade(timerSaid, animationSpec = MekaMotion.appear(reduced), label = "timer-said") { s ->
-                    s?.let { Text(it, style = MekaType.caption, color = timerSaidColor, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+            // Car and parking, slice 2, kept under Parked: the parking timer (synced; the Mac shows it too).
+            if (c.key == CarPageRules.PARKED) {
+                if (timers.rows.isNotEmpty()) {
+                    item(key = "timer-label") { SectionLabel(ParkingTimerRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
                 }
-                timerUndo?.let { id ->
-                    Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                itemsIndexed(timers.rows, key = { _, t -> "timer-${t.carId}" }) { _, t ->
+                    TimerCard(
+                        t, showTitle = cars.cars.size > 1, modifier = Modifier.animateItem(),
+                        onExtend = { m ->
                             haptics.light()
-                            scope.launch { if (core.undoEndParkingTimer(id)) timerSaid = null; timerUndo = null }
-                        }.minTouch().padding(MekaSpace.xs))
-                }
-            }
-        }
-        // Car and parking, slice 6: the cheapest fuel nearby (Fuel Finder, via Navilife's server; nothing kept).
-        item(key = "fuel-label") { SectionLabel(FUEL_HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
-        item(key = "fuel-line") {
-            Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically) {
-                Crossfade(fuel.line, animationSpec = MekaMotion.appear(reduced), modifier = Modifier.weight(1f), label = "fuel-line") { l ->
-                    Text(l, style = MekaType.caption,
-                        color = if (fuel.state == FuelRules.OK || fuel.state == FuelRules.LOOKING) Meka.colors.textSecondary else Meka.colors.accent,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                }
-                val action = when (fuel.state) {
-                    FuelRules.NO_LOCATION -> FUEL_ALLOW
-                    FuelRules.LOOKING -> null
-                    else -> FUEL_AGAIN
-                }
-                action?.let { a ->
-                    Text(a, style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                            scope.launch { core.extendParkingTimer(t.carId, m)?.let { timerSaid = it; timerRefused = false } }
+                        },
+                        onEnd = {
                             haptics.tick()
-                            if (a == FUEL_ALLOW && !HereLocation.permitted(context)) askCoarse.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                            else fuelTick++
-                        }.semantics { contentDescription = "$a: fuel prices" }.minTouch().padding(MekaSpace.xs))
+                            scope.launch { core.endParkingTimer(t.carId)?.let { timerSaid = it; timerRefused = false; timerUndo = t.carId } }
+                        },
+                    )
                 }
-            }
-        }
-        fuel.blocks.forEach { b ->
-            item(key = "fuel-block-${b.fuel.code}") {
-                Column(Modifier.animateItem().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(b.heading, style = MekaType.caption, color = Meka.colors.textTertiary)
-                    Text(b.summary, style = MekaType.body, color = Meka.colors.textPrimary)
-                    b.saving?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-                }
-            }
-            itemsIndexed(b.rows, key = { i, _ -> "fuel-${b.fuel.code}-$i" }) { _, r ->
-                FuelRow(r, Modifier.animateItem()) {
-                    haptics.tick()
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FuelRules.mapsUrl(r))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                }
-            }
-        }
-        itemsIndexed(cars.cars, key = { _, c -> "fuel-car-${c.carId}" }) { _, c ->
-            FuelCarRow(
-                title = c.title, fuel = c.fuel, open = fuelFor == c.carId, modifier = Modifier.animateItem(),
-                onToggle = { haptics.tick(); fuelFor = if (fuelFor == c.carId) null else c.carId },
-                onPick = { k ->
-                    haptics.light()
-                    fuelFor = null
-                    scope.launch { core.setCarFuel(c.carId, k.code) }
-                },
-            )
-        }
-        // Car and parking, slice 3: each car's Bluetooth saves the spot when it disconnects.
-        item(key = "bt-label") { SectionLabel(CarBluetoothRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
-        item(key = "bt-intro") {
-            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Text(CarBluetoothRules.INTRO, style = MekaType.caption, color = Meka.colors.textSecondary)
-                if (!btAllowed) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(CarBluetoothRules.NEEDS_PERMISSION, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
-                        Text(CarBluetoothRules.ALLOW, style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                                haptics.tick(); askNearby.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                            }.minTouch().padding(MekaSpace.xs))
-                    }
-                } else if (links.isNotEmpty()) {
-                    Text(CarBluetoothRules.modeLine(always), style = MekaType.caption, color = Meka.colors.textSecondary)
-                    if (!always) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(CarBluetoothRules.ALWAYS_LINE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
-                            Text(CarBluetoothRules.ALLOW, style = MekaType.caption, color = Meka.colors.accent,
+                item(key = "timer-said") {
+                    Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Crossfade(timerSaid, animationSpec = MekaMotion.appear(reduced), label = "timer-said") { s ->
+                            s?.let { Text(it, style = MekaType.caption, color = timerSaidColor, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                        }
+                        timerUndo?.let { id ->
+                            Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
-                                    haptics.tick()
-                                    if (ParkingStore.precise(context)) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                                    else askPreciseForAlways.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                    haptics.light()
+                                    scope.launch { if (core.undoEndParkingTimer(id)) timerSaid = null; timerUndo = null }
                                 }.minTouch().padding(MekaSpace.xs))
                         }
                     }
                 }
-            }
-        }
-        if (btAllowed) {
-            itemsIndexed(cars.cars, key = { _, c -> "bt-${c.carId}" }) { _, c ->
-                BluetoothRow(
-                    title = c.title, link = links[c.carId], open = picking == c.carId,
-                    choices = if (picking == c.carId) CarBluetoothRules.choices(CarBluetooth.paired(context), links, c.carId, cars) else emptyList(),
-                    bluetoothOn = CarBluetooth.bluetoothOn(context),
-                    modifier = Modifier.animateItem(),
-                    onToggle = { haptics.tick(); picking = if (picking == c.carId) null else c.carId },
-                    onPick = { d ->
-                        haptics.light()
-                        links = if (d == null) CarBluetoothRules.unlink(links, c.carId)
-                        else CarBluetoothRules.link(links, c.carId, PairedDevice(d.address, d.name))
-                        CarBluetooth.store(context, links)
-                        picking = null
-                    },
-                )
             }
         }
     }
@@ -506,6 +420,95 @@ fun CarPane(
             Text(os.meka.core.domain.ParkingConfirmationRules.PASTE_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
             if (timerRefused) timerSaid?.let { Text(it, style = MekaType.caption, color = timerSaidColor) }
         }
+    }
+    // Slice 4: the Fuel card's sheet: where the prices come from (or what's missing) with Allow / Look again, each
+    // fuel's summary and every forecourt (a tap: directions), then each car's fuel with Change.
+    LifeSheet(fuelSheet, CarPageRules.FUEL, CAR_FUEL_SHEET_TAG, onClose = { fuelSheet = false }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(fuel.line, animationSpec = MekaMotion.appear(reduced), modifier = Modifier.weight(1f), label = "fuel-line") { l ->
+                Text(l, style = MekaType.caption,
+                    color = if (fuel.state == FuelRules.OK || fuel.state == FuelRules.LOOKING) Meka.colors.textSecondary else Meka.colors.accent,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+            val action = when (fuel.state) {
+                FuelRules.NO_LOCATION -> FUEL_ALLOW
+                FuelRules.LOOKING -> null
+                else -> FUEL_AGAIN
+            }
+            action?.let { a ->
+                Text(a, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                        haptics.tick()
+                        if (a == FUEL_ALLOW && !HereLocation.permitted(context)) askCoarse.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        else fuelTick++
+                    }.semantics { contentDescription = "$a: fuel prices" }.minTouch().padding(MekaSpace.xs))
+            }
+        }
+        fuel.blocks.forEach { b ->
+            Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(b.heading, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(b.summary, style = MekaType.body, color = Meka.colors.textPrimary)
+                b.saving?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            }
+            b.rows.forEach { r -> FuelRow(r, Modifier) { haptics.tick(); directions(context, r) } }
+        }
+        cars.cars.forEach { c ->
+            FuelCarRow(
+                title = c.title, fuel = c.fuel, open = fuelFor == c.carId, modifier = Modifier,
+                onToggle = { haptics.tick(); fuelFor = if (fuelFor == c.carId) null else c.carId },
+                onPick = { k ->
+                    haptics.light()
+                    fuelFor = null
+                    scope.launch { core.setCarFuel(c.carId, k.code) }
+                },
+            )
+        }
+    }
+    // A forecourt's row: its price, how far and how fresh, and Directions in his maps app (only on his tap).
+    val court = forecourt?.let { CarPageRules.fuelRowOf(fuel, it) }
+    LifeSheet(court != null, court?.second?.title ?: CarPageRules.FUEL, CAR_FORECOURT_SHEET_TAG, onClose = { forecourt = null }) {
+        val (b, r) = court ?: return@LifeSheet
+        Text("${b.fuel.label} · ${r.price}", style = MekaType.body, color = if (r.cheapest) Meka.colors.accent else Meka.colors.textPrimary)
+        Text(r.line, style = MekaType.caption, color = if (r.stale) Meka.colors.textTertiary else Meka.colors.textSecondary)
+        if (r.cheapest) b.saving?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        Text(FUEL_DIRECTIONS, style = MekaType.metaStrong, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) {
+                haptics.tick(); directions(context, r); forecourt = null
+            }.semantics { contentDescription = "$FUEL_DIRECTIONS: ${r.title}" }.minTouch().padding(horizontal = MekaSpace.m))
+    }
+    // A car's Bluetooth row: how it works, the mode (and Allow all the time), and the phone's paired devices to pick.
+    val btCar = cars.cars.firstOrNull { it.carId == picking }
+    LifeSheet(btAllowed && btCar != null, ParkingRules.heading(btCar?.title ?: CarPageRules.BLUETOOTH), CAR_BLUETOOTH_SHEET_TAG, onClose = { picking = null }) {
+        val c = btCar ?: return@LifeSheet
+        Text(CarBluetoothRules.INTRO, style = MekaType.caption, color = Meka.colors.textSecondary)
+        if (links.isNotEmpty()) {
+            Text(CarBluetoothRules.modeLine(always), style = MekaType.caption, color = Meka.colors.textSecondary)
+            if (!always) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(CarBluetoothRules.ALWAYS_LINE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+                    Text(CarBluetoothRules.ALLOW, style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                            haptics.tick()
+                            if (ParkingStore.precise(context)) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                            else askPreciseForAlways.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                        }.minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
+        BluetoothRow(
+            title = c.title, link = links[c.carId], open = true,
+            choices = CarBluetoothRules.choices(CarBluetooth.paired(context), links, c.carId, cars),
+            bluetoothOn = CarBluetooth.bluetoothOn(context),
+            modifier = Modifier,
+            onToggle = { haptics.tick(); picking = null },
+            onPick = { d ->
+                haptics.light()
+                links = if (d == null) CarBluetoothRules.unlink(links, c.carId)
+                else CarBluetoothRules.link(links, c.carId, PairedDevice(d.address, d.name))
+                CarBluetooth.store(context, links)
+                picking = null
+            },
+        )
     }
     // A parked car's row: Find my car, the bay's photo, the bay typed from the sign and Drove off.
     val sheetRow = rows.firstOrNull { it.carId == parkedSheet }
@@ -602,7 +605,18 @@ private fun BluetoothRow(
 internal const val CAR_LIST_TAG = "car-list"
 /** A parked car's sheet. */
 internal const val CAR_PARKED_SHEET_TAG = "car-parked-sheet"
-private const val FUEL_HEADING = "FUEL NEARBY"
+/** Slice 4: the Fuel card's sheet, a forecourt's sheet and a car's Bluetooth sheet. */
+internal const val CAR_FUEL_SHEET_TAG = "car-fuel-sheet"
+internal const val CAR_FORECOURT_SHEET_TAG = "car-forecourt-sheet"
+internal const val CAR_BLUETOOTH_SHEET_TAG = "car-bluetooth-sheet"
+private const val FUEL_DIRECTIONS = "Directions"
+
+/** Directions to a forecourt in his maps app (only ever on his tap). */
+private fun directions(context: android.content.Context, r: FuelPriceRow) {
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FuelRules.mapsUrl(r))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
 private const val FUEL_ALLOW = "Allow"
 private const val FUEL_AGAIN = "Look again"
 

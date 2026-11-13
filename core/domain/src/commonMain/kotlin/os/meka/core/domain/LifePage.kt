@@ -106,6 +106,14 @@ object CarPageRules {
     const val ALL_DATES = "All dates"
     const val DATES_EMPTY = "No dates yet · + Add puts the MOT, tax, insurance and service here"
     const val PARKED_EMPTY = "Not parked · + Add → Where I parked when you leave the car"
+    /** Slice 4: fuel prices near him and each car's Bluetooth, as cards whose rows open sheets. */
+    const val FUEL = "Fuel near you"
+    const val BLUETOOTH = "Car Bluetooth"
+    /** The Fuel card's link (always there): its sheet holds Allow or Look again, every forecourt and each car's fuel. */
+    const val FUEL_MORE = LifePageRules.SEE_ALL
+    /** The Bluetooth card's link while Nearby devices isn't allowed. */
+    const val BLUETOOTH_ALLOW = "Allow"
+    const val BLUETOOTH_EMPTY = "Add a car's dates first · then pick its Bluetooth here"
     /** A date is lit (brass) this many days ahead. */
     const val SOON_DAYS = 7
 
@@ -170,7 +178,53 @@ object CarPageRules {
         )
     }
 
-    fun page(cars: CarsView, parked: List<ParkedRow>, timers: TimersView, fuel: FuelView, today: Long, nowMs: Long, cal: LocalCalendar): LifePageView {
+    /**
+     * Slice 4: the Fuel card. Each fuel's forecourts, the blocks taken in turn so two cars' fuels both show in the five
+     * (each block's cheapest first, lit); a row is "fuel:<code>:<index in its block>" and opens that forecourt's sheet.
+     * See all opens its sheet even with nothing to list (each car's fuel is picked there); with nothing to list it says the view's line ("Allow location to …", "Looking up …", "No diesel prices within 8 km").
+     */
+    fun fuelCard(fuel: FuelView): PageCard {
+        val many = fuel.blocks.size > 1
+        val longest = fuel.blocks.maxOfOrNull { it.rows.size } ?: 0
+        val rows = (0 until longest).flatMap { i ->
+            fuel.blocks.mapNotNull { b ->
+                b.rows.getOrNull(i)?.let { r ->
+                    PageRow("fuel:${b.fuel.code}:$i", r.title, if (many) "${b.fuel.label} · ${r.line}" else r.line, r.price, r.cheapest)
+                }
+            }
+        }
+        val empty = if (fuel.state == FuelRules.OK) fuel.blocks.firstOrNull()?.summary ?: fuel.line else fuel.line
+        return LifePageRules.card(FUEL, FUEL, rows, more = FUEL_MORE, empty = empty)
+    }
+
+    /** A Fuel card row's forecourt back from its key ("fuel:E10:0"), or null once the prices have moved on. */
+    fun fuelRowOf(fuel: FuelView, key: String): Pair<FuelBlock, FuelPriceRow>? {
+        val parts = key.split(':')
+        if (parts.size != 3 || parts[0] != "fuel") return null
+        val b = fuel.blocks.firstOrNull { it.fuel.code == parts[1] } ?: return null
+        return parts[2].toIntOrNull()?.let { b.rows.getOrNull(it) }?.let { b to it }
+    }
+
+    /**
+     * Slice 4: the Car Bluetooth card, one row a car ("bt:<carId>"): the linked device ("Bluetooth · MY VW 1234") or
+     * "Not linked …", and on the right Change or Pick (lit while not linked). Without Nearby devices it asks for it.
+     */
+    fun bluetoothCard(cars: CarsView, links: Map<String, CarLink>, allowed: Boolean): PageCard {
+        if (!allowed) return LifePageRules.card(BLUETOOTH, BLUETOOTH, emptyList(), more = BLUETOOTH_ALLOW, empty = CarBluetoothRules.NEEDS_PERMISSION)
+        val rows = cars.cars.map { c ->
+            val link = links[c.carId]
+            PageRow(
+                "bt:${c.carId}", ParkingRules.heading(c.title), CarBluetoothRules.rowLine(link),
+                if (link != null) CarBluetoothRules.CHANGE else CarBluetoothRules.PICK, link == null,
+            )
+        }
+        return LifePageRules.card(BLUETOOTH, BLUETOOTH, rows, empty = BLUETOOTH_EMPTY)
+    }
+
+    fun page(
+        cars: CarsView, parked: List<ParkedRow>, timers: TimersView, fuel: FuelView, today: Long, nowMs: Long, cal: LocalCalendar,
+        links: Map<String, CarLink> = emptyMap(), bluetoothAllowed: Boolean = true,
+    ): LifePageView {
         val many = cars.cars.size > 1
         val dates = dated(cars)
         val dateTile = dateTile(cars, dates, today)
@@ -198,6 +252,8 @@ object CarPageRules {
             listOf(
                 datesCard(cars, dates, today),
                 LifePageRules.card(PARKED, PARKED, parkedRows, more = if (parked.isNotEmpty()) ParkingRules.FIND else null, empty = PARKED_EMPTY),
+                fuelCard(fuel),
+                bluetoothCard(cars, links, bluetoothAllowed),
             ),
             ADD_TITLE, ADD_CHOICES,
         )

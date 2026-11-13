@@ -33,6 +33,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.CAR_FUEL_SHEET_TAG
 import os.meka.android.ask.CAR_LIST_TAG
 import os.meka.android.ask.CAR_PARKED_SHEET_TAG
 import os.meka.android.ask.LIFE_ADD_SHEET_TAG
@@ -292,7 +293,11 @@ class CarScreensTest {
         until { datesTapped > tapsBeforeAdd }
         if (datesTapped == tapsBeforeAdd) fail("$name: + Add → A date opened nothing")
 
-        // Fuel: Change unfolds the four, Diesel is kept.
+        // Fuel (page shape, slice 4): the Fuel card's See all opens its sheet; Change unfolds the four, Diesel is kept.
+        reach(name, hasText("${CarPageRules.FUEL_MORE} ›") and hasClickAction(), "the Fuel card's See all")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(hasTestTag(CAR_FUEL_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasTestTag(CAR_FUEL_SHEET_TAG)).fetchSemanticsNodes().isEmpty()) fail("$name: the Fuel card's See all opened no sheet")
         reach(name, hasContentDescription("Change fuel for ", substring = true) and hasClickAction(), "Change fuel")[0]
             .performSemanticsAction(SemanticsActions.OnClick)
         val diesel = hasText(FuelKind.B7.label) and hasClickAction()
@@ -302,6 +307,7 @@ class CarScreensTest {
         until { core.carsView.value.cars.first { it.carId == car }.fuel == FuelKind.B7 }
         if (core.carsView.value.cars.first { it.carId == car }.fuel != FuelKind.B7) fail("$name: picking Diesel didn't keep it")
         assertTouchTargets(name)
+        ScreenShots.assertShows(compose, name, CarPageRules.FUEL)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverEmpty() { shoot("cover-dark-empty", Fill.EMPTY) }

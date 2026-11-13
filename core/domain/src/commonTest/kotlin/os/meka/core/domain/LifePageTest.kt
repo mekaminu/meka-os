@@ -86,7 +86,9 @@ class LifePageTest {
         val p = CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
         assertEquals(listOf("No dates", "Fuel", "Not parked"), p.tiles.map { it.number })
         assertTrue(ScreenSenseRules.problems(p.tiles.flatMap { listOf(it.number, it.label) }).isEmpty())
-        assertTrue(p.cards.all { it.rows.isEmpty() && it.empty != null })
+        assertTrue(p.cards.filter { it.key != CarPageRules.BLUETOOTH }.all { it.rows.isEmpty() && it.empty != null })
+        // The one car there always is can still be linked to its Bluetooth.
+        assertEquals(CarBluetoothRules.NOT_LINKED, p.cards.single { it.key == CarPageRules.BLUETOOTH }.rows.single().line)
         assertNull(p.cards[1].more)
     }
 
@@ -113,5 +115,65 @@ class LifePageTest {
         assertEquals("dates on the radar", p.tiles[1].label)
         assertEquals(listOf("Dates"), p.cards.map { it.title })
         assertEquals(listOf("timer", "date"), p.addChoices.map { it.key })
+    }
+
+    @Test
+    fun theFuelCardListsForecourtsCheapestLitAndTakesTwoFuelsInTurn() {
+        val one = CarPageRules.fuelCard(fuel)
+        assertEquals("Fuel near you", one.title)
+        assertEquals(listOf("Oakfield Fuel", "Sam's Garage"), one.rows.map { it.name })
+        assertEquals("2 km", one.rows[0].line)
+        assertEquals("138.9p", one.rows[1].whenText)
+        assertTrue(one.rows[1].lit)
+        assertEquals("See all", one.more)
+        assertEquals("Sam's Garage", CarPageRules.fuelRowOf(fuel, one.rows[1].key)?.second?.title)
+        assertNull(CarPageRules.fuelRowOf(fuel, "fuel:B7:0"))
+
+        val diesel = FuelBlock(
+            FuelKind.B7, "DIESEL", "summary", null,
+            (1..4).map { FuelPriceRow("Diesel $it", "14$it.9p", "$it km", it == 1, false, 51.5, -0.1) },
+        )
+        val two = CarPageRules.fuelCard(fuel.copy(blocks = fuel.blocks + diesel))
+        assertEquals(6, two.count)
+        assertEquals(listOf("Oakfield Fuel", "Diesel 1", "Sam's Garage", "Diesel 2", "Diesel 3"), two.rows.map { it.name })
+        assertEquals("Diesel · 1 km", two.rows[1].line)
+        assertEquals("fuel:B7:2", two.rows[4].key)
+    }
+
+    @Test
+    fun theFuelCardSaysWhyItIsEmptyAndStillOpensItsSheet() {
+        val none = CarPageRules.fuelCard(FuelView(FuelRules.NO_LOCATION, FuelRules.NO_LOCATION_LINE, emptyList()))
+        assertTrue(none.rows.isEmpty())
+        assertEquals(FuelRules.NO_LOCATION_LINE, none.empty)
+        assertEquals("See all", none.more)
+        val nothingNear = CarPageRules.fuelCard(FuelView(FuelRules.OK, "line", listOf(FuelBlock(FuelKind.B7, "DIESEL", "No diesel prices within 8 km", null, emptyList()))))
+        assertEquals("No diesel prices within 8 km", nothingNear.empty)
+    }
+
+    @Test
+    fun theBluetoothCardHasARowACarAndAsksForNearbyDevicesFirst() {
+        val cars = CarsView(listOf(car(CarRules.ENTITY_ID, "the Golf"), car("car2", "Car 2")), true)
+        val links = mapOf("car2" to CarLink("car2", "AA:BB", "MY VW 1234"))
+        val c = CarPageRules.bluetoothCard(cars, links, allowed = true)
+        assertEquals("Car Bluetooth", c.title)
+        assertEquals(listOf("The Golf", "Car 2"), c.rows.map { it.name })
+        assertEquals(listOf("Pick", "Change"), c.rows.map { it.whenText })
+        assertEquals(listOf(true, false), c.rows.map { it.lit })
+        assertEquals("Bluetooth · MY VW 1234", c.rows[1].line)
+        assertEquals("bt:car2", c.rows[1].key)
+        assertNull(c.more)
+
+        val ask = CarPageRules.bluetoothCard(cars, links, allowed = false)
+        assertTrue(ask.rows.isEmpty())
+        assertEquals("Allow", ask.more)
+        assertEquals(CarBluetoothRules.NEEDS_PERMISSION, ask.empty)
+    }
+
+    @Test
+    fun theCarPageEndsWithTheFuelAndBluetoothCards() {
+        val cars = CarsView(listOf(car(CarRules.ENTITY_ID, "Car", row("mot", "MOT", day + 21))), true)
+        val p = CarPageRules.page(cars, emptyList(), TimersView.EMPTY, fuel, day, at(9), cal)
+        assertEquals(listOf("Dates", "Parked", "Fuel near you", "Car Bluetooth"), p.cards.map { it.title })
+        assertTrue(ScreenSenseRules.problems(p.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line, it.whenText) } + listOfNotNull(c.empty) }).isEmpty())
     }
 }
