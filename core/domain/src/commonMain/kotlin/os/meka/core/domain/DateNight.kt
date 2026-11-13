@@ -33,7 +33,11 @@ data class DateNightSetting(
 }
 
 /** One coming date night in the pane: "Fri 23 Oct" · "19:00 · kept clear", or "Skipped · the evening is free to plan". */
-data class DateNightRow(val day: Long, val label: String, val line: String, val skipped: Boolean, val spoken: String)
+data class DateNightRow(
+    val day: Long, val label: String, val line: String, val skipped: Boolean, val spoken: String,
+    /** Somewhere is booked and cover arranged (the page shape, slice 11). */
+    val booked: Boolean = false,
+)
 
 /**
  * The nudge before a kept night that isn't booked (slice 2), in Needs you on both apps: "In 7 days · from 19:00" ·
@@ -226,7 +230,7 @@ object DateNightRules {
                 skipped -> "$label: skipped."
                 else -> "$label: date night from ${LocalClock.formatMinute(s.startMin)}, kept clear${if (booked) ", booked" else ""}."
             }
-            DateNightRow(d, label, line, skipped, spoken)
+            DateNightRow(d, label, line, skipped, spoken, booked)
         }
         val next = coming.firstOrNull { it !in s.skipped }
         val nextPart = when (next) {

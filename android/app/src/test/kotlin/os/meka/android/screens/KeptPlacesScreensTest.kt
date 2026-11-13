@@ -34,7 +34,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.DATE_NIGHT_EVENING_SHEET_TAG
 import os.meka.android.ask.DATE_NIGHT_LIST_TAG
+import os.meka.android.ask.DATE_NIGHT_ROW_SHEET_TAG
 import os.meka.android.ask.DateNightPane
 import os.meka.android.ask.EMERGENCY_LIST_TAG
 import os.meka.android.ask.EmergencyPane
@@ -47,6 +49,7 @@ import os.meka.android.ask.LeavePane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.DateNightPageRules
 import os.meka.core.domain.DateNightRules
 import os.meka.core.domain.EmergencyRules
 import os.meka.core.domain.EmergencySection
@@ -184,7 +187,13 @@ class KeptPlacesScreensTest {
             Place.DATE_NIGHT -> {
                 val v = core.dateNightView.value
                 ScreenShots.assertShows(compose, name, v.summaryShown)
-                ScreenShots.assertReadable(compose, name, v.nights.flatMap { listOf(it.label, it.line) }, mustShow = false)
+                // The page shape (slice 11): the three numbers, and Coming up's first row (or its empty line).
+                val page = core.dateNightPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, DateNightPageRules.COMING_EMPTY)
                 if (fill == Fill.EMPTY && v.on) fail("$name: date night on with nothing chosen")
                 if (fill != Fill.EMPTY && v.nights.isEmpty()) fail("$name: no nights coming up once it's on")
                 if (fill == Fill.MANY && v.nights.none { it.skipped }) fail("$name: the skipped night isn't skipped")
@@ -299,38 +308,58 @@ class KeptPlacesScreensTest {
     }
 
     /**
-     * Works by hand, Date night: Skip this one skips a night and Keep it keeps it again; a weekday chip moves the
-     * evening, a time chip its start, the other Starts chip the first night; Turn off turns it off.
+     * Works by hand, Date night (the page shape, slice 11): every button a 48 dp touch; a night's row opens its sheet,
+     * Booked books it and Not booked yet takes that back, Skip this one skips it and Keep it keeps it again; + Add → The
+     * evening's sheet moves the start with a time chip, the evening with a weekday chip, the first night with the other
+     * First night chip, and Turn off turns it off.
      */
     private fun dateNightByHand(core: MekaCore) {
         val name = "date-night-by-hand"
         val p = Place.DATE_NIGHT
         assertTouchTargets(name)
         fun v() = core.dateNightView.value
+        val rowSheet = hasAnyAncestor(hasTestTag(DATE_NIGHT_ROW_SHEET_TAG))
+        val evening = hasAnyAncestor(hasTestTag(DATE_NIGHT_EVENING_SHEET_TAG))
+        fun closeSheet(sheet: SemanticsMatcher) {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(sheet) }
+        }
         val night = v().nights.firstOrNull { !it.skipped } ?: fail("$name: no kept night")
         fun cur() = v().nights.firstOrNull { it.day == night.day }
+        tap(p, name, night.label, hasText(night.label) and !rowSheet)
+        until { shows(hasContentDescription("Skip ${night.label}")) }
+        assertTouchTargets(name)
+        tap(p, name, DateNightPageRules.BOOKED, hasContentDescription("${DateNightPageRules.BOOKED}, ${night.label}"))
+        until { cur()?.booked == true }
+        if (cur()?.booked != true) fail("$name: Booked didn't book ${night.label}")
+        tap(p, name, DateNightPageRules.NOT_BOOKED, hasContentDescription("${DateNightPageRules.NOT_BOOKED}, ${night.label}"))
+        until { cur()?.booked == false }
+        if (cur()?.booked != false) fail("$name: Not booked yet left ${night.label} booked")
         tap(p, name, DateNightRules.SKIP_LABEL, hasContentDescription("Skip ${night.label}"))
         until { cur()?.skipped == true }
         if (cur()?.skipped != true) fail("$name: Skip this one didn't skip ${night.label}")
         tap(p, name, DateNightRules.KEEP_LABEL, hasContentDescription("Keep ${night.label}"))
         until { cur()?.skipped == false }
         if (cur()?.skipped != false) fail("$name: Keep it didn't keep ${night.label}")
+        closeSheet(rowSheet)
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(DATE_NIGHT_EVENING_SHEET_TAG)) }
+        assertTouchTargets(name)
         val time = DateNightRules.START_CHOICES.first { it != v().startMin }
-        tap(p, name, LocalClock.formatMinute(time), hasText(LocalClock.formatMinute(time)))
+        tap(p, name, LocalClock.formatMinute(time), hasText(LocalClock.formatMinute(time)) and evening)
         until { v().startMin == time }
         if (v().startMin != time) fail("$name: the ${LocalClock.formatMinute(time)} chip left the start at ${v().startMin}")
         val weekday = if (v().weekday == 6) 4 else 6
-        tap(p, name, DateNightRules.WEEKDAY_CHOICES[weekday - 1], hasText(DateNightRules.WEEKDAY_CHOICES[weekday - 1]))
+        tap(p, name, DateNightRules.WEEKDAY_CHOICES[weekday - 1], hasText(DateNightRules.WEEKDAY_CHOICES[weekday - 1]) and evening)
         until { v().weekday == weekday && v().on }
         if (v().weekday != weekday || !v().on) fail("$name: the ${DateNightRules.WEEKDAY_CHOICES[weekday - 1]} chip didn't move the evening")
         val other = v().starts.firstOrNull { !it.chosen }
         if (other != null) {
-            tap(p, name, other.label, hasText(other.label))
+            tap(p, name, other.label, hasText(other.label) and evening)
             until { v().starts.firstOrNull { it.label == other.label }?.chosen == true }
-            if (v().starts.firstOrNull { it.label == other.label }?.chosen != true) fail("$name: Starts ${other.label} wasn't chosen")
+            if (v().starts.firstOrNull { it.label == other.label }?.chosen != true) fail("$name: First night ${other.label} wasn't chosen")
         }
-        assertTouchTargets(name)
-        tap(p, name, DateNightRules.OFF_LABEL, hasText(DateNightRules.OFF_LABEL))
+        tap(p, name, DateNightRules.OFF_LABEL, hasText(DateNightRules.OFF_LABEL) and evening)
         until { !v().on }
         if (v().on) fail("$name: Turn off left date night on")
     }

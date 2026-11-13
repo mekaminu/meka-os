@@ -3476,6 +3476,12 @@ final class CoreModel {
         return core.errandsPage(view: errands ?? ErrandView.companion.EMPTY, near: nil)
     }
 
+    /// Ask → Date night in the page shape (slice 11).
+    func dateNightPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.dateNightPage(view: dateNight ?? DateNightView.companion.EMPTY)
+    }
+
     /// Ask → Appointments in the page shape (slice 10).
     func appointmentsPage() -> LifePageView? {
         guard let core else { return nil }
@@ -6720,6 +6726,18 @@ final class CoreModel {
 
     /// The sheet closed: its line goes with it.
     func forgetDateNightSaid() { dateNightSaid = nil }
+
+    /// Booked (or Not booked yet) on a night's row in Ask → Date night (the page shape, slice 11): an Int64 and a Bool
+    /// cross, a String comes back. Navilife books nothing; it only stops Needs you asking.
+    func markDateNightBooked(day: Int64, booked: Bool) {
+        guard let core else { return }
+        if booked { MekaHaptics.light() } else { MekaHaptics.tick() }
+        Task {
+            do {
+                if let line = try await core.bookDateNight(day: day, booked: booked) { dateNightSaid = line }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
 
     // MARK: Life admin hour (slice 1)
 

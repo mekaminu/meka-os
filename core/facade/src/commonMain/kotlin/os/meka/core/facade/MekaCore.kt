@@ -5986,6 +5986,10 @@ class MekaCore(
         os.meka.core.domain.DateNightRules.view(dateNight.setting(), todayEpochDay()).summary
     }
 
+    /** Every page under Ask in one shape, slice 11: Ask → Date night as the page shape (both apps). */
+    fun dateNightPage(view: os.meka.core.domain.DateNightView = _dateNight.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.DateNightPageRules.page(view, todayEpochDay())
+
     /** Turns date night off: those evenings are free to plan again. */
     suspend fun dateNightOff(): Boolean = onCore { dateNight.off() }
 
