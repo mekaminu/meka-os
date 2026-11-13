@@ -56,6 +56,10 @@ data class PersonRow(
     val spoken: String,
     /** Which of the Fold's lists has them: "Family", "Always notify" or "Watched for requests" (the first that does). */
     val listed: String? = null,
+    /** The epoch day of the next birthday, for the page shape's tiles and Coming up; null when not in Gifts. */
+    val birthdayDay: Long? = null,
+    /** "turns 60" for that birthday, or null when the year isn't known. */
+    val birthdayAge: String? = null,
 )
 
 data class PeopleView(val rows: List<PersonRow>, val summary: String) {
@@ -203,7 +207,11 @@ object PeopleRules {
             birthday?.let { append(' ').append(it).append('.') }
             last?.let { append(' ').append(it).append('.') }
         }
-        return PersonRow(a.key, a.name, owed, promised, waiting, birthday, last, lit, spoken, a.listed)
+        val bDay = a.birthday?.let { GiftRules.next(it, today) }
+        return PersonRow(
+            a.key, a.name, owed, promised, waiting, birthday, last, lit, spoken, a.listed,
+            birthdayDay = bDay, birthdayAge = a.birthday?.let { o -> bDay?.let { GiftRules.age(o, it) } },
+        )
     }
 
     private fun tidy(name: String): String? {

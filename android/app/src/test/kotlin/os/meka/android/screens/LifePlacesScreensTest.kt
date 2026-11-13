@@ -17,6 +17,8 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -37,13 +39,16 @@ import os.meka.android.ask.ERRANDS_LIST_TAG
 import os.meka.android.ask.ErrandsPane
 import os.meka.android.ask.MEALS_LIST_TAG
 import os.meka.android.ask.MealsPane
+import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.android.ask.PEOPLE_LIST_TAG
+import os.meka.android.ask.PEOPLE_PERSON_SHEET_TAG
 import os.meka.android.ask.PeoplePane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.ErrandRules
 import os.meka.core.domain.MealRules
+import os.meka.core.domain.PeoplePageRules
 import os.meka.core.domain.PeopleRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -157,7 +162,12 @@ class LifePlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != PeopleRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nobody in")
                 if (fill != Fill.EMPTY && v.rows.isEmpty()) fail("$name: no person shown with a promise in")
-                v.rows.forEach { ScreenShots.assertShows(compose, name, it.name) }
+                // The page shape (slice 2): the three numbers, and Coming up's first row (or Everyone's when nothing's coming).
+                val page = core.peoplePage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, PeoplePageRules.COMING_EMPTY)
                 // The walk-through 2026-11-08 A8: a row due to chase says so in the head's words.
                 val chase = v.rows.sumOf { r -> r.waiting.count { it.due } }
                 if (chase > 0 && v.rows.none { it.owedLine?.contains("to chase") == true }) fail("$name: \"$chase to chase\" in the head but no row says it")
@@ -269,8 +279,9 @@ class LifePlacesScreensTest {
     }
 
     /**
-     * Works by hand, People: a tap on a person opens what's owed either way; each Kept is a 48 dp touch and takes its
-     * promise off; a second tap folds the person again.
+     * Works by hand, People (the page shape, slice 2): a tap on a person's row opens their sheet with what's owed either
+     * way; each Kept is a 48 dp touch and takes its promise off; Close folds the sheet; + Add → Something I promised adds
+     * a typed "Jordan: lend the ladder" to Lists → Promises under Jordan.
      */
     private fun peopleByHand(core: MekaCore) {
         val name = "people-by-hand"
@@ -279,9 +290,10 @@ class LifePlacesScreensTest {
         val casey = core.peopleView.value.rows.firstOrNull { it.name == "Casey" } ?: fail("$name: Casey isn't on People")
         val promise = casey.promised.firstOrNull() ?: fail("$name: nothing promised to Casey")
         val kept = hasContentDescription("Kept: ${promise.title}")
-        tap(p, name, "Casey", hasContentDescription(casey.spoken))
+        tap(p, name, "Casey", hasText("Casey"))
         until { shows(kept) }
-        if (!shows(kept)) fail("$name: tapping Casey didn't open what's owed")
+        if (!shows(kept)) fail("$name: tapping Casey didn't open their sheet")
+        if (!shows(hasTestTag(PEOPLE_PERSON_SHEET_TAG))) fail("$name: Casey's sheet isn't up")
         ScreenShots.assertShows(compose, name, "WAITING FOR")
         assertTouchTargets(name)
         tap(p, name, "Kept", kept)
@@ -292,9 +304,22 @@ class LifePlacesScreensTest {
         if (core.listsView.value.promised.any { it.id == promise.id }) fail("$name: Kept on People didn't keep it on Lists")
         val now = core.peopleView.value.rows.first { it.key == casey.key }
         val other = now.promised.firstOrNull() ?: fail("$name: Casey's other promise went too")
-        tap(p, name, "Casey", hasContentDescription(now.spoken))
+        until { shows(hasContentDescription("Kept: ${other.title}")) }
+        compose.onAllNodes(hasText("Close") and hasClickAction() and hasAnyAncestor(hasTestTag(PEOPLE_PERSON_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
         until { !shows(hasContentDescription("Kept: ${other.title}")) }
-        if (shows(hasContentDescription("Kept: ${other.title}"))) fail("$name: a second tap on Casey didn't fold him")
+        if (shows(hasContentDescription("Kept: ${other.title}"))) fail("$name: Close didn't fold Casey's sheet")
+        // + Add → Something I promised: typed "who: what" lands in Promises under that person.
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        val choice = PeoplePageRules.ADD_CHOICES.first { it.key == PeoplePageRules.ADD_PROMISE }
+        tap(p, name, choice.label, hasText(choice.label))
+        type(p, name, PeoplePageRules.hint(PeoplePageRules.ADD_PROMISE), "Jordan: lend the ladder")
+        until { core.listsView.value.promised.any { it.title == "Lend the ladder" } }
+        val added = core.listsView.value.promised.firstOrNull { it.title == "Lend the ladder" } ?: fail("$name: + Add didn't add the promise")
+        if (added.to != "Jordan") fail("$name: the promise went to \"${added.to}\", not Jordan")
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        ScreenShots.assertShows(compose, name, "Added your promise to Jordan: Lend the ladder")
     }
 
     /**

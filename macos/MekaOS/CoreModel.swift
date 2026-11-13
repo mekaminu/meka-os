@@ -3446,6 +3446,12 @@ final class CoreModel {
     // MARK: Every page under Ask in one shape (approved 2026-11-11, docs/design/look/LifePage.dc.html; Car first)
 
     /// The Mac's Car page: three numbers, the Dates card and + Add's choices, from the cars and timers already here.
+    /// Ask → Life → People in the page shape (slice 2): built from the synced People pane on the main actor (pure).
+    func peoplePage() -> LifePageView? {
+        guard let core, let people else { return nil }
+        return core.peoplePage(view: people)
+    }
+
     func carPage() -> LifePageView? {
         guard let core, let cars else { return nil }
         return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)
