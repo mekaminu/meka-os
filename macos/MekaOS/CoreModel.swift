@@ -3146,7 +3146,7 @@ final class CoreModel {
 
     /// The orb speed pass, slice 2: the turn's speaking is over (or the conversation stopped).
     func turnEnded() async {
-        try? await core?.turnEnded()
+        try? await core?.turnEnded(device: "Mac")
     }
 
     /// The orb speed pass, slice 2: Voice → Speed, the last 20 hellos and answers on this Mac (strings only).

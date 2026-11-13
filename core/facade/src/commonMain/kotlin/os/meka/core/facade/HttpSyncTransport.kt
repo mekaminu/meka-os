@@ -580,6 +580,14 @@ interface FoldPostureApi {
  * server or before this device's key is registered); `POST /v1/push/test` asks the server to push a test to this
  * device and returns its word ("sent", "no_address" …), or null from an older server.
  */
+/**
+ * Obi's response times (Needs Meka #43): `POST /v1/diagnostics/speed` sends this device's last day's summary, numbers
+ * only. False from an older server without the route or before this device's key is registered.
+ */
+interface DeviceSpeedApi {
+    suspend fun reportDeviceSpeed(report: os.meka.core.wire.DeviceSpeedCodec.Report): Boolean
+}
+
 interface NotifyDiagnosticsApi {
     suspend fun reportNotifyTrace(report: os.meka.core.wire.NotifyDiagnosticsCodec.Report): Boolean
     suspend fun testPush(): String?
@@ -679,7 +687,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi, LiveApi, FaceFilesApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi, LiveApi, FaceFilesApi, DeviceSpeedApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -1430,6 +1438,18 @@ class HttpSyncTransport(
 
     override suspend fun reportFoldPostures(report: os.meka.core.wire.FoldPostureCodec.Report): Boolean {
         val codec = os.meka.core.wire.FoldPostureCodec
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.REPORT_PATH, codec.encodeReport(report))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.REPORT_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.REPORT_PATH}")
+            else -> true
+        }
+    }
+
+    override suspend fun reportDeviceSpeed(report: os.meka.core.wire.DeviceSpeedCodec.Report): Boolean {
+        val codec = os.meka.core.wire.DeviceSpeedCodec
         prepare() // the route requires the device's signing key on the server
         val resp = send(codec.REPORT_PATH, codec.encodeReport(report))
         return when {

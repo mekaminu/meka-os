@@ -15,6 +15,7 @@ import os.meka.core.domain.UpdateFailureRules
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
+import os.meka.core.wire.DeviceSpeedCodec
 import os.meka.core.wire.FoldPostureCodec
 import os.meka.core.wire.ServerSpeedCodec
 import os.meka.core.wire.NotifyDiagnosticsCodec
@@ -50,7 +51,7 @@ object ReleasePublisher {
     const val LABEL = "GitHub build"
     const val AUTH_SCHEME = "Publisher"
     /** The only routes the publisher may call. */
-    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH, NotifyDiagnosticsCodec.LATEST_PATH, ServerSpeedCodec.PATH)
+    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH, NotifyDiagnosticsCodec.LATEST_PATH, ServerSpeedCodec.PATH, DeviceSpeedCodec.LATEST_PATH)
 
     /** A fresh key pair: (PKCS#8 private key, X.509 public key), both standard base64. */
     fun generateKeyPair(): Pair<String, String> {
@@ -205,6 +206,14 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
         return ServerSpeedCodec.decodeResponse(body)
     }
 
+    /** Needs Meka #43: each device's newest day's summary, newest first; null from a server without the route. */
+    suspend fun deviceSpeeds(): List<DeviceSpeedCodec.Report>? {
+        val (status, body) = send(DeviceSpeedCodec.LATEST_PATH, DeviceSpeedCodec.encodeLatestRequest())
+        if (status == 404) return null
+        if (status != 200) throw IllegalStateException("HTTP $status from ${DeviceSpeedCodec.LATEST_PATH}")
+        return DeviceSpeedCodec.decodeLatest(body)
+    }
+
     /** The phone's newest notification report with the server's last push; throws on a server without the route. */
     suspend fun notifications(): NotifyDiagnosticsCodec.Latest {
         val (status, body) = send(NotifyDiagnosticsCodec.LATEST_PATH, NotifyDiagnosticsCodec.encodeEmptyRequest())
@@ -302,6 +311,10 @@ object ReleasePublisherCli {
                     val turns = runCatching { client.talkSpeed() }
                         .getOrElse { println("::notice title=Talk speed::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
                     speedLines(turns, System.currentTimeMillis()).forEach(::println)
+                    // Needs Meka #43: one line per device, its own day's hellos and answers (numbers only).
+                    val devices = runCatching { client.deviceSpeeds() }
+                        .getOrElse { println("::notice title=Obi's speed (devices)::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    deviceSpeedLines(devices).forEach(::println)
                     0
                 }
                 "publisher-postures" -> {
@@ -513,6 +526,23 @@ object ReleasePublisherCli {
         val lines = os.meka.core.domain.ServerSpeedRules.lines(turns.map(TalkSpeed::domain), nowMs)
         if (lines.isEmpty()) return listOf("::notice title=Talk speed::no answers in the last day")
         return lines.map { "::notice title=Talk speed (server, last day)::$it".replace("%", "%25") }
+    }
+
+    /**
+     * Needs Meka #43: the build report's speed line per device ("Phone · 6 hellos avg 0.5 s, slowest 1.2 s (aim 0.6 s) ·
+     * 14 answers avg 1.7 s, …, sent 2026-11-13 08:00 UTC"), a warning when an average is over its aim; one notice when
+     * none has come.
+     */
+    fun deviceSpeedLines(reports: List<DeviceSpeedCodec.Report>?): List<String> {
+        if (reports == null) return listOf("::notice title=Obi's speed (devices)::this server doesn't take the devices' times yet")
+        if (reports.isEmpty()) return listOf("::notice title=Obi's speed (devices)::no device has sent its day's times yet")
+        return reports.map { r ->
+            val s = os.meka.core.domain.DeviceSpeedSummary(
+                r.device, r.sentAtMs, r.helloCount, r.helloAvgMs, r.helloMaxMs, r.answerCount, r.answerAvgMs, r.answerMaxMs,
+            )
+            val level = if (os.meka.core.domain.DeviceSpeedRules.overAim(s)) "warning" else "notice"
+            "::$level title=Obi's speed (devices, last day)::${os.meka.core.domain.DeviceSpeedRules.line(s)} · sent ${utc(r.sentAtMs)}".replace("%", "%25")
+        }
     }
 
     /** The job's lines for the Fold's posture report: one notice per change, newest first, else one notice. */

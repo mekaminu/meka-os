@@ -91,6 +91,7 @@ import os.meka.core.wire.TradingExportCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.TalkWarmCodec
+import os.meka.core.wire.DeviceSpeedCodec
 import os.meka.core.wire.FoldPostureCodec
 import os.meka.core.wire.ServerSpeedCodec
 import os.meka.core.wire.NotifyDiagnosticsCodec
@@ -154,6 +155,7 @@ fun Application.mekaSync(
     updateFailures: UpdateFailures? = null,
     /** The Fold's posture changes (bedside clock, slice 2); null leaves the routes out. */
     foldPostures: FoldPostures? = null,
+    deviceSpeeds: DeviceSpeeds? = null,
     /** The server's timing of each answer (talking to Obi like a conversation, slice 2); null keeps none and leaves its route out. */
     talkSpeed: TalkSpeed? = null,
     /** The phone's notification trace (notifications never seen, slice 2); null leaves the routes out. */
@@ -641,6 +643,26 @@ fun Application.mekaSync(
                 UpdateFailureCodec.decodeListRequest(body)
                 val list = withContext(Dispatchers.IO) { updateFailures.recent(who) }
                 call.respondText(UpdateFailureCodec.encodeList(list), ContentType.Application.Json)
+            }
+        }
+
+        if (deviceSpeeds != null) {
+            // Obi's response times (Needs Meka #43): a device sends its day's summary (keyed devices only; the publisher
+            // is refused), and the publisher (or a keyed device) reads the newest per device for the build report.
+            post(DeviceSpeedCodec.REPORT_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val report = DeviceSpeedCodec.decodeReport(body)
+                withContext(Dispatchers.IO) { deviceSpeeds.report(who, report) }
+                call.respondText("{}", ContentType.Application.Json)
+            }
+
+            post(DeviceSpeedCodec.LATEST_PATH) {
+                val body = call.boundedBody()
+                val who = call.releaseCaller(devices, verifier, body, publisher)
+                DeviceSpeedCodec.decodeLatestRequest(body)
+                val latest = withContext(Dispatchers.IO) { deviceSpeeds.latest(who) }
+                call.respondText(DeviceSpeedCodec.encodeLatest(latest), ContentType.Application.Json)
             }
         }
 
@@ -1491,7 +1513,7 @@ fun main(args: Array<String>) {
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
-                    foldPostures = FoldPostures(PostgresFoldPostureStore(ds)), talkSpeed = TalkSpeed(PostgresTalkSpeedStore(ds)),
+                    foldPostures = FoldPostures(PostgresFoldPostureStore(ds)), deviceSpeeds = DeviceSpeeds(PostgresDeviceSpeedStore(ds)), talkSpeed = TalkSpeed(PostgresTalkSpeedStore(ds)),
                     notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push, profile = { hh ->
                         opStore.latestFields(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)[AboutYouRules.ENTITY_ID]
                     }, assistantCalls = assistantCallsReader(opStore), mailChecks = { hh -> integrations?.mailReport(hh).orEmpty() },
@@ -1758,6 +1780,7 @@ object Migrations {
         28 to "/db/V28__talk_timing.sql",
         29 to "/db/V29__live_session.sql",
         30 to "/db/V30__live_call.sql",
+        31 to "/db/V31__device_speed.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

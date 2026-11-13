@@ -326,6 +326,7 @@ class MekaCore(
     private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
     private var foldPostureApi: FoldPostureApi? = transport as? FoldPostureApi
     private var notifyDiagnosticsApi: NotifyDiagnosticsApi? = transport as? NotifyDiagnosticsApi
+    private var deviceSpeedApi: DeviceSpeedApi? = transport as? DeviceSpeedApi
     private var voiceMessageApi: VoiceMessageApi? = transport as? VoiceMessageApi
     private var familyApi: FamilyApi? = transport as? FamilyApi
     /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
@@ -387,6 +388,8 @@ class MekaCore(
     private var turnWatch: os.meka.core.domain.TurnStopwatch? = null
     private var turnWallStart = 0L
     private var turnTraces: List<os.meka.core.domain.TurnTrace>? = null
+    /** Needs Meka #43: a day's summary on its way to the server (one at a time). */
+    private var deviceSpeedSending = false
 
     // Declared before Today: Today's timeline reads the booked sessions.
     private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
@@ -8783,7 +8786,7 @@ class MekaCore(
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
             numberLookupApi = transport as? NumberLookupApi; tradingExportApi = transport as? TradingExportApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
-            notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
+            notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi; deviceSpeedApi = transport as? DeviceSpeedApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
             recoveryApi = transport as? RecoveryApi; vaultFileApi = transport as? VaultFileApi; faceFilesApi = transport as? FaceFilesApi
         }
@@ -13149,8 +13152,40 @@ class MekaCore(
     /** A spoken question: his words ended [agoMs] ago; times the turn from then to the answer's voice. */
     suspend fun turnTalkBegan(agoMs: Long): Unit = onCore { beginTurn(os.meka.core.domain.TurnKind.TALK, agoMs.coerceIn(0L, 10_000L)) }
 
-    /** The turn's speaking is over, or the conversation stopped: its trace is kept (when its voice started). */
-    suspend fun turnEnded(): Unit = onCore { endTurn() }
+    /**
+     * The turn's speaking is over, or the conversation stopped: its trace is kept (when its voice started). Needs Meka
+     * #43: once a day the last day's times go to Navilife's own server as numbers only ([os.meka.core.domain.DeviceSpeedRules],
+     * [device] "phone" or "Mac"), for the daily build report's speed line; offline or refused, the next turn tries again.
+     */
+    suspend fun turnEnded(device: String = "phone") {
+        val summary = onCore {
+            endTurn()
+            if (deviceSpeedSending || deviceSpeedApi == null) return@onCore null
+            val rules = os.meka.core.domain.DeviceSpeedRules
+            val last = runCatching { localStore.transaction { localStore.localValue(rules.SENT_KEY) } }.getOrNull()?.toLongOrNull()
+            val now = nowMs()
+            if (!rules.due(last, now)) return@onCore null
+            rules.summary(loadTurnTraces(), device, now)?.also { deviceSpeedSending = true }
+        } ?: return
+        val api = deviceSpeedApi
+        val sent = api != null && try {
+            api.reportDeviceSpeed(
+                os.meka.core.wire.DeviceSpeedCodec.Report(
+                    summary.device, summary.sentAtMs, summary.helloCount, summary.helloAvgMs, summary.helloMaxMs,
+                    summary.answerCount, summary.answerAvgMs, summary.answerMaxMs,
+                ),
+            )
+        } catch (e: CancellationException) {
+            onCore { deviceSpeedSending = false }
+            throw e
+        } catch (e: Exception) { false }
+        onCore {
+            deviceSpeedSending = false
+            if (sent) runCatching {
+                localStore.transaction { localStore.setLocalValue(os.meka.core.domain.DeviceSpeedRules.SENT_KEY, summary.sentAtMs.toString()) }
+            }
+        }
+    }
 
     /** Settings → Navilife's voice → Speed: the last 20 turns, newest first, with a summary ([device]: "phone" or "Mac"). */
     suspend fun turnSpeed(device: String = "phone"): os.meka.core.domain.TurnSpeedView = onCore {
