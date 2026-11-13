@@ -12,6 +12,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -33,6 +35,7 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.BINS_LIST_TAG
+import os.meka.android.ask.BINS_ROW_SHEET_TAG
 import os.meka.android.ask.BinsPane
 import os.meka.android.ask.GIFTS_LIST_TAG
 import os.meka.android.ask.GiftsPane
@@ -44,6 +47,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.BinRules
+import os.meka.core.domain.BinsPageRules
 import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.GiftRules
 import os.meka.core.domain.GiftsPageRules
@@ -206,6 +210,12 @@ class PlansPlacesScreensTest {
                 v.rows.filter { it.name == "Black bin" || it.name == "Recycling" }.forEach { r ->
                     if ("Tuesday" !in r.line) fail("$name: ${r.name} reads \"${r.line}\", typed as a Tuesday")
                 }
+                // The page shape (slice 5): the three numbers, and Your bins' first row (or its empty line).
+                val page = core.binsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, BinsPageRules.YOURS_EMPTY)
             }
             Place.READING -> {
                 val v = core.readingView.value
@@ -377,19 +387,31 @@ class PlansPlacesScreensTest {
         if (cur() != null) fail("$name: Remove left ${row.title}")
     }
 
-    /** Works by hand, Bins: Remove takes a bin off, the field adds it back, a reminder chip moves the evening's heads-up. */
+    /**
+     * Works by hand, Bins (the page shape, slice 5): a bin's row opens its sheet and Remove takes it off; + Add → A bin
+     * adds it back from the field; the Reminder row's sheet holds the times and a chip moves the evening's heads-up;
+     * the Council's dates row's sheet holds the chip that opens the file picker for the council's bin calendar.
+     */
     private fun binsByHand(core: MekaCore) {
         val name = "bins-by-hand"
         val p = Place.BINS
         assertTouchTargets(name)
         val caddy = core.binsView.value.rows.firstOrNull { it.name.startsWith("Food") } ?: fail("$name: no food caddy")
-        tap(p, name, "Remove", hasContentDescription("Remove ${caddy.name}"))
+        val remove = hasContentDescription("Remove ${caddy.name}")
+        tap(p, name, caddy.name, hasText(caddy.name))
+        until { shows(remove) }
+        if (!shows(remove)) fail("$name: tapping ${caddy.name} didn't open its sheet")
+        assertTouchTargets(name)
+        tap(p, name, "Remove", remove)
         until { core.binsView.value.rows.none { it.id == caddy.id } }
         if (core.binsView.value.rows.any { it.id == caddy.id }) fail("$name: Remove left ${caddy.name}")
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        tap(p, name, "A bin", hasText("A bin"))
         type(p, name, BinRules.ADD_DESCRIPTION, "Food caddy every Tuesday")
         until { core.binsView.value.rows.any { it.name == caddy.name } }
         if (core.binsView.value.rows.none { it.name == caddy.name }) fail("$name: Done on the field added no bin")
         val before = core.binsView.value.remindMinute
+        tap(p, name, BinsPageRules.REMINDER, hasText(BinsPageRules.REMINDER))
         val off = hasContentDescription("Bins reminder at", substring = true) and
             SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Off")
         reach(p, name, off, "reminder chip that's off")
@@ -397,7 +419,10 @@ class PlansPlacesScreensTest {
         tap(p, name, "a reminder chip", off)
         until { core.binsView.value.remindMinute != before }
         if (core.binsView.value.remindMinute == before) fail("$name: the reminder chip didn't move the heads-up")
-        // Council dates: the chip that opens the file picker for the council's bin calendar is there and reachable.
+        tap(p, name, "the sheet's Close", hasText("Close") and hasAnyAncestor(hasTestTag(BINS_ROW_SHEET_TAG)))
+        until { !shows(off) }
+        // Council dates: the chip that opens the file picker for the council's bin calendar is in its row's sheet.
+        tap(p, name, BinsPageRules.COUNCIL, hasText(BinsPageRules.COUNCIL))
         reach(p, name, hasContentDescription("Use the council's dates", substring = true), "Use the council's dates")
         assertTouchTargets(name)
     }

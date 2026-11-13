@@ -5,19 +5,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,13 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,31 +50,34 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
-import os.meka.android.today.SectionLabel
 import os.meka.android.work.SettingChip
 import os.meka.core.domain.BinAdded
 import os.meka.core.domain.BinCouncilRules
-import os.meka.core.domain.BinRow
 import os.meka.core.domain.BinRules
+import os.meka.core.domain.BinsPageRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val BINS_LIST_TAG = "bins-list"
+const val BINS_ROW_SHEET_TAG = "bins-row-sheet"
+const val BINS_ALL_SHEET_TAG = "bins-all-sheet"
 
 /**
- * Ask → More → Bins (bin days, slice 1): each bin typed once with its day — "Black bin Tue fortnightly from 13 Oct",
- * "Food caddy every Tuesday" — a row per bin with its pattern and next collection (a day later after a bank holiday),
- * each with Remove. Slice 3: one-offs typed in the same field ("Black bin Sat 2 Jan instead of 29 Dec", "No black bin
- * 29 Dec") list under ONE-OFFS, each with Remove (the collection goes on its usual day again). The evening before, Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
- * Completeness: REMINDER's chips (17:00 to 21:00) move that heads-up, synced so the Mac reminds at the same time.
- * Council dates (2026-11-02): COUNCIL'S DATES → "Use the council's dates" opens Android's file picker for the bin
- * calendar (.ics) downloaded from the council's bin-day page; it is read here (nothing sent) and the bins follow the
- * council's dates on both devices; "Use my own days" goes back to what he typed.
+ * Ask → Life → Bins in the page shape (every page under Ask in one shape, slice 5; approved 2026-11-11,
+ * `docs/design/look/LifePage.dc.html`): the title with its ⓘ, one gold + Add (A bin · A one-off, each a field in the
+ * sheet: "Food caddy every Tuesday", "Black bin Tue fortnightly from 13 Oct", "No black bin 29 Dec"; The council's
+ * dates opens Android's file picker for the bin calendar (.ics) downloaded from the council's bin-day page, read here,
+ * nothing sent), three numbers (the next collection, the bins, the one-offs to come), then Your bins (soonest first,
+ * brass for tonight's), One-offs and Reminder and dates. A bin's row opens its sheet (pattern, next collection,
+ * Remove); a one-off's its Remove (the collection goes on its usual day again); Reminder its times (17:00 to 21:00,
+ * synced so the Mac reminds at the same time); Council's dates Use the council's dates / Use my own days. The evening
+ * before, Today says "Black bin and food caddy out tonight" and a heads-up comes at the reminder's time.
  *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
- * cross-fade (a refused line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with the list's
- * item motion; Add gives a light haptic (a tick when refused), Remove a tick. Reduced motion: cross-fades.
+ * Motion: the title travels in from Ask's tile (shared title); the header, summary, tiles and cards appear in turn;
+ * cards move with the list's item motion; the ⓘ's words unfold and the sheets rise on the expand spring
+ * (LifePageParts); the added line cross-fades over the summary (a refused line lit in the accent, in the sheet); an add
+ * gives a light haptic (a tick when refused), Remove and a time a tick. Reduced motion: cross-fades.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -84,6 +86,12 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val v by core.binsView.collectAsState()
+    val page = remember(v) { core.binsPage(v) }
+    var infoOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var addChosen by remember { mutableStateOf<String?>(null) }
+    var allOpen by remember { mutableStateOf(false) }
+    var rowKey by remember { mutableStateOf<String?>(null) }
     var said by remember { mutableStateOf<BinAdded?>(null) }
     val context = LocalContext.current
     val pickCalendar = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -102,139 +110,163 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
             said = r
         }
     }
+    fun openCouncilPicker() = pickCalendar.launch(arrayOf("text/calendar", "text/x-vcalendar", "application/ics", "application/octet-stream", "text/plain"))
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "bins-said",
     )
 
-    LazyColumn(
-        Modifier.fillMaxSize().testTag(BINS_LIST_TAG),
-        contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        item(key = "close") {
-            Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        }
-        item(key = "title") {
-            Text("Bins", style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.BINS)).appear(rememberAppearance(0)))
-        }
-        item(key = "summary") {
-            Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "bins-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().testTag(BINS_LIST_TAG),
+            contentPadding = PaddingValues(MekaSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            item(key = "close") {
+                Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
+            }
+            item(key = "title") {
+                LifePageHeader(
+                    page.title, page.info, infoOpen,
+                    titleModifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.BINS)).appear(rememberAppearance(0)),
+                    onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                    onAdd = { haptics.tick(); addChosen = null; said = null; addOpen = true },
+                )
+            }
+            item(key = "summary") {
+                // The last thing done (added, a one-off, the council's dates) cross-fades over the next collection.
+                val line = said?.takeIf { !it.refused && !addOpen }?.line ?: v.summary
+                Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "bins-summary") { s ->
+                    Text(s, style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.appear(rememberAppearance(1)).semantics { liveRegion = LiveRegionMode.Polite })
+                }
+            }
+            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            page.cards.forEachIndexed { i, c ->
+                item(key = "card-${c.key}") {
+                    LifePageCard(
+                        c, Modifier.animateItem().appear(rememberAppearance(3 + i)),
+                        onMore = { haptics.tick(); allOpen = true },
+                        onRow = { r -> haptics.tick(); said = null; rowKey = r.key },
+                    )
+                }
             }
         }
-        item(key = "field") {
-            Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(BinRules.ADD_HINT, description = BinRules.ADD_DESCRIPTION) { text ->
+        // + Add: a bin or a one-off typed once, or the council's own calendar file.
+        LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+            AddChoiceRows(page.addChoices, addChosen) { c ->
+                haptics.tick(); said = null
+                if (BinsPageRules.takesText(c.key)) addChosen = c.key
+                else { addOpen = false; openCouncilPicker() }
+            }
+            addChosen?.let { choice ->
+                Field(BinsPageRules.hint(choice), description = BinRules.ADD_DESCRIPTION) { text ->
                     scope.launch {
                         val r = runCatching { core.addBin(text) }.getOrNull()
-                        if (r?.refused == false) haptics.light() else haptics.tick()
-                        said = r
+                        if (r?.refused == false) { haptics.light(); said = r; addOpen = false }
+                        else { haptics.tick(); said = r ?: BinAdded(BinRules.NOT_READ, true) }
                     }
                 }
-                Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "bins-added") { r ->
-                    r?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
+                said?.takeIf { it.refused }?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
+            }
+        }
+        // See all: every bin, a tap opens its sheet.
+        LifeSheet(allOpen, BinsPageRules.YOURS, BINS_ALL_SHEET_TAG, onClose = { allOpen = false }) {
+            v.rows.forEach { r ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { haptics.tick(); allOpen = false; rowKey = BinsPageRules.binKey(r.id) }
+                        .semantics(mergeDescendants = true) { contentDescription = r.spoken }
+                        .minTouch().padding(vertical = MekaSpace.xs),
+                ) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
-        if (v.rows.isNotEmpty()) {
-            item(key = "label") {
-                SectionLabel("YOUR BINS", Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(3)))
-            }
+        // A row's sheet: a bin, a one-off, the reminder's times or the council's dates.
+        val key = rowKey
+        val bin = key?.let { BinsPageRules.bin(v, it) }
+        val oneOff = key?.let { BinsPageRules.oneOff(v, it) }
+        val sheetTitle = when {
+            bin != null -> bin.name
+            oneOff != null -> oneOff.name
+            key == BinsPageRules.KEY_REMIND -> BinsPageRules.REMINDER
+            key == BinsPageRules.KEY_COUNCIL -> BinsPageRules.COUNCIL
+            else -> BinsPageRules.TITLE
         }
-        itemsIndexed(v.rows, key = { _, r -> "bin-${r.id}" }) { i, r ->
-            BinRowView(r, Modifier.animateItem().appear(rememberAppearance(4 + i))) {
-                haptics.tick()
-                scope.launch { runCatching { core.removeBin(r.id) } }
-            }
-        }
-        // Slice 3: the one-offs still to come ("Sat 2 Jan instead of Wed 30 Dec"), each with Remove to take it back.
-        if (v.oneOffs.isNotEmpty()) {
-            item(key = "one-offs") {
-                SectionLabel("ONE-OFFS", Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-        }
-        itemsIndexed(v.oneOffs, key = { _, r -> "move-${r.id}" }) { i, r ->
-            BinRowView(r, Modifier.animateItem().appear(rememberAppearance(4 + v.rows.size + i)), "Remove the one-off for ${r.name}, ${r.line}") {
-                haptics.tick()
-                scope.launch { runCatching { core.removeBinMove(r.id) } }
-            }
-        }
-        // Completeness: when the evening reminder comes (synced, both devices); Today's line from 16:00 is unchanged.
-        item(key = "remind-label") {
-            SectionLabel("REMINDER", Modifier.animateItem().padding(top = MekaSpace.m))
-        }
-        item(key = "remind") {
-            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    v.remindChoices.forEach { m ->
-                        val label = LocalClock.formatMinute(m)
-                        SettingChip(label, m == v.remindMinute, "Bins reminder at $label") {
-                            haptics.tick()
-                            scope.launch {
-                                runCatching { core.setBinReminder(m) }.getOrNull()?.let { said = BinAdded(it, refused = false) }
+        val sheetOpen = bin != null || oneOff != null || key == BinsPageRules.KEY_REMIND || key == BinsPageRules.KEY_COUNCIL
+        LifeSheet(sheetOpen, sheetTitle, BINS_ROW_SHEET_TAG, onClose = { rowKey = null }) {
+            when {
+                bin != null -> {
+                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = bin.spoken },
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text(bin.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        bin.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+                    }
+                    Text("To change its day, + Add it again with the same name.", style = MekaType.caption, color = Meka.colors.textTertiary)
+                    RemoveLink("Remove ${bin.name}") {
+                        haptics.tick(); rowKey = null
+                        scope.launch { runCatching { core.removeBin(bin.id) } }
+                    }
+                }
+                oneOff != null -> {
+                    Text(oneOff.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text("Remove it and the collection goes on its usual day again.", style = MekaType.caption, color = Meka.colors.textTertiary)
+                    RemoveLink("Remove the one-off for ${oneOff.name}, ${oneOff.line}") {
+                        haptics.tick(); rowKey = null
+                        scope.launch { runCatching { core.removeBinMove(oneOff.id) } }
+                    }
+                }
+                key == BinsPageRules.KEY_REMIND -> {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        v.remindChoices.forEach { m ->
+                            val label = LocalClock.formatMinute(m)
+                            SettingChip(label, m == v.remindMinute, "Bins reminder at $label") {
+                                haptics.tick()
+                                scope.launch {
+                                    runCatching { core.setBinReminder(m) }.getOrNull()?.let { said = BinAdded(it, refused = false) }
+                                }
                             }
                         }
                     }
-                }
-                Crossfade(v.remindLine, animationSpec = MekaMotion.appear(reduced), label = "bins-remind") { line ->
-                    Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
-                }
-            }
-        }
-        // Council dates: the council's own calendar file, read here.
-        item(key = "council-label") {
-            SectionLabel("COUNCIL'S DATES", Modifier.animateItem().padding(top = MekaSpace.m))
-        }
-        item(key = "council-use") {
-            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                v.councilLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(if (v.councilLine == null) "Use the council's dates" else "Pick a newer calendar", false,
-                        "Use the council's dates: pick the bin calendar file from your council") {
-                        haptics.tick()
-                        pickCalendar.launch(arrayOf("text/calendar", "text/x-vcalendar", "application/ics", "application/octet-stream", "text/plain"))
+                    Crossfade(v.remindLine, animationSpec = MekaMotion.appear(reduced), label = "bins-remind") { line ->
+                        Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
-                    if (v.councilLine != null) {
-                        SettingChip("Use my own days", false, "Use the bin days you typed instead of the council's") {
-                            haptics.tick()
-                            scope.launch {
-                                runCatching { core.useTypedBins() }.getOrNull()?.let { said = BinAdded(it.line, it.refused) }
+                }
+                key == BinsPageRules.KEY_COUNCIL -> {
+                    v.councilLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                    Text(v.footLine, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        SettingChip(if (v.councilLine == null) "Use the council's dates" else "Pick a newer calendar", false,
+                            "Use the council's dates: pick the bin calendar file from your council") {
+                            haptics.tick(); rowKey = null
+                            openCouncilPicker()
+                        }
+                        if (v.councilLine != null) {
+                            SettingChip("Use my own days", false, "Use the bin days you typed instead of the council's") {
+                                haptics.tick()
+                                scope.launch {
+                                    runCatching { core.useTypedBins() }.getOrNull()?.let { said = BinAdded(it.line, it.refused) }
+                                }
                             }
                         }
                     }
+                    said?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
                 }
             }
-        }
-        item(key = "council") {
-            Text(v.footLine, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
 }
 
 @Composable
-private fun BinRowView(row: BinRow, modifier: Modifier, removeLabel: String = "Remove ${row.name}", onRemove: () -> Unit) {
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.spoken },
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(row.name, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-            row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
-        }
-        Text(
-            "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = removeLabel }
-                // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
-                .minTouch().padding(horizontal = MekaSpace.xs),
-        )
-    }
+private fun RemoveLink(label: String, onRemove: () -> Unit) {
+    Text(
+        "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onRemove)
+            .semantics { contentDescription = label }
+            // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
+            .minTouch().padding(horizontal = MekaSpace.xs),
+    )
 }

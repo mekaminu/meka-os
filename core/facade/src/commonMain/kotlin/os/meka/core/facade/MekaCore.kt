@@ -5256,6 +5256,13 @@ class MekaCore(
         os.meka.core.domain.GiftsPageRules.page(view, ZoneCalendar(timeZone).epochDayOf(nowMs()))
 
     /**
+     * Ask → Life → Bins in the page shape (every page under Ask in one shape, slice 5): the next collection, the bins
+     * and the one-offs, then Your bins, One-offs and Reminder and dates ([os.meka.core.domain.BinsPageRules.page]).
+     */
+    fun binsPage(view: os.meka.core.domain.BinsView = _bins.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.BinsPageRules.page(view, ZoneCalendar(timeZone).epochDayOf(nowMs()))
+
+    /**
      * Car and parking, slice 5: what the share sheet offers for shared text that is a parking confirmation (RingGo,
      * JustPark, PayByPhone…), read on the device: "Parking timer until 15:30 · RingGo 81234", the car (from its
      * registration in the text, or the only car) or the choices, or "That parking ended at 15:30 …". Null when the

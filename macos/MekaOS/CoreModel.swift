@@ -3458,6 +3458,12 @@ final class CoreModel {
         return core.giftsPage(view: gifts)
     }
 
+    /// Ask → Life → Bins in the page shape (every page under Ask in one shape, slice 5).
+    func binsPage() -> LifePageView? {
+        guard let core, let bins else { return nil }
+        return core.binsPage(view: bins)
+    }
+
     func carPage() -> LifePageView? {
         guard let core, let cars else { return nil }
         return core.carPageForMac(cars: cars, timers: parkingTimers ?? TimersView.companion.EMPTY)

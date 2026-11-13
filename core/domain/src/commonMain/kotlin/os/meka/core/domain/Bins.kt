@@ -72,7 +72,13 @@ data class BinItem(
 }
 
 /** A row in the Bins pane: "Black bin" · "Every other Tuesday" · "Next: Tue 13 Oct" (or "Tomorrow · a day later for the bank holiday"). */
-data class BinRow(val id: String, val name: String, val line: String, val note: String?, val spoken: String)
+data class BinRow(
+    val id: String, val name: String, val line: String, val note: String?, val spoken: String,
+    /** The next collection's day (page shape: the right-hand day and the first number), or null for a one-off row. */
+    val nextDay: Long? = null,
+    /** "a day later for the bank holiday" on the next collection, or null. */
+    val shiftNote: String? = null,
+)
 
 /** The evening before a collection: Today's header, "Black bin and food caddy out tonight". */
 data class BinLine(val text: String, val spoken: String)
@@ -441,7 +447,7 @@ object BinRules {
             val next = next(b, today, holidays)
             val note = next?.let { "Next: ${dayWord(it, today)}" + (note(b, it)?.let { n -> " · $n" } ?: "") }
             val line = patternLabel(b) + if (b.council) " · council dates" else ""
-            BinRow(b.id, b.name, line, note, listOfNotNull(b.name, line, note).joinToString(". "))
+            BinRow(b.id, b.name, line, note, listOfNotNull(b.name, line, note).joinToString(". "), next, next?.let { note(b, it) })
         }
         val firstDay = bins.mapNotNull { next(it, today, holidays) }.minOrNull()
         val summary = firstDay?.let { "Next: ${names(onDay(bins, it, holidays))} · ${dayWord(it, today)}" } ?: EMPTY_LINE
