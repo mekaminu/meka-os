@@ -6115,3 +6115,15 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Mac: `ListsScreen` the same; + Add unfolds the six choices and the chosen form under the header; `AddWaitingRow` takes its way from the choice; each add row calls back so the form folds away and the tab switches; `CoreModel.listsPage`.
 - Help (`docs/help/lists.md`, HelpIndex), motion catalogue's Life page shape row.
 - Tests: `ListsPageTest` (empty lists in words, promises due lit, the next renewal, cancel-by and overdue lead lit, shopping count, every choice lands on its tab); `ListsScreensTest` adds through + Add → Something I'm waiting for and + Add → Shopping.
+
+## One voice for Obi everywhere
+
+### Slice 1 (2026-11-13, server): Gemini speech generation in Live's voices
+- Route (a) from the item, built: `GeminiSpeech` (backend `GeminiSpeech.kt`) calls Google's `generateContent` on the speech model (`gemini-2.5-flash-preview-tts`, `MEKA_SPEECH_GEMINI_MODEL` overrides) with the key from the Live secret (`MEKA_GEMINI_SECRET`, read at use time, in a header, never logged), the prebuilt voice by name (Live's list) and a British English style line ahead of the words.
+- `SpeechService.say`: a request naming one of Live's voices that Chirp 3 HD didn't say goes to Gemini; on a refusal, a timeout (3.5 s) or a spent AI budget, the default Polly voice says it once and Gemini rests (the same latch as Google's: a failure, or two timeouts in a row, 15 minutes). `MEKA_SPEECH_GEMINI=off` stops it.
+- Clips: Google's 24 kHz PCM wrapped as WAV (`WavClip`): 16-bit while it fits `SpeechCodec.MAX_AUDIO_BYTES` (about 22 s), G.711 μ-law up to about 45 s, else Polly. Sent with the same raw-audio content type so the devices on the Fold and the Mac play it unchanged (MediaPlayer and AVAudioPlayer read the clip itself, not the label).
+- Cost: in the AI budget as `voice.gemini` (shown under Voice) at list price from Google's token counts ($0.50/M in, $10/M audio out), estimated from the clip's length when Google gives none.
+- Obi's face: Polly's neural mouth sounds for the same words, fitted to the WAV's length.
+- Report: the voice line ends " · Gemini voice (model) on · probe clip in Charon n KB, n ms long, in n ms" or why it failed.
+- Devices unchanged: they ask for Live's voice while Live is on (OneVoiceRules), so those read-outs are Gemini's now; Live off still asks for the chosen/default voice until slice (5).
+- Tests: `GeminiSpeechTest` (the request and key header, the British style, the budget's figure, non-Live voices and no key stay with Polly, a refusal falls back once and rests, timeouts, a spent budget, lenient parsing, the WAV fitting and μ-law points, the report).

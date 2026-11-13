@@ -357,6 +357,12 @@ class SpeechService(
      * free tier, so they cost nothing and aren't counted. Null (no AI layer): Polly's own [capChars] only, as before.
      */
     private val budget: AiBudget? = null,
+    /**
+     * One voice for Obi everywhere (2026-11-13): Gemini speech generation in Live's voices ([GeminiSpeech]). A request
+     * for one of Live's voices ("Charon") that Chirp 3 HD doesn't offer here is said by it, metered in the AI budget as
+     * [GEMINI_FEATURE]; when it fails, is slow or the budget is spent, the default Polly voice says it once instead.
+     */
+    private val gemini: SpeechEngine? = null,
 ) {
     private var cached: Pair<Long, List<SpeechCodec.Voice>>? = null
     private var googleCached: Pair<Long, List<SpeechCodec.Voice>>? = null
@@ -455,6 +461,8 @@ class SpeechService(
                 }
             }
         }
+        // One voice for Obi: one of Live's voices that Chirp didn't say is Gemini's, before Polly stands in.
+        geminiSaid(r, default)?.let { return it }
         val voice = if (wanted.provider == SpeechCodec.POLLY) wanted else default
         if (usage.used(m) + chars > capChars) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER))
         if (budget?.over() == true) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = BUDGET_OVER))
@@ -473,6 +481,54 @@ class SpeechService(
         val visemes = marking?.let { f -> markedUp(f, chars, voice.engine, audio) }
         return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine, visemes = visemes), audio)
     }
+
+    /**
+     * [r] in Gemini's voice when it asks for one of Live's voices and Gemini is set up, not resting after a failure and
+     * the AI budget isn't spent; null hands it to Polly. The mouth sounds, when asked for, are Polly's (neural) for the
+     * same words fitted to the clip's length. Never throws.
+     */
+    private fun geminiSaid(r: SpeechCodec.Request, polly: SpeechCodec.Voice): Said? {
+        val g = gemini ?: return null
+        val name = GeminiSpeech.liveVoice(r.voice) ?: return null
+        if (!runCatching { g.configured() }.getOrDefault(false)) return null
+        if (budget?.over() == true) return null
+        if (EngineLatchRules.useFallback(geminiLatch, nowMs())) return null
+        val chars = r.text.length.toLong()
+        val m = month()
+        val marker = engine
+        val marking = if (r.visemes && marker != null && usage.used(m) + chars <= capChars) {
+            java.util.concurrent.CompletableFuture.supplyAsync { marker.visemes(r.text, polly.id, NEURAL) }
+        } else null
+        val tried = runCatching { g.synthesize(r.text, name, GeminiSpeech.ENGINE) }
+        val audio = tried.getOrNull()?.takeIf { it.isNotEmpty() && it.size <= SpeechCodec.MAX_AUDIO_BYTES }
+        synchronized(latchLock) {
+            val now = nowMs()
+            geminiLatch = if (audio != null) EngineLatchRules.worked(geminiLatch, now)
+            else EngineLatchRules.failed(geminiLatch, now, timeout = isTimeout(tried.exceptionOrNull()))
+        }
+        if (audio == null) {
+            marking?.cancel(false)
+            geminiFailedAtMs = nowMs()
+            geminiFailedWhy = failedWhy(tried.exceptionOrNull())
+            return null
+        }
+        runCatching {
+            val tokens = (g as? GeminiSpeech)?.lastTokens ?: GeminiSpeech.estimateTokens(r.text, ((WavClip.ms(audio) ?: 0L) * GeminiSpeech.RATE * 2 / 1000).toInt(), GeminiSpeech.RATE)
+            budget?.recordCost(GEMINI_FEATURE, GeminiSpeech.microUsd(tokens))
+        }
+        val visemes = marking?.let { f ->
+            val marks = runCatching { f.get(MARKS_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrElse { f.cancel(false); null }
+            marks?.takeIf { it.isNotEmpty() }?.let {
+                runCatching { usage.add(m, chars) }
+                meterPolly(chars, NEURAL)
+                SpeechCodec.encodeMarks(WavClip.ms(audio)?.let { ms -> fitMarks(it, ms) } ?: it)
+            }
+        }
+        return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, WAV, name, GeminiSpeech.ENGINE, visemes = visemes), audio)
+    }
+
+    /** Whether Polly has Gemini's job now (Gemini is resting after a failure). */
+    fun geminiSwitched(): Boolean = geminiLatch.switched
 
     /**
      * The mouth sounds from [f] (waited for within [MARKS_WAIT_MS]; the clip never waits longer), metered like a clip
@@ -553,7 +609,30 @@ class SpeechService(
      * listed and how many, a probe clip of [PROBE_LINE] in the first British one (a few metered characters on Google's
      * free tier, skipped past [googleFallbackAt]), this month's Google characters, and Polly's state. Never throws.
      */
-    fun report(): String {
+    fun report(): String = googleReport() + geminiReport()
+
+    /**
+     * " · Gemini voice …" for the report (one voice for Obi): a probe clip of [PROBE_LINE] in Obi's Live voice (a few
+     * tokens in the AI budget), its size and time, or why it failed; "" when Gemini isn't set up here. Never throws.
+     */
+    fun geminiReport(): String {
+        val g = gemini ?: return ""
+        if (!runCatching { g.configured() }.getOrDefault(false)) return " · Gemini voice off · no key"
+        val voice = os.meka.core.domain.LiveModeRules.DEFAULT_VOICE
+        val model = (g as? GeminiSpeech)?.model?.let { " ($it)" } ?: ""
+        if (budget?.over() == true) return " · Gemini voice$model: probe skipped · AI budget spent"
+        val started = System.nanoTime()
+        return runCatching { g.synthesize(PROBE_LINE, voice, GeminiSpeech.ENGINE) }.fold(
+            { clip ->
+                runCatching { budget?.recordCost(GEMINI_FEATURE, GeminiSpeech.microUsd((g as? GeminiSpeech)?.lastTokens ?: GeminiSpeech.estimateTokens(PROBE_LINE, 0, GeminiSpeech.RATE))) }
+                " · Gemini voice$model on · probe clip in $voice ${(clip.size + 1023) / 1024} KB, ${WavClip.ms(clip) ?: "?"} ms long, in ${(System.nanoTime() - started) / 1_000_000} ms" +
+                    (if (geminiLatch.switched) " · Polly standing in since a failure" else "")
+            },
+            { e -> geminiFailedAtMs = nowMs(); geminiFailedWhy = failedWhy(e); " · Gemini voice$model: probe clip failed (${failedWhy(e)})" },
+        )
+    }
+
+    private fun googleReport(): String {
         val polly = if (engine == null) "Polly off" else runCatching { pollyOffered().size }.fold({ "Polly $it voices" }, { "Polly unreachable" })
         val g = google
         if (g == null || !runCatching { g.configured() }.getOrDefault(false)) return "Google voice off · no key · $polly"
@@ -671,6 +750,20 @@ class SpeechService(
         const val BUDGET_OVER = "This month's AI budget is used up; the device's own voice speaks until the 1st"
         /** The AI budget's feature for Navilife's voice (the apps show it as Voice, counted in clips). */
         const val VOICE_FEATURE = "voice.polly"
+        /** Gemini's read-outs in the AI budget (shown with Polly's under Voice). */
+        const val GEMINI_FEATURE = "voice.gemini"
+        /** A Gemini clip's format: WAV ([WavClip]); devices play it as they play MP3. */
+        const val WAV = "wav"
+
+        /** Why a Gemini clip didn't come, in a few plain words (never Google's free text). */
+        fun failedWhy(e: Throwable?): String = when {
+            e == null -> "no audio"
+            isTimeout(e) -> "too slow"
+            e.message?.startsWith("generate 4") == true -> "refused (${e.message?.removePrefix("generate ")?.take(40)})"
+            e.message?.startsWith("generate ") == true -> "Google's error (${e.message?.removePrefix("generate ")?.take(40)})"
+            e.message == "clip too long" -> "clip too long"
+            else -> "couldn't reach Google"
+        }
         /** What [warm] says once at start (metered like any clip). */
         const val WARM_LINE = "Hello."
         /** How often the background refresh reads the voice list (well inside the six hours a request would wait). */
@@ -732,10 +825,13 @@ fun speechFromEnv(ds: DataSource, budget: AiBudget? = null): SpeechService? {
     val speechSecret = System.getenv("MEKA_SPEECH_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
     val mapsSecret = System.getenv("MEKA_MAPS_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
     val google = if (speechSecret != null || mapsSecret != null) GoogleSpeech.fromSecrets(speechSecret, mapsSecret) else null
+    // One voice for Obi everywhere: Live's voices through the Gemini key Live already uses (`MEKA_SPEECH_GEMINI=off` stops it).
+    val gemini = System.getenv("MEKA_GEMINI_SECRET")?.takeIf { it.isNotBlank() && System.getenv("MEKA_SPEECH_GEMINI")?.trim() != "off" }
+        ?.let { GeminiSpeech.fromSecret(it) }
     return SpeechService(
         PollySpeech(), PostgresSpeechUsageStore(ds),
         google = google, googleUsage = PostgresSpeechUsageStore(ds, "speech_usage_google"),
-        budget = budget,
+        budget = budget, gemini = gemini,
     )
 }
 
