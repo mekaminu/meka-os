@@ -49,10 +49,12 @@ class LeavePageTest {
         val taken = p.cards.first { it.key == LeavePageRules.TAKEN }.rows
         assertEquals(listOf("Annual leave"), taken.map { it.name })
         assertEquals("", taken[0].whenText)
-        // A leave year from April: Spain's January days are next year's, and its row says so.
+        // A leave year from April: a stretch in next April is next year's; the row's line stays one line (the cover
+        // screen cut "… · Next leave year") and its sheet says so.
         val april = LeaveRules.view(listOf(item("l4", "Ski", d(4, 2, 2027), d(4, 9, 2027))), emptyList(), work, LeaveSettings(25, 4), sat)
         val ski = LeavePageRules.page(april, sat).cards.first().rows.single()
-        assertTrue(ski.line.endsWith("Next leave year"), ski.line)
+        assertTrue(!ski.line.contains("Next leave year"), ski.line)
+        assertEquals("Next leave year", LeavePageRules.leave(april, ski.key)?.note)
     }
 
     @Test

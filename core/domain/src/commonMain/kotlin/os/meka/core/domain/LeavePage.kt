@@ -52,8 +52,8 @@ object LeavePageRules {
     private fun bookedRow(r: LeaveRow, today: Long): PageRow {
         val now = today in r.startDay..r.endDay
         val whenText = if (now) "Now" else LifePageRules.until(r.startDay, today)
-        val line = if (r.note != null && !now) "${r.lineShown} · ${r.note}" else r.lineShown
-        return PageRow(leaveKey(r.id), r.title, line, whenText, now || r.startDay - today <= SOON_DAYS)
+        // The line stays one line on the cover screen; "Next leave year" is in the row's sheet.
+        return PageRow(leaveKey(r.id), r.title, r.lineShown, whenText, now || r.startDay - today <= SOON_DAYS)
     }
 
     private fun takenRow(r: LeaveRow): PageRow = PageRow(leaveKey(r.id), r.title, r.lineShown, "", false)
