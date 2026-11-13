@@ -72,8 +72,7 @@ final class SidebarUITests: XCTestCase {
         // The Today rebuild, slice 2d (core TodayColumnsRules): Today is two columns across the window, under the header.
         let app = launch(size: "1440x900", still: true)
         let window = app.windows.firstMatch
-        let today = app.descendants(matching: .any)["column-today"]
-        if !today.waitForExistence(timeout: 30) {
+        if !todayShows(app) {
             let shows = whatShows(app)
             XCTFail("Today's column didn't appear; " + shows)
             return
@@ -81,7 +80,7 @@ final class SidebarUITests: XCTestCase {
         // Let the opening stagger finish before measuring and photographing.
         sleep(3)
         var frames: [CGRect] = []
-        for id in ["column-today", "column-today-left", "column-today-right"] {
+        for id in ["column-today-left", "column-today-right"] {
             let column = app.descendants(matching: .any)[id]
             XCTAssertTrue(column.waitForExistence(timeout: 10), "\(id) isn't showing at 1440×900")
             let f = column.frame, w = window.frame
@@ -90,7 +89,7 @@ final class SidebarUITests: XCTestCase {
             XCTAssertLessThanOrEqual(f.maxX, w.maxX + 1, "\(id) runs past the window's right edge")
             frames.append(f)
         }
-        XCTAssertLessThanOrEqual(frames[1].maxX, frames[2].minX + 1, "Today's two columns overlap")
+        XCTAssertLessThanOrEqual(frames[0].maxX, frames[1].minX + 1, "Today's two columns overlap")
         XCTAssertFalse(app.descendants(matching: .any)["column-needs_you"].exists, "Needs you still has a column beside Today")
         XCTAssertFalse(app.descendants(matching: .any)["column-coming_up"].exists, "Coming up still has a column beside Today")
         keep(window.screenshot(), named: "Today 1440x900")
@@ -101,7 +100,7 @@ final class SidebarUITests: XCTestCase {
         // The runner's screen may be shorter than 1100 pt: macOS keeps the window inside it; the width is what counts.
         let app = launch(size: "1000x1100", still: true)
         let window = app.windows.firstMatch
-        if !app.descendants(matching: .any)["column-today"].waitForExistence(timeout: 30) {
+        if !todayShows(app) {
             let shows = whatShows(app)
             XCTFail("Today's column didn't appear at 1000 pt; " + shows)
             return
@@ -112,6 +111,20 @@ final class SidebarUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["column-today-right"].exists, "Today's right-hand column is missing at 1000 pt")
         XCTAssertFalse(app.descendants(matching: .any)["column-needs_you"].exists, "Needs you still has a column beside Today")
         keep(window.screenshot(), named: "Today 1000 wide")
+    }
+
+    /// Today's column is on screen: the whole column, or (split in two) its left-hand list. Nightly run 43332589169: with
+    /// Today split, macOS exposes only the two lists ("column-today-left", "column-today-right"), not the containing
+    /// "column-today", so waiting for that alone failed although both columns were showing.
+    @MainActor
+    private func todayShows(_ app: XCUIApplication) -> Bool {
+        let any = app.descendants(matching: .any)
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if any["column-today"].exists || any["column-today-left"].exists { return true }
+            usleep(250_000)
+        }
+        return false
     }
 
     /// What the window holds when a column is missing, on one line for the annotation: the screen and column ids
