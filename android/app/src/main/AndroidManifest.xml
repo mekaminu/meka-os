@@ -36,7 +36,9 @@
     <!-- Errands by location (slice 2): asked for only when Meka turns on near-me reminders in Ask → More → Errands
          (off by default). Precise location for "I'm here" (one fix that saves where a place is, kept on this phone,
          never synced or sent) and for Android's own proximity alert near the saved places; "Allow all the time" so
-         Android can watch them with MEKA closed. MEKA itself never tracks or records where Meka goes. -->
+         Android can watch them with MEKA closed. MEKA itself never tracks or records where Meka goes.
+         Leaving now's "When I leave work" (off by default) uses the same two for one saved work spot on this phone:
+         only walking in and out of it is noticed, kept on the phone, never sent. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <!-- Spam call protection (call assistant polish 7, 8b): asked for in Work mode → Call assistant → "Recognise
@@ -385,6 +387,10 @@
         <!-- Errands by location, slice 2: Android's proximity alert near a saved place, and Done / Undo on "Near …". -->
         <receiver
             android:name=".ask.ErrandNearReceiver"
+            android:exported="false" />
+        <!-- Leaving now, "When I leave work": Android's proximity alert on the work spot (walking in or out). -->
+        <receiver
+            android:name=".work.WorkAreaReceiver"
             android:exported="false" />
         <!-- Fasting v2: End fast and its Undo from the ongoing notification. -->
         <receiver

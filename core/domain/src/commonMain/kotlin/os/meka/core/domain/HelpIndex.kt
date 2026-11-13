@@ -356,10 +356,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "leaving-now",
             title = "Leaving now",
-            keywords = listOf("leaving now", "leaving message", "eta message", "tell my partner"),
+            keywords = listOf("leaving now", "leaving message", "eta message", "tell my partner", "when i leave work", "work area", "geofence"),
             what = "at work's end on office days, a ready-made \"Leaving now, home about …\" message to your partner.",
-            how = "Turn it on and pick who it goes to; the heads-up has Send and Edit.",
-            tips = listOf("It's never sent without your tap."),
+            how = "Turn it on and pick who it goes to; the heads-up has Send and Edit. Pick When I leave work and tap I'm at work once there: it then comes as you walk out.",
+            tips = listOf("It's never sent without your tap. Only leaving the work area is noticed; the spot stays on the phone."),
             fold = HelpPlace.WORK,
             foldWhere = "Ask → Settings → Work mode → Leaving now",
             mac = HelpPlace.WORK,

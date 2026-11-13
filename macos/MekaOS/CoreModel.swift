@@ -2103,6 +2103,12 @@ final class CoreModel {
         run { _ = try await $0.setLeavingNow(on: on, to: to, journeyMin: j) }
     }
 
+    /// Leaving now, "When I leave work": wait for the Fold to notice he walked out of the work area (synced). Only a Bool crosses.
+    func setLeavingByArea(_ on: Bool) {
+        MekaHaptics.tick()
+        run { _ = try await $0.setLeavingByArea(on: on) }
+    }
+
     /// The week ahead's Sunday heads-up: on or off and its time. Only a Bool and an Int32 cross.
     /// Calmer Today, slice 1: Done tasks on Today, Folded · Hidden · Shown (synced). Shows at once; the write follows.
     func setDoneTodayShow(_ show: DoneShow) {

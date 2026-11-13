@@ -269,6 +269,16 @@ struct WorkSheet: View {
                         .contentTransition(.opacity)
                 }
                 .transition(.opacity)
+                // "When I leave work" (Needs Meka #24): the Fold watches the work spot it saved; the Mac only sets the switch.
+                Toggle(isOn: Binding(get: { view?.byArea ?? false }, set: { model.setLeavingByArea($0) })) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text("When I leave the work area").font(MekaType.itemMeta)
+                        Text("Watched on the Fold (save the spot there with I'm at work); else when work ends")
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .transition(.opacity)
             }
             Text("On the Fold the draft comes with Send and Edit; here, Copy. Nothing is sent until you tap.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)

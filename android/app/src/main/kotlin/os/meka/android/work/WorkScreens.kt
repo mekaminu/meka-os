@@ -144,13 +144,30 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     var listening by remember { mutableStateOf(hasNotificationAccess(context)) }
     var alertsOk by remember { mutableStateOf(WorkAlerts.canPost(context)) }
     var screening by remember { mutableStateOf(MekaCallScreeningService.roleHeld(context)) }
+    // Leaving now, "When I leave work": what this phone allows and whether the work spot is saved (kept on the phone).
+    var precise by remember { mutableStateOf(os.meka.android.ask.ErrandProximity.precise(context)) }
+    var always by remember { mutableStateOf(os.meka.android.ask.ErrandProximity.always(context)) }
+    var spotSaved by remember { mutableStateOf(WorkArea.spotSaved(context)) }
+    var areaSaid by remember { mutableStateOf<String?>(null) }
+    fun rearmArea() {
+        precise = os.meka.android.ask.ErrandProximity.precise(context)
+        always = os.meka.android.ask.ErrandProximity.always(context)
+        spotSaved = WorkArea.spotSaved(context)
+        scope.launch { runCatching { WorkArea.arm(context, core) } }
+    }
     LaunchedEffect(Unit) {
         // Re-check when Meka comes back from the system settings screen.
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             listening = hasNotificationAccess(context)
             alertsOk = WorkAlerts.canPost(context)
             screening = MekaCallScreeningService.roleHeld(context)
+            rearmArea()
         }
+    }
+    val askAlways = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { rearmArea() }
+    val askPrecise = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        rearmArea()
+        if (precise && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     }
     val askScreening = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         screening = MekaCallScreeningService.roleHeld(context)
@@ -234,7 +251,34 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label(LeavingRules.TITLE, 3)
-        LeavingNowSection(leaving, lists, Modifier.appear(rememberAppearance(3))) { on, to, journey ->
+        LeavingNowSection(
+            leaving, lists, Modifier.appear(rememberAppearance(3)),
+            area = LeavingRules.areaLine(leaving.byArea, precise, always, spotSaved).let { l -> areaSaid?.let { l.copy(line = it) } ?: l },
+            onByArea = { on ->
+                areaSaid = null
+                scope.launch { core.setLeavingByArea(on) }
+                if (on && !precise) askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                else if (on && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            },
+            onAreaAction = {
+                when {
+                    !precise -> askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    !always -> askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    spotSaved -> scope.launch {
+                        WorkArea.forget(context, core); spotSaved = false; areaSaid = null
+                    }
+                    else -> {
+                        areaSaid = "Finding where you are…"
+                        scope.launch {
+                            val r = WorkArea.saveHere(context, core)
+                            spotSaved = WorkArea.spotSaved(context)
+                            areaSaid = r.second
+                            if (r.first) haptics.light() else haptics.tick()
+                        }
+                    }
+                }
+            },
+        ) { on, to, journey ->
             scope.launch { core.setLeavingNow(on, to, journey) }
         }
 

@@ -341,6 +341,12 @@ open class MekaApplication : Application() {
                 .distinctUntilChanged()
                 .collect { runCatching { os.meka.android.ask.ErrandProximity.arm(this@MekaApplication, core.errandsView.value) } }
         }
+        // Leaving now, "When I leave work": Android watches the work spot while the switch is on and location is allowed,
+        // re-armed when the setting changes and at every process start (the phone's last walk in and out go back to the core).
+        appScope.launch {
+            core.leavingView.map { it.on to it.byArea }.distinctUntilChanged()
+                .collect { runCatching { os.meka.android.work.WorkArea.arm(this@MekaApplication, core) } }
+        }
         // Train-time queue, slice 2: a link saved here or synced from the Mac has its article's words fetched on Wi-Fi.
         appScope.launch {
             core.queueView.map { v -> v.waiting.map { it.id } }.distinctUntilChanged()

@@ -157,7 +157,7 @@ object ErrandProximity {
     private const val FUSED = "fused" // LocationManager.FUSED_PROVIDER (API 31)
 
     @SuppressLint("MissingPermission") // checked by the caller (precise)
-    private suspend fun locate(context: Context): Location? {
+    internal suspend fun locate(context: Context): Location? {
         val lm = context.getSystemService(LocationManager::class.java) ?: return null
         if (!lm.isLocationEnabled) return null
         val provider = pickProvider(lm.getProviders(true)) ?: return null

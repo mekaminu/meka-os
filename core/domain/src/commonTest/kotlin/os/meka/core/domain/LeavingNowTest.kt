@@ -151,4 +151,78 @@ class LeavingNowTest {
         assertTrue(a.set(true, "Robin", 80))
         assertEquals("Robin", a.setting().to)
     }
+
+    @Test
+    fun withWhenILeaveWorkTheDraftComesAsHeWalksOutOfTheWorkArea() {
+        val byArea = on.copy(byArea = true)
+        val watching = WorkAreaState(armed = true, enteredMs = at(fri, 8, 50), leftMs = null)
+        // Still inside at 17:30 (worked late): nothing yet, not even planned.
+        assertTrue(LeavingRules.notices(byArea, office, good, at(fri, 17, 30), cal, watching).isEmpty())
+        assertTrue(LeavingRules.notices(byArea, office, good, at(fri, 18, 30), cal, watching).isEmpty())
+        // Walked out at 18:12: due then, home about 18:12 + 70 = 19:25 (rounded up), and the title says so.
+        val out = watching.copy(leftMs = at(fri, 18, 12))
+        val n = LeavingRules.notices(byArea, office, good, at(fri, 18, 12), cal, out).single()
+        assertEquals(at(fri, 18, 12), n.atMs)
+        assertEquals("Leaving now, home about 19:25", n.text)
+        assertEquals("You've left work · tell Jordan?", n.title)
+        assertEquals("leaving:$fri", n.postId)
+        // It stays for the journey home from the walk out, then goes.
+        assertEquals(1, LeavingRules.notices(byArea, office, good, at(fri, 19, 30), cal, out).size)
+        assertTrue(LeavingRules.notices(byArea, office, good, at(fri, 19, 43), cal, out).isEmpty())
+        // Send sends those words; a few minutes later they still stand.
+        assertEquals(LeavingTap.Send("Jordan", n.text), LeavingRules.tap(n.key, n.text, byArea, office, good, at(fri, 18, 20), cal, area = out))
+        // Leaving a little early (17:00) counts; a lunchtime walk (12:30) doesn't, and he's back inside after it.
+        val early = watching.copy(leftMs = at(fri, 17))
+        assertEquals("Leaving now, home about 18:10", LeavingRules.notices(byArea, office, good, at(fri, 17), cal, early).single().text)
+        val lunch = WorkAreaState(true, at(fri, 13, 30), at(fri, 12, 30))
+        assertTrue(LeavingRules.notices(byArea, office, good, at(fri, 17, 30), cal, lunch).isEmpty())
+        // Went home at lunch and never came back: the end of work stands, as before.
+        val home = WorkAreaState(true, at(fri, 8, 50), at(fri, 12, 30))
+        assertEquals(office.endMs, LeavingRules.notices(byArea, office, good, at(fri, 17, 30), cal, home).single().atMs)
+    }
+
+    @Test
+    fun withNoPermissionNoSpotOrTheSwitchOffItFallsBackToTheEndOfWork() {
+        val out = WorkAreaState(true, at(fri, 8, 50), at(fri, 18, 12))
+        // Switch off: the phone's walk out is ignored.
+        assertEquals(office.endMs, LeavingRules.notices(on, office, good, at(fri, 17, 30), cal, out).single().atMs)
+        assertEquals("Tell Jordan you're leaving?", LeavingRules.notices(on, office, good, at(fri, 17, 30), cal, out).single().title)
+        // Not watched (permission refused, no spot saved, or the Mac): the end of work, as before.
+        val byArea = on.copy(byArea = true)
+        assertEquals(office.endMs, LeavingRules.notices(byArea, office, good, at(fri, 17, 30), cal, WorkAreaState.NONE).single().atMs)
+        assertEquals(office.endMs, LeavingRules.notices(byArea, office, good, at(fri, 17, 30), cal, out.copy(armed = false)).single().atMs)
+        // Watched but nothing noticed today (yesterday's walk in): the end of work.
+        val yesterday = WorkAreaState(true, at(fri - 1, 8, 50), null)
+        assertEquals(office.endMs, LeavingRules.notices(byArea, office, good, at(fri, 17, 30), cal, yesterday).single().atMs)
+        // Work mode's line on the Fold, one step at a time.
+        assertEquals("Off · the draft comes when work ends", LeavingRules.areaLine(false, true, true, true).line)
+        assertEquals("Allow", LeavingRules.areaLine(true, false, false, false).action)
+        assertTrue(LeavingRules.areaLine(true, true, false, false).line.startsWith("Allow location all the time"))
+        assertEquals("I'm at work", LeavingRules.areaLine(true, true, true, false).action)
+        assertEquals("Forget work area", LeavingRules.areaLine(true, true, true, true).action)
+        assertFalse(LeavingRules.areaSaved(null).first)
+        assertFalse(LeavingRules.areaSaved(250.0).first)
+        assertTrue(LeavingRules.areaSaved(20.0).first)
+    }
+
+    @Test
+    fun theSwitchIsSyncedAndKeptWhenTheRestChanges() {
+        val world = SyncWorld()
+        val fold = world.device("fold")
+        val mac = world.device("mac")
+        val a = LeavingNow(fold.replica)
+        assertFalse(a.setting().byArea, "off until he turns it on")
+        assertTrue(a.setByArea(true))
+        assertFalse(a.setByArea(true), "nothing changed")
+        assertEquals("On · a draft to Jordan Lane when you leave the work area on office days · about 1 h 10 home", LeavingRules.summary(a.setting()))
+        assertTrue(LeavingRules.view(a.setting()).byArea)
+        fold.sync(); mac.sync(); fold.sync()
+        val m = LeavingNow(mac.replica)
+        assertTrue(m.setting().byArea)
+        // Changing who it goes to keeps the switch.
+        assertTrue(m.set(true, "Wife", 80))
+        assertTrue(m.setting().byArea)
+        fold.sync(); mac.sync(); fold.sync()
+        assertEquals(LeavingSetting(true, "Wife", 80, byArea = true), a.setting())
+    }
 }

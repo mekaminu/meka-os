@@ -5974,13 +5974,38 @@ class MekaCore(
     }
 
     /**
+     * "When I leave work" (Needs Meka #24, "Geofence yes"): wait for the Fold to notice he walked out of the work area
+     * before drafting. Synced, so the Mac's Work sheet says the same. The new summary line, or null when unchanged.
+     */
+    suspend fun setLeavingByArea(on: Boolean): String? = onCore {
+        if (!leavingNow.setByArea(on)) return@onCore null
+        refresh()
+        os.meka.core.domain.LeavingRules.summary(leavingSetting())
+    }
+
+    /** What the Fold knows about the work area today (kept on the phone, never synced or stored by the core). */
+    @kotlin.concurrent.Volatile
+    private var workArea: os.meka.core.domain.WorkAreaState = os.meka.core.domain.WorkAreaState.NONE
+
+    /**
+     * The Fold's proximity alert on the work spot: whether Android is watching it and when he last walked in and out.
+     * Held in memory only (the phone keeps its own copy for a restart); the Leaving now draft follows it.
+     */
+    suspend fun setWorkArea(armed: Boolean, enteredMs: Long?, leftMs: Long?) = onCore {
+        val next = os.meka.core.domain.WorkAreaState(armed, enteredMs, leftMs)
+        if (next == workArea) return@onCore
+        workArea = next
+        refresh()
+    }
+
+    /**
      * Send or Edit tapped on a "Leaving now" notification [key] that showed [shown] (Level 3: only from Meka's tap).
      * [os.meka.core.domain.LeavingTap.Send] carries exactly the shown words; Changed carries the updated notice to show
      * instead (nothing is sent); null when it no longer applies.
      */
     suspend fun leavingTap(key: String, shown: String, edit: Boolean): os.meka.core.domain.LeavingTap? = onCore {
         os.meka.core.domain.LeavingRules.tap(
-            key, shown, leavingSetting(), officeToday(), lineStatus.snapshot(), nowMs(), ZoneCalendar(timeZone), edit,
+            key, shown, leavingSetting(), officeToday(), lineStatus.snapshot(), nowMs(), ZoneCalendar(timeZone), edit, workArea,
         )
     }
 
@@ -15132,7 +15157,7 @@ class MekaCore(
             approvals = os.meka.core.domain.ApprovalRules.pending(approvalStore.all(), nowMs()),
             appointments = appointments.items(),
             goals = _goals.value,
-            leaving = leavingSetting(),
+            leaving = leavingSetting(), leavingArea = workArea,
             weekAhead = _weekAhead.value,
             weekAheadSetting = weekAheadSettings.setting(),
             bins = bins.items(), holidays = bankHolidays.calendar(), binRemindMinute = bins.remindMinute(),

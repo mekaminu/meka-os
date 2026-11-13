@@ -826,6 +826,8 @@ object NoticeSources {
         goals: GoalsView = GoalsView.EMPTY,
         /** "Leaving now": the setting, for the draft when an office day's work ends ([LeavingRules.notices]). */
         leaving: LeavingSetting? = null,
+        /** The work area as the Fold saw it today ("When I leave work"); NONE on the Mac and with it off. */
+        leavingArea: WorkAreaState = WorkAreaState.NONE,
         /** The Sunday week ahead, for Sunday evening's heads-up ([WeekAheadRules.notices]), and its time setting. */
         weekAhead: WeekAheadView? = null,
         weekAheadSetting: WeekAheadSetting = WeekAheadSetting.DEFAULT,
@@ -1034,7 +1036,7 @@ object NoticeSources {
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         // Habits screen, slice 3: each habit's own reminder while today is unmarked.
         out += HabitBoardRules.reminderNotices(goals, nowMs, cal)
-        if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
+        if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal, leavingArea)
         out += BinRules.notices(bins, nowMs, cal, holidays, binRemindMinute)
         out += GiftRules.notices(occasions, nowMs, cal)
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)

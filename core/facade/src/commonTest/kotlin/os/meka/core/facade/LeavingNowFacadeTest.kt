@@ -77,4 +77,31 @@ class LeavingNowFacadeTest {
         fold.setLeavingNow(true, "Jordan", 120)
         assertEquals(60, fold.leavingView.value.journeyMin)
     }
+
+    @Test
+    fun whenILeaveWorkWaitsForTheFoldToSeeHimWalkOut() = runTest {
+        // Needs Meka #24 ("Geofence yes"): set on the Mac, watched on the Fold.
+        val fold = core("android")
+        val mac = core("mac")
+        mac.setAboutYouField("partnerName", "Jordan")
+        assertEquals("On · a draft to Jordan when you leave the work area on office days · about 1 h 20 home", mac.setLeavingByArea(true))
+        assertNull(mac.setLeavingByArea(true))
+        mac.syncNow(); fold.syncNow()
+        assertTrue(fold.leavingView.value.byArea)
+        // The Fold saw him walk in at 08:50 and is watching: at 17:30 he's still there, so nothing yet.
+        val walkedIn = now - 70 * 60_000L
+        fold.setWorkArea(true, walkedIn, null)
+        now += 7 * 3_600_000L + 30 * 60_000L // 17:30
+        assertTrue(fold.governNotifications(null, DeviceAlerts.ALL).post.none { it.source == NoticeSource.LEAVING })
+        // He walks out at 18:05: the draft comes then, and Send carries its words.
+        now += 35 * 60_000L
+        fold.setWorkArea(true, walkedIn, now)
+        val n = fold.governNotifications(null, DeviceAlerts.ALL).post.single { it.source == NoticeSource.LEAVING }
+        assertEquals("You've left work · tell Jordan?", n.title)
+        assertEquals("Leaving now, home about 19:25", n.text)
+        assertEquals(LeavingTap.Send("Jordan", n.text), fold.leavingTap(n.key, n.text, edit = false))
+        // Not watched (permission taken away): the end of work stands, as before.
+        fold.setWorkArea(false, walkedIn, null)
+        assertTrue(fold.governNotifications(null, DeviceAlerts.ALL).post.any { it.source == NoticeSource.LEAVING })
+    }
 }

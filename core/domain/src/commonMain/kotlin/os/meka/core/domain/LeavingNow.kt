@@ -26,16 +26,36 @@ import os.meka.core.sync.fv
  * no `to` typed the draft goes to the partner named in About you ([Household]); with neither, no draft is made and the
  * line says to add them. Plain, non-AI rules.
  *
- * Later: "when he leaves the work place, if location is on" (MEKA's location is on demand only, never background, so
- * that waits on a decision), and live departures once the Darwin key lands.
+ * When he leaves the work area (Meka's answer to Needs Meka #24, 2026-11-11: "Geofence yes"): with `byArea` on (synced,
+ * off until he turns it on) the Fold saves the work spot once ("I'm at work") and Android's own proximity alert tells
+ * it when he walks out of it ([WorkAreaState], kept on the phone, never synced or sent). The draft then comes at that
+ * moment instead of at the end of work; while the phone knows he's still inside it waits, and with no permission, no
+ * spot or nothing noticed it falls back to the end of work ([LeavingRules.start]).
+ *
+ * Later: live departures once the Darwin key lands.
  */
 object LeavingFields {
     const val ON = "on"
     const val TO = "to"
     const val JOURNEY = "journeyMin"
+    /** Wait for the phone to notice he left the work area (Bool, off by default). */
+    const val BY_AREA = "byArea"
 }
 
-data class LeavingSetting(val on: Boolean, val to: String, val journeyMin: Int) {
+/**
+ * What the Fold knows about the work area today, kept on the phone only: whether Android is watching it ([armed]) and
+ * the last time it noticed him walk in and out. Nothing here is synced, stored by the core or sent anywhere.
+ */
+data class WorkAreaState(val armed: Boolean, val enteredMs: Long?, val leftMs: Long?) {
+    companion object {
+        val NONE = WorkAreaState(false, null, null)
+    }
+}
+
+/** Work mode's line under "When I leave work" on the Fold, and the I'm at work button's words. */
+data class WorkAreaLine(val line: String, val action: String?)
+
+data class LeavingSetting(val on: Boolean, val to: String, val journeyMin: Int, val byArea: Boolean = false) {
     companion object {
         /** On, to About you's partner (blank with none), the usual journey. */
         val DEFAULT: LeavingSetting get() = LeavingSetting(true, LeavingRules.defaultTo(), LeavingRules.DEFAULT_JOURNEY)
@@ -46,7 +66,7 @@ data class LeavingSetting(val on: Boolean, val to: String, val journeyMin: Int) 
 data class LeavingDraft(val text: String, val etaMs: Long, val delayMin: Int, val level: LineLevel, val reason: String?)
 
 /** What Work mode shows: the switch, who it goes to, the journey, and the line under them. */
-data class LeavingView(val on: Boolean, val to: String, val journeyMin: Int, val summary: String) {
+data class LeavingView(val on: Boolean, val to: String, val journeyMin: Int, val summary: String, val byArea: Boolean = false) {
     companion object {
         val EMPTY = LeavingRules.view(null)
     }
@@ -87,19 +107,20 @@ object LeavingRules {
         if (fields == null) return LeavingSetting.DEFAULT
         val to = cleanName(fields[LeavingFields.TO]?.textOrNull) ?: defaultTo()
         val j = fields[LeavingFields.JOURNEY]?.longOrNull?.toInt()?.takeIf { it in 10..240 } ?: DEFAULT_JOURNEY
-        return LeavingSetting(fields[LeavingFields.ON]?.boolOrNull ?: true, to, j)
+        return LeavingSetting(fields[LeavingFields.ON]?.boolOrNull ?: true, to, j, fields[LeavingFields.BY_AREA]?.boolOrNull ?: false)
     }
 
     fun cleanName(raw: String?): String? = raw?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_TO && it.none { c -> c == '\n' } }
 
     fun view(s: LeavingSetting?): LeavingView {
         val set = s ?: LeavingSetting.DEFAULT
-        return LeavingView(set.on, set.to, set.journeyMin, summary(set))
+        return LeavingView(set.on, set.to, set.journeyMin, summary(set), set.byArea)
     }
 
     /** "On · a draft to Sam when work ends on office days · about 1 h 20 home" / "Off" / [NO_ONE]. */
     fun summary(s: LeavingSetting): String =
         if (s.on && s.to.isBlank()) NO_ONE
+        else if (s.on && s.byArea) "On · a draft to ${s.to} when you leave the work area on office days · about ${CommuteRules.label(s.journeyMin)} home"
         else if (s.on) "On · a draft to ${s.to} when work ends on office days · about ${CommuteRules.label(s.journeyMin)} home"
         else "Off · no draft when work ends"
 
@@ -172,6 +193,69 @@ object LeavingRules {
         return LeavingDraft(text, eta, extra, level, reason)
     }
 
+    /** A walk out of the work area counts from this long before work ends (not a lunchtime walk). */
+    const val EARLY_EXIT_MS = 60 * 60_000L
+    /** …and until this long after (a late evening still counts). */
+    const val LATE_EXIT_MS = 6 * 60 * 60_000L
+    /** Walking in counts as "at work today" from this long before work starts. */
+    const val EARLY_ENTRY_MS = 3 * 60 * 60_000L
+    /** The work area's radius for Android's proximity alert; a big office and its car park fit inside. */
+    const val AREA_RADIUS_M = 300.0
+    /** "I'm at work" saves the spot only with a fix at least this sure. */
+    const val AREA_MAX_ACCURACY_M = 100.0
+
+    /**
+     * When the phone saw him walk out of the work area today, while waiting for it ([LeavingSetting.byArea]) and
+     * Android is watching: an exit from an hour before work ends to six hours after, later than any walk back in.
+     */
+    fun left(s: LeavingSetting, office: OfficeWindow, area: WorkAreaState): Long? {
+        if (!s.byArea || !area.armed) return null
+        val l = area.leftMs ?: return null
+        if (l < office.endMs - EARLY_EXIT_MS || l >= office.endMs + LATE_EXIT_MS) return null
+        if (area.enteredMs != null && area.enteredMs > l) return null
+        return l
+    }
+
+    /** The phone saw him walk in today and not out since: still at work, so the draft waits for him to leave. */
+    fun inside(s: LeavingSetting, office: OfficeWindow, area: WorkAreaState): Boolean {
+        if (!s.byArea || !area.armed) return false
+        val e = area.enteredMs ?: return false
+        if (e < office.startMs - EARLY_ENTRY_MS || e >= office.endMs + LATE_EXIT_MS) return false
+        return area.leftMs == null || area.leftMs < e
+    }
+
+    /**
+     * When the draft is due: the moment he walked out of the work area; null while the phone knows he's still inside
+     * (until six hours after work ends, then the end of work stands, already over); otherwise (switched off, no
+     * permission or spot, or nothing noticed today) the end of work, as before.
+     */
+    fun start(s: LeavingSetting, office: OfficeWindow, area: WorkAreaState): Long? {
+        left(s, office, area)?.let { return it }
+        return if (inside(s, office, area)) null else office.endMs
+    }
+
+    /** Work mode's line on the Fold for "When I leave work", from what this phone allows and has saved. */
+    fun areaLine(byArea: Boolean, precise: Boolean, always: Boolean, spotSaved: Boolean): WorkAreaLine = when {
+        !byArea -> WorkAreaLine("Off · the draft comes when work ends", null)
+        !precise -> WorkAreaLine("Allow precise location so the phone can notice you leave work", "Allow")
+        !always -> WorkAreaLine("Allow location all the time · Android watches the work area with Navilife closed", "Allow")
+        !spotSaved -> WorkAreaLine("No work area yet · tap I'm at work when you're there", "I'm at work")
+        else -> WorkAreaLine(
+            "Watching the work area (${AREA_RADIUS_M.toInt()} m) · if the phone misses you leaving, it comes when work ends",
+            "Forget work area",
+        )
+    }
+
+    /** What "I'm at work" says: saved, or why not (no fix, or one too unsure). */
+    fun areaSaved(accuracyM: Double?): Pair<Boolean, String> = when {
+        accuracyM == null -> false to "Couldn't find where you are · try again by a window or outside"
+        accuracyM > AREA_MAX_ACCURACY_M -> false to "Not sure enough where you are (±${accuracyM.toInt()} m) · try again outside"
+        else -> true to "Work area saved · the draft comes when you leave it"
+    }
+
+    /** Under the switch: what is and isn't noticed. */
+    const val AREA_PRIVACY = "Only leaving the work area is noticed. The spot stays on this phone; nothing about where you go is kept or sent."
+
     fun key(day: Long, level: LineLevel): String = "$KEY_PREFIX$day:${level.name.lowercase()}"
     fun postId(day: Long): String = "$KEY_PREFIX$day"
     fun isKey(key: String): Boolean = key.startsWith(KEY_PREFIX)
@@ -183,17 +267,26 @@ object LeavingRules {
      * line level, all in one place: a line going bad on the way offers the updated draft once; going good again after
      * starting good doesn't buzz again. Its text is the draft itself, word for word what Send sends.
      */
-    fun notices(s: LeavingSetting, office: OfficeWindow?, lines: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar): List<Notice> {
+    fun notices(
+        s: LeavingSetting, office: OfficeWindow?, lines: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar,
+        area: WorkAreaState = WorkAreaState.NONE,
+    ): List<Notice> {
         if (!s.on || office == null || s.to.isBlank()) return emptyList()
-        val until = office.endMs + WINDOW_MS
+        val start = start(s, office, area) ?: return emptyList()
+        val until = start + WINDOW_MS
         if (nowMs >= until) return emptyList()
-        val d = draft(s, maxOf(nowMs, office.endMs), lines, nowMs, cal)
+        val d = draft(s, maxOf(nowMs, start), lines, nowMs, cal)
         val day = cal.epochDayOf(office.endMs)
+        val walked = left(s, office, area) != null
         return listOf(
             Notice(
                 key = key(day, d.level), source = NoticeSource.LEAVING, tier = NoticeTier.HEADS_UP,
-                title = if (d.level == LineLevel.GOOD) "Tell ${s.to} you're leaving?" else "Trains delayed · tell ${s.to}?",
-                text = d.text, atMs = office.endMs, target = NoticeTarget.TODAY, expiresAtMs = until,
+                title = when {
+                    d.level != LineLevel.GOOD -> "Trains delayed · tell ${s.to}?"
+                    walked -> "You've left work · tell ${s.to}?"
+                    else -> "Tell ${s.to} you're leaving?"
+                },
+                text = d.text, atMs = start, target = NoticeTarget.TODAY, expiresAtMs = until,
                 actions = listOf(NoticeAction.SEND_MESSAGE, NoticeAction.EDIT_MESSAGE, NoticeAction.COPY_MESSAGE),
                 postAs = postId(day),
             ),
@@ -208,15 +301,16 @@ object LeavingRules {
      */
     fun tap(
         key: String, shown: String, s: LeavingSetting, office: OfficeWindow?, lines: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar,
-        edit: Boolean = false,
+        edit: Boolean = false, area: WorkAreaState = WorkAreaState.NONE,
     ): LeavingTap? {
         if (!isKey(key) || office == null || !s.on || s.to.isBlank()) return null
         if (dayOf(key) != cal.epochDayOf(office.endMs)) return null
-        val now = notices(s, office, lines, nowMs, cal).firstOrNull() ?: return null
+        val now = notices(s, office, lines, nowMs, cal, area).firstOrNull() ?: return null
         if (edit || now.text == shown) return LeavingTap.Send(s.to, shown)
+        val start = now.atMs
         // Still right if it is the draft for leaving up to [STILL_RIGHT_MS] ago (the ETA steps every 5 minutes).
         val stillRight = (0..STILL_RIGHT_MS step 5 * 60_000L).any { back ->
-            draft(s, maxOf(office.endMs, nowMs - back), lines, nowMs, cal).text == shown
+            draft(s, maxOf(start, nowMs - back), lines, nowMs, cal).text == shown
         }
         return if (stillRight) LeavingTap.Send(s.to, shown) else LeavingTap.Changed(now)
     }
@@ -283,7 +377,7 @@ class LeavingNow(private val replica: Replica) {
         val name = LeavingRules.cleanName(to)
         if (name == null && to.isNotBlank()) return false
         if (journeyMin !in 10..240) return false
-        val next = LeavingSetting(on, name ?: setting().to, journeyMin)
+        val next = LeavingSetting(on, name ?: setting().to, journeyMin, setting().byArea)
         if (replica.entity(EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID) != null && setting() == next) return false
         val fields = buildMap {
             put(LeavingFields.ON, on.fv())
@@ -291,6 +385,13 @@ class LeavingNow(private val replica: Replica) {
             put(LeavingFields.JOURNEY, journeyMin.toLong().fv())
         }
         replica.commitLocal(EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID, fields)
+        return true
+    }
+
+    /** "When I leave work": wait for the phone to notice he left the work area. False when nothing changes. */
+    fun setByArea(on: Boolean): Boolean {
+        if (setting().byArea == on) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID, mapOf(LeavingFields.BY_AREA to on.fv()))
         return true
     }
 }
