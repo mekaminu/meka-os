@@ -177,8 +177,10 @@ class HabitsScreensTest {
         show(core)
         compose.onNodeWithTag("habits-add").performClick(); settle()
         compose.onNode(hasContentDescription("Habit name")).performTextInput("No phone in bed")
-        compose.onNodeWithTag("habits-add-avoid").performClick()
-        compose.onNodeWithTag("habits-add-list-Night time").performClick()
+        // Each choice settles before the next tap: Add habit's tap reads the choices from the last composition, so a
+        // save before Avoid had recomposed added it as a habit to build (ci run 43460366350).
+        compose.onNodeWithTag("habits-add-avoid").performClick(); settle()
+        compose.onNodeWithTag("habits-add-list-Night time").performClick(); settle()
         compose.onNodeWithTag("habits-add-save").performClick(); settle()
         awaitCore("the habit added") { core.goalsView.value.habits.any { it.title == "No phone in bed" } }
         val h = core.goalsView.value.habits.first { it.title == "No phone in bed" }
