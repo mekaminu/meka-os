@@ -1,17 +1,18 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Life → Kids on the Mac (Kids' admin, slices 1–3), like the Fold's KidsPane: a card per child from About you with
-/// their sizes (shoes, football boots, tops, trousers, coat, school jumper), when they were last checked (in the accent
-/// three months on) and All still fit. Type a size and press Return to keep it; clear it to remove it, with Undo.
-/// Slice 2: CLUB FEES under the sizes (each a bill on the radar, the line in the accent within 3 days of due) with Paid
-/// and Remove (Undo), and a field that reads "Football £35 monthly from 1 Nov". Slice 3: THIS WEEK over the cards — what
-/// they need in the next 7 days from School, club sessions and fees. Slice 5: CHORES AND POCKET MONEY under the fees —
-/// the weekly amount, each chore with a dot per day of this week (click today's, or an earlier day, to tick it), the
-/// week's sum, Paid £8 and Remove with Undo. Only Strings and day numbers cross to the core.
+/// Ask → Kids on the Mac in the page shape (every page under Ask in one shape, slice 15; approved 2026-11-11,
+/// docs/design/look/LifePage.dc.html), like the Fold's KidsPane: the title with its ⓘ, one gold + Add (A club fee ·
+/// A chore · Pocket money a week, each one typed line, "Alex: …" first when there's more than one child), three numbers
+/// (what they need this week, the next club fee, what's to pay this week or the sizes to check), then This week,
+/// Children, Club fees and Chores and pocket money (five rows each, See all for the rest). A row opens in place with
+/// ‹ Kids back: a child's card (sizes with Undo, All still fit, club fees with Paid / Remove and the fee field, chores
+/// and pocket money), a fee's line with Paid and Remove (Undo), a child's chores and pocket money, or a thing this week.
+/// Only Strings and day numbers cross to the core; Navilife never pays a fee or moves money.
 ///
-/// Motion: the sheet scale-fades (system); the summary and each card's lines cross-fade; cards stagger in; the checked
-/// line blends to the accent when due; a save gives a light haptic, a refusal a tick. Reduce Motion: cross-fades.
+/// Motion: the sheet scale-fades (system); sections stagger in; + Add's choices and field and the ⓘ unfold on the
+/// expand spring; a row opens and closes with a cross-fade and slide from the trailing edge; the lines cross-fade, the
+/// checked line and a refusal in the accent; a save gives a light haptic, a refusal a tick. Reduce Motion: cross-fades.
 struct KidsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -21,76 +22,244 @@ struct KidsSheet: View {
     @State private var texts: [String: String] = [:]
     /// Per child: what the last save or All still fit said.
     @State private var said: [String: CoreModel.KidSaid] = [:]
-    /// Slice 2, per child: the fee field's text and what the last fee action said.
+    /// Per child: the fee field's text and what the last fee action said.
     @State private var feeTexts: [String: String] = [:]
     @State private var feeSaid: [String: CoreModel.KidSaid] = [:]
-    /// Slice 5, per child: the chore and pocket money fields and what the last chore/money action said.
+    /// Per child: the chore and pocket money fields and what the last chore/money action said.
     @State private var choreTexts: [String: String] = [:]
     @State private var pocketTexts: [String: String] = [:]
     @State private var moneySaid: [String: CoreModel.KidSaid] = [:]
+    @State private var infoOpen = false
+    @State private var adding = false
+    @State private var addChoice: String?
+    @State private var text = ""
+    /// What the last add said.
+    @State private var addSaid: CoreModel.KidSaid?
+    /// The row that's open, if any (its key).
+    @State private var open: String?
+    /// The card whose rows are all shown (See all), if any.
+    @State private var showAll: String?
+    /// A fee's open row: what Paid or Remove said (kept while the fee itself is gone, for its Undo).
+    @State private var feeLine: CoreModel.KidSaid?
 
     var body: some View {
+        let rules = KidsPageRules.shared
         let v = model.kids ?? KidsView.companion.EMPTY
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(KidsRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
-                .staggeredAppear(1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: MekaSpace.m) {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            if let key = open {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil; feeLine = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                ScrollView {
+                    rowDetail(key, v)
+                }
+                .frame(maxHeight: 520)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
+            } else if let card = showAll {
+                Button("‹ \(rules.TITLE)") { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = nil } }
+                    .buttonStyle(.link).font(MekaType.caption)
+                Text(rules.cardTitle(cardKey: card)).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(rules.allRows(view: v, cardKey: card, today: model.todayEpochDay), id: \.key) { r in
+                            let key = r.key
+                            Button { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; showAll = nil } } label: {
+                                HStack(spacing: MekaSpace.xs) {
+                                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                    }
+                                    Spacer(minLength: MekaSpace.xs)
+                                    Text(r.whenText).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textTertiary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                }
+                .frame(maxHeight: 400)
+                .transition(.opacity)
+            } else if let page = model.kidsPage() {
+                LifePageHeader(title: page.title, info: page.info, palette: palette, infoOpen: $infoOpen) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding.toggle(); addSaid = nil }
+                }
+                .staggeredAppear(0)
+                if adding { addForm(page) }
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    if !adding, let addSaid {
+                        Text(addSaid.line).font(MekaType.caption)
+                            .foregroundStyle(addSaid.refused ? palette.accent : palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                    }
                     if let empty = v.empty {
                         Button("About you…") { dismiss(); model.showAboutYou = true }
                             .accessibilityLabel(empty)
                     }
-                    if let w = v.week {
-                        week(w).staggeredAppear(2)
-                    }
-                    ForEach(Array(v.kids.enumerated()), id: \.element.name) { i, kid in
-                        card(kid).staggeredAppear(2 + i)
+                }
+                .staggeredAppear(1)
+                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        ForEach(0..<Int(page.cardCount), id: \.self) { i in
+                            let card = page.cardAt(index: Int32(i))
+                            let cardKey = card.key
+                            LifePageCardView(card: card, palette: palette, onMore: {
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { showAll = cardKey }
+                            }, onRow: { r in
+                                let key = r.key
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = key; addSaid = nil; feeLine = nil }
+                            })
+                            .staggeredAppear(3 + i)
+                        }
+                        Text(KidsRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .frame(maxHeight: 420)
             }
-            .frame(maxHeight: 520)
-            Text(KidsRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 480)
         .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showAll)
     }
 
-    /// Slice 3: THIS WEEK — what they need in the next 7 days, one block per day; fees and soon school things in the accent.
-    private func week(_ w: KidWeek) -> some View {
+    /// An open row as it is now: a child's card, a fee, a child's chores and pocket money, or a thing this week.
+    @ViewBuilder
+    private func rowDetail(_ key: String, _ v: KidsView) -> some View {
+        let rules = KidsPageRules.shared
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(KidsWeekRules.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            Text(w.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: w.line)
-            ForEach(w.days, id: \.day) { d in
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(d.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    ForEach(Array(d.items.enumerated()), id: \.offset) { _, thing in
-                        Text(thing.text).font(MekaType.body)
-                            .foregroundStyle(thing.lit ? palette.accent : palette.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityLabel(thing.spoken)
-                    }
+            Text(rules.sheetTitle(view: v, key: key)).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            if let kid = rules.kid(view: v, key: key) {
+                if rules.isMoney(key: key) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) { money(kid) }
+                } else {
+                    card(kid)
                 }
-                .transition(.opacity)
-            }
-            if !w.isEmpty {
+            } else if let fee = rules.feeRow(view: v, key: key), let owner = rules.feeOwner(view: v, key: key) {
+                feeDetail(kid: owner, fee: fee)
+            } else if let thing = rules.weekThing(view: v, key: key) {
+                Text(thing.text).font(MekaType.body).foregroundStyle(thing.lit ? palette.accent : palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(thing.spoken)
                 Text(KidsWeekRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if feeLine == nil {
+                // Removed (here or on the Fold) while it was open.
+                Text(rules.GONE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            if let line = feeLine {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(line.line).font(MekaType.caption)
+                        .foregroundStyle(line.refused ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let id = line.feeUndo {
+                        Button("Undo") {
+                            Task {
+                                if await model.undoKidFee(id: id) { feeLine = nil }
+                                else { feeLine = CoreModel.KidSaid(line: KidsRules.shared.FEE_NOTHING_TO_UNDO, refused: true, undo: nil) }
+                            }
+                        }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    }
+                }
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
             }
         }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: w.line)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A fee's row: whose it is, its line, Paid and Remove; what they said shows under it with Undo.
+    @ViewBuilder
+    private func feeDetail(kid: KidCard, fee: KidFeeRow) -> some View {
+        let id = fee.id
+        Text(kid.name).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+            Text(fee.line).font(MekaType.body)
+                .foregroundStyle(fee.due ? palette.accent : palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: fee.line)
+                .accessibilityLabel(fee.spoken)
+            Spacer()
+            Button("Paid") {
+                Task { if let r = await model.kidFeePaid(id: id) { feeLine = r } }
+            }
+            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+            .accessibilityLabel("\(fee.title) paid")
+            Button("Remove") {
+                Task { if let r = await model.removeKidFee(id: id) { feeLine = r } }
+            }
+            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            .accessibilityLabel("Remove \(fee.title)")
+        }
+        Text(KidsRules.shared.FEE_FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private func addForm(_ page: LifePageView) -> some View {
+        let rules = KidsPageRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(page.addTitle).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(0..<Int(page.addChoiceCount), id: \.self) { i in
+                    let c = page.addChoiceAt(index: Int32(i))
+                    let key = c.key
+                    chip(c.label, lit: addChoice == key) { addChoice = key; addSaid = nil }
+                        .help(c.hint)
+                }
+            }
+            if let choice = addChoice {
+                TextField(rules.hint(choice: choice), text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(rules.spokenHint(choice: choice))
+                    .onSubmit { submit(choice) }
+                if let addSaid, addSaid.refused {
+                    Text(addSaid.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func submit(_ choice: String) {
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return }
+        let m = model
+        Task {
+            guard let r = await m.addKids(choice: choice, text: typed) else { return }
+            addSaid = r
+            // A refusal keeps its words to fix.
+            if !r.refused { text = ""; adding = false; addChoice = nil }
+        }
+    }
+
+    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(MekaType.caption).lineLimit(1)
+                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityAddTraits(lit ? .isSelected : [])
     }
 
     @ViewBuilder

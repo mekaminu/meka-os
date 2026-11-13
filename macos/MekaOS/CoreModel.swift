@@ -6146,6 +6146,26 @@ final class CoreModel {
         }
     }
 
+    /// Every page under Ask in one shape, slice 15: Ask → Kids as the page shape.
+    func kidsPage() -> LifePageView? {
+        guard let core else { return nil }
+        return core.kidsPage(view: kids ?? KidsView.companion.EMPTY)
+    }
+
+    /// Slice 15: Kids' + Add, one typed line for a choice ("Alex: Football £35 monthly from 1 Nov"); a chore or pocket
+    /// money keeps its Undo token. Only Strings cross to the core.
+    func addKids(choice: String, text: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.addKids(choice: choice, text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return KidSaid(line: r.line, refused: r.refused, undo: nil, moneyUndo: r.moneyUndo)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// A child's club fee paid (moves on to its next time, or closes); Undo with `undoKidFee`.
     func kidFeePaid(id: String) async -> KidSaid? {
         guard let core else { return nil }

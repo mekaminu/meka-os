@@ -39,6 +39,7 @@ import os.meka.android.ask.APPOINTMENTS_LIST_TAG
 import os.meka.android.ask.APPOINTMENTS_ROW_SHEET_TAG
 import os.meka.android.ask.AppointmentsPane
 import os.meka.android.ask.KIDS_LIST_TAG
+import os.meka.android.ask.KIDS_ROW_SHEET_TAG
 import os.meka.android.ask.KidsPane
 import os.meka.android.ask.LIFE_ADD_SHEET_TAG
 import os.meka.android.ask.SCHOOL_COUNCIL_SHEET_TAG
@@ -53,6 +54,7 @@ import os.meka.core.domain.AppointmentsPageRules
 import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.KidChoreRules
 import os.meka.core.domain.KidSize
+import os.meka.core.domain.KidsPageRules
 import os.meka.core.domain.KidsRules
 import os.meka.core.domain.SchoolPageRules
 import os.meka.core.domain.SchoolRules
@@ -190,7 +192,6 @@ class AdminPlacesScreensTest {
             }
             Place.KIDS -> {
                 val v = core.kidsView.value
-                ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY) {
                     if (v.summary != KidsRules.NO_CHILDREN) fail("$name: \"${v.summary}\" with no children")
@@ -198,8 +199,13 @@ class AdminPlacesScreensTest {
                 }
                 if (fill == Fill.MANY && v.kids.size != 2) fail("$name: ${v.kids.size} cards for two children")
                 if (fill == Fill.MANY && v.week?.isEmpty != false) fail("$name: Kids' week is empty with half term in it (${v.week?.line})")
-                // Slice 16's findings: each size field's hint fits its pill on one line ("Boot size… (12)" wrapped).
-                ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { "e.g. ${it.hint}" }.toSet())
+                // The page shape (slice 15): the three numbers, and the first card's first row (or its empty line).
+                val page = core.kidsPage(v)
+                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, KidsPageRules.CHILDREN_EMPTY)
                 // Walk-through 2026-11-02 A12: an empty field's hint says "e.g.", and a child with only some sizes kept
                 // is never "Sizes checked" as though all were.
                 v.kids.forEach { k ->
@@ -361,10 +367,13 @@ class AdminPlacesScreensTest {
     }
 
     /**
-     * Works by hand, Kids: All still fit says so; Clear takes a size off and Undo puts it back; a size field keeps what's
-     * typed; a fee's Paid moves it on and Undo back, Remove takes it off, the fee field adds one; a chore's day dot ticks,
-     * Paid notes the week and Undo takes it back, Remove and Undo, the chore field adds one, the pocket money field keeps
-     * a new amount.
+     * Works by hand, Kids (the page shape, slice 15): every button a 48 dp touch; Alex's row opens his card: All still
+     * fit says so, Clear takes a size off and Undo puts it back, a size field keeps what's typed (and slice 16's finding:
+     * each size field's hint fits its pill on one line); a fee's row opens its sheet: Paid moves it on and Undo back,
+     * Remove takes it off; + Add → A club fee adds one ("Alex: …"), and with two children a line that doesn't say whose
+     * is turned away; Sam's chores row opens his chores and pocket money: a day dot ticks (drawn 36 dp, round), Paid
+     * notes the week and Undo takes it back, Remove and Undo, the chore field adds one, the pocket money field keeps a
+     * new amount.
      */
     private fun kidsByHand(core: MekaCore) {
         val name = "kids-by-hand"
@@ -372,48 +381,86 @@ class AdminPlacesScreensTest {
         assertTouchTargets(name)
         fun kid(n: String) = core.kidsView.value.kids.firstOrNull { it.name == n } ?: fail("$name: no card for $n")
         val undo = hasText("Undo") and hasClickAction()
-        // All still fit.
+        val sheet = hasAnyAncestor(hasTestTag(KIDS_ROW_SHEET_TAG))
+        val addSheet = hasAnyAncestor(hasTestTag(LIFE_ADD_SHEET_TAG))
+        fun closeSheet() {
+            tap(p, name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(hasTestTag(KIDS_ROW_SHEET_TAG)) }
+        }
+        // Alex's card.
+        tap(p, name, "Alex", hasText("Alex") and !sheet)
+        until { shows(hasContentDescription("Alex's sizes all still fit")) }
+        assertTouchTargets(name)
+        ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { "e.g. ${it.hint}" }.toSet())
         tap(p, name, "All still fit", hasContentDescription("Alex's sizes all still fit"))
         val fit = hasText(KidsRules.fitLine("Alex"))
         until { shows(fit) }
         if (!shows(fit)) fail("$name: All still fit didn't say so")
-        // Clear and Undo.
         val shoes = kid("Alex").sizes.firstOrNull { it.value == "13" } ?: fail("$name: Alex's size 13 isn't kept")
         fun shoesNow() = kid("Alex").sizes.first { it.size == shoes.size }.value
         tap(p, name, "Clear", hasContentDescription("Clear Alex's ${shoes.label.lowercase()} size"))
         until { shoesNow() == null }
         if (shoesNow() != null) fail("$name: Clear left Alex's ${shoes.label} at ${shoesNow()}")
-        tap(p, name, "Undo", undo)
+        tap(p, name, "Undo", undo and sheet)
         until { shoesNow() == "13" }
         if (shoesNow() != "13") fail("$name: Undo didn't put Alex's ${shoes.label} back (${shoesNow()})")
-        // A size field.
         val empty = kid("Alex").sizes.firstOrNull { it.value == null } ?: fail("$name: no empty size for Alex")
         fun emptyNow() = kid("Alex").sizes.first { it.size == empty.size }.value
         type(p, name, "Alex's ${empty.label.lowercase()} size, for example ${empty.hint}", empty.hint)
         until { emptyNow() != null }
         if (emptyNow() == null) fail("$name: Done on Alex's ${empty.label} field kept nothing")
-        assertTouchTargets(name)
-        // Club fees.
+        closeSheet()
+        // A club fee's sheet.
         val fee = kid("Alex").fees.firstOrNull() ?: fail("$name: no fee for Alex")
         fun feeNow() = kid("Alex").fees.firstOrNull { it.id == fee.id }
-        tap(p, name, "Paid", hasContentDescription("${fee.title} paid"))
+        tap(p, name, fee.title, hasText(fee.title) and !sheet)
+        until { shows(hasContentDescription("${fee.title} paid")) }
+        assertTouchTargets(name)
+        tap(p, name, "Paid", hasContentDescription("${fee.title} paid") and sheet)
         until { feeNow()?.dueDay != fee.dueDay }
         if (feeNow()?.dueDay == fee.dueDay) fail("$name: Paid didn't move ${fee.title} on")
-        tap(p, name, "Undo", undo)
+        tap(p, name, "Undo", undo and sheet)
         until { feeNow()?.dueDay == fee.dueDay }
         if (feeNow()?.dueDay != fee.dueDay) fail("$name: Undo didn't put ${fee.title} back")
-        tap(p, name, "Remove", hasContentDescription("Remove ${fee.title}"))
+        tap(p, name, "Remove", hasContentDescription("Remove ${fee.title}") and sheet)
         until { feeNow() == null }
         if (feeNow() != null) fail("$name: Remove left ${fee.title}")
+        closeSheet()
+        // + Add → A club fee: whose it is first; without it, with two children, it's turned away.
         fun fees() = core.kidsView.value.kids.sumOf { it.fees.size }
         val feesBefore = fees()
-        type(p, name, KidsRules.FEE_HINT, "Tennis £20 monthly from 5 Nov")
+        val choice = KidsPageRules.ADD_FEE
+        val label = KidsPageRules.ADD_CHOICES.first { it.key == choice }.label
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        tap(p, name, label, hasText(label) and addSheet)
+        until { shows(hasContentDescription(KidsPageRules.spokenHint(choice)) and hasSetTextAction()) }
+        type(p, name, KidsPageRules.spokenHint(choice), "Tennis £20 monthly from 5 Nov")
+        val whose = hasText(KidsPageRules.whoseFirst(core.kidsView.value.kids.map { it.name }))
+        until { shows(whose) }
+        if (!shows(whose) || fees() != feesBefore) fail("$name: a fee that doesn't say whose wasn't turned away")
+        type(p, name, KidsPageRules.spokenHint(choice), "Alex: Tennis £20 monthly from 5 Nov", replace = true)
         until { fees() > feesBefore }
-        if (fees() <= feesBefore) fail("$name: Done on the fee field added nothing")
-        // Chores and pocket money (Sam's).
+        if (fees() <= feesBefore) fail("$name: + Add → $label added nothing")
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        // Sam's chores and pocket money.
+        val moneyRow = core.kidsPage().cards.first { it.key == KidsPageRules.MONEY }.rows.firstOrNull { it.name == "Sam" }
+            ?: fail("$name: no chores row for Sam")
+        tap(p, name, "Sam's chores", hasText("Sam") and hasText(moneyRow.line) and !sheet)
         val chore = kid("Sam").money.chores.firstOrNull() ?: fail("$name: no chore for Sam")
         fun choreNow() = kid("Sam").money.chores.firstOrNull { it.id == chore.id }
         val today = chore.days.firstOrNull { it.today } ?: fail("$name: no today dot on ${chore.title}")
+        until { shows(hasContentDescription("${chore.title}, ${today.spoken}")) }
+        assertTouchTargets(name)
+        // Walk-through 2026-11-08 A13: a chore's day dots are drawn 36 dp on the cover (they were 32), round.
+        val d = compose.density.density
+        val dots = compose.onAllNodes(hasTestTag("kid-chore-dot"), useUnmergedTree = true).fetchSemanticsNodes()
+        if (dots.isEmpty()) fail("$name: no chore day dots on screen")
+        dots.forEach { n ->
+            val w = n.size.width / d
+            val h = n.size.height / d
+            if (w < 35.5f || kotlin.math.abs(w - h) > 0.5f) fail("$name: a chore dot is ${w.toInt()} × ${h.toInt()} dp")
+        }
         tap(p, name, today.letter, hasContentDescription("${chore.title}, ${today.spoken}"))
         until { choreNow()?.days?.firstOrNull { it.today }?.done == true }
         if (choreNow()?.days?.firstOrNull { it.today }?.done != true) fail("$name: today's dot didn't tick ${chore.title}")
@@ -422,25 +469,24 @@ class AdminPlacesScreensTest {
         tap(p, name, pay, hasContentDescription("$pay to Sam for this week"))
         until { kid("Sam").money.paidLine != paidBefore }
         if (kid("Sam").money.paidLine == paidBefore) fail("$name: $pay noted nothing")
-        tap(p, name, "Undo", undo)
+        tap(p, name, "Undo", undo and sheet)
         until { kid("Sam").money.paidLine == paidBefore }
         if (kid("Sam").money.paidLine != paidBefore) fail("$name: Undo didn't take back $pay")
         tap(p, name, "Remove", hasContentDescription("Remove ${chore.title}"))
         until { choreNow() == null }
         if (choreNow() != null) fail("$name: Remove left ${chore.title}")
-        tap(p, name, "Undo", undo)
+        tap(p, name, "Undo", undo and sheet)
         until { choreNow() != null }
         if (choreNow() == null) fail("$name: Undo didn't bring ${chore.title} back")
-        // Each child's card has its own chore and pocket money fields; the first composed one takes the words.
         fun chores() = core.kidsView.value.kids.flatMap { it.money.chores }
         type(p, name, KidChoreRules.CHORE_HINT, "Feed the cat")
         until { chores().any { it.title == "Feed the cat" } }
         if (chores().none { it.title == "Feed the cat" }) fail("$name: Done on the chore field added nothing")
-        fun pockets() = core.kidsView.value.kids.map { it.money.pocketValue }
-        val pocket = pockets()
+        val pocket = kid("Sam").money.pocketValue
         type(p, name, KidChoreRules.POCKET_HINT, "£6", replace = true)
-        until { pockets() != pocket }
-        if (pockets() == pocket) fail("$name: the pocket money field kept $pocket")
+        until { kid("Sam").money.pocketValue != pocket }
+        if (kid("Sam").money.pocketValue == pocket) fail("$name: the pocket money field kept $pocket")
+        closeSheet()
         assertTouchTargets(name)
     }
 
@@ -520,15 +566,6 @@ class AdminPlacesScreensTest {
     fun kidsByHand() {
         kidsByHand(shoot(Place.KIDS, "cover-dark-kids-by-hand", Fill.MANY))
         ScreenShots.reshootAfterHand(compose, Place.KIDS.area, "cover-dark-kids-by-hand") // walk-through A15
-        // Walk-through 2026-11-08 A13: a chore's day dots are drawn 36 dp on the cover (they were 32), round.
-        val d = compose.density.density
-        val dots = compose.onAllNodes(hasTestTag("kid-chore-dot"), useUnmergedTree = true).fetchSemanticsNodes()
-        if (dots.isEmpty()) fail("kids-by-hand: no chore day dots on screen")
-        dots.forEach { n ->
-            val w = n.size.width / d
-            val h = n.size.height / d
-            if (w < 35.5f || kotlin.math.abs(w - h) > 0.5f) fail("kids-by-hand: a chore dot is ${w.toInt()} × ${h.toInt()} dp")
-        }
     }
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun schoolByHand() {

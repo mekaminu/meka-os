@@ -25,6 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -56,31 +58,31 @@ import os.meka.core.domain.KidChoreRow
 import os.meka.core.domain.KidMoney
 import os.meka.core.domain.KidFeeRow
 import os.meka.core.domain.KidSaved
-import os.meka.core.domain.KidWeekDay
+import os.meka.core.domain.KidsPageRules
 import os.meka.core.domain.KidsRules
 import os.meka.core.domain.KidsWeekRules
 import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val KIDS_LIST_TAG = "kids-list"
+const val KIDS_ROW_SHEET_TAG = "kids-row-sheet"
+const val KIDS_ALL_SHEET_TAG = "kids-all-sheet"
 
 /**
- * Ask → Life → Kids (Kids' admin, slice 1): a card per child from About you with their sizes — shoes, football boots,
- * tops, trousers, coat, school jumper — one field each (type and Done keeps it, Clear removes it, Undo puts it
- * back), when they were last checked (lit three months on) and **All still fit**. No children yet: a line and About you.
- * Slice 2: CLUB FEES under the sizes — each fee with its line (brass within 3 days of due), Paid and Remove (Undo), and
- * one field that reads "Football £35 monthly from 1 Nov"; each fee is a bill on the radar, so Bills due reminds once.
+ * Ask → Kids in the page shape (every page under Ask in one shape, slice 15; approved 2026-11-11,
+ * `docs/design/look/LifePage.dc.html`): the title with its ⓘ, one gold + Add (A club fee · A chore · Pocket money a
+ * week, each one typed line, "Alex: …" first when there's more than one child), three numbers (what they need this
+ * week, the next club fee, what's to pay this week or the sizes to check), then This week, Children, Club fees and
+ * Chores and pocket money (five rows each, See all for the rest). A child's row opens their card in a sheet (sizes with
+ * Clear and Undo, All still fit, their club fees with Paid / Remove and the fee field, their chores and pocket money);
+ * a fee's row its line, Paid and Remove with Undo; a chores row the child's chores and pocket money (day dots, Paid,
+ * Remove, Undo, the chore and pocket money fields); a week's row the day and the thing. No children: a line and About
+ * you ›. Navilife never pays a fee or moves money.
  *
- * Slice 5: CHORES AND POCKET MONEY under the fees — the weekly amount, each chore with a dot per day Mon–Sun (tap today's,
- * or an earlier day this week, to tick it), "This week · £5 pocket money + £3 for chores = £8", **Paid £8** and Remove
- * with Undo; one field adds a chore ("Tidy room £1").
- *
- * Slice 3: THIS WEEK over the cards — what they need in the next 7 days, one block per day ("Tomorrow" · "Alex: PE kit"),
- * fees and today's/tomorrow's school things in brass.
- *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, the checked line and the line
- * under a card cross-fade (the checked line's colour blends to the accent when due; a refusal blends its line to the
- * accent with a tick haptic, a save gives a light haptic); cards stagger in 40 ms apart. Reduced motion: cross-fades.
+ * Motion: the title travels in from Ask's tile (shared title); the header, summary, tiles and cards appear in turn;
+ * cards move with the list's item motion; the ⓘ's words unfold and the sheets rise on the expand spring
+ * (LifePageParts); inside a sheet the lines cross-fade, the checked line and a refusal blend to the accent (tick
+ * haptic; a save a light haptic), a chore dot's fill blends. Reduced motion: cross-fades.
  */
 @Composable
 fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
@@ -88,72 +90,164 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val v by core.kidsView.collectAsState()
+    val page = remember(v) { core.kidsPage(v) }
     // Per "child|size": what the field holds while it's being edited; per child, what the last save said and which
     // size a clear came from (for Undo).
     val texts = remember { mutableStateMapOf<String, String>() }
     val said = remember { mutableStateMapOf<String, KidSaved>() }
     val undoSize = remember { mutableStateMapOf<String, String>() }
-    // Slice 2: per child, what the fee field holds and what the last fee action said (with the fee id Undo takes back).
+    // Per child, what the fee field holds and what the last fee action said (with the fee id Undo takes back).
     val feeTexts = remember { mutableStateMapOf<String, String>() }
     val feeSaid = remember { mutableStateMapOf<String, KidSaved>() }
-    // Slice 5: per child, the chore and pocket money fields and what the last chore/money action said.
+    // Per child, the chore and pocket money fields and what the last chore/money action said.
     val choreTexts = remember { mutableStateMapOf<String, String>() }
     val pocketTexts = remember { mutableStateMapOf<String, String>() }
     val moneySaid = remember { mutableStateMapOf<String, KidSaved>() }
+    var infoOpen by remember { mutableStateOf(false) }
+    var addOpen by remember { mutableStateOf(false) }
+    var addChosen by remember { mutableStateOf<String?>(null) }
+    var addText by remember { mutableStateOf("") }
+    // The last add's answer: what was added, or why nothing was (lit, the words kept in the field).
+    var addSaid by remember { mutableStateOf<KidSaved?>(null) }
+    val addSaidColor by animateColorAsState(
+        if (addSaid?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "kids-add-said",
+    )
+    var allCard by remember { mutableStateOf<String?>(null) }
+    var rowKey by remember { mutableStateOf<String?>(null) }
+    // A fee's sheet: what Paid or Remove said, with the fee id Undo takes back (kept while the fee itself is gone).
+    var feeLine by remember { mutableStateOf<Pair<String, KidSaved>?>(null) }
+    fun open(key: String) { haptics.tick(); addSaid = null; feeLine = null; rowKey = key }
 
-    LazyColumn(
-        Modifier.fillMaxSize().testTag(KIDS_LIST_TAG),
-        contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        item(key = "close") {
-            Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        }
-        item(key = "title") {
-            Text(KidsRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
-                modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.KIDS)).appear(rememberAppearance(0)))
-        }
-        item(key = "summary") {
-            Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "kids-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().testTag(KIDS_LIST_TAG),
+            contentPadding = PaddingValues(MekaSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            item(key = "close") {
+                Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
             }
-        }
-        if (v.empty != null) {
-            item(key = "about-you") {
-                Text("About you ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-                    modifier = Modifier.clickable(role = Role.Button) { onAboutYou() }.minTouch().appear(rememberAppearance(2)))
+            item(key = "title") {
+                LifePageHeader(
+                    page.title, page.info, infoOpen,
+                    titleModifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.KIDS)).appear(rememberAppearance(0)),
+                    onInfo = { haptics.tick(); infoOpen = !infoOpen },
+                    onAdd = { haptics.tick(); addSaid = null; addOpen = true },
+                )
             }
-        }
-        // Slice 3: THIS WEEK — what they need in the next 7 days (School, club sessions, fees), one block per day.
-        v.week?.let { w ->
-            item(key = "week-head") {
-                Column(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2)),
-                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(KidsWeekRules.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary)
-                    Crossfade(w.line, animationSpec = MekaMotion.appear(reduced), label = "kids-week-line") { l ->
-                        Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            item(key = "summary") {
+                Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "kids-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                    val line = if (addOpen) null else addSaid
+                    Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "kids-add-line") { l ->
+                        l?.let { Text(it.line, style = MekaType.caption, color = addSaidColor) }
+                    }
+                    if (v.empty != null) {
+                        Text("About you ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clickable(role = Role.Button) { onAboutYou() }.minTouch())
                     }
                 }
             }
-            w.days.forEachIndexed { i, d ->
-                item(key = "week-${d.day}") {
-                    KidWeekDayView(d, Modifier.animateItem().appear(rememberAppearance(3 + i)))
+            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            page.cards.forEachIndexed { i, c ->
+                item(key = "card-${c.key}") {
+                    LifePageCard(
+                        c, Modifier.animateItem().appear(rememberAppearance(3 + i)),
+                        onMore = { haptics.tick(); allCard = c.key },
+                        onRow = { r -> open(r.key) },
+                    )
                 }
             }
-            if (!w.isEmpty) {
-                item(key = "week-foot") {
-                    Text(KidsWeekRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+            item(key = "foot") {
+                Text(KidsRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+            }
+        }
+        // + Add: which kind, then one typed line.
+        LifeSheet(addOpen, page.addTitle, LIFE_ADD_SHEET_TAG, onClose = { addOpen = false }) {
+            AddChoiceRows(page.addChoices, addChosen) { c -> haptics.tick(); addSaid = null; addChosen = c.key }
+            addChosen?.let { choice ->
+                Field(
+                    KidsPageRules.hint(choice), value = addText, onValue = { addText = it },
+                    description = KidsPageRules.spokenHint(choice), keep = true,
+                ) { typed ->
+                    scope.launch {
+                        val r = runCatching { core.addKids(choice, typed) }.getOrNull() ?: return@launch
+                        addSaid = r
+                        if (r.refused) haptics.tick() else { haptics.light(); addText = ""; addOpen = false }
+                    }
+                }
+                addSaid?.takeIf { it.refused }?.let { Text(it.line, style = MekaType.caption, color = addSaidColor) }
+            }
+        }
+        // See all: every row of one card; a tap opens its sheet.
+        val all = allCard
+        LifeSheet(all != null, all?.let(KidsPageRules::cardTitle) ?: KidsPageRules.TITLE, KIDS_ALL_SHEET_TAG, onClose = { allCard = null }) {
+            if (all != null) KidsPageRules.allRows(v, all, core.todayEpochDay()).forEach { r ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { allCard = null; open(r.key) }
+                        .semantics(mergeDescendants = true) {}
+                        .minTouch().padding(vertical = MekaSpace.xs),
+                ) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(listOf(r.line, r.whenText).filter { it.isNotEmpty() }.joinToString(" · "), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
-        v.kids.forEachIndexed { i, kid ->
-            item(key = "kid-${kid.name}") {
-                KidCardView(
+        // A row's sheet: a child's card, a fee, a child's chores and pocket money, or a thing this week.
+        val openKey = rowKey
+        LifeSheet(openKey != null, openKey?.let { KidsPageRules.sheetTitle(v, it) } ?: KidsPageRules.TITLE, KIDS_ROW_SHEET_TAG, onClose = { rowKey = null }) {
+            if (openKey == null) return@LifeSheet
+            val kid = KidsPageRules.kid(v, openKey)
+            val fee = KidsPageRules.fee(v, openKey)
+            val week = KidsPageRules.weekItem(v, openKey)
+            val moneyOf: @Composable (KidCard) -> Unit = { k ->
+                val say: (KidSaved) -> Unit = { r -> if (r.refused) haptics.tick() else haptics.light(); moneySaid[k.name] = r }
+                KidMoneyView(
+                    name = k.name,
+                    money = k.money,
+                    pocketText = pocketTexts[k.name] ?: k.money.pocketValue ?: "",
+                    onPocketText = { pocketTexts[k.name] = it },
+                    onPocket = { typed ->
+                        scope.launch {
+                            val r = runCatching { core.setKidPocketMoney(k.name, typed) }.getOrNull() ?: return@launch
+                            say(r)
+                            if (r.refused) pocketTexts[k.name] = typed else pocketTexts.remove(k.name)
+                        }
+                    },
+                    choreText = choreTexts[k.name] ?: "",
+                    onChoreText = { choreTexts[k.name] = it },
+                    onAddChore = { typed ->
+                        scope.launch {
+                            val r = runCatching { core.addKidChore(k.name, typed) }.getOrNull() ?: return@launch
+                            say(r)
+                            if (r.refused) choreTexts[k.name] = typed else choreTexts.remove(k.name)
+                        }
+                    },
+                    onTick = { id, day -> scope.launch { runCatching { core.tickKidChore(id, day) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.removeKidChore(id) }.getOrNull()?.let(say) } },
+                    onPaid = { scope.launch { runCatching { core.kidPocketMoneyPaid(k.name) }.getOrNull()?.let(say) } },
+                    said = moneySaid[k.name],
+                    onUndo = { token ->
+                        scope.launch {
+                            val ok = runCatching { core.undoKidMoney(token) }.getOrDefault(false)
+                            haptics.light()
+                            if (ok) moneySaid.remove(k.name) else moneySaid[k.name] = KidSaved(KidChoreRules.NOTHING_TO_UNDO, refused = true)
+                        }
+                    },
+                )
+            }
+            when {
+                kid != null && KidsPageRules.isMoney(openKey) -> moneyOf(kid)
+                kid != null -> KidCardView(
                     kid = kid,
                     texts = texts,
                     said = said[kid.name],
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2 + i)),
+                    modifier = Modifier,
                     onSave = { size, typed ->
                         scope.launch {
                             val r = runCatching { core.setKidSize(kid.name, size, typed) }.getOrNull() ?: return@launch
@@ -209,54 +303,60 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
                             if (ok) feeSaid.remove(kid.name) else feeSaid[kid.name] = KidSaved(KidsRules.FEE_NOTHING_TO_UNDO, refused = true)
                         }
                     },
-                ) {
-                    // Slice 5: chores and pocket money.
-                    val say: (KidSaved) -> Unit = { r -> if (r.refused) haptics.tick() else haptics.light(); moneySaid[kid.name] = r }
-                    KidMoneyView(
-                        name = kid.name,
-                        money = kid.money,
-                        pocketText = pocketTexts[kid.name] ?: kid.money.pocketValue ?: "",
-                        onPocketText = { pocketTexts[kid.name] = it },
-                        onPocket = { typed ->
-                            scope.launch {
-                                val r = runCatching { core.setKidPocketMoney(kid.name, typed) }.getOrNull() ?: return@launch
-                                say(r)
-                                if (r.refused) pocketTexts[kid.name] = typed else pocketTexts.remove(kid.name)
+                ) { moneyOf(kid) }
+                fee != null || feeLine?.first == openKey -> {
+                    fee?.let { (k, f) ->
+                        Text(k.name, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        KidFeeRowView(
+                            f,
+                            onPaid = {
+                                scope.launch {
+                                    val r = runCatching { core.kidFeePaid(f.id) }.getOrNull() ?: return@launch
+                                    if (r.refused) haptics.tick() else haptics.light()
+                                    feeLine = openKey to r
+                                }
+                            },
+                            onRemove = {
+                                scope.launch {
+                                    val r = runCatching { core.removeKidFee(f.id) }.getOrNull() ?: return@launch
+                                    haptics.light()
+                                    feeLine = openKey to r
+                                }
+                            },
+                        )
+                        Text(KidsRules.FEE_FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    }
+                    val line = feeLine?.takeIf { it.first == openKey }?.second
+                    Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "kids-fee-sheet-line") { s ->
+                        if (s != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                                Text(s.line, style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                                    modifier = Modifier.weight(1f))
+                                s.feeUndo?.let { id ->
+                                    Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
+                                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                                            scope.launch {
+                                                val ok = runCatching { core.undoKidFee(id) }.getOrDefault(false)
+                                                haptics.light()
+                                                feeLine = if (ok) null else openKey to KidSaved(KidsRules.FEE_NOTHING_TO_UNDO, refused = true)
+                                            }
+                                        }.minTouch().padding(MekaSpace.xs))
+                                }
                             }
-                        },
-                        choreText = choreTexts[kid.name] ?: "",
-                        onChoreText = { choreTexts[kid.name] = it },
-                        onAddChore = { typed ->
-                            scope.launch {
-                                val r = runCatching { core.addKidChore(kid.name, typed) }.getOrNull() ?: return@launch
-                                say(r)
-                                if (r.refused) choreTexts[kid.name] = typed else choreTexts.remove(kid.name)
-                            }
-                        },
-                        onTick = { id, day ->
-                            scope.launch { runCatching { core.tickKidChore(id, day) }.getOrNull()?.let(say) }
-                        },
-                        onRemove = { id ->
-                            scope.launch { runCatching { core.removeKidChore(id) }.getOrNull()?.let(say) }
-                        },
-                        onPaid = {
-                            scope.launch { runCatching { core.kidPocketMoneyPaid(kid.name) }.getOrNull()?.let(say) }
-                        },
-                        said = moneySaid[kid.name],
-                        onUndo = { token ->
-                            scope.launch {
-                                val ok = runCatching { core.undoKidMoney(token) }.getOrDefault(false)
-                                haptics.light()
-                                if (ok) moneySaid.remove(kid.name) else moneySaid[kid.name] = KidSaved(KidChoreRules.NOTHING_TO_UNDO, refused = true)
-                            }
-                        },
-                    )
+                        }
+                    }
                 }
+                week != null -> {
+                    val (d, thing) = week
+                    Text(thing.text, style = MekaType.body, color = if (thing.lit) Meka.colors.accent else Meka.colors.textPrimary,
+                        modifier = Modifier.semantics { contentDescription = thing.spoken })
+                    Text(KidsWeekRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    if (d.items.size > 1) d.items.filter { it != thing }.forEach { other ->
+                        Text(other.text, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+                else -> Text(KidsPageRules.GONE, style = MekaType.caption, color = Meka.colors.textSecondary)
             }
-        }
-        item(key = "foot") {
-            Text(KidsRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
 }
@@ -500,17 +600,5 @@ private fun KidFeeRowView(fee: KidFeeRow, onPaid: () -> Unit, onRemove: () -> Un
         Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${fee.title}" }.minTouch().padding(MekaSpace.xs))
-    }
-}
-
-/** Slice 3: one day of THIS WEEK: its label, then each thing (brass when it wants doing: a fee, kit for tomorrow). */
-@Composable
-private fun KidWeekDayView(d: KidWeekDay, modifier: Modifier) {
-    Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Text(d.label, style = MekaType.caption, color = Meka.colors.textTertiary)
-        d.items.forEach { thing ->
-            Text(thing.text, style = MekaType.body, color = if (thing.lit) Meka.colors.accent else Meka.colors.textPrimary,
-                modifier = Modifier.semantics { contentDescription = thing.spoken })
-        }
     }
 }

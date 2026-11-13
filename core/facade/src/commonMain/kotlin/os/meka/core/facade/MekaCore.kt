@@ -1999,6 +1999,26 @@ class MekaCore(
         else keepKidUndo(kidChores.markPaid(child, todayEpochDay()), "pay:${os.meka.core.domain.KidsRules.idFor(child)}")
     }
 
+    /** Every page under Ask in one shape, slice 15: Ask → Kids as the page shape (both apps). */
+    fun kidsPage(view: os.meka.core.domain.KidsView = _kids.value): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.KidsPageRules.page(view, todayEpochDay())
+
+    /**
+     * Slice 15: Kids' + Add — one typed line for [choice] ([os.meka.core.domain.KidsPageRules.ADD_FEE], `ADD_CHORE`,
+     * `ADD_POCKET`), "Alex: …" first when there's more than one child; refused (nothing written) when it doesn't say whose.
+     */
+    suspend fun addKids(choice: String, text: String): os.meka.core.domain.KidSaved {
+        val names = onCore { aboutYou.profile().children.map { it.name } }
+        if (names.isEmpty()) return os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.NO_CHILDREN, refused = true)
+        val (child, rest) = os.meka.core.domain.KidsPageRules.split(text, names)
+        if (child == null) return os.meka.core.domain.KidSaved(os.meka.core.domain.KidsPageRules.whoseFirst(names), refused = true)
+        return when (choice) {
+            os.meka.core.domain.KidsPageRules.ADD_CHORE -> addKidChore(child, rest)
+            os.meka.core.domain.KidsPageRules.ADD_POCKET -> setKidPocketMoney(child, rest)
+            else -> addKidFee(child, rest)
+        }
+    }
+
     /** Undo for [removeKidChore], [setKidPocketMoney] or [kidPocketMoneyPaid] by its token; false when there's nothing to take back. */
     suspend fun undoKidMoney(token: String): Boolean = onCore {
         val u = kidMoneyUndo.remove(token) ?: return@onCore false
