@@ -860,8 +860,10 @@ private fun ProgressBar(p: TripProgress, modifier: Modifier) {
             Text(p.label, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.weight(1f))
             Text(p.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, softWrap = false)
         }
-        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(fill).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+        // A19: "Nothing yet" keeps the track's space (the two cards stay one height) but draws no empty track.
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill))
+            .background(if (p.showsTrack) Meka.colors.hairline else Color.Transparent).testTag("trip-bar-${p.label}-${p.showsTrack}")) {
+            if (p.showsTrack) Box(Modifier.fillMaxHeight().fillMaxWidth(fill).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
         }
     }
 }

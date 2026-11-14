@@ -116,7 +116,8 @@ struct HabitsSheet: View {
                     VStack(spacing: MekaSpace.xxs) {
                         Text(d.weekday).font(MekaType.micro).foregroundStyle(ink)
                         Text("\(d.dayOfMonth)").font(MekaType.metaStrong).foregroundStyle(ink)
-                        HabitBar(share: Double(d.pct) / 100, track: ink.opacity(0.2), fill: d.selected ? ink : palette.accent)
+                        // A19: a day with no habits counted keeps the bar's space but draws no empty track.
+                        HabitBar(share: Double(d.pct) / 100, track: d.showsBar ? ink.opacity(0.2) : .clear, fill: d.selected ? ink : palette.accent)
                             .frame(width: 22, height: 3)
                     }
                     .frame(maxWidth: .infinity, minHeight: 62)
@@ -141,12 +142,17 @@ struct HabitsSheet: View {
                     Text(streak).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
             }
-            HabitBar(share: Double(b.pct) / 100, track: palette.surfaceRaised, fill: palette.accent)
-                .frame(height: 5)
-                .animation(MekaMotion.replan(reduced: reduceMotion), value: b.pct)
+            // A19: no empty track under "No habits yet"; the bar appears once a habit counts that day.
+            if b.showsBar {
+                HabitBar(share: Double(b.pct) / 100, track: palette.surfaceRaised, fill: palette.accent)
+                    .frame(height: 5)
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: b.pct)
+                    .transition(.opacity)
+            }
         }
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: b.showsBar)
         .accessibilityElement(children: .combine)
     }
 

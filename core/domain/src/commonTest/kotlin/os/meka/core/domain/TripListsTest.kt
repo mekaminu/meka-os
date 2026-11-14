@@ -104,6 +104,7 @@ class TripListsTest {
         assertTrue(v.countdownLit)
         assertEquals("1 of 4", v.packed.line)
         assertEquals(0.25f, v.packed.fraction)
+        assertTrue(v.packed.showsTrack)
         assertEquals("0 of 1", v.bought.line)
         assertEquals("Bought 0 of 1 · packed 1 of 4", v.summary)
         val docs = v.tab(TripList.PACK).groups.first()
@@ -142,6 +143,9 @@ class TripListsTest {
         assertEquals(TripListRules.LISTS_EMPTY, v.summary)
         assertEquals(TripListRules.NOTHING_YET, v.bought.line)
         assertEquals(0f, v.packed.fraction)
+        // A19: "Nothing yet" has no empty track under it.
+        assertFalse(v.bought.showsTrack)
+        assertFalse(v.packed.showsTrack)
         assertEquals("8 days to go", v.countdown)
         assertFalse(v.countdownLit)
         assertEquals(listOf("To buy", "To pack", "Before we leave"), v.tabs.map { it.label })

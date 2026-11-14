@@ -4,6 +4,7 @@ import os.meka.core.testing.Device
 import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -171,6 +172,10 @@ class HabitBoardTest {
         val fri = board(sel = 0, list = "Weekend")
         assertEquals("No habits yet · Fri 6", fri.doneLine)
         assertEquals("", fri.groups.single().count)
+        // A19: nothing counted that day, so no empty track; a day with one counted keeps its bar.
+        assertFalse(fri.showsBar)
+        assertTrue(fri.days[6].showsBar)
+        assertTrue(board().showsBar)
     }
 
     @Test
@@ -206,5 +211,8 @@ class HabitBoardTest {
         assertEquals("Thu 12, no habits yet", b.days[6].label)
         assertTrue(b.groups.isEmpty())
         assertNull(b.streakLine)
+        // A19: no empty tracks with nothing set, neither the summary's nor the days'.
+        assertFalse(b.showsBar)
+        assertTrue(b.days.none { it.showsBar })
     }
 }

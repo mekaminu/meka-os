@@ -4623,6 +4623,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         let empty = core.habitBoard(view: core.goalsView.value, selected: 6, list: HabitBoardRules.shared.ALL)
         XCTAssertEqual(empty.doneLine, "No habits yet")
         XCTAssertTrue(empty.empty)
+        XCTAssertFalse(empty.showsBar)  // A19: no empty track with nothing set
+        XCTAssertFalse(empty.days[6].showsBar)
         let biscuits = try await core.addHabitToList(title: "No biscuits", avoid: true, list: "All day", perWeek: 7, remindAt: nil)
         _ = try await core.addHabitToList(title: "Long walk", avoid: false, list: "Weekend", perWeek: 2, remindAt: KotlinInt(int: 540))
         let today = core.goalsView.value.today

@@ -6,6 +6,10 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -161,8 +165,10 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                         ) {
                             Text(d.weekday, style = MekaType.micro, color = ink)
                             Text("${d.dayOfMonth}", style = MekaType.metaStrong, color = ink)
-                            Box(Modifier.padding(top = MekaSpace.xxs).width(22.dp).height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(ink.copy(alpha = 0.2f))) {
-                                Box(Modifier.fillMaxHeight().fillMaxWidth(share).background(if (d.selected) ink else Meka.colors.accent))
+                            // A19: a day with no habits counted keeps the bar's space but draws no empty track.
+                            Box(Modifier.padding(top = MekaSpace.xxs).width(22.dp).height(3.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                                .background(if (d.showsBar) ink.copy(alpha = 0.2f) else Color.Transparent).testTag("habits-day-bar-$i-${d.showsBar}")) {
+                                if (d.showsBar) Box(Modifier.fillMaxHeight().fillMaxWidth(share).background(if (d.selected) ink else Meka.colors.accent))
                             }
                         }
                     }
@@ -181,8 +187,12 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                         }
                         b.streakLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
                     }
-                    Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
-                        Box(Modifier.fillMaxHeight().fillMaxWidth(share).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+                    // A19: no empty track under "No habits yet"; the bar appears once a habit counts that day.
+                    AnimatedVisibility(b.showsBar, enter = fadeIn(MekaMotion.appear(reduced)) + expandVertically(MekaMotion.expand(reduced)),
+                        exit = fadeOut(MekaMotion.appear(reduced)) + shrinkVertically(MekaMotion.expand(reduced))) {
+                        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised).testTag("habits-summary-bar")) {
+                            Box(Modifier.fillMaxHeight().fillMaxWidth(share).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+                        }
                     }
                 }
             }

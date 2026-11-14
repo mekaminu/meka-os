@@ -119,6 +119,8 @@ class TripListsScreensTest {
         ScreenShots.assertShows(compose, name, "Seville trip")
         ScreenShots.assertShows(compose, name, "2 days to go")
         ScreenShots.assertNotCornerClipped(compose, name, "2 days to go")
+        // A19: lists with things on them keep their tracks.
+        compose.onNodeWithTag("trip-bar-Packed-true", useUnmergedTree = true).assertExists()
         // Walk-through 2026-11-02 A9: each "⋯" is a whole 48 × 48 target, not as wide as its glyph.
         ScreenShots.assertWholeTargets(compose, name)
         // Walk-through 2026-11-08 A13: the groups' fold marks and every ⋯ are drawn, not bare glyphs.
@@ -258,6 +260,9 @@ class TripListsScreensTest {
         ScreenShots.assertSensible(compose, "cover-dark-start-from")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-start-from")
         ScreenShots.assertShows(compose, "cover-dark-start-from", "Start from Seville trip")
+        // A19 (walk-through 2026-11-08): "Nothing yet" draws no empty track; the cards keep one height.
+        compose.onNodeWithTag("trip-bar-Bought-false", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("trip-bar-Packed-false", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("trip-start-from").performClick()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.tripListsView.value.single { it.tripId == rome }.packed.total == 9 }

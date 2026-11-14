@@ -590,9 +590,12 @@ struct TripListsPanel: View {
                 Text(p.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
             GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(palette.hairline)
-                    Capsule().fill(palette.accent).frame(width: geo.size.width * CGFloat(p.fraction))
+                // A19: "Nothing yet" keeps the track's space (the two cards stay one height) but draws no empty track.
+                if p.showsTrack {
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(palette.hairline)
+                        Capsule().fill(palette.accent).frame(width: geo.size.width * CGFloat(p.fraction))
+                    }
                 }
             }
             .frame(height: 4)

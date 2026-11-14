@@ -121,9 +121,15 @@ class HabitsScreensTest {
             ScreenShots.assertShows(compose, name, "before work")
             ScreenShots.assertShows(compose, name, "Do · 7 day streak")
             ScreenShots.assertShows(compose, name, "Avoid · 7 day streak")
+            // A19: with habits counted, the summary and today's day carry their bars.
+            compose.onNodeWithTag("habits-summary-bar", useUnmergedTree = true).assertExists()
+            compose.onNodeWithTag("habits-day-bar-6-true", useUnmergedTree = true).assertExists()
         } else {
             ScreenShots.assertShows(compose, name, "Add a habit to do")
             ScreenShots.assertShows(compose, name, "No habits yet")
+            // A19 (walk-through 2026-11-08): nothing set, so no empty progress tracks, neither the summary's nor a day's.
+            compose.onNodeWithTag("habits-summary-bar", useUnmergedTree = true).assertDoesNotExist()
+            (0 until 7).forEach { compose.onNodeWithTag("habits-day-bar-$it-false", useUnmergedTree = true).assertExists() }
         }
     }
 

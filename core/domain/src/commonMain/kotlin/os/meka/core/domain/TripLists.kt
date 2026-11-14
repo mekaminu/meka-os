@@ -115,7 +115,10 @@ data class TripListTab(
 )
 
 /** "Bought" · "3 of 9", and how far along (0..1) for the thin bar. */
-data class TripProgress(val label: String, val line: String, val fraction: Float, val done: Int, val total: Int)
+data class TripProgress(val label: String, val line: String, val fraction: Float, val done: Int, val total: Int) {
+    /** Walk-through 2026-11-08, A19: "Nothing yet" has no empty track under it (the card keeps its height). */
+    val showsTrack: Boolean get() = total > 0
+}
 
 /** A trip's lists: the header, the two bars and the three tabs. */
 data class TripListsView(

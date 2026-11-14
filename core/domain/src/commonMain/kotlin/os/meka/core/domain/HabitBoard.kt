@@ -26,6 +26,9 @@ data class HabitBoardDay(
 ) {
     /** 0–100, the little bar under the date. */
     val pct: Int get() = if (total == 0) 0 else done * 100 / total
+
+    /** Walk-through 2026-11-08, A19: no empty track under a day with no habits counted on it (the space stays). */
+    val showsBar: Boolean get() = total > 0
 }
 
 /** A list chip: All, Morning, All day, Night time, then his own lists. */
@@ -91,6 +94,8 @@ data class HabitBoard(
     val streakLine: String?,
     /** 0–100: the selected day's bar (of the habits shown). */
     val pct: Int,
+    /** Walk-through 2026-11-08, A19: the bar only once a habit counts on the selected day (no empty track under "No habits yet"). */
+    val showsBar: Boolean,
     val chips: List<HabitBoardChip>,
     val groups: List<HabitBoardGroup>,
     /** Every list a habit can go in (the add sheet's and a row's choices). */
@@ -236,6 +241,7 @@ object HabitBoardRules {
             doneLine = doneLine,
             streakLine = best?.let { "best streak ${it.streak} ${it.streakUnit}s" },
             pct = if (counted.isEmpty()) 0 else done * 100 / counted.size,
+            showsBar = counted.isNotEmpty(),
             chips = (listOf(ALL) + lists).map { HabitBoardChip(it, it == chosen) },
             groups = groups,
             lists = lists,
