@@ -54,6 +54,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.headFade
 import os.meka.android.designsystem.minTouch
 import os.meka.android.lists.Field
 import os.meka.core.domain.MoneyChallenges
@@ -147,8 +148,10 @@ internal fun OwnCategorySheet(
                         Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
+                // Whatever scrolls under the head fades out rather than being cut to a hard edge (the board's headFade).
+                val body = rememberScrollState()
                 Column(
-                    Modifier.weight(1f, fill = false).fillMaxWidth().clipToBounds().verticalScroll(rememberScrollState())
+                    Modifier.weight(1f, fill = false).fillMaxWidth().clipToBounds().headFade(body.value > 0).verticalScroll(body)
                         .padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m, top = MekaSpace.xs)
                         .testTag("money-own-body"),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
