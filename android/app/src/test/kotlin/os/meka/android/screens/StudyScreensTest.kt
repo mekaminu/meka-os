@@ -125,6 +125,7 @@ class StudyScreensTest {
         // Slice 2a: YOUR PLAN sits between the header and the lessons, so the modules are further down.
         scrollTo(hasTestTag("study-module-${core.studyView.value.course(id)!!.modules[1].key}"))
         ScreenShots.assertShows(compose, name, "2 · Core skills")
+        assertWraps(core, id, name)
         // Walk-through 2026-11-08 A13: each module's fold mark is drawn whole, never a bare "⌄".
         kotlin.test.assertTrue(ScreenShots.assertDrawnMarks(compose, name) > 0, "$name: no drawn fold marks")
     }
@@ -163,6 +164,20 @@ class StudyScreensTest {
         // Walk-through 2026-11-02 A3: the week's time says it's a week's, and the next lesson names its module in full.
         ScreenShots.assertShows(compose, name, "a week · 5 lessons left")
         ScreenShots.assertShows(compose, name, "Next: Pivot tables · Module 2: Core skills")
+        assertWraps(core, id, name)
+    }
+
+    /**
+     * Walk-through 2026-11-08, A14 (Study's lone "1"): the course's line, its next lesson, the plan's status, figures,
+     * fit and Obi's line, and the notes never leave a word alone on a line or start one with a "·".
+     */
+    private fun assertWraps(core: MekaCore, id: String, name: String) {
+        val c = core.studyView.value.course(id)!!
+        val p = c.plan
+        val lines = listOfNotNull(c.line, c.next, p.status, p.perWeekSub, p.fit, p.obi,
+            os.meka.core.domain.StudyRules.NOTE + " " + os.meka.core.domain.StudyRules.HOLD_NOTE)
+        ScreenShots.assertNoLoneWords(compose, name, lines)
+        ScreenShots.assertNoDotStartingALine(compose, name, lines)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun planCoverDark() = shootPlan("cover-dark-plan", ThemeChoice.DARK)
@@ -176,8 +191,8 @@ class StudyScreensTest {
         val (core, id) = filled(ThemeChoice.DARK)
         show(core, id)
         val ends = core.studyView.value.course(id)!!.plan.ends
-        compose.onNodeWithText("23 Nov · 4 wks").assertExists()
-        compose.onAllNodesWithText("Mon 23 Nov · 4 wks").assertCountEquals(0)
+        compose.onNode(ScreenShots.plainText("23 Nov · 4 wks")).assertExists()
+        compose.onAllNodes(ScreenShots.plainText("Mon 23 Nov · 4 wks")).assertCountEquals(0)
         val first = compose.onNodeWithTag("study-end-${ends[0].key}").getUnclippedBoundsInRoot()
         val second = compose.onNodeWithTag("study-end-${ends[1].key}").getUnclippedBoundsInRoot()
         assertEquals(first.top, second.top, "the first two finish dates share a row")
@@ -200,11 +215,11 @@ class StudyScreensTest {
         compose.onNodeWithTag("study-end-$fourWeeks").performClick()
         compose.mainClock.advanceTimeBy(16L)
         compose.onNodeWithTag("study-end-$fourWeeks").assertIsSelected()
-        compose.onNodeWithText("2 sessions a week").assertExists()
+        compose.onNode(ScreenShots.plainText("2 sessions a week")).assertExists()
         scrollTo(hasTestTag("study-slot-sat"))
         compose.onNodeWithTag("study-slot-sat").performClick()
         compose.mainClock.advanceTimeBy(16L)
-        compose.onNodeWithText("Doesn’t fit", substring = true).assertExists()
+        compose.onNode(ScreenShots.plainText("Doesn’t fit", substring = true)).assertExists()
         // The core's writes land after: the view then says the same.
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.plan.obi != null }
@@ -444,7 +459,7 @@ class StudyScreensTest {
         compose.onNode(hasContentDescription("Session done"), useUnmergedTree = true).assertExists()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.done == 1 }
-        compose.onNodeWithText("Ticked \u201CWelcome and setup\u201D").assertExists()
+        compose.onNode(ScreenShots.plainText("Ticked \u201CWelcome and setup\u201D")).assertExists()
     }
 
     @Test

@@ -4,6 +4,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.hasContentDescription
@@ -189,8 +190,18 @@ object ScreenShots {
     fun assertShows(compose: ComposeContentTestRule, name: String, text: String) {
         val found = compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true), useUnmergedTree = true)
             .fetchSemanticsNodes()
-        if (found.isEmpty()) fail("$name: \"$text\" isn't on screen")
+        // A line drawn with no-break spaces (LoneWordGlue, DateGlue) reads the same: the words are compared as plain.
+        if (found.isEmpty() && texts(compose).none { DateGlue.plain(it).contains(DateGlue.plain(text)) }) fail("$name: \"$text\" isn't on screen")
     }
+
+    /** A node whose text, read as plain words (no-break spaces as spaces), is [text] (or holds it, with [substring]). */
+    fun plainText(text: String, substring: Boolean = false): SemanticsMatcher =
+        SemanticsMatcher("plain text \"$text\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text).orEmpty().any {
+                val t = DateGlue.plain(it.text)
+                if (substring) t.contains(DateGlue.plain(text)) else t == DateGlue.plain(text)
+            }
+        }
 
     /**
      * Fails unless the text containing [text] is laid out on one line (Today's re-shot, 2026-10-22: "Good afternoon"

@@ -112,6 +112,7 @@ import os.meka.android.lists.DayPickerDialog
 import os.meka.android.lists.Field
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.ChecklistRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.StudyAdded
 import os.meka.core.domain.StudyChip
 import os.meka.core.domain.StudyPlanInput
@@ -165,7 +166,7 @@ internal fun StudySection(
             removed?.let { r -> UndoLine(r) { haptics.light(); onUndo(r) } }
         }
         Field(StudyRules.ADD_COURSE_HINT, Modifier.testTag("study-add-course")) { text -> onAdd(text) }
-        if (view.courses.isEmpty()) Text(StudyRules.ADD_COURSE_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (view.courses.isEmpty()) Text(studyShown(StudyRules.ADD_COURSE_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -182,8 +183,8 @@ private fun CourseRow(c: StudyCourseView, onOpen: () -> Unit) {
         CourseRing(c.fraction, "${c.pct}", 40.dp, 4.dp, null)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(c.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-            c.next?.let { Text(it, style = MekaType.caption, color = if (c.allDone) Meka.colors.success else Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            Text(studyShown(c.line), style = MekaType.caption, color = Meka.colors.textSecondary)
+            c.next?.let { Text(studyShown(it), style = MekaType.caption, color = if (c.allDone) Meka.colors.success else Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
         Text("›", style = MekaType.body, color = Meka.colors.accent)
     }
@@ -216,7 +217,7 @@ private fun CourseRing(fraction: Float, label: String, size: Dp, width: Dp, sub:
 @Composable
 private fun UndoLine(r: StudyRemoved, onUndo: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        Text(studyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         Text(
             "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onUndo)
@@ -450,7 +451,7 @@ internal fun StudyPane(
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); onClose() }.semantics { contentDescription = "Back to Goals and habits" }.minTouch())
         }
         if (c == null) {
-            item(key = "gone") { Text(StudyRules.GONE, style = MekaType.body, color = Meka.colors.textSecondary) }
+            item(key = "gone") { Text(studyShown(StudyRules.GONE), style = MekaType.body, color = Meka.colors.textSecondary) }
             return@LazyColumn
         }
         val lessons = c.modules.flatMap { it.lessons }
@@ -468,10 +469,10 @@ internal fun StudyPane(
                 CourseRing(if (total == 0) 0f else done.toFloat() / total, "$pct%", 96.dp, 8.dp, "done")
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Text(c.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
-                    Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-                    c.next?.let { Text(it, style = MekaType.captionStrong, color = if (c.allDone) Meka.colors.success else Meka.colors.accent) }
+                    Text(studyShown(c.line), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    c.next?.let { Text(studyShown(it), style = MekaType.captionStrong, color = if (c.allDone) Meka.colors.success else Meka.colors.accent) }
                     Crossfade(plan.status, animationSpec = MekaMotion.appear(reduced), label = "study-status") { st ->
-                        st?.let { Text(it, style = MekaType.caption, color = if (plan.behind) Meka.colors.accent else Meka.colors.success, modifier = Modifier.testTag("study-status")) }
+                        st?.let { Text(studyShown(it), style = MekaType.caption, color = if (plan.behind) Meka.colors.accent else Meka.colors.success, modifier = Modifier.testTag("study-status")) }
                     }
                 }
             }
@@ -521,7 +522,7 @@ internal fun StudyPane(
             Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 AnimatedVisibility(said != null && !fieldOpen, enter = unfold(), exit = fold()) {
                     Crossfade(said?.line.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "study-said-top") { line ->
-                        Text(line, style = MekaType.caption, color = saidColor, modifier = Modifier.testTag("study-said"))
+                        Text(studyShown(line), style = MekaType.caption, color = saidColor, modifier = Modifier.testTag("study-said"))
                     }
                 }
                 AnimatedVisibility(
@@ -540,7 +541,7 @@ internal fun StudyPane(
         }
         if (c.modules.isEmpty()) {
             item(key = "empty") {
-                Text(StudyRules.EMPTY_COURSE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem().padding(top = MekaSpace.xs))
+                Text(studyShown(StudyRules.EMPTY_COURSE), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem().padding(top = MekaSpace.xs))
             }
         }
         val firstOpen = shownModules.firstOrNull { m -> m.lessons.any { !(pending[it.id] ?: it.done) } }?.key
@@ -674,7 +675,7 @@ internal fun StudyPane(
                         OutlineField(outline, { outline = it }, add)
                         ScreenshotAction(fromScreenshot)
                         Crossfade(scanned ?: said?.line ?: StudyRules.ADD_LESSONS_NOTE, animationSpec = MekaMotion.appear(reduced), label = "study-added") { line ->
-                            Text(line, style = MekaType.caption, color = if (said != null || scanned != null) saidColor else Meka.colors.textTertiary)
+                            Text(studyShown(line), style = MekaType.caption, color = if (said != null || scanned != null) saidColor else Meka.colors.textTertiary)
                         }
                     }
                 }
@@ -693,7 +694,7 @@ internal fun StudyPane(
         }
         item(key = "note") {
             Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Text(StudyRules.NOTE + " " + StudyRules.HOLD_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(studyShown(StudyRules.NOTE + " " + StudyRules.HOLD_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Text(
                     "Remove course", style = MekaType.itemMeta, color = Meka.colors.critical,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
@@ -839,7 +840,7 @@ private fun NudgeRow(
     ) {
         Column(Modifier.weight(1f)) {
             Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(sub, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(studyShown(sub), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         Crossfade(if (on) "On" else "Off", animationSpec = MekaMotion.appear(reduced), label = "study-nudge-on") { l ->
             Text(l, style = MekaType.captionStrong, color = if (on) Meka.colors.onAccent else Meka.colors.textSecondary,
@@ -927,16 +928,16 @@ private fun PlanCard(
             Crossfade(plan.perWeek to plan.perWeekSub, animationSpec = MekaMotion.appear(reduced), label = "study-per-week") { (big, sub) ->
                 if (big != null) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     Text(big, style = MekaType.nowTitle, color = Meka.colors.accent, modifier = Modifier.testTag("study-per-week"))
-                    sub?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs)) }
+                    sub?.let { Text(studyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs)) }
                 }
             }
             Crossfade(plan.fit, animationSpec = MekaMotion.appear(reduced), label = "study-fit") { fit ->
-                fit?.let { Text(it, style = MekaType.caption, color = if (plan.fits) Meka.colors.success else if (plan.perWeek == null) Meka.colors.textTertiary else Meka.colors.accent, modifier = Modifier.testTag("study-fit")) }
+                fit?.let { Text(studyShown(it), style = MekaType.caption, color = if (plan.fits) Meka.colors.success else if (plan.perWeek == null) Meka.colors.textTertiary else Meka.colors.accent, modifier = Modifier.testTag("study-fit")) }
             }
             // Slice 2b: lessons he hasn't planned, suggested for his next sessions ("5 lessons suggested for your next 3 sessions · …").
             AnimatedVisibility(suggested != null, enter = unfold(), exit = fold()) {
                 Crossfade(suggested.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "study-suggested") { line ->
-                    Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("study-suggested"))
+                    Text(studyShown(line), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("study-suggested"))
                 }
             }
         }
@@ -950,7 +951,7 @@ private fun PlanCard(
                 Box(Modifier.padding(top = MekaSpace.xxs).size(16.dp).clip(RoundedCornerShape(MekaRadius.pill))
                     .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.9f), accent.copy(alpha = 0.45f)))))
                 Crossfade(plan.obi.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "study-obi") { line ->
-                    Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(studyShown(line), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
@@ -1223,7 +1224,7 @@ private fun ConfirmRow(question: String, yes: String, tag: String, onYes: () -> 
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs).testTag(tag),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(question, style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Text(studyShown(question), style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
         Text(yes, style = MekaType.itemMeta, color = Meka.colors.critical,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onYes)
                 .semantics { contentDescription = "$yes: $question" }.minTouch().padding(MekaSpace.xs).testTag("$tag-yes"))
@@ -1395,10 +1396,17 @@ private fun DeletedRow(d: StudyDeletedRow, modifier: Modifier, onRestore: () -> 
     ) {
         Column(Modifier.weight(1f)) {
             Text(d.title, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(d.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(studyShown(d.line), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         Text(StudyRules.RESTORE, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRestore)
                 .semantics { contentDescription = "Restore ${d.title}" }.minTouch().padding(MekaSpace.xs).testTag("study-restore-${d.id}"))
     }
 }
+
+/**
+ * Walk-through 2026-11-08, A14 (Study's lone "1" on the cover screen): a line Study draws where it may wrap (a course's
+ * line, the plan's figures and fit, Obi's line, what was added, the notes) keeps its numbers, durations, dates and dots
+ * whole and its last words together. Names (a course's, a lesson's, a module's) stay as typed.
+ */
+private fun studyShown(line: String): String = LoneWordGlue.measured(line)
