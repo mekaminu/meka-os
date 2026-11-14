@@ -52,7 +52,8 @@ struct LifePageHeader: View {
     }
 }
 
-/// The three number tiles in a row: the number (brass when lit) over its words.
+/// The three number tiles in a row: the number (brass when lit) over its words. Every tile fills the row's height, so
+/// a one-line label's tile is never shorter than its two-line neighbours (walk-through 2026-11-08 A19).
 struct LifeNumberTiles: View {
     let page: LifePageView
     let palette: MekaPalette
@@ -66,11 +67,12 @@ struct LifeNumberTiles: View {
                     Text(t.label).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(2)
                 }
                 .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.surfaceRaised))
                 .accessibilityElement(children: .combine)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

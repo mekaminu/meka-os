@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -118,13 +120,21 @@ internal fun LifePageHeader(
     }
 }
 
-/** The three number tiles in a row: the number (brass when lit) over its words. */
+/** Each number tile's tag (the screen tests check the three share one height). */
+internal const val LIFE_TILE_TAG = "life-page-tile"
+
+/**
+ * The three number tiles in a row: the number (brass when lit) over its words. The row is as tall as its tallest
+ * tile and every tile fills it, so a one-line label's tile is never shorter than its neighbours (walk-through
+ * 2026-11-08 A19: "7 days / to Seville" sat short beside two-line "None booked for Seville").
+ */
 @Composable
 internal fun LifeNumberTiles(tiles: List<PageTile>, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         tiles.forEach { t ->
             Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+                    .testTag(LIFE_TILE_TAG)
                     .semantics(mergeDescendants = true) {}
                     .padding(MekaSpace.xs),
             ) {

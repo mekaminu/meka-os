@@ -19,6 +19,7 @@ import androidx.compose.ui.test.swipeUp
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import org.robolectric.Shadows
+import os.meka.android.ask.LIFE_TILE_TAG
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DurationGlue
@@ -26,6 +27,7 @@ import os.meka.core.domain.LifePageView
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PhraseGlue
 import os.meka.core.domain.ScreenSenseRules
+import androidx.compose.ui.test.onAllNodesWithTag
 import kotlin.test.fail
 
 /**
@@ -439,6 +441,18 @@ object ScreenShots {
         assertNoLoneWords(compose, name, empties)
         assertNoDotEndingALine(compose, name, empties)
         assertNoDotStartingALine(compose, name, empties + page.tiles.map { it.label })
+        assertTilesOneHeight(compose, name)
+    }
+
+    /**
+     * Walk-through 2026-11-08 A19: a page's number tiles share one height, so a one-line label's tile ("7 days / to
+     * Seville") is never shorter than its two-line neighbours. Pages without the tiles pass.
+     */
+    fun assertTilesOneHeight(compose: ComposeContentTestRule, name: String) {
+        val heights = compose.onAllNodesWithTag(LIFE_TILE_TAG, useUnmergedTree = true)
+            .fetchSemanticsNodes().map { it.boundsInRoot.height }
+        if (heights.size < 2) return
+        if (heights.max() - heights.min() > 1f) fail("$name: the number tiles aren't one height: ${heights.map { it.toInt() }} px")
     }
 
     /** Quality gate slice 36: none of [texts], where drawn on more than one line, has a line ending on a "·". */
