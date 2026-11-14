@@ -172,7 +172,13 @@ class MoneyAccountsScreensTest {
         assertTrue(showsText("Remove Current account and its"), "Remove didn't ask first")
         assertTrue(core.moneyView.value.accounts.any { it.id == current.id }, "Remove removed before asking")
         tap("money-account-remove-yes")
-        runBlocking { core.tick() }
+        // The removal runs off the main thread: wait for it in bounded turns (ci run 43566421595 read it a turn early).
+        repeat(40) {
+            if (core.moneyView.value.accounts.none { it.id == current.id }) return@repeat
+            runBlocking { core.tick() }
+            Thread.sleep(25)
+            settle()
+        }
         settle()
         if (core.moneyView.value.accounts.any { it.id == current.id }) fail("Remove didn't remove the account")
         if (shows("money-account-sheet")) fail("the sheet stayed open on a removed account")

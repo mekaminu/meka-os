@@ -349,9 +349,9 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
         fun label(t: ListTab): String = (if (shortLabels) t.short else t.label).let { val c = counts.getValue(t); if (c > 0 && roomForCounts) "$it $c" else it }
         val labelSize = remember(slot, tabs.map { label(it) }, density) {
             val room = with(density) { (slot - TAB_LABEL_ROOM * 2).toPx() }
-            tabLabelSize { size -> tabs.maxOf { measurer.measure(label(it), MekaType.caption.copy(fontSize = size), maxLines = 1, softWrap = false).size.width.toFloat() } <= room }
+            tabLabelSize { size -> tabs.maxOf { measurer.measure(label(it), MekaType.caption.copy(fontSize = size), maxLines = 1, softWrap = false).size.width.toFloat() } <= room } // type: ok (one size for every tab, found by measuring)
         }
-        val labelStyle = MekaType.caption.copy(fontSize = labelSize, lineHeight = labelSize * 1.2f)
+        val labelStyle = MekaType.caption.copy(fontSize = labelSize, lineHeight = labelSize * 1.2f) // type: ok (caption at the size every tab fits)
         val countStyle = MekaType.micro.copy(fontSize = (labelSize.value - 1f).coerceAtLeast(TAB_MIN_SIZE.value).sp, lineHeight = labelSize * 1.1f) // type: ok (the count line under a tab, a step under its label)
         val x by animateDpAsState(slot * tabs.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "lists-pill")
         Box(Modifier.offset(x = x).padding(vertical = MekaSpace.xxs).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
