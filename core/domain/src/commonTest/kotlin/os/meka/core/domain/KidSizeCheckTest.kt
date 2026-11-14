@@ -67,4 +67,14 @@ class KidSizeCheckTest {
         )
         assertEquals(1, all.count { it.source == NoticeSource.KIDS })
     }
+
+    @Test
+    fun theFitButtonSaysOnlyWhatIsKept() {
+        // Walk-through 2026-11-08 A15: "All still fit" with 2 of 6 kept claimed the four he never typed.
+        assertEquals("Both still fit", KidsRules.card(alex, checked, mon12Oct, cal).fitButton)
+        assertEquals("It still fits", KidsRules.fitButton(1))
+        assertEquals("These still fit", KidsRules.fitButton(3))
+        val all = KidRecord("c-alex", KidSize.entries.associateWith { "9" }, at(mon12Oct))
+        assertEquals(KidsRules.ALL_FIT, KidsRules.card(alex, all, mon12Oct, cal).fitButton)
+    }
 }

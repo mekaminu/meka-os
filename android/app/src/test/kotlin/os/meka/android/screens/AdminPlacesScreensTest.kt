@@ -393,10 +393,19 @@ class AdminPlacesScreensTest {
         }
         // Alex's card.
         tap(p, name, "Alex", hasText("Alex") and !sheet)
-        until { shows(hasContentDescription("Alex's sizes all still fit")) }
+        val fitSays = kid("Alex").fitButton
+        until { shows(hasContentDescription("Alex's sizes: $fitSays")) }
         assertTouchTargets(name)
         ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { "e.g. ${it.hint}" }.toSet())
-        tap(p, name, "All still fit", hasContentDescription("Alex's sizes all still fit"))
+        // Walk-through 2026-11-08 A15: with only some sizes kept the button says so, and every size field is one width
+        // (a filled one keeps Clear in a place every row has).
+        if (kid("Alex").sizes.any { it.value == null } && fitSays == KidsRules.ALL_FIT) fail("$name: All still fit with sizes not kept")
+        val widths = kid("Alex").sizes.map { r ->
+            compose.onNode(hasContentDescription("Alex's ${r.label.lowercase()} size, for example ${r.hint}"), useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot.width
+        }
+        if (widths.maxOrNull()!! - widths.minOrNull()!! > 1f) fail("$name: Alex's size fields differ in width: $widths")
+        tap(p, name, fitSays, hasContentDescription("Alex's sizes: $fitSays"))
         val fit = hasText(KidsRules.fitLine("Alex"))
         until { shows(fit) }
         if (!shows(fit)) fail("$name: All still fit didn't say so")

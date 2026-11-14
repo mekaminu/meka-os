@@ -5684,6 +5684,13 @@ pack shots and StudyScreensTest's course shots; AdminPlacesScreensTest measures 
 
 **A14 slice 4 (2026-11-14): Money wraps whole; A14 done.** The walk-through saw Money's "21st" (Spending's "… by the 21st"), "Dec / 2027", "minute or / two" (Trading's "Reading it from Hyperliquid · within a minute or two") and "for the / month" alone. Fold: a new `moneyShown` (MoneyPane.kt, = core `LoneWordGlue.measured`: dates, numbers, counts, durations and each " · " kept whole, the last words held) draws every wrapping caption line in MoneyPane, MoneyAccountsUi, MoneyBillsBlocks, MoneyCategoriesUi, MoneyChatUi, MoneyClearBlocks, MoneyGoalBlocks, MoneyLayoutBlocks, MoneyPaymentSheetUi, MoneyPlanBlocks, MoneyPlanMoreBlocks, MoneySaveBlocks and MoneySpendingBlocks (about 150 lines); one-line labels, chips and tappable words (Undo, Remove, Restore, Copy, Look again, Show again, All categories, a suggested question) keep their own words. Tests: MoneyTradingLayoutScreensTest asserts the reading line on the cover screen has no lone word and no line starting on a dot; the Money screen tests' `showsText` and MoneyScreensTest's summary, empty and old-spent checks read held words as plain (`ScreenShots.plainText`). Fold only; the Mac wraps by its own rules.
 (the Mac uses SF Symbols chevrons); no core change.
+A15 (2026-11-14): **Kids' size fields** on a child's card: Clear's place is kept on every size row (invisible and not a
+target while the field is empty), so a filled field is as wide as an empty one (KidsPane; AdminPlacesScreensTest
+kidsByHand measures every size field's width). The size check's button says only what's kept: core
+`KidsRules.fitButton`/`KidCard.fitButton` gives "All still fit" only when every size is kept, "It still fits" for one,
+"Both still fit" for two, "These still fit" otherwise (KidSizeCheckTest), on the Fold and the Mac (KidsSheet); the
+heads-up's button stays All still fit. Mac checked nightly.
+
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 
 Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:

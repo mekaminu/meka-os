@@ -33,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -399,10 +401,10 @@ private fun KidCardView(
             }
             if (kid.sizesLine != null) {
                 Text(
-                    "All still fit", style = MekaType.caption, color = Meka.colors.accent,
+                    kid.fitButton, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Button, onClick = onFit)
-                        .semantics { contentDescription = "${kid.name}'s sizes all still fit" }
+                        .semantics { contentDescription = "${kid.name}'s sizes: ${kid.fitButton}" }
                         .minTouch().padding(MekaSpace.xs),
                 )
             }
@@ -420,12 +422,17 @@ private fun KidCardView(
                 ) { typed ->
                     onSave(row.size, typed)
                 }
-                if (row.value != null) {
-                    Text("Clear", style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onSave(row.size, "") }
-                            .semantics { contentDescription = "Clear ${kid.name}'s ${row.label.lowercase()} size" }
-                            .minTouch().padding(MekaSpace.xs))
-                }
+                // Walk-through 2026-11-08 A15: Clear's place is kept on every row, so a filled field is as wide as an
+                // empty one; on an empty row it is invisible and not a target.
+                val filled = row.value != null
+                Text("Clear", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.alpha(if (filled) 1f else 0f).clip(RoundedCornerShape(MekaRadius.m))
+                        .then(
+                            if (filled) Modifier.clickable(role = Role.Button) { onSave(row.size, "") }
+                                .semantics { contentDescription = "Clear ${kid.name}'s ${row.label.lowercase()} size" }
+                            else Modifier.clearAndSetSemantics {},
+                        )
+                        .minTouch().padding(MekaSpace.xs))
             }
         }
         Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "kid-line-${kid.name}") { s ->

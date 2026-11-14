@@ -274,7 +274,7 @@ struct KidsSheet: View {
                 .accessibilityLabel(kid.spoken)
                 Spacer()
                 if kid.sizesLine != nil {
-                    Button("All still fit") {
+                    Button(kid.fitButton) {
                         Task {
                             guard let line = await model.kidSizesFit(child: kid.name) else { return }
                             said[kid.name] = CoreModel.KidSaid(line: line, refused: false, undo: nil)

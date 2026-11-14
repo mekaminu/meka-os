@@ -77,6 +77,8 @@ data class KidCard(
     val spoken: String,
     /** Slice 2: the child's club fees (on the radar as bills), soonest first. */
     val fees: List<KidFeeRow> = emptyList(),
+    /** The size check's button, saying only what's kept: "All still fit", "Both still fit", "It still fits" (walk-through 2026-11-08 A15). */
+    val fitButton: String = KidsRules.ALL_FIT,
     /** Slice 5: the child's chores and pocket money this week ([KidMoney.NONE] until he sets any). */
     val money: KidMoney = KidMoney.NONE,
 )
@@ -206,6 +208,7 @@ object KidsRules {
             line = AboutYouRules.childLine(c),
             sizes = KidSize.entries.map { s -> KidSizeRow(s.key, s.label, sizes[s], s.hint) },
             sizesLine = line,
+            fitButton = fitButton(sizes.size),
             checkedLine = checked,
             due = due(r, todayDay, cal),
             spoken = listOfNotNull(c.name, line, checked).joinToString(". "),
@@ -391,6 +394,17 @@ object KidsRules {
 
     /** The line after a save: "Saved · shoes 13". */
     fun savedLine(size: KidSize, value: String): String = "Saved · ${size.label.lowercase()} $value"
+
+    /**
+     * The size check's button for [kept] sizes kept: "All still fit" only when every size is kept, so it never claims
+     * the ones he hasn't typed; "It still fits" for one, "Both still fit" for two, "These still fit" otherwise.
+     */
+    fun fitButton(kept: Int): String = when {
+        kept >= KidSize.entries.size -> ALL_FIT
+        kept == 1 -> "It still fits"
+        kept == 2 -> "Both still fit"
+        else -> "These still fit"
+    }
 
     /** The line after All still fit. */
     fun fitLine(name: String): String = "Marked $name's sizes as still fitting · Navilife asks again in 3 months"
