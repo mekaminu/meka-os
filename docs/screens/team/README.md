@@ -29,3 +29,6 @@ Rendered with `tools/design-render/render.mjs` at 390 (and with Inbox unfolded) 
 
 Kept on purpose: Ask the team… is the same bar as Money's (the orb at its left, a plain mic), so the two read alike.
 The Mac's Team sheet already sits at the mockup's sizes on its own type scale (15 medium names, 11 status, 12 pills).
+
+After the fixes (ci run 1848 at 029e8a6): `beside-simpler-busy.png` and `beside-simpler-unfolded.png` (mockup left, app
+right, 1 px per dp). The sizes, the Waiting on you box and the one row of pills match; nothing left to change.
