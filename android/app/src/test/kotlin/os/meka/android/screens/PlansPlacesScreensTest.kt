@@ -48,6 +48,7 @@ import os.meka.android.ask.TRIPS_ROW_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.BinRules
 import os.meka.core.domain.BinsPageRules
 import os.meka.core.domain.BoardFeedRules
@@ -189,11 +190,12 @@ class PlansPlacesScreensTest {
                 // The page shape (slice 16): the three numbers, and Your trips' first row (or its empty line).
                 val page = core.tripsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 val first = page.cards.first()
                 ScreenShots.assertReadable(compose, name, first.rows.flatMap { listOf(it.name, it.line) }, mustShow = false)
                 first.rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, TripsPageRules.TRIPS_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(TripsPageRules.TRIPS_EMPTY))
             }
             Place.GIFTS -> {
                 val v = core.giftsView.value
@@ -206,9 +208,10 @@ class PlansPlacesScreensTest {
                 // The page shape (slice 3): the three numbers, and Coming up's first row (or the whole list's when nothing's coming).
                 val page = core.giftsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, GiftsPageRules.COMING_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(GiftsPageRules.COMING_EMPTY))
             }
             Place.BINS -> {
                 val v = core.binsView.value
@@ -223,9 +226,10 @@ class PlansPlacesScreensTest {
                 // The page shape (slice 5): the three numbers, and Your bins' first row (or its empty line).
                 val page = core.binsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, BinsPageRules.YOURS_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(BinsPageRules.YOURS_EMPTY))
             }
             Place.READING -> {
                 val v = core.readingView.value
@@ -243,9 +247,10 @@ class PlansPlacesScreensTest {
                 // The page shape (slice 6): the three numbers, and On the go's first row (or its empty line).
                 val page = core.readingPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, ReadingPageRules.GO_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(ReadingPageRules.GO_EMPTY))
             }
         }
         return core

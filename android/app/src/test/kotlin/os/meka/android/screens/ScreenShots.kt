@@ -21,6 +21,7 @@ import org.robolectric.Shadows
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DurationGlue
+import os.meka.core.domain.LifePageView
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PhraseGlue
 import os.meka.core.domain.ScreenSenseRules
@@ -416,6 +417,17 @@ object ScreenShots {
         }
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         if (bad.isNotEmpty()) fail("$name starts a line with a dot:\n" + bad.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * Walk-through 2026-11-08, A14 ("4 days ·", "Oct", "from AI" alone on the cover screen): on a page under Ask, no card's
+     * empty line leaves a word alone or ends or starts a line on a "·", and no tile's label starts a line with a "·".
+     */
+    fun assertLifePageWraps(compose: ComposeContentTestRule, name: String, page: LifePageView) {
+        val empties = page.cards.mapNotNull { it.empty }
+        assertNoLoneWords(compose, name, empties)
+        assertNoDotEndingALine(compose, name, empties)
+        assertNoDotStartingALine(compose, name, empties + page.tiles.map { it.label })
     }
 
     /** Quality gate slice 36: none of [texts], where drawn on more than one line, has a line ending on a "·". */

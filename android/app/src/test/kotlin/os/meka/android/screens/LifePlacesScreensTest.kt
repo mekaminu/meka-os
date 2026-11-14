@@ -48,6 +48,7 @@ import os.meka.android.ask.PeoplePane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.ErrandRules
 import os.meka.core.domain.ErrandsPageRules
 import os.meka.core.domain.MealRules
@@ -169,9 +170,10 @@ class LifePlacesScreensTest {
                 // The page shape (slice 2): the three numbers, and Coming up's first row (or Everyone's when nothing's coming).
                 val page = core.peoplePage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, PeoplePageRules.COMING_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(PeoplePageRules.COMING_EMPTY))
                 // The walk-through 2026-11-08 A8: a row due to chase says so in the head's words.
                 val chase = v.rows.sumOf { r -> r.waiting.count { it.due } }
                 if (chase > 0 && v.rows.none { it.owedLine?.contains("to chase") == true }) fail("$name: \"$chase to chase\" in the head but no row says it")
@@ -188,9 +190,10 @@ class LifePlacesScreensTest {
                 // The page shape (slice 7): the three numbers, and Waiting's first place (or its empty line).
                 val page = core.errandsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, ErrandsPageRules.WAITING_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(ErrandsPageRules.WAITING_EMPTY))
                 rows.forEach { r -> if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case") }
                 val raw = rows.map { it.title }.filter { it.first().isLowerCase() }.toSet()
                 ScreenShots.texts(compose).firstOrNull { it in raw }?.let { fail("$name: \"$it\" reads lower case") }
@@ -207,9 +210,10 @@ class LifePlacesScreensTest {
                 // The page shape (slice 8): the three numbers, and This week's first row (or its empty line).
                 val page = core.mealsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, MealsPageRules.WEEK_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(MealsPageRules.WEEK_EMPTY))
                 if (fill == Fill.MANY && v.week.count { it.mealId != null } != 3) fail("$name: the week doesn't hold its three dinners")
             }
         }

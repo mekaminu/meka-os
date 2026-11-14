@@ -176,4 +176,27 @@ class LifePageTest {
         assertEquals(listOf("Dates", "Parked", "Fuel near you", "Car Bluetooth"), p.cards.map { it.title })
         assertTrue(ScreenSenseRules.problems(p.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line, it.whenText) } + listOfNotNull(c.empty) }).isEmpty())
     }
+
+    // Walk-through 2026-11-08, A14: no word or dot left alone at a line's end on a page.
+    private val nb = LifeTileRules.GLUE
+
+    @Test
+    fun aTileLabelKeepsItsLastShortPairAndItsDotWithTheWordBefore() {
+        assertEquals("to${nb}the${nb}MOT".replaceFirst(nb, " "), LifePageRules.tileLabel("to the MOT"))
+        assertEquals("parked$nb· 08:10", LifePageRules.tileLabel("parked · 08:10"))
+        assertEquals("cheapest unleaded near", LifePageRules.tileLabel("cheapest unleaded near")) // "unleaded near" is wider than a tile
+        assertEquals("to go", LifePageRules.tileLabel("to go"))
+        assertEquals("next 30 days", LifePageRules.tileLabel("next 30 days").replace(nb, " "))
+        assertFalse(LifePageRules.tileLabel("cheapest unleaded near").contains(nb))
+    }
+
+    @Test
+    fun shownWordsHoldTheirLastPairDatesAndDots() {
+        val s = LifePageRules.shown("Seville · 4 days · next one on 28 Oct")
+        assertEquals("Seville · 4 days · next one on 28 Oct", DateGlue.plain(s))
+        assertTrue("28${nb}Oct" in s)
+        assertFalse(s.split(' ').any { it == "·" }, "a dot stands alone in \"$s\"")
+        val empty = LifePageRules.shown(CarPageRules.DATES_EMPTY)
+        assertTrue(empty.endsWith("service${nb}here"))
+    }
 }

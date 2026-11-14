@@ -110,7 +110,7 @@ internal fun LifePageHeader(
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
             Text(
-                info, style = MekaType.caption, color = Meka.colors.textSecondary,
+                LifePageRules.shown(info), style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
@@ -134,7 +134,7 @@ internal fun LifeNumberTiles(tiles: List<PageTile>, modifier: Modifier = Modifie
                     maxLines = 1, softWrap = false,
                     autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.metaStrong.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
                 )
-                Text(t.label, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(LifePageRules.tileLabel(t.label), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -166,7 +166,7 @@ internal fun LifePageCard(card: PageCard, modifier: Modifier = Modifier, onMore:
         }
         if (card.rows.isEmpty()) {
             card.empty?.let {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xs))
+                Text(LifePageRules.shown(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xs))
             }
         }
         card.rows.forEach { r ->
@@ -178,6 +178,7 @@ internal fun LifePageCard(card: PageCard, modifier: Modifier = Modifier, onMore:
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
+                    // A row's name is matched as typed (search, the tests), so it wraps freely; the empty line and tiles are held.
                     // Two lines, so a long title (a book's) is read before it's cut (the quality gate's "cut after 0 characters").
                     Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (r.line.isNotEmpty()) {
@@ -250,7 +251,7 @@ internal fun AddChoiceRows(choices: List<AddChoice>, chosen: String?, onChoose: 
                 .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         ) {
             Text(c.label, style = MekaType.body, color = if (lit) Meka.colors.accent else Meka.colors.textPrimary)
-            Text(c.hint, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(LifePageRules.shown(c.hint), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
     }
 }

@@ -49,6 +49,7 @@ import os.meka.android.ask.SchoolPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.AppointmentRules
 import os.meka.core.domain.AppointmentsPageRules
 import os.meka.core.domain.BoardFeedRules
@@ -185,10 +186,11 @@ class AdminPlacesScreensTest {
                 // The page shape (slice 10): the three numbers, and To book's first row (or its empty line).
                 val page = core.appointmentsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, AppointmentsPageRules.EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(AppointmentsPageRules.EMPTY))
             }
             Place.KIDS -> {
                 val v = core.kidsView.value
@@ -202,10 +204,11 @@ class AdminPlacesScreensTest {
                 // The page shape (slice 15): the three numbers, and the first card's first row (or its empty line).
                 val page = core.kidsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, KidsPageRules.CHILDREN_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(KidsPageRules.CHILDREN_EMPTY))
                 // Walk-through 2026-11-02 A12: an empty field's hint says "e.g.", and a child with only some sizes kept
                 // is never "Sizes checked" as though all were.
                 v.kids.forEach { k ->
@@ -223,10 +226,11 @@ class AdminPlacesScreensTest {
                 // The page shape (slice 14): the three numbers, and Days off's first row (or its empty line).
                 val page = core.schoolPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, SchoolPageRules.OFF_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(SchoolPageRules.OFF_EMPTY))
                 // Slice 16's findings: with no council to offer, the council card never asks him to pick one.
                 v.terms?.takeIf { it.choices.isEmpty() && it.refresh == null && it.filled == null }?.let { t ->
                     if ("Pick" in t.line) fail("$name: \"${t.line}\" asks him to pick a council with none to pick")

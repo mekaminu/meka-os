@@ -5675,6 +5675,8 @@ day letter in itemMeta. Left as they are: the No-spend week dots (a picture of t
 pills, Week ahead chips and Watch for requests (drawn 32 dp inside 48 dp targets since A9, the shots measured the
 drawing). Tests: `ScreenShots.assertDrawnMarks` (no bare "⌄ ˅ ^ ⌃ ⋯" text, marks at full size) in TripListsScreensTest's
 pack shots and StudyScreensTest's course shots; AdminPlacesScreensTest measures the chore dots on the cover. Fold only
+
+**A14 slice 1 (2026-11-14): pages under Ask wrap whole.** The walk-through's lone words and dangling dots on the Life pages ("4 days ·", "Oct", "from AI", "key", "sent") came from words that wrap: since every page under Ask took the one page shape (2026-11-11), those are a card's empty line, a tile's label, + Add's hints and the ⓘ's words. `LifePageRules.shown` (= `LoneWordGlue.measured`: dates, counts and durations whole, a "·" held to its words, the last pair together) draws the empty lines, hints and ⓘ; `LifePageRules.tileLabel` keeps a tile's "·" with the word before it and its last pair together only while that pair is 11 letters or less (the closed Fold's tiles are about 12 wide, so a longer held run would break inside a word). Row names and choice labels are left as typed, as search and the tests match them. Tests: LifePageTest (two), and `ScreenShots.assertLifePageWraps` (no lone word, no line ending or starting on a dot in an empty line, no tile label line starting on a dot) on Trips, Gifts, Bins, Reading, Appointments, Kids, School, Date night, Leave, Emergency, Facts, People, Errands and Meals shots; the empty-line asserts read the held words. Fold only.
 (the Mac uses SF Symbols chevrons); no core change.
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 

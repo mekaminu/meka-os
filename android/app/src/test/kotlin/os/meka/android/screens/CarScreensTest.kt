@@ -42,6 +42,7 @@ import os.meka.android.ask.ParkingStore
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.CarPageRules
 import os.meka.core.domain.CarRules
 import os.meka.core.domain.FuelKind
@@ -148,7 +149,7 @@ class CarScreensTest {
         val cars = core.carsView.value
         ScreenShots.assertReadable(compose, name, cars.cars.flatMap { listOf(it.title, it.summary) }.filter { it.isNotBlank() }, mustShow = false)
         when (fill) {
-            Fill.EMPTY -> ScreenShots.assertShows(compose, name, CarPageRules.PARKED_EMPTY)
+            Fill.EMPTY -> ScreenShots.assertShows(compose, name, LifePageRules.shown(CarPageRules.PARKED_EMPTY))
             else -> {
                 val spots = ParkingStore.spots(context)
                 if (spots.size != (if (fill == Fill.MANY) 2 else 1)) fail("$name: ${spots.size} parked spots kept")

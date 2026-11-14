@@ -81,6 +81,32 @@ object LifePageRules {
     fun card(key: String, title: String, rows: List<PageRow>, more: String? = null, empty: String? = null): PageCard =
         PageCard(key, title, rows.size, rows.take(MAX_ROWS), more ?: if (rows.size > MAX_ROWS) SEE_ALL else null, empty)
 
+    /**
+     * Words a page draws where they may wrap (the ⓘ's words, a card's empty line, a row's name, + Add's choices), with no
+     * word, date or "·" left alone at a line's end (walk-through 2026-11-08, A14: "4 days ·", "Oct", "from AI" on the
+     * cover screen): [LoneWordGlue.measured]. Only for drawing; what is read out or compared keeps plain spaces.
+     */
+    fun shown(text: String): String = LoneWordGlue.measured(text)
+
+    /** The longest last pair a tile's label holds together: the closed Fold's three tiles are about 12 letters wide. */
+    const val TILE_PAIR_MAX = 11
+
+    /**
+     * A tile's label as drawn: a "·" stays with the word before it, so no line starts with one, and the last two words
+     * go down together while they fit a tile's width ([TILE_PAIR_MAX]), so "to the / MOT" reads "to / the MOT". Longer
+     * pairs stay free, as a held run wider than the tile would break inside a word.
+     */
+    fun tileLabel(label: String): String {
+        val s = label.trimEnd().replace(" ·", "$NBSP·")
+        val starts = s.indices.filter { i -> s[i] != ' ' && s[i] != NBSP && (i == 0 || s[i - 1] == ' ' || s[i - 1] == NBSP) }
+        if (starts.size < 3) return s
+        val tail = s.substring(starts[starts.size - 2])
+        if (tail.length > TILE_PAIR_MAX || '·' in tail) return s
+        return s.substring(0, starts[starts.size - 2]) + tail.replace(' ', NBSP)
+    }
+
+    private val NBSP = LifeTileRules.GLUE[0]
+
     /** "today", "tomorrow", "5 days", "3 wks", "2 mths": how far off [day] is, for a tile's number. */
     fun until(day: Long, today: Long): String {
         val d = day - today

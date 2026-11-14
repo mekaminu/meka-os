@@ -52,6 +52,7 @@ import os.meka.android.ask.LeavePane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.DateNightPageRules
 import os.meka.core.domain.DateNightRules
 import os.meka.core.domain.EmergencyPageRules
@@ -195,10 +196,11 @@ class KeptPlacesScreensTest {
                 // The page shape (slice 11): the three numbers, and Coming up's first row (or its empty line).
                 val page = core.dateNightPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, DateNightPageRules.COMING_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(DateNightPageRules.COMING_EMPTY))
                 if (fill == Fill.EMPTY && v.on) fail("$name: date night on with nothing chosen")
                 if (fill != Fill.EMPTY && v.nights.isEmpty()) fail("$name: no nights coming up once it's on")
                 if (fill == Fill.MANY && v.nights.none { it.skipped }) fail("$name: the skipped night isn't skipped")
@@ -209,10 +211,11 @@ class KeptPlacesScreensTest {
                 // The page shape (slice 9): the three numbers, and Booked's first row (or its empty line).
                 val page = core.leavePage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LeavePageRules.BOOKED_EMPTY)
+                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(LeavePageRules.BOOKED_EMPTY))
                 if (fill == Fill.EMPTY && v.summary != LeaveRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing booked")
                 if (fill == Fill.MANY && v.booked.size + v.taken.size != 5) fail("$name: ${v.booked.size + v.taken.size} rows for five stretches")
                 if (fill == Fill.MANY && v.holidays.isEmpty()) fail("$name: no school holidays after typing two")
@@ -223,10 +226,11 @@ class KeptPlacesScreensTest {
                 // The page shape (slice 12): the three numbers, and Who to call's first row (or its empty line).
                 val page = core.emergencyPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, it) }
+                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, LifePageRules.shown(it)) }
                 if (fill == Fill.EMPTY && v.summary != EmergencyRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing on the card")
                 if (fill == Fill.MANY && v.count != 7) fail("$name: ${v.count} lines for seven")
                 // A part's example never names a line it already holds (walk-through 2026-11-02, A14).
@@ -241,10 +245,11 @@ class KeptPlacesScreensTest {
                 // The page shape (slice 13): the three numbers, and the first group's first row (or its empty line).
                 val page = core.factsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, it) }
+                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, LifePageRules.shown(it)) }
                 if (fill == Fill.EMPTY && v.summary != FactRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.count != 6) fail("$name: ${v.count} facts for six")
             }
