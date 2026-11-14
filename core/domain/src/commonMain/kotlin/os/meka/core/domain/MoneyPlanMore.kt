@@ -82,6 +82,8 @@ object MoneyPlanMore {
     const val ADD_NAME_HINT = "What for? e.g. Holiday"
     const val ADD_AMOUNT_HINT = "How much? e.g. £2,000"
     const val ADD = "Add goal"
+    /** Walk-through A26: the Add a £ goal sheet's quiet way out, under its one gold Add goal. */
+    const val CANCEL = "Cancel"
     const val ADD_BAD_AMOUNT = "Type how much, e.g. £2,000."
     const val ADD_NO_NAME = "Say what it's for, e.g. Holiday."
     const val DEFAULT_NAME = "Savings"

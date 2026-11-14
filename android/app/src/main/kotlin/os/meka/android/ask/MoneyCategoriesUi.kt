@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +49,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -114,6 +117,7 @@ internal fun OwnCategorySheet(
     AnimatedVisibility(visible = row != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
         val r = row ?: shown[0] ?: return@AnimatedVisibility
         var asking by rememberSaveable(r.id) { mutableStateOf(false) }
+        val draft = rememberCategoryDraft(r.name, r.tone, r.icon)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Box(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
@@ -122,7 +126,8 @@ internal fun OwnCategorySheet(
                     .testTag("money-own-dim"),
             )
             Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                // Walk-through A26: a tall sheet stops short of the status bar with a gap, never against the top edge.
+                Modifier.statusBarsPadding().padding(top = MekaSpace.xl).widthIn(max = 560.dp).fillMaxWidth()
                     .animateEnterExit(
                         enter = if (reduced) fadeIn(MekaMotion.expand(true)) else slideInVertically(MekaMotion.expand(false)) { it / 3 },
                         exit = if (reduced) fadeOut(MekaMotion.expand(true)) else slideOutVertically(MekaMotion.expand(false)) { it / 3 },
@@ -159,7 +164,7 @@ internal fun OwnCategorySheet(
                     NewCategoryForm(
                         own = own, onCreate = onSave, onCancel = onClose,
                         title = MoneyOwnCategories.EDIT_TITLE, action = MoneyOwnCategories.SAVE,
-                        startName = r.name, startTone = r.tone, startIcon = r.icon,
+                        startName = r.name, startTone = r.tone, startIcon = r.icon, draft = draft, buttons = false,
                     )
                     Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-own-said") { s ->
                         if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -218,12 +223,34 @@ internal fun OwnCategorySheet(
                             }
                         }
                     }
+                }
+                // Walk-through A26: Cancel · Save at the sheet's foot, under everything they finish, and always in view
+                // (the body scrolls above them). Save writes the name, colour and icon only when they changed, then closes;
+                // Hide, the cap, Merge and Delete act as they are tapped.
+                val ready = MoneyOwnCategories.clean(draft.name.value) != null
+                Row(
+                    Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs, bottom = MekaSpace.m)
+                        .testTag("money-own-foot"),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(MoneyOwnCategories.CANCEL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClose)
+                            .minTouch().padding(MekaSpace.xs).testTag("money-own-cancel"))
+                    Spacer(Modifier.weight(1f))
                     Box(
-                        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
-                            .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.xs).testTag("money-own-done"),
+                        Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(if (ready) Meka.colors.accent else Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button, enabled = ready) {
+                                val name = MoneyOwnCategories.clean(draft.name.value)
+                                if (name != null && MoneyOwnCategories.edited(r, name, draft.tone.value, draft.icon.value.name)) {
+                                    onSave(name, draft.tone.value, draft.icon.value)
+                                }
+                                onClose()
+                            }
+                            .semantics { if (!ready) stateDescription = MoneyOwnCategories.NO_NAME }
+                            .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs).testTag("money-own-save"),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(MoneyOwnCategories.DONE, style = MekaType.metaStrong, color = Meka.colors.onAccent)
+                        Text(MoneyOwnCategories.SAVE, style = MekaType.metaStrong, color = if (ready) Meka.colors.onAccent else Meka.colors.textTertiary)
                     }
                 }
             }

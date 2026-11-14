@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -165,6 +166,8 @@ class MoneyPlanMoreScreensTest {
         tap("money-goal-start-add")
         assertTrue(shows("money-add-goal-sheet") && showsText(MoneyPlanMore.ADD_AMOUNT_HINT), "Add a £ goal should open its sheet")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-add-goal-cover"))
+        // Walk-through A26: one gold button (Add goal); the way out is a quiet Cancel, not a second gold Done.
+        compose.onNodeWithTag("money-add-goal-sheet-done").assertTextEquals(MoneyPlanMore.CANCEL)
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

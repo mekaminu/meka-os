@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -192,7 +193,11 @@ internal fun MoneyPaydayRow(b: MoneyPaydayBrief, modifier: Modifier = Modifier, 
  */
 @Composable
 internal fun <T : Any> MoneyDetailSheet(
-    item: T?, title: (T) -> String, tag: String, done: String, onClose: () -> Unit, content: @Composable ColumnScope.(T) -> Unit,
+    item: T?, title: (T) -> String, tag: String, done: String, onClose: () -> Unit,
+    // Walk-through A26: a sheet whose own gold button finishes it (Add goal) closes with a quiet text button instead, so
+    // the foot never shows two identical gold buttons.
+    quietDone: Boolean = false,
+    content: @Composable ColumnScope.(T) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val shown = remember { arrayOfNulls<Any>(1) }
@@ -210,7 +215,8 @@ internal fun <T : Any> MoneyDetailSheet(
                     .testTag("$tag-dim"),
             )
             Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                // Walk-through A26: a tall sheet stops short of the status bar with a gap, never against the top edge.
+                Modifier.statusBarsPadding().padding(top = MekaSpace.xl).widthIn(max = 560.dp).fillMaxWidth()
                     .animateEnterExit(
                         enter = if (reduced) fadeIn(MekaMotion.expand(true)) else slideInVertically(MekaMotion.expand(false)) { h -> h / 3 },
                         exit = if (reduced) fadeOut(MekaMotion.expand(true)) else slideOutVertically(MekaMotion.expand(false)) { h -> h / 3 },
@@ -227,7 +233,13 @@ internal fun <T : Any> MoneyDetailSheet(
             ) {
                 Text(name, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
                 content(it)
-                Box(
+                if (quietDone) Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.xs).testTag("$tag-done"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(done, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                } else Box(
                     Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                         .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.xs).testTag("$tag-done"),
                     contentAlignment = Alignment.Center,

@@ -28,6 +28,17 @@ class MoneyOwnCategoriesTest {
         MoneyRules.view(m.accounts(), m.txns(), m.rules(), oct16, LocalCalendar.UTC, 0, own = m.ownCategories(), ownRules = m.ownRules())
 
     @Test
+    fun saveAtTheSheetsFootWritesOnlyWhatChanged() {
+        val row = MoneyOwnRow("k1", "own:k1", "Treats", 3, MoneyIcon.CUP, hidden = false, payees = 1, line = "1 payee", spoken = "Treats")
+        assertFalse(MoneyOwnCategories.edited(row, "Treats", 3, "CUP"), "nothing changed, so Save only closes")
+        assertFalse(MoneyOwnCategories.edited(row, "  Treats ", 3, "CUP"), "spaces alone aren't a new name")
+        assertFalse(MoneyOwnCategories.edited(row, "   ", 4, "BAG"), "no name, nothing to save")
+        assertTrue(MoneyOwnCategories.edited(row, "Snacks", 3, "CUP"))
+        assertTrue(MoneyOwnCategories.edited(row, "Treats", 4, "CUP"))
+        assertTrue(MoneyOwnCategories.edited(row, "Treats", 3, "BAG"))
+    }
+
+    @Test
     fun namesAreTidiedAndBuiltInOnesRefused() {
         assertEquals("Vape", MoneyOwnCategories.clean("  Vape  "))
         assertEquals("Nights out", MoneyOwnCategories.clean("Nights   out"))

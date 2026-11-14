@@ -47,6 +47,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -223,11 +224,15 @@ internal fun NewCategoryForm(
     // Slice 3: the same form edits one of his (Accounts → YOUR CATEGORIES), starting from its name, colour and icon.
     title: String = MoneyOwnCategories.TITLE, action: String = MoneyOwnCategories.CREATE,
     startName: String = "", startTone: Int = MoneyOwnCategories.nextTone(own), startIcon: MoneyIcon = MoneyIcon.DOTS,
+    // Walk-through A26: the edit sheet holds the form's choices itself and puts Cancel · Save at its own foot, under Hide
+    // from the ring, the cap and Merge, so the form draws no buttons of its own there.
+    draft: CategoryDraft = rememberCategoryDraft(startName, startTone, startIcon),
+    buttons: Boolean = true,
 ) {
     val haptics = rememberMekaHaptics()
-    var name by rememberSaveable(startName) { mutableStateOf(startName) }
-    var tone by rememberSaveable(startTone) { mutableStateOf(startTone) }
-    var icon by rememberSaveable(startIcon) { mutableStateOf(startIcon) }
+    var name by draft.name
+    var tone by draft.tone
+    var icon by draft.icon
     val create = { MoneyOwnCategories.clean(name)?.let { onCreate(it, tone, icon) } }
     Column(Modifier.fillMaxWidth().testTag("money-new-category"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
@@ -246,7 +251,7 @@ internal fun NewCategoryForm(
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        Modifier.size(28.dp).clip(CircleShape).background(Meka.colors.moneyTone(t.tone))
+                        Modifier.size(34.dp).clip(CircleShape).background(Meka.colors.moneyTone(t.tone))
                             .then(if (on) Modifier.border(2.dp, Meka.colors.textPrimary, CircleShape) else Modifier),
                     )
                 }
@@ -266,7 +271,7 @@ internal fun NewCategoryForm(
                 ) { MoneyIconChip(i, tone) }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        if (buttons) Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             Text(MoneyOwnCategories.CANCEL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onCancel)
                     .minTouch().padding(MekaSpace.xs).testTag("money-new-cancel"))
@@ -283,6 +288,17 @@ internal fun NewCategoryForm(
             }
         }
     }
+}
+
+/** The category form's name, colour and icon as he picks them, kept across a rotation; the edit sheet's Save reads them. */
+internal class CategoryDraft(val name: MutableState<String>, val tone: MutableState<Int>, val icon: MutableState<MoneyIcon>)
+
+@Composable
+internal fun rememberCategoryDraft(startName: String, startTone: Int, startIcon: MoneyIcon): CategoryDraft {
+    val name = rememberSaveable(startName) { mutableStateOf(startName) }
+    val tone = rememberSaveable(startTone) { mutableStateOf(startTone) }
+    val icon = rememberSaveable(startIcon) { mutableStateOf(startIcon) }
+    return remember(name, tone, icon) { CategoryDraft(name, tone, icon) }
 }
 
 /** The quick sorter's heading over the payment sheet: [head] ("SORT YOUR PAYMENTS · 12 LEFT"), the payee's [line] and [spoken]. */

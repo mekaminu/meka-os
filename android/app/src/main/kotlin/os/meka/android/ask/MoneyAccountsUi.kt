@@ -164,7 +164,8 @@ internal fun MoneyDataDetails(
             asking, label = "money-delete-all", modifier = Modifier.padding(top = MekaSpace.m),
             transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
         ) { ask ->
-            if (!ask) Text(MoneyRules.DELETE_ALL, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+            // Walk-through A26: it reads as a button that deletes (the critical red), not a line of plain text.
+            if (!ask) Text(MoneyRules.DELETE_ALL, style = MekaType.itemMeta, color = Meka.colors.critical,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = true }
                     .minTouch().padding(vertical = MekaSpace.xs).testTag("money-delete-all"))
             else Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {

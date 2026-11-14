@@ -883,7 +883,8 @@ struct MoneySheet: View {
                 .onSubmit { addGoal() }
             if let s = said, s.refused { Text(s.line).font(MekaType.caption).foregroundStyle(palette.accent) }
             HStack {
-                Button(MoneyCards.shared.DONE) { addGoalOpen = false }.keyboardShortcut(.cancelAction)
+                // Walk-through A26: one prominent button (Add goal); the way out is a quiet Cancel.
+                Button(MoneyPlanMore.shared.CANCEL) { addGoalOpen = false }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(MoneyPlanMore.shared.ADD) { addGoal() }.keyboardShortcut(.defaultAction)
             }
@@ -2097,7 +2098,7 @@ struct MoneySheet: View {
                     let on = t.tone == newCategoryTone
                     let tone = t.tone
                     Button { newCategoryTone = tone; MekaHaptics.tick() } label: {
-                        Circle().fill(palette.moneyTone(tone)).frame(width: 22, height: 22)
+                        Circle().fill(palette.moneyTone(tone)).frame(width: 26, height: 26)
                             .overlay(Circle().strokeBorder(on ? palette.textPrimary : Color.clear, lineWidth: 2))
                             .frame(width: 32, height: 32).contentShape(Rectangle())
                     }
@@ -2121,8 +2122,9 @@ struct MoneySheet: View {
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
-            HStack {
-                Button(MoneyOwnCategories.shared.CANCEL) { if editing != nil { ownSheet = nil } else { makingCategory = false } }
+            // Walk-through A26: editing one of his, Cancel · Save sit at the popover's foot (ownCategorySheet), not here.
+            if editing == nil { HStack {
+                Button(MoneyOwnCategories.shared.CANCEL) { makingCategory = false }
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
@@ -2135,7 +2137,7 @@ struct MoneySheet: View {
                     .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
                     .background(ready ? palette.accent : palette.surfaceRaised, in: Capsule())
                     .disabled(!ready)
-            }
+            } }
         }
     }
 
@@ -2260,14 +2262,28 @@ struct MoneySheet: View {
                         .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                         .padding(.top, MekaSpace.xs)
                 }
+                // Walk-through A26: Cancel · Save at the foot, under Hide, the cap and Merge. Save writes the name, colour
+                // and icon only when they changed, then closes; the rest acts as it's clicked.
+                let ready = MoneyOwnCategories.shared.clean(raw: newCategoryName) != nil
                 HStack {
+                    Button(MoneyOwnCategories.shared.CANCEL) { ownSheet = nil; askingDelete = false }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .keyboardShortcut(.cancelAction)
                     Spacer()
-                    Button(MoneyOwnCategories.shared.DONE) { ownSheet = nil }
+                    Button(MoneyOwnCategories.shared.SAVE) {
+                        if MoneyOwnCategories.shared.edited(row: r, name: newCategoryName, tone: newCategoryTone, iconName: newCategoryIcon) {
+                            saveCategory(id: id)
+                        }
+                        ownSheet = nil
+                        askingDelete = false
+                    }
                         .buttonStyle(MekaPressStyle())
                         .font(MekaType.metaStrong)
-                        .foregroundStyle(palette.onAccent)
+                        .foregroundStyle(ready ? palette.onAccent : palette.textTertiary)
                         .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
-                        .background(palette.accent, in: Capsule())
+                        .background(ready ? palette.accent : palette.surfaceRaised, in: Capsule())
+                        .disabled(!ready)
+                        .padding(.top, MekaSpace.xs)
                 }
             }
             .padding(MekaSpace.m)
@@ -3073,8 +3089,9 @@ struct MoneySheet: View {
                         Button("Cancel") { deleting = false }
                     }
                 } else {
+                    // Walk-through A26: it reads as a button that deletes (the critical red), not plain text.
                     Button(MoneyRules.shared.DELETE_ALL) { deleting = true; MekaHaptics.tick() }
-                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.critical)
                         .padding(.top, MekaSpace.m)
                 }
             }

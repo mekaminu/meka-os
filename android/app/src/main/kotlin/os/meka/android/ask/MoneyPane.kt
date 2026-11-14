@@ -1349,7 +1349,7 @@ fun MoneyPane(
     }
     // Plan's lower half: Goals' empty card → Add a £ goal (what for, how much).
     MoneyDetailSheet(v.goals?.takeIf { addGoalOpen }, title = { MoneyPlanMore.ADD_SHEET },
-        tag = "money-add-goal-sheet", done = MoneyCards.DONE, onClose = { addGoalOpen = false }) { _ ->
+        tag = "money-add-goal-sheet", done = MoneyPlanMore.CANCEL, onClose = { addGoalOpen = false }, quietDone = true) { _ ->
         MoneyAddGoalFields { name, amount ->
             haptics.light()
             scope.launch {

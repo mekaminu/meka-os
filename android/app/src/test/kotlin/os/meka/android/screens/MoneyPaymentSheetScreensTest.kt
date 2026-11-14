@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -233,6 +234,15 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(shows("money-own-sheet"), "the category's sheet didn't open")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-own-category"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-own-category")
+        // Walk-through A26: Cancel · Save sit at the sheet's foot, below Hide from the ring and the cap (never between the
+        // form and them), the form draws no buttons of its own, and the sheet stops short of the screen's top edge.
+        if (shows("money-new-create") || shows("money-new-cancel")) fail("the edit form still has its own Cancel / Save mid-sheet")
+        val sheet = compose.onNodeWithTag("money-own-sheet").fetchSemanticsNode().boundsInRoot
+        val hide = compose.onNodeWithTag("money-own-hide", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val foot = compose.onNodeWithTag("money-own-foot").fetchSemanticsNode().boundsInRoot
+        assertTrue(foot.top >= hide.bottom, "Cancel / Save sit above Hide from the ring: foot $foot, hide $hide")
+        assertTrue(foot.bottom <= sheet.bottom + 1f, "Cancel / Save run off the sheet: foot $foot in $sheet")
+        assertTrue(sheet.top >= 16f, "the sheet sits against the screen's top edge: $sheet")
         tap("money-own-hide")
         waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.hidden == true }
         assertTrue(core.moneyView.value.ownRows.single().hidden, "Hide from the ring didn't land")
@@ -243,6 +253,41 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(core.moneyView.value.ownRows.isEmpty(), "the category wasn't deleted")
         assertEquals("Other", core.moneyView.value.month!!.txns.first { it.id == costa.id }.categoryLabel)
         if (shows("money-own-sheet")) fail("the sheet stayed open after Delete")
+    }
+
+    /** Walk-through A26: the sheet's Save renames it and closes; Save with nothing changed only closes, Cancel keeps the old name. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun saveAtTheFootRenamesAndCloses() {
+        val core = open(ThemeChoice.DARK)
+        val costa = core.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        runBlocking { check(!core.addMoneyCategory("Treats", 3, "CUP", costa.id).refused) }
+        settle()
+        compose.onNodeWithContentDescription(MoneyTabs.spoken(MoneyTab.ACCOUNTS, false)).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        val own = core.moneyView.value.ownRows.single()
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-own-card"))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        tap("money-own-${own.id}")
+        val name = hasSetTextAction() and hasAnyAncestor(hasTestTag("money-new-name"))
+        compose.onNode(name, useUnmergedTree = true).performTextReplacement("Snacks")
+        settle()
+        tap("money-own-cancel")
+        if (shows("money-own-sheet")) fail("Cancel didn't close the sheet")
+        assertEquals("Treats", core.moneyView.value.ownRows.single().name, "Cancel saved the new name")
+        tap("money-own-${own.id}")
+        tap("money-own-save")
+        if (shows("money-own-sheet")) fail("Save with nothing changed didn't close the sheet")
+        assertEquals("Treats", core.moneyView.value.ownRows.single().name)
+        tap("money-own-${own.id}")
+        compose.onNode(name, useUnmergedTree = true).performTextReplacement("Snacks")
+        settle()
+        tap("money-own-save")
+        waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.name != "Treats" }
+        if (shows("money-own-sheet")) fail("Save didn't close the sheet")
+        assertEquals("Snacks", core.moneyView.value.ownRows.single().name, "Save didn't rename it")
     }
 
     /** His categories in caps: MONTHLY CAP in the category's sheet; "£10" caps it and its bar shows this month against it. */

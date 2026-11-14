@@ -120,6 +120,15 @@ object MoneyOwnCategories {
     private fun fold(name: String): String = name.trim().lowercase().replace(Regex("\\s+"), " ")
 
     /** [raw] tidied: spaces collapsed, at most [MAX_NAME] characters; null when nothing is left. */
+    /**
+     * Walk-through A26 (2026-11-14): the edit sheet's Save sits at its foot under Hide, the cap and Merge, and closes it;
+     * it writes only when the name (once [clean]ed), colour or icon differ from [row]'s, so a look and Save says nothing.
+     */
+    fun edited(row: MoneyOwnRow, name: String, tone: Int, iconName: String): Boolean {
+        val n = clean(name) ?: return false
+        return n != row.name || tone != row.tone || iconName != row.icon.name
+    }
+
     fun clean(raw: String): String? = raw.trim().replace(Regex("\\s+"), " ").take(MAX_NAME).trim().takeIf { it.isNotEmpty() }
 
     /** The built-in category a name already is ("groceries" → Groceries), so he isn't given a second one. */

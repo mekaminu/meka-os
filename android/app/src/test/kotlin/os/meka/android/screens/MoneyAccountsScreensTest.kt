@@ -201,6 +201,9 @@ class MoneyAccountsScreensTest {
         assertTrue(shows("money-export-all"), "the sheet has no Export")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-data-sheet"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-data-sheet")
+        // Walk-through A26: the sheet stops short of the screen's top edge.
+        val sheetTop = compose.onNodeWithTag("money-more-sheet").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(sheetTop >= 16f, "the money data sheet sits against the top edge (top $sheetTop)")
         // Delete all asks first, and Cancel keeps everything.
         tap("money-delete-all")
         assertTrue(showsText(MoneyRules.DELETE_ASK), "Delete all didn't ask first")
