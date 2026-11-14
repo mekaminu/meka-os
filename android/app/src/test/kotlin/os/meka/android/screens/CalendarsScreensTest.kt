@@ -36,6 +36,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.CalendarsPane
 import os.meka.android.today.WEATHER_HINT
+import os.meka.core.domain.PhoneCalendarRules
 import os.meka.core.domain.CalendarAccessAction
 import os.meka.core.domain.CalendarAccessRules
 import os.meka.core.domain.CalendarRules
@@ -183,6 +184,13 @@ class CalendarsScreensTest {
             list.flatMap { listOfNotNull(it.shownStatus, it.eventsLine, it.editingShown) }
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
+        // Walk-through 2026-11-08, A14: "work's" alone under Where I am now, and a "→" starting a line. Every other line
+        // that wraps on the pane holds its last words and its dots and arrows too (an arrow counts as a dot here).
+        val here = core.hereSetting(on = false, permitted = false)
+        val more = listOf(here.statusLine, here.privacy, PhoneCalendarRules.ASK_LINE, PhoneCalendarRules.DENIED_LINE,
+            PhoneCalendarRules.ONLY_HERE, "No calendars connected yet.", core.weatherView.value.placeChoice.line, core.weatherView.value.workChoice.line)
+        ScreenShots.assertNoLoneWords(compose, name, more)
+        ScreenShots.assertNoDotStartingALine(compose, name, more)
         ScreenShots.assertEachOneLine(compose, name, list.map { it.title } + CalendarAccessAction.entries.map { it.label } + "Reconnect")
         ScreenShots.assertReadable(compose, name, list.map { it.title }, mustShow = false)
         providerNeverAlone(name, core)

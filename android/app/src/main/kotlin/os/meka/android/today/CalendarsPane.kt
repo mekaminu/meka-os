@@ -131,7 +131,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         when (val list = accounts) {
             null -> SkeletonRows(count = 2, rowHeight = 56.dp)
             else -> {
-                if (list.isEmpty()) Text("No calendars connected yet.", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                if (list.isEmpty()) Text(LoneWordGlue.kept("No calendars connected yet."), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 list.forEachIndexed { i, a ->
                     AccountRow(
                         a, Modifier.appear(rememberAppearance(i)),
@@ -170,7 +170,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         ConnectButton("Connect Google Calendar") { connect("google") }
         ConnectButton("Connect Outlook Calendar") { connect("microsoft") }
         note?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
-        message?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) }
+        message?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.critical) }
         Text("Refresh", style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) { reload++ }.minTouch())
     }
@@ -193,13 +193,13 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
                 // "Headlines" (never "news_more") on the line under it (Meka's screenshot 2026-10-09 09:01).
                 Text(LoneWordGlue.kept(a.title), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                 // The time on the core's clock and zone, like Health's (quality gate slice 33).
-                Text(a.shownStatus, style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(a.shownStatus), style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
                 // Whether its events come through: "No events in the next 30 days" says an empty calendar, not a broken one.
                 a.eventsLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                 // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
                 a.editingShown?.let { line ->
                     Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-line") {
-                        Text(it, style = MekaType.caption, color = if (a.canEdit) Meka.colors.accent else Meka.colors.textTertiary)
+                        Text(LoneWordGlue.kept(it), style = MekaType.caption, color = if (a.canEdit) Meka.colors.accent else Meka.colors.textTertiary)
                     }
                 }
             }
@@ -319,7 +319,7 @@ private fun CalendarNameField(c: CalendarChoice, onDone: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Name for ${c.defaultLabel}" },
             )
         }
-        Text("Only in Navilife: the calendar keeps its name in ${c.detail?.substringBefore(" · ") ?: "its app"}. Empty goes back to ${c.defaultLabel}.",
+        Text(LoneWordGlue.kept("Only in Navilife: the calendar keeps its name in ${c.detail?.substringBefore(" · ") ?: "its app"}. Empty goes back to ${c.defaultLabel}."),
             style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

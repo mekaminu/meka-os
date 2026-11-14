@@ -92,7 +92,7 @@ internal fun PhoneCalendarsSection(core: MekaCore, modifier: Modifier = Modifier
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    if (list.isEmpty()) Text(PhoneCalendarRules.NONE_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    if (list.isEmpty()) Text(LoneWordGlue.kept(PhoneCalendarRules.NONE_LINE), style = MekaType.caption, color = Meka.colors.textTertiary)
                     list.forEach { c ->
                         Text(LoneWordGlue.kept(c.line), style = MekaType.itemMeta, color = Meka.colors.textPrimary)
                     }

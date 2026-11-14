@@ -63,4 +63,18 @@ class LoneWordGlueTest {
         assertFalse(LoneWordGlue.alone("his${nb}own"))
         assertFalse(LoneWordGlue.alone("your tap"))
     }
+
+    // Walk-through 2026-11-08, A14: Calendars' "→" alone at a line's start, and "work's" alone under the weather line.
+    @Test
+    fun anArrowStaysWithTheWordBeforeIt() {
+        val s = LoneWordGlue.kept(PhoneCalendarRules.DENIED_LINE)
+        assertFalse(s.split(' ').any { it == "→" || it.startsWith("→") }, "an arrow can start a line in \"$s\"")
+        assertEquals(PhoneCalendarRules.DENIED_LINE, DateGlue.plain(s))
+        assertTrue(LoneWordGlue.dotStartsLine("→ Permissions."))
+    }
+
+    @Test
+    fun thePossessivePairGoesDownTogether() {
+        assertTrue(LoneWordGlue.kept("Off · the weather is home's and work's").endsWith("and${nb}work's"))
+    }
 }

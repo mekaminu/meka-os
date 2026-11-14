@@ -132,7 +132,7 @@ private fun HereSwitch(core: MekaCore, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(1f).then(
                     if (view.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) }.minTouch() else Modifier,
                 ),
-            ) { l -> Text(l, style = MekaType.caption, color = statusColor) }
+            ) { l -> Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = statusColor) }
             // Walk-through 2026-11-02 A9: the pill is drawn as before inside a whole 48 dp touch.
             Box(
                 Modifier.padding(start = MekaSpace.m).sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
@@ -157,7 +157,7 @@ private fun HereSwitch(core: MekaCore, modifier: Modifier = Modifier) {
                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
             }
         }
-        Text(view.privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(os.meka.core.domain.LoneWordGlue.kept(view.privacy), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -234,7 +234,7 @@ private fun PlaceField(
                 label = "place-line-$label",
                 modifier = Modifier.weight(1f),
             ) { l ->
-                Text(l, style = MekaType.caption, color = when {
+                Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = when {
                     bad -> Meka.colors.critical
                     choice.lit -> Meka.colors.accent
                     else -> Meka.colors.textTertiary

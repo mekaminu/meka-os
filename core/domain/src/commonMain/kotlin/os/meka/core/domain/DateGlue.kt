@@ -121,7 +121,10 @@ object DurationGlue {
 object LoneWordGlue {
     const val PAIR_MAX = 22
     private val NBSP = LifeTileRules.GLUE[0]
-    private val JOINERS = setOf("·", "–", "-", "—")
+    private val JOINERS = setOf("·", "–", "-", "—", "→")
+
+    /** The marks held to the word before them, so no line starts with one or holds one alone (A14: Calendars' "→"). */
+    private val HELD = setOf("·", "→")
 
     /**
      * [line] with its dates, numbers and counts whole ([PhraseGlue.kept]), each " · " held to the words beside it
@@ -153,7 +156,7 @@ object LoneWordGlue {
     const val RUN_MAX = 28
 
     /**
-     * [s] with every spaced "·" held to the word before it, so no line starts with a dot, and to the word after it too
+     * [s] with every spaced "·" (and "→", A14) held to the word before it, so no line starts with one, and to the word after it too
      * while that run stays within [DOT_RUN_MAX] ("expired · sign"), so a line ends on a dot only beside long words
      * ("jordan@example.com ·").
      */
@@ -163,10 +166,10 @@ object LoneWordGlue {
         var i = 0
         while (i < tokens.size) {
             val t = tokens[i]
-            if (t == "·" && runs.isNotEmpty() && runs.last().isNotEmpty()) {
-                runs[runs.lastIndex] = runs.last() + NBSP + "·"
+            if (t in HELD && runs.isNotEmpty() && runs.last().isNotEmpty()) {
+                runs[runs.lastIndex] = runs.last() + NBSP + t
                 val next = tokens.getOrNull(i + 1)
-                if (next != null && next.isNotEmpty() && next != "·" && runs.last().length + 1 + next.length <= DOT_RUN_MAX) {
+                if (next != null && next.isNotEmpty() && next !in HELD && runs.last().length + 1 + next.length <= DOT_RUN_MAX) {
                     runs[runs.lastIndex] = runs.last() + NBSP + next
                     i += 2
                     continue
@@ -180,7 +183,7 @@ object LoneWordGlue {
     }
 
     /** True when a laid-out line (plain or kept) starts with a "·", for a screen test. */
-    fun dotStartsLine(laidLine: String): Boolean = laidLine.trim { it.isWhitespace() || it == NBSP }.startsWith("·")
+    fun dotStartsLine(laidLine: String): Boolean = laidLine.trim { it.isWhitespace() || it == NBSP }.let { l -> HELD.any { l.startsWith(it) } }
 
     /** The index where each word of [s] starts (words split on plain and no-break spaces). */
     private fun wordStarts(s: String): List<Int> =
