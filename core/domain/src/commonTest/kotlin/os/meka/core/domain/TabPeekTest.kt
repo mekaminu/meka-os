@@ -37,4 +37,24 @@ class TabPeekTest {
         assertFalse(TabPeekRules.peeks(listOf(50f, 50f), 0f, 20f, 75f, 0f)) // a sliver
         assertTrue(TabPeekRules.peeks(listOf(50f, 50f), 0f, 20f, 95f, 0f))
     }
+
+    @Test
+    fun theChosenPillIsScrolledWhollyIntoView() {
+        // A25: Accounts (the last pill) on a 344 dp screen at 16 dp padding: the content is 16 + 94+8+62+8+62+8+84+8+94 + 16
+        // = 460 wide, so the row scrolls to its end (460 − 344 = 116) and Accounts shows whole with 16 dp clear.
+        assertEquals(116f, TabPeekRules.scrollTo(labels, 16f, 8f, 344f, 16f, chosen = 4))
+        // Spending, the first, needs no scroll; one already in view keeps the row where it is.
+        assertEquals(0f, TabPeekRules.scrollTo(labels, 16f, 8f, 344f, 16f, chosen = 0))
+        assertEquals(40f, TabPeekRules.scrollTo(labels, 16f, 8f, 344f, 16f, chosen = 2, current = 40f))
+        // Back to Spending from the end scrolls back to the start.
+        assertEquals(0f, TabPeekRules.scrollTo(labels, 16f, 8f, 344f, 16f, chosen = 0, current = 116f))
+        // Trading (ends at 342) needs 342 + 16 − 344 = 14 to clear the edge.
+        assertEquals(14f, TabPeekRules.scrollTo(labels, 16f, 8f, 344f, 16f, chosen = 3))
+    }
+
+    @Test
+    fun aRowThatFitsNeverScrolls() {
+        assertEquals(0f, TabPeekRules.scrollTo(labels, 16f, 8f, 900f, 16f, chosen = 4))
+        assertEquals(0f, TabPeekRules.scrollTo(labels, 16f, 8f, 344f, 16f, chosen = 9))
+    }
 }

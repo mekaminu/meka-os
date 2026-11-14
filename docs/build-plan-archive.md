@@ -6309,3 +6309,9 @@ Obi's spare sum under What if I save… was `roundTen(left − amount)` while th
 - Server: `take` appends a "Put your answer into the draft" step when steps remain and none is a draft; the follow-up branch appends one when the model planned none; `report`/`followUp` get the current draft as a `<draft>` data block; REPORT/FOLLOW prompts put every answer into the redraft.
 - Fold `WorkingOnPane` and Mac `WorkingOnSheet`: a stale draft is dimmed, its foot line is the accent REDRAFTING line, and Copy is hidden.
 - Tests: backend `ObiErrandsTest.hisAnswerReachesTheDraft`, core `ObiJobsTest` (2 new), `WorkingOnScreensTest.errandsByHand` checks the line and no Copy before the answered shot.
+
+### Found and fixing, week 3 · A25 (2026-11-14): the open Money tab is always whole
+- Confirmed real: `MoneyTabPills` used a fresh `rememberScrollState()` and never scrolled, so a tab past the cover's edge (Accounts, opened from a test or a later visit) stayed cut to "Ac".
+- Core `TabPeekRules.scrollTo(labels, start, gap, viewport, pad, chosen, current)`: the least move that shows the chosen pill whole with the row's start padding clear, clamped to the scroll range.
+- Fold `MoneyTabPills`: a hoisted scroll state; a `LaunchedEffect(chosen, pad, viewport)` jumps there on first placing (and with reduced motion), else `animateScrollTo` on the appear spring. The Mac's tabs are a side column, nothing to scroll.
+- Tests: core `TabPeekTest` (2 new); `MoneyScreensTest.shoot` fails if the open pill runs past the screen's left or right edge.

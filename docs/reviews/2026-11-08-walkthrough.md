@@ -105,7 +105,7 @@ agree) before changing anything.
     plan-abroad unfolded shows the abroad tiles only at the bottom edge.
 24. **The answer doesn't reach the draft** (high, real if confirmed): an answered errand's YOU SAID "Tuesday morning"
     while the draft still says "next week, ideally a morning" (`working-on/cover-dark-answered.png`).
-25. **Money's cover tab row hides the open tab** (med): on Accounts the selected tab is cut to "Ac" at the right edge;
+25. **(Fixed 2026-11-14.)** **Money's cover tab row hides the open tab** (med): on Accounts the selected tab is cut to "Ac" at the right edge;
     the row doesn't scroll to it (`money/cover-dark-empty-accounts.png`, `cover-dark-accounts-data-sheet.png`,
     `cover-dark-own-category.png`; B lists the overflow, this is the selected tab hidden).
 26. **Sheets out of order or out of line** (med): Edit category's Cancel / Save sit above Hide from the ring and the

@@ -189,6 +189,11 @@ class MoneyScreensTest {
             val shown = (edge - cut.left) / cut.width
             if (shown < 0.25f || shown > 0.75f) fail("$name: the pill at the screen's edge shows ${"%.0f".format(shown * 100)}% (want a peek)")
         }
+        // Walk-through 2026-11-08, A25: the open tab is whole on screen (Accounts was cut to "Ac" at the cover's edge).
+        val open = pills[MoneyTabs.ALL.indexOf(tab)]
+        val left = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot.left
+        if (open.left < left - 0.5f || open.right > edge + 0.5f)
+            fail("$name: the open ${tab.label} pill runs off the screen (${open.left}..${open.right} of $left..$edge)")
         val importShown = compose.onAllNodesWithText(os.meka.core.domain.MoneyMore.DATA).fetchSemanticsNodes().isNotEmpty()
         // (A lazy list only lays out what's on screen, so Import is only required on Accounts with nothing above it.)
         if (importShown && tab != MoneyTab.ACCOUNTS) fail("$name: Import a statement shows on ${tab.label}")

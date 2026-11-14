@@ -1457,13 +1457,27 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
     val labelStyle = MekaType.metaStrong
     val density = androidx.compose.ui.platform.LocalDensity.current
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
-    val pad = remember(maxWidth, labelStyle, density) {
-        val widths = MoneyTabs.ALL.map { t -> with(density) { measurer.measure(t.label, labelStyle, maxLines = 1).size.width.toDp().value } }
-        TabPeekRules.padding(widths, start = MekaSpace.gutter.value, gap = MekaSpace.xs.value,
-            viewport = maxWidth.value + 2 * MekaSpace.gutter.value, base = MekaSpace.m.value).dp
+    val widths = remember(labelStyle, density) {
+        MoneyTabs.ALL.map { t -> with(density) { measurer.measure(t.label, labelStyle, maxLines = 1).size.width.toDp().value } }
+    }
+    val viewport = maxWidth.value + 2 * MekaSpace.gutter.value
+    val pad = remember(widths, viewport) {
+        TabPeekRules.padding(widths, start = MekaSpace.gutter.value, gap = MekaSpace.xs.value, viewport = viewport, base = MekaSpace.m.value).dp
+    }
+    // Walk-through 2026-11-08, A25: the row scrolls so the open tab is always whole in view (it opened on Accounts cut
+    // to "Ac" at the cover's edge). The first placing jumps there; a later pick glides on the appear spring.
+    val scroll = rememberScrollState()
+    var placed by remember { mutableStateOf(false) }
+    LaunchedEffect(chosen, pad, viewport) {
+        val target = with(density) {
+            TabPeekRules.scrollTo(widths, MekaSpace.gutter.value, MekaSpace.xs.value, viewport, pad.value,
+                MoneyTabs.ALL.indexOf(chosen), scroll.value.toDp().value).dp.roundToPx()
+        }
+        if (!placed || reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target, MekaMotion.appear(reduced))
+        placed = true
     }
     Row(
-        Modifier.fillMaxWidth().bleed(MekaSpace.gutter).horizontalScroll(rememberScrollState()).selectableGroup()
+        Modifier.fillMaxWidth().bleed(MekaSpace.gutter).horizontalScroll(scroll).selectableGroup()
             .padding(horizontal = MekaSpace.gutter),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,

@@ -50,6 +50,24 @@ object TabPeekRules {
         return false
     }
 
+    /**
+     * Walk-through 2026-11-08, A25: on the cover screen the row opened on Accounts with that pill cut to "Ac" at the right
+     * edge, as the row didn't scroll to it. The sideways offset that shows the [chosen] pill whole, with the row's own
+     * [start] padding clear on both sides of it, moving as little as possible from [current]: a pill already in view
+     * keeps the row where it is. Clamped to the row's scroll range (the content is [start] + pills + [start]).
+     */
+    fun scrollTo(labels: List<Float>, start: Float, gap: Float, viewport: Float, pad: Float, chosen: Int, current: Float = 0f): Float {
+        if (chosen !in labels.indices || viewport <= 0f) return current.coerceAtLeast(0f)
+        val max = (end(labels, start, gap, pad) + start - viewport).coerceAtLeast(0f)
+        var x = start
+        for (i in 0 until chosen) x += labels[i] + 2 * pad + gap
+        val right = x + labels[chosen] + 2 * pad
+        var s = current
+        if (x - start < s) s = x - start
+        if (right + start > s + viewport) s = right + start - viewport
+        return s.coerceIn(0f, max)
+    }
+
     private fun end(labels: List<Float>, start: Float, gap: Float, pad: Float): Float =
         start + labels.sumOf { (it + 2 * pad).toDouble() }.toFloat() + gap * (labels.size - 1)
 }
