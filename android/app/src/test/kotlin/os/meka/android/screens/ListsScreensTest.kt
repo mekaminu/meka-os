@@ -42,6 +42,7 @@ import os.meka.android.lists.LIST_TAB_TAG
 import os.meka.android.lists.ListTab
 import os.meka.android.lists.ListsRoute
 import os.meka.android.lists.TabLabelCut
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.ListRules
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
@@ -213,7 +214,7 @@ class ListsScreensTest {
         tap(name, "+ Add", hasContentDescription("Add"))
         until { compose.onAllNodes(hasTestTag(LIFE_ADD_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
         val c = ListsPageRules.ADD_CHOICES.first { it.key == key }
-        tap(name, c.label, hasText(c.hint))
+        tap(name, c.label, hasText(LifePageRules.shown(c.hint)))
         turns(500)
     }
 
