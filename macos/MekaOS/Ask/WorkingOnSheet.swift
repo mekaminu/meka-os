@@ -131,6 +131,7 @@ struct WorkingOnSheet: View {
         let need = j.need ?? ""
         let canAnswer = j.canAnswer
         let canCarryOn = j.canCarryOn
+        let canCopy = j.canCopy
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(LoneWordGlue.shared.kept(line: j.title)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -152,14 +153,15 @@ struct WorkingOnSheet: View {
             }
             if let draft {
                 label(ObiJobRules.shared.DRAFT_LABEL).padding(.top, MekaSpace.xs)
-                Text(draft).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                // Week 3's walk-through (A24): a draft his answer hasn't reached yet is dimmed, says so, and has no Copy.
+                Text(draft).font(MekaType.body).foregroundStyle(canCopy ? palette.textPrimary : palette.textSecondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(MekaSpace.xs)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
-                Text(LoneWordGlue.shared.kept(line: ObiJobRules.shared.DRAFT_FOOT)).font(MekaType.caption)
-                    .foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: j.draftFoot)).font(MekaType.caption)
+                    .foregroundStyle(canCopy ? palette.textTertiary : palette.accent)
                     .fixedSize(horizontal: false, vertical: true)
             }
             // Week 3's walk-through (A19): a card's buttons start under its words, like the call card's Play.
@@ -178,7 +180,7 @@ struct WorkingOnSheet: View {
                         answerPanel(id, need: need)
                     }
                 }
-                if let draft {
+                if let draft, canCopy {
                     pill(ObiJobRules.shared.COPY, ink: palette.accent, fill: palette.surface) { copy(draft) }
                         .accessibilityLabel("\(ObiJobRules.shared.COPY) the draft: \(j.title)")
                 }

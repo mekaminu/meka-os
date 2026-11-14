@@ -149,6 +149,12 @@ data class ObiJobRow(
     val canCarryOn: Boolean = false,
     /** What he last told Obi on it ("Somewhere in Leeds, under £100"), while it is open. */
     val youSaid: String? = null,
+    /**
+     * Week 3's walk-through (A24): the line under the draft. While Obi hasn't yet put his answer into it, it says so
+     * ([ObiJobRules.REDRAFTING]) and [canCopy] is false, so an old draft is never copied as if it were the new one.
+     */
+    val draftFoot: String = ObiJobRules.DRAFT_FOOT,
+    val canCopy: Boolean = draft != null,
 ) {
     val needsYou: Boolean get() = need != null
 }
@@ -200,6 +206,10 @@ object ObiJobRules {
     const val CARRY_ON_LINE = "Obi will carry on in a minute or so"
     const val ANSWER_GONE = "That errand isn't waiting for you any more"
     const val ANSWER_STATUS = "Working · Obi has your answer"
+    /** Week 3's walk-through (A24): under a draft his answer hasn't reached yet. */
+    const val REDRAFTING = "Obi is putting your answer into this draft · copy it once he has"
+    /** The step the server adds when his answer should reach a draft and nothing planned would redraft it. */
+    const val REDRAFT_TITLE = "Put your answer into the draft"
 
     // Part 3 slice 4: the apps' words (Obi is working on on the Fold and the Mac), the same on both.
     /** The row that opens the ask sheet (no open field on the pane, the layout rules). */
@@ -309,6 +319,40 @@ object ObiJobRules {
     fun isCarryOn(text: String): Boolean =
         clean(text).lowercase().trimEnd('.', '!', ' ') in setOf("carry on", "keep going", "go on", "continue", "yes", "yes please", "ok", "okay")
 
+    /** "thanks", "that's great", "all done": he's happy with it, nothing to put into a draft. */
+    fun isFinished(text: String): Boolean {
+        val t = clean(text).lowercase().trimEnd('.', '!', ' ')
+        if (t in setOf("thanks", "thank you", "cheers", "great", "that's great", "thats great", "perfect", "all done", "done",
+                "looks good", "that looks good", "that's fine", "fine", "lovely", "no thanks", "no, thanks", "stop")) return true
+        // "that's great, thanks", "perfect, thank you": short, happy, and asking for nothing else.
+        val words = t.split(Regex("""[\s,]+""")).filter { it.isNotEmpty() }
+        if (words.size > 6 || words.any { it in setOf("but", "make", "change", "instead", "can", "could", "please") }) return false
+        return listOf("thanks", "thank you", "cheers", "that's great", "perfect", "all done", "looks good", "lovely").any { it in t }
+    }
+
+    /**
+     * Week 3's walk-through (A24): his answer should reach the draft ("Tuesday morning" in place of "next week"):
+     * anything but only telling Obi to carry on, or saying he's happy with it.
+     */
+    fun redraftsAfter(answer: String?): Boolean =
+        !answer.isNullOrBlank() && !isCarryOn(answer) && !isFinished(answer)
+
+    /** A draft step to add after [steps] when his answer should reach [draft] and no draft step is still to come. */
+    fun redraftStep(steps: List<ObiStep>, draft: String?, answer: String?): ObiStep? =
+        if (draft != null && redraftsAfter(answer) && steps.none { !it.done && it.kind == ObiStepKind.DRAFT }) ObiStep(ObiStepKind.DRAFT, REDRAFT_TITLE)
+        else null
+
+    /**
+     * The draft on [j] is older than his last answer and Obi hasn't redrafted it yet: the answer waits for the server,
+     * or the server has taken it and the redraft (planned or still to plan) hasn't run.
+     */
+    fun redrafting(j: ObiJob): Boolean {
+        if (j.finished || j.draft == null || !redraftsAfter(j.answer)) return false
+        if (j.answerWaiting) return true
+        if (j.state == ObiJobState.NEEDS_YOU) return false
+        return (j.replan && j.nextStep == null) || j.steps.any { !it.done && it.kind == ObiStepKind.DRAFT }
+    }
+
     /** He can answer it: it waits for him and he hasn't already answered. */
     fun canAnswer(j: ObiJob): Boolean = !j.finished && j.state == ObiJobState.NEEDS_YOU && !j.answerWaiting
 
@@ -356,11 +400,13 @@ object ObiJobRules {
         val need = if (j.finished || j.answerWaiting) null else j.need
         val youSaid = if (j.finished) null else if (j.answerWaiting) j.answer else j.heard.lastOrNull()?.answer
         val canAnswer = canAnswer(j)
+        val redrafting = redrafting(j)
         return ObiJobRow(
             j.id, title, status, did, need, j.draft, canStop = !j.finished,
             spoken = listOfNotNull(title, status, did, need?.let { "Needs you: $it" }, youSaid?.let { "$YOU_SAID: $it" }).joinToString(". "),
             found = j.found != null,
             canAnswer = canAnswer, canCarryOn = canAnswer && j.atCap, youSaid = youSaid,
+            draftFoot = if (redrafting) REDRAFTING else DRAFT_FOOT, canCopy = j.draft != null && !redrafting,
         )
     }
 

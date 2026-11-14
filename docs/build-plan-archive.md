@@ -6302,3 +6302,10 @@ The Board's two pairs. `theTimelinesHeadingSitsOnTheDatesLine` shot `inner-dark-
 ### Found and fixing, week 3 · A21 (2026-11-14)
 
 Obi's spare sum under What if I save… was `roundTen(left − amount)` while the split line said `roundTen(left) − amount`, so with an average month of about £2,234 and £1,125 a month the split said £1,105 and Obi £1,110. One rule now, `MoneySave.spareAfter(amount, left)` (the forecast's rounded month less the amount, at least nothing), used by the split, `MoneySave.obi` (so Ask Obi's What if I save answer too) and `MoneyClear`'s "fits inside an average month, leaving about …". Test: `MoneySaveTest.obisSpareIsTheCardsSumNotARoundingOfIt`. The reviewer's Ask Obi shot ("£1,100 … about £1,120") was its own fixture's month (about £2,220), already agreeing with itself.
+
+### Found and fixing, week 3 · A24 (2026-11-14): his answer reaches the draft
+- Confirmed real: `ErrandRunner.take` set REPLAN only when nothing was planned, and FOLLOW_SYSTEM redrafted only when he asked for a change, so a plain answer ("Tuesday morning") could end the errand with the old "next week" draft.
+- Core `ObiJobRules.isFinished`, `redraftsAfter`, `redraftStep`, `redrafting`; `ObiJobRow.draftFoot` (`REDRAFTING` while stale) and `canCopy`.
+- Server: `take` appends a "Put your answer into the draft" step when steps remain and none is a draft; the follow-up branch appends one when the model planned none; `report`/`followUp` get the current draft as a `<draft>` data block; REPORT/FOLLOW prompts put every answer into the redraft.
+- Fold `WorkingOnPane` and Mac `WorkingOnSheet`: a stale draft is dimmed, its foot line is the accent REDRAFTING line, and Copy is hidden.
+- Tests: backend `ObiErrandsTest.hisAnswerReachesTheDraft`, core `ObiJobsTest` (2 new), `WorkingOnScreensTest.errandsByHand` checks the line and no Copy before the answered shot.

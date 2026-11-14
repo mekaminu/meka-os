@@ -417,6 +417,10 @@ class WorkingOnScreensTest {
         if (boiler().canAnswer) fail("$name: it can be answered twice")
         until { compose.onAllNodes(hasTestTag("errand-you-said"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         if (compose.onAllNodes(hasTestTag("errand-you-said"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no YOU SAID")
+        // Week 3's walk-through (A24): the old draft ("next week") isn't offered to copy while Obi puts the answer in.
+        if (!onScreen(ObiJobRules.REDRAFTING)) fail("$name: the draft doesn't say Obi is putting the answer in")
+        if (compose.onAllNodes(hasContentDescription("${ObiJobRules.COPY} the draft: Find someone to service the boiler") and hasClickAction())
+                .fetchSemanticsNodes().isNotEmpty()) fail("$name: the old draft can still be copied")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-answered"))
     }
 

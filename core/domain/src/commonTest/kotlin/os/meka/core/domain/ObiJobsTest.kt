@@ -154,4 +154,39 @@ class ObiJobsTest {
         assertEquals("Done today", rows[2].status)
         assertEquals("Three engineers nearby", rows[2].did)
     }
+
+    /** Week 3's walk-through (A24): which answers should reach a draft, and the step that puts them there. */
+    @Test
+    fun anAnswerThatShouldReachTheDraft() {
+        for (a in listOf("Tuesday morning", "somewhere in Leeds", "make it shorter please", "thanks, but say Tuesday")) {
+            assertTrue(ObiJobRules.redraftsAfter(a), a)
+        }
+        for (a in listOf("Carry on", "thanks", "That's great, thanks!", "perfect, thank you", "all done", "", null)) {
+            assertFalse(ObiJobRules.redraftsAfter(a), a.toString())
+        }
+        val done = listOf(ObiStep(ObiStepKind.WORK, "Say who looks best", done = true))
+        assertEquals(ObiJobRules.REDRAFT_TITLE, ObiJobRules.redraftStep(done, "Hello", "Tuesday morning")!!.title)
+        assertNull(ObiJobRules.redraftStep(done, null, "Tuesday morning"), "no draft yet: nothing to redraft")
+        assertNull(ObiJobRules.redraftStep(done + ObiStep(ObiStepKind.DRAFT, "Draft it again"), "Hello", "Tuesday morning"), "one is already to come")
+        assertNull(ObiJobRules.redraftStep(done, "Hello", "thanks"))
+    }
+
+    @Test
+    fun anOldDraftIsNotCopiedWhileHisAnswerIsOnItsWay() {
+        val waiting = ObiJob(
+            id = "j", ask = "Find someone to service the boiler", askedAtMs = 0L, state = ObiJobState.NEEDS_YOU, stopped = false,
+            steps = emptyList(), notes = emptyList(), found = null, need = "Which morning next week suits you?",
+            draft = "Could you come next week?", didAtMs = null, nextAtMs = null, stepDay = null, daySteps = 0, totalSteps = 4, waiting = null,
+        )
+        assertTrue(ObiJobRules.row(waiting, 0L, LocalCalendar.UTC).canCopy)
+        val answered = waiting.copy(answer = "Tuesday morning", answeredAtMs = 5L)
+        var row = ObiJobRules.row(answered, 10L, LocalCalendar.UTC)
+        assertFalse(row.canCopy)
+        assertEquals(ObiJobRules.REDRAFTING, row.draftFoot)
+        assertEquals("Tuesday morning", row.youSaid)
+        // Only thanks: the draft stands and can be copied.
+        row = ObiJobRules.row(waiting.copy(answer = "Thanks", answeredAtMs = 5L), 10L, LocalCalendar.UTC)
+        assertTrue(row.canCopy)
+        assertEquals(ObiJobRules.DRAFT_FOOT, row.draftFoot)
+    }
 }

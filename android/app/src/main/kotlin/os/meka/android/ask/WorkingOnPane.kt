@@ -364,10 +364,12 @@ private fun JobCard(
         j.draft?.let { draft ->
             Text(ObiJobRules.DRAFT_LABEL.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.xs))
-            Text(draft, style = MekaType.body, color = Meka.colors.textPrimary,
+            // Week 3's walk-through (A24): a draft his answer hasn't reached yet is dimmed, says so, and has no Copy.
+            Text(draft, style = MekaType.body, color = if (j.canCopy) Meka.colors.textPrimary else Meka.colors.textSecondary,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
                     .padding(MekaSpace.xs).testTag("errand-draft"))
-            Text(LoneWordGlue.kept(ObiJobRules.DRAFT_FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(LoneWordGlue.kept(j.draftFoot), style = MekaType.caption,
+                color = if (j.canCopy) Meka.colors.textTertiary else Meka.colors.accent, modifier = Modifier.testTag("errand-draft-foot"))
         }
         // Week 3's walk-through (A19): a card's buttons start under its words, like the call card's Play and Up next's
         // Done, not pushed to the right edge.
@@ -380,7 +382,7 @@ private fun JobCard(
                 TouchPill(ObiJobRules.ANSWER, Meka.colors.accent, Meka.colors.onAccent, spoken = "${ObiJobRules.ANSWER}: ${j.title}",
                     modifier = Modifier.testTag("errand-answer"), onClick = onAnswer)
             }
-            j.draft?.let { draft ->
+            j.draft?.takeIf { j.canCopy }?.let { draft ->
                 TouchPill(ObiJobRules.COPY, Meka.colors.surface, Meka.colors.accent, spoken = "${ObiJobRules.COPY} the draft: ${j.title}") { onCopy(draft) }
             }
             if (j.canStop) {

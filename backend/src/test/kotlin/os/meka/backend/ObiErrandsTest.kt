@@ -45,16 +45,23 @@ class ObiErrandsTest {
         var follows = 0
         var lastHeard: List<ObiHeard> = emptyList()
         var follow: List<ObiStep> = listOf(ObiStep(ObiStepKind.DRAFT, "Draft a shorter request"))
-        override fun followUp(ask: String, done: List<ObiStep>, notes: List<String>, found: String?, heard: List<ObiHeard>, today: String): BrainAnswer<List<ObiStep>> {
+        var followDraft: String? = null
+        var reportDraft: String? = null
+        override fun followUp(ask: String, done: List<ObiStep>, notes: List<String>, found: String?, heard: List<ObiHeard>, today: String, draft: String?): BrainAnswer<List<ObiStep>> {
             if (aiOff) return BrainAnswer.Later("Navilife's AI is off")
             follows++
             lastHeard = heard
+            followDraft = draft
             return BrainAnswer.Ok(follow)
         }
-        override fun report(ask: String, step: ObiStep, done: List<ObiStep>, notes: List<String>, found: String?, today: String, heard: List<ObiHeard>): BrainAnswer<ErrandReport> =
+        override fun report(ask: String, step: ObiStep, done: List<ObiStep>, notes: List<String>, found: String?, today: String, heard: List<ObiHeard>, draft: String?): BrainAnswer<ErrandReport> =
             if (aiOff) BrainAnswer.Later("Navilife's AI is off") else BrainAnswer.Ok(
                 when (step.kind) {
-                    ObiStepKind.DRAFT -> ErrandReport(found, null, "Hello, could you service my boiler next week? Thanks, Meka")
+                    ObiStepKind.DRAFT -> {
+                        reportDraft = draft
+                        val day = heard.lastOrNull()?.answer?.takeIf { draft != null }?.lowercase() ?: "next week"
+                        ErrandReport(found, null, "Hello, could you service my boiler $day? Thanks, Meka")
+                    }
                     else -> ErrandReport("Two engineers nearby: Acme Heating and Oak Gas (from their websites).", "", null)
                 },
             )
@@ -232,6 +239,36 @@ class ObiErrandsTest {
         assertTrue(row.canAnswer)
         assertFalse(row.canCarryOn)
         assertEquals("Make it shorter please", row.youSaid)
+    }
+
+    /**
+     * Week 3's walk-through (A24): "Tuesday morning" reaches the draft that said "next week", even when the follow-up
+     * plan has no draft step, and until it has, the card says so and won't copy the old draft.
+     */
+    @Test
+    fun hisAnswerReachesTheDraft() {
+        val id = toTheDraft()
+        brain.follow = emptyList()
+        assertTrue(answer(id, "tuesday morning"))
+        var row = ObiJobRules.row(job(), nowMs, LocalCalendar.UTC)
+        assertEquals(ObiJobRules.REDRAFTING, row.draftFoot)
+        assertFalse(row.canCopy)
+        assertTrue(tick()) // read
+        row = ObiJobRules.row(job(), nowMs, LocalCalendar.UTC)
+        assertFalse(row.canCopy, "taken but not yet redrafted")
+        assertTrue(tick()) // follow-up planned nothing; the redraft is added
+        assertEquals("Hello, could you service my boiler next week? Thanks, Meka", brain.followDraft)
+        assertEquals(ObiJobRules.REDRAFT_TITLE, job().nextStep!!.title)
+        assertEquals(ObiJobState.WORKING, job().state)
+        assertTrue(tick()) // the redraft
+        val j = job()
+        assertEquals("Hello, could you service my boiler next week? Thanks, Meka", brain.reportDraft)
+        assertEquals("Hello, could you service my boiler tuesday morning? Thanks, Meka", j.draft)
+        assertEquals(ObiJobState.NEEDS_YOU, j.state)
+        row = ObiJobRules.row(j, nowMs, LocalCalendar.UTC)
+        assertTrue(row.canCopy)
+        assertEquals(ObiJobRules.DRAFT_FOOT, row.draftFoot)
+        assertEquals("Tuesday morning", row.youSaid)
     }
 
     @Test
