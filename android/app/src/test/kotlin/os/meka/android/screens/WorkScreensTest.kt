@@ -37,6 +37,7 @@ import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.ScreenUnknownRules
+import os.meka.core.domain.WorkSchedule
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -44,7 +45,7 @@ import kotlin.test.fail
 
 /**
  * The quality gate, slice 37 (build plan: "the remaining screens' shots", Work mode next): Ask → More → Work mode with
- * nothing set, one set of hours (Mon–Fri, a commute, one family member) and a full set (four work days with Thursday
+ * nothing set (Navilife's default hours, empty lists, also shot below the fold), one set of hours (Mon–Fri, a commute, one family member) and a full set (four work days with Thursday
  * short, at work, the call assistant on and screening unknown callers all the time, Leaving now on, a blocked number,
  * two family members (one without a number) and one always-notify), each on the Fold's cover and inner screens, Dark
  * (and the full one in Light). Saved under `work/` and read for nonsense, cut lines, broken words, split dates, times
@@ -165,7 +166,15 @@ class WorkScreensTest {
             if (air < 8f) fail("$name: the commute's Home label sits ${air.toInt()} dp under the To work chips (want ≥ 8)")
         }
         when (fill) {
-            Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Add from contacts")
+            Fill.EMPTY -> {
+                ScreenShots.assertShows(compose, name, "Add from contacts")
+                // Walk-through 2026-11-08 A23: a fresh Fold comes with Navilife's own hours (WorkSchedule.DEFAULT, so at
+                // work at 17:15 on a Wednesday), so the top of the empty page reads like a set-up one; what's empty is
+                // further down (nobody on the lists, the call assistant off). The empty state is shot there too.
+                if (w.schedule != WorkSchedule.DEFAULT) fail("$name: a fresh Fold's hours aren't Navilife's default (${w.schedule})")
+                if (w.callAssistant) fail("$name: the call assistant is on with nothing set")
+                ScreenShots.shootBelow(compose, "work", name, "Add from contacts", settle = { turns(1_000) })
+            }
             Fill.ONE -> {
                 if (!w.atWork) fail("$name: not at work at 17:15 on a Wednesday inside 09:00–17:30 (${w.line})")
                 ScreenShots.assertShows(compose, name, "Stop work now")

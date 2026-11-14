@@ -81,8 +81,13 @@ class NotificationsScreensTest {
                 core.setDigest(NotificationSettings.MIDDAY, false)
                 core.setDigest(NotificationSettings.EVENING, false)
             }
-            Fill.ONE -> Unit
+            // Walk-through 2026-11-08 A23: one and many each have things waiting for the evening digest, so the line under
+            // the title says what the state holds ("1 thing so far", "3 things so far" or more); both used to read "nothing yet".
+            Fill.ONE -> core.addPromise("Send Sam the photos", "Sam", 0)
             Fill.MANY -> {
+                core.addPromise("Send Sam the photos", "Sam", 0)
+                core.addWaiting("Quote for the boiler", "Riley", 0)
+                core.addPromise("Return the drill", "Alex", 0)
                 core.setQuietHours(true, 21 * 60 + 30, 6 * 60 + 45)
                 core.setNoticeTier(NoticeSource.BRIEF, NoticeTier.DIGEST)
                 core.setNoticeTier(NoticeSource.WEEKLY_REVIEW, NoticeTier.SILENT)
@@ -188,11 +193,12 @@ class NotificationsScreensTest {
             }
             Fill.ONE -> {
                 if (!onScreen("Quiet hours 22:00–07:00")) fail("$name: the quiet hours line reads \"${p.quietLine}\"")
-                if (!onScreen("Next digest 18:00")) fail("$name: the digest line reads \"${p.digestLine}\"")
+                if (!onScreen("Next digest 18:00 · 1 thing so far")) fail("$name: the digest line reads \"${p.digestLine}\"")
             }
             Fill.MANY -> {
                 if (!onScreen("On · 21:30–06:45")) fail("$name: quiet hours don't read 21:30–06:45")
                 if (s.tierFor(NoticeSource.WEEKLY_REVIEW) != NoticeTier.SILENT) fail("$name: the weekly review wasn't lowered ($s)")
+                if (!p.digestLine.endsWith("things so far") || !onScreen(p.digestLine)) fail("$name: the digest line reads \"${p.digestLine}\", not the things waiting")
             }
         }
         return core
