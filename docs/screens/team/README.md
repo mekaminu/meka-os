@@ -24,7 +24,7 @@ Rendered with `tools/design-render/render.mjs` at 390 (and with Inbox unfolded) 
    (now `metaStrong`). The status word beside the dot was 13 sp; mockup 11.5 (now `micro`, 12).
 2. A waiting row's words were 17 sp body; mockup 14 (now `itemMeta`, 15).
 3. An unfolded helper's Open · Pause · Whole day › wrapped onto two rows on the cover screen; the mockup has one row
-   of small pills (now caption words with 12 dp sides, Whole day › bare with 8 dp; the test fails if they wrap).
+   of small pills (now caption words with 8 dp sides, Whole day › bare; the test fails if they wrap).
 4. The busy shot had nothing waiting, so the Waiting on you box was never drawn; it now has a request card waiting.
 
 Kept on purpose: Ask the team… is the same bar as Money's (the orb at its left, a plain mic), so the two read alike.

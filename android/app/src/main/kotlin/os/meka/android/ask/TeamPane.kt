@@ -371,18 +371,18 @@ private fun HelpersBox(
                             Text(LoneWordGlue.kept(l.text), style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                         }
                     }
-                    // Beside the mockup: three small pills on one row (caption words, 12 dp sides; Whole day › drawn
-                    // bare with 8 dp sides); they still wrap rather than run off the edge at a large text size.
+                    // Beside the mockup: three small pills on one row (caption words, 8 dp sides; Whole day › drawn
+                    // bare); they still wrap rather than run off the edge at a large text size.
                     FlowRow(
                         Modifier.fillMaxWidth().padding(top = MekaSpace.xxs),
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                     ) {
                         TouchPill(c.openLabel, Meka.colors.surface, Meka.colors.accent, spoken = "${c.openLabel}: ${c.title}",
-                            pad = MekaSpace.s, style = MekaType.caption, modifier = Modifier.testTag("team-open")) { onOpen(c) }
+                            pad = MekaSpace.xs, style = MekaType.caption, modifier = Modifier.testTag("team-open")) { onOpen(c) }
                         c.pauseShort?.let { p ->
                             TouchPill(p, Meka.colors.surface, Meka.colors.accent, spoken = "$p: ${c.title}",
-                                pad = MekaSpace.s, style = MekaType.caption, modifier = Modifier.testTag("team-pause-short")) { onPause(c) }
+                                pad = MekaSpace.xs, style = MekaType.caption, modifier = Modifier.testTag("team-pause-short")) { onPause(c) }
                         }
                         TouchPill("${TeamSimplerRules.WHOLE_DAY} ›", Color.Transparent, Meka.colors.accent,
                             spoken = "${TeamSimplerRules.WHOLE_DAY}: ${c.title}",
