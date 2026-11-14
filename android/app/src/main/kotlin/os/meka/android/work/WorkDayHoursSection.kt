@@ -52,7 +52,7 @@ internal fun WorkDayHoursSection(
     var open by rememberSaveable { mutableStateOf<Int?>(null) }
     val haptics = rememberMekaHaptics()
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Text("Each day", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text("EACH DAY", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         schedule.weekRows.forEach { row ->
             DayHoursRow(row, open == row.isoDay,
                 onToggle = { haptics.tick(); open = if (open == row.isoDay) null else row.isoDay },

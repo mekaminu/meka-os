@@ -64,7 +64,18 @@ import os.meka.core.domain.LeavePageRules
 import os.meka.core.domain.LeaveRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.BankHolidayFields
+import os.meka.core.domain.BankHolidayStore
+import os.meka.core.domain.EntityTypes
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.InMemoryServerOpStore
+import os.meka.core.sync.Op
+import os.meka.core.sync.PullRequest
+import os.meka.core.sync.PushRequest
+import os.meka.core.sync.SyncService
+import os.meka.core.sync.SyncTransport
 import kotlin.random.Random
 import kotlin.test.fail
 
@@ -89,12 +100,34 @@ class KeptPlacesScreensTest {
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
 
+    /** Navilife's server, as far as these pages ask it: sync only (the bank holidays it mirrors from GOV.UK). */
+    private class Server(val service: SyncService) : SyncTransport {
+        override suspend fun push(request: PushRequest) = service.push(request)
+        override suspend fun pull(request: PullRequest) = service.pull(request)
+    }
+
+    /**
+     * Walk-through 2026-11-08, A19: with no bank holidays the Christmas holidays (21 Dec – 1 Jan) read as 10 work days.
+     * The server's list, as GOV.UK has it, so they read 7 as they do on his phone.
+     */
+    private fun server(): Server {
+        val ops = InMemoryServerOpStore()
+        val clock = HlcClock("server", { now })
+        ops.append(Op("srvbh", "hh", EntityTypes.CONTEXT_MODE, BankHolidayStore.ENTITY_ID, BankHolidayFields.DATES,
+            FieldValue.Text(BANK_HOLIDAYS), clock.now(), emptyList(), "server"))
+        return Server(SyncService(ops))
+    }
+
     private fun core(): MekaCore = MekaCore(
-        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = server(),
         secureRandom = Random(43), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        const val BANK_HOLIDAYS = "2026-12-25=Christmas Day;2026-12-28=Boxing Day (substitute day);2027-01-01=New Year’s Day;" +
+            "2027-03-26=Good Friday;2027-03-29=Easter Monday;2027-05-03=Early May bank holiday;2027-05-31=Spring bank holiday"
+    }
 
     private enum class Place(val area: String, val title: String, val listTag: String) {
         DATE_NIGHT("date-night", "Date night", DATE_NIGHT_LIST_TAG), LEAVE("leave", "Annual leave", LEAVE_LIST_TAG),
@@ -157,6 +190,7 @@ class KeptPlacesScreensTest {
         val core = core()
         context.useCoreForScreens(core)
         runBlocking {
+            check(core.syncNow()) { "the bank holidays didn't sync" }
             core.tick()
             fill(core, place, fill)
             core.tick()
@@ -219,6 +253,11 @@ class KeptPlacesScreensTest {
                 if (fill == Fill.EMPTY && v.summary != LeaveRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing booked")
                 if (fill == Fill.MANY && v.booked.size + v.taken.size != 5) fail("$name: ${v.booked.size + v.taken.size} rows for five stretches")
                 if (fill == Fill.MANY && v.holidays.isEmpty()) fail("$name: no school holidays after typing two")
+                // A19: the Christmas holidays leave out Christmas Day, Boxing Day's substitute and New Year's Day.
+                if (fill == Fill.MANY) {
+                    val christmas = v.holidays.firstOrNull { "Christmas" in it.title } ?: fail("$name: no Christmas holidays row")
+                    if ("7 work days" !in christmas.line) fail("$name: the Christmas holidays read \"${christmas.line}\", not 7 work days")
+                }
             }
             Place.EMERGENCY -> {
                 val v = core.emergencyView.value

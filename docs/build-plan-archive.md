@@ -6231,3 +6231,10 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Fix (app): `ReadingPane.SaidLine` offers Undo only on the line being shown, so a line fading out can't be tapped or found and a quick Undo always takes back the latest command.
 - Fix (test, tighter not looser): `PlansPlacesScreensTest.readingByHand` waits for "Undo: Finished Dune", fails if more than one Undo shows, and taps that one.
 
+
+
+### Found and fixing, week 3: A19 slice 1 (2026-11-14)
+
+- Kids' THIS WEEK (`KidsWeekRules.week`): a SchoolKind.OFF stretch is listed once, on its first day inside the 7, with " · until <its last day>" when it runs on (`KidsWeekRules.UNTIL`); counted as one thing. Test `KidsWeekTest.aStretchOffIsOneThingOnItsFirstDayWithWhenItEnds`.
+- Work mode → Hours → "EACH DAY" drawn as a section label (sectionLabel, tracked on the Mac), not a sentence-case caption (`WorkDayHoursSection.kt`, `WorkSheet.swift`).
+- `KeptPlacesScreensTest`: the core syncs from an in-memory server holding GOV.UK's bank holidays (invented-free public dates), so Leave's Christmas holidays row reads 7 work days; the MANY shot checks it.

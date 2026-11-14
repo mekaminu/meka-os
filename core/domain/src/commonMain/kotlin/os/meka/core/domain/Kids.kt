@@ -496,6 +496,8 @@ object KidsWeekRules {
     const val DAYS = 7
     const val EMPTY = "Nothing in the next 7 days from School, club sessions or fees."
     const val FOOT = "From School, the club sessions in your calendar and the club fees below."
+    /** "No school · Half term · until Fri 30 Oct": a stretch off is listed once, on its first day in the 7. */
+    const val UNTIL = "until"
 
     private fun dayLabel(day: Long, today: Long): String = when (day - today) {
         0L -> "Today"
@@ -538,13 +540,17 @@ object KidsWeekRules {
         val today = cal.epochDayOf(nowMs)
         val ids = children.mapNotNull { c -> KidsRules.idFor(c.name)?.let { it to c.name } }.toMap()
         val sessions = events.filter { !it.allDay && it.endAtMs > nowMs && ClubChildRules.asks(it) }.sortedBy { it.startAtMs }
+        val offShown = HashSet<String>()
         val days = (today until today + DAYS).mapNotNull { d ->
             val label = dayLabel(d, today)
             val soon = d - today <= 1
             val items = mutableListOf<KidWeekItem>()
             SchoolRules.onDay(school, d, holidays).forEach { t ->
                 val who = if (t.who.isEmpty()) null else (childNamed(t.who, children)?.name ?: return@forEach)
-                val text = schoolText(t, who)
+                // A19: a stretch off (half term) is one thing, on its first day here, not one per day.
+                if (t.kind == SchoolKind.OFF && !offShown.add(t.id)) return@forEach
+                val end = if (t.kind == SchoolKind.OFF) school.firstOrNull { it.id == t.id }?.endDay else null
+                val text = schoolText(t, who) + if (end != null && end > d) " · $UNTIL ${CivilDate.shortLabel(end)}" else ""
                 items += KidWeekItem(text, soon, "$label. $text")
             }
             sessions.filter { cal.epochDayOf(it.startAtMs) == d }.forEach { e ->

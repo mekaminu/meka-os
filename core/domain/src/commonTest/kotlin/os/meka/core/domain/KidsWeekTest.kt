@@ -52,6 +52,20 @@ class KidsWeekTest {
     }
 
     @Test
+    fun aStretchOffIsOneThingOnItsFirstDayWithWhenItEnds() {
+        // Half term Mon 19 – Fri 23 Oct (the walk-through's A19: it read as two things, one per day).
+        val w = week(school = listOf(school("ht", SchoolKind.OFF, "Half term", "", today + 4, today + 8)))
+        assertEquals(listOf("Mon 19 Oct"), w.days.map { it.label })
+        assertEquals("No school · Half term · until Fri 23 Oct", w.days.single().items.single().text)
+        assertEquals("1 thing in the next 7 days", w.line)
+        // Already started: it shows on today; its last day says no "until".
+        val started = week(school = listOf(school("ht", SchoolKind.OFF, "Half term", "", today - 3, today + 1)))
+        assertEquals("No school · Half term · until Fri 16 Oct", started.days.single().items.single().text)
+        val last = week(school = listOf(school("ht", SchoolKind.OFF, "Half term", "", today - 3, today)))
+        assertEquals("No school · Half term", last.days.single().items.single().text)
+    }
+
+    @Test
     fun aSchoolLineForSomeoneNotInAboutYouIsLeftOut() {
         val w = week(school = listOf(school("pe", SchoolKind.WEEKLY, "Swimming", "Jo", today - 30, weekday = 5)))
         assertTrue(w.isEmpty)

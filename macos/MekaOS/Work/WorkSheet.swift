@@ -628,7 +628,7 @@ struct WorkSheet: View {
     @ViewBuilder private var eachDay: some View {
         if let s = model.work?.schedule, s.enabled, !s.days.isEmpty {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text("Each day").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text("EACH DAY").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
                 ForEach(s.weekRows, id: \.isoDay) { row in
                     dayRow(row)
                 }
