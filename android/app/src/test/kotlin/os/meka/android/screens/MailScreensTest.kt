@@ -197,7 +197,7 @@ class MailScreensTest {
         // Walk-through A20 ("mail one = many"): One's accounts and Still to connect sit below the switches, so with none of
         // them on screen its top is Many's top byte for byte; then only its -below shot is kept (once the test passes).
         val topIsMany = fill == Fill.ONE && v != null &&
-            !ScreenShots.anyOnScreen(compose, v.rows.map { it.title } + listOfNotNull(v.toConnect?.let { LoneWordGlue.kept(it) }))
+            !ScreenShots.anyOnScreen(compose, v.rows.map { it.title } + v.connects.map { it.label } + listOfNotNull(v.toConnect))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -249,10 +249,8 @@ class MailScreensTest {
         // them), so the end of the page gets its own shot, which must differ from every other.
         val last = if (fill == Fill.ONE || fill == Fill.MANY) v.connects.lastOrNull()?.label ?: v.rows.last().title else null
         val shotBelow = below && last != null && ScreenShots.shootBelow(compose, "mail", name, last, settle = { turns(1_000) })
-        if (topIsMany && below) {
-            if (!shotBelow) fail("$name: One's accounts weren't on screen at the top, yet no -below shot was taken")
-            top.delete()
-        }
+        // The whole page on screen from the start (nothing to scroll): the top is One's only shot, and it shows the end.
+        if (topIsMany && shotBelow) top.delete()
         return core
     }
 

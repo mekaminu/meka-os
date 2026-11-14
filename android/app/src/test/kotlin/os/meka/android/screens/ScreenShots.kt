@@ -632,12 +632,13 @@ object ScreenShots {
      * Walk-through 2026-11-08 A20 ("one = many above the fold"): true when any piece of [texts] is at least partly on
      * screen. A one-thing state whose only difference from the many-things state sits lower down (Mail's accounts below
      * its switches, Fasting's week below the ring) draws the same top as the many state when none of them is: its top
-     * shot is then a copy, so the test keeps only its `-below` shot.
+     * shot is then a copy, so the test keeps only its `-below` shot (when the page fits, there is no -below and the top stays).
+     * Text is read as plain words (no-break spaces as spaces).
      */
     fun anyOnScreen(compose: ComposeContentTestRule, texts: List<String>): Boolean {
         val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
         return texts.any { t ->
-            compose.onAllNodes(hasText(t, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            compose.onAllNodes(plainText(t, substring = true) or hasContentDescription(t, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
                 .any { it.boundsInRoot.bottom > screen.top && it.boundsInRoot.top < screen.bottom && it.boundsInRoot.height > 0f }
         }
     }
