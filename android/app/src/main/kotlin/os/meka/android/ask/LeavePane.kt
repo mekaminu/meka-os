@@ -25,8 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
@@ -247,8 +249,13 @@ private fun Stepper(label: String, value: String, less: () -> Unit, more: () -> 
         Text("−", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button, onClick = less)
                 .semantics { contentDescription = "$label: fewer" }.minTouch().padding(horizontal = MekaSpace.m))
-        Crossfade(value, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "leave-$label") { t ->
-            Text(t, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        // A19: the value sits centred in the widest value's width, so − and + line up on both steppers.
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.testTag("leave-stepper-value")) {
+            Text(LeavePageRules.STEPPER_WIDEST, style = MekaType.itemTitle, color = Color.Transparent,
+                modifier = Modifier.clearAndSetSemantics { })
+            Crossfade(value, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "leave-$label") { t ->
+                Text(t, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            }
         }
         Text("+", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button, onClick = more)

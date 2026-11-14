@@ -128,4 +128,13 @@ class LeavePageTest {
         assertEquals(LifePageRules.SEE_ALL, card.more)
         assertEquals(6, LeavePageRules.allRows(view(many, emptyList()), LeavePageRules.BOOKED, sat).size)
     }
+
+    @Test
+    fun steppersShareTheWidestValueSoTheirButtonsLineUp() {
+        assertEquals("60 days", LeavePageRules.STEPPER_WIDEST)
+        val widest = LeavePageRules.STEPPER_WIDEST.length
+        LeavePageRules.stepperValues().forEach { v ->
+            kotlin.test.assertTrue(v.length <= widest, "$v is wider than the steppers' shared width")
+        }
+    }
 }

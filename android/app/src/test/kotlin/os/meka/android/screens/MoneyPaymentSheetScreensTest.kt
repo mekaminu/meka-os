@@ -305,6 +305,12 @@ class MoneyPaymentSheetScreensTest {
         compose.mainClock.autoAdvance = false
         settle()
         assertTrue(shows("money-view-needs"), "no Needs vs wants chip on Spending")
+        // A19: "All N ›" beside the chips sits on their centre line (it was xs/2 above it).
+        if (shows("money-cats-all")) {
+            fun mid(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center.y
+            val off = kotlin.math.abs(mid("money-cats-all") - mid("money-view-needs"))
+            assertTrue(off <= 1.5f, "\"All\" is ${off}px off the chips' centre line")
+        }
         tap("money-view-needs")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-needs-wants"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-needs-wants")

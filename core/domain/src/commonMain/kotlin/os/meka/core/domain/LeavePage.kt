@@ -112,6 +112,17 @@ object LeavePageRules {
     /** The month name for the leave year's start ("1 Apr"), for the Allowance sheet's stepper. */
     fun yearStartLabel(month: Int): String = "1 ${Recurrence.MONTH_SHORT[month.coerceIn(1, 12) - 1]}"
 
+    /**
+     * Walk-through 2026-11-08 A19: the Allowance sheet's two steppers ("25 days", "1 Apr") put their − at different
+     * places because each value was only as wide as itself. Both values now sit centred in the width of the widest one
+     * either stepper can show, so − and + line up down the sheet.
+     */
+    val STEPPER_WIDEST: String = LeaveRules.daysWord(LeaveRules.MAX_ALLOWANCE)
+
+    /** Every value a stepper can show (for the width test). */
+    fun stepperValues(): List<String> =
+        (LeaveRules.MIN_ALLOWANCE..LeaveRules.MAX_ALLOWANCE).map { LeaveRules.daysWord(it) } + (1..12).map { yearStartLabel(it) }
+
     /** The month before and after [month] (the stepper's − and +). */
     fun monthBefore(month: Int): Int = (month + 10) % 12 + 1
     fun monthAfter(month: Int): Int = month % 12 + 1

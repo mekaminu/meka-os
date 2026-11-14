@@ -974,8 +974,11 @@ fun MoneyPane(
                                 if (on != needsView) { haptics.tick(); needsView = on; focus = null }
                             }
                             MoneySpending.allLabel(ringSp.rows.size, allCats)?.let { l ->
+                                // A19: the chips' row is padded xs at its top, so "All N ›" takes the same top
+                                // padding and its centre sits on the chips' centre, not xs/2 above it.
                                 Text(l, style = MekaType.caption, color = Meka.colors.accent,
-                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { allCats = !allCats }.minTouch()
+                                    modifier = Modifier.padding(top = MekaSpace.xs).testTag("money-cats-all")
+                                        .clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { allCats = !allCats }.minTouch()
                                         .padding(horizontal = MekaSpace.xs))
                             }
                         }

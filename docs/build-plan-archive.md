@@ -6250,6 +6250,12 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Money → Spending's three tiles (Fold, `MoneyTiles`): the labels share one size, the largest at which every label fits its tile (caption down to 10 sp in half steps, measured with a TextMeasurer), and the figures share one (metaStrong down to 11 sp); each text still auto-sizes under that cap, so a tile drawn narrower than measured never cuts (the first push, measured size only, cut the review card's figures on the cover: ci run 43577918572); each used to step down alone, so "Bills to come" read smaller than "Came in" and "Left" on the closed Fold. The Mac's tiles fit whole at its widths.
 - Tests: core `ParkingTest.theFindLinkSaysWhatATapDoesAndMapsIsOneQuietWayOut`; `CarScreensTest` taps Find my car in the sheet and fails unless it says Hide the arrow, shows Open in Maps once and no "Walk there", and a second tap brings Find my car back; `MoneyScreensTest` fails on the full month's Spending if the three labels or the three figures are laid out at different sizes.
 
+### Found and fixing, week 3: A19 slice 5 (2026-11-14)
+
+- Ask → Leave → Allowance: each stepper's value ("25 days", "1 Apr") is drawn centred over an invisible copy of `LeavePageRules.STEPPER_WIDEST` (`LeaveRules.daysWord(MAX_ALLOWANCE)`, "60 days"), so both rows' − and + sit at the same x; Fold `LeavePane.Stepper` (Box with a transparent widest text, no semantics), Mac `LeaveSheet.stepper` (hidden widest text with the value as an overlay).
+- Money → Spending, Needs vs wants in the head: the chips' row carries `padding(top = xs)`, so "All N ›" takes the same top padding outside its 48 dp target and its centre meets the chips' centre (was xs/2 above). Fold only; the Mac's HStack already centres them.
+- Tests: core `LeavePageTest.steppersShareTheWidestValueSoTheirButtonsLineUp`; `KeptPlacesScreensTest.leaveByHand` checks both steppers' − and + share their x; `MoneyPaymentSheetScreensTest.theNeedToggleAndTheNeedsView` checks "All" against the chips' centre; Mac `MekaCoreBridgeTests.testLeaveSteppersShareTheWidestValue`. Mac checked nightly.
+
 ### Found and fixing, week 3: A19 slice 4 (2026-11-14)
 
 - Money → Plan → Obi's money check with nothing found: `MoneyCheck.view` leaves `from` blank when there are no ideas, so the card says `MoneyCheck.EMPTY` ("Nothing to look at just now · Obi checks again as payments come in") once instead of "no ideas just now" over it; the Fold's `MoneyCheckCard` and the Mac's MoneySheet skip a blank `from` (and its words in the spoken line).

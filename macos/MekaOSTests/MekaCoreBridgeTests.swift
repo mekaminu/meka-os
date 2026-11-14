@@ -4655,4 +4655,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(off.groups.first?.rows.first?.remindAt)
         XCTAssertEqual(NoticeSource.habits.label, "Habit reminders")
     }
+
+    func testLeaveSteppersShareTheWidestValue() {
+        XCTAssertEqual(LeavePageRules.shared.STEPPER_WIDEST, "60 days")
+        XCTAssertEqual(LeavePageRules.shared.yearStartLabel(month: 4), "1 Apr")
+    }
 }

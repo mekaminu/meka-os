@@ -467,6 +467,13 @@ class KeptPlacesScreensTest {
         tap(p, name, LeavePageRules.ALLOWANCE, hasText("${LeaveRules.daysWord(days)} a year") and !sheet)
         until { shows(hasContentDescription("${LeavePageRules.DAYS_A_YEAR}: more")) }
         assertTouchTargets(name)
+        // A19: both steppers' − (and +) sit at the same x, whatever their values' widths.
+        listOf("fewer", "more").forEach { side ->
+            val xs = listOf(LeavePageRules.DAYS_A_YEAR, LeavePageRules.YEAR_STARTS).map { label ->
+                compose.onNode(hasContentDescription("$label: $side")).fetchSemanticsNode().boundsInRoot.left
+            }
+            if (kotlin.math.abs(xs[0] - xs[1]) > 1f) fail("$name: the steppers' $side buttons don't line up (${xs[0]} vs ${xs[1]})")
+        }
         tap(p, name, "+", hasContentDescription("${LeavePageRules.DAYS_A_YEAR}: more"))
         until { v().allowance == days + 1 }
         if (v().allowance != days + 1) fail("$name: + left the allowance at ${v().allowance}")

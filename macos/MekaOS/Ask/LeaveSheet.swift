@@ -194,9 +194,15 @@ struct LeaveSheet: View {
             Spacer()
             Button("−", action: less).buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 .accessibilityLabel("\(title): fewer")
-            Text(value).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: value)
+            // A19: centred in the widest value's width, so − and + line up on both steppers.
+            Text(LeavePageRules.shared.STEPPER_WIDEST).font(MekaType.itemTitle).hidden()
+                .accessibilityHidden(true)
+                .overlay {
+                    Text(value).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        .fixedSize()
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: value)
+                }
             Button("+", action: more).buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 .accessibilityLabel("\(title): more")
         }
