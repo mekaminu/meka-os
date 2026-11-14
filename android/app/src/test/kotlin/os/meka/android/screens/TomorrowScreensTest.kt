@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.TomorrowPane
@@ -62,6 +64,8 @@ class TomorrowScreensTest {
 
     @get:Rule(order = 1)
     val compose = createComposeRule()
+
+    private companion object { const val PEEK_TAG = "tomorrow-peek" }
 
     private val london = TimeZone.of("Europe/London")
     private val now = 1_792_606_200_000L // Wed 21 Oct 2026, 19:10 in London
@@ -94,7 +98,15 @@ class TomorrowScreensTest {
                     // "2 tasks" after a move and the old title over an edit).
                     val peek by core.shutdownView.collectAsState()
                     Column {
-                        peek.peek?.let { TomorrowPeekCard(it, onOpen = {}) }
+                        // Walk-through 2026-11-08 A19: inside Today's gutter and top space, as Today's list holds it
+                        // (the shot drew it against the screen's top and side edges).
+                        peek.peek?.let {
+                            TomorrowPeekCard(
+                                it, onOpen = {},
+                                Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl, bottom = MekaSpace.l)
+                                    .testTag(PEEK_TAG),
+                            )
+                        }
                         TomorrowPane(core, onClose = {})
                     }
                 }
@@ -139,6 +151,13 @@ class TomorrowScreensTest {
         assertTrue(peek.line.endsWith("2 tasks · 1 bill due · first 07:40 Gym before work"), peek.line)
         // Lines are drawn through LoneWordGlue (the last words held together), so look for them as drawn.
         assertTrue(shows(LoneWordGlue.kept(peek.line)), "$name: the peek isn't shown")
+        // A19: the peek stands clear of the screen's edges (Today's gutter at the sides, its top space above).
+        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
+        val card = compose.onNodeWithTag(PEEK_TAG).fetchSemanticsNode().boundsInRoot
+        val dp = compose.density.density
+        assertTrue((card.top - screen.top) / dp >= 31.5f, "$name: the peek sits ${((card.top - screen.top) / dp).toInt()} dp under the top edge")
+        assertTrue((card.left - screen.left) / dp >= 15.5f && (screen.right - card.right) / dp >= 15.5f,
+            "$name: the peek runs into the side edges")
         assertTrue(shows("Gym before work") && shows("Ring the school about the trip"), "$name: tomorrow's tasks aren't listed")
         assertTrue(shows(LoneWordGlue.kept("Due tomorrow · Water bill £32.50")), "$name: tomorrow's bill isn't shown")
         assertTouchTargets(name)

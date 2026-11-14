@@ -6272,3 +6272,9 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Habits: `GoalRules.leftLine` reads "1 left · 2 days to go" (was "1 left — 2 days to go"), the " · " every other habit meta line uses ("Done today · 1 of 2 this week"); both apps show the core's line.
 - Settings → Navilife's AI on the Fold: `AiSpendRow` draws designsystem `FoldChevron` (down while shut, up once open, 20 dp, turned with the expand motion) in place of a "›" turned 90° that pointed down while the card was open.
 - Tests: core `GoalsTest` (both weekly lines), Mac `MekaCoreBridgeTests` leftLine; `AiScreensTest` asserts one drawn fold chevron on an open card, none with nothing to unfold, and no bare "›". Mac checked nightly.
+
+### Found and fixing, week 3: A19 slice 8 (2026-11-14)
+
+- Bedside clock shots: the phone's daily 06:30 alarm is set in the morning (07:40) and day (13:00) scenes too, as a real phone reports it (the next one, tomorrow's), so the morning shot reads "Alarm 06:30 · in 22 h 50" beside the evening's "Alarm 06:30 · in 10 h" instead of "No alarm set"; the nothing-on scene keeps no alarm. Every alarm scene checks the line starts "Alarm 06:30" (was the evening only). The rule itself (`FoldModeRules.alarmLine`) was right; only the shots' fixture disagreed.
+- Tomorrow shots: the Tomorrow peek is drawn inside Today's gutter (16 dp at the sides) with Today's 32 dp top space, as Today's list holds it, instead of against the screen's top and side edges; `TomorrowScreensTest` measures both.
+- Tests only (the Fold's `BedsideScreensTest`, `TomorrowScreensTest`); no app code changed, so nothing for the Mac.

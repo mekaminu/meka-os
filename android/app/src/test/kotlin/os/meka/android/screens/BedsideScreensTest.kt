@@ -70,7 +70,7 @@ import kotlin.test.fail
  * The quality gate, slice 63 (build plan: "the rest of Ask's places", Bedside the last): the bedside clock on the Fold's
  * inner screen standing half folded on a table (landscape, the hinge across the middle), at the four parts of the day
  * it reads differently — the morning with the brief unread (07:40), the day with what's next (13:00), the evening with
- * tomorrow and the alarm set (20:30), and quiet hours dimmed (23:30) — plus nothing on at all, Dark and Light; and the
+ * tomorrow (20:30), and quiet hours dimmed (23:30), each with the phone's daily 06:30 alarm — plus nothing on at all, Dark and Light; and the
  * charging screen saver on both screens. Saved under `bedside/` and read for nonsense, cut lines, broken words, split
  * dates, times and numbers, a word left alone and a dot starting a line, with ‹ Back a 48 dp touch. By hand: ‹ Back
  * leaves the clock, the morning's section opens the brief, the evening's opens the shutdown, and the watch face springs
@@ -97,8 +97,10 @@ class BedsideScreensTest {
 
     private enum class Scene(val hour: Int, val minute: Int, val section: BedsideSection, val alarm: Boolean) {
         EMPTY(13, 0, BedsideSection.DAY, alarm = false),
-        MORNING(7, 40, BedsideSection.MORNING, alarm = false),
-        DAY(13, 0, BedsideSection.DAY, alarm = false),
+        // Walk-through 2026-11-08 A19: the phone's daily 06:30 alarm is set through the whole day, as on a real phone
+        // (its 06:30 has gone, so the next is tomorrow's); the morning shot said "No alarm set" beside the evening's 06:30.
+        MORNING(7, 40, BedsideSection.MORNING, alarm = true),
+        DAY(13, 0, BedsideSection.DAY, alarm = true),
         EVENING(20, 30, BedsideSection.EVENING, alarm = true),
         QUIET(23, 30, BedsideSection.EVENING, alarm = true),
     }
@@ -148,7 +150,7 @@ class BedsideScreensTest {
         headline("world-0", "Leaders meet to agree a new climate fund", "world", 95, "BBC News")
     }
 
-    /** The phone's own next alarm: Thursday 06:30 (the Clock app's, as AlarmManager reports it). */
+    /** The phone's own next alarm: Thursday 06:30, the daily one (the Clock app's, as AlarmManager reports it). */
     private fun setAlarm(context: Context) {
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -264,12 +266,11 @@ class BedsideScreensTest {
             }
             Scene.MORNING -> ScreenShots.assertShows(compose, name, "Open the brief ›")
             Scene.DAY -> if (v.lines.none { "Dentist" in it }) fail("$name: the dentist at 13:45 isn't what's next (${v.lines})")
-            Scene.EVENING -> {
-                if (!v.alarmSet || !v.alarmLine.startsWith("Alarm 06:30")) fail("$name: the alarm reads \"${v.alarmLine}\"")
-                ScreenShots.assertShows(compose, name, "See tomorrow ›")
-            }
+            Scene.EVENING -> ScreenShots.assertShows(compose, name, "See tomorrow ›")
             Scene.QUIET -> if (!v.dim) fail("$name: 23:30 is in quiet hours, but the clock isn't dimmed")
         }
+        // A19: one alarm through the day: every shot with the daily alarm says the same 06:30.
+        if (scene.alarm && (!v.alarmSet || !v.alarmLine.startsWith("Alarm 06:30"))) fail("$name: the alarm reads \"${v.alarmLine}\"")
     }
 
     // ---- Shots: the inner screen standing half folded ----
