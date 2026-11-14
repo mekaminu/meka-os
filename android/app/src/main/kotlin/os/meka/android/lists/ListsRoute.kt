@@ -469,15 +469,21 @@ internal fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
 @Composable
 internal fun Field(
     hint: String, modifier: Modifier = Modifier, value: String? = null, onValue: ((String) -> Unit)? = null,
-    description: String = hint, keep: Boolean = false, onDone: (String) -> Unit,
+    description: String = hint, keep: Boolean = false, tag: String? = null,
+    trailing: (@Composable () -> Unit)? = null, onDone: (String) -> Unit,
 ) {
     var own by rememberSaveable(hint) { mutableStateOf("") }
     val text = value ?: own
     val set: (String) -> Unit = onValue ?: { own = it }
+    // [trailing] (e.g. Kids' Clear) sits inside the pill's end, so a field with it is as wide as one without.
     Box(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+            .then(if (tag != null) Modifier.testTag(tag) else Modifier),
     ) {
+      Box(Modifier.fillMaxWidth().padding(
+          start = MekaSpace.l, top = MekaSpace.m, bottom = MekaSpace.m,
+          end = if (trailing != null) FIELD_TRAILING_ROOM else MekaSpace.l,
+      )) {
         if (text.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(
             value = text,
@@ -489,8 +495,13 @@ internal fun Field(
             keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onDone(text); if (!keep) set("") } }),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = description },
         )
+      }
+      if (trailing != null) Box(Modifier.align(Alignment.CenterEnd).padding(end = MekaSpace.xs)) { trailing() }
     }
 }
+
+/** Room at a field's end for its trailing button: a 48 dp target plus its 8 dp inset. */
+private val FIELD_TRAILING_ROOM = 56.dp
 
 /**
  * Add to Promises (+ Add's Something I promised / Something I'm waiting for): what, then (once typing) who and when —

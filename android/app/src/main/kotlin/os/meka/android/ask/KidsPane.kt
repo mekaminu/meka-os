@@ -33,8 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -363,6 +361,9 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
     }
 }
 
+/** Kids: a child's size field's pill, then ":" and the size's key (walk-through A15 measures them). */
+internal const val KIDS_SIZE_FIELD_TAG = "kids-size-field"
+
 @Composable
 private fun KidCardView(
     kid: KidCard,
@@ -416,23 +417,21 @@ private fun KidCardView(
             val key = "${kid.name}|${row.size}"
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(row.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.width(112.dp))
+                // Walk-through 2026-11-08 A15: Clear sits inside a filled field's end, so a filled field is as wide as
+                // an empty one.
                 Field(
                     row.placeholder, modifier = Modifier.weight(1f), value = texts[key] ?: row.value ?: "", onValue = { texts[key] = it },
                     description = "${kid.name}'s ${row.label.lowercase()} size, for example ${row.hint}",
+                    tag = "$KIDS_SIZE_FIELD_TAG:${row.size}",
+                    trailing = if (row.value == null) null else @Composable {
+                            Text("Clear", style = MekaType.caption, color = Meka.colors.textTertiary,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onSave(row.size, "") }
+                                    .semantics { contentDescription = "Clear ${kid.name}'s ${row.label.lowercase()} size" }
+                                    .minTouch().padding(MekaSpace.xs))
+                    },
                 ) { typed ->
                     onSave(row.size, typed)
                 }
-                // Walk-through 2026-11-08 A15: Clear's place is kept on every row, so a filled field is as wide as an
-                // empty one; on an empty row it is invisible and not a target.
-                val filled = row.value != null
-                Text("Clear", style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.alpha(if (filled) 1f else 0f).clip(RoundedCornerShape(MekaRadius.m))
-                        .then(
-                            if (filled) Modifier.clickable(role = Role.Button) { onSave(row.size, "") }
-                                .semantics { contentDescription = "Clear ${kid.name}'s ${row.label.lowercase()} size" }
-                            else Modifier.clearAndSetSemantics {},
-                        )
-                        .minTouch().padding(MekaSpace.xs))
             }
         }
         Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "kid-line-${kid.name}") { s ->

@@ -39,6 +39,7 @@ import os.meka.android.ask.APPOINTMENTS_LIST_TAG
 import os.meka.android.ask.APPOINTMENTS_ROW_SHEET_TAG
 import os.meka.android.ask.AppointmentsPane
 import os.meka.android.ask.KIDS_LIST_TAG
+import os.meka.android.ask.KIDS_SIZE_FIELD_TAG
 import os.meka.android.ask.KIDS_ROW_SHEET_TAG
 import os.meka.android.ask.KidsPane
 import os.meka.android.ask.LIFE_ADD_SHEET_TAG
@@ -401,8 +402,7 @@ class AdminPlacesScreensTest {
         // (a filled one keeps Clear in a place every row has).
         if (kid("Alex").sizes.any { it.value == null } && fitSays == KidsRules.ALL_FIT) fail("$name: All still fit with sizes not kept")
         val widths = kid("Alex").sizes.map { r ->
-            compose.onNode(hasContentDescription("Alex's ${r.label.lowercase()} size, for example ${r.hint}"), useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot.width
+            compose.onNode(hasTestTag("$KIDS_SIZE_FIELD_TAG:${r.size}"), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.width
         }
         if (widths.maxOrNull()!! - widths.minOrNull()!! > 1f) fail("$name: Alex's size fields differ in width: $widths")
         tap(p, name, fitSays, hasContentDescription("Alex's sizes: $fitSays"))
