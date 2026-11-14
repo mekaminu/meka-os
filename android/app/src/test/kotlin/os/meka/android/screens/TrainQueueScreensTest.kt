@@ -221,6 +221,8 @@ class TrainQueueScreensTest {
 
         fun tap(description: String) {
             val n = compose.onAllNodes(hasContentDescription(description) and hasClickAction())
+            // The core's view can change a frame before the row is drawn (ci run 43557376345): wait for the row itself.
+            until { n.fetchSemanticsNodes().isNotEmpty() }
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$description\"")
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }
