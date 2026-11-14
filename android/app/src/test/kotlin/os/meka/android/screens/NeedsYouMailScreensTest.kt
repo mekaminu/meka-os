@@ -38,6 +38,7 @@ import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
 import os.meka.android.today.NeedsYouGroupStore
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.NEEDS_YOU_MAIL_ROW_TAG
+import os.meka.core.domain.NeedsYouStackRules
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
@@ -162,6 +163,10 @@ class NeedsYouMailScreensTest {
         fun showing(t: String) = compose.onAllNodes(androidx.compose.ui.test.hasText(t, substring = true), useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
         if (showing("nothing is drafted") && showing("Draft replies to")) fail("$name: Draft replies sits over \"nothing is drafted\"")
+        // Walk-through A22 (2026-11-14): beside Mail to answer and Renewals the empty line never says nothing needs him,
+        // and the open Fold's header counts the renewals with the mail.
+        if (showing(NeedsYouStackRules.EMPTY_LINE)) fail("$name: \"${NeedsYouStackRules.EMPTY_LINE}\" beside mail to answer and renewals")
+        if (name.startsWith("inner") && !showing("2 mail · 2 renewals")) fail("$name: the header doesn't count the renewals with the mail")
         openRow(name, football)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
         // Needs you bugs (2026-11-10): a mail row is its sender and subject; the body waits until he opens the email.

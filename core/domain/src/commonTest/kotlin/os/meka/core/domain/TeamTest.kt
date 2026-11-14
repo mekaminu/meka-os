@@ -230,13 +230,14 @@ class TeamTest {
     @Test fun teamSimplerAllClearAndPaused() {
         val v = TeamRules.view(TeamInputs(emptyList(), paused = setOf(TeamAgent.INBOX)), now, cal)
         assertTrue(v.waiting.isEmpty(), "the box hides with nothing waiting")
-        assertEquals("All clear · 4 helpers on", v.subtitle)
+        assertEquals(TeamStatus.NOT_SET_UP, v.card("money")!!.status)
+        assertEquals("All clear · 3 helpers on", v.subtitle, "neither the paused Inbox nor Money, not set up, is on")
         val inbox = v.card("inbox")!!
         assertEquals("Paused till midnight", inbox.line)
         assertEquals("Turn back on", inbox.pauseShort)
         assertTrue(v.card("obi")!!.recent.isEmpty())
         val one = TeamRules.view(TeamInputs(emptyList(), mailWait = "1 email needs you"), now, cal)
-        assertEquals("1 thing waits on you · 5 helpers on", one.subtitle)
+        assertEquals("1 thing waits on you · 4 helpers on", one.subtitle, "Money, not set up, isn't counted as on")
         assertEquals("1 email to answer", one.waiting.single().what)
     }
 }

@@ -934,6 +934,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Fold review 2026-10-12 17:56, item 3: messages waiting change the line; the after-work card names people.
         XCTAssertEqual(NeedsYouStackRules.shared.emptyLine(toCatchUp: 9), "Nothing to decide · 9 messages to catch up on")
         XCTAssertEqual(NeedsYouStackRules.shared.emptyLine(toCatchUp: 0), "Nothing needs you")
+        // Walk-through A22: beside mail to answer or renewals found, nothing is left to decide, not "nothing needs you".
+        XCTAssertEqual(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: 0, waitingElsewhere: 4), "Nothing to decide")
+        XCTAssertEqual(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: 0, waitingElsewhere: 0), "Nothing needs you")
         XCTAssertEqual(AfterWorkSummary.companion.OPEN_LABEL, "Open")
         XCTAssertNil(AfterWorkSummary(people: []).namesLine)
         XCTAssertEqual(AfterWorkSummary(people: []).toCatchUp, 0)

@@ -628,6 +628,7 @@ internal fun NeedsYouColumn(
     val replyCount = NeedsYouLayoutRules.replyCount(chats)
     val decideCount = approvals.size + looseRequests.size + asks + cards.size
     val mailCount = mailNeeds?.count ?: 0  // the card headline's figure, never just the rows shown
+    val renewalCount = mailFinds?.rows?.size ?: 0  // the Renewals box's own figure
     fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section) && NeedsYouLayoutRules.inPart(part, section)
     val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null
     // Needs you grouped and folding (APPROVED 2026-11-10 21:51, needs-you-grouped.dc.html), slice 1: on the folded Fold
@@ -904,7 +905,7 @@ internal fun NeedsYouColumn(
                     verticalAlignment = Alignment.CenterVertically) {
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
-                        Text(NeedsYouStackRules.emptyLine(afterWork.toCatchUp), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, mailCount + renewalCount), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
                         if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
@@ -942,7 +943,7 @@ internal fun NeedsYouColumn(
             } else {
                 Column(Modifier.onSizeChanged { headerHeight?.value = it.height }.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
                     if (boxed) {
-                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount), presentAll.isNotEmpty(),
+                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount, renewalCount), presentAll.isNotEmpty(),
                             onClear = { openGroups = NeedsYouGroupRules.all(openGroups, presentAll) },
                             actionLabel = NeedsYouGroupRules.allLabel(openGroups, presentAll))
                     } else {
@@ -1305,7 +1306,7 @@ internal fun NeedsYouColumn(
                     verticalAlignment = Alignment.CenterVertically) {
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
-                        Text(NeedsYouStackRules.emptyLine(afterWork.toCatchUp), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, mailCount + renewalCount), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
                         if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }

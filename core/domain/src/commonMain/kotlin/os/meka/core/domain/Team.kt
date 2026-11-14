@@ -288,7 +288,7 @@ object TeamRules {
             TeamTile(NEED_YOU.lowercase(), need.toString(), need > 0, if (need == 0) "Nobody needs you" else "${plural(need, "thing")} wait on you"),
             TeamTile(DONE_TODAY.lowercase(), SpeechRules.grouped(done.toLong()), false, "${plural(done, "thing")} done today"),
         )
-        return TeamView(tiles, cards, TeamSimplerRules.subtitle(need, cards.count { !it.paused }), need)
+        return TeamView(tiles, cards, TeamSimplerRules.subtitle(need, TeamSimplerRules.onCount(cards)), need)
     }
 
     /** A helper that did something today is Working (a breathing dot); one that hasn't is Ready. */
@@ -352,7 +352,13 @@ object TeamSimplerRules {
 
     private fun plural(n: Int, one: String, many: String = one + "s") = "${SpeechRules.grouped(n.toLong())} ${if (n == 1) one else many}"
 
-    /** "2 things wait on you · 4 helpers on", or "All clear · 5 helpers on" (on = not paused). */
+    /**
+     * The helpers counted as on: not paused and set up (walk-through A22, 2026-11-14: "5 helpers on" sat over Money's
+     * Not set up line).
+     */
+    fun onCount(cards: List<TeamCard>): Int = cards.count { !it.paused && it.status != TeamStatus.NOT_SET_UP }
+
+    /** "2 things wait on you · 4 helpers on", or "All clear · 5 helpers on" (on = [onCount]). */
     fun subtitle(waiting: Int, on: Int): String =
         (if (waiting == 0) "All clear" else "${plural(waiting, "thing")} ${if (waiting == 1) "waits" else "wait"} on you") +
             " · ${plural(on, "helper")} on"

@@ -326,10 +326,17 @@ object NeedsYouGroupRules {
         listOf(names(groups, 3), discord.orEmpty().trim()).filter { it.isNotEmpty() }.joinToString(" · ")
 
     /** "1 to decide · 4 to reply · 5 FYI · 14 mail", leaving out what is nothing; "All clear" when all are. */
-    fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int): String {
+    fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int): String = subtitle(decide, reply, fyi, mail, 0)
+
+    /**
+     * With the renewals found in mail counted too (walk-through A22, 2026-11-14: "2 mail" over Mail to answer 2 and
+     * Renewals 2): "2 mail · 2 renewals".
+     */
+    fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int, renewals: Int): String {
         val base = NeedsYouLayoutRules.subtitle(decide, reply, fyi)
-        if (mail <= 0) return base
-        return if (base == NeedsYouLayoutRules.ALL_CLEAR) "$mail mail" else "$base · $mail mail"
+        val more = listOfNotNull("$mail mail".takeIf { mail > 0 }, plural(renewals, "renewal", "renewals").takeIf { renewals > 0 })
+        if (more.isEmpty()) return base
+        return (if (base == NeedsYouLayoutRules.ALL_CLEAR) more else listOf(base) + more).joinToString(" · ")
     }
 
     private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"

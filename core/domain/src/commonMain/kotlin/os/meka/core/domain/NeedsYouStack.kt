@@ -109,6 +109,14 @@ object NeedsYouStackRules {
         else "$NOTHING_TO_DECIDE · $toCatchUp ${if (toCatchUp == 1) "message" else "messages"} to catch up on"
 
     /**
+     * [emptyLine] beside mail still to answer or renewals found in mail ([waitingElsewhere], the boxes shown with it;
+     * walk-through A22, 2026-11-14: "Nothing needs you" sat beside Mail to answer 2 and Renewals 2): [NOTHING_TO_DECIDE]
+     * then, as nothing is left to decide but something still waits on him.
+     */
+    fun emptyLineBeside(toCatchUp: Int, waitingElsewhere: Int): String =
+        if (toCatchUp <= 0 && waitingElsewhere > 0) NOTHING_TO_DECIDE else emptyLine(toCatchUp)
+
+    /**
      * Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. A lit [credit]
      * card (the call assistant paused or under £2) goes first; a merely low one after the tasks.
      */

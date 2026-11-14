@@ -185,6 +185,9 @@ class TeamScreensTest {
                 if (v.waiting.isEmpty()) fail("$name: nothing waits on a busy day, so the Waiting on you box isn't drawn")
             }
         }
+        // Week 3's walk-through (A22): the head's "N helpers on" leaves out a helper that's paused or Not set up.
+        val on = v.cards.count { !it.paused && it.status != TeamStatus.NOT_SET_UP }
+        if (!v.subtitle.endsWith(" $on helper${if (on == 1) "" else "s"} on")) fail("$name: the head says \"${v.subtitle}\" with $on helpers on")
         val live = v.cards.count { it.status.live }
         if (v.tiles.first().value != live.toString()) fail("$name: WORKING ${v.tiles.first().value}, but $live cards say Working")
         if (fill == Fill.QUIET && live != 0) fail("$name: a quiet day has $live helpers working")

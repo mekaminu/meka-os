@@ -290,6 +290,9 @@ class WorkingOnScreensTest {
                 if (!onScreen(os.meka.core.domain.CallRecordingRules.BOOKING_LABEL.uppercase())) fail("$name: the recording's label isn't shown")
                 if (compose.onAllNodes(hasTestTag("call-try-again"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Try again")
                 if (!onScreen("they offered 21:00")) fail("$name: the result isn't shown")
+                // Week 3's walk-through (A22): no "Nothing to keep an eye on yet" over the finished call's card.
+                if (v.summary != "1 call finished · nothing needs you") fail("$name: the summary reads \"${v.summary}\"")
+                if (onScreen("Nothing to keep an eye on yet")) fail("$name: the empty line shows over a call card")
             }
             Fill.FOUND -> {
                 val r = v.calls.singleOrNull() ?: fail("$name: ${v.calls.size} call cards, not 1")

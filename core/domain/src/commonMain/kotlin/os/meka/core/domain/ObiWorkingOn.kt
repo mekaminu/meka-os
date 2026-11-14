@@ -255,9 +255,12 @@ object WorkingOnRules {
         val callsPart = if (openCalls > 0) " · ${plural(openCalls, "call card")}" else ""
         val open = jobs.count { it.canStop }
         val needs = if (need > 0) " · $need need${if (need == 1) "s" else ""} you" else " · nothing needs you"
+        // Walk-through A22 (2026-11-14): a finished call's card (not booked, Try again) still shows, so the head never
+        // says there's nothing to keep an eye on over it.
         val summary = when {
-            switches.none { it.on } && open == 0 && openCalls == 0 -> ALL_OFF_LINE
-            cards.isEmpty() && open == 0 && openCalls == 0 -> EMPTY_LINE
+            switches.none { it.on } && open == 0 && calls.isEmpty() -> ALL_OFF_LINE
+            cards.isEmpty() && open == 0 && calls.isEmpty() -> EMPTY_LINE
+            cards.isEmpty() && open == 0 && openCalls == 0 -> "${plural(calls.size, "call")} finished$needs"
             cards.isEmpty() && open == 0 -> "Holding ${plural(openCalls, "call card")} for you$needs"
             cards.isEmpty() -> "On ${plural(open, "errand")} for you$callsPart$needs"
             open == 0 -> "Keeping an eye on ${plural(cards.size, "thing")}$callsPart$needs"

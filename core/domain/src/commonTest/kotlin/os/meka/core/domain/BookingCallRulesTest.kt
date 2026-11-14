@@ -215,5 +215,15 @@ class BookingCallRulesTest {
         assertFalse(gone.needsYou)
         assertEquals(BookingCallRules.NOT_RUNG, gone.status)
         assertEquals(BookingCallRules.DAY_GONE, gone.blocked)
+        // Week 3's walk-through (A22): a finished call's card (nothing left to cancel) still shows, so the head says so,
+        // never "Nothing to keep an eye on yet" over it.
+        val over = WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today,
+            calls = listOf(gone.copy(canCancel = false)))
+        assertEquals("1 call finished · nothing needs you", over.summary)
+        val allOff = WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()), RenewalsView.EMPTY, GiftsView.EMPTY,
+            emptyList(), today, calls = listOf(gone.copy(canCancel = false)))
+        assertEquals("1 call finished · nothing needs you", allOff.summary)
+        assertEquals(WorkingOnRules.EMPTY_LINE,
+            WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today).summary)
     }
 }

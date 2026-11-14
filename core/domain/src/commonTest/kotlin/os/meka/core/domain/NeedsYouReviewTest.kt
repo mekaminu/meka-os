@@ -30,6 +30,14 @@ class NeedsYouReviewTest {
         assertEquals("Nothing needs you", NeedsYouStackRules.emptyLine(0))
         assertEquals("Nothing to decide · 1 message to catch up on", NeedsYouStackRules.emptyLine(1))
         assertEquals("Nothing to decide · 9 messages to catch up on", NeedsYouStackRules.emptyLine(9))
+        // Walk-through A22: beside mail to answer or renewals found, the line never says nothing needs him.
+        assertEquals("Nothing to decide", NeedsYouStackRules.emptyLineBeside(0, 4))
+        assertEquals("Nothing needs you", NeedsYouStackRules.emptyLineBeside(0, 0))
+        assertEquals("Nothing to decide · 2 messages to catch up on", NeedsYouStackRules.emptyLineBeside(2, 4))
+        assertEquals("2 mail · 2 renewals", NeedsYouGroupRules.subtitle(0, 0, 0, 2, 2))
+        assertEquals("1 to decide · 1 renewal", NeedsYouGroupRules.subtitle(1, 0, 0, 0, 1))
+        assertEquals("2 mail", NeedsYouGroupRules.subtitle(0, 0, 0, 2))
+        assertEquals(NeedsYouLayoutRules.ALL_CLEAR, NeedsYouGroupRules.subtitle(0, 0, 0, 0, 0))
     }
 
     @Test

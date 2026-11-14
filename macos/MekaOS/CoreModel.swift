@@ -278,6 +278,9 @@ final class CoreModel {
     private(set) var mailChases: MailChaseCard?
     /// Promises, receipts and renewals, slice 1: "Renewals from your mail" — renewals to add, each only on his tap.
     private(set) var mailFinds: MailFindCard?
+    /// Walk-through A22: mail still to answer plus renewals found in mail, so Needs you's empty line says "Nothing to
+    /// decide" beside them rather than "Nothing needs you".
+    var mailWaitingElsewhere: Int32 { (mailNeeds?.count ?? 0) + Int32(mailFinds?.rows.count ?? 0) }
     /// Discord channel watch, slice 1: one card per channel he follows with the posts the Fold kept, each with Done.
     private(set) var discord: DiscordCards?
     /// Discord channel watch, slice 1: Work → Discord's channels (from the Fold's notifications), each Follow / Stop.

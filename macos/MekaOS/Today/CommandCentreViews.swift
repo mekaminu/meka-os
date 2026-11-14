@@ -77,7 +77,8 @@ struct CommandNeedsYouView: View {
                         // review 2026-10-09 00:10, item 6).
                         HStack(spacing: MekaSpace.m) {
                             BreathingRingView(palette: palette, size: 20, check: true)
-                            Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
+                            Text(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: model.afterWork?.toCatchUp ?? 0,
+                                                                  waitingElsewhere: model.mailWaitingElsewhere))
                                 .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                         }
                         .accessibilityElement(children: .combine)
