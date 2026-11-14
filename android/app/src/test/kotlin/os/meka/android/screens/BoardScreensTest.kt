@@ -95,7 +95,10 @@ class BoardScreensTest {
         secureRandom = Random(7), timeZone = { TimeZone.of("Europe/London") }, nowMs = { at },
     )
 
-    private companion object { const val SETTLE_MS = 2_000L }
+    private companion object {
+        const val SETTLE_MS = 2_000L
+        const val FOLD_FRAME_TAG = "board-fold-frame"
+    }
 
     private enum class Fill { EMPTY, ONE, MANY }
 
@@ -523,8 +526,9 @@ class BoardScreensTest {
     fun theTimelinesHeadingSitsOnTheDatesLine() {
         val (core, _) = timedCore()
         show(core)
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-timeline-aligned"))
-        ScreenShots.assertSensible(compose, "inner-dark-timeline-aligned")
+        // Walk-through 2026-11-08 A20: this opening state is the one inner-dark-timeline already shoots (the two were
+        // byte copies), so this test only measures; its own shot is gone.
+        ScreenShots.assertSensible(compose, "inner-dark-timeline")
         fun whole(n: androidx.compose.ui.semantics.SemanticsNode) = androidx.compose.ui.geometry.Rect(n.positionInRoot, androidx.compose.ui.geometry.Size(n.size.width.toFloat(), n.size.height.toFloat()))
         val panel = compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().firstOrNull()?.let(::whole)
             ?: throw AssertionError("the timeline isn't beside the week")
@@ -950,7 +954,7 @@ class BoardScreensTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    Box(Modifier.width(screenWidth).fillMaxHeight()) {
+                    Box(Modifier.width(screenWidth).fillMaxHeight().testTag(FOLD_FRAME_TAG)) {
                         WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
                     }
                 }
@@ -999,7 +1003,13 @@ class BoardScreensTest {
         resize { screenWidth = 344.dp }
         if (!has(FOLDED_STRIP_TAG)) fail("folded again isn't the one-day layout")
         assertTrue("folding again comes back to Saturday: ${dayLine()}", dayLine().startsWith("Sat 24"))
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-folded-again"))
+        // Walk-through 2026-11-08 A20: folded again is the cover's one-day layout, so the shot is the 344 dp frame it
+        // is drawn in (cover-dark-folded-again), not the inner screen with the layout pushed into its left third.
+        val frame = compose.onNodeWithTag(FOLD_FRAME_TAG).fetchSemanticsNode().size
+        assertEquals("the folded frame is the cover's width", with(compose.density) { 344.dp.roundToPx() }, frame.width)
+        compose.onNodeWithTag(FOLD_FRAME_TAG).captureRoboImage(ScreenShots.path("board", "cover-dark-folded-again"))
+        val shot = javax.imageio.ImageIO.read(java.io.File(ScreenShots.path("board", "cover-dark-folded-again")))
+        assertEquals("the folded-again shot is the cover's width", frame.width, shot.width)
     }
 
     private fun show(core: MekaCore) {
