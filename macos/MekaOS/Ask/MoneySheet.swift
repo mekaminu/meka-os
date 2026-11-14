@@ -1627,8 +1627,11 @@ struct MoneySheet: View {
                         }
                         .accessibilityElement(children: .combine)
                     }
+                    // Walk-through A26: say how many more were behind it than the list shows.
+                    if let more = i.behindMore {
+                        Text(more).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
                 }
-                .moneyCard(palette)
             }
             HStack(spacing: MekaSpace.xs) {
                 if let a = i.act {

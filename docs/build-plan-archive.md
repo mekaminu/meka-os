@@ -6323,3 +6323,10 @@ Obi's spare sum under What if I save… was `roundTen(left − amount)` while th
 - Mac: the edit popover's form has no buttons; its foot is Cancel (Esc) · Save; swatches 22 → 26 pt; Add a £ goal's Done → Cancel; Delete all money data in `critical`.
 - Tests: `MoneyPaymentSheetScreensTest` (the foot under Hide, inside the sheet, the sheet ≥ 16 px from the top; new `saveAtTheFootRenamesAndCloses`), `MoneyPlanMoreScreensTest` (Add a £ goal's foot is Cancel), `MoneyAccountsScreensTest` (the data sheet clear of the top).
 - Left for slice 2: the Idea sheet (`money/cover-dark-plan-idea.png`): rows and Not for me ~36 px in from its heading, amounts ending short of the figure above, "12× in 30 days" listing 6 with no "6 more".
+
+### Found and fixing, week 3 · A26 slice 2 (2026-11-14): the Idea sheet in line (A26 done)
+
+- Confirmed in the code: the sheet's payments sat in a `MoneyCard` (16 dp padding inside the sheet's own), so names started and amounts ended 16 dp in from the title and figure; Not for me carried a pill's 16 dp text inset with no pill drawn; `behind()` takes `BEHIND_MAX` (6) with nothing saying the rest.
+- Core: `MoneyIdea.behindMore` ("and 6 more", null when all are listed) set by every idea kind from its full list (`MoneyCheck.more(n)`); subscriptions too.
+- Fold `MoneyIdeaDetails`: the payments a plain column flush with the heading (tags `money-idea-head`, `-figure`, `-pay`, `-pay-amount`, `-more`); Not for me as the lead card's (8 dp inset). Mac `ideaDetails`: the same rows without `.moneyCard`, and the more line.
+- Tests: MoneyCheckTest (six listed of twelve, "and 6 more"; five behind → none), MoneyPlanLayoutScreensTest.planInCardsWithTheWhatIfsAndChallengeFieldsInSheets (pay row left = head left, amount right = figure right within 1 px, the more line shows). Mac checked nightly.

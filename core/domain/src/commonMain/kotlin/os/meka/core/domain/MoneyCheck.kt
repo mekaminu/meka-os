@@ -40,6 +40,8 @@ data class MoneyIdea(
     val behind: List<MoneyIdeaPay>, val act: String?, val actKey: String?, val lit: Boolean, val spoken: String,
     /** The rules' own title and why (what goes to Obi, and what [MoneyCheckWords.check] reads); [byObi] when he worded it. */
     val ruleTitle: String = title, val ruleWhy: String = why, val byObi: Boolean = false,
+    /** "and 6 more" under [behind] when there were more payments than the sheet lists ([MoneyCheck.BEHIND_MAX]); null otherwise. */
+    val behindMore: String? = null,
 )
 
 /** What he put away: ideas he said Not for me to, and ideas he asked to be reminded of, with the day they come back. */
@@ -91,6 +93,9 @@ object MoneyCheck {
 
     private fun pay(l: MoneyLine) = MoneyIdeaPay(MoneyCategoryRules.merchantLabel(l.merchant), CivilDate.shortLabel(l.day), fmt(-l.pence))
 
+    /** The line under the payments when [n] were behind the idea and only [BEHIND_MAX] are listed (walk-through A26). */
+    fun more(n: Int): String? = (n - BEHIND_MAX).takeIf { it > 0 }?.let { "and $it more" }
+
     private fun behind(ls: List<MoneyLine>) = ls.sortedByDescending { it.day }.take(BEHIND_MAX).map(::pay)
 
     /** Interest and fees charged in the last [INTEREST_DAYS] days, a year of it at that pace. */
@@ -104,7 +109,7 @@ object MoneyCheck {
         val n = ls.size
         val why = "${fmt(total)} in interest and fees in the last 3 months, $n charge${if (n == 1) "" else "s"}. Clear my cards on this tab shows how to clear what the cards owe."
         return MoneyIdea("interest", MoneyIdeaKind.INTEREST.key, title, yearly(save), save, why, behind(ls), ACT_CLEAR_LABEL, ACT_CLEAR,
-            lit = true, spoken = "$title, about ${fmt(save)} a year. $why")
+            lit = true, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. $why")
     }
 
     /** A regular payment that went up: the rise over a year. */
@@ -113,8 +118,9 @@ object MoneyCheck {
             val save = r.rise * 12
             val title = "${r.label} went up · ask for a better price"
             val why = "${fmt(r.monthly)} a month from ${CivilDate.shortLabel(r.lastDay)}, up from ${fmt(r.monthly - r.rise)}. Asking for the old price may bring it back down."
+            val paid = lines.filter { it.merchant == r.key && it.pence < 0 }
             MoneyIdea("rise-${r.key}", MoneyIdeaKind.RISE.key, title, yearly(save), save, why,
-                behind(lines.filter { it.merchant == r.key && it.pence < 0 }), null, null, lit = true,
+                behind(paid), null, null, lit = true, behindMore = more(paid.size),
                 spoken = "$title, ${fmt(save)} a year. $why")
         }
 
@@ -129,7 +135,7 @@ object MoneyCheck {
             val title = "${c.label} ${ls.size}× in 30 days"
             val why = "${fmt(total)} in the last 30 days. Halving it saves about ${fmt(save)} a year."
             MoneyIdea("habit-${c.key}", MoneyIdeaKind.HABIT.key, title, yearly(save), save, why, behind(ls), ACT_CAP_LABEL, ACT_CAP,
-                lit = false, spoken = "$title, about ${fmt(save)} a year. $why")
+                lit = false, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. $why")
         }.sortedByDescending { it.savePence }.take(MoneyTips.MAX_PER_KIND)
     }
 
@@ -143,7 +149,7 @@ object MoneyCheck {
         val why = "$named${if (s.size > 2) " and ${s.size - 2} more" else ""}, every month: ${fmt(monthly * 12)} a year. One you no longer use saves its whole year."
         val rows = s.take(BEHIND_MAX).map { MoneyIdeaPay(it.label, "monthly · last ${CivilDate.shortLabel(it.lastDay)}", fmt(it.monthly)) }
         return MoneyIdea("subs", MoneyIdeaKind.SUBS.key, title, "${fmt(monthly)}/mo", 0, why, rows, null, null, lit = false,
-            spoken = "$title, ${fmt(monthly)} a month. $why")
+            behindMore = more(s.size), spoken = "$title, ${fmt(monthly)} a month. $why")
     }
 
     /** This month's categories well over their 6-month average ([MoneyTips.over]): how far, with a cap to set. */
@@ -154,7 +160,7 @@ object MoneyCheck {
         val month = MoneyRules.monthOf(today)
         val ls = lines.filter { it.category == c && it.pence < 0 && MoneyRules.monthOf(it.day) == month }
         MoneyIdea("over-$key", MoneyIdeaKind.OVER.key, "${c.label} over usual this month", "$by over", 0, "${t.title}. ${t.line}.",
-            behind(ls), ACT_CAP_LABEL, ACT_CAP, lit = true, spoken = "${c.label} $by over usual this month. ${t.line}")
+            behind(ls), ACT_CAP_LABEL, ACT_CAP, lit = true, behindMore = more(ls.size), spoken = "${c.label} $by over usual this month. ${t.line}")
     }
 
     /** His own categories bought often (wants only, as [habits]): "Vape 12× in 30 days", what halving saves a year. */
@@ -168,7 +174,7 @@ object MoneyCheck {
             val title = "${c.name} ${ls.size}× in 30 days"
             val why = "${fmt(total)} in the last 30 days. Halving it saves about ${fmt(save)} a year."
             MoneyIdea("habit-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.HABIT.key, title, yearly(save), save, why, behind(ls),
-                ACT_CAP_LABEL, ACT_CAP, lit = false, spoken = "$title, about ${fmt(save)} a year. $why")
+                ACT_CAP_LABEL, ACT_CAP, lit = false, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. $why")
         }.sortedByDescending { it.savePence }.take(MoneyTips.MAX_PER_KIND)
     }
 
@@ -195,7 +201,7 @@ object MoneyCheck {
             val line = "${fmt(p)} so far in $monthName · " + when (left) { 0 -> "last day of the month"; 1 -> "1 day to go"; else -> "$left days to go" }
             val cur = ls.filter { MoneyRules.monthOf(it.day) == month }
             Triple(p - avg, c, MoneyIdea("over-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.OVER.key, "${c.name} over usual this month", "$by over", 0,
-                "${c.name} $by over $avgName. $line.", behind(cur), ACT_CAP_LABEL, ACT_CAP, lit = true,
+                "${c.name} $by over $avgName. $line.", behind(cur), ACT_CAP_LABEL, ACT_CAP, lit = true, behindMore = more(cur.size),
                 spoken = "${c.name} $by over usual this month. $line"))
         }.sortedByDescending { it.first }.take(MoneyTips.MAX_PER_KIND).map { it.third }
     }

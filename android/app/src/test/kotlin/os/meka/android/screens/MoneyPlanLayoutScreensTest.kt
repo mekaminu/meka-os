@@ -158,6 +158,17 @@ class MoneyPlanLayoutScreensTest {
         assertTrue(showsText(idea.why) && shows("money-idea-behind"), "the idea's sheet says why, with the payments behind it")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-idea"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-plan-idea")
+        // Walk-through A26: the payments sit flush with the heading (names under the title, amounts ending under the
+        // figure) and a list cut at six says how many more.
+        fun box(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+        val head = box("money-idea-head")
+        val figure = box("money-idea-figure")
+        val pay = box("money-idea-pay")
+        val amount = box("money-idea-pay-amount")
+        assertTrue(kotlin.math.abs(pay.left - head.left) <= 1f, "the payments start ${pay.left - head.left} px in from the idea's heading")
+        assertTrue(kotlin.math.abs(amount.right - figure.right) <= 1f, "the amounts end ${figure.right - amount.right} px short of the figure")
+        if (idea.behindMore == null) fail("twelve coffees list six: the sheet should say how many more")
+        assertTrue(shows("money-idea-more") && showsText(idea.behindMore!!), "the sheet should say ${idea.behindMore} under the payments")
         // Its step: Set a cap opens Set a challenge.
         tap("money-idea-act")
         if (shows("money-idea-sheet")) fail("the idea's step should close its sheet")

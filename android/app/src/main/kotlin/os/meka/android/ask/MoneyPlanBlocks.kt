@@ -191,34 +191,41 @@ private fun MoneyLeadIdeaCard(i: MoneyIdea, onOpen: () -> Unit, onAct: () -> Uni
 @Composable
 internal fun MoneyIdeaDetails(i: MoneyIdea, onAct: () -> Unit, onRemind: () -> Unit, onNotFor: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = i.spoken },
+        Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = i.spoken }.testTag("money-idea-head"),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
             Text(i.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-            Text(i.figure, style = MekaType.itemTitle, color = if (i.lit) Meka.colors.accent else Meka.colors.textSecondary)
+            Text(i.figure, style = MekaType.itemTitle, color = if (i.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                modifier = Modifier.testTag("money-idea-figure"))
         }
         Text(i.why, style = MekaType.body, color = Meka.colors.textSecondary)
         if (i.behind.isNotEmpty()) {
             Text(moneyShown(MoneyCheck.BEHIND), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
-            MoneyCard(tag = "money-idea-behind") {
+            // Walk-through A26: the rows sit flush with the heading, so their names start under the title and their amounts
+            // end under the figure (they were inset by a card's padding), then "and 6 more" when the list stops short.
+            Column(Modifier.fillMaxWidth().testTag("money-idea-behind"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 i.behind.forEach { p ->
-                    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${p.label}, ${p.date}, ${p.amount}" },
-                        verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${p.label}, ${p.date}, ${p.amount}" }
+                        .testTag("money-idea-pay"), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(p.label, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(p.date, style = MekaType.caption, color = Meka.colors.textTertiary)
                         }
-                        Text(p.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+                        Text(p.amount, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.testTag("money-idea-pay-amount"))
                     }
                 }
+                i.behindMore?.let { m -> Text(m, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-idea-more")) }
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             modifier = Modifier.padding(top = MekaSpace.xs)) {
             i.act?.let { a -> IdeaPill(a, Meka.colors.accent, "money-idea-act", onAct) }
             IdeaPill(MoneyCheck.REMIND, Meka.colors.textPrimary, "money-idea-remind", onRemind)
-            Text(MoneyCheck.NOT_FOR_ME, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotFor)
-                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-idea-not-for-me"))
+            // As the lead card's: a quiet word with a small inset, not a pill's 16 dp (walk-through A26).
+            Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotFor)
+                .minTouch().testTag("money-idea-not-for-me"), contentAlignment = Alignment.Center) {
+                Text(MoneyCheck.NOT_FOR_ME, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(horizontal = MekaSpace.xs))
+            }
         }
     }
 }

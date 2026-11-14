@@ -56,6 +56,11 @@ class MoneyCheckTest {
         assertEquals("Coffee 12× in 30 days", habit.title)
         assertEquals("~£290/yr", habit.figure)
         assertEquals(MoneyCheck.ACT_CAP, habit.actKey)
+        // Walk-through A26: twelve behind it, six listed, and the sheet says the rest.
+        assertEquals(MoneyCheck.BEHIND_MAX, habit.behind.size)
+        assertEquals("and 6 more", habit.behindMore)
+        assertNull(rise.behindMore, "five behind it are all listed")
+        assertNull(MoneyCheck.more(MoneyCheck.BEHIND_MAX))
         val subs = assertNotNull(MoneyCheck.subs(regular))
         assertEquals("2 subscriptions · still using them all?", subs.title)
         assertEquals("£24.48/mo", subs.figure)
