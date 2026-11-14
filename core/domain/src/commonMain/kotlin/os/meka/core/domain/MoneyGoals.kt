@@ -104,6 +104,8 @@ object MoneyGoals {
             val follows = when {
                 linked == null -> null
                 linked.balance == null -> "Follows ${linked.name} · it has no balance yet: type one under Net worth"
+                // Walk-through A19: once the goal has caught up with the balance, the figure is the line above; don't say it again.
+                linked.balance.pence == m.currentX100 -> "Follows ${linked.name} · up to date with its balance on ${CivilDate.shortLabel(linked.balance.day)}"
                 else -> "Follows ${linked.name} · its balance ${MoneyRules.signedPlain(linked.balance.pence)} on ${CivilDate.shortLabel(linked.balance.day)}"
             }
             val choices = follow.map { MoneyGoalChoice(it.id, it.name, it.id == linked?.id) }
@@ -118,13 +120,14 @@ object MoneyGoals {
         return MoneyGoalsView(HEAD, rows, if (follow.isEmpty()) NO_ACCOUNTS else null, FOOT)
     }
 
-    /** What linking said: "“Holiday” follows Savings · £800 of £2,000 now". */
+    /**
+     * What linking said: "“Holiday” follows Savings · it moves with its balance". Walk-through A19: the figure isn't
+     * repeated here; the sheet's line above already shows where the goal now stands.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun linkedSaid(goal: String, account: String, balancePence: Long?, target: GoalMetric?): String =
-        "“$goal” follows $account" + when {
-            balancePence == null -> " · it moves once the account has a balance"
-            target != null -> " · ${GoalMetricRules.line(balancePence, target.targetX100, UNIT)} now"
-            else -> ""
-        }
+        "“$goal” follows $account" + if (balancePence == null) " · it moves once the account has a balance" else " · it moves with its balance"
+
 
     fun unlinkedSaid(goal: String): String = "“$goal” no longer follows an account · its number stays where it got to"
 }

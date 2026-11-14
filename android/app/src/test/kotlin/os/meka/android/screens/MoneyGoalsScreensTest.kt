@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -162,6 +164,10 @@ class MoneyGoalsScreensTest {
         fun follows() = core.moneyView.value.goals?.rows?.firstOrNull { it.id == holiday }?.followsName == "Savings"
         repeat(40) { if (!follows()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(follows(), "the chip should make the goal follow Savings")
+        // Walk-through A19: "£800 of £3,000" is said once, on the sheet's line, not again by the follows line or the toast.
+        val sheetFigures = compose.onAllNodes(ScreenShots.plainText("£800", substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().count { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { "of £3,000" in it.text || "balance £800" in it.text } }
+        assertTrue(sheetFigures <= 2, "the goal's figure should show on the page's row and the sheet's line only, found $sheetFigures")
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-plan-goal-sheet-cover.png")
         tap("money-goal-sheet-done")
         assertTrue(!shows("money-goal-sheet"))

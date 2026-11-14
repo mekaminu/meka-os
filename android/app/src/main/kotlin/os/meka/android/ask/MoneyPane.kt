@@ -2629,7 +2629,9 @@ private fun WorthLine(points: List<MoneyWorthPoint>, dots: Boolean = true) {
     var drawn by remember { mutableStateOf(if (reduced) 1f else 0f) }
     LaunchedEffect(points.size) { drawn = 1f }
     val progress by animateFloatAsState(drawn, MekaMotion.appear(reduced), label = "money-worth-line")
-    var picked by remember(points) { mutableStateOf(points.size - 1) }
+    // A day-by-day line starts with nothing tapped (walk-through A19: Now's figure is already the headline above).
+    var tapped by remember(points) { mutableStateOf<Int?>(null) }
+    val picked = tapped ?: (points.size - 1)
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         androidx.compose.foundation.Canvas(
             Modifier.fillMaxWidth().height(96.dp)
@@ -2637,7 +2639,7 @@ private fun WorthLine(points: List<MoneyWorthPoint>, dots: Boolean = true) {
                 .pointerInput(points) {
                     detectTapGestures { o ->
                         val step = if (points.size > 1) size.width / (points.size - 1).toFloat() else 0f
-                        picked = if (step > 0f) (o.x / step).roundToInt().coerceIn(0, points.size - 1) else 0
+                        tapped = if (step > 0f) (o.x / step).roundToInt().coerceIn(0, points.size - 1) else 0
                     }
                 },
         ) {
@@ -2671,8 +2673,11 @@ private fun WorthLine(points: List<MoneyWorthPoint>, dots: Boolean = true) {
             Text(points.first().label, style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
             Text(points.last().label, style = MekaType.micro, color = Meka.colors.textTertiary)
         }
-        Crossfade(points[picked.coerceIn(0, points.size - 1)].said, animationSpec = MekaMotion.appear(reduced), label = "money-worth-picked") { l ->
-            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textPrimary)
+        val line = if (dots) points[picked.coerceIn(0, points.size - 1)].said else os.meka.core.domain.TradingEquity.pickedLine(points, tapped)
+        Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "money-worth-picked") { l ->
+            Text(moneyShown(l), style = MekaType.caption,
+                color = if (!dots && tapped == null) Meka.colors.textTertiary else Meka.colors.textPrimary,
+                modifier = Modifier.testTag("money-line-picked"))
         }
     }
 }

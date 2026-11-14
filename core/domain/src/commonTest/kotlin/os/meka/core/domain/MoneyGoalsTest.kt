@@ -34,8 +34,26 @@ class MoneyGoalsTest {
     fun followsSaysTheBalanceOrThatThereIsNone() {
         val v = MoneyGoals.view(listOf(goal("g1", "£", 80_000L, "a-savings"), goal("g2", "£", 0, "a-current")), listOf(savings, current), emptySet(), day)
         assertEquals("£800 of £2,000 · 40%", v.rows[0].line)
-        assertEquals("Follows Savings · its balance £800 on ${CivilDate.shortLabel(day)}", v.rows[0].follows)
+        // Walk-through A19: caught up with the balance, the sheet doesn't say £800 a second time.
+        assertEquals("Follows Savings · up to date with its balance on ${CivilDate.shortLabel(day)}", v.rows[0].follows)
         assertEquals("Follows Current account · it has no balance yet: type one under Net worth", v.rows[1].follows)
+        // Not caught up yet (Money not opened since the balance moved): the balance is news, so it's said.
+        val behind = MoneyGoals.view(listOf(goal("g1", "£", 60_000L, "a-savings")), listOf(savings), emptySet(), day)
+        assertEquals("Follows Savings · its balance £800 on ${CivilDate.shortLabel(day)}", behind.rows[0].follows)
+    }
+
+    @Test
+    fun linkingSaysWhatItFollowsWithoutTheFigureAgain() {
+        assertEquals("“Holiday” follows Savings · it moves with its balance", MoneyGoals.linkedSaid("Holiday", "Savings", 80_000L, null))
+        assertEquals("“Holiday” follows Savings · it moves once the account has a balance", MoneyGoals.linkedSaid("Holiday", "Savings", null, null))
+    }
+
+    @Test
+    fun aDayByDayLineSaysHowToReadItUntilADayIsTapped() {
+        val pts = listOf(MoneyWorthPoint("Wed 7 Oct", 0, "Wed 7 Oct · +$0.00"), MoneyWorthPoint("Now", 47_000, "Now · +$470.00 since Wed 7 Oct"))
+        assertEquals(TradingEquity.TAP_A_DAY, TradingEquity.pickedLine(pts, null))
+        assertEquals("Wed 7 Oct · +$0.00", TradingEquity.pickedLine(pts, 0))
+        assertEquals(TradingEquity.TAP_A_DAY, TradingEquity.pickedLine(pts, 9))
     }
 
     @Test

@@ -44,11 +44,11 @@ class MoneyGoalsFacadeTest {
         val acct = row.choices.single { it.name == "Savings" }.accountId
 
         val r = fold.moneyGoalFollow(goal, acct)
-        assertEquals("“Holiday fund” follows Savings · £800 of £2,000 now", r.line)
+        assertEquals("“Holiday fund” follows Savings · it moves with its balance", r.line)
         val m = fold.goalsView.value.goals.first { it.id == goal }.metric!!
         assertEquals(80_000L, m.currentX100)
         assertEquals(MoneyGoals.followsInGoals("Savings"), m.moneyLine)
-        assertEquals("Follows Savings · its balance £800 on Mon 12 Oct", fold.moneyView.value.goals!!.rows.single().follows)
+        assertEquals("Follows Savings · up to date with its balance on Mon 12 Oct", fold.moneyView.value.goals!!.rows.single().follows)
 
         // The Mac opening Money the same day writes the same update: still £800, not £1,600.
         fold.syncNow(); mac.syncNow()

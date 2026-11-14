@@ -295,6 +295,9 @@ class MoneyTradingLayoutScreensTest {
         assertTrue(showsText(month), "the month's change shows first: $month")
         if (shows("money-curve-card")) fail("the P&L line still has a card of its own")
         if (showsText("Dollars")) fail("the Dollars · Pounds row still sits on the card")
+        // Walk-through A19: under the line, how to read it, not Now's figure and the account again.
+        assertTrue(showsText(TradingEquity.TAP_A_DAY), "the line should say to tap a day until one is tapped")
+        if (showsText("Now · ")) fail("the line's readout repeats the headline before a day is tapped")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-equity"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-equity")
         compose.onNodeWithContentDescription(TradingEquity.chips(c, TradingEquity.MONTH)[1].spoken, useUnmergedTree = true)

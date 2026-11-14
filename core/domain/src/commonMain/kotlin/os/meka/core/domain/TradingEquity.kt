@@ -50,6 +50,16 @@ object TradingEquity {
 
     fun lineHint(r: TradingRange): String? = if (r.points.size >= 2) null else NO_LINE
 
+    /**
+     * Walk-through 2026-11-08 A19: under a day-by-day line, before a day is tapped, how to read it, not Now's figure again
+     * (the headline and the change above already say it).
+     */
+    const val TAP_A_DAY = "Tap the line for a day's figure"
+
+    /** The words under a day-by-day line: the tapped point's line, or [TAP_A_DAY] while none is tapped. */
+    fun pickedLine(points: List<MoneyWorthPoint>, tapped: Int?): String =
+        tapped?.let { points.getOrNull(it)?.said } ?: TAP_A_DAY
+
     /** The range [key] picks (the month for anything else), with its chips' on state. */
     fun range(c: TradingEquityCard, key: String): TradingRange = c.ranges.firstOrNull { it.key == key } ?: c.ranges.first { it.key == DEFAULT }
 

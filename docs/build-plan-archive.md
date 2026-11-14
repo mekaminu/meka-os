@@ -6238,3 +6238,8 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Kids' THIS WEEK (`KidsWeekRules.week`): a SchoolKind.OFF stretch is listed once, on its first day inside the 7, with " · until <its last day>" when it runs on (`KidsWeekRules.UNTIL`); counted as one thing. Test `KidsWeekTest.aStretchOffIsOneThingOnItsFirstDayWithWhenItEnds`.
 - Work mode → Hours → "EACH DAY" drawn as a section label (sectionLabel, tracked on the Mac), not a sentence-case caption (`WorkDayHoursSection.kt`, `WorkSheet.swift`).
 - `KeptPlacesScreensTest`: the core syncs from an in-memory server holding GOV.UK's bank holidays (invented-free public dates), so Leave's Christmas holidays row reads 7 work days; the MANY shot checks it.
+
+### Found and fixing, week 3: A19 slice 2 (2026-11-14)
+
+- Money → Plan → a goal's sheet: `MoneyGoals.view` follows line says "Follows Savings · up to date with its balance on <day>" when the goal already equals the balance (the figure stays when the balance has moved on); `MoneyGoals.linkedSaid` says "· it moves with its balance" instead of repeating "£800 of £3,000 now". Tests `MoneyGoalsTest`, `MoneyGoalsFacadeTest`, `MoneyGoalsScreensTest` (the figure shows at most on the row and the sheet's line).
+- Money → Trading: the equity card's and P&L curve's readout under a day-by-day line (`WorthLine(dots = false)` / `MoneyWorthLine`) shows `TradingEquity.TAP_A_DAY` in tertiary ink until a day is tapped, instead of "Now · +$470.00 since … · account $6,500.00" under the same headline. `TradingEquity.pickedLine`; `MoneyTradingLayoutScreensTest.theEquityCardLeadsAsTheMockup` checks it. Net worth's month line is unchanged.

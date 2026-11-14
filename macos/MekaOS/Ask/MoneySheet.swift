@@ -3370,8 +3370,11 @@ private struct MoneyWorthLine: View {
                 Spacer()
                 Text(points.last?.label ?? "").font(MekaType.micro).foregroundStyle(palette.textTertiary)
             }
-            Text(points[pick].said).font(MekaType.caption).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduced), value: pick)
+            // A day-by-day line starts with nothing tapped (walk-through A19: Now's figure is already the headline above).
+            let hint = !dots && picked == nil
+            Text(hint ? TradingEquity.shared.TAP_A_DAY : points[pick].said).font(MekaType.caption)
+                .foregroundStyle(hint ? palette.textTertiary : palette.textPrimary).contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduced), value: picked)
         }
         .onAppear {
             if reduced { drawn = 1 } else { withAnimation(MekaMotion.appear(reduced: false)) { drawn = 1 } }
