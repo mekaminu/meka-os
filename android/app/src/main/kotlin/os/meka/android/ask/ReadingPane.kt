@@ -261,7 +261,9 @@ private fun SaidLine(said: ReadingSaid?, color: Color, onUndo: (String) -> Unit)
     Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "reading-line") { s ->
         if (s != null) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
             Text(s.line, style = MekaType.caption, color = color, modifier = Modifier.weight(1f, fill = false))
-            s.undo?.let { token ->
+            // Only the line being shown offers Undo: the one fading out (a command earlier) can't be tapped or found,
+            // so a quick Undo always takes back the latest command, never the one before it.
+            s.undo?.takeIf { s == said }?.let { token ->
                 Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { haptics.tick(); onUndo(token) }
                         .minTouch().semantics { contentDescription = "Undo: ${s.line}" })

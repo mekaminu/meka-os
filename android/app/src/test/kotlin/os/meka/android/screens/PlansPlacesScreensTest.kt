@@ -497,7 +497,14 @@ class PlansPlacesScreensTest {
         tap(p, name, "Finished", hasContentDescription("Finished: Dune"))
         until { v().finished.any { it.id == dune.id } }
         if (v().finished.none { it.id == dune.id }) fail("$name: Finished didn't finish Dune")
-        tap(p, name, "Undo", hasContentDescription("Undo:", substring = true))
+        // The view can show Dune finished a frame before the line under it says so; Undo then still belonged to Start
+        // and took Dune back up next (the flake on ci run 43545220211). Wait for Finished's own Undo and tap that one.
+        val undoFinished = hasContentDescription("Undo: Finished Dune")
+        until { shows(undoFinished) }
+        if (!shows(undoFinished)) fail("$name: Finished didn't offer Undo")
+        if (compose.onAllNodes(hasContentDescription("Undo:", substring = true)).fetchSemanticsNodes().size != 1)
+            fail("$name: more than one Undo showed after Finished")
+        tap(p, name, "Undo", undoFinished)
         until { v().onTheGo.any { it.id == dune.id } }
         if (v().onTheGo.none { it.id == dune.id }) fail("$name: Undo didn't put Dune back on the go")
         tap(p, name, "Put down", hasContentDescription("Put down: Dune"))
