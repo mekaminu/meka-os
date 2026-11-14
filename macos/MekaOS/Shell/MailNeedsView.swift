@@ -149,7 +149,7 @@ struct MailNeedsView: View {
             }
             if MailSendAllRules.shared.barShows(rows: Int32(shown.count)) {
                 sendAllBar(rows: shown)
-                    .padding(.top, MekaSpace.xs)
+                    .padding(.top, MekaSpace.xs).padding(.horizontal, MekaSpace.m) // A27: on the rows' text line
             }
             if let snoozed = card.snoozedLine {
                 Text(snoozed).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)

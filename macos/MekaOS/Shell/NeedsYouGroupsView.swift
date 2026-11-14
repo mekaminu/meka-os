@@ -243,7 +243,8 @@ struct NeedsYouMailThinRowView: View {
                         .font(MekaType.micro).foregroundStyle(palette.textTertiary)
                         .rotationEffect(.degrees(open ? 180 : 0))
                 }
-                .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xxs)
+                // Walk-through A27 (2026-11-14): the sender and subject start on the box's text line (the lead's words).
+                .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.m)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }

@@ -49,6 +49,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.wordsTap
+import os.meka.android.designsystem.bleedSides
 import os.meka.core.domain.NeedsYouChip
 import os.meka.core.domain.NeedsYouFilter
 import os.meka.core.domain.NeedsYouFyiRow
@@ -89,6 +90,7 @@ import os.meka.core.domain.NeedsYouOpenRules
  */
 
 internal const val NEEDS_YOU_CHIPS_TAG = "needs-you-chips"
+internal const val NEEDS_YOU_HEADER_ACTION_TAG = "needs-you-header-action"
 internal const val NEEDS_YOU_ROW_TAG = "needs-you-row"
 internal const val NEEDS_YOU_FYI_TAG = "needs-you-fyi"
 internal const val NEEDS_YOU_MAIL_TAG = "needs-you-mail"
@@ -108,13 +110,17 @@ internal fun NeedsYouHeader(
             Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary)
             Text(subtitle, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
         }
-        if (showClear) {
-            Text(
-                actionLabel, style = MekaType.captionStrong, color = Meka.colors.textSecondary,
-                modifier = Modifier.wordsTap(onClick = onClear).minTouch(),
-            )
-        }
+        if (showClear) NeedsYouHeaderAction(actionLabel, onClear)
     }
+}
+
+/** The header's right-hand words (Clear FYI, Open all / Close all), on their own so the open Fold's right column can carry them. */
+@Composable
+internal fun NeedsYouHeaderAction(label: String, onClick: () -> Unit) {
+    Text(
+        label, style = MekaType.captionStrong, color = Meka.colors.textSecondary,
+        modifier = Modifier.wordsTap(onClick = onClick).minTouch().testTag(NEEDS_YOU_HEADER_ACTION_TAG),
+    )
 }
 
 /** All · Decide 2 · Reply 4 · FYI 4 · Mail: one sliding line of chips, the chosen one in gold. */
@@ -122,7 +128,10 @@ internal fun NeedsYouHeader(
 internal fun NeedsYouChips(chips: List<NeedsYouChip>, chosen: NeedsYouFilter, onPick: (NeedsYouFilter) -> Unit, modifier: Modifier = Modifier) {
     val haptics = rememberMekaHaptics()
     Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(NEEDS_YOU_CHIPS_TAG),
+        // Walk-through A27 (2026-11-14): the row slides through the page's gutter to the screen's edge (the last chip was
+        // cut flat at the gutter), its first chip still starting on the page's left edge.
+        modifier.fillMaxWidth().bleedSides(MekaSpace.gutter).testTag(NEEDS_YOU_CHIPS_TAG).horizontalScroll(rememberScrollState())
+            .padding(horizontal = MekaSpace.gutter),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         chips.forEach { c ->

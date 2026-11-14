@@ -5,6 +5,8 @@ import os.meka.android.designsystem.LocalContainerOrigins
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
@@ -25,7 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import os.meka.core.domain.NeedsYouFilter
 import os.meka.core.domain.NeedsYouPart
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -125,15 +126,19 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
             val filter = rememberSaveable { mutableStateOf(NeedsYouFilter.ALL) }
             val openChat = rememberSaveable { mutableStateOf<String?>(null) }
             val headerHeight = remember { mutableStateOf(0) }
+            // Walk-through A27: the title row's height, so the right column's Close all sits level with "Needs you".
+            val headerRowHeight = remember { mutableStateOf(0) }
             // Grouped and folding, slice 3: both columns read one set of open boxes, so Open all / Close all reaches both.
             val openGroups = rememberOpenGroups()
             val list: @Composable (Modifier) -> Unit = { m ->
                 if (columns) {
                     Row(m.testTag(NEEDS_YOU_COLUMNS_TAG)) {
                         NeedsYouColumn(core, stack, moves, Modifier.weight(1f).fillMaxHeight(), openAfterWork = { showAfterWork = true },
-                            part = NeedsYouPart.LEFT, filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups)
+                            part = NeedsYouPart.LEFT, filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups,
+                            headerRowHeight = headerRowHeight)
                         NeedsYouColumn(core, stack, moves, Modifier.weight(1f).fillMaxHeight(), openAfterWork = { showAfterWork = true },
-                            part = NeedsYouPart.RIGHT, filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups)
+                            part = NeedsYouPart.RIGHT, filterState = filter, openChatState = openChat, headerHeight = headerHeight, openGroupsState = openGroups,
+                            headerRowHeight = headerRowHeight)
                     }
                 } else {
                     NeedsYouColumn(core, stack, moves, m, openAfterWork = { showAfterWork = true },
@@ -522,6 +527,8 @@ internal fun NeedsYouColumn(
     headerHeight: MutableState<Int>? = null,
     /** The open boxes, held by the screen so the open Fold's two columns share them; this list's own when null. */
     openGroupsState: MutableState<Set<NeedsYouGroup>>? = null,
+    /** The left column's title row height (walk-through A27: the right column's Close all sits level with it). */
+    headerRowHeight: MutableState<Int>? = null,
 ) {
     // Taps feel instant (2026-10-25): what was just decided here is hidden at once, until the views no longer hold it.
     val hidden = moves.hidden
@@ -928,7 +935,18 @@ internal fun NeedsYouColumn(
         if (part == NeedsYouPart.RIGHT) {
             // The right column starts level with To decide: the left column's header height, empty.
             item(key = "title-space") {
-                Spacer(Modifier.height(with(LocalDensity.current) { (headerHeight?.value ?: 0).toDp() }))
+                // Walk-through A27 (2026-11-14): on the open Fold, Open all / Close all reaches both columns, so it sits
+                // at the page's right edge, level with "Needs you", not at the end of the left column mid-screen.
+                val d = LocalDensity.current
+                Box(Modifier.fillMaxWidth().height(with(d) { (headerHeight?.value ?: 0).toDp() })) {
+                    if (boxed && presentAll.isNotEmpty()) {
+                        Box(Modifier.align(Alignment.TopEnd).height(with(d) { (headerRowHeight?.value ?: 0).toDp() })
+                            .appear(rememberAppearance(0, play)), contentAlignment = Alignment.CenterEnd) {
+                            NeedsYouHeaderAction(NeedsYouGroupRules.allLabel(openGroups, presentAll),
+                                onClick = { openGroups = NeedsYouGroupRules.all(openGroups, presentAll) })
+                        }
+                    }
+                }
             }
             if (if (boxed) present.isEmpty() else (!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny)) {
                 item(key = "right-empty") {
@@ -943,9 +961,12 @@ internal fun NeedsYouColumn(
             } else {
                 Column(Modifier.onSizeChanged { headerHeight?.value = it.height }.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
                     if (boxed) {
-                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount, renewalCount), presentAll.isNotEmpty(),
+                        // On the open Fold the right column carries Open all / Close all at the page's edge (A27).
+                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount, renewalCount),
+                            presentAll.isNotEmpty() && part != NeedsYouPart.LEFT,
                             onClear = { openGroups = NeedsYouGroupRules.all(openGroups, presentAll) },
-                            actionLabel = NeedsYouGroupRules.allLabel(openGroups, presentAll))
+                            actionLabel = NeedsYouGroupRules.allLabel(openGroups, presentAll),
+                            modifier = Modifier.onSizeChanged { headerRowHeight?.value = it.height })
                     } else {
                         NeedsYouHeader(NeedsYouLayoutRules.subtitle(decideCount, replyCount, fyiChats.size), fyiChats.isNotEmpty(), onClear = {
                             fyiChats.forEach { moves.onTriageChat(it, ChatFinishTap.DONE) }

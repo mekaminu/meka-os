@@ -288,7 +288,9 @@ internal fun NeedsYouMailRowView(row: os.meka.core.domain.NeedsYouMailRow, open:
                 }
                 .semantics(mergeDescendants = true) { contentDescription = row.spoken; stateDescription = if (open) "Open" else "Closed" }
                 .testTag("$NEEDS_YOU_MAIL_ROW_TAG-${row.id}")
-                .padding(vertical = MekaSpace.xs, horizontal = MekaSpace.xxs),
+                // Walk-through A27 (2026-11-14): the sender and subject start on the box's text line (the lead's words
+                // and the head's padding), not 12 dp left of it.
+                .padding(vertical = MekaSpace.xs, horizontal = MekaSpace.m),
             verticalArrangement = Arrangement.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

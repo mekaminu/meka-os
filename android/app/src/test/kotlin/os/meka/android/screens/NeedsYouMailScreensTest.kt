@@ -34,6 +34,8 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_LIST_TAG
+import os.meka.android.today.NEEDS_YOU_CHIPS_TAG
+import os.meka.android.today.NEEDS_YOU_HEADER_ACTION_TAG
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
 import os.meka.android.today.NeedsYouGroupStore
 import os.meka.android.today.NeedsYouRoute
@@ -167,6 +169,7 @@ class NeedsYouMailScreensTest {
         // and the open Fold's header counts the renewals with the mail.
         if (showing(NeedsYouStackRules.EMPTY_LINE)) fail("$name: \"${NeedsYouStackRules.EMPTY_LINE}\" beside mail to answer and renewals")
         if (name.startsWith("inner") && !showing("2 mail · 2 renewals")) fail("$name: the header doesn't count the renewals with the mail")
+        assertEdges(name)
         openRow(name, football)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
         // Needs you bugs (2026-11-10): a mail row is its sender and subject; the body waits until he opens the email.
@@ -175,6 +178,32 @@ class NeedsYouMailScreensTest {
         if (compose.onAllNodes(androidx.compose.ui.test.hasText("Football on Saturday", substring = true), useUnmergedTree = true)
                 .fetchSemanticsNodes().isEmpty()) fail("$name: a mail row's subject isn't shown")
         return core
+    }
+
+    /**
+     * Walk-through A27 (2026-11-14): a mail row's sender starts on the box's text line (the ten-minute inbox's words),
+     * the chips slide to the screen's edge rather than being cut at the gutter, and on the open Fold Close all sits at
+     * the page's right edge, not mid-screen at the end of the left column.
+     */
+    private fun assertEdges(name: String) {
+        fun left(text: String) = compose.onAllNodes(androidx.compose.ui.test.hasText(text, substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: fail("$name: no \"$text\" on screen")
+        val dp = compose.density.density
+        val sender = left("Sam Taylor").left
+        val lead = left("Ten-minute inbox").left
+        if (kotlin.math.abs(sender - lead) / dp > 1.5f) {
+            fail("$name: the mail row's sender starts ${((sender - lead) / dp).toInt()} dp off the ten-minute inbox's words")
+        }
+        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
+        val chips = compose.onNodeWithTag(NEEDS_YOU_CHIPS_TAG).fetchSemanticsNode().boundsInRoot
+        val columns = compose.onAllNodesWithTag(NEEDS_YOU_RIGHT_TAG).fetchSemanticsNodes().isNotEmpty()
+        val edge = if (columns) screen.width / 2 else screen.right
+        if (chips.right < edge - 1f) fail("$name: the chips stop ${((edge - chips.right) / dp).toInt()} dp short of the edge (cut at the gutter)")
+        if (columns) {
+            val action = compose.onNodeWithTag(NEEDS_YOU_HEADER_ACTION_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            if (action.right < screen.right - 40f * dp) fail("$name: Close all ends ${((screen.right - action.right) / dp).toInt()} dp from the page's right edge")
+            if (action.top > left("Needs you").bottom) fail("$name: Close all isn't level with \"Needs you\"")
+        }
     }
 
     /** Runs the main looper and the frames by turns (a tap's change reaches the recomposer through the looper). */

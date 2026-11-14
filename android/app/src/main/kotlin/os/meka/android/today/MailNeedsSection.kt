@@ -186,6 +186,8 @@ internal fun MailNeedsSection(
                                 undo(said) { runCatching { core.undoMailItem() } }
                             }
                         },
+                        // Walk-through A27: in the box, its pills and line start on the rows' text line.
+                        modifier = if (boxed) Modifier.padding(horizontal = MekaSpace.m) else Modifier,
                     )
                 }
                 }
@@ -581,10 +583,10 @@ internal fun MailNeedsRowView(
 @Composable
 private fun MailSendAllBar(
     draftLabel: String?, drafting: Boolean, draftSpoken: String, sendLabel: String?, sendSpoken: String?, line: String?,
-    onDraft: () -> Unit, onSendAll: () -> Unit,
+    onDraft: () -> Unit, onSendAll: () -> Unit, modifier: Modifier = Modifier,
 ) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().testTag("mail-send-all"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+    Column(modifier.fillMaxWidth().testTag("mail-send-all"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             AnimatedVisibility(sendLabel != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut()) {
                 MailCardPill(sendLabel ?: "", spoken = sendSpoken ?: "", onClick = onSendAll)
