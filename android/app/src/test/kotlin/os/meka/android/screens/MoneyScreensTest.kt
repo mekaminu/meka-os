@@ -281,7 +281,11 @@ class MoneyScreensTest {
     fun coverOne() = shoot("cover-dark-one", Fill.ONE)
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverMany() = shoot("cover-dark-many", Fill.MANY)
+    fun coverMany() {
+        shoot("cover-dark-many", Fill.MANY)
+        // One column on the cover (MoneyColumns only on the open Fold); a cover-dark-one-column shot was this one's bytes.
+        compose.onAllNodesWithTag("money-columns", useUnmergedTree = true).assertCountEquals(0)
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverManyLight() = shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT)
@@ -311,12 +315,11 @@ class MoneyScreensTest {
     fun innerOne() = shoot("inner-dark-one", Fill.ONE)
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerMany() = shoot("inner-dark-many", Fill.MANY)
-
-    @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT)
 
     // Money on the open Fold (MoneyColumns): each tab's body in two columns, as the mockup at Fold size; one on the cover.
+    // Walk-through A20: this is the open Fold's busy Spending shot (an inner-dark-many beside it was the same bytes), and
+    // the cover's one column is checked on cover-dark-many's own shot.
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerTwoColumns() {
         shoot("inner-dark-columns-spending", Fill.MANY)
@@ -333,9 +336,4 @@ class MoneyScreensTest {
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerAccounts() = shoot("inner-dark-columns-accounts", Fill.MANY, tab = MoneyTab.ACCOUNTS)
 
-    @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverOneColumn() {
-        shoot("cover-dark-one-column", Fill.MANY)
-        compose.onAllNodesWithTag("money-columns", useUnmergedTree = true).assertCountEquals(0)
-    }
 }

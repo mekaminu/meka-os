@@ -618,6 +618,17 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-08 A20: true when the node tagged [tag] already sits wholly on screen, so a shot taken after
+     * "scrolling to it" would be byte for byte the shot before (the scroll has nothing to do). A test then takes no shot of
+     * its own for that state: the earlier shot already shows it.
+     */
+    fun wholeOnScreen(compose: ComposeContentTestRule, tag: String): Boolean {
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        return compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
+            .any { it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom }
+    }
+
+    /**
      * Walk-through A15: a screen longer than the Fold's showed only its top, so a state whose difference sits lower
      * down (Mail's second and third accounts, AI's last rows) shot the same as another. Swipes [tag]'s node (default the
      * whole screen) up until the node showing [lastText] is wholly on screen, then shoots `<name>-below`; [settle] runs

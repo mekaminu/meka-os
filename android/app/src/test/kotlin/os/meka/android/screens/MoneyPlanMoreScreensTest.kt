@@ -155,10 +155,13 @@ class MoneyPlanMoreScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-tiles-cover"))
         tap("money-forecast-span-6")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-six-cover"))
+        // Walk-through A20: when the goals' start card already sits under the six-month forecast, that shot shows it and
+        // a second one would be the same bytes; only a scroll that moved the page earns its own shot.
+        val goalsInSix = ScreenShots.wholeOnScreen(compose, "money-goals-empty")
         scrollTo("money-goals-empty")
         assertTrue(showsText(MoneyPlanMore.GOALS_EMPTY_TITLE), "no £ goal should show the start card")
         assertTrue(shows("money-goal-start-add"), "Add a £ goal should always be a tile")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-goals-empty-cover"))
+        if (!goalsInSix) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-goals-empty-cover"))
         tap("money-goal-start-add")
         assertTrue(shows("money-add-goal-sheet") && showsText(MoneyPlanMore.ADD_AMOUNT_HINT), "Add a £ goal should open its sheet")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-add-goal-cover"))

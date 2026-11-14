@@ -328,10 +328,12 @@ class MoneyTradingLayoutScreensTest {
         val t = core.moneyView.value.trading ?: fail("no trading view")
         val tiles = t.tiles ?: fail("no tiles once trades are read")
         assertEquals(listOf("+$42.00", "−$38.20", "−$3.00", "2 of 3"), tiles.tiles.map { it.value })
+        // Walk-through A20: tiles already whole under the equity card are in cover-dark-trading-equity; no copy of it.
+        val tilesInEquity = ScreenShots.wholeOnScreen(compose, "money-trading-tiles")
         scrollTo("money-trading-tiles")
         assertTrue(showsText(TradingTiles.HEAD), "the tiles sit under their label")
         tiles.tiles.forEach { assertTrue(showsText(it.label), "the ${it.label} tile shows") }
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-tiles"))
+        if (!tilesInEquity) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-tiles"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-tiles")
         scrollTo("money-trades-card")
         if (showsText(t.trades?.summary ?: fail("no trades summary"))) fail("YOUR TRADES still repeats the trades closed and won")
@@ -355,6 +357,7 @@ class MoneyTradingLayoutScreensTest {
         open(seed = true, equityCard = true)
         pick(MoneyTab.TRADING)
         assertTrue(shows("money-trading-tiles"))
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-tiles"))
+        // Walk-through A20: the open Fold opens on the same screen as theEquityCardOnTheOpenFold, so
+        // inner-dark-trading-equity is the tiles' shot too (a second one here was the same bytes); this test only checks.
     }
 }
