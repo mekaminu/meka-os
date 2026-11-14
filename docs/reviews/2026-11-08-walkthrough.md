@@ -5,7 +5,7 @@
 four fresh reviewers who did not build the screens, folded and open, dark and light, against `docs/design/` and the
 layout rules, each re-checking last week's items in its area.
 
-**Not covered yet (finish in tonight's Sunday run):** the image viewer's request limit stopped two reviewers part way:
+**Not covered yet (read 2026-11-14, see section A2 below; the Mac still isn't covered):** the image viewer's request limit stopped two reviewers part way:
 **31 Money/AI shots** (account and card sheets, accounts-data-*, ask-obi-*, bills-layout/tidy, empty*, own-category,
 plan-idea/layout, sorter, `inner-dark-one`, `inner-dark-plan-layout`, `inner-dark-trading-*`, `inner-light-many`,
 plan-abroad-*, plan-add-goal, plan-challenges-*, plan-forecast-six, plan-forecast-tiles-unfolded) and **~40 shots in
@@ -80,6 +80,78 @@ Obi pill destination, lone Not now and cut "Send the quote"; Study on the Board;
     money many = one-column, inner many = columns-spending, trading equity = tiles (cover and inner),
     plan-forecast-six = plan-goals-empty; mail one = many (still); board timeline = timeline-aligned; fasting one = many
     above the fold; board folded-again draws the cover layout in an inner frame.
+
+## A2 · The shots not covered on 8 Nov (read 2026-11-14 on `screens` at ci run 1882, 63c0b72), ranked
+
+65 shots (30 Money/AI, 35 helpers and settings, cover and inner, dark and light) read by four fresh reviewers. Each item
+is a reviewer's reading: the fixing run confirms it in the code first (a real sum to fix, or a shot's fixture to make
+agree) before changing anything.
+
+21. **Obi's "spare" sum disagrees with the card above it** (high, real if confirmed): What if I save… says "about
+    £1,105" left each month (£2,230 − £1,125) while Obi's line under it says "£1,125 a month still leaves about £1,110
+    spare"; Ask Obi's answer says "£1,100 … about £1,120 spare" where £2,230 − £1,100 = £1,130
+    (`money/plan-forecast-tiles-unfolded.png`, `plan-challenges-tiles-unfolded.png`, `plan-abroad-tiles-unfolded.png`,
+    `cover-dark-ask-obi-answer.png`).
+22. **Headers that say nothing over a card** (high): Needs you's open Fold mail state says "Nothing needs you" beside
+    Mail to answer 2 and Renewals 2, and its "2 mail" leaves out the renewals (`needs-you/inner-dark-mail.png`); Obi is
+    working on's not-booked shots say "Nothing to keep an eye on yet" over a call card
+    (`working-on/*-not-booked.png`); Team says "5 helpers on" with Money Not set up (`team/cover-dark-quiet.png`,
+    `cover-light-busy.png`).
+23. **Shots that don't show their state** (high, tests): setup empty and work empty are fully set up
+    (`setup/cover-dark-empty.png`, `work/cover-dark-empty.png`); notifications one and many show "Next digest 18:00 ·
+    nothing yet" (`notifications/cover-dark-one.png`, `cover-dark-many.png`); voice one shows Obi remembers nothing
+    (`voice/inner-dark-one.png`); trading layout on the open Fold is only the loading line
+    (`money/inner-dark-trading-layout.png`); bills tidy is "£0 · no bills found yet" (`money/cover-dark-bills-tidy.png`);
+    plan-abroad unfolded shows the abroad tiles only at the bottom edge.
+24. **The answer doesn't reach the draft** (high, real if confirmed): an answered errand's YOU SAID "Tuesday morning"
+    while the draft still says "next week, ideally a morning" (`working-on/cover-dark-answered.png`).
+25. **Money's cover tab row hides the open tab** (med): on Accounts the selected tab is cut to "Ac" at the right edge;
+    the row doesn't scroll to it (`money/cover-dark-empty-accounts.png`, `cover-dark-accounts-data-sheet.png`,
+    `cover-dark-own-category.png`; B lists the overflow, this is the selected tab hidden).
+26. **Sheets out of order or out of line** (med): Edit category's Cancel / Save sit above Hide from the ring and the
+    cap field, which is cut at the bottom, colour circles ~28 dp (`money/cover-dark-own-category.png`); the Idea sheet's
+    rows and Not for me start ~36 px in from its heading, amounts end short of the figure above, "12× in 30 days" lists
+    6 with no "6 more" (`money/cover-dark-plan-idea.png`); Add a £ goal has two identical gold buttons, Add goal and Done
+    (`money/plan-add-goal-cover.png`); the money data sheet sits ~40 px high against the top edge and its Delete all
+    money data reads as plain text (`money/cover-dark-accounts-data-sheet.png`).
+27. **Left edges that drift** (med): Needs you's mail rows start ~28 px left of the group cards' text, Close all sits
+    mid-screen on the open Fold, the Mail chip is cut in the gutter on the cover (`needs-you/inner-dark-mail.png`,
+    `cover-light-mail.png`); Ask's search results step right row by row (`ask/cover-dark-field-by-hand.png`); Voice
+    notes' Keep / Delete start ~18 px right of the note text (`voice-notes/*`); the Plan coffee card's Not for me
+    (`money/cover-dark-plan-layout.png`); −/+ steppers end ~40 px short of the On pills' right edge
+    (`notifications/*-many.png`, `work/cover-dark-one.png`).
+28. **Lines ending on "·" or a lone word** (med, A14's rule on screens it missed): Needs you's hint "for the next ·" and
+    "£10.99 a month ·"; Health "can't see notifications ·"; Obi is working on "Obi found … · on" and the chaser card
+    wrapping ~140 px early; Trading's alerts "5× ·"; the card sheet's lone "due", "one)", "on Plan)", "0% / ends";
+    Challenges' "Cap a category for the / month" sitting on its pill's edge and "fun / money"; Activity "1 /
+    reminder", "stopped.", lone "log."; Plan's "24 months" chip alone and "a year."; Ask Obi's "6 / months?", "Not /
+    financial advice.".
+29. **Said twice** (med): "Home insurance renews Thu 5 Nov" under both WHAT I DID and WHAT I NEED FROM YOU
+    (`working-on/inner-dark-many.png`); "Obi has your answer" twice and "never sends, books or buys" twice
+    (`working-on/cover-dark-answered.png`); NOT BOOKED / "Not booked ·" and the restaurant's name twice on the call card;
+    "Nothing imported yet" twice (`money/cover-dark-empty-accounts.png`); Money empty's "your month shows here" twice;
+    Navilife's number "takes messages for you" repeating its label (`setup/inner-*.png`); Routines' Morning brief time on
+    the tile and the line; Notifications' "On · 21:30–06:45" beside an On pill.
+30. **The call card's tiles** (med): WINDOW's figure smaller than WHEN's and PEOPLE's, PEOPLE taller, Party size repeating
+    PEOPLE (`working-on/cover-dark-found.png`; the Party size placement is also in B).
+31. **Light contrast** (low): Money's unselected tabs, grey percentages and gold "over usual" (`money/inner-light-many.png`);
+    Work mode's off day circles and commute chips (`work/cover-light-many.png`); Routines' time tiles and paused tile
+    (`routines/cover-light-many.png`); Voice notes' cards and Keep / Delete (`voice-notes/cover-light-many.png`); Ask's
+    tiles (`ask/cover-light-many.png`).
+32. **Smaller ones** (low): Spending's Left £1,942 = in − spent with Bills to come £142 beside it (say what it counts or
+    take bills off; `money/inner-light-many.png`); Kestrel's "About £2,140" for $2,736 at the equity card's rate (~£2,120);
+    Work's commute "About 1 h 20 each way" with no chip lit; bare −/+ and "›" glyphs as ~24–30 dp targets (Work,
+    Notifications, Health); Health "Checking now" beside "5 things need a look"; Setup "All set for now" with "1
+    couldn't be checked"; the card sheet's Charge card / Not a card with no pill; "Save £ a month" reading as a missing
+    figure; the What if slider short of the edge; one date header with a day total and the next without; the Apr bar's
+    label touching May's; No-spend circles ~17 dp; Trading's 1D/1W/1M chips with no line now on the open Fold too
+    (A11 said "The line draws once…", the chips could hide until then); shots' fixtures disagreeing (forecast OUT £270 vs
+    £280 under Bills' £295, Coffee missing from Spending beside Ask Obi's £57.60, statements to 13 vs 15 Oct, "1 payment
+    without a category" vs the sorter's 2 left, Face On on Voice vs off on Health, Trips and Countdowns both "Seville in
+    7 days").
+
+Still showing from A (not counted again): Ask's People tile "waiting for / 1 · +1", setup counts, habits 0 of 1 vs 1 of
+2 on Ask's cover, Health's Call assistant Off.
 
 ## B · For the whole-app layout review (waits on the Navilife look, Needs Meka #51)
 
