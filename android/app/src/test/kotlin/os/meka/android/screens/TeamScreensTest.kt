@@ -34,11 +34,15 @@ import os.meka.android.ask.TeamPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.CaptureApp
+import os.meka.core.domain.CaptureKind
+import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.Notice
 import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.NoticeTier
+import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.TeamPauseRules
 import os.meka.core.domain.TeamAskRules
 import os.meka.core.domain.TeamRules
@@ -132,6 +136,11 @@ class TeamScreensTest {
                     notice("t2", NoticeSource.BINS, "Black bin out tonight", 60),
                     notice("m1", NoticeSource.BILLS, "Water bill due Friday", 120),
                 ))
+                // Beside the mockup (2026-11-14): something waits, so the Waiting on you box is in the shot.
+                core.readRequest(
+                    CapturedItem("v1", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Sam", "Voice message (0:12)", null, now - 30 * 60_000L),
+                    PeopleLists(), setOf("Sam"),
+                )
             }
             core.tick()
         }
@@ -172,6 +181,7 @@ class TeamScreensTest {
                 if (!onScreen("1 heads-up")) fail("$name: Money's heads-up isn't counted")
                 // Week 3's walk-through (A4): the tiles agree with the cards below them.
                 if (onScreen(TeamStatus.NOT_SET_UP.label)) fail("$name: Money says Not set up beside a heads-up today")
+                if (v.waiting.isEmpty()) fail("$name: nothing waits on a busy day, so the Waiting on you box isn't drawn")
             }
         }
         val live = v.cards.count { it.status.live }
@@ -195,6 +205,11 @@ class TeamScreensTest {
         if (count("team-open") != 1 || count("team-pause-short") != 1 || count("team-whole-day") != 1) {
             fail("$name: the unfolded row lacks Open · Pause · Whole day")
         }
+        // Beside the mockup (2026-11-14): Open · Pause · Whole day › sit on one row on the cover screen.
+        val tops = listOf("team-open", "team-pause-short", "team-whole-day").map { tag ->
+            compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+        }
+        if (tops.distinct().size != 1) fail("$name: Open · Pause · Whole day › wrap onto ${tops.distinct().size} rows")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", "cover-dark-unfolded"))
         ScreenShots.assertSensible(compose, "$name-unfolded")
         ScreenShots.assertNoBrokenWords(compose, "$name-unfolded")

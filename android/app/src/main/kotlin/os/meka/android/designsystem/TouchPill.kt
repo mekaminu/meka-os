@@ -41,6 +41,8 @@ fun TouchPill(
     spoken: String? = null,
     /** The word's side padding inside the pill (a narrow Board column uses [MekaSpace.xs] so "To Sat" shows whole). */
     pad: androidx.compose.ui.unit.Dp = MekaSpace.m,
+    /** The label's style; a row of three small pills (Your team's unfolded helper) uses [MekaType.caption]. */
+    style: androidx.compose.ui.text.TextStyle = MekaType.itemMeta,
     onClick: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -58,7 +60,7 @@ fun TouchPill(
             contentAlignment = Alignment.Center,
         ) {
             Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "touch-pill-label") { t ->
-                Text(t, style = MekaType.itemMeta, color = ink, maxLines = 1)
+                Text(t, style = style, color = ink, maxLines = 1)
             }
         }
     }

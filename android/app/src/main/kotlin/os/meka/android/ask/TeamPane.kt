@@ -275,7 +275,8 @@ private fun TeamBox(title: String, modifier: Modifier, trailing: @Composable Row
             Modifier.fillMaxWidth().padding(bottom = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
+            // Beside the mockup (2026-11-14): the box titles are 15 semibold, not the item-title size.
+            Text(title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
             trailing()
         }
         content()
@@ -305,7 +306,7 @@ private fun WaitingBox(rows: List<TeamWaitRow>, modifier: Modifier, onOpen: (Tea
             ) {
                 AgentIcon(w.agent)
                 Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(LoneWordGlue.kept(w.what), style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(LoneWordGlue.kept(w.what), style = MekaType.itemMeta, color = Meka.colors.textPrimary)
                     Text(LoneWordGlue.kept(w.who), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
                 Text("${w.cta} ›", style = MekaType.caption, color = Meka.colors.accent, maxLines = 1)
@@ -340,9 +341,10 @@ private fun HelpersBox(
                 AgentIcon(c.agent)
                 Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-                        Text(c.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1)
+                        // Beside the mockup: the name 15 semibold, its status word small beside the dot.
+                        Text(c.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
                         StatusDot(c.status.live)
-                        Text(c.status.label, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                        Text(c.status.label, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
                             overflow = TextOverflow.Ellipsis)
                     }
                     Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -369,21 +371,22 @@ private fun HelpersBox(
                             Text(LoneWordGlue.kept(l.text), style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                         }
                     }
-                    // The pills wrap on the narrow cover screen rather than run off its edge.
+                    // Beside the mockup: three small pills on one row (caption words, 12 dp sides; Whole day › drawn
+                    // bare with 8 dp sides); they still wrap rather than run off the edge at a large text size.
                     FlowRow(
                         Modifier.fillMaxWidth().padding(top = MekaSpace.xxs),
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                     ) {
                         TouchPill(c.openLabel, Meka.colors.surface, Meka.colors.accent, spoken = "${c.openLabel}: ${c.title}",
-                            modifier = Modifier.testTag("team-open")) { onOpen(c) }
+                            pad = MekaSpace.s, style = MekaType.caption, modifier = Modifier.testTag("team-open")) { onOpen(c) }
                         c.pauseShort?.let { p ->
                             TouchPill(p, Meka.colors.surface, Meka.colors.accent, spoken = "$p: ${c.title}",
-                                modifier = Modifier.testTag("team-pause-short")) { onPause(c) }
+                                pad = MekaSpace.s, style = MekaType.caption, modifier = Modifier.testTag("team-pause-short")) { onPause(c) }
                         }
                         TouchPill("${TeamSimplerRules.WHOLE_DAY} ›", Color.Transparent, Meka.colors.accent,
                             spoken = "${TeamSimplerRules.WHOLE_DAY}: ${c.title}",
-                            modifier = Modifier.testTag("team-whole-day")) { onWholeDay(c) }
+                            pad = MekaSpace.xs, style = MekaType.caption, modifier = Modifier.testTag("team-whole-day")) { onWholeDay(c) }
                     }
                 }
             }
