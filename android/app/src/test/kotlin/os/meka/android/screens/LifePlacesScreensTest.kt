@@ -329,6 +329,7 @@ class LifePlacesScreensTest {
         if (added.to != "Jordan") fail("$name: the promise went to \"${added.to}\", not Jordan")
         until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         ScreenShots.assertShows(compose, name, "Added your promise to Jordan: Lend the ladder")
+        ScreenShots.reshootAfterHand(compose, p.area, "cover-dark-people-by-hand") // Walk-through 2026-11-08 A20: the promise just added
     }
 
     /**

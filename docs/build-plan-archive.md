@@ -6284,3 +6284,7 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Obi is working on: an errand card's buttons (Carry on / Answer, Copy, Stop) and a standing watcher's "Open …" button now start under the card's words (the card's 16 dp padding), like the call card's Play and Up next's Done, instead of being pushed to the right edge; the row gets the xs gap above it that the card's sections use.
 - Fold `WorkingOnPane` (`JobCard` row tagged `errand-actions`, `ErrandCard`'s pill tagged `working-on-open`), Mac `WorkingOnSheet` (`jobCard`, `card`: the leading Spacer moved to the end).
 - `WorkingOnScreensTest.assertActionsStart`: in the errands shots (Answer) and the many-cards shots (Open …) each button sits no further than the card's padding in from its card's left edge. Mac checked nightly.
+
+
+### Found and fixing, week 3 · A20 slice 1 (2026-11-14)
+By-hand screenshots that were byte copies of another state: Routines (by-hand shot mid-walk after Add + Pause; new-list after Save), Notifications, About you, Activity, Needs you, Voice notes, People re-shot at the end of the walk with `ScreenShots.reshootAfterHand`; Team, Voice by-hand and by-hand-more, Working on by-hand, errands-by-hand, try-again and use-found pass `shot = false` to their pane so they no longer save a copy of another test's shot. Tests only (Fold).

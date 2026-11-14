@@ -242,6 +242,7 @@ class TalkActivityScreensTest {
         compose.waitForIdle()
         val left = core.activityView.value.days.flatMap { it.rows }.count { it.canUndo }
         if (left >= doneForYou.size) fail("Activity: Undo didn't take anything back ($left of ${doneForYou.size} still undoable)")
+        ScreenShots.reshootAfterHand(compose, "activity", "cover-dark-by-hand") // Walk-through 2026-11-08 A20: after the Undo
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun activityCoverEmpty() { activity("cover-dark-empty", Fill.EMPTY) }

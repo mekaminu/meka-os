@@ -167,7 +167,7 @@ class VoiceScreensTest {
         }
     }
 
-    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, log: MutableList<String> = mutableListOf()): VoiceScreen {
+    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, log: MutableList<String> = mutableListOf(), shot: Boolean = true): VoiceScreen {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val s = screen(fill)
@@ -189,7 +189,8 @@ class VoiceScreensTest {
         turns()
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("voice", name))
+        // Walk-through 2026-11-08 A20: the by-hand walks only log their taps (the screen is fixed), so they take no shot.
+        if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("voice", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -237,7 +238,7 @@ class VoiceScreensTest {
     private fun byHand() {
         val name = "voice-by-hand"
         val log = mutableListOf<String>()
-        pane("cover-dark-by-hand", Fill.ONE, log = log)
+        pane("cover-dark-by-hand", Fill.ONE, log = log, shot = false)
         fun tap(what: String, matcher: SemanticsMatcher, expect: String) {
             val n = compose.onAllNodes(matcher and hasClickAction())
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no $what to tap")
@@ -257,7 +258,7 @@ class VoiceScreensTest {
     private fun byHandMore() {
         val name = "voice-by-hand-more"
         val log = mutableListOf<String>()
-        pane("cover-dark-by-hand-more", Fill.MANY, log = log)
+        pane("cover-dark-by-hand-more", Fill.MANY, log = log, shot = false)
         val more = compose.onAllNodes(hasText("+2 more") and hasClickAction())
         if (more.fetchSemanticsNodes().isEmpty()) fail("$name: no +2 more to tap")
         more[0].performSemanticsAction(SemanticsActions.OnClick)

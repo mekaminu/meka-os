@@ -231,6 +231,8 @@ class NotificationsScreensTest {
         digest[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.notificationSettings.value.tierFor(first) == NoticeTier.DIGEST }
         if (core.notificationSettings.value.tierFor(first) != NoticeTier.DIGEST) fail("$name: Digest left ${first.label} at ${core.notificationSettings.value.tierFor(first)}")
+        // Walk-through 2026-11-08 A20: the shot shows what the hand set (quiet hours on till 07:15, the first kind in Digest).
+        ScreenShots.reshootAfterHand(compose, "notifications", "cover-dark-by-hand")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }

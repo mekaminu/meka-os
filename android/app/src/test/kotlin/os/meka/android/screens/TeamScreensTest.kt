@@ -123,7 +123,7 @@ class TeamScreensTest {
     private var reviewed: TeamTarget? = null
     private val asked = mutableListOf<Boolean>()
 
-    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, shot: Boolean = true): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -154,7 +154,8 @@ class TeamScreensTest {
         }
         until { onScreen(TeamRules.TITLE) && count("team-card") == 5 }
         compose.waitForIdle()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", name))
+        // Walk-through 2026-11-08 A20: a by-hand walk whose opening is another test's shot takes none of its own.
+        if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", name))
         val v = runBlocking { core.teamView() }
         val lines = listOf(v.subtitle, TeamRules.FOOT) + v.cards.map { it.line } + v.waiting.flatMap { listOf(it.what, it.who) }
         ScreenShots.assertSensible(compose, name)
@@ -260,5 +261,5 @@ class TeamScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverBusy() { pane("cover-dark-busy", Fill.BUSY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverBusyLight() { pane("cover-light-busy", Fill.BUSY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerBusy() { pane("inner-dark-busy", Fill.BUSY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.BUSY)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.BUSY, shot = false)) }
 }

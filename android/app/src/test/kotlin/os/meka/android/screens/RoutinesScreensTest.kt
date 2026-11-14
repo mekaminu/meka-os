@@ -109,7 +109,7 @@ class RoutinesScreensTest {
 
     private fun count(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().size
 
-    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, shot: Boolean = true): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -135,7 +135,8 @@ class RoutinesScreensTest {
         val v = core.routinesView.value
         until { onScreen(RoutineRules.TITLE) && (fill == Fill.EMPTY || onScreen(RoutineRules.YOURS.uppercase())) }
         compose.waitForIdle()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", name))
+        // Walk-through 2026-11-08 A20: a by-hand walk opens on the empty screen, so its shot is taken where the hand has changed it.
+        if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", name))
         val lines = listOf(v.summary, RoutineRules.RULE_LINE) + v.rows.flatMap { listOf(it.name, it.line) } +
             v.starters.flatMap { listOf(it.name, it.line, it.whenLine) }
         ScreenShots.assertSensible(compose, name)
@@ -193,6 +194,7 @@ class RoutinesScreensTest {
         tap("Pause Sunday reset")
         until { sunday()?.on == false }
         if (sunday()?.on != false) fail("$name: the switch didn't pause it")
+        ScreenShots.reshootAfterHand(compose, "routines", "cover-dark-by-hand") // A20: Sunday reset added and paused
         tap("Switch on Sunday reset")
         until { sunday()?.on == true }
         if (sunday()?.on != true) fail("$name: the switch didn't switch it back on")
@@ -296,6 +298,7 @@ class RoutinesScreensTest {
         if (page.steps[1].badge != "Just show") fail("$name: the label he chose wasn't kept (${page.steps[1].badge})")
         if (page.steps.any { it.title.contains("Sam") }) fail("$name: a step that texts someone was saved")
         if (!onScreen("Saved Sunday evening · first run")) fail("$name: the list doesn't say it was saved")
+        ScreenShots.reshootAfterHand(compose, "routines", "cover-dark-new-list") // A20: the list with the routine just saved
     }
 
     /**
@@ -345,10 +348,10 @@ class RoutinesScreensTest {
         if (v.ideas.isNotEmpty()) fail("$name: Bin night is still offered after it was saved")
     }
 
-    @Test @Config(qualifiers = ScreenShots.COVER) fun newRoutine() { newRoutine(pane("cover-dark-new-list", Fill.EMPTY)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun newRoutine() { newRoutine(pane("cover-dark-new-list", Fill.EMPTY, shot = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverMany() { pane("cover-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { pane("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { pane("inner-dark-many", Fill.MANY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.EMPTY)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.EMPTY, shot = false)) }
 }

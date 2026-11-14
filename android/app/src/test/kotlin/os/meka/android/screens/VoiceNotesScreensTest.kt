@@ -233,6 +233,7 @@ class VoiceNotesScreensTest {
         until { VoiceNoteStore.notes.value.orEmpty().size == 1 && onScreen("Put back") }
         if (VoiceNoteStore.notes.value.orEmpty().size != 1) fail("$name: Undo didn't put the note back")
         if (!onScreen(row.title)) fail("$name: the note put back isn't on screen")
+        ScreenShots.reshootAfterHand(compose, "voice-notes", "cover-dark-by-hand") // Walk-through 2026-11-08 A20: kept, then put back
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }

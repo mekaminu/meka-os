@@ -221,7 +221,7 @@ class WorkingOnScreensTest {
         ))
     }
 
-    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, shot: Boolean = true): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
@@ -246,7 +246,8 @@ class WorkingOnScreensTest {
         val v = runBlocking { core.workingOnView() }
         until { onScreen(WorkingOnRules.SWITCHES.uppercase()) }
         compose.waitForIdle()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", name))
+        // Walk-through 2026-11-08 A20: a by-hand walk whose opening is another test's shot takes none of its own.
+        if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", name))
         val lines = listOf(v.summary, WorkingOnRules.INTRO, ObiJobRules.INTRO, ObiJobRules.EMPTY, ObiJobRules.DRAFT_FOOT) +
             v.cards.flatMap { listOfNotNull(it.did, it.need) } + v.jobs.flatMap { listOfNotNull(it.title, it.status, it.did, it.need) } +
             v.switches.map { it.line } + v.calls.flatMap { listOfNotNull(it.status, it.result, it.lengthLine, it.triedAgainLine) } +
@@ -419,18 +420,18 @@ class WorkingOnScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverErrands() { pane("cover-dark-errands", Fill.ERRANDS) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverErrandsLight() { pane("cover-light-errands", Fill.ERRANDS, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerErrands() { pane("inner-dark-errands", Fill.ERRANDS) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsByHand() { errandsByHand(pane("cover-dark-errands-by-hand", Fill.ERRANDS)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun errandsByHand() { errandsByHand(pane("cover-dark-errands-by-hand", Fill.ERRANDS, shot = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBooked() { pane("cover-dark-not-booked", Fill.CALL) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBookedLight() { pane("cover-light-not-booked", Fill.CALL, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerNotBooked() { pane("inner-dark-not-booked", Fill.CALL) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun tryAgainByHand() { tryAgainByHand(pane("cover-dark-try-again", Fill.CALL)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun tryAgainByHand() { tryAgainByHand(pane("cover-dark-try-again", Fill.CALL, shot = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverFound() { pane("cover-dark-found", Fill.FOUND) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverFoundLight() { pane("cover-light-found", Fill.FOUND, ThemeChoice.LIGHT) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun useFoundByHand() { useFoundByHand(pane("cover-dark-use-found", Fill.FOUND)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun useFoundByHand() { useFoundByHand(pane("cover-dark-use-found", Fill.FOUND, shot = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverOne() { pane("cover-dark-one", Fill.ONE) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverMany() { pane("cover-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { pane("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { pane("inner-dark-many", Fill.MANY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.ONE, shot = false)) }
 }

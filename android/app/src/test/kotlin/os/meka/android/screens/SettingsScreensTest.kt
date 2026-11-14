@@ -431,6 +431,8 @@ class SettingsScreensTest {
         until { v().children.any { it.name == "Casey" } }
         if (v().children.none { it.name == "Casey" }) fail("$name: Done on the child field added nobody")
         assertTouchTargets(name)
+        // Walk-through 2026-11-08 A20: the shot shows what the hand changed (the new name, Casey added), not the opening page again.
+        ScreenShots.reshootAfterHand(compose, "about-you", "cover-dark-about-you-by-hand")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun settingsByHand() = handSettings()

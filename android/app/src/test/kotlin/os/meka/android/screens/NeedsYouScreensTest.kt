@@ -269,6 +269,7 @@ class NeedsYouScreensTest {
         tap(name, "Check the passport dates", hasText("Check the passport dates"))
         openedThenClosed(name, "Check the passport dates")
         assertTouchTargets(name)
+        ScreenShots.reshootAfterHand(compose, "needs-you", "cover-dark-by-hand") // Walk-through 2026-11-08 A20: three cards dealt with
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
