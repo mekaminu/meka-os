@@ -629,6 +629,20 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-08 A20 ("one = many above the fold"): true when any piece of [texts] is at least partly on
+     * screen. A one-thing state whose only difference from the many-things state sits lower down (Mail's accounts below
+     * its switches, Fasting's week below the ring) draws the same top as the many state when none of them is: its top
+     * shot is then a copy, so the test keeps only its `-below` shot.
+     */
+    fun anyOnScreen(compose: ComposeContentTestRule, texts: List<String>): Boolean {
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        return texts.any { t ->
+            compose.onAllNodes(hasText(t, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+                .any { it.boundsInRoot.bottom > screen.top && it.boundsInRoot.top < screen.bottom && it.boundsInRoot.height > 0f }
+        }
+    }
+
+    /**
      * Walk-through A15: a screen longer than the Fold's showed only its top, so a state whose difference sits lower
      * down (Mail's second and third accounts, AI's last rows) shot the same as another. Swipes [tag]'s node (default the
      * whole screen) up until the node showing [lastText] is wholly on screen, then shoots `<name>-below`; [settle] runs
@@ -636,7 +650,7 @@ object ScreenShots {
      * of the area. Nothing is shot when it was on screen from the start (the opening shot already shows it).
      */
     fun shootBelow(compose: ComposeContentTestRule, area: String, name: String, lastText: String, settle: () -> Unit,
-                   tag: String = "screen", maxSwipes: Int = 16) {
+                   tag: String = "screen", maxSwipes: Int = 16): Boolean {
         val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
         fun onScreen() = compose.onAllNodes(hasText(lastText, substring = true) or hasContentDescription(lastText, substring = true),
             useUnmergedTree = true).fetchSemanticsNodes().any { it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom }
@@ -647,10 +661,11 @@ object ScreenShots {
             swipes++
         }
         if (!onScreen()) fail("$name: \"$lastText\" never came on screen after $swipes swipes")
-        if (swipes == 0) return
+        if (swipes == 0) return false
         val file = File(path(area, "$name-below"))
         compose.onNodeWithTag("screen").captureRoboImage(file.path)
         assertNotACopy("$name-below", file, null, null)
+        return true
     }
 
     private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {

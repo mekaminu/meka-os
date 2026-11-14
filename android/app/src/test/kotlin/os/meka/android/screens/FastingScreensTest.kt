@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import org.junit.Rule
@@ -118,7 +119,11 @@ class FastingScreensTest {
         }
         settle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("fasting", name))
+        val top = File(ScreenShots.path("fasting", name))
+        compose.onNodeWithTag("screen").captureRoboImage(top.path)
+        // Walk-through A20 ("fasting one = many above the fold"): One and Many run the same fast, and differ only in This
+        // week and History; with neither on screen One's top is Many's byte for byte, so only its -below shot is kept.
+        val topIsMany = fill == Fill.ONE && !ScreenShots.anyOnScreen(compose, listOf("THIS WEEK", "History", "HISTORY", FastingScreenRules.HISTORY_EMPTY))
         check(name)
         ScreenShots.assertShows(compose, name, "Fasting")
         ScreenShots.assertShows(compose, name, "16:8")
@@ -167,6 +172,10 @@ class FastingScreensTest {
             }
         }
         if (stageRowsSeen == 0) fail("$name: no stage row was ever on screen to measure")
+        if (topIsMany) {
+            if (swipes == 0) fail("$name: This week and History weren't on screen at the top, yet nothing scrolled")
+            top.delete()
+        }
     }
 
     /** The most stage rows seen measured in one look, over a shot's scroll. */

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import org.junit.Rule
@@ -191,7 +192,12 @@ class MailScreensTest {
             compose.waitForIdle()
         }
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("mail", name))
+        val top = File(ScreenShots.path("mail", name))
+        compose.onNodeWithTag("screen").captureRoboImage(top.path)
+        // Walk-through A20 ("mail one = many"): One's accounts and Still to connect sit below the switches, so with none of
+        // them on screen its top is Many's top byte for byte; then only its -below shot is kept (once the test passes).
+        val topIsMany = fill == Fill.ONE && v != null &&
+            !ScreenShots.anyOnScreen(compose, v.rows.map { it.title } + listOfNotNull(v.toConnect?.let { LoneWordGlue.kept(it) }))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -242,7 +248,11 @@ class MailScreensTest {
         // Walk-through A15: One, Many and by-hand shot the same top of the screen (the switches; the accounts sit below
         // them), so the end of the page gets its own shot, which must differ from every other.
         val last = if (fill == Fill.ONE || fill == Fill.MANY) v.connects.lastOrNull()?.label ?: v.rows.last().title else null
-        if (below && last != null) ScreenShots.shootBelow(compose, "mail", name, last, settle = { turns(1_000) })
+        val shotBelow = below && last != null && ScreenShots.shootBelow(compose, "mail", name, last, settle = { turns(1_000) })
+        if (topIsMany && below) {
+            if (!shotBelow) fail("$name: One's accounts weren't on screen at the top, yet no -below shot was taken")
+            top.delete()
+        }
         return core
     }
 
