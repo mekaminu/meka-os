@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
@@ -483,8 +485,11 @@ class StudyScreensTest {
         scrollTo(hasTestTag("study-nudge"))
         ScreenShots.assertShows(compose, "cover-dark-nudge", "Nudge me 10 minutes before")
         compose.onNodeWithTag("study-nudge").performClick()
-        compose.mainClock.advanceTimeBy(16L)
-        compose.onNodeWithText("Off", useUnmergedTree = true).assertExists()
+        compose.mainClock.advanceTimeByFrame()
+        // One frame after the tap: the row says Off and so does its pill's word (no Crossfade a frame behind).
+        compose.onNodeWithTag("study-nudge").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Off"))
+        compose.onNode(hasText("Off") and hasAnyAncestor(hasTestTag("study-nudge")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("On") and hasAnyAncestor(hasTestTag("study-nudge")), useUnmergedTree = true).assertDoesNotExist()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)?.nudge == false }
     }
@@ -510,8 +515,11 @@ class StudyScreensTest {
         scrollTo(hasTestTag("study-checkin"))
         ScreenShots.assertShows(compose, "cover-dark-checkin", "Sunday check-in")
         compose.onNodeWithTag("study-checkin").performClick()
-        compose.mainClock.advanceTimeBy(16L)
-        compose.onNodeWithText("Off", useUnmergedTree = true).assertExists()
+        compose.mainClock.advanceTimeByFrame()
+        // One frame after the tap: the row says Off and so does its pill's word (no Crossfade a frame behind).
+        compose.onNodeWithTag("study-checkin").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Off"))
+        compose.onNode(hasText("Off") and hasAnyAncestor(hasTestTag("study-checkin")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("On") and hasAnyAncestor(hasTestTag("study-checkin")), useUnmergedTree = true).assertDoesNotExist()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)?.checkin == false }
     }

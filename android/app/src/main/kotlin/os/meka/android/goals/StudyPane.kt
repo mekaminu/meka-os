@@ -842,10 +842,11 @@ private fun NudgeRow(
             Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
             Text(studyShown(sub), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
-        Crossfade(if (on) "On" else "Off", animationSpec = MekaMotion.appear(reduced), label = "study-nudge-on") { l ->
-            Text(l, style = MekaType.captionStrong, color = if (on) Meka.colors.onAccent else Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
-        }
+        // The word changes in the tap's own frame (a Crossfade composed the new word a frame late now and then: the
+        // nudge test's flake on ci run 43590269192); the pill's fill and the word's colour glide as before.
+        val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "study-nudge-word")
+        Text(if (on) "On" else "Off", style = MekaType.captionStrong, color = fg,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
     }
 }
 

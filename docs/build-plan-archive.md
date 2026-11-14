@@ -6226,6 +6226,11 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Cause: `MekaCore.addHabitToList` called `Goals.addHabit` and then `setHabitAvoid`, `setHabitList` and `setHabitReminder`, each its own `Replica.commitLocal`, and every commit tells the listeners, so `goalsView` was published with the new habit still a Do habit; `addPutsAnAvoidHabitIntoItsList` waited for the habit's name and could read it in that gap (ci run 43523059596). The same half-made habit could flash as Do on screen or reach another device by sync.
 - Fix: `Goals.addHabitToList(title, avoid, list, perWeek, remindAt)` writes title, kind, part of the day, own list and reminder in one commit; the facade calls it. Test `HabitBoardTest.addIntoAListIsOneChangeSoNoViewSeesItHalfMade` (one listener call, already Avoid, its list and reminder; default lists set the part of the day; bad time and blank name refused; syncs whole).
 
+### Study nudge toggle flaky (done 2026-11-14)
+- Cause: the On/Off pill under THIS WEEK (`StudyPane.NudgeRow`, also the Sunday check-in) drew its word inside a `Crossfade`; the row's state flipped in the tap's frame, but the Crossfade sometimes composed the new word one frame later, so "Off" was missing 16 ms after the tap (ci run 43590269192 attempt 1).
+- Fix (app): the word changes in the tap's own frame; the pill's fill and the word's colour still glide on the appear spring (reduced motion: instant).
+- Fix (test, tighter): both toggle tests advance one frame and check the row's state says Off, its pill shows Off and no longer On.
+
 ### readingByHand flaky (done 2026-11-14)
 - Cause: Reading's undo is one commit (`ReadingStore.undo`), so not a half-made write. The test waited for Dune to show as finished in `readingView`, but `said` (the line with Undo) is set only after `finishReading` returns to the pane, a frame or more later, and the Crossfade keeps the old line composed while it fades. The tap on any "Undo:" then sometimes hit Start's Undo ("Undo: On the go: Dune"), which put Dune back up next: "Undo didn't put Dune back on the go" (ci run 43545220211).
 - Fix (app): `ReadingPane.SaidLine` offers Undo only on the line being shown, so a line fading out can't be tapped or found and a quick Undo always takes back the latest command.
