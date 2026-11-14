@@ -364,6 +364,15 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
 /** Kids: a child's size field's pill, then ":" and the size's key (walk-through A15 measures them). */
 internal const val KIDS_SIZE_FIELD_TAG = "kids-size-field"
 
+/** A filled size field's Clear, inside the field's end. */
+@Composable
+private fun KidClearButton(name: String, label: String, onClear: () -> Unit) {
+    Text("Clear", style = MekaType.caption, color = Meka.colors.textTertiary,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClear)
+            .semantics { contentDescription = "Clear $name's ${label.lowercase()} size" }
+            .minTouch().padding(MekaSpace.xs))
+}
+
 @Composable
 private fun KidCardView(
     kid: KidCard,
@@ -423,12 +432,7 @@ private fun KidCardView(
                     row.placeholder, modifier = Modifier.weight(1f), value = texts[key] ?: row.value ?: "", onValue = { texts[key] = it },
                     description = "${kid.name}'s ${row.label.lowercase()} size, for example ${row.hint}",
                     tag = "$KIDS_SIZE_FIELD_TAG:${row.size}",
-                    trailing = if (row.value == null) null else @Composable {
-                            Text("Clear", style = MekaType.caption, color = Meka.colors.textTertiary,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onSave(row.size, "") }
-                                    .semantics { contentDescription = "Clear ${kid.name}'s ${row.label.lowercase()} size" }
-                                    .minTouch().padding(MekaSpace.xs))
-                    },
+                    trailing = if (row.value == null) null else ({ KidClearButton(kid.name, row.label) { onSave(row.size, "") } }),
                 ) { typed ->
                     onSave(row.size, typed)
                 }
