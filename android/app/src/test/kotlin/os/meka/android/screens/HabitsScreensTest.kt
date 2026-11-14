@@ -177,8 +177,8 @@ class HabitsScreensTest {
         show(core)
         compose.onNodeWithTag("habits-add").performClick(); settle()
         compose.onNode(hasContentDescription("Habit name")).performTextInput("No phone in bed")
-        // Each choice settles before the next tap: Add habit's tap reads the choices from the last composition, so a
-        // save before Avoid had recomposed added it as a habit to build (ci run 43460366350).
+        // Each choice settles before the next tap (ci run 43460366350). The habit is made in one commit with its Avoid
+        // and list (Goals.addHabitToList), so the view this test reads never holds it half made (ci run 43523059596).
         compose.onNodeWithTag("habits-add-avoid").performClick(); settle()
         compose.onNodeWithTag("habits-add-list-Night time").performClick(); settle()
         compose.onNodeWithTag("habits-add-save").performClick(); settle()

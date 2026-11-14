@@ -114,6 +114,34 @@ class HabitBoardTest {
     }
 
     @Test
+    fun addIntoAListIsOneChangeSoNoViewSeesItHalfMade() {
+        // The flaky HabitsScreensTest (ci run 43523059596): the add and its Avoid were two commits, and a view between
+        // them showed a Do habit. Now every listener hears of it once, already Avoid, in its list, with its reminder.
+        val seen = mutableListOf<HabitItem?>()
+        fold.replica.addListener { seen += view().habits.firstOrNull { it.title == "No phone" } }
+        val h = g.addHabitToList("No phone", avoid = true, list = "Weekend", perWeek = 2, remindAt = 21 * 60)
+        assertEquals(1, seen.size)
+        val item = seen.single()!!
+        assertTrue(item.avoid)
+        assertEquals("Weekend", item.list)
+        assertEquals(21 * 60, item.remindAt)
+        assertEquals(2, item.targetPerWeek)
+        // A default list sets the part of the day and keeps no list of his own; a blank one is All day.
+        val teeth = g.addHabitToList("Brush teeth", avoid = false, list = "night time")
+        val t = view().habits.first { it.id == teeth }
+        assertEquals(HabitTiming.EVENING, t.timing)
+        assertNull(t.list)
+        assertEquals(false, t.avoid)
+        val water = g.addHabitToList("Water", false, "  ")
+        assertEquals("All day", HabitBoardRules.listName(view().habits.first { it.id == water }))
+        assertFailsWith<ValidationException> { g.addHabitToList("Late", false, "Morning", remindAt = 24 * 60) }
+        assertFailsWith<ValidationException> { g.addHabitToList("  ", false, "Morning") }
+        // It syncs as it was made.
+        fold.sync(); mac.sync()
+        assertTrue(goals(mac).view(mac.tasks.all()).habits.first { it.id == h }.avoid)
+    }
+
+    @Test
     fun avoidHabitsSayAvoidAndTheirStreakCountsDaysKeptClear() {
         val h = added("No biscuits")
         g.setHabitAvoid(h, true)

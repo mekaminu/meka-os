@@ -460,6 +460,37 @@ class Goals(
         return id
     }
 
+    /**
+     * The Habits screen's + Add: a habit made already in its list, as Do or Avoid, with its reminder, in **one** commit,
+     * so no view ever shows it half made (a Do habit that turns Avoid a moment later: the flaky HabitsScreensTest, ci run
+     * 43523059596, read the habit between the add and the Avoid) and another device never syncs the half-made one.
+     * Morning, All day or Night time set its part of the day; any other name is his own list (All day's part of the day).
+     */
+    fun addHabitToList(title: String, avoid: Boolean, list: String, perWeek: Int = 7, remindAt: Int? = null): String {
+        val t = cleanTitle(title, "Name the habit")
+        checkTarget(perWeek)
+        if (remindAt != null && remindAt !in 0 until 24 * 60) throw ValidationException("Pick a time of day")
+        val name = HabitBoardRules.cleanList(list) ?: HabitBoardRules.ALL_DAY
+        val timing = HabitBoardRules.timingOf(name) ?: HabitTiming.ANYTIME
+        val id = ids()
+        val fields = linkedMapOf<String, FieldValue>(
+            ActionableFields.TITLE to t.fv(),
+            ActionableFields.LIFECYCLE to Lifecycle.ACTIVE.name.fv(),
+            HabitFields.TARGET_PER_WEEK to perWeek.fv(),
+            HabitFields.PREFERRED_TIMING to timing.name.fv(),
+            HabitFields.MINUTES to GoalRules.DEFAULT_MINUTES.fv(),
+            ActionableFields.CREATED_AT to nowMs().fv(),
+            ActionableFields.VISIBILITY to Visibility.PRIVATE.name.fv(),
+            ActionableFields.PROVENANCE_SOURCE to "user".fv(),
+            ActionableFields.PROVENANCE_TRUST to Trust.TRUSTED_USER.name.fv(),
+        )
+        if (avoid) fields[HabitFields.KIND] = HabitBoardRules.AVOID.fv()
+        if (HabitBoardRules.timingOf(name) == null) fields[HabitFields.LIST] = name.fv()
+        remindAt?.let { fields[HabitFields.REMIND_AT] = it.fv() }
+        replica.commitLocal(EntityTypes.HABIT, id, fields)
+        return id
+    }
+
     fun editHabit(
         id: String, title: String? = null, perWeek: Int? = null, timing: HabitTiming? = null, minutes: Int? = null,
     ) {

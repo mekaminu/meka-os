@@ -6845,13 +6845,8 @@ class MekaCore(
      * own), how many days a week and an optional daily reminder ([remindAt], minutes after midnight). Returns its id.
      */
     suspend fun addHabitToList(title: String, avoid: Boolean, list: String, perWeek: Int = 7, remindAt: Int? = null): String = onCore {
-        val name = os.meka.core.domain.HabitBoardRules.cleanList(list) ?: os.meka.core.domain.HabitBoardRules.ALL_DAY
-        val timing = os.meka.core.domain.HabitBoardRules.timingOf(name) ?: HabitTiming.ANYTIME
-        val id = goals.addHabit(title, perWeek, timing, os.meka.core.domain.GoalRules.DEFAULT_MINUTES, null)
-        if (avoid) goals.setHabitAvoid(id, true)
-        if (os.meka.core.domain.HabitBoardRules.timingOf(name) == null) goals.setHabitList(id, name)
-        if (remindAt != null) goals.setHabitReminder(id, remindAt)
-        id
+        // One commit (Goals.addHabitToList): the view never shows the habit before its Avoid, list or reminder.
+        goals.addHabitToList(title, avoid, list, perWeek, remindAt)
     }
     /** The circle on the Habits screen: [day] (one of the last seven) marked done, missed or clear. */
     suspend fun setHabitMark(id: String, day: Long, mark: os.meka.core.domain.HabitMark) = onCore { goals.setHabitMark(id, day, mark) }
