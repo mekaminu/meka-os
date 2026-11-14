@@ -88,6 +88,8 @@ class MoneyCheckTest {
         // Nothing found: the empty line.
         val none = MoneyCheck.view(listOf(line(oct16, -500, "TESCO STORES", MoneyCategory.GROCERIES)), oct16, emptyList(), MoneyIdeaState())!!
         assertEquals(MoneyCheck.EMPTY, none.empty)
+        // Said once (walk-through A19): no "no ideas just now" over the empty line.
+        assertEquals("", none.from)
         assertNull(none.total)
         assertNull(MoneyCheck.view(emptyList(), oct16, emptyList(), MoneyIdeaState()))
     }

@@ -133,6 +133,20 @@ class MoneyChatTest {
     }
 
     @Test
+    fun theTryChipsLeaveOutAQuestionAlreadyAsked() {
+        // Walk-through A19 (2026-11-08): Ask Obi re-offered the question just asked.
+        val s = MoneyChat.suggestions(data())
+        val asked = MoneyChatTurn("  can I afford £300 on saturday ", "…")
+        val left = MoneyChat.tries(s, listOf(asked))
+        assertEquals(s.size - 1, left.size)
+        assertTrue("Can I afford £300 on Saturday?" !in left)
+        assertEquals(s, MoneyChat.tries(s, emptyList()))
+        assertEquals(left, MoneyChat.triesAfter(s, listOf("Can I afford £300 on Saturday")))
+        // Another question leaves the chips as they were.
+        assertEquals(s, MoneyChat.triesAfter(s, listOf("Can I afford £400 on Saturday?")))
+    }
+
+    @Test
     fun goalAndTurns() {
         val g = MoneyChat.goal(13_500, 9, thisMonth)
         assertEquals("Save £1,215 by Jul 2027", g.title)

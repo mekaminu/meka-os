@@ -107,10 +107,12 @@ struct MoneyChatPanel: View {
                     if let last = now.last { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { proxy.scrollTo(last.id, anchor: .bottom) } }
                 }
             }
-            if !suggestions.isEmpty {
+            // The Try chips leave out a question already asked (walk-through A19).
+            let tries = MoneyChat.shared.triesAfter(suggestions: suggestions, asked: turns.map(\.question))
+            if !tries.isEmpty {
                 Text(MoneyChat.shared.TRY).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xxs)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    ForEach(suggestions, id: \.self) { q in
+                    ForEach(tries, id: \.self) { q in
                         Button(q) { onAsk(q) }
                             .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textPrimary)
                             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)

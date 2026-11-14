@@ -73,14 +73,16 @@ internal fun MoneyCheckCard(
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         MoneyBrassCard(tag = "money-check-card") {
             MoneyLabel(MoneyCheck.HEAD, color = Meka.colors.accent)
-            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = listOfNotNull(c.total, c.from).joinToString(", ") },
+            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = listOfNotNull(c.total, c.from.ifEmpty { null }).joinToString(", ") },
                 verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 c.total?.let { t ->
                     Crossfade(t, animationSpec = MekaMotion.appear(reduced), label = "money-check-total") { l ->
                         Text(l, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.testTag("money-check-total"))
                     }
                 }
-                Text(moneyShown(c.from), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
+                if (c.from.isNotEmpty()) {
+                    Text(moneyShown(c.from), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
+                }
             }
             c.empty?.let { e -> Text(moneyShown(e), style = MekaType.caption, color = Meka.colors.textSecondary) }
             // Obi's wording: "Written by Obi · Sun 25 Oct" (or that he's reading them) and Ask Obi to look again.

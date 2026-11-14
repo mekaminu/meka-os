@@ -47,7 +47,7 @@ data class MoneyIdeaState(val notFor: Set<String> = emptySet(), val until: Map<S
 
 /**
  * OBI'S MONEY CHECK: [total] "£1,960 a year" (null when no idea saves a sum) over [from] "from 4 ideas", the [ideas]
- * (empty with [empty] said instead), and [away] "2 put away" with Show them again when any are put away.
+ * (empty with [empty] said instead, and [from] then blank so the card says it once: walk-through A19), and [away] "2 put away" with Show them again when any are put away.
  */
 data class MoneyCheckView(
     val total: String?, val from: String, val ideas: List<MoneyIdea>, val empty: String?, val away: String?,
@@ -233,7 +233,7 @@ object MoneyCheck {
         val n = shown.size
         return MoneyCheckWords.apply(MoneyCheckView(
             total = if (save > 0) "${fmt(save)} a year" else null,
-            from = if (n == 0) "no ideas just now" else "from $n idea${if (n == 1) "" else "s"}",
+            from = if (n == 0) "" else "from $n idea${if (n == 1) "" else "s"}",
             ideas = shown, empty = if (n == 0) EMPTY else null, away = awayLine(awayN),
         ), words)
     }

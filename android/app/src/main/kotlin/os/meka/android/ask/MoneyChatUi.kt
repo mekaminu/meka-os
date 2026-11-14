@@ -200,10 +200,12 @@ internal fun MoneyChatContent(
             Text(moneyShown(MoneyChat.WORKING), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
-        if (suggestions.isNotEmpty()) {
+        // The Try chips leave out a question already asked (walk-through A19).
+        val tries = MoneyChat.tries(suggestions, turns)
+        if (tries.isNotEmpty()) {
             Text(moneyShown(MoneyChat.TRY), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                suggestions.forEachIndexed { i, q ->
+                tries.forEachIndexed { i, q ->
                     Text(q, style = MekaType.caption, color = Meka.colors.textPrimary,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                             .clickable(role = Role.Button) { onAsk(q) }.minTouch()

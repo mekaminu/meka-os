@@ -426,7 +426,9 @@ struct MoneySheet: View {
                         if let t = c.total {
                             Text(t).font(MekaType.greeting).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
                         }
-                        Text(c.from).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        if !c.from.isEmpty {
+                            Text(c.from).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        }
                     }
                     .accessibilityElement(children: .combine)
                     if let e = c.empty {

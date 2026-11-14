@@ -239,6 +239,20 @@ object MoneyChat {
         return out
     }
 
+    /**
+     * The "Try" chips still worth offering under [turns] (walk-through A19, 2026-11-08: Ask Obi re-offered the question
+     * just asked): any already asked, same words with case, spaces and the end mark aside, is left out.
+     */
+    fun tries(suggestions: List<String>, turns: List<MoneyChatTurn>): List<String> = triesAfter(suggestions, turns.map { it.question })
+
+    /** [tries] from the questions [asked] alone (the Mac keeps its own turn lines). */
+    fun triesAfter(suggestions: List<String>, asked: List<String>): List<String> {
+        val gone = asked.map(::said).toSet()
+        return suggestions.filter { said(it) !in gone }
+    }
+
+    private fun said(q: String): String = q.trim().lowercase().split(' ').filter { it.isNotEmpty() }.joinToString(" ").trimEnd('?', '.', '!', ' ')
+
     /** The goal Make it a goal makes: "Save £1,800 by Apr 2027", its target the total, due the end of that month. */
     data class Goal(val title: String, val target: String, val dueDay: Long, val horizon: GoalHorizon)
 
