@@ -159,8 +159,15 @@ object TickerRules {
 object BedsideTickerRules {
     /** Half Today's speed. */
     const val SPEED_DP_PER_S = TickerRules.SPEED_DP_PER_S / 2
-    /** The strip's opacity under the clock (the clock's own lines stay as they are). */
+    /** The strip's opacity under the clock in Dark (the clock's own lines stay as they are). */
     const val ALPHA = 0.6f
+
+    /**
+     * The strip's opacity for the theme (walk-through 2026-11-08, A18): dimmed to [ALPHA] in Dark, where the clock
+     * sits at night; whole in Light, where 0.6 left the white tiles' headlines and "BBC News · 2 h ago" under 3:1 on
+     * the pale page (the meta 2.0:1).
+     */
+    fun alpha(dark: Boolean): Float = if (dark) ALPHA else 1f
     /** At most this many stories (the match card comes on top). */
     const val MAX_ITEMS = 6
 

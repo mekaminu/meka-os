@@ -21,6 +21,7 @@ struct FastingSheet: View {
     static var timeFont: Font { Font.system(size: MekaTextScale.size(36), weight: .bold) } // type: ok, beside the mockup (FastingBesideRules.TIME_SP at the Mac's scale)
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
@@ -283,7 +284,11 @@ struct FastingSheet: View {
 
     private func stageRow(_ row: FastingStageRow, fasting: Bool) -> some View {
         let open = stageOpen == row.stage.id
-        let dot: Color = row.here ? palette.accent.mix(with: .white, by: 0.3) : (row.reached ? palette.accent : palette.hairline)
+        // A18: the stage he's in deepens in Light (lifts in Dark), a stage ahead is the tertiary ink (the hairline was
+        // 1.2:1 in Light) and only Dark dims the rows ahead (FastingScreenRules.notYetAlpha), as on the Fold.
+        let dark = scheme == .dark
+        let here: Color = dark ? palette.accent.mix(with: .white, by: 0.3) : palette.accent.mix(with: .black, by: 0.25)
+        let dot: Color = row.here ? here : (row.reached ? palette.accent : palette.textTertiary)
         return Button {
             MekaHaptics.tick()
             stageOpen = open ? nil : row.stage.id
@@ -308,7 +313,7 @@ struct FastingSheet: View {
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(row.here ? palette.accent.opacity(0.1) : palette.surface))
-            .opacity(fasting && !row.reached ? 0.7 : 1)
+            .opacity(fasting && !row.reached ? Double(FastingScreenRules.shared.notYetAlpha(dark: dark)) : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
@@ -381,6 +386,7 @@ struct FastingSheet: View {
 /// tip at the sweep's end that breathes while a fast runs, and the time in the middle. 280 pt across.
 private struct FastingBigRing: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     let screen: FastingScreen
     let palette: MekaPalette
     var burst: Double = 0
@@ -394,7 +400,9 @@ private struct FastingBigRing: View {
         let r = side / 2 - stroke / 2 - 8
         let light = palette.accent.mix(with: .white, by: 0.4)
         ZStack {
-            Circle().stroke(palette.surfaceRaised, lineWidth: stroke).frame(width: r * 2, height: r * 2)
+            // A18: the track token (surfaceRaised was 1.1:1 in Light), markers ahead in the tertiary ink whole, and
+            // in Light the knob ringed in the accent so it has an edge on the pale page.
+            Circle().stroke(palette.track, lineWidth: stroke).frame(width: r * 2, height: r * 2)
             if s.isFasting && s.fraction > 0 {
                 Circle().trim(from: 0, to: CGFloat(s.fraction))
                     .stroke(LinearGradient(colors: [light, palette.accent], startPoint: .topLeading, endPoint: .bottomTrailing),
@@ -406,7 +414,7 @@ private struct FastingBigRing: View {
             ForEach(s.marks, id: \.label) { m in
                 ZStack {
                     Circle().fill(m.passed ? palette.onAccent : palette.background).frame(width: 12, height: 12)
-                    Circle().fill(m.passed ? palette.onAccent : palette.textTertiary.opacity(0.6)).frame(width: 8, height: 8)
+                    Circle().fill(m.passed ? palette.onAccent : palette.textTertiary).frame(width: 8, height: 8)
                 }
                 .offset(at(Double(m.fraction), r))
             }
@@ -416,6 +424,7 @@ private struct FastingBigRing: View {
                                                  center: .center, startRadius: 0, endRadius: 22))
                         .frame(width: 44, height: 44)
                     Circle().fill(light.mix(with: .white, by: 0.5)).frame(width: 22, height: 22)
+                    if scheme != .dark { Circle().strokeBorder(palette.accent, lineWidth: 2).frame(width: 22, height: 22) }
                 }
                 .offset(at(Double(s.fraction), r))
                 .animation(reduceMotion ? nil : .linear(duration: 1), value: s.fraction)
@@ -471,7 +480,7 @@ private struct FastWeekRing: View {
                 : palette.accent.opacity(dark ? 0.5 : 0.8))
         VStack(spacing: MekaSpace.xxs) {
             ZStack {
-                Circle().stroke(palette.surfaceRaised, lineWidth: 5)
+                Circle().stroke(palette.track, lineWidth: 5) // A18: seen in Light too
                 if shown > 0 {
                     Circle().trim(from: 0, to: shown)
                         .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))

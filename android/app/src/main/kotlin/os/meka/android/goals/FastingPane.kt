@@ -382,10 +382,12 @@ private fun BigRing(s: FastingScreen, burst: Float, modifier: Modifier = Modifie
     }
     val accent = Meka.colors.accent
     val light = lerp(accent, Color.White, 0.4f)
-    val track = Meka.colors.surfaceRaised
+    // A18: every ink from FastingInk, so the track, the markers ahead and the knob read in Light too.
+    val ink = FastingInk.of(Meka.colors, Meka.theme.isDark)
+    val track = ink.track
     val bg = Meka.colors.background
     val passedDot = Meka.colors.onAccent
-    val markAhead = Meka.colors.textTertiary.copy(alpha = 0.6f)
+    val markAhead = ink.markAhead
     val spoken = "${s.topLine}. ${s.bigTime}. ${s.subLine}"
     BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         val side = if (maxWidth < 300.dp) maxWidth else 300.dp
@@ -415,7 +417,8 @@ private fun BigRing(s: FastingScreen, burst: Float, modifier: Modifier = Modifie
                 if (s.showTip) {
                     val p = at(sweep)
                     drawCircle(Brush.radialGradient(listOf(light.copy(alpha = 0.55f * breath), Color.Transparent), p, 22.dp.toPx()), 22.dp.toPx(), p)
-                    drawCircle(lerp(light, Color.White, 0.5f), 11.dp.toPx(), p)
+                    drawCircle(ink.knob, 11.dp.toPx(), p)
+                    ink.knobEdge?.let { drawCircle(it, 11.dp.toPx(), p, style = Stroke(2.dp.toPx())) }
                 }
                 // The "you did it" burst: a ring of light spreading out past the track, fading as it goes.
                 if (burst > 0f) {
@@ -487,10 +490,11 @@ private fun Badge(evidence: String, tone: EvidenceTone) {
 @Composable
 private fun StageRow(row: FastingStageRow, fasting: Boolean, open: Boolean, onClick: () -> Unit) {
     val accent = Meka.colors.accent
+    val ink = FastingInk.of(Meka.colors, Meka.theme.isDark)
     val dot = when {
-        row.here -> lerp(accent, Color.White, 0.3f)
+        row.here -> ink.stageHere
         row.reached -> accent
-        else -> Meka.colors.hairline
+        else -> ink.stageAhead
     }
     val dim = fasting && !row.reached
     val pad by animateDpAsState(if (open) MekaSpace.xs else 0.dp, MekaMotion.expand(Meka.reducedMotion), label = "stage-pad")
@@ -498,7 +502,7 @@ private fun StageRow(row: FastingStageRow, fasting: Boolean, open: Boolean, onCl
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
             .background(if (row.here) accent.copy(alpha = 0.1f) else Meka.colors.surface)
             .clickable(role = Role.Button) { onClick() }
-            .graphicsLayer { alpha = if (dim) 0.7f else 1f }
+            .graphicsLayer { alpha = if (dim) ink.notYetAlpha else 1f }
             // The row is the 48 dp touch target and no taller (was 64 dp: 8 dp more above and below); open, it keeps
             // 8 dp above and below its words.
             .padding(horizontal = MekaSpace.m, vertical = pad)
@@ -556,7 +560,7 @@ private fun WeekRing(d: FastingWeekRing, modifier: Modifier) {
         d.isToday -> if (dark) lerp(accent, Color.White, 0.3f) else lerp(accent, Color.Black, 0.25f)
         else -> accent.copy(alpha = if (dark) 0.5f else 0.8f)
     }
-    val track = Meka.colors.surfaceRaised
+    val track = Meka.colors.track
     Column(modifier.semantics { contentDescription = d.spoken }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Canvas(Modifier.size(40.dp)) {
             val stroke = 5.dp.toPx()

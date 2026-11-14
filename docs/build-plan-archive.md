@@ -5700,6 +5700,18 @@ for, Someday's kinds, Shopping's line and Got) and the empty lines start 8 dp in
 ListsScreensTest's tab check fails on two sizes, a label under 6 dp from its edge or a count not drawn, and the Many
 shots check YOU PROMISED's left edge against its first row's title. Fold only; no core change.
 
+Slice (2026-11-14): **A18, Light contrast.** New colour role `track` in design/tokens/tokens.json (dark #26262B, light
+#CFCBBF), generated for the Fold, the watch and the Mac, with a per-mode floor in the contrast gate (design/generate.mjs:
+1.25:1 dark, 1.5:1 light, on background and surface); ADR-012 addendum. Fasting (Fold FastingPane via the new
+FastingInk, FastingTodayCard; Mac FastingSheet, FastingSection, FastingTodayCard): the big ring's and the week rings'
+track use it (surfaceRaised was 1.1:1 in Light); markers ahead are textTertiary whole (was at 0.6, 2.0:1); the stage
+dot not reached yet is textTertiary (the hairline was 1.2:1), the stage he's in deepens toward black in Light; rows
+ahead dim to 0.7 only in Dark (core FastingScreenRules.notYetAlpha); in Light the knob gets a 2 dp accent edge. Bedside
+clock: the news strip's opacity is core BedsideTickerRules.alpha(dark), 0.6 in Dark and whole in Light (the meta was
+2.0:1). Tests: android FastingInkTest (every mark ≥ 3:1 on the page and the card in both themes, tracks over their floor,
+the knob's edge, the bedside meta), core FastingScreenTest.stagesNotReachedDimOnlyInDark, BedsideTickerTest. No server
+change, no migration.
+
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 
 Seen on Meka's three Today screenshots 2026-11-08 22:09 (folded phone). Original item text:

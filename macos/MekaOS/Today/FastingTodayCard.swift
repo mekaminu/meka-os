@@ -28,7 +28,7 @@ struct FastingTodayCardView: View {
             Button { model.showFasting = true } label: {
                 HStack(spacing: MekaSpace.m) {
                     ZStack {
-                        Circle().stroke(palette.surfaceRaised, lineWidth: 7)
+                        Circle().stroke(palette.track, lineWidth: 7) // A18: the track token
                         Circle().trim(from: 0, to: CGFloat(card.fraction))
                             .stroke(palette.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round))
                             .rotationEffect(.degrees(-90))

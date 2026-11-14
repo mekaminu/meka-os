@@ -62,6 +62,9 @@ class BedsideTickerTest {
     fun itDriftsAtHalfTodaysSpeedAndIsDimmer() {
         assertEquals(TickerRules.SPEED_DP_PER_S / 2, BedsideTickerRules.SPEED_DP_PER_S)
         assertTrue(BedsideTickerRules.ALPHA < 1f && BedsideTickerRules.ALPHA > 0.3f)
+        // Dimmer only in Dark (A18): Light keeps the strip whole so its headlines and meta stay readable.
+        assertEquals(BedsideTickerRules.ALPHA, BedsideTickerRules.alpha(dark = true))
+        assertEquals(1f, BedsideTickerRules.alpha(dark = false))
         // One second at the bedside goes half as far as on Today.
         val today = TickerRules.step(TickerDrift.START, 100, 1000f)
         val bedside = TickerRules.stepAt(TickerDrift.START, 100, 1000f, BedsideTickerRules.SPEED_DP_PER_S)

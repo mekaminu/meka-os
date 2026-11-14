@@ -131,6 +131,14 @@ object FastingScreenRules {
     const val MORE_OPTIONS_PROMPT = "Longer fast or started earlier?"
     const val MORE_OPTIONS = "More options"
     const val STAGES_TITLE = "Stages · tap for more"
+
+    /**
+     * How far a stage not reached yet is dimmed while a fast runs (walk-through 2026-11-08, A18). Dark dims it to 0.7;
+     * Light keeps it whole, as 0.7 there took its time and dot under 3:1 on the white row. The not-yet dot is the
+     * tertiary ink (the hairline it was is 1.2:1), so reached and not yet still read apart by colour.
+     */
+    fun notYetAlpha(dark: Boolean): Float = if (dark) NOT_YET_ALPHA_DARK else 1f
+    const val NOT_YET_ALPHA_DARK = 0.7f
     const val NOW_TITLE = "What’s happening now"
     /** Under the stages, word for word from the design. */
     const val STAGES_NOTE = "Timings are typical, not exact: they vary with your last meal, activity and body. For fasts over 72 hours, or if you take medication or have a health condition, check with your GP first."

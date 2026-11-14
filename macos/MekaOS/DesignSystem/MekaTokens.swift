@@ -7,6 +7,7 @@ struct MekaPalette {
     let surface: Color
     let surfaceRaised: Color
     let hairline: Color
+    let track: Color
     let textPrimary: Color
     let textSecondary: Color
     let textTertiary: Color
@@ -38,6 +39,7 @@ extension MekaPalette {
         surface: Color(.sRGB, red: 0.0549, green: 0.0549, blue: 0.0627, opacity: 1),
         surfaceRaised: Color(.sRGB, red: 0.0902, green: 0.0902, blue: 0.1020, opacity: 1),
         hairline: Color(.sRGB, red: 0.1490, green: 0.1490, blue: 0.1686, opacity: 1),
+        track: Color(.sRGB, red: 0.1490, green: 0.1490, blue: 0.1686, opacity: 1),
         textPrimary: Color(.sRGB, red: 0.9569, green: 0.9569, blue: 0.9608, opacity: 1),
         textSecondary: Color(.sRGB, red: 0.6314, green: 0.6314, blue: 0.6667, opacity: 1),
         textTertiary: Color(.sRGB, red: 0.3882, green: 0.3882, blue: 0.4196, opacity: 1),
@@ -70,6 +72,7 @@ extension MekaPalette {
         surface: Color(.sRGB, red: 1.0000, green: 1.0000, blue: 1.0000, opacity: 1),
         surfaceRaised: Color(.sRGB, red: 0.9490, green: 0.9451, blue: 0.9255, opacity: 1),
         hairline: Color(.sRGB, red: 0.8941, green: 0.8863, blue: 0.8549, opacity: 1),
+        track: Color(.sRGB, red: 0.8118, green: 0.7961, blue: 0.7490, opacity: 1),
         textPrimary: Color(.sRGB, red: 0.0667, green: 0.0667, blue: 0.0745, opacity: 1),
         textSecondary: Color(.sRGB, red: 0.3569, green: 0.3569, blue: 0.3882, opacity: 1),
         textTertiary: Color(.sRGB, red: 0.4941, green: 0.4941, blue: 0.5255, opacity: 1),

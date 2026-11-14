@@ -20,7 +20,7 @@ struct FastingSection: View {
                 Button { model.showFasting = true } label: {
                     HStack(spacing: MekaSpace.m) {
                         ZStack {
-                            Circle().stroke(palette.surfaceRaised, lineWidth: 5)
+                            Circle().stroke(palette.track, lineWidth: 5) // A18: the track token
                             if s.isFasting {
                                 Circle().trim(from: 0, to: CGFloat(s.fraction))
                                     .stroke(palette.accent, style: StrokeStyle(lineWidth: 5, lineCap: .round))

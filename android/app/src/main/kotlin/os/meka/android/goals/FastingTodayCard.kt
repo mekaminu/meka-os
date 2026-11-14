@@ -85,7 +85,7 @@ fun FastingTodayCardView(
     ) {
         Box(Modifier.size(RING), contentAlignment = Alignment.Center) {
             val accent = colors.accent
-            val track = colors.surfaceRaised
+            val track = colors.track // A18: the track token, seen in Light too
             Canvas(Modifier.size(RING)) {
                 val stroke = 7.dp.toPx()
                 val inset = stroke / 2

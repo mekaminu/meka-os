@@ -162,6 +162,7 @@ private fun blend(a: MekaColors, b: MekaColors, t: Float): MekaColors = when (t)
         money5 = lerp(a.money5, b.money5, t),
         money6 = lerp(a.money6, b.money6, t),
         money7 = lerp(a.money7, b.money7, t),
+        track = lerp(a.track, b.track, t),
     )
 }
 

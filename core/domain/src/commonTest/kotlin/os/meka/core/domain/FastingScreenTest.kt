@@ -241,4 +241,12 @@ class FastingScreenTest {
         assertEquals("1 minute", FastingScreenRules.spokenLength(60_000L))
         assertEquals("2 hours", FastingScreenRules.spokenLength(2 * hourMs))
     }
+
+    @Test
+    fun stagesNotReachedDimOnlyInDark() {
+        // A18: Light keeps a not-yet stage whole (0.7 there took it under 3:1); Dark still dims it.
+        assertEquals(FastingScreenRules.NOT_YET_ALPHA_DARK, FastingScreenRules.notYetAlpha(dark = true))
+        assertTrue(FastingScreenRules.NOT_YET_ALPHA_DARK < 1f)
+        assertEquals(1f, FastingScreenRules.notYetAlpha(dark = false))
+    }
 }

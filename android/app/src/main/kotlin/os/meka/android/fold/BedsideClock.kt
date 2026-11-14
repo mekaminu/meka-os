@@ -280,7 +280,7 @@ private fun BedsideClockContent(core: MekaCore, fold: FoldState, onBack: () -> U
 
 /**
  * Today's news strip under the bedside clock (news ticker, slice 4): slower ([BedsideTickerRules.SPEED_DP_PER_S]) and
- * dimmer ([BedsideTickerRules.ALPHA]); always drifting on the charger, calm on battery; Off in Appearance hides it, and
+ * dimmer in Dark ([BedsideTickerRules.alpha]; whole in Light, A18); always drifting on the charger, calm on battery; Off in Appearance hides it, and
  * it fades away when quiet hours start. [openNews] gets a story's id, or "" for the match (News leads with it).
  */
 @Composable
@@ -295,7 +295,7 @@ private fun BedsideNews(
         modifier = modifier,
     ) {
         NewsTickerStrip(
-            core, ticker, BedsideTickerRules.mode(todayMode, charging), Modifier.alpha(BedsideTickerRules.ALPHA),
+            core, ticker, BedsideTickerRules.mode(todayMode, charging), Modifier.alpha(BedsideTickerRules.alpha(Meka.theme.isDark)),
             openStory = { openNews(it) }, openMatch = { openNews("") },
             speedDpPerS = BedsideTickerRules.SPEED_DP_PER_S, stillInset = MekaSpace.gutter,
         )
