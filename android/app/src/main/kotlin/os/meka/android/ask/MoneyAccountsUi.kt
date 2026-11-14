@@ -85,7 +85,7 @@ internal fun MoneyAccountsCard(items: List<MoneyAccountItem>, modifier: Modifier
                     // Mockup check item 7: no cut words; a long name or line wraps instead.
                     Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2)
                     Crossfade(r.sub, animationSpec = MekaMotion.appear(reduced), label = "money-account-sub-${r.id}") { l ->
-                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 3)
+                        Text(moneyShown(l), style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 3)
                     }
                 }
                 Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "money-account-amount-${r.id}") { a ->
@@ -126,7 +126,7 @@ internal fun MoneyMoreCard(rows: List<MoneyMoreRow>, modifier: Modifier = Modifi
                 Column(Modifier.weight(1f)) {
                     Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-more-line-${r.kind}") { l ->
-                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                        Text(moneyShown(l), style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary,
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -149,14 +149,14 @@ internal fun MoneyDataDetails(
     var asking by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(MoneyAccountList.IMPORT_HEAD.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        Text(MoneyAccountList.IMPORT_ROW_SUB, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(moneyShown(MoneyAccountList.IMPORT_ROW_SUB), style = MekaType.caption, color = Meka.colors.textSecondary)
         Field(MoneyRules.ACCOUNT_HINT, value = account, onValue = onAccount) { onAccount(it) }
         Text(if (busy) "Reading the file…" else MoneyRules.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, enabled = !busy, onClick = onPick)
                 .minTouch().padding(vertical = MekaSpace.xs).testTag("money-import-file"))
-        if (connectLater) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (connectLater) Text(moneyShown(MoneyRules.CONNECT_LATER), style = MekaType.caption, color = Meka.colors.textTertiary)
         Text("EXPORT", style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.m))
-        Text(MoneyMore.EXPORT_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(moneyShown(MoneyMore.EXPORT_LINE), style = MekaType.caption, color = Meka.colors.textSecondary)
         Text(MoneyMore.EXPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onExport)
                 .minTouch().padding(vertical = MekaSpace.xs).testTag("money-export-all"))
@@ -199,7 +199,7 @@ internal fun MoneyAccountDetails(
     var name by rememberSaveable(a.id) { mutableStateOf(a.nick ?: a.title) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         a.fullName?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        Text(a.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(moneyShown(a.line), style = MekaType.caption, color = Meka.colors.textSecondary)
         // Accounts' rest: Name — type what to call it and press Done on the keyboard; clear it for its own name.
         Text(MoneyAccountNames.RENAME.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
         Field(MoneyAccountNames.RENAME_HINT, modifier = Modifier.testTag("money-account-name"), value = name,
@@ -209,7 +209,7 @@ internal fun MoneyAccountDetails(
             Text(t, style = if (a.amount != null) MekaType.nowTitle else MekaType.body,
                 color = if (a.amount != null) Meka.colors.textPrimary else Meka.colors.textSecondary, modifier = Modifier.testTag("money-account-amount"))
         }
-        a.balanceLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        a.balanceLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
         if (a.canType) Field(MoneyWorth.BALANCE_HINT, modifier = Modifier.testTag("money-account-balance"), value = balance,
             onValue = { balance = it }, description = "${MoneyWorth.BALANCE_HINT} for ${a.title}") { balance = ""; onBalance(it) }
         Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -254,7 +254,7 @@ private fun SwitchRow(label: String, line: String, on: Boolean, tag: String, onC
     ) {
         Column(Modifier.weight(1f)) {
             Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         TripPill(if (on) "On" else "Off", on = on, description = "$label, ${if (on) "on" else "off"}", onClick = onClick)
     }

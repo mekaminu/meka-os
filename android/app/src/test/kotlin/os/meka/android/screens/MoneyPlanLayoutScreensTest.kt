@@ -111,7 +111,7 @@ class MoneyPlanLayoutScreensTest {
     }
 
     private fun shows(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-    private fun showsText(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    private fun showsText(text: String) = compose.onAllNodes(ScreenShots.plainText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun tap(tag: String) {
         compose.onNodeWithTag(tag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)

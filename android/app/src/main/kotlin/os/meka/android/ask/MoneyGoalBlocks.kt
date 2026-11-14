@@ -56,7 +56,7 @@ internal fun MoneyGoalsCard(gv: MoneyGoalsView, modifier: Modifier = Modifier, o
         verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
         if (gv.rows.isEmpty()) {
-            Text(gv.empty ?: MoneyGoals.EMPTY, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(gv.empty ?: MoneyGoals.EMPTY), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         gv.rows.forEach { r -> GoalCardRow(r) { onOpen(r.id) } }
     }
@@ -102,12 +102,12 @@ internal fun MoneyGoalDetails(r: MoneyGoalRow, gv: MoneyGoalsView, onFollow: (St
         Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-goal-sheet-line") { l ->
             Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
         }
-        Text(r.note, style = MekaType.caption, color = if (r.behind) Meka.colors.money3 else Meka.colors.textSecondary)
-        Text(MoneyGoals.FOLLOW, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+        Text(moneyShown(r.note), style = MekaType.caption, color = if (r.behind) Meka.colors.money3 else Meka.colors.textSecondary)
+        Text(moneyShown(MoneyGoals.FOLLOW), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
         Crossfade(r.follows ?: MoneyGoals.NOT_FOLLOWING, animationSpec = MekaMotion.appear(reduced), label = "money-goal-sheet-follows") { l ->
-            Text(l, style = MekaType.caption, color = if (r.follows != null) Meka.colors.accent else Meka.colors.textSecondary)
+            Text(moneyShown(l), style = MekaType.caption, color = if (r.follows != null) Meka.colors.accent else Meka.colors.textSecondary)
         }
-        if (r.choices.isEmpty()) Text(MoneyGoals.NO_ACCOUNTS, style = MekaType.caption, color = Meka.colors.textSecondary)
+        if (r.choices.isEmpty()) Text(moneyShown(MoneyGoals.NO_ACCOUNTS), style = MekaType.caption, color = Meka.colors.textSecondary)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             r.choices.forEach { c ->
                 val col by animateColorAsState(if (c.picked) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-goal-chip-${c.accountId}")
@@ -119,6 +119,6 @@ internal fun MoneyGoalDetails(r: MoneyGoalRow, gv: MoneyGoalsView, onFollow: (St
                         .testTag("money-goal-follow-${c.accountId}"))
             }
         }
-        Text(gv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(gv.foot), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

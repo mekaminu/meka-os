@@ -161,7 +161,7 @@ class MoneyTradingLayoutScreensTest {
     }
 
     private fun shows(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-    private fun showsText(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    private fun showsText(text: String) = compose.onAllNodes(ScreenShots.plainText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun tap(tag: String) {
         compose.onNodeWithTag(tag, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
@@ -193,6 +193,11 @@ class MoneyTradingLayoutScreensTest {
         assertTrue(shows("money-trading-note"), "before the first read the equity card says it's reading")
         assertEquals(1, compose.onAllNodesWithText("Reading it from Hyperliquid", substring = true, ignoreCase = true, useUnmergedTree = true)
             .fetchSemanticsNodes().size, "reading from Hyperliquid should be said once")
+        // Walk-through 2026-11-08, A14 ("minute or / two"): on the cover screen the reading line never ends on a lone word.
+        val note = compose.onNodeWithTag("money-trading-note", useUnmergedTree = true).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text }
+        ScreenShots.assertNoLoneWords(compose, "trading-cover-reading", listOf(note))
+        ScreenShots.assertNoDotStartingALine(compose, "trading-cover-reading", listOf(note))
         if (shows("money-trading-readonly")) fail("the Read-only mark sits on a card with no figures")
         if (showsText("Dollars")) fail("the Dollars · Pounds row still shows before any figures")
         if (showsText(TradingTracker.FOOT)) fail("the tracker's long source line still sits on the page")

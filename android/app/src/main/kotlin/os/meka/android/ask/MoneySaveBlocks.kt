@@ -108,9 +108,9 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
             Crossfade(v.total, animationSpec = MekaMotion.appear(reduced), label = "money-save-total") { t ->
                 Text(t, style = MekaType.greeting, color = Meka.colors.accent, modifier = Modifier.testTag("money-save-total"))
             }
-            Text(v.end, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
+            Text(moneyShown(v.end), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
         }
-        Text(v.split, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(v.split), style = MekaType.caption, color = Meka.colors.textTertiary)
         val obiColor by animateColorAsState(if (v.obiLit) Meka.colors.money3 else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-save-obi")
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.xs),
@@ -121,7 +121,7 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
                     .background(Brush.radialGradient(listOf(Meka.colors.accent, Meka.colors.accent.copy(alpha = 0.35f)))),
             )
             Crossfade(v.obi, animationSpec = MekaMotion.appear(reduced), label = "money-save-obi-line", modifier = Modifier.weight(1f)) { o ->
-                Text(o, style = MekaType.caption, color = obiColor, modifier = Modifier.testTag("money-save-obi"))
+                Text(moneyShown(o), style = MekaType.caption, color = obiColor, modifier = Modifier.testTag("money-save-obi"))
             }
         }
         Text(

@@ -91,7 +91,7 @@ internal fun MoneyClearCard(base: MoneyClearBase, modifier: Modifier = Modifier,
             ClearTile(v.interestLabel, v.interest, Meka.colors.textPrimary, reduced, "money-clear-interest", Modifier.weight(1f))
         }
         Crossfade(v.vsMin, animationSpec = MekaMotion.appear(reduced), label = "money-clear-min") { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.money3)
+            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.money3)
         }
         val obiColor by animateColorAsState(if (v.obiLit) Meka.colors.money3 else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-clear-obi")
         Row(
@@ -103,7 +103,7 @@ internal fun MoneyClearCard(base: MoneyClearBase, modifier: Modifier = Modifier,
                     .background(Brush.radialGradient(listOf(Meka.colors.accent, Meka.colors.accent.copy(alpha = 0.35f)))),
             )
             Crossfade(v.obi, animationSpec = MekaMotion.appear(reduced), label = "money-clear-obi-line", modifier = Modifier.weight(1f)) { o ->
-                Text(o, style = MekaType.caption, color = obiColor, modifier = Modifier.testTag("money-clear-obi"))
+                Text(moneyShown(o), style = MekaType.caption, color = obiColor, modifier = Modifier.testTag("money-clear-obi"))
             }
         }
         val goal = v.goalTitle
@@ -136,7 +136,7 @@ private fun ClearRow(r: MoneyClearRow, reduced: Boolean) {
         Column(Modifier.weight(1f)) {
             Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(r.rate, animationSpec = MekaMotion.appear(reduced), label = "money-clear-rate-${r.id}") { l ->
-                Text(l, style = MekaType.caption, color = if (r.rateLit) Meka.colors.money3 else Meka.colors.textSecondary)
+                Text(moneyShown(l), style = MekaType.caption, color = if (r.rateLit) Meka.colors.money3 else Meka.colors.textSecondary)
             }
         }
         Text(r.owed, style = MekaType.metaStrong, color = Meka.colors.textPrimary)

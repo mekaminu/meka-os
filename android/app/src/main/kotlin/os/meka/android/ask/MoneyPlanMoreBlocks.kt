@@ -71,7 +71,7 @@ internal fun MoneyGoalsEmptyCard(e: MoneyGoalsEmpty, modifier: Modifier = Modifi
             ) { Text("◎", style = MekaType.body, color = Meka.colors.accent) }
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(e.title, style = MekaType.upNextCardTitle, color = Meka.colors.textPrimary)
-                Text(e.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(moneyShown(e.line), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -168,7 +168,7 @@ internal fun ColumnScope.MoneyForecastTilesBlock(
             range = 0f..MoneyPlanMore.CUT_MAX_POUNDS.toFloat(),
             tag = "money-cut-slider", spoken = "What if I cut, ${t.cutLabel}",
         )
-        Text(t.cutNote, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(moneyShown(t.cutNote), style = MekaType.caption, color = Meka.colors.textSecondary)
     }
 }
 
@@ -348,7 +348,7 @@ internal fun ColumnScope.MoneyAbroadTilesBlock(t: MoneyAbroadTiles, onTick: () -
                 Text(v, style = MekaType.upNextCardTitle, color = if (t.lit) Meka.colors.critical else Meka.colors.textPrimary, maxLines = 1)
             }
         }
-        Text(t.line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        Text(moneyShown(t.line), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
     }
     t.bars.forEach { b ->
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = b.spoken }.testTag("money-abroad-bar-${b.id}"),
@@ -364,7 +364,7 @@ internal fun ColumnScope.MoneyAbroadTilesBlock(t: MoneyAbroadTiles, onTick: () -
                 Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill))
                     .background(if (b.good) Meka.colors.accent else Meka.colors.critical))
             }
-            Text(b.sub, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(b.sub), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
     }
     if (t.payments.isNotEmpty()) {
@@ -395,7 +395,7 @@ internal fun ColumnScope.MoneyAbroadTilesBlock(t: MoneyAbroadTiles, onTick: () -
                         Text(p.fee, style = MekaType.caption, color = Meka.colors.critical, maxLines = 1)
                     }
                 }
-                t.more?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                t.more?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
             }
         }
     }

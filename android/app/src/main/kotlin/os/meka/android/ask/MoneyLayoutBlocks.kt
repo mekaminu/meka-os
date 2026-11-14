@@ -88,7 +88,7 @@ internal fun MoneyReviewCard(rv: MoneyMonthReviewView, modifier: Modifier = Modi
         if (rv.tiles.isNotEmpty()) MoneyTiles(rv.tiles)
         Crossfade(rv.lines, animationSpec = MekaMotion.appear(reduced), label = "money-review-lines") { lines ->
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                lines.forEach { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                lines.forEach { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
         }
     }
@@ -99,7 +99,7 @@ internal fun MoneyReviewCard(rv: MoneyMonthReviewView, modifier: Modifier = Modi
 internal fun MoneyTabFoot(modifier: Modifier = Modifier, text: String = MoneyTabs.FOOT_SHORT, onInfo: () -> Unit) {
     Row(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(text, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        Text(moneyShown(text), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
         MoneyInfoButton(MoneyTabs.INFO_SPOKEN, "money-foot-info", onInfo)
     }
 }

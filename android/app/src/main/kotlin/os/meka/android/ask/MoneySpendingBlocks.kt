@@ -169,10 +169,10 @@ internal fun MoneyRing(s: MoneySpendingView, focus: String?, modifier: Modifier 
         }
         androidx.compose.animation.Crossfade(centre, animationSpec = MekaMotion.appear(reduced), label = "money-centre") { c ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Text(c.top, style = MekaType.caption, color = Meka.colors.textSecondary, textAlign = TextAlign.Center)
+                Text(moneyShown(c.top), style = MekaType.caption, color = Meka.colors.textSecondary, textAlign = TextAlign.Center)
                 Text(c.big, style = MekaType.greeting, color = Meka.colors.textPrimary)
                 c.sub?.let { sub ->
-                    Text(sub, style = MekaType.caption, textAlign = TextAlign.Center,
+                    Text(moneyShown(sub), style = MekaType.caption, textAlign = TextAlign.Center,
                         color = toneColor(c.tone, Meka.colors.success, Meka.colors.accent, Meka.colors.textSecondary),
                         modifier = Modifier.padding(horizontal = MekaSpace.l))
                 }
@@ -258,7 +258,7 @@ internal fun MoneyHeadWithLink(head: String, link: String?, modifier: Modifier =
 internal fun MoneyDayHead(d: MoneyPayDay, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {
         Text(d.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
-        d.total?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        d.total?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 
@@ -307,11 +307,11 @@ internal fun MoneyLookRowView(r: MoneyLookRow, open: Boolean, modifier: Modifier
                 exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(),
             ) {
                 Column(Modifier.padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                     Text(MoneyWatch.FINE, style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFine)
                             .minTouch().testTag("money-look-fine-${r.id}"))
-                    Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(moneyShown(MoneyWatch.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
         }

@@ -146,10 +146,10 @@ internal fun PaymentSheet(
                             Text(p.merchant, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                             if (so == null) Text(p.amount, style = MekaType.nowTitle, color = if (p.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
                         }
-                        Text(so?.line ?: MoneyPaymentSheet.sub(p), style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Text(moneyShown(so?.line ?: MoneyPaymentSheet.sub(p)), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
-                r.receipt?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                r.receipt?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
                 Text(MoneyPaymentSheet.CATEGORY_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.xs))
                 AnimatedContent(
@@ -167,12 +167,12 @@ internal fun PaymentSheet(
                             }
                             if (!r.moneyIn) TripPill(MoneyOwnCategories.NEW, tag = "money-sheet-new", description = MoneyOwnCategories.NEW_SPOKEN) { making = true }
                         }
-                        Text(MoneyPaymentSheet.ruleLine(r), style = MekaType.caption, color = Meka.colors.textTertiary)
+                        Text(moneyShown(MoneyPaymentSheet.ruleLine(r)), style = MekaType.caption, color = Meka.colors.textTertiary)
                     }
                 }
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-sheet-said") { s ->
                     if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Text(s.line, style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                        Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
                             modifier = Modifier.weight(1f).testTag("money-sheet-said"))
                         s.undo?.let { u ->
                             Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,

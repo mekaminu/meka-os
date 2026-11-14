@@ -185,7 +185,7 @@ internal fun MoneyChatContent(
                     Bubble(t.question, mine = true, Modifier.align(Alignment.End))
                     Bubble(t.text, mine = false, Modifier.testTag("money-chat-answer-$i"))
                     if (t.byObi) {
-                        Text(MoneyChatObi.BY, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        Text(moneyShown(MoneyChatObi.BY), style = MekaType.caption, color = Meka.colors.textTertiary,
                             modifier = Modifier.padding(start = MekaSpace.xs).testTag("money-chat-by-$i"))
                     }
                     if (t.actions.isNotEmpty()) {
@@ -197,11 +197,11 @@ internal fun MoneyChatContent(
             }
         }
         if (working) {
-            Text(MoneyChat.WORKING, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(moneyShown(MoneyChat.WORKING), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
         if (suggestions.isNotEmpty()) {
-            Text(MoneyChat.TRY, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+            Text(moneyShown(MoneyChat.TRY), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 suggestions.forEachIndexed { i, q ->
                     Text(q, style = MekaType.caption, color = Meka.colors.textPrimary,
@@ -230,10 +230,10 @@ internal fun MoneyChatContent(
             Box(Modifier.testTag("money-chat-listening")) { ListeningLine(listener.engine, listener.resting, listener.level, Meka.reducedMotion) }
         }
         problem?.takeIf { !listener.listening }?.let { p ->
-            Text(p, style = MekaType.caption, color = Meka.colors.textSecondary,
+            Text(moneyShown(p), style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.testTag("money-chat-heard").semantics { liveRegion = LiveRegionMode.Polite })
         }
-        Text(MoneyChat.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(MoneyChat.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

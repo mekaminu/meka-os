@@ -87,6 +87,7 @@ import os.meka.android.lists.Field
 import os.meka.android.security.FoldBiometric
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MoneyLook
 import os.meka.core.domain.MoneyMore
 import os.meka.core.domain.MoneyMoreKind
@@ -591,7 +592,7 @@ fun MoneyPane(
         // Speed (4c): while the fresh view is built, the last one shows with "bringing it up to date…" under the title.
         v.opening?.takeIf { !v.skeleton }?.let { line ->
             item(key = "opening") {
-                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                Text(moneyShown(line), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
             }
         }
         if (v.skeleton) return@body
@@ -679,7 +680,7 @@ fun MoneyPane(
                     m.vsLine?.let { vs ->
                         val c by animateColorAsState(if (m.vsLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-vs")
                         Crossfade(vs, animationSpec = MekaMotion.appear(reduced), label = "money-vs-line") { l ->
-                            Text(l, style = MekaType.caption, color = c)
+                            Text(moneyShown(l), style = MekaType.caption, color = c)
                         }
                     }
                 }
@@ -892,7 +893,7 @@ fun MoneyPane(
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 f.notReady?.let { n ->
-                    item(key = "forecast-not-ready") { Text(n, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) }
+                    item(key = "forecast-not-ready") { Text(moneyShown(n), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) }
                 }
                 // Layout rules on Plan (a), (e): the forecast in one card; the what-ifs behind its What if… row (a sheet).
                 if (f.notReady == null) item(key = "forecast") {
@@ -903,7 +904,7 @@ fun MoneyPane(
                             MoneyForecastTilesBlock(tiles, onSpan = { forecastSpan = it }, onCut = { cutPounds = it }, onTick = { haptics.tick() })
                         } else ForecastBlock(f, Modifier)
                         // Spending plans he counts in his forecast, and what they still have to buy.
-                        f.plansLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.testTag("money-forecast-plans")) }
+                        f.plansLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.testTag("money-forecast-plans")) }
                         MoneyLinkRow(MoneyPlanLayout.WHAT_IF_ROW, MoneyPlanLayout.whatIfBrief(f), MoneyPlanLayout.whatIfOn(f), "money-whatif-row") {
                             haptics.tick(); said = null; whatIfOpen = true
                         }
@@ -931,7 +932,7 @@ fun MoneyPane(
                             },
                             onCap = { haptics.tick(); said = null; setChallengeOpen = true })
                         ch.caps.forEach { ChallengeBar(it) { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } } }
-                        ch.throughLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                        ch.throughLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                     }
                 }
             }
@@ -1043,7 +1044,7 @@ fun MoneyPane(
                 }
                 m.receiptsLine?.let { l ->
                     item(key = "txns-receipts") {
-                        Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem())
+                        Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem())
                     }
                 }
                 m.txns.forEach { t ->
@@ -1115,7 +1116,7 @@ fun MoneyPane(
         }
         // Accounts' rest (mockup): Side hustle and tax, Shared with his partner, and Import, export and delete as one card
         // of rows, each opening its sheet; what sat open on the page lives in those sheets now.
-        v.empty?.takeIf { has(MoneySection.MORE) }?.let { e -> item(key = "empty") { Text(e, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(top = MekaSpace.m)) } }
+        v.empty?.takeIf { has(MoneySection.MORE) }?.let { e -> item(key = "empty") { Text(moneyShown(e), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(top = MekaSpace.m)) } }
         if (has(MoneySection.MORE)) {
             item(key = "more-head") {
                 MoneyLabel(MoneyMore.HEAD,
@@ -1133,7 +1134,7 @@ fun MoneyPane(
             val c by animateColorAsState(if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-said")
             Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-said-line") { s ->
                 if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    Text(s.line, style = MekaType.caption, color = c, modifier = Modifier.weight(1f))
+                    Text(moneyShown(s.line), style = MekaType.caption, color = c, modifier = Modifier.weight(1f))
                     s.undo?.let { u ->
                         Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
@@ -1319,7 +1320,7 @@ fun MoneyPane(
                 cm?.setPrimaryClip(android.content.ClipData.newPlainText("Refund chase", chase))
                 scope.launch { runCatching { core.moneyRefundChased(r.id) }.getOrNull()?.let(say) }
             })
-        v.refunds?.foot?.let { f -> Text(f, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        v.refunds?.foot?.let { f -> Text(moneyShown(f), style = MekaType.caption, color = Meka.colors.textTertiary) }
         SheetSaid(said)
     }
     // Obi's money check: an idea's sheet — why, the payments behind it, its step, Remind me and Not for me.
@@ -1431,7 +1432,7 @@ fun MoneyPane(
 private fun SheetSaid(said: MoneySaved?) {
     val reduced = Meka.reducedMotion
     Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-sheet-said") { s ->
-        if (s != null) Text(s.line, style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
+        if (s != null) Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
             modifier = Modifier.testTag("money-sheet-said"))
     }
 }
@@ -1522,7 +1523,7 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
         Crossfade(b.line, animationSpec = MekaMotion.appear(reduced), label = "money-bank-line") { l ->
             Text(l, style = MekaType.body, color = c)
         }
-        b.reconnect.forEach { r -> Text(r.line, style = MekaType.caption, color = Meka.colors.accent) }
+        b.reconnect.forEach { r -> Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.accent) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
             Crossfade(b.refreshing, animationSpec = MekaMotion.appear(reduced), label = "money-bank-refresh") { busy ->
                 Text(if (busy) MoneyBank.REFRESHING else MoneyBank.REFRESH, style = MekaType.itemMeta,
@@ -1536,7 +1537,7 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
         }
         b.restoreLine?.let { r ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Text(r, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+                Text(moneyShown(r), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
                 Text(MoneyBank.RESTORE, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRestore() }.minTouch().padding(MekaSpace.xs))
             }
@@ -1564,7 +1565,7 @@ private fun TradingEquityBlock(t: TradingView, range: String, onRange: (String) 
                 Crossfade(total, animationSpec = MekaMotion.appear(reduced), label = "trading-total") { l ->
                     Text(l, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
                 }
-                t.totalLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                t.totalLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
             ReadOnlyMark()
         }
@@ -1573,7 +1574,7 @@ private fun TradingEquityBlock(t: TradingView, range: String, onRange: (String) 
     // Dollars · Pounds row with nothing to show in either (MoneyTradingLayout.note).
     MoneyTradingLayout.note(t)?.let { l ->
         Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "trading-note") { n ->
-            Text(n, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.fillMaxWidth().testTag("money-trading-note"))
+            Text(moneyShown(n), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.fillMaxWidth().testTag("money-trading-note"))
         }
     }
     t.pnl.forEach { r ->
@@ -1627,7 +1628,7 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
         }
         // Walk-through A11: the chips never sit under nothing; until the line can be drawn, this says when it will.
         TradingEquity.lineHint(r)?.let { h ->
-            Text(h, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-trading-line-hint"))
+            Text(moneyShown(h), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-trading-line-hint"))
         }
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             TradingEquity.chips(c, chosen).forEach { ch -> key(ch.key) {
@@ -1644,14 +1645,14 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
                 }
             } }
         }
-        c.foot?.let { f -> Text(f, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        c.foot?.let { f -> Text(moneyShown(f), style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 
 /** The mockup's small "Read-only" mark on the equity card: nothing on this tab can trade. */
 @Composable
 private fun ReadOnlyMark() {
-    Text(MoneyTradingLayout.READ_ONLY, style = MekaType.caption, color = Meka.colors.textSecondary,
+    Text(moneyShown(MoneyTradingLayout.READ_ONLY), style = MekaType.caption, color = Meka.colors.textSecondary,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .semantics { contentDescription = MoneyTradingLayout.READ_ONLY_SPOKEN }
             .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs).testTag("money-trading-readonly"))
@@ -1664,7 +1665,7 @@ private fun ReadOnlyMark() {
 @Composable
 private fun TradingPositionsBlock(t: TradingView, all: Boolean, onMore: () -> Unit) {
     val reduced = Meka.reducedMotion
-    t.unrealisedLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+    t.unrealisedLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary) }
     Column(Modifier.fillMaxWidth().animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         MoneyTradingLayout.positions(t, all).forEach { p -> key(p.id) {
             val c by animateColorAsState(if (p.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-liq-${p.id}")
@@ -1674,8 +1675,8 @@ private fun TradingPositionsBlock(t: TradingView, all: Boolean, onMore: () -> Un
                     Text(p.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                     Text(p.amount, style = MekaType.body, color = if (p.up == true) Meka.colors.accent else Meka.colors.textPrimary)
                 }
-                if (p.line.isNotEmpty()) Text(p.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-                p.liquidationLine?.let { l -> Text(l, style = MekaType.caption, color = c) }
+                if (p.line.isNotEmpty()) Text(moneyShown(p.line), style = MekaType.caption, color = Meka.colors.textSecondary)
+                p.liquidationLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = c) }
             }
         } }
     }
@@ -1712,8 +1713,8 @@ private fun TradingKestrelBlock(k: TradingKestrelView, onReview: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(k.status, style = MekaType.body, color = c, modifier = Modifier.testTag("money-kestrel-status"))
         k.waitingTitle?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
-        k.waitingLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        k.tally?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        k.waitingLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
+        k.tally?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
     k.review?.let { r ->
         Text(r + " ›", style = MekaType.caption, color = Meka.colors.accent,
@@ -1781,7 +1782,7 @@ private fun TradingAddressesBlock(t: TradingView, onAdd: () -> Unit, onRemove: (
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
                 Text(w.name, style = MekaType.body, color = Meka.colors.textPrimary)
-                Text(w.line, style = MekaType.caption, color = if (w.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                Text(moneyShown(w.line), style = MekaType.caption, color = if (w.lit) Meka.colors.accent else Meka.colors.textSecondary)
             }
             Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(w.id) }
@@ -1816,7 +1817,7 @@ private fun TradingAddressFields(onAdd: (String) -> Unit) {
     var adding by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field(MoneyTradingLayout.ADD_HINT, modifier = Modifier.testTag("money-address-field"), value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
-        Text(MoneyTradingLayout.ADD_SHEET_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(MoneyTradingLayout.ADD_SHEET_LINE), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -1830,7 +1831,7 @@ private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit)
     // Layout rules on Trading: the card's label (a.head) sits above the card.
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Crossfade(a.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-line") { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         listOf(a.liqLabel to a.liqChips, a.dropLabel to a.dropChips, a.fillLabel to a.fillChips, a.fundingLabel to a.fundingChips)
             .filter { it.second.isNotEmpty() }.forEach { (label, chips) ->
@@ -1860,7 +1861,7 @@ private fun ExportBlock(e: TradingExportView, exporting: Boolean, onExport: (Str
     Column(Modifier.fillMaxWidth().padding(top = if (inCard) 0.dp else MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         if (!inCard) MoneyLabel(e.head)
         Crossfade(if (exporting) TradingExportRules.WORKING else e.line, animationSpec = MekaMotion.appear(reduced), label = "trading-export-line") { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             e.chips.forEach { c -> key(c.key) {
@@ -1888,7 +1889,7 @@ private fun CurveBlock(c: TradingCurveView) {
             Text(l, style = MekaType.body, color = if (c.up == true) Meka.colors.accent else Meka.colors.textPrimary,
                 modifier = Modifier.semantics { contentDescription = c.spoken })
         }
-        c.rangeLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        c.rangeLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary) }
         WorthLine(c.points, dots = false)
     }
 }
@@ -1902,7 +1903,7 @@ private fun TradesBlock(tr: TradingTradesView) {
     val reduced = Meka.reducedMotion
     // Layout rules on Trading: the label sits above the card; how trades are counted is behind the tab's foot ⓘ.
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        tr.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        tr.empty?.let { e -> Text(moneyShown(e), style = MekaType.caption, color = Meka.colors.textSecondary) }
         tr.summary?.let { s ->
             Crossfade(s, animationSpec = MekaMotion.appear(reduced), label = "trades-summary") { l ->
                 Text(l, style = MekaType.body, color = Meka.colors.textPrimary,
@@ -1917,8 +1918,8 @@ private fun TradesBlock(tr: TradingTradesView) {
                 }
             }
         } }
-        tr.averageLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        tr.bestLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        tr.averageLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary) }
+        tr.bestLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary) }
         tr.coins.forEach { c -> key(c.id) {
             Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = c.spoken },
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -1928,10 +1929,10 @@ private fun TradesBlock(tr: TradingTradesView) {
                         Text(a, style = MekaType.body, color = if (c.up == true) Meka.colors.accent else Meka.colors.textPrimary)
                     }
                 }
-                Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(moneyShown(c.line), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         } }
-        tr.moreLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        tr.moreLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 
@@ -1950,7 +1951,7 @@ private fun ReviewBlock(r: TradingReviewView) {
                 }
             }
         }
-        if (r.sentences.isEmpty()) Text(r.summary, style = MekaType.caption, color = Meka.colors.textSecondary)
+        if (r.sentences.isEmpty()) Text(moneyShown(r.summary), style = MekaType.caption, color = Meka.colors.textSecondary)
         Crossfade(r.sentences, animationSpec = MekaMotion.appear(reduced), label = "review-sentences") { lines ->
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 lines.forEach { line -> Text(line, style = MekaType.body, color = Meka.colors.textSecondary) }
@@ -1982,7 +1983,7 @@ private fun CategoryRow(c: MoneyCategoryRow, modifier: Modifier) {
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
             Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(bar))
         }
-        Text(c.line, style = MekaType.caption, color = if (c.over) Meka.colors.accent else Meka.colors.textSecondary)
+        Text(moneyShown(c.line), style = MekaType.caption, color = if (c.over) Meka.colors.accent else Meka.colors.textSecondary)
     }
 }
 
@@ -2007,7 +2008,7 @@ private fun TxnRow(
             Text((if (showDay) "${t.day} · " else "") + t.categoryLabel + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
                 style = MekaType.caption, color = Meka.colors.textSecondary)
             // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
-            t.receipt?.let { r -> Text(r, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            t.receipt?.let { r -> Text(moneyShown(r), style = MekaType.caption, color = Meka.colors.textSecondary) }
             t.receiptDetail?.let { d -> Text(d, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }
         }
         Text(t.amount, style = MekaType.body, color = if (t.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
@@ -2026,15 +2027,15 @@ private fun BusinessBlock(
 ) {
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        b.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        b.intro?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
         b.profitLine?.let { profit ->
             Column(Modifier.semantics(mergeDescendants = true) { contentDescription = b.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                b.yearLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                b.yearLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                 Crossfade(profit, animationSpec = MekaMotion.appear(reduced), label = "money-biz-profit") { l ->
                     Text(l, style = MekaType.itemTitle, color = if (b.profitUp) Meka.colors.accent else Meka.colors.textPrimary)
                 }
                 Crossfade(listOfNotNull(b.inLine, b.outLine).joinToString("\n"), animationSpec = MekaMotion.appear(reduced), label = "money-biz-inout") { l ->
-                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
             b.setAsideLine?.let { l ->
@@ -2052,31 +2053,31 @@ private fun BusinessBlock(
                             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
                 }
             }
-            b.allowanceLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            b.allowanceLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
             b.costs.forEach { c ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(c.label, style = MekaType.body, color = Meka.colors.textPrimary)
-                        Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Text(moneyShown(c.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                     Text(c.amount, style = MekaType.body, color = Meka.colors.textPrimary)
                 }
             }
-            b.lastYearLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            b.lastYearLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
             // Slice 13b: YEAR-END EXPORT — a chip per tax year, then the save sheet.
             b.export?.let { e -> ExportBlock(e, exporting = false, onExport = onExport) }
             b.dates.forEach { d ->
                 Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
                     Text(d.line, style = MekaType.body, color = if (d.lit) Meka.colors.accent else Meka.colors.textPrimary)
-                    Text(d.title, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(d.title), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
         // Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's money in his Business mail against the statements.
         b.mail?.let { m -> BusinessMailBlock(m, onBusinessTxn) }
-        b.merchantsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        b.merchantsLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
         // Money review, Accounts: "Side hustle account" is a switch in each account's sheet now.
-        Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(b.foot), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2091,14 +2092,14 @@ private fun BusinessMailBlock(m: MoneyBusinessMailView, onBusinessTxn: (String) 
     Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         MoneyLabel(m.head)
         Crossfade(m.line, animationSpec = MekaMotion.appear(reduced), label = "money-biz-mail-line") { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         m.rows.forEach { r ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
                     Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
                     Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-biz-mail-${r.id}") { l ->
-                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                        Text(moneyShown(l), style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
                     }
                     r.quote?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
@@ -2111,8 +2112,8 @@ private fun BusinessMailBlock(m: MoneyBusinessMailView, onBusinessTxn: (String) 
                 }
             }
         }
-        m.moreLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Text(m.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+        m.moreLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Text(moneyShown(m.foot), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2148,7 +2149,7 @@ private fun TravelBlock(tv: os.meka.core.domain.MoneyTravelView, modifier: Modif
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
                     Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-travel-line-${r.id}") { l ->
-                        Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
             }
@@ -2187,12 +2188,12 @@ private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier,
         ) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 yv.leftLine?.let { Text(it, style = MekaType.body, color = if (yv.leftLit) Meka.colors.accent else Meka.colors.textSecondary) }
-                yv.vsLine?.let { Text(it, style = MekaType.caption, color = if (yv.vsLit) Meka.colors.accent else Meka.colors.textSecondary) }
+                yv.vsLine?.let { Text(moneyShown(it), style = MekaType.caption, color = if (yv.vsLit) Meka.colors.accent else Meka.colors.textSecondary) }
                 yv.categories.forEach { c ->
                     CategoryRow(MoneyCategoryRow(c.key, c.label, c.amount, c.share, c.line, c.lit, c.spoken), Modifier)
                 }
-                yv.monthsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-                yv.biggest?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                yv.monthsLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
+                yv.biggest?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
                 // Layout rule (c): what the year covers is said behind Accounts' foot ⓘ (MoneyTabs.info).
             }
         }
@@ -2219,7 +2220,7 @@ internal fun ChallengeBar(b: MoneyChallengeBar, onRemove: (String) -> Unit) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Crossfade(b.line, animationSpec = MekaMotion.appear(reduced), label = "money-chal-line-${b.key}", modifier = Modifier.weight(1f)) { l ->
-                Text(l, style = MekaType.caption, color = if (b.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                Text(moneyShown(l), style = MekaType.caption, color = if (b.lit) Meka.colors.accent else Meka.colors.textSecondary)
             }
             Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(b.key) }
@@ -2241,16 +2242,16 @@ private fun SharedBlock(
     val reduced = Meka.reducedMotion
     var adding by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        sh.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        sh.intro?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
         sh.balanceLine?.let { bal ->
             Column(Modifier.semantics(mergeDescendants = true) { contentDescription = sh.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                sh.sinceLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                sh.sinceLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                 val col by animateColorAsState(if (sh.balanceLit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "money-shared-bal")
                 Crossfade(bal, animationSpec = MekaMotion.appear(reduced), label = "money-shared-balance") { l ->
                     Text(l, style = MekaType.itemTitle, color = col)
                 }
                 Crossfade(listOfNotNull(sh.youLine, sh.partnerLine, sh.splitLine).joinToString("\n"), animationSpec = MekaMotion.appear(reduced), label = "money-shared-lines") { l ->
-                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -2270,7 +2271,7 @@ private fun SharedBlock(
             }
             sh.monthLine?.let { l ->
                 Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-shared-month") { x ->
-                    Text(x, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(x), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
         }
@@ -2278,7 +2279,7 @@ private fun SharedBlock(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
                     Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
-                    Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
                 Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
                 Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -2286,9 +2287,9 @@ private fun SharedBlock(
                         .semantics { contentDescription = "Remove ${r.name} from what was paid" }.minTouch().padding(MekaSpace.xs))
             }
         }
-        sh.merchantsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        sh.merchantsLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
         Field(sh.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
-        Text(sh.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(sh.foot), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2298,7 +2299,7 @@ private fun RegularRow(r: MoneyRegularRow, modifier: Modifier) {
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(r.merchant, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(r.line, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
+            Text(moneyShown(r.line), style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
         }
         Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
     }
@@ -2316,7 +2317,7 @@ private fun RefundCard(r: MoneyRefundRow, modifier: Modifier, onClose: () -> Uni
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
             if (r.title != r.name) Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-refund-line-${r.id}") { l ->
-                Text(l, style = MekaType.caption, color = c)
+                Text(moneyShown(l), style = MekaType.caption, color = c)
             }
         }
         if (r.state == MoneyRefunds.BACK) {
@@ -2325,10 +2326,10 @@ private fun RefundCard(r: MoneyRefundRow, modifier: Modifier, onClose: () -> Uni
         }
         r.chase?.let { chase ->
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Text(chase, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(moneyShown(chase), style = MekaType.caption, color = Meka.colors.textSecondary)
                 Text(MoneyRefunds.COPY, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onCopy(chase) }.minTouch())
-                Text(MoneyRefunds.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(moneyShown(MoneyRefunds.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
     }
@@ -2350,23 +2351,23 @@ private fun CardDetails(
     val promoColor by animateColorAsState(if (c.promoLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-card-promo-${c.id}")
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(c.kindLine, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(moneyShown(c.kindLine), style = MekaType.caption, color = Meka.colors.textTertiary)
             Crossfade(c.dueLine, animationSpec = MekaMotion.appear(reduced), label = "money-card-due-line-${c.id}") { l ->
                 Text(l, style = MekaType.body, color = dueColor)
             }
-            c.paidLine?.let { p -> Text(p, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            c.paidLine?.let { p -> Text(moneyShown(p), style = MekaType.caption, color = Meka.colors.textSecondary) }
             c.statementLine?.let { l ->
                 Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-card-statement-${c.id}") { t ->
-                    Text(t, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(moneyShown(t), style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
             }
             c.useLine?.let { l ->
                 Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-card-use-line-${c.id}") { t ->
-                    Text(t, style = MekaType.caption, color = useColor)
+                    Text(moneyShown(t), style = MekaType.caption, color = useColor)
                 }
             }
-            c.promoLine?.let { l -> Text(l, style = MekaType.caption, color = promoColor) }
-            c.feesLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.accent) }
+            c.promoLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = promoColor) }
+            c.feesLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.accent) }
         }
         if (c.canPay) {
             Text(MoneyCards.PAID, style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -2388,7 +2389,7 @@ private fun CardDetails(
             Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onKind(false, false) }.minTouch())
         }
-        Text(MoneyCards.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(MoneyCards.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2398,16 +2399,16 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolea
     val reduced = Meka.reducedMotion
     var balance by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        p.notReady?.let { n -> Text(n, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        p.notReady?.let { n -> Text(moneyShown(n), style = MekaType.caption, color = Meka.colors.textSecondary) }
         p.payLine?.let { l ->
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-payday") { t ->
                     Text(t, style = MekaType.body, color = Meka.colors.textPrimary)
                 }
-                p.fromLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                p.fromLine?.let { Text(moneyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
                 p.sinceLine?.let { s ->
                     Crossfade(s, animationSpec = MekaMotion.appear(reduced), label = "money-payday-since") { t ->
-                        Text(t, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Text(moneyShown(t), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
             }
@@ -2415,7 +2416,7 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolea
         // Money redesign (B3): with the Bills card above, its list holds these rows.
         p.goingOut?.takeIf { withRows }?.let { g ->
             Crossfade(g, animationSpec = MekaMotion.appear(reduced), label = "money-payday-out") { t ->
-                Text(t, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(moneyShown(t), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
         if (withRows) p.rows.forEach { r ->
@@ -2430,7 +2431,7 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolea
         if (withRows && p.more > 0) Text("+ ${p.more} more", style = MekaType.caption, color = Meka.colors.textTertiary)
         p.balanceLine?.let { b ->
             Crossfade(b, animationSpec = MekaMotion.appear(reduced), label = "money-payday-balance") { t ->
-                Text(t, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(moneyShown(t), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         if (p.account != null) {
@@ -2442,7 +2443,7 @@ private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, withRows: Boolea
                 Text(t, style = MekaType.body, color = c)
             }
         }
-        Text(p.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(p.foot), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2458,7 +2459,7 @@ private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier) {
         f.left?.let { l ->
             val c by animateColorAsState(if (f.leftLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-forecast-left")
             Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-left-line") { t ->
-                Text(t, style = MekaType.caption, color = c)
+                Text(moneyShown(t), style = MekaType.caption, color = c)
             }
         }
         f.rows.forEach { r -> ForecastRow(r) }
@@ -2481,9 +2482,9 @@ private fun WhatIfBlock(f: MoneyForecastView, onCut: (String) -> Unit, onExtra: 
         }
         // Trading tracker, slice 11: trading at the pace it has gone, on its own row, with where the figure comes from.
         f.trading?.let { t -> CutChip(t, onCut) }
-        f.tradingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        f.tradingLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textTertiary) }
         Field(MoneyForecast.EXTRA_HINT, value = extra, onValue = { extra = it }) { extra = it; onExtra(it) }
-        f.extraLine?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.accent) }
+        f.extraLine?.let { e -> Text(moneyShown(e), style = MekaType.caption, color = Meka.colors.accent) }
     }
 }
 
@@ -2498,7 +2499,7 @@ private fun CutChip(c: MoneyCutChip, onCut: (String) -> Unit) {
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     ) {
         Text(c.label, style = MekaType.caption, color = col)
-        Text(c.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(c.line), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2510,7 +2511,7 @@ private fun ForecastRow(r: MoneyForecastRow) {
         Column(Modifier.weight(1f)) {
             Text(r.label, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-line-${r.label}") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-amount-${r.label}") { a ->
@@ -2534,7 +2535,7 @@ private fun WorthBlock(w: MoneyWorthView, modifier: Modifier, onOther: () -> Uni
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }.testTag("money-total"),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Crossfade(c.head, animationSpec = MekaMotion.appear(reduced), label = "money-total-head") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
             c.total?.let { t ->
                 Crossfade(t, animationSpec = MekaMotion.appear(reduced), label = "money-worth-total") { l ->
@@ -2543,19 +2544,19 @@ private fun WorthBlock(w: MoneyWorthView, modifier: Modifier, onOther: () -> Uni
             }
             c.breakdown?.let { l ->
                 Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-total-breakdown") { x ->
-                    Text(x, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("money-total-breakdown"))
+                    Text(moneyShown(x), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag("money-total-breakdown"))
                 }
             }
-            c.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            c.empty?.let { e -> Text(moneyShown(e), style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
         w.changeLine?.let { l ->
             Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-worth-change") { x ->
-                Text(x, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(moneyShown(x), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
         if (w.points.size >= 2) WorthLine(w.points)
-        w.chartLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        w.missingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        w.chartLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textTertiary) }
+        w.missingLine?.let { l -> Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textTertiary) }
         MoneyWorthOther.row(w)?.let { r -> WorthOtherRow(r, onOther) }
         // Layout rule (c): how net worth is worked out is said behind Accounts' foot ⓘ (MoneyTabs.info).
     }
@@ -2576,7 +2577,7 @@ private fun WorthOtherRow(r: MoneyWorthOtherRow, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 3)
+                Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 3)
             }
         }
         Crossfade(r.amount ?: MoneyWorthOther.ADD, animationSpec = MekaMotion.appear(reduced), label = "money-worth-other-amount") { a ->
@@ -2594,7 +2595,7 @@ private fun WorthOtherDetails(w: MoneyWorthView, onAdd: (String) -> Unit, onRemo
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         MoneyWorthOther.rows(w).forEach { r -> key(r.id) { WorthRow(r, onRemove = { onRemove(r.id) }) } }
         Field(MoneyWorthOther.HINT, modifier = Modifier.testTag("money-worth-add"), value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
-        Text(MoneyWorthOther.LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(moneyShown(MoneyWorthOther.LINE), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -2603,7 +2604,7 @@ private fun WorthRow(r: MoneyWorthRow, onRemove: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
             Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         if (r.amount.isNotEmpty()) Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
         if (r.removable) {
@@ -2671,7 +2672,7 @@ private fun WorthLine(points: List<MoneyWorthPoint>, dots: Boolean = true) {
             Text(points.last().label, style = MekaType.micro, color = Meka.colors.textTertiary)
         }
         Crossfade(points[picked.coerceIn(0, points.size - 1)].said, animationSpec = MekaMotion.appear(reduced), label = "money-worth-picked") { l ->
-            Text(l, style = MekaType.caption, color = Meka.colors.textPrimary)
+            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textPrimary)
         }
     }
 }
@@ -2756,3 +2757,10 @@ private fun Modifier.bleed(by: androidx.compose.ui.unit.Dp): Modifier = layout {
     val w = if (constraints.hasBoundedWidth) constraints.maxWidth else p.width
     layout(w, p.height) { p.place(-px, 0) }
 }
+
+/**
+ * A Money line as drawn (walk-through 2026-11-08, A14: Money's "21st", "Dec / 2027", "minute or / two", "for the /
+ * month"): dates, numbers, durations and each " · " kept whole, and the last words held together, so no grey line on
+ * the folded phone ends on a lone word. Only for words drawn on screen; tests read them back as plain.
+ */
+internal fun moneyShown(line: String): String = LoneWordGlue.measured(line)

@@ -166,7 +166,7 @@ class MoneyScreensTest {
         if (v.locked) fail("$name: Money is still locked after opening")
         // Money's top as the mockup: the line under the title only when nothing is in yet ("2 accounts · …" is gone), and
         // the chosen tab's pill really is the chosen one in the shot.
-        val summaryShown = compose.onAllNodesWithText(v.summary).fetchSemanticsNodes().isNotEmpty()
+        val summaryShown = compose.onAllNodes(ScreenShots.plainText(v.summary)).fetchSemanticsNodes().isNotEmpty()
         if (summaryShown != os.meka.core.domain.MoneyHeader.showsSummary(v)) fail("$name: the line under the title shows=$summaryShown")
         if (compose.onAllNodesWithContentDescription(MoneyTabs.spoken(tab, chosen = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
             fail("$name: the ${tab.label} pill isn't the chosen one")
@@ -217,7 +217,7 @@ class MoneyScreensTest {
                 ScreenShots.assertShows(compose, name, MoneyRules.EMPTY_SUMMARY.substringBefore(" ·"))
                 ScreenShots.assertShows(compose, name, MoneyTabs.EMPTY_SPENDING)
                 // Slice 12: the how-to is said once (under Import a statement), never under the title as well.
-                val said = compose.onAllNodesWithText(MoneyRules.EMPTY).fetchSemanticsNodes().size
+                val said = compose.onAllNodes(ScreenShots.plainText(MoneyRules.EMPTY)).fetchSemanticsNodes().size
                 if (said > 1) fail("$name: the empty line is said $said times")
             }
             else -> {
@@ -227,7 +227,7 @@ class MoneyScreensTest {
                 val sp = m.spending ?: fail("$name: no Spending view with a statement in")
                 ScreenShots.assertShows(compose, name, sp.centre.top)
                 ScreenShots.assertShows(compose, name, sp.centre.big)
-                if (compose.onAllNodesWithText(m.spentLine).fetchSemanticsNodes().isNotEmpty()) fail("$name: the old spent line still shows")
+                if (compose.onAllNodes(ScreenShots.plainText(m.spentLine)).fetchSemanticsNodes().isNotEmpty()) fail("$name: the old spent line still shows")
                 // As the mockup: Categories · Needs vs wants sit under the ring and its tiles (over the rows), not above it
                 // (on the open Fold they top the right column, beside the ring, as the mockup at Fold size).
                 val columns = compose.onAllNodesWithTag("money-columns", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

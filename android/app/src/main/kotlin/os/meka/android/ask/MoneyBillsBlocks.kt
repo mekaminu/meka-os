@@ -83,19 +83,19 @@ internal fun MoneyBillsCard(b: MoneyBillsView, modifier: Modifier = Modifier) {
             .padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(b.head, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(moneyShown(b.head), style = MekaType.caption, color = Meka.colors.textSecondary)
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Crossfade(b.amount, animationSpec = MekaMotion.appear(reduced), label = "money-bills-amount") { a ->
                 Text(a, style = MekaType.greeting, color = Meka.colors.textPrimary)
             }
-            Text(b.count, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
+            Text(moneyShown(b.count), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
         }
         if (b.paidLine != null) {
             Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)) {
                 Box(Modifier.fillMaxWidth(bar.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
             }
             // Money review item 9: the paid line in the head's secondary grey (as the mockup), was the dim tertiary.
-            Text(b.paidLine!!, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(moneyShown(b.paidLine!!), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
     }
 }

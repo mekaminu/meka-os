@@ -80,15 +80,15 @@ internal fun MoneyCheckCard(
                         Text(l, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.testTag("money-check-total"))
                     }
                 }
-                Text(c.from, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
+                Text(moneyShown(c.from), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
             }
-            c.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            c.empty?.let { e -> Text(moneyShown(e), style = MekaType.caption, color = Meka.colors.textSecondary) }
             // Obi's wording: "Written by Obi · Sun 25 Oct" (or that he's reading them) and Ask Obi to look again.
             onLookAgain?.let { look ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     val line = if (looking) MoneyCheckWords.LOOKING else c.by.orEmpty()
                     Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "money-check-by", modifier = Modifier.weight(1f)) { l ->
-                        Text(l, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-check-by"))
+                        Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("money-check-by"))
                     }
                     if (!looking) {
                         Text(MoneyCheckWords.LOOK_AGAIN, style = MekaType.caption, color = Meka.colors.accent,
@@ -127,7 +127,7 @@ internal fun MoneyCheckCard(
                 c.away?.let { h ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Crossfade(h, animationSpec = MekaMotion.appear(reduced), label = "money-ideas-away", modifier = Modifier.weight(1f)) { l ->
-                            Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
+                            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textTertiary)
                         }
                         Text(MoneyCheck.SHOW_AGAIN, style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onShowAgain)
@@ -168,7 +168,7 @@ private fun MoneyLeadIdeaCard(i: MoneyIdea, onOpen: () -> Unit, onAct: () -> Uni
             Text(i.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
             Text(i.figure, style = MekaType.itemTitle, color = if (i.lit) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
         }
-        Text(i.why, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(moneyShown(i.why), style = MekaType.caption, color = Meka.colors.textSecondary)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             i.act?.let { a -> IdeaPill(a, Meka.colors.accent, "money-lead-act", onAct) }
             IdeaPill(MoneyCheck.REMIND, Meka.colors.textPrimary, "money-lead-remind", onRemind)
@@ -196,7 +196,7 @@ internal fun MoneyIdeaDetails(i: MoneyIdea, onAct: () -> Unit, onRemind: () -> U
         }
         Text(i.why, style = MekaType.body, color = Meka.colors.textSecondary)
         if (i.behind.isNotEmpty()) {
-            Text(MoneyCheck.BEHIND, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+            Text(moneyShown(MoneyCheck.BEHIND), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
             MoneyCard(tag = "money-idea-behind") {
                 i.behind.forEach { p ->
                     Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${p.label}, ${p.date}, ${p.amount}" },

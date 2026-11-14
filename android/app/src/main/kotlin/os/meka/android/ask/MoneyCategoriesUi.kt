@@ -142,7 +142,7 @@ internal fun OwnCategorySheet(
                     MoneyIconChip(r.icon, r.tone)
                     Column(Modifier.weight(1f)) {
                         Text(r.name, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
-                        Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
                 NewCategoryForm(
@@ -152,7 +152,7 @@ internal fun OwnCategorySheet(
                 )
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-own-said") { s ->
                     if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Text(s.line, style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                        Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
                             modifier = Modifier.weight(1f).testTag("money-own-said"))
                         s.undo?.let { u ->
                             Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -182,7 +182,7 @@ internal fun OwnCategorySheet(
                 }
                 Text(MoneyOwnCategories.MERGE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.xs))
-                Text(MoneyOwnCategories.MERGE_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(moneyShown(MoneyOwnCategories.MERGE_HINT), style = MekaType.caption, color = Meka.colors.textTertiary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     for (t in MoneyOwnCategories.mergeTargets(own, r.id)) {
                         TripPill(t.label, tag = "money-own-merge-${t.key}", description = "Merge ${r.name} into ${t.label}") { onMerge(t.key) }
