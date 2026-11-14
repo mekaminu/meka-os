@@ -63,9 +63,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.platform.testTag
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -104,6 +106,10 @@ const val LIST_TAB_TAG = "list-tab"
 /** Test tag of the Lists screen's own list, scrolled in bounded steps by ListsScreensTest (never performScrollToNode). */
 const val LISTS_LIST_TAG = "lists-list"
 val TabLabelCut = SemanticsPropertyKey<Boolean>("TabLabelCut")
+/** Every tab's label size in sp (one size for all), the room left each side of its label in dp, and whether its count is drawn. */
+val TabLabelSize = SemanticsPropertyKey<Float>("TabLabelSize")
+val TabLabelRoom = SemanticsPropertyKey<Float>("TabLabelRoom")
+val TabCountShown = SemanticsPropertyKey<Boolean>("TabCountShown")
 
 /** The lists, in the order of the tabs; [short] is the label when five don't fit (the closed Fold). */
 enum class ListTab(val label: String, val short: String = label) {
@@ -232,7 +238,7 @@ private fun LazyListScope.waiting(
         return
     }
     if (view.promised.isNotEmpty()) {
-        item(key = "label-promised") { SectionLabel("You promised", Modifier.animateItem().padding(top = MekaSpace.xs)) }
+        item(key = "label-promised") { SectionLabel("You promised", Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.xs)) }
         items(view.promised, key = { "p-${it.id}" }) { p: PromiseItem ->
             ListRow(p.title, p.meta, p.state, open == p.id, { toggle(p.id) }, Modifier.animateItem()) {
                 p.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
@@ -245,7 +251,7 @@ private fun LazyListScope.waiting(
         }
     }
     if (view.waiting.isNotEmpty() && view.promised.isNotEmpty()) {
-        item(key = "label-waiting") { SectionLabel("Waiting for", Modifier.animateItem().padding(top = MekaSpace.m)) }
+        item(key = "label-waiting") { SectionLabel("Waiting for", Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.m)) }
     }
     items(view.waiting, key = { "w-${it.id}" }) { w ->
         ListRow(w.title, w.meta, w.state, open == w.id, { toggle(w.id) }, Modifier.animateItem()) {
@@ -267,7 +273,7 @@ private fun LazyListScope.someday(
     if (view.someday.isEmpty()) empty("someday", "Ideas, trips, things to buy or read. They stay out of Today and the planner until you say \"Do it now\".")
     view.someday.forEach { g ->
         item(key = "g-${g.kind.name}") {
-            SectionLabel(g.label, Modifier.animateItem().padding(top = MekaSpace.m))
+            SectionLabel(g.label, Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.m))
         }
         items(g.items, key = { "s-${it.id}" }) { t: Task ->
             ListRow(t.title, null, DueState.NONE, open == t.id, { toggle(t.id) }, Modifier.animateItem()) {
@@ -310,40 +316,57 @@ private fun LazyListScope.decisions(
 }
 
 internal fun LazyListScope.empty(key: String, line: String) = item(key = "empty-$key") {
-    Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.xs))
+    Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs))
 }
 
 /**
- * Five tabs on a quiet track; the lit pill springs to the chosen one. Counts sit beside the labels when there's room,
- * and the short labels ("Waiting") are used when a slot is narrower than 84 dp (the closed Fold).
+ * Five tabs on a quiet track; the lit pill springs to the chosen one. Every label is drawn at one size, the largest
+ * (caption down to 10 sp) at which the longest one keeps [TAB_LABEL_ROOM] clear of its pill's edges on both sides, so
+ * "Decisions" is never smaller than the rest and "Shopping" never touches the pill (walk-through A16). Counts sit
+ * beside the labels when there's room; on a narrow slot (the closed Fold) they sit on a small line under the label
+ * instead of being dropped. The short labels are used when a slot is narrower than 84 dp.
  */
 @Composable
 private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: (ListTab) -> Unit) {
     val tabs = ListTab.entries
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     // Works by hand (quality gate): the track and the lit pill look as before (a 40 dp pill inside a 48 dp track), but
     // each tab's touch is the track's full 48 dp height, not the 40 dp pill.
     BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(horizontal = MekaSpace.xxs)) {
         val slot = maxWidth / tabs.size
         val roomForCounts = slot >= 104.dp
         val shortLabels = slot < 84.dp
+        val counts = tabs.associateWith { t ->
+            when (t) {
+                ListTab.WAITING -> view.promisesBothWays
+                ListTab.SOMEDAY -> view.somedayCount
+                ListTab.DECISIONS -> view.decisions.size
+                ListTab.RENEWALS -> view.renewals.count
+                ListTab.SHOPPING -> view.shopping.count
+            }
+        }
+        fun label(t: ListTab): String = (if (shortLabels) t.short else t.label).let { val c = counts.getValue(t); if (c > 0 && roomForCounts) "$it $c" else it }
+        val labelSize = remember(slot, tabs.map { label(it) }, density) {
+            val room = with(density) { (slot - TAB_LABEL_ROOM * 2).toPx() }
+            tabLabelSize { size -> tabs.maxOf { measurer.measure(label(it), MekaType.caption.copy(fontSize = size), maxLines = 1, softWrap = false).size.width.toFloat() } <= room }
+        }
+        val labelStyle = MekaType.caption.copy(fontSize = labelSize, lineHeight = labelSize * 1.2f)
+        val countStyle = MekaType.micro.copy(fontSize = (labelSize.value - 1f).coerceAtLeast(TAB_MIN_SIZE.value).sp, lineHeight = labelSize * 1.1f) // type: ok (the count line under a tab, a step under its label)
         val x by animateDpAsState(slot * tabs.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "lists-pill")
         Box(Modifier.offset(x = x).padding(vertical = MekaSpace.xxs).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
             tabs.forEach { t ->
-                val count = when (t) {
-                    ListTab.WAITING -> view.promisesBothWays
-                    ListTab.SOMEDAY -> view.somedayCount
-                    ListTab.DECISIONS -> view.decisions.size
-                    ListTab.RENEWALS -> view.renewals.count
-                    ListTab.SHOPPING -> view.shopping.count
-                }
+                val count = counts.getValue(t)
                 val due = when (t) {
                     ListTab.WAITING -> view.chaseDue + view.promisesDue; ListTab.DECISIONS -> view.reviewsDue; ListTab.RENEWALS -> view.renewalsDue; else -> 0
                 }
                 val color by animateColorAsState(
                     if (t == current) Meka.colors.textPrimary else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "tab",
                 )
+                val countUnder = count > 0 && !roomForCounts
                 var cut by remember(t) { mutableStateOf(false) }
+                var room by remember(t) { mutableStateOf(0f) }
                 Box(
                     Modifier.weight(1f).height(MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Tab) { choose(t) }
@@ -352,23 +375,41 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                             contentDescription = t.label + (if (due > 0) ", $due due" else "") + ", $count"
                             selected = t == current
                             this[TabLabelCut] = cut
+                            this[TabLabelSize] = labelSize.value
+                            this[TabLabelRoom] = room
+                            this[TabCountShown] = count > 0 && (roomForCounts || countUnder)
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    // Lists' shots (quality gate slice 10, 2026-10-22): on the cover screen a slot is about 61 dp, too
-                    // narrow for "Decisions" at the caption size, so the label shrinks a step at a time (never below
-                    // 10 sp) rather than being cut at the slot's edges.
-                    BasicText(
-                        (if (shortLabels) t.short else t.label).let { if (count > 0 && roomForCounts) "$it $count" else it }, maxLines = 1, softWrap = false,
-                        style = MekaType.caption.copy(color = if (due > 0) Meka.colors.accent else color),
-                        modifier = Modifier.padding(horizontal = MekaSpace.xxs),
-                        onTextLayout = { cut = it.hasVisualOverflow },
-                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        BasicText(
+                            label(t), maxLines = 1, softWrap = false,
+                            style = labelStyle.copy(color = if (due > 0) Meka.colors.accent else color),
+                            onTextLayout = {
+                                cut = it.hasVisualOverflow
+                                room = with(density) { ((slot.toPx() - it.size.width) / 2f).toDp().value }
+                            },
+                        )
+                        if (countUnder) BasicText("$count", maxLines = 1, softWrap = false, style = countStyle.copy(color = if (due > 0) Meka.colors.accent else color))
+                    }
                 }
             }
         }
     }
+}
+
+/** Clear space kept between a tab's label and its pill's edge, on each side. */
+internal val TAB_LABEL_ROOM = 6.dp
+private val TAB_MIN_SIZE = 10.sp // type: ok (the smallest a tab label goes)
+
+/** The largest label size, caption down to 10 sp in half steps, at which [fits]; 10 sp when none does. */
+internal fun tabLabelSize(fits: (TextUnit) -> Boolean): TextUnit {
+    var size = MekaType.caption.fontSize.value
+    while (size > TAB_MIN_SIZE.value) {
+        if (fits(size.sp)) return size.sp
+        size -= 0.5f
+    }
+    return TAB_MIN_SIZE
 }
 
 /**

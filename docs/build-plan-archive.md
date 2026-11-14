@@ -5691,6 +5691,14 @@ which wrapped their hints ("e.g. 7–8 years"; ci run 43560017342). The size che
 `KidsRules.fitButton`/`KidCard.fitButton` gives "All still fit" only when every size is kept, "It still fits" for one,
 "Both still fit" for two, "These still fit" otherwise (KidSizeCheckTest), on the Fold and the Mac (KidsSheet); the
 heads-up's button stays All still fit. Mac checked nightly.
+A16 (2026-11-14): **Lists' tab row on the cover screen.** Each tab's label had shrunk on its own (StepBased autosize),
+so "Decisions" was a step smaller than the rest, "Shopping" filled its slot to the pill's edge, and the counts were
+dropped below 104 dp a slot. Now ListsRoute's `Tabs` measures every label once (TextMeasurer) and draws all five at one
+size, the largest from caption down to 10 sp at which the longest keeps `TAB_LABEL_ROOM` (6 dp) clear each side
+(`tabLabelSize`); on a narrow slot the count sits on a small line under the label. The headings (You promised, Waiting
+for, Someday's kinds, Shopping's line and Got) and the empty lines start 8 dp in, where the rows' titles start.
+ListsScreensTest's tab check fails on two sizes, a label under 6 dp from its edge or a count not drawn, and the Many
+shots check YOU PROMISED's left edge against its first row's title. Fold only; no core change.
 
 ## Today's clipped first letters (TOP bug, 2026-11-08)
 

@@ -42,6 +42,10 @@ import os.meka.android.lists.LIST_TAB_TAG
 import os.meka.android.lists.ListTab
 import os.meka.android.lists.ListsRoute
 import os.meka.android.lists.TabLabelCut
+import os.meka.android.lists.TabLabelSize
+import os.meka.android.lists.TabLabelRoom
+import os.meka.android.lists.TabCountShown
+import os.meka.android.lists.TAB_LABEL_ROOM
 import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.ListRules
 import os.meka.core.domain.ObligationKind
@@ -136,6 +140,7 @@ class ListsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Lists")
         assertTabsWhole(name)
+        if (tab == ListTab.WAITING && fill == Fill.MANY) assertRowsUnderHeadings(name)
         when {
             // Nothing on: the line says what the list is for, never a bare heading over an empty box.
             fill == Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Nothing promised either way")
@@ -308,12 +313,31 @@ class ListsScreensTest {
         reach(name, hasText("Coffee beans", substring = true), "Coffee beans back on Shopping")
     }
 
+    /** Walk-through A16: a heading ("You promised") starts where its rows' titles start, not ~8 dp left of them. */
+    private fun assertRowsUnderHeadings(name: String) {
+        fun left(text: String) = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.left
+        val heading = left("YOU PROMISED") ?: fail("$name: no You promised heading")
+        val row = left("Send Sam the photos") ?: fail("$name: no promise row")
+        val px = compose.density.density
+        if (kotlin.math.abs(heading - row) > 1.5f * px) fail("$name: You promised starts ${(row - heading) / px} dp from its rows' titles")
+    }
+
     /** All five tabs, each label whole inside its slot (TabLabelCut, set from the label's own layout). */
     private fun assertTabsWhole(name: String) {
         val tabs = compose.onAllNodes(hasTestTag(LIST_TAB_TAG), useUnmergedTree = true).fetchSemanticsNodes()
         if (tabs.size != ListTab.entries.size) fail("$name: ${tabs.size} Lists tabs on screen, not ${ListTab.entries.size}")
         val cut = tabs.filter { it.config.getOrElse(TabLabelCut) { false } }
         if (cut.isNotEmpty()) fail("$name: Lists tab labels cut at the slot's edges: " + cut.joinToString { it.config.toString() })
+        // Walk-through A16: one label size for every tab, each label clear of its pill's edges, and no count dropped.
+        val sizes = tabs.map { it.config.getOrElse(TabLabelSize) { -1f } }.distinct()
+        if (sizes.size != 1) fail("$name: Lists tabs drawn at different sizes: $sizes")
+        val tight = tabs.filter { it.config.getOrElse(TabLabelRoom) { 0f } < TAB_LABEL_ROOM.value - 0.5f }
+        if (tight.isNotEmpty()) fail("$name: Lists tab labels against the pill's edge: " + tight.joinToString { "${it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }} (${it.config.getOrElse(TabLabelRoom) { 0f }} dp)" })
+        val dropped = tabs.filter {
+            val d = it.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }.joinToString()
+            !d.endsWith(", 0") && !it.config.getOrElse(TabCountShown) { false }
+        }
+        if (dropped.isNotEmpty()) fail("$name: Lists tabs whose count isn't shown: " + dropped.joinToString { it.config.toString() })
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
