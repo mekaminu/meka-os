@@ -369,7 +369,9 @@ private fun JobCard(
                     .padding(MekaSpace.xs).testTag("errand-draft"))
             Text(LoneWordGlue.kept(ObiJobRules.DRAFT_FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End),
+        // Week 3's walk-through (A19): a card's buttons start under its words, like the call card's Play and Up next's
+        // Done, not pushed to the right edge.
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).testTag("errand-actions"), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically) {
             if (j.canCarryOn) {
                 TouchPill(ObiJobRules.CARRY_ON, Meka.colors.accent, Meka.colors.onAccent, spoken = "${ObiJobRules.CARRY_ON}: ${j.title}",
@@ -470,8 +472,9 @@ private fun ErrandCard(c: WorkingOnCard, modifier: Modifier, onOpen: () -> Unit)
                 modifier = Modifier.padding(top = MekaSpace.xs))
             Text(LoneWordGlue.kept(need), style = MekaType.body, color = Meka.colors.accent)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            TouchPill(c.errand.openLabel, Meka.colors.surface, Meka.colors.accent, spoken = "${c.errand.openLabel}: ${c.title}", onClick = onOpen)
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.CenterVertically) {
+            TouchPill(c.errand.openLabel, Meka.colors.surface, Meka.colors.accent, spoken = "${c.errand.openLabel}: ${c.title}",
+                modifier = Modifier.testTag("working-on-open"), onClick = onOpen)
         }
     }
 }

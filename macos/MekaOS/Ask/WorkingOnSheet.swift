@@ -162,8 +162,8 @@ struct WorkingOnSheet: View {
                     .foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Week 3's walk-through (A19): a card's buttons start under its words, like the call card's Play.
             HStack(spacing: MekaSpace.xs) {
-                Spacer()
                 if canCarryOn {
                     pill(ObiJobRules.shared.CARRY_ON, ink: palette.onAccent, fill: palette.accent) { carryOn(id) }
                         .accessibilityLabel("\(ObiJobRules.shared.CARRY_ON): \(j.title)")
@@ -186,7 +186,9 @@ struct WorkingOnSheet: View {
                     pill(ObiJobRules.shared.STOP, ink: palette.textSecondary, fill: palette.surface) { stop(id) }
                         .accessibilityLabel("\(ObiJobRules.shared.STOP): \(j.title)")
                 }
+                Spacer(minLength: 0)
             }
+            .padding(.top, MekaSpace.xs)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -748,7 +750,6 @@ struct WorkingOnSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Spacer()
                 Button(c.errand.openLabel) {
                     MekaHaptics.tick()
                     model.openFromWorkingOn(place, reduced: reduceMotion)
@@ -759,7 +760,9 @@ struct WorkingOnSheet: View {
                 .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .background(palette.surface, in: Capsule())
                 .accessibilityLabel("\(c.errand.openLabel): \(c.title)")
+                Spacer(minLength: 0)
             }
+            .padding(.top, MekaSpace.xs)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

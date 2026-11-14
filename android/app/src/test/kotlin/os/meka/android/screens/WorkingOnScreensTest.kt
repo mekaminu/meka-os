@@ -31,6 +31,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.WorkingOnPane
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.BookingCallFields
@@ -121,6 +122,25 @@ class WorkingOnScreensTest {
                 "\"$label\" ${(n.size.height / compose.density.density).toInt()} dp"
             }
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
+    }
+
+    /**
+     * Week 3's walk-through (A19): a card's buttons start under its words (the card's own padding in from its left
+     * edge), like the call card's Play, not pushed to the right edge.
+     */
+    private fun assertActionsStart(name: String, cardTag: String, pillTag: String) {
+        val cards = compose.onAllNodes(hasTestTag(cardTag), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        val pills = compose.onAllNodes(hasTestTag(pillTag), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        if (pills.isEmpty()) fail("$name: no $pillTag to measure")
+        val pad = MekaSpace.m.value * compose.density.density
+        pills.forEach { b ->
+            val card = cards.firstOrNull { it.left <= b.left && it.right >= b.right && it.top <= b.top && it.bottom >= b.bottom }
+                ?: fail("$name: a $pillTag outside any $cardTag")
+            val inset = b.left - card.left
+            if (inset > pad + compose.density.density) {
+                fail("$name: $pillTag starts ${(inset / compose.density.density).toInt()} dp in from its card's edge, not under its words (${MekaSpace.m.value.toInt()} dp)")
+            }
+        }
     }
 
     private suspend fun fill(core: MekaCore, fill: Fill) {
@@ -259,6 +279,7 @@ class WorkingOnScreensTest {
                 if (!onScreen("Which morning next week suits you")) fail("$name: the question isn't shown")
                 if (!onScreen(ObiJobRules.DRAFT_LABEL.uppercase())) fail("$name: no draft box")
                 if (!onScreen("Working · step 2 of 2")) fail("$name: the fence's status isn't shown")
+                assertActionsStart(name, "errand-card", "errand-answer")
             }
             Fill.CALL -> {
                 val r = v.calls.singleOrNull() ?: fail("$name: ${v.calls.size} call cards, not 1")
@@ -282,6 +303,7 @@ class WorkingOnScreensTest {
                 if (cards != 3) fail("$name: $cards cards, not 3")
                 if (v.summary != "Keeping an eye on 3 things · 3 need you") fail("$name: the summary reads \"${v.summary}\"")
                 if (!onScreen(WorkingOnRules.NEED.uppercase())) fail("$name: no WHAT I NEED FROM YOU")
+                assertActionsStart(name, "working-on-card", "working-on-open")
             }
         }
         return core

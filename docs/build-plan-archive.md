@@ -6278,3 +6278,9 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Bedside clock shots: the phone's daily 06:30 alarm is set in the morning (07:40) and day (13:00) scenes too, as a real phone reports it (the next one, tomorrow's), so the morning shot reads "Alarm 06:30 · in 22 h 50" beside the evening's "Alarm 06:30 · in 10 h" instead of "No alarm set"; the nothing-on scene keeps no alarm. Every alarm scene checks the line starts "Alarm 06:30" (was the evening only). The rule itself (`FoldModeRules.alarmLine`) was right; only the shots' fixture disagreed.
 - Tomorrow shots: the Tomorrow peek is drawn inside Today's gutter (16 dp at the sides) with Today's 32 dp top space, as Today's list holds it, instead of against the screen's top and side edges; `TomorrowScreensTest` measures both.
 - Tests only (the Fold's `BedsideScreensTest`, `TomorrowScreensTest`); no app code changed, so nothing for the Mac.
+
+### Found and fixing, week 3: A19 slice 9 (2026-11-14)
+
+- Obi is working on: an errand card's buttons (Carry on / Answer, Copy, Stop) and a standing watcher's "Open …" button now start under the card's words (the card's 16 dp padding), like the call card's Play and Up next's Done, instead of being pushed to the right edge; the row gets the xs gap above it that the card's sections use.
+- Fold `WorkingOnPane` (`JobCard` row tagged `errand-actions`, `ErrandCard`'s pill tagged `working-on-open`), Mac `WorkingOnSheet` (`jobCard`, `card`: the leading Spacer moved to the end).
+- `WorkingOnScreensTest.assertActionsStart`: in the errands shots (Answer) and the many-cards shots (Open …) each button sits no further than the card's padding in from its card's left edge. Mac checked nightly.
