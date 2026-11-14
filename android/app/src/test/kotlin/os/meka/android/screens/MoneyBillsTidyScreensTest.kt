@@ -37,6 +37,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyPayday
 import os.meka.core.domain.MoneyTab
+import os.meka.core.domain.MoneyBills
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -62,7 +63,12 @@ class MoneyBillsTidyScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
+        // Walk-through 2026-11-08 A23: three months of the council tax and the streaming bill, so Bills finds them and
+        // the tidy shot shows a bill to come, not "£0 · no bills found yet".
         const val CURRENT = "Date,Description,Amount\n" +
+            "01/08/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
+            "05/08/2026,SALARY OAKFIELD LTD,2500.00\n" +
+            "15/08/2026,STREAMLY.COM,-10.99\n" +
             "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
             "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
             "15/09/2026,STREAMLY.COM,-10.99\n" +
@@ -141,6 +147,10 @@ class MoneyBillsTidyScreensTest {
         val v = core.moneyView.value
         val cv = v.cards ?: fail("no cards view with a card marked")
         if (cv.rows.isEmpty()) fail("the card isn't on Bills")
+        // Walk-through 2026-11-08 A23: the tidy shot shows Bills with a bill in it, not its empty card.
+        val bills = v.bills ?: fail("Bills has no card with three months of statements in")
+        if (bills.rows.none { !it.paid }) fail("Bills found no bill to come: ${bills.count}")
+        if (showsText(MoneyBills.NONE_FOUND)) fail("Bills says \"${MoneyBills.NONE_FOUND}\" with the council tax on three statements")
         scrollTo("money-cards-card")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-bills-tidy"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-bills-tidy")

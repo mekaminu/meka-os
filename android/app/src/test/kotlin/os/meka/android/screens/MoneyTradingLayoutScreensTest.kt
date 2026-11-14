@@ -237,10 +237,19 @@ class MoneyTradingLayoutScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun tradingInCardsOnTheOpenFold() {
-        open()
+        // Walk-through 2026-11-08 A23: the open Fold's layout shot was only the reading line. It now has figures read
+        // and shows the page's lower cards (the addresses and the foot line); its top is inner-dark-trading-risk's.
+        open(seed = true)
         pick(MoneyTab.TRADING)
         assertTrue(shows("money-trading-card"))
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-trading-layout"))
+        if (shows("money-trading-note")) fail("the open Fold's layout shot still shows only the reading line")
+        scrollTo("money-foot-info")
+        assertTrue(showsText(MoneyTradingLayout.ADDRESSES_HEAD), "the addresses card should be in the layout shot")
+        assertTrue(showsText(MoneyTradingLayout.FOOT_SHORT), "Trading's foot line should be in the layout shot")
+        val shot = java.io.File(ScreenShots.path("money", "inner-dark-trading-layout"))
+        compose.onNodeWithTag("screen").captureRoboImage(shot.path)
+        val top = java.io.File(ScreenShots.path("money", "inner-dark-trading-risk"))
+        if (top.exists() && top.readBytes().contentEquals(shot.readBytes())) fail("the layout shot is byte for byte inner-dark-trading-risk")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

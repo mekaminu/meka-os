@@ -214,6 +214,11 @@ class MoneyPlanMoreScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-challenges-tiles-unfolded"))
         scrollTo("money-abroad-fees")
         assertTrue(showsText(MoneyPlanMore.FEES_LABEL))
+        // Walk-through 2026-11-08 A23: scrolling only to the fees left PAYING ABROAD at the screen's bottom edge, so
+        // scroll on to its last row and check the fees and the bars' toggle both sit wholly on screen.
+        scrollTo("money-abroad-payments-toggle")
+        if (!ScreenShots.wholeOnScreen(compose, "money-abroad-fees")) fail("PAYING ABROAD's fees tile isn't wholly in the shot")
+        if (!ScreenShots.wholeOnScreen(compose, "money-abroad-payments-toggle")) fail("PAYING ABROAD's last row isn't wholly in the shot")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-abroad-tiles-unfolded"))
     }
 }

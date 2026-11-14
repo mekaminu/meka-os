@@ -74,7 +74,10 @@ class VoiceScreensTest {
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
     private val cal = LocalCalendar.fixedOffset(3_600_000L)
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        const val ONE_MEMORY = "Likes the 07:42 train"
+    }
 
     private enum class Fill { EMPTY, ONE, MANY }
 
@@ -89,8 +92,9 @@ class VoiceScreensTest {
             deviceVoices = emptyList(), deviceSettings = DeviceVoiceSettings.DEFAULT, showAll = false,
             speed = TurnSpeedRules.view(emptyList(), cal), serverSpeed = null,
         )
+        // Walk-through 2026-11-08 A23: "one" shows one thing Obi remembers, not the empty memory.
         Fill.ONE -> VoiceScreen(
-            sir = false, faceOn = true, faceReady = true, remembers = true, memoryRows = emptyList(),
+            sir = false, faceOn = true, faceReady = true, remembers = true, memoryRows = listOf(ONE_MEMORY),
             live = LiveTalkRules.view(on = false, voice = null, meterKnown = true, configured = true, level = "ok", spentPence = 40, capPence = 500),
             liveSampleFailed = false,
             view = os.meka.core.domain.OneVoiceRules.view("Charon", null, SpeechRules.ON, "Navilife's voice · Charon · 1,240 of 1,000,000 characters in October", mac = false),
@@ -197,6 +201,7 @@ class VoiceScreensTest {
         ScreenShots.assertClocksWhole(compose, name)
         ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertShows(compose, name, VoicePickerRules.TITLE)
+        if (fill == Fill.ONE && !onScreen(ONE_MEMORY)) fail("$name: the one thing Obi remembers doesn't show")
         if (!onScreen("One voice for Obi")) fail("$name: the intro doesn't say it's Obi's one voice")
         val v = s.view!!
         val d = DeviceVoiceRules.view(s.deviceVoices!!, s.deviceSettings, mac = false, expanded = s.showAll)
