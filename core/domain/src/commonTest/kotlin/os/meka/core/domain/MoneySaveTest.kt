@@ -120,4 +120,20 @@ class MoneySaveTest {
         val v = MoneySave.view(110_000, 6, 0, base(221_730))
         assertTrue("left each month after saving this and your usual spending: about £1,120" in v.split, v.split)
     }
+
+    /** Walk-through A21: "About £2,230 left over" less £1,125 is £1,105 in the split, in Obi's line and in Ask Obi's answer. */
+    @Test
+    fun obisSpareIsTheCardsSumNotARoundingOfIt() {
+        val left = 223_450L // the forecast says about £2,230
+        val v = MoneySave.view(112_500, 6, 0, base(left))
+        assertTrue("about £1,105" in v.split, v.split)
+        assertTrue(v.obi.startsWith("£1,125 a month still leaves about £1,105 spare"), v.obi)
+        assertEquals(110_500L, MoneySave.spareAfter(112_500, left))
+        for (a in listOf(2_500L, 37_500L, 110_000L, 112_500L, 187_500L)) {
+            val said = MoneySave.view(a, 6, 0, base(left))
+            val split = Regex("""usual spending: about (£[\d,]+)""").find(said.split)!!.groupValues[1]
+            val obi = Regex("""about (£[\d,]+)""").find(said.obi)?.groupValues?.get(1)
+            if (obi != null) assertEquals(split, obi, "£${a / 100}: " + said.split + " / " + said.obi)
+        }
+    }
 }

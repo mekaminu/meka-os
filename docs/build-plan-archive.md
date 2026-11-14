@@ -6297,3 +6297,8 @@ Money's byte-identical shot pairs: MoneyScreensTest drops `cover-dark-one-column
 
 ### Found and fixing, week 3 · A20 slice 4 (2026-11-14, A20 done)
 The Board's two pairs. `theTimelinesHeadingSitsOnTheDatesLine` shot `inner-dark-timeline-aligned`, the same opening state `unfoldedTheTimelineOpensBesideTheWeekWithTodaysTimedTask` shoots as `inner-dark-timeline` (byte copies); it now only measures the heading against the dates. `foldingAndUnfoldingSwapsTheLayoutAndKeepsTheDay` shot `inner-dark-folded-again` from the inner screen's root, so the 344 dp one-day layout sat in the left third of an inner-sized picture; the 344 dp box is now tagged `board-fold-frame` and the shot is that node, `cover-dark-folded-again`, with the test checking the frame and the PNG are the cover's width. Tests only (BoardScreensTest), Fold.
+
+
+### Found and fixing, week 3 · A21 (2026-11-14)
+
+Obi's spare sum under What if I save… was `roundTen(left − amount)` while the split line said `roundTen(left) − amount`, so with an average month of about £2,234 and £1,125 a month the split said £1,105 and Obi £1,110. One rule now, `MoneySave.spareAfter(amount, left)` (the forecast's rounded month less the amount, at least nothing), used by the split, `MoneySave.obi` (so Ask Obi's What if I save answer too) and `MoneyClear`'s "fits inside an average month, leaving about …". Test: `MoneySaveTest.obisSpareIsTheCardsSumNotARoundingOfIt`. The reviewer's Ask Obi shot ("£1,100 … about £1,120") was its own fixture's month (about £2,220), already agreeing with itself.

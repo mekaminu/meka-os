@@ -92,6 +92,9 @@ object MoneySave {
 
     private fun pct(bp: Int): String = if (bp % 100 == 0) "${bp / 100}%" else "${bp / 100}.${(bp % 100).toString().padStart(2, '0').trimEnd('0')}%"
 
+    /** What's left each month after saving [amountPence]: the forecast's rounded month less it, at least nothing. */
+    fun spareAfter(amountPence: Long, leftPence: Long): Long = (MoneyForecast.roundTen(leftPence) - amountPence).coerceAtLeast(0)
+
     /** Obi's line: whether [amountPence] a month fits his average month, and whether it's lit (it doesn't fit). */
     fun obi(amountPence: Long, leftPence: Long?): Pair<String, Boolean> {
         val amt = fmt(amountPence)
@@ -101,8 +104,11 @@ object MoneySave {
             val said = if (more >= 1_000) "About ${fmt(more)} more goes out than comes in in an average month" else "About what comes in goes out in an average month"
             return "$said, so $amt a month would come from savings or the cards. Clear my cards first may cost you less." to true
         }
-        val spare = MoneyForecast.roundTen(leftPence - amountPence)
-        val left = fmt(MoneyForecast.roundTen(leftPence))
+        // Walk-through A21: the forecast's rounded month less the amount, the sum the split line and the card above say
+        // ("About £2,230 left over" less £1,125 is £1,105), never the unrounded month less it rounded again (£1,110).
+        val usual = MoneyForecast.roundTen(leftPence)
+        val spare = usual - amountPence
+        val left = fmt(usual)
         return when {
             spare >= 40_000 -> "$amt a month still leaves about ${fmt(spare)} spare in an average month." to false
             spare >= 15_000 -> "Doable: it leaves about ${fmt(spare)} in an average month, so a dearer month (December) would be tight." to false
@@ -128,7 +134,7 @@ object MoneySave {
         val split = buildList {
             add("You put in ${fmt(paidIn)}")
             if (interest >= 50) add("interest about ${fmt(MoneyForecast.roundTen(interest).coerceAtLeast(100))}")
-            base.leftPence?.takeIf { it >= 1_000 }?.let { add("$LEFT_AFTER ${fmt((MoneyForecast.roundTen(it) - amt).coerceAtLeast(0))}") }
+            base.leftPence?.takeIf { it >= 1_000 }?.let { add("$LEFT_AFTER ${fmt(spareAfter(amt, it))}") }
         }.joinToString(" · ")
         val (obi, lit) = obi(amt, base.leftPence)
         val monthChips = MONTHS.map { m ->

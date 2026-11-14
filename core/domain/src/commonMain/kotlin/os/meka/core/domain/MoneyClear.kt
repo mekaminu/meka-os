@@ -205,7 +205,7 @@ object MoneyClear {
         when {
             left == null -> parts += "Once two whole months of payments are in, I can say whether ${fmt(pay)} a month fits your usual month."
             left < pay -> { parts += "That's more than you usually have left (${fmt(MoneyForecast.roundTen(left.coerceAtLeast(0)))} a month), so some months it would come from savings."; lit = true }
-            else -> parts += "${fmt(pay)} a month fits inside an average month, leaving about ${fmt(MoneyForecast.roundTen(left - pay))}."
+            else -> parts += "${fmt(pay)} a month fits inside an average month, leaving about ${fmt(MoneySave.spareAfter(pay, left))}."
         }
         base.cards.firstOrNull { it.aprBp == null }?.let { parts += "Type ${it.name}'s APR in its sheet on Bills for the true interest." }
         if (plan.interestPence >= 10_000) parts += "A 0% balance transfer could cut the interest; worth checking what you're offered."
