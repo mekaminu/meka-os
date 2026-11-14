@@ -1,6 +1,7 @@
 package os.meka.android.ask
 
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -192,17 +193,17 @@ internal fun MoneyTiles(tiles: List<MoneyTile>, modifier: Modifier = Modifier) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
         val n = tiles.size.coerceAtLeast(1)
-        val room = with(density) { ((maxWidth - MekaSpace.xs * (n - 1)) / n - MekaSpace.m * 2).toPx() }
+        val room = if (constraints.hasBoundedWidth) with(density) { ((maxWidth - MekaSpace.xs * (n - 1)) / n - MekaSpace.m * 2).toPx() } else Float.MAX_VALUE
         val labelStyle = MekaType.caption
         val valueStyle = MekaType.metaStrong
         val labelSize = remember(room, tiles.map { it.label }, density) {
             sharedFitSize(labelStyle.fontSize, TILE_LABEL_MIN) { size ->
-                tiles.all { measurer.measure(it.label, labelStyle.copy(fontSize = size), maxLines = 1, softWrap = false).size.width <= room }
+                tiles.all { measurer.measure(it.label, labelStyle.copy(fontSize = size), maxLines = 1, softWrap = false).size.width <= room } // type: ok (measuring at a candidate size)
             }
         }
         val valueSize = remember(room, tiles.map { it.value }, density) {
             sharedFitSize(valueStyle.fontSize, TILE_VALUE_MIN) { size ->
-                tiles.all { measurer.measure(it.value, valueStyle.copy(fontSize = size), maxLines = 1, softWrap = false).size.width <= room }
+                tiles.all { measurer.measure(it.value, valueStyle.copy(fontSize = size), maxLines = 1, softWrap = false).size.width <= room } // type: ok (measuring at a candidate size)
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -215,14 +216,15 @@ internal fun MoneyTiles(tiles: List<MoneyTile>, modifier: Modifier = Modifier) {
                 ) {
                     // As the mockup: the label whole ("Bills to come", never "Bills to"), at the row's one size.
                     BasicText(
-                        t.label, style = labelStyle.copy(color = Meka.colors.textSecondary, fontSize = labelSize), // type: ok (caption at the size every tile's label fits)
-                        maxLines = 1, softWrap = false,
+                        t.label, style = labelStyle.copy(color = Meka.colors.textSecondary), maxLines = 1, softWrap = false,
+                        // Capped at the row's one size; still steps down if the drawn tile is narrower than measured.
+                        autoSize = TextAutoSize.StepBased(minFontSize = TILE_LABEL_MIN, maxFontSize = labelSize, stepSize = 0.5.sp), // type: ok (caption at the size every tile's label fits)
                     )
                     // Walk-through A3 (2026-11-08): the figure whole ("£2,125.91", never "£2,125."), stepping down to
                     // fit three tiles on the closed Fold rather than cutting at the point; one size for the three.
                     BasicText(
-                        t.value, style = valueStyle.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary, fontSize = valueSize), // type: ok (metaStrong at the size every tile's figure fits)
-                        maxLines = 1, softWrap = false,
+                        t.value, style = valueStyle.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary), maxLines = 1, softWrap = false,
+                        autoSize = TextAutoSize.StepBased(minFontSize = TILE_VALUE_MIN, maxFontSize = valueSize, stepSize = 0.5.sp), // type: ok (metaStrong at the size every tile's figure fits)
                     )
                 }
             }
