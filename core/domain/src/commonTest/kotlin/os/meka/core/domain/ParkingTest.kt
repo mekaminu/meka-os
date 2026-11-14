@@ -349,4 +349,14 @@ class ParkingTest {
         assertEquals(ParkingRules.PHOTO_KEPT, ParkingRules.photoKeptLine(null))
         assertEquals("Photo kept · read “Level 3 · Zone F” from the sign", ParkingRules.photoKeptLine("Level 3 · Zone F"))
     }
+
+    @Test fun theFindLinkSaysWhatATapDoesAndMapsIsOneQuietWayOut() {
+        // Walk-through 2026-11-08 A19: "Find my car" over the arrow already shown, and "Walk there in Maps" under it.
+        assertEquals("Find my car", ParkingRules.findAction(open = false))
+        assertEquals("Hide the arrow", ParkingRules.findAction(open = true))
+        assertEquals("Open in Maps", ParkingRules.MAPS)
+        assertEquals("Open in Maps: walk to The Golf", ParkingRules.mapsSpoken("The Golf"))
+        assertFalse("Walk there" in ParkingRules.PRIVACY)
+        assertTrue(ParkingRules.MAPS in ParkingRules.PRIVACY)
+    }
 }

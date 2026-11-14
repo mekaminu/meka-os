@@ -92,7 +92,19 @@ object ParkingRules {
     const val PARK = "I've parked here"
     const val FIND = "Find my car"
     const val DROVE_OFF = "Drove off"
-    const val MAPS = "Walk there in Maps"
+    /**
+     * Walk-through 2026-11-08 A19: the open finder said "Find my car" above the arrow it had already found and "Walk
+     * there in Maps" under it, two gold links for one job. Now the card's link says what a tap does while the arrow is
+     * shown ([findAction]: "Hide the arrow"), and Maps is the quieter way out: "Open in Maps".
+     */
+    const val HIDE_FIND = "Hide the arrow"
+    const val MAPS = "Open in Maps"
+    /** The parked card's link: [FIND] to show the arrow, [HIDE_FIND] while it is shown. */
+    fun findAction(open: Boolean): String = if (open) HIDE_FIND else FIND
+
+    /** What Open in Maps says to a screen reader: where it goes ("Open in Maps: walk to the Golf"). */
+    fun mapsSpoken(carTitle: String): String = "$MAPS: walk to $carTitle"
+
     const val LABEL_HINT = "The bay, e.g. level 3 row F"
     const val SAVING = "Finding where you are…"
     const val FINDING = "Finding where you are…"
@@ -101,7 +113,7 @@ object ParkingRules {
     const val LOCATION_OFF = "Location is off on the phone · turn it on to save the spot"
     const val NOT_PARKED = "Not parked · tap “I've parked here” when you leave the car"
     const val WHICH_CAR = "Which car?"
-    const val PRIVACY = "Where you park syncs to your watch so it can point to the car, and is forgotten when you drive off. The bay's photo stays on this phone: never synced, sent or backed up. Walk there in Maps hands the spot to your maps app only when you tap it."
+    const val PRIVACY = "Where you park syncs to your watch so it can point to the car, and is forgotten when you drive off. The bay's photo stays on this phone: never synced, sent or backed up. Open in Maps hands the spot to your maps app only when you tap it."
     const val DATES_LINE = "MOT, tax, insurance and service · in Lists → Renewals"
     const val DATES_ACTION = "Dates ›"
     const val COMPASS_HINT = "Hold the phone flat and point it ahead"

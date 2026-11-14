@@ -1,7 +1,6 @@
 package os.meka.android.ask
 
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -181,32 +180,67 @@ internal fun MoneyRing(s: MoneySpendingView, focus: String?, modifier: Modifier 
     }
 }
 
-/** Came in · Bills to come · Left, side by side in raised tiles. */
+/**
+ * Came in · Bills to come · Left, side by side in raised tiles. Walk-through 2026-11-08 A19: each label stepped down
+ * on its own, so on the closed Fold "Bills to come" read smaller than "Came in" and "Left"; now the three labels share
+ * one size (the largest at which every one fits its tile, never below 10 sp), and so do the three figures (never below
+ * 11 sp), found by measuring.
+ */
 @Composable
 internal fun MoneyTiles(tiles: List<MoneyTile>, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        tiles.forEach { t ->
-            Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-                    .semantics(mergeDescendants = true) { contentDescription = "${t.label}, ${t.value}" }
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-            ) {
-                // As the mockup: the label whole ("Bills to come", never "Bills to"), stepping down on the closed Fold.
-                BasicText(
-                    t.label, style = MekaType.caption.copy(color = Meka.colors.textSecondary), maxLines = 1, softWrap = false,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
-                )
-                // Walk-through A3 (2026-11-08): the figure whole ("£2,125.91", never "£2,125."), stepping down to fit
-                // three tiles on the closed Fold rather than cutting at the point.
-                BasicText(
-                    t.value, style = MekaType.metaStrong.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary),
-                    maxLines = 1, softWrap = false,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = MekaType.metaStrong.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 11)
-                )
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
+        val n = tiles.size.coerceAtLeast(1)
+        val room = with(density) { ((maxWidth - MekaSpace.xs * (n - 1)) / n - MekaSpace.m * 2).toPx() }
+        val labelStyle = MekaType.caption
+        val valueStyle = MekaType.metaStrong
+        val labelSize = remember(room, tiles.map { it.label }, density) {
+            sharedFitSize(labelStyle.fontSize, TILE_LABEL_MIN) { size ->
+                tiles.all { measurer.measure(it.label, labelStyle.copy(fontSize = size), maxLines = 1, softWrap = false).size.width <= room }
+            }
+        }
+        val valueSize = remember(room, tiles.map { it.value }, density) {
+            sharedFitSize(valueStyle.fontSize, TILE_VALUE_MIN) { size ->
+                tiles.all { measurer.measure(it.value, valueStyle.copy(fontSize = size), maxLines = 1, softWrap = false).size.width <= room }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            tiles.forEach { t ->
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                        .semantics(mergeDescendants = true) { contentDescription = "${t.label}, ${t.value}" }
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                ) {
+                    // As the mockup: the label whole ("Bills to come", never "Bills to"), at the row's one size.
+                    BasicText(
+                        t.label, style = labelStyle.copy(color = Meka.colors.textSecondary, fontSize = labelSize), // type: ok (caption at the size every tile's label fits)
+                        maxLines = 1, softWrap = false,
+                    )
+                    // Walk-through A3 (2026-11-08): the figure whole ("£2,125.91", never "£2,125."), stepping down to
+                    // fit three tiles on the closed Fold rather than cutting at the point; one size for the three.
+                    BasicText(
+                        t.value, style = valueStyle.copy(color = if (t.lit) Meka.colors.accent else Meka.colors.textPrimary, fontSize = valueSize), // type: ok (metaStrong at the size every tile's figure fits)
+                        maxLines = 1, softWrap = false,
+                    )
+                }
             }
         }
     }
+}
+
+private val TILE_LABEL_MIN = 10.sp // type: ok (the smallest a tile's label goes)
+private val TILE_VALUE_MIN = 11.sp // type: ok (the smallest a tile's figure goes)
+
+/** The largest size from [max] down to [min] in half steps at which [fits]; [min] when none does. */
+internal fun sharedFitSize(max: androidx.compose.ui.unit.TextUnit, min: androidx.compose.ui.unit.TextUnit, fits: (androidx.compose.ui.unit.TextUnit) -> Boolean): androidx.compose.ui.unit.TextUnit {
+    var size = max.value
+    while (size > min.value) {
+        if (fits(size.sp)) return size.sp
+        size -= 0.5f
+    }
+    return min
 }
 
 /** A category row: chip, name and share, amount, a thin bar in its colour against the biggest, and the note. */

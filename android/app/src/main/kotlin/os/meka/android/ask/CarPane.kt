@@ -745,9 +745,12 @@ private fun ParkedCard(
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
-            Text(ParkingRules.FIND, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFind)
-                    .semantics { contentDescription = "${ParkingRules.FIND}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
+            // Walk-through A19: the link says what a tap does now ("Hide the arrow" while the arrow is shown).
+            Crossfade(ParkingRules.findAction(open), animationSpec = MekaMotion.appear(reduced), label = "find-action") { action ->
+                Text(action, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFind)
+                        .semantics { contentDescription = "$action: ${row.title}" }.minTouch().padding(MekaSpace.xs))
+            }
             Text(ParkingRules.photoAction(row.spot), style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPhoto)
                     .semantics { contentDescription = "${ParkingRules.photoAction(row.spot)}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
@@ -760,7 +763,7 @@ private fun ParkedCard(
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            FindMyCar(row.spot, photoKey = "${row.spot.photoAtMs}-$photoTick")
+            FindMyCar(row.spot, row.title, photoKey = "${row.spot.photoAtMs}-$photoTick")
         }
         Field(ParkingRules.LABEL_HINT, Modifier.padding(top = MekaSpace.xxs), onDone = onLabel)
     }
@@ -768,7 +771,7 @@ private fun ParkedCard(
 
 /** The arrow and the distance, live while shown: GPS and the compass run only while this is on screen. */
 @Composable
-private fun FindMyCar(spot: ParkedSpot, photoKey: String) {
+private fun FindMyCar(spot: ParkedSpot, carTitle: String, photoKey: String) {
     val context = LocalContext.current
     val reduced = Meka.reducedMotion
     var here by remember { mutableStateOf<LocationFix?>(null) }
@@ -817,8 +820,10 @@ private fun FindMyCar(spot: ParkedSpot, photoKey: String) {
         }
         view.accuracy?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         if (view.arrowDeg == null && here != null) Text(ParkingRules.COMPASS_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
-        Text(ParkingRules.MAPS, style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+        // Walk-through A19: Maps is the quieter way out (secondary ink), not a second gold "find" beside the arrow.
+        Text(ParkingRules.MAPS, style = MekaType.caption, color = Meka.colors.textSecondary,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).semantics { contentDescription = ParkingRules.mapsSpoken(carTitle) }
+                .clickable(role = Role.Button) {
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ParkingRules.mapsUrl(spot))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }

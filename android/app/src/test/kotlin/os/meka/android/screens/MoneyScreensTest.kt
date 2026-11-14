@@ -35,6 +35,7 @@ import os.meka.core.domain.MoneyTabs
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -200,6 +201,21 @@ class MoneyScreensTest {
             val card = v.bills?.amount ?: fail("$name: no Bills card while Spending says $toCome to come")
             if (toCome != card) fail("$name: Spending says $toCome to come, the Bills tab $card")
             if (toCome == "£0") fail("$name: the full month's fixture has nothing to come")
+        }
+        // Walk-through 2026-11-08 A19: the three tiles' labels are one size ("Bills to come" read smaller than its
+        // neighbours on the closed Fold), and so are their figures.
+        if (tab == MoneyTab.SPENDING && fill == Fill.MANY) {
+            val tiles = v.month?.spending?.tiles.orEmpty()
+            fun sizeOf(text: String): Float? {
+                val n = compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull() ?: return null
+                val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                return results.firstOrNull()?.layoutInput?.style?.fontSize?.value
+            }
+            val labels = tiles.mapNotNull { t -> sizeOf(t.label)?.let { t.label to it } }
+            if (labels.size == tiles.size && labels.map { it.second }.distinct().size > 1) fail("$name: the tiles' labels differ in size: $labels")
+            val values = tiles.mapNotNull { t -> sizeOf(t.value)?.let { t.value to it } }
+            if (values.size == tiles.size && values.map { it.second }.distinct().size > 1) fail("$name: the tiles' figures differ in size: $values")
         }
         // Walk-through 2026-11-08 A10: the total card's head and the outside row said "Outside these accounts" twice.
         if (tab == MoneyTab.ACCOUNTS && fill == Fill.MANY) {

@@ -259,6 +259,24 @@ class CarScreensTest {
         if (compose.onAllNodes(hasTestTag(CAR_PARKED_SHEET_TAG)).fetchSemanticsNodes().isEmpty()) fail("$name: the parked row opened no sheet")
         assertTouchTargets(name)
 
+        // Walk-through 2026-11-08 A19: Find my car, once the arrow shows, says Hide the arrow; Maps is one quiet "Open in
+        // Maps" (it was "Walk there in Maps" in gold under a link still saying Find my car); a second tap hides it.
+        reach(name, hasContentDescription("${ParkingRules.FIND}: ", substring = true) and hasClickAction(), "Find my car")[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(hasContentDescription("${ParkingRules.HIDE_FIND}: ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription("${ParkingRules.HIDE_FIND}: ", substring = true)).fetchSemanticsNodes().isEmpty())
+            fail("$name: the open finder's link doesn't say ${ParkingRules.HIDE_FIND}")
+        if (compose.onAllNodes(hasContentDescription("${ParkingRules.FIND}: ", substring = true)).fetchSemanticsNodes().isNotEmpty())
+            fail("$name: the open finder still says ${ParkingRules.FIND}")
+        if (ScreenShots.texts(compose).any { "Walk there" in it }) fail("$name: the finder still says Walk there in Maps")
+        val maps = compose.onAllNodes(hasContentDescription("${ParkingRules.MAPS}: ", substring = true)).fetchSemanticsNodes().size
+        if (maps != 1) fail("$name: Open in Maps shows $maps times")
+        compose.onAllNodes(hasContentDescription("${ParkingRules.HIDE_FIND}: ", substring = true) and hasClickAction())[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { compose.onAllNodes(hasContentDescription("${ParkingRules.FIND}: ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription("${ParkingRules.FIND}: ", substring = true)).fetchSemanticsNodes().isEmpty())
+            fail("$name: Hide the arrow didn't bring Find my car back")
+
         // The bay: typed, then Done on the keyboard.
         val bay = hasContentDescription(ParkingRules.LABEL_HINT) and hasSetTextAction()
         reach(name, bay, "bay field")[0].performTextInput("level 2 row b")
