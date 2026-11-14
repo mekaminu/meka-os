@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -129,14 +130,15 @@ internal fun OwnCategorySheet(
                     .background(Meka.colors.surface)
                     .pointerInput(Unit) { detectTapGestures { } }
                     .heightIn(max = 680.dp)
-                    .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
-                    .padding(MekaSpace.m)
                     .testTag("money-own-sheet"),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
+                // Walk-through 2026-11-08, A17: the category's head stays put above the sheet's scrolling body, so a
+                // scrolled sheet (the cap field brought into view) never leaves a sliver of it over "Edit category".
                 Row(
-                    Modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading(); contentDescription = "${r.name}, ${r.line}" },
+                    Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.m, bottom = MekaSpace.xs)
+                        .semantics(mergeDescendants = true) { heading(); contentDescription = "${r.name}, ${r.line}" }
+                        .testTag("money-own-head"),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
                 ) {
                     MoneyIconChip(r.icon, r.tone)
@@ -145,74 +147,81 @@ internal fun OwnCategorySheet(
                         Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
-                NewCategoryForm(
-                    own = own, onCreate = onSave, onCancel = onClose,
-                    title = MoneyOwnCategories.EDIT_TITLE, action = MoneyOwnCategories.SAVE,
-                    startName = r.name, startTone = r.tone, startIcon = r.icon,
-                )
-                Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-own-said") { s ->
-                    if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
-                            modifier = Modifier.weight(1f).testTag("money-own-said"))
-                        s.undo?.let { u ->
-                            Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onUndo(u) }
-                                    .minTouch().padding(MekaSpace.xs))
-                        }
-                    }
-                }
-                FlowRow(Modifier.padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    TripPill(MoneyOwnCategories.HIDE, on = r.hidden, tag = "money-own-hide",
-                        description = MoneyOwnCategories.HIDE + if (r.hidden) ", on" else ", off") { onHide(!r.hidden) }
-                }
-                // Money, his categories in caps (2026-10-27): a monthly cap on this one, counting its payees.
-                Text(MoneyChallenges.OWN_CAP_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(top = MekaSpace.xs))
-                AnimatedContent(
-                    r.cap, label = "money-own-cap",
-                    transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
-                    contentKey = { it != null },
-                ) { cap ->
-                    if (cap != null) Column(Modifier.testTag("money-own-cap")) {
-                        ChallengeBar(cap) { onCap("") }
-                    } else Field(
-                        MoneyChallenges.OWN_CAP_HINT, modifier = Modifier.testTag("money-own-cap-field"),
-                        description = "${MoneyChallenges.OWN_CAP_HINT} for ${r.name}",
-                    ) { onCap(it) }
-                }
-                Text(MoneyOwnCategories.MERGE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(top = MekaSpace.xs))
-                Text(moneyShown(MoneyOwnCategories.MERGE_HINT), style = MekaType.caption, color = Meka.colors.textTertiary)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    for (t in MoneyOwnCategories.mergeTargets(own, r.id)) {
-                        TripPill(t.label, tag = "money-own-merge-${t.key}", description = "Merge ${r.name} into ${t.label}") { onMerge(t.key) }
-                    }
-                }
-                AnimatedContent(
-                    asking, label = "money-own-delete",
-                    transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
-                ) { ask ->
-                    if (!ask) Text(MoneyOwnCategories.DELETE, style = MekaType.itemMeta, color = Meka.colors.accent,
-                        modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-                            .clickable(role = Role.Button) { asking = true }.minTouch().padding(MekaSpace.xs).testTag("money-own-delete"))
-                    else Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Text(MoneyOwnCategories.deleteAsk(r.name, r.payees), style = MekaType.body, color = Meka.colors.textPrimary)
-                        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-                            Text(MoneyOwnCategories.DELETE_YES, style = MekaType.itemMeta, color = Meka.colors.accent,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = false; onDelete() }
-                                    .minTouch().padding(MekaSpace.xs).testTag("money-own-delete-yes"))
-                            Text(MoneyOwnCategories.KEEP, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = false }
-                                    .minTouch().padding(MekaSpace.xs))
-                        }
-                    }
-                }
-                Box(
-                    Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
-                        .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.xs).testTag("money-own-done"),
-                    contentAlignment = Alignment.Center,
+                Column(
+                    Modifier.weight(1f, fill = false).fillMaxWidth().clipToBounds().verticalScroll(rememberScrollState())
+                        .padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m, top = MekaSpace.xs)
+                        .testTag("money-own-body"),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
-                    Text(MoneyOwnCategories.DONE, style = MekaType.metaStrong, color = Meka.colors.onAccent)
+                    NewCategoryForm(
+                        own = own, onCreate = onSave, onCancel = onClose,
+                        title = MoneyOwnCategories.EDIT_TITLE, action = MoneyOwnCategories.SAVE,
+                        startName = r.name, startTone = r.tone, startIcon = r.icon,
+                    )
+                    Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-own-said") { s ->
+                        if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
+                                modifier = Modifier.weight(1f).testTag("money-own-said"))
+                            s.undo?.let { u ->
+                                Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onUndo(u) }
+                                        .minTouch().padding(MekaSpace.xs))
+                            }
+                        }
+                    }
+                    FlowRow(Modifier.padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        TripPill(MoneyOwnCategories.HIDE, on = r.hidden, tag = "money-own-hide",
+                            description = MoneyOwnCategories.HIDE + if (r.hidden) ", on" else ", off") { onHide(!r.hidden) }
+                    }
+                    // Money, his categories in caps (2026-10-27): a monthly cap on this one, counting its payees.
+                    Text(MoneyChallenges.OWN_CAP_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(top = MekaSpace.xs))
+                    AnimatedContent(
+                        r.cap, label = "money-own-cap",
+                        transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
+                        contentKey = { it != null },
+                    ) { cap ->
+                        if (cap != null) Column(Modifier.testTag("money-own-cap")) {
+                            ChallengeBar(cap) { onCap("") }
+                        } else Field(
+                            MoneyChallenges.OWN_CAP_HINT, modifier = Modifier.testTag("money-own-cap-field"),
+                            description = "${MoneyChallenges.OWN_CAP_HINT} for ${r.name}",
+                        ) { onCap(it) }
+                    }
+                    Text(MoneyOwnCategories.MERGE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(top = MekaSpace.xs))
+                    Text(moneyShown(MoneyOwnCategories.MERGE_HINT), style = MekaType.caption, color = Meka.colors.textTertiary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        for (t in MoneyOwnCategories.mergeTargets(own, r.id)) {
+                            TripPill(t.label, tag = "money-own-merge-${t.key}", description = "Merge ${r.name} into ${t.label}") { onMerge(t.key) }
+                        }
+                    }
+                    AnimatedContent(
+                        asking, label = "money-own-delete",
+                        transitionSpec = { fadeIn(MekaMotion.expand(reduced)) togetherWith fadeOut(MekaMotion.expand(reduced)) using SizeTransform(clip = false) },
+                    ) { ask ->
+                        if (!ask) Text(MoneyOwnCategories.DELETE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { asking = true }.minTouch().padding(MekaSpace.xs).testTag("money-own-delete"))
+                        else Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(MoneyOwnCategories.deleteAsk(r.name, r.payees), style = MekaType.body, color = Meka.colors.textPrimary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                                Text(MoneyOwnCategories.DELETE_YES, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = false; onDelete() }
+                                        .minTouch().padding(MekaSpace.xs).testTag("money-own-delete-yes"))
+                                Text(MoneyOwnCategories.KEEP, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { asking = false }
+                                        .minTouch().padding(MekaSpace.xs))
+                            }
+                        }
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                            .clickable(role = Role.Button, onClick = onClose).minTouch().padding(MekaSpace.xs).testTag("money-own-done"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(MoneyOwnCategories.DONE, style = MekaType.metaStrong, color = Meka.colors.onAccent)
+                    }
                 }
             }
         }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -271,6 +272,16 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(shows("money-own-cap"), "the cap's bar didn't show in the sheet")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-own-category-cap"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-own-category-cap")
+        // Walk-through 2026-11-08, A17: with the sheet scrolled to the cap, the category's head is still whole at the
+        // sheet's top (not a sliver of it over "Edit category"), and the scrolling body starts below it.
+        val sheet = compose.onNodeWithTag("money-own-sheet").fetchSemanticsNode().boundsInRoot
+        val head = compose.onNodeWithTag("money-own-head", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val body = compose.onNodeWithTag("money-own-body").fetchSemanticsNode().boundsInRoot
+        assertTrue(head.top >= sheet.top && head.height > 0f, "the category's head isn't whole at the sheet's top: $head in $sheet")
+        assertTrue(body.top >= head.bottom - 1f, "the sheet's body scrolls over its head: body $body, head $head")
+        assertTrue(compose.onNodeWithTag("money-own-body").fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.VerticalScrollAxisRange)?.value?.invoke()?.let { it > 0f } == true,
+            "the shot isn't of a scrolled sheet, so it can't show the head staying put")
     }
 
     /** Needs and wants: the sheet's Need toggle marks the payee; Spending's "Needs vs wants" chip splits the month in two. */
