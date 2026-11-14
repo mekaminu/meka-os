@@ -1431,7 +1431,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let monday: Int64 = 4 // 1970-01-05
         XCTAssertEqual(rules.weeklyPace(target: 2, doneThisWeek: 0, doneToday: false, today: monday + 2, createdDay: monday), .onTrack)
         XCTAssertEqual(rules.weeklyPace(target: 2, doneThisWeek: 1, doneToday: false, today: monday + 5, createdDay: monday), .due)
-        XCTAssertEqual(rules.leftLine(left: 1, days: 2), "1 left — 2 days to go")
+        XCTAssertEqual(rules.leftLine(left: 1, days: 2), "1 left · 2 days to go")
         XCTAssertEqual(rules.weeklyMeta(pace: .onTrack, done: 1, weekTarget: 2, today: monday + 2), "1 of 2 this week")
     }
 

@@ -74,10 +74,10 @@ class GoalsTest {
         assertEquals(1, habit(h).slotsFilled)
         repeat(5) { nextDay() } // Saturday: 1 left, Sat + Sun to go
         assertEquals(HabitPace.DUE, habit(h).pace)
-        assertEquals("1 left — 2 days to go", habit(h).meta)
+        assertEquals("1 left · 2 days to go", habit(h).meta)
         assertEquals("1/2", habit(h).countLabel)
         nextDay() // Sunday
-        assertEquals("1 left — 1 day to go", habit(h).meta)
+        assertEquals("1 left · 1 day to go", habit(h).meta)
         g.setHabitDone(h, true)
         nextDay() // Monday: a fresh week, nothing missed
         assertEquals(HabitPace.ON_TRACK, habit(h).pace)
@@ -92,7 +92,7 @@ class GoalsTest {
         val item = habit(h)
         assertEquals(2, item.weekTarget) // ceil(3 × 3/7)
         assertEquals(HabitPace.DUE, item.pace) // 2 left, Fri–Sun
-        assertEquals("2 left — 3 days to go", item.meta)
+        assertEquals("2 left · 3 days to go", item.meta)
         assertNull(g.habits().single().takeIf { it.pace == HabitPace.BEHIND })
     }
 

@@ -123,6 +123,11 @@ class AiScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertEachOneLine(compose, name, ai.spend.map { it.detail } + ai.spend.map { it.label } + ai.fallbacks.map { it.label })
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        // Walk-through A19: the open card's mark is the drawn fold chevron (up once open), never a turned "›".
+        val marks = ScreenShots.assertDrawnMarks(compose, name)
+        if (ai.spend.isNotEmpty() && marks != 1) fail("$name: the open card should draw one fold chevron, found $marks")
+        if (ai.spend.isEmpty() && marks != 0) fail("$name: a chevron with nothing to unfold")
+        if (onScreen("›")) fail("$name: a bare › glyph is still drawn")
         when (fill) {
             Fill.EMPTY -> {
                 if (!onScreen("Until this device is connected")) fail("$name: doesn't say what works until it's connected")

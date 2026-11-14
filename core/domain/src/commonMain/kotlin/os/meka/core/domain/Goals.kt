@@ -15,7 +15,7 @@ import os.meka.core.sync.fv
  *   added). Behind = a day missed; Due = today's go keeps you on pace.
  * - Pace, N-a-week habits (Fold review 2026-10-09 13:45, item 1): days off are never misses. On track while the week
  *   can still be met with a spare day; Due once the days left (today included) are no more than one more than the goes
- *   left ("1 left — 2 days to go"); Behind only once the week can no longer be met.
+ *   left ("1 left · 2 days to go"); Behind only once the week can no longer be met.
  * - Streaks: a daily habit counts days in a row; any other target counts weeks in a row that met it.
  * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week, goals under it, its
  *   milestones ticked), or set by hand when nothing is linked. A numeric goal ("Save £2,000") takes its progress from
@@ -371,8 +371,8 @@ object GoalRules {
         }
     }
 
-    /** "1 left — 2 days to go", "2 left — 1 day to go". */
-    fun leftLine(left: Int, days: Int): String = "$left left — $days ${if (days == 1) "day" else "days"} to go"
+    /** "1 left · 2 days to go", "2 left · 1 day to go" (the dot every other habit line uses, never a dash). */
+    fun leftLine(left: Int, days: Int): String = "$left left · $days ${if (days == 1) "day" else "days"} to go"
 
     /**
      * Daily habits: days in a row up to today (or yesterday, while today is still open). Other targets: weeks in a

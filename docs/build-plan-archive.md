@@ -6261,3 +6261,9 @@ Core `WhatsAppCallRules` (core/domain WhatsAppCalls.kt): `incoming` reads a ring
 - Money → Plan → Obi's money check with nothing found: `MoneyCheck.view` leaves `from` blank when there are no ideas, so the card says `MoneyCheck.EMPTY` ("Nothing to look at just now · Obi checks again as payments come in") once instead of "no ideas just now" over it; the Fold's `MoneyCheckCard` and the Mac's MoneySheet skip a blank `from` (and its words in the spoken line).
 - Money → Ask Obi: the Try chips are `MoneyChat.tries(suggestions, turns)` (the Mac: `triesAfter(suggestions, asked)` from its own turn lines): a question already asked, same words with case, spaces and the end mark aside, is left out, so a tapped chip goes once it's asked; Fold `MoneyChatContent`, Mac `MoneyChatPanel`.
 - Tests: core `MoneyChatTest.theTryChipsLeaveOutAQuestionAlreadyAsked`, `MoneyCheckTest` (blank `from` with nothing found), `MoneyTabsTest` fixture. Fold and Mac; Mac checked nightly.
+
+### Found and fixing, week 3: A19 slice 6 (2026-11-14)
+
+- Habits: `GoalRules.leftLine` reads "1 left · 2 days to go" (was "1 left — 2 days to go"), the " · " every other habit meta line uses ("Done today · 1 of 2 this week"); both apps show the core's line.
+- Settings → Navilife's AI on the Fold: `AiSpendRow` draws designsystem `FoldChevron` (down while shut, up once open, 20 dp, turned with the expand motion) in place of a "›" turned 90° that pointed down while the card was open.
+- Tests: core `GoalsTest` (both weekly lines), Mac `MekaCoreBridgeTests` leftLine; `AiScreensTest` asserts one drawn fold chevron on an open card, none with nothing to unfold, and no bare "›". Mac checked nightly.

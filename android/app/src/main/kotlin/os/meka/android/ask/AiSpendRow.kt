@@ -28,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -37,6 +36,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.FoldChevron
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
@@ -50,7 +50,7 @@ import os.meka.core.domain.LoneWordGlue
  * Settings → Navilife's AI (AI layer completeness slice 2): the status line as before ("On · $2.05 of $20 this month",
  * or "Key refused by Anthropic · …" in the accent), and once the server has metered something this month a tap unfolds
  * "This month by feature" with a row per kind of use ("Talk · 40 calls · $1.20") and a thin accent bar for its share.
- * The rows stagger in under the heading and each bar grows from the left; the chevron turns. Reduced motion: the rows
+ * The rows stagger in under the heading and each bar grows from the left; the drawn chevron turns up as it opens. Reduced motion: the rows
  * appear at once and the bars are drawn full. Its grey lines keep their last words and dots together ([LoneWordGlue],
  * quality gate slice 60). While the AI can't answer (slice 3) a list under the line says what each
  * AI feature does instead ("While it's off · Morning brief · read from your day as it is…"), fading in.
@@ -86,11 +86,8 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
                     label = "ai-row-line",
                 ) { l -> Text(LoneWordGlue.kept(l), style = MekaType.caption, color = lineColor, maxLines = 3) }
             }
-            if (canOpen) {
-                val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.appear(reduced), label = "ai-chevron")
-                Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(start = MekaSpace.xs).rotate(turn))
-            }
+            // The drawn fold chevron every folding box uses (A19): down while shut, up once open, never a bare glyph.
+            if (canOpen) FoldChevron(open, Meka.colors.textSecondary, Modifier.padding(start = MekaSpace.xs))
         }
         // AI layer completeness slice 3: while it can't answer, what each AI feature does instead, always shown.
         val fallbacks = ai?.fallbacks.orEmpty()
