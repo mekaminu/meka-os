@@ -45,7 +45,7 @@ internal object MoneyShotMonth {
         "18/10/2026,CINEWORLD OAKFIELD,-17.50\n"
 
     /** The biggest payee without a category first: Zebra Plover (2 × £12.60) over The Garden Shop (£24.99). */
-    val UNSORTED = listOf("Zebra Plover", "The Garden Shop Oakfield")
+    val UNSORTED = listOf("Zebra Plover", "The Garden Shop")
 
     /** Imports the month into [core] (Money already open). */
     suspend fun fill(core: MekaCore) {
