@@ -147,7 +147,9 @@ struct MoneyForecastTilesView: View {
                         .frame(height: max(3, 80 * CGFloat(grown || reduced ? b.share : 0)))
                         .animation(reduced ? nil : .easeOut(duration: 0.6).delay(Double(i) * 0.04), value: grown)
                         .animation(MekaMotion.appear(reduced: reduced), value: b.share)
+                    // Walk-through A32: over 12 months every other name (the core's `labelled`), so none touch.
                     Text(b.month).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1).fixedSize()
+                        .opacity(b.labelled ? 1 : 0)
                 }
                 .frame(maxWidth: .infinity)
             }

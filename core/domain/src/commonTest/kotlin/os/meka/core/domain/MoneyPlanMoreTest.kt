@@ -47,6 +47,18 @@ class MoneyPlanMoreTest {
     }
 
     @Test
+    fun twelveMonthNamesNeverTouch() {
+        // Walk-through A32: twelve names side by side ran into each other on the cover screen ("Apr" into "May").
+        val f = MoneyForecast.view(months(7, 8, 9), oct16)!!
+        val t = MoneyPlanMore.forecast(f, 12, 0)!!
+        assertEquals(listOf("Dec", "Feb", "Apr", "Jun", "Aug", "Oct"), t.bars.filter { it.labelled }.map { it.month })
+        assertTrue(t.bars.filter { it.key }.all { it.labelled }, "the 6th and 12th keep their names")
+        assertTrue(t.bars.zipWithNext().none { (a, b) -> a.labelled && b.labelled }, "two names side by side")
+        // Six months have room for every name.
+        assertTrue(MoneyPlanMore.forecast(f, 6, 0)!!.bars.all { it.labelled })
+    }
+
+    @Test
     fun theSliderAndWhatIfsMoveEverything() {
         val f = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(extraPence = 10_000))!!
         val t = MoneyPlanMore.forecast(f, 12, 160)!!

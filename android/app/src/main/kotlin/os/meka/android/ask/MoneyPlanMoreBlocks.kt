@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -203,8 +204,11 @@ private fun ForecastBars(bars: List<MoneyPlanBar>) {
                             },
                         ),
                 )
+                // Walk-through A32: over 12 months every other name (the core's `labelled`), so none touch; the
+                // unnamed bars keep the line's height, so every bar stands on the same floor.
                 Text(b.month, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false,
-                    modifier = Modifier.wrapContentWidth(unbounded = true))
+                    modifier = Modifier.wrapContentWidth(unbounded = true).alpha(if (b.labelled) 1f else 0f)
+                        .then(if (b.labelled) Modifier.testTag("money-forecast-month-${b.month}") else Modifier))
             }
         }
     }

@@ -29,7 +29,14 @@ data class MoneyPlanTile(val label: String, val value: String, val lit: Boolean 
  * One month's bar: [month] "Nov", [share] of the tallest bar (0–1), [tag] "+£6.3k" on the 6th and 12th (gold), [key]
  * when tagged, [below] when the total by then is under zero.
  */
-data class MoneyPlanBar(val month: String, val share: Float, val tag: String?, val key: Boolean, val below: Boolean)
+/**
+ * One forecast bar. [labelled]: whether its month name is drawn under it (walk-through A32: twelve names side by side
+ * touched on the folded phone, "Apr" running into "May"), so over 12 months every other one is named, the 6th and
+ * 12th always; over 6 all are. [month] is still there for the screen reader either way.
+ */
+data class MoneyPlanBar(
+    val month: String, val share: Float, val tag: String?, val key: Boolean, val below: Boolean, val labelled: Boolean = true,
+)
 
 /** The forecast card: the three tiles, the span chips, the bars, the By tiles and the slider's lines. */
 data class MoneyForecastTiles(
@@ -174,7 +181,7 @@ object MoneyPlanMore {
             val total = at(i)
             val key = i == 6 || i == 12
             MoneyPlanBar(Recurrence.MONTH_SHORT[(f.thisMonth + i) % 12], (abs(total).toFloat() / tallest).coerceIn(0.04f, 1f),
-                if (key) short(total) else null, key, total < 0)
+                if (key) short(total) else null, key, total < 0, labelled = s <= 6 || i % 2 == 0)
         }
         val by = SPANS.map { h ->
             MoneyPlanTile("BY ${monthYear(f.thisMonth + h)}", signed(at(h)), alarm = at(h) < 0,

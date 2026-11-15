@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
@@ -154,6 +157,13 @@ class MoneyPlanMoreScreensTest {
         // Walk-through A11 (2026-11-08): the tiles' labels whole ("OUT / MONTH", never "OUT /").
         ScreenShots.assertNotCut(compose, "plan-forecast-tiles-cover", listOf(MoneyPlanMore.IN, MoneyPlanMore.OUT, MoneyPlanMore.LEFT, "BY OCT 2027"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-tiles-cover"))
+        // Walk-through A32: the month names under the twelve bars never touch ("Apr" ran into "May" on the cover).
+        val names = compose.onAllNodes(
+            SemanticsMatcher("a forecast month") { n -> n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("money-forecast-month-") == true },
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().map { it.boundsInRoot }.sortedBy { it.left }
+        assertTrue(names.size == 6, "over 12 months every other month should be named, not ${names.size}")
+        names.zipWithNext().forEach { (a, b) -> assertTrue(a.right < b.left, "two month names touch: $a and $b") }
         tap("money-forecast-span-6")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-six-cover"))
         // Walk-through A20: when the goals' start card already sits under the six-month forecast, that shot shows it and
