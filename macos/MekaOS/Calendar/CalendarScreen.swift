@@ -112,7 +112,7 @@ struct CalendarScreen: View {
             }
             if model.calendarShowsBoard, let board = model.board, !board.weeks.isEmpty {
                 // The Day list item's slice 5 (2026-11-10): the Board is Day lists side by side, 3 · 5 · 7 days (each
-                // column scrolls on its own); the old WeekBoardScreen is no longer shown.
+                // column scrolls on its own); the old week board was removed 2026-11-15.
                 DayListSpreadScreen(board: board, palette: palette)
                     .padding(.bottom, MekaSpace.l)
                     .staggeredAppear(2)

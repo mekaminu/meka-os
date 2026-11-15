@@ -35,9 +35,6 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.StudyPane
-import os.meka.android.calendar.EventUndo
-import os.meka.android.calendar.STUDY_NOTE_TAG
-import os.meka.android.calendar.WeekBoardView
 import os.meka.android.shell.ShellDestination
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -375,53 +372,6 @@ class StudyScreensTest {
         compose.waitUntil(5_000L) {
             core.studyView.value.course(id)!!.modules.map { it.name } == listOf("1 · Foundations", "3 · Putting it together", "2 · Core skills")
         }
-    }
-
-    @Test
-    @Config(qualifiers = ScreenShots.INNER)
-    fun plannedLessonsShowUnderTheirDayOnTheWeekBoardAndOpenTheCourse() {
-        // Meka 2026-10-26 23:21: planned lessons show "on the Week board under that day".
-        val (core, id) = filled(ThemeChoice.DARK)
-        val lessons = core.studyView.value.course(id)!!.modules[1].lessons
-        runBlocking {
-            core.planStudyLesson(lessons[0].id, 20_752L) // Pivot tables, today (Mon 26 Oct)
-            core.planStudyLesson(lessons[1].id, 20_753L) // Charts, tomorrow
-            core.tick()
-        }
-        assertEquals("Study · 1 lesson · about 1 h", core.weekBoard.value.day(20_752L)!!.study!!.text)
-        compose.mainClock.autoAdvance = false
-        compose.setContent {
-            MekaTheme {
-                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
-                }
-            }
-        }
-        compose.mainClock.advanceTimeBy(3_000L)
-        compose.waitForIdle()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "inner-dark-board-study"))
-        ScreenShots.assertSensible(compose, "inner-dark-board-study")
-        ScreenShots.assertNoBrokenWords(compose, "inner-dark-board-study")
-        ScreenShots.assertShows(compose, "inner-dark-board-study", os.meka.core.domain.LoneWordGlue.kept("Study · 1 lesson · about 1 h"))
-        ScreenShots.assertShows(compose, "inner-dark-board-study", os.meka.core.domain.LoneWordGlue.kept("Study · 1 lesson · about 40 min"))
-        // Walk-through 2026-11-02 (A10): the study line keeps its length (never cut before "about 1 h") and each day's
-        // budget pill counts its session (never "0m / 2h" with a lesson planned).
-        val cut = ScreenShots.laidOut(compose).filter { it.text.startsWith("Study") && it.cut }
-        org.junit.Assert.assertTrue("study line cut: ${cut.map { it.text }}", cut.isEmpty())
-        listOf(20_752L to 60, 20_753L to 40).forEach { (d, mins) ->
-            val cap = core.weekBoard.value.day(d)!!.capacity!!
-            org.junit.Assert.assertTrue("day $d plans ${cap.plannedMin} min", cap.plannedMin >= mins)
-            val pill = os.meka.core.domain.BoardPlannerRules.budget(cap)
-            org.junit.Assert.assertFalse(pill.value, pill.value.startsWith(os.meka.core.domain.BoardPlannerRules.NOTHING_YET))
-            ScreenShots.assertShows(compose, "inner-dark-board-study", pill.spoken) // the pill reads out its figures
-        }
-        // A tap opens the course on Goals.
-        val app = ApplicationProvider.getApplicationContext<ShotApplication>()
-        compose.mainClock.autoAdvance = true
-        compose.onAllNodesWithTag(STUDY_NOTE_TAG, useUnmergedTree = true)[0].performClick()
-        compose.waitForIdle()
-        assertEquals(id, app.openStudy.value)
-        assertEquals(ShellDestination.GOALS, app.openDestination.value)
     }
 
     @Test
