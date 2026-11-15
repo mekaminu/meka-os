@@ -490,7 +490,6 @@ struct RoutinesSheet: View {
                 Text(LoneWordGlue.shared.kept(line: s.name)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 Text(LoneWordGlue.shared.kept(line: s.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(LoneWordGlue.shared.kept(line: s.whenLine)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             Spacer(minLength: 0)
             Button(RoutineRules.shared.ADD) { add(key) }

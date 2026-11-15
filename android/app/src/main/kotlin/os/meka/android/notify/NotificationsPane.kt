@@ -178,7 +178,7 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("Quiet hours", 2)
-        ToggleRow(if (quiet.enabled) "On · ${quiet.summary}" else NotifyRules.QUIET_OFF, quiet.enabled, Modifier.appear(rememberAppearance(2))) {
+        ToggleRow(NotifyRules.quietRow(quiet.enabled, quiet.summary), quiet.enabled, Modifier.appear(rememberAppearance(2))) {
             haptics.tick(); saveQuiet(enabled = !quiet.enabled)
         }
         AnimatedVisibility(

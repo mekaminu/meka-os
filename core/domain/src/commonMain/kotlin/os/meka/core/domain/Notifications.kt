@@ -1190,6 +1190,9 @@ object NotifyRules {
     /** The settings screens' notes (quality gate slice 57: shared by the Fold, the Mac and the shots). */
     /** Quiet hours' switch row when off (it read "Off" beside its own "Off" pill). */
     const val QUIET_OFF = "No quiet hours"
+
+    /** Quiet hours' switch row: "21:30–06:45" beside the On pill (walk-through A29: it read "On · …" beside "On"), else [QUIET_OFF]. */
+    fun quietRow(enabled: Boolean, summary: String): String = if (enabled) summary else QUIET_OFF
     const val QUIET_NOTE = "Heads-ups that fall in quiet hours wait for the next digest. Only critical things come through."
     const val DIGEST_NOTE = "One quiet round-up of what's due: renewals, things to chase, decisions to review, overdue tasks."
     const val TIER_NOTE = "Heads-up: a notification at the time. Digest: in the midday or evening round-up. App only: never a " +

@@ -297,4 +297,14 @@ class SetupTest {
             assertEquals(emptyList(), ScreenSenseRules.problems(texts), v.summary)
         }
     }
+
+    @Test
+    fun saidOnceRowsDontRepeatTheirLabel() {
+        // Walk-through A29: "Navilife's number takes messages for you" under "Navilife's number".
+        assertEquals("Takes messages for you", SetupRules.numberLine(null))
+        assertEquals("020 7946 0000 takes messages for you", SetupRules.numberLine("020 7946 0000"))
+        // and Notifications' quiet hours row beside its On pill.
+        assertEquals("21:30–06:45", NotifyRules.quietRow(true, "21:30–06:45"))
+        assertEquals(NotifyRules.QUIET_OFF, NotifyRules.quietRow(false, "21:30–06:45"))
+    }
 }

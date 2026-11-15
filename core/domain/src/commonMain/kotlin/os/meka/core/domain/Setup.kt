@@ -225,11 +225,15 @@ object SetupRules {
         "Home ${home ?: "not set, showing ${WeatherPlaceRules.FALLBACK}"} · work ${work ?: "not set"} · " +
             if (home == null || work == null) "add them in About you" else "change in Calendars"
 
+    /** "07700 900123 takes messages for you", or "Takes messages for you" (never the row's own label again). */
+    internal fun numberLine(number: String?): String = number?.let { "$it takes messages for you" } ?: "Takes messages for you"
+
     private fun calls(f: SetupFacts): List<SetupStep> {
         val number = CallScreeningRules.assistantNumber ?: "Navilife's number"
         val service = when (f.server?.calls) {
             null -> SetupStep("calls.number", "Navilife's number", COULDNT, SetupState.UNKNOWN)
-            true -> SetupStep("calls.number", "Navilife's number", "$number takes messages for you", SetupState.DONE)
+            // Walk-through A29: with no number known the line read "Navilife's number takes messages for you" under its own label.
+            true -> SetupStep("calls.number", "Navilife's number", numberLine(CallScreeningRules.assistantNumber), SetupState.DONE)
             false -> SetupStep("calls.number", "Navilife's number", "The phone service isn't set up on Navilife's server yet", SetupState.LATER)
         }
         val on = if (f.callAssistantOn) SetupStep("calls.on", "Call assistant", "On · it answers calls you decline", SetupState.DONE)

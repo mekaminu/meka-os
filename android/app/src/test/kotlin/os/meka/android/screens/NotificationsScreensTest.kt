@@ -197,7 +197,8 @@ class NotificationsScreensTest {
                 if (!onScreen("Next digest 18:00 · 1 thing so far")) fail("$name: the digest line reads \"${p.digestLine}\"")
             }
             Fill.MANY -> {
-                if (!onScreen("On · 21:30–06:45")) fail("$name: quiet hours don't read 21:30–06:45")
+                if (!onScreen("21:30–06:45")) fail("$name: quiet hours don't read 21:30–06:45")
+                if (onScreen("On · 21:30–06:45")) fail("$name: the quiet hours row says On beside its own On pill")
                 if (s.tierFor(NoticeSource.WEEKLY_REVIEW) != NoticeTier.SILENT) fail("$name: the weekly review wasn't lowered ($s)")
                 if (!p.digestLine.endsWith("things so far") || !onScreen(p.digestLine)) fail("$name: the digest line reads \"${p.digestLine}\", not the things waiting")
             }

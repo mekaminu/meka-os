@@ -138,7 +138,9 @@ class RoutinesScreensTest {
         // Walk-through 2026-11-08 A20: a by-hand walk opens on the empty screen, so its shot is taken where the hand has changed it.
         if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("routines", name))
         val lines = listOf(v.summary, RoutineRules.RULE_LINE) + v.rows.flatMap { listOf(it.name, it.line) } +
-            v.starters.flatMap { listOf(it.name, it.line, it.whenLine) }
+            v.starters.flatMap { listOf(it.name, it.line) }
+        // Walk-through A29: a starter's time is on its tile only, not said again as "Weekdays at 07:00".
+        v.starters.forEach { if (onScreen(it.whenLine)) fail("$name: ${it.name}'s time is on the tile and again as \"${it.whenLine}\"") }
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)

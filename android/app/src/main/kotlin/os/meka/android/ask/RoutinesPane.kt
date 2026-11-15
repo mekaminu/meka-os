@@ -422,7 +422,7 @@ private fun StepRow(st: RoutineStepRow, modifier: Modifier, onLabel: () -> Unit)
     }
 }
 
-/** A starter not added yet: the tile, its name, line and when, and Add. */
+/** A starter not added yet: the tile (its days and time), its name and line, and Add (walk-through A29: the when line repeated the tile). */
 @Composable
 private fun StarterCard(s: RoutineStarterRow, modifier: Modifier, onAdd: () -> Unit) {
     Row(
@@ -435,7 +435,6 @@ private fun StarterCard(s: RoutineStarterRow, modifier: Modifier, onAdd: () -> U
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(LoneWordGlue.kept(s.name), style = MekaType.body, color = Meka.colors.textPrimary)
             Text(LoneWordGlue.kept(s.line), style = MekaType.caption, color = Meka.colors.textSecondary)
-            Text(LoneWordGlue.kept(s.whenLine), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         TouchPill(RoutineRules.ADD, Meka.colors.surface, Meka.colors.accent, spoken = "${RoutineRules.ADD} ${s.name}", onClick = onAdd)
     }
