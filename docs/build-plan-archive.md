@@ -6462,3 +6462,7 @@ Each failed once on CI and passed on its re-run; test only, Fold, no app change.
 - **Small (Claude 2026-11-14 17:10): StudyImportScreensTest.cancelPutsItAwayWithNothingWritten flaked once on CI** (run 43618122560, green on its re-run): the "Add Data analytics · 2 modules · 5 lessons?" card didn't show within `awaitShows`' 80 turns (about 2 s of real time while GoalsRoute's LaunchedEffect asks the core for the offer). Steady it (wait on the core's offer, or more turns) if it recurs; Fold tests only.
 
 Fixes: `theAddressFieldSitsInASheet` waits up to 80 short turns for "Added Spare" after the wallet is followed; `AdminPlacesScreensTest.turns` and `until` call `compose.waitForIdle()` after each turn so a read or tap never lands mid-layout; `coverMailByHand` waits with `until` for Streamly on Lists' renewals; `StudyImportScreensTest.open` gives the import card 320 turns (it stops as soon as the card shows).
+
+## Found and fixing, week 4 (walk-through 2026-11-15)
+
+Walk-through 2026-11-15 19:50: 494 changed shots (screens 96ad204d → 8bfad1f3, CI run 1613 → 1945) read by thirteen fresh reviewers in groups of 27–49, every shot read; ranked list in `docs/reviews/2026-11-15-walkthrough.md` section A, each reviewer's report in C. Slices are recorded here as they land.
