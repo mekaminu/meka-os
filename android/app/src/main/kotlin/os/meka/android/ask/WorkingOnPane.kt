@@ -133,7 +133,7 @@ fun WorkingOnPane(core: MekaCore, onClose: () -> Unit, onOpen: (HelpPlace) -> Un
             // Part 3 slice 4: the errands he asked for, first, with the row that opens the ask sheet.
             Text(ObiJobRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(1)))
-            Text(LoneWordGlue.kept(ObiJobRules.INTRO), style = MekaType.caption, color = Meka.colors.textSecondary,
+            Text(LoneWordGlue.kept(ObiJobRules.PANE_INTRO), style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.appear(rememberAppearance(1)))
             Row(Modifier.fillMaxWidth().appear(rememberAppearance(1)), verticalAlignment = Alignment.CenterVertically) {
                 TouchPill(ObiJobRules.ASK_ROW, Meka.colors.surfaceRaised, Meka.colors.accent, modifier = Modifier.testTag("errand-ask")) {

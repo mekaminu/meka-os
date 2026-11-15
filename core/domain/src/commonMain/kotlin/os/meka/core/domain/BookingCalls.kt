@@ -217,6 +217,15 @@ data class BookingCallRow(
     val transcriptAtMs: List<Long> = emptyList(),
 ) {
     val canRead: Boolean get() = transcript.isNotEmpty()
+
+    /**
+     * Walk-through 2026-11-08 A29 (said twice): the result card's length line without the business, which is the
+     * card's title just above ("1 min 35 s", "Obi 1 min 10 s · you 3 min 10 s"). Read the call keeps [lengthLine].
+     */
+    val lengthOnCard: String? get() = lengthLine?.let { BookingCallRules.withoutLead(it, business) }
+
+    /** A29: the result line without the "Not booked · " or "Booked · " the card's label above already says. */
+    val resultOnCard: String? get() = result?.let { BookingCallRules.withoutLead(it, status) }
 }
 
 object BookingCallRules {
@@ -294,6 +303,14 @@ object BookingCallRules {
         "one" to 1, "two" to 2, "three" to 3, "four" to 4, "five" to 5, "six" to 6, "seven" to 7, "eight" to 8,
         "nine" to 9, "ten" to 10, "eleven" to 11, "twelve" to 12,
     )
+
+    /** [line] without a leading "[lead] · " (any case), first letter raised; [line] unchanged when it doesn't lead so. */
+    fun withoutLead(line: String, lead: String): String {
+        val l = lead.trim()
+        if (l.isEmpty() || !line.startsWith("$l · ", ignoreCase = true)) return line
+        val rest = line.substring(l.length + 3).trim()
+        return if (rest.isEmpty()) line else rest.replaceFirstChar { it.uppercaseChar() }
+    }
 
     private fun clean(s: String?, max: Int): String? = s?.replace(Regex("\\s+"), " ")?.trim()?.trim('.', ',', ';')?.take(max)?.trim()?.takeIf { it.isNotEmpty() }
 

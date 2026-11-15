@@ -112,6 +112,7 @@ class WorkingOnScreensTest {
     }
 
     private fun onScreen(text: String): Boolean = ScreenShots.texts(compose).any { DateGlue.plain(it).contains(text) }
+    private fun timesOnScreen(text: String): Int = ScreenShots.texts(compose).count { DateGlue.plain(it).contains(text) }
 
     private fun assertTouchTargets(name: String) {
         val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
@@ -249,9 +250,9 @@ class WorkingOnScreensTest {
         compose.waitForIdle()
         // Walk-through 2026-11-08 A20: a by-hand walk whose opening is another test's shot takes none of its own.
         if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", name))
-        val lines = listOf(v.summary, WorkingOnRules.INTRO, ObiJobRules.INTRO, ObiJobRules.EMPTY, ObiJobRules.DRAFT_FOOT) +
+        val lines = listOf(v.summary, WorkingOnRules.INTRO, ObiJobRules.PANE_INTRO, ObiJobRules.EMPTY, ObiJobRules.DRAFT_FOOT) +
             v.cards.flatMap { listOfNotNull(it.did, it.need) } + v.jobs.flatMap { listOfNotNull(it.title, it.status, it.did, it.need) } +
-            v.switches.map { it.line } + v.calls.flatMap { listOfNotNull(it.status, it.result, it.lengthLine, it.triedAgainLine) } +
+            v.switches.map { it.line } + v.calls.flatMap { listOfNotNull(it.status, it.resultOnCard, it.lengthOnCard, it.triedAgainLine) } +
             (if (v.calls.any { it.canPlay }) listOf(os.meka.core.domain.CallRecordingRules.BOOKING_FOOT) else emptyList())
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
@@ -266,6 +267,16 @@ class WorkingOnScreensTest {
         // Walk-through 2026-11-08 A28: the chaser card wrapped ~140 px early; its did and need lines now sit on one line each.
         v.cards.firstOrNull { it.errand == StandingErrand.FOLLOW_UPS }?.let { c ->
             ScreenShots.assertEachOneLine(compose, name, listOfNotNull(c.did, c.need).map { LoneWordGlue.kept(it) })
+        }
+        // Walk-through 2026-11-08 A29: nothing said twice on the pane (the promise, the answer, a renewal, a call's name).
+        listOf("never sends, books or buys", "Obi has your answer").forEach { said ->
+            val n = timesOnScreen(said)
+            if (n > 1) fail("$name: \"$said\" is said $n times")
+        }
+        v.cards.forEach { c ->
+            val need = c.need ?: return@forEach
+            val named = need.substringBefore(" · ")
+            if (named.length > 12 && c.did.contains(named)) fail("$name: \"$named\" is under both What I did and What I need from you")
         }
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         val cards = compose.onAllNodes(hasTestTag("working-on-card"), useUnmergedTree = true).fetchSemanticsNodes().size
@@ -429,6 +440,11 @@ class WorkingOnScreensTest {
         if (!onScreen(ObiJobRules.REDRAFTING)) fail("$name: the draft doesn't say Obi is putting the answer in")
         if (compose.onAllNodes(hasContentDescription("${ObiJobRules.COPY} the draft: Find someone to service the boiler") and hasClickAction())
                 .fetchSemanticsNodes().isNotEmpty()) fail("$name: the old draft can still be copied")
+        // Walk-through 2026-11-08 A29: the card says Obi has the answer; the line under the ask row doesn't say it again.
+        until { onScreen(ObiJobRules.ANSWERED_LINE) }
+        if (!onScreen(ObiJobRules.ANSWERED_LINE)) fail("$name: no line saying Obi will carry on")
+        val has = timesOnScreen("Obi has your answer")
+        if (has != 1) fail("$name: \"Obi has your answer\" is said $has times")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-answered"))
     }
 

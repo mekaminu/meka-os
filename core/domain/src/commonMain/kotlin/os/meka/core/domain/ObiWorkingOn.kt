@@ -108,9 +108,11 @@ object WorkingOnRules {
         if (all.isEmpty()) return null
         val first = all.minWith(compareBy<RenewalItem> { it.dueDay }.thenBy { it.title.lowercase() })
         fun says(i: RenewalItem) = "${tidy(i.title)} ${if (i.dueDay < today) "was due" else RenewalRules.verb(i.kind)} ${RenewalRules.dayWord(i.dueDay, today)}"
-        val did = "Watching ${plural(all.size, "renewal")} · next: ${says(first)}"
         // What needs him: one in Needs you first (overdue, cancel-by), else the soonest within four weeks.
         val soon = v.attention.firstOrNull() ?: all.filter { it.dueDay <= today + RENEWAL_AHEAD }.minByOrNull { it.dueDay }
+        // Walk-through 2026-11-08 A29 (said twice): when the need line names the next renewal, the did line stops at the
+        // count, so "Home insurance renews Thu 5 Nov" isn't under both What I did and What I need from you.
+        val did = "Watching ${plural(all.size, "renewal")}" + if (soon?.id == first.id) "" else " · next: ${says(first)}"
         val need = soon?.let { i ->
             val cancel = i.cancelByDay?.takeIf { it >= today && i.dueDay >= today }
             when {

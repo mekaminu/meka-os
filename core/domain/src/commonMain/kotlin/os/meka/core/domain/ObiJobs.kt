@@ -185,7 +185,12 @@ object ObiJobRules {
 
     const val TITLE = "Errands you asked for"
     const val HINT = "Find someone to service the boiler"
+    /**
+     * The ask sheet's words, with the promise in full (the sheet stands on its own). Walk-through 2026-11-08 A29: the
+     * pane's section says only [PANE_INTRO], since the page's line above it already says he never sends, books or buys.
+     */
     const val INTRO = "Ask Obi to look into something. He works on it step by step and comes back when he needs you. He never sends, books or buys anything; a draft is for you to send."
+    const val PANE_INTRO = "Ask Obi to look into something. He works on it step by step and comes back when he needs you; a draft is for you to send."
     const val EMPTY = "Nothing asked yet · try “find someone to service the boiler”"
     const val TOO_MANY = "Obi is already on $MAX_OPEN errands · stop one or wait for one to finish"
     const val BLANK = "Say what you'd like Obi to look into"
@@ -202,7 +207,8 @@ object ObiJobRules {
     const val ANSWER_HINT = "Your answer, or what to change"
     const val ANSWER_GO = "Tell Obi"
     const val YOU_SAID = "You said"
-    const val ANSWERED_LINE = "Obi has your answer · he'll carry on in a minute or so"
+    /** A29: the card's status already says "Obi has your answer", so the line under the ask row doesn't say it again. */
+    const val ANSWERED_LINE = "Thanks · Obi will carry on in a minute or so"
     const val CARRY_ON_LINE = "Obi will carry on in a minute or so"
     const val ANSWER_GONE = "That errand isn't waiting for you any more"
     const val ANSWER_STATUS = "Working · Obi has your answer"

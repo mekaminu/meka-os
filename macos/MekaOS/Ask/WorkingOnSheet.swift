@@ -98,7 +98,7 @@ struct WorkingOnSheet: View {
     private func jobsSection(_ v: WorkingOnView) -> some View {
         label(ObiJobRules.shared.TITLE).padding(.top, MekaSpace.xs)
             .accessibilityAddTraits(.isHeader)
-        Text(LoneWordGlue.shared.kept(line: ObiJobRules.shared.INTRO)).font(MekaType.caption)
+        Text(LoneWordGlue.shared.kept(line: ObiJobRules.shared.PANE_INTRO)).font(MekaType.caption)
             .foregroundStyle(palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
         HStack {
@@ -303,7 +303,7 @@ struct WorkingOnSheet: View {
     @ViewBuilder
     private func resultView(_ r: BookingCallRow) -> some View {
         let id = r.id
-        if let length = r.lengthLine {
+        if let length = r.lengthOnCard {
             Text(LoneWordGlue.shared.kept(line: length)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
         }
         if !r.resultTiles.isEmpty {
@@ -312,7 +312,7 @@ struct WorkingOnSheet: View {
             }
             .padding(.top, MekaSpace.xs)
         }
-        if let result = r.result {
+        if let result = r.resultOnCard {
             Text(LoneWordGlue.shared.kept(line: result)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)

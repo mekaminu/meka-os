@@ -229,13 +229,13 @@ private fun ResultView(
     r: BookingCallRow, onAddToCalendar: () -> Unit, onRead: () -> Unit, onTryAgain: () -> Unit,
     audio: suspend (String) -> ByteArray? = { null },
 ) {
-    r.lengthLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
+    r.lengthOnCard?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
     if (r.resultTiles.isNotEmpty()) {
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             r.resultTiles.forEach { Tile(it.label, it.value, Modifier.weight(1f)) }
         }
     }
-    r.result?.let {
+    r.resultOnCard?.let {
         Text(LoneWordGlue.kept(it), style = MekaType.body, color = Meka.colors.textPrimary,
             modifier = Modifier.padding(top = MekaSpace.xs).testTag("call-result"))
     }

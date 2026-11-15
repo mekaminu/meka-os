@@ -100,6 +100,9 @@ class BookingLiveRulesTest {
         val r = row(c)
         assertFalse(r.live || r.showBrief)
         assertEquals("Rosa's Kitchen · 2 min 40 s", r.lengthLine)
+        // Walk-through 2026-11-08 A29: the card's title is the business and its label says Booked, so neither is said twice.
+        assertEquals("2 min 40 s", r.lengthOnCard)
+        assertEquals("Sat 19:30 for 4 · ref RK204", r.resultOnCard)
         assertEquals(listOf("Sat 19:30", "4", "Alex"), r.resultTiles.map { it.value })
         assertEquals("In your calendar · Sat 14 Nov 19:30", r.calendarLine)
         assertTrue(r.canAddToCalendar && !r.addedToCalendar && r.canRead)
@@ -182,6 +185,9 @@ class BookingLiveRulesTest {
         assertTrue(BookingCallState.TAKEN.finished && !r.live && !r.showBrief && !r.canTakeOver)
         assertEquals(BookingLiveRules.TAKEN, r.status)
         assertEquals("Rosa's Kitchen · Obi 1 min 10 s · you 3 min 10 s", r.lengthLine)
+        assertEquals("Obi 1 min 10 s · you 3 min 10 s", r.lengthOnCard)
+        // A result that doesn't lead with the label is left as it is.
+        assertEquals("You took the call from Obi", r.resultOnCard)
         assertTrue(r.resultTiles.isEmpty() && r.calendarLine == null)
         // His own leg is metered at his mobile's rate plus the business's line, by the minute.
         assertEquals(4 * (31_000L + 16_000L), BookingDialRules.handOverMicroUsd("+441234567890", 190))
@@ -223,5 +229,14 @@ class BookingLiveRulesTest {
         // His listening leg: his mobile's minute and its stream.
         assertEquals(2 * (31_000L + 4_000L), BookingDialRules.listenMicroUsd(61))
         assertEquals(0L, BookingDialRules.listenMicroUsd(0))
+    }
+
+    @Test
+    fun aLeadIsDroppedOnlyWhenTheLineStartsWithIt() {
+        assertEquals("They're full at 7 · they offered 21:00", BookingCallRules.withoutLead("Not booked · they're full at 7 · they offered 21:00", "Not booked"))
+        assertEquals("Fully booked", BookingCallRules.withoutLead("not booked · fully booked", "Not booked"))
+        assertEquals("Not booked", BookingCallRules.withoutLead("Not booked", "Not booked"))
+        assertEquals("Not bookedish · x", BookingCallRules.withoutLead("Not bookedish · x", "Not booked"))
+        assertEquals("Booked · x", BookingCallRules.withoutLead("Booked · x", ""))
     }
 }

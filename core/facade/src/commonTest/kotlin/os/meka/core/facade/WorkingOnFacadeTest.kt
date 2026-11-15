@@ -64,7 +64,8 @@ class WorkingOnFacadeTest {
         assertEquals(listOf(StandingErrand.RENEWALS, StandingErrand.BIRTHDAYS, StandingErrand.FOLLOW_UPS), v.cards.map { it.errand }, all)
         assertEquals(3, v.needCount, all)
         assertTrue(v.summary.startsWith("Keeping an eye on 3 things"), all)
-        assertTrue(v.cards[0].did.startsWith("Watching 1 renewal · next: Home insurance"), all)
+        // Walk-through 2026-11-08 A29: the need line names the renewal, so the did line doesn't say it again.
+        assertEquals("Watching 1 renewal", v.cards[0].did, all)
         assertTrue(v.cards[0].need!!.startsWith("Home insurance "), all)
         assertTrue(v.cards[1].did.startsWith("Sam's birthday"), all)
         assertTrue(v.cards[1].need!!.startsWith("Pick a gift · "), all)
