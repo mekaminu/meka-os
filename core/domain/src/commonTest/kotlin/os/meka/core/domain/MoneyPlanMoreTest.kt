@@ -90,7 +90,7 @@ class MoneyPlanMoreTest {
     fun goalStartTiles() {
         val none = MoneyGoalsView(MoneyGoals.HEAD, emptyList(), MoneyGoals.EMPTY, MoneyGoals.FOOT)
         val e = MoneyPlanMore.goalsEmpty(none, hasSave = true, hasClear = true)!!
-        assertEquals(listOf("Save £ a month", "Clear my cards", "Add a £ goal"), e.tiles.map { it.name })
+        assertEquals(listOf("Save each month", "Clear my cards", "Add a £ goal"), e.tiles.map { it.name })
         assertEquals(listOf("Add a £ goal"), MoneyPlanMore.goalsEmpty(none, hasSave = false, hasClear = false)!!.tiles.map { it.name })
         val one = none.copy(rows = listOf(MoneyGoalRow("g", "Holiday", "£0 of £600", 0, null, emptyList(), "Holiday")))
         assertNull(MoneyPlanMore.goalsEmpty(one, true, true))

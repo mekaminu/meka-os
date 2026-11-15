@@ -194,7 +194,7 @@ struct MoneySheet: View {
                         .id(tab.name)
                         .transition(.opacity)
                     }
-                    // Plan's lower half: a goal start tile (Save £ a month, Clear my cards) scrolls to its card.
+                    // Plan's lower half: a goal start tile (Save each month, Clear my cards) scrolls to its card.
                     .onChange(of: scrollTarget) { _, target in
                         guard let target else { return }
                         if reduceMotion { proxy.scrollTo(target, anchor: .top) } else { withAnimation(MekaMotion.appear(reduced: false)) { proxy.scrollTo(target, anchor: .top) } }
@@ -770,19 +770,25 @@ struct MoneySheet: View {
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
             }
             ForEach(c.fields, id: \.key) { f in cardField(cardId: c.id, f) }
-            HStack(spacing: MekaSpace.m) {
+            HStack(spacing: MekaSpace.s) {
                 Button(MoneyCards.shared.CHARGE_SWITCH + (c.charge ? " ✓" : "")) {
                     let id = c.id
                     let charge = !c.charge
                     Task { said = await model.moneyCardKind(accountId: id, card: true, charge: charge) }
                 }
-                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(c.charge ? palette.accent : palette.textSecondary)
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(c.charge ? palette.onAccent : palette.textSecondary)
+                // Walk-through A32: Charge card and Not a card are pills (lit while it's a charge card), not loose words.
+                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                .background(c.charge ? palette.accent : palette.surfaceRaised, in: Capsule())
+                .accessibilityValue(c.charge ? "On" : "Off")
                 Button(MoneyCards.shared.NOT_CARD) {
                     let id = c.id
                     editingCard = nil
                     Task { said = await model.moneyCardKind(accountId: id, card: false, charge: false) }
                 }
-                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                .background(palette.surfaceRaised, in: Capsule())
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -850,7 +856,7 @@ struct MoneySheet: View {
     private func moneyGoals(_ gv: MoneyGoalsView, _ v: MoneyView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             MoneyLabel(gv.head, palette: palette).padding(.top, MekaSpace.xs)
-            // Plan's lower half: no £ goal yet → start tiles (Save £ a month · Clear my cards · Add a £ goal).
+            // Plan's lower half: no £ goal yet → start tiles (Save each month · Clear my cards · Add a £ goal).
             if let e = MoneyPlanMore.shared.goalsEmpty(goals: gv, hasSave: v.save != nil && has(.save, v), hasClear: v.clear != nil && has(.clear, v)) {
                 MoneyGoalsEmptyView(empty: e, palette: palette) { key in
                     said = nil

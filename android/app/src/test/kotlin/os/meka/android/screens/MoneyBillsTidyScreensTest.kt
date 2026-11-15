@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -173,6 +176,14 @@ class MoneyBillsTidyScreensTest {
             card.feesLine, MoneyCards.FOOT) + card.fields.map { if (it.value.isEmpty()) it.hint else "${it.label} · now ${it.value}" }
         ScreenShots.assertNoLoneWords(compose, "cover-dark-card-sheet", sheetLines)
         ScreenShots.assertNoDotEndingALine(compose, "cover-dark-card-sheet", sheetLines)
+        // Walk-through A32: Charge card and Not a card are pills inside whole 48 dp targets; Charge card says if it's on.
+        listOf("money-card-charge", "money-card-not-card").forEach { t ->
+            compose.onNodeWithTag(t).assertHeightIsAtLeast(48.dp)
+        }
+        compose.onNodeWithTag("money-card-charge").assert(
+            androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
+                if (card.charge) "On" else "Off"))
+        ScreenShots.assertWholeTargets(compose, "cover-dark-card-sheet")
         tap("money-card-sheet-done")
         if (shows("money-card-sheet")) fail("Done didn't close the card's sheet")
         if (v.payday != null) {

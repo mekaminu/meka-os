@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -853,7 +854,7 @@ fun MoneyPane(
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
                 item(key = "goals") {
-                    // Plan's lower half: no £ goal yet → a card with start tiles (Save £ a month · Clear my cards · Add a £ goal).
+                    // Plan's lower half: no £ goal yet → a card with start tiles (Save each month · Clear my cards · Add a £ goal).
                     val empty = MoneyPlanMore.goalsEmpty(gv, hasSave = v.save != null && has(MoneySection.SAVE), hasClear = v.clear != null && has(MoneySection.CLEAR))
                     if (empty != null) {
                         MoneyGoalsEmptyCard(empty, Modifier.animateItem().appear(rememberAppearance(6))) { key ->
@@ -2407,12 +2408,22 @@ private fun CardDetails(
                 onField(f.key, t)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-            Text(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", style = MekaType.caption,
-                color = if (c.charge) Meka.colors.accent else Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onKind(true, !c.charge) }.minTouch())
-            Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onKind(false, false) }.minTouch())
+        // Walk-through A32: Charge card and Not a card are pills (lit while it's a charge card), each drawn inside a whole
+        // 48 dp tall target, so they read as the two switches they are rather than loose words under the fields.
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            val chargeBg by animateColorAsState(if (c.charge) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "money-card-charge-bg-${c.id}")
+            val chargeFg by animateColorAsState(if (c.charge) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-card-charge-fg-${c.id}")
+            Text(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", style = MekaType.caption, color = chargeFg,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Switch) { onKind(true, !c.charge) }.testTag("money-card-charge")
+                    .semantics { stateDescription = if (c.charge) "On" else "Off" }
+                    .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(chargeBg)
+                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+            Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { onKind(false, false) }.testTag("money-card-not-card")
+                    .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
         }
         Text(moneyShown(MoneyCards.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
     }

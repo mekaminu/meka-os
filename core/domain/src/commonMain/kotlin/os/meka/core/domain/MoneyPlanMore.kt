@@ -7,7 +7,7 @@ import kotlin.math.roundToLong
  * **Plan's lower half** (approved by Meka 2026-11-06 21:34, mockup `docs/design/money/Phone-PlanMore.dc.html`), slice 1:
  * Goals' empty state and the forecast as tiles and bars instead of sentences.
  *
- * - **Goals, empty**: a card ("No money goals yet · Start one from a plan") with up to three start tiles: Save £ a month
+ * - **Goals, empty**: a card ("No money goals yet · Start one from a plan") with up to three start tiles: Save each month
  *   (What if I save…), Clear my cards (only with a card to clear), and Add a £ goal (a sheet: what for, how much), so a
  *   first goal is one tap away.
  * - **Forecast at your pace**: In / Out / Left over tiles for the average month; a 6 · 12 months toggle; one bar a month
@@ -110,7 +110,8 @@ object MoneyPlanMore {
     fun goalsEmpty(goals: MoneyGoalsView?, hasSave: Boolean, hasClear: Boolean): MoneyGoalsEmpty? {
         if (goals == null || goals.rows.isNotEmpty()) return null
         val tiles = buildList {
-            if (hasSave) add(MoneyGoalStart(START_SAVE, "↗", "Save £ a month", "Save pounds a month: opens What if I save"))
+            // Walk-through A32: "Save £ a month" read as a missing figure; the tile names the plan, not a blank sum.
+            if (hasSave) add(MoneyGoalStart(START_SAVE, "↗", "Save each month", "Save each month: opens What if I save"))
             if (hasClear) add(MoneyGoalStart(START_CLEAR, "▭", "Clear my cards", "Clear my cards: opens Clear my cards"))
             add(MoneyGoalStart(START_ADD, "◎", "Add a £ goal", "Add a pound goal"))
         }
