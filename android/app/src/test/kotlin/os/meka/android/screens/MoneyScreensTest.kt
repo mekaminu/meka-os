@@ -303,7 +303,15 @@ class MoneyScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerBills() = shoot("inner-dark-columns-bills", Fill.MANY, tab = MoneyTab.BILLS)
+    fun innerBills() {
+        shoot("inner-dark-columns-bills", Fill.MANY, tab = MoneyTab.BILLS)
+        // Walk-through A32: one pay month's bills (Netflix paid since payday on 5 Oct, the council tax due 1 Nov), not
+        // "£153 of £295 this month" with the council tax counted twice, above Plan's whole month out.
+        val line = "£11 of £153 already paid since payday"
+        if (compose.onAllNodes(ScreenShots.plainText(line, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("the Bills card should say \"$line\"")
+        }
+    }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerPlan() = shoot("inner-dark-columns-plan", Fill.MANY, tab = MoneyTab.PLAN)

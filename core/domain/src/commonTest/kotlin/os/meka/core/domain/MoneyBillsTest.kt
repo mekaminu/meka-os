@@ -41,7 +41,7 @@ class MoneyBillsTest {
         assertEquals("£251", b.amount)
         assertEquals(25_099L, payday().toGoPence)
         assertEquals("3 bills", b.count)
-        assertEquals("£30 of £281 this month already paid", b.paidLine)
+        assertEquals("£30 of £281 already paid since payday", b.paidLine)
         assertTrue(kotlin.math.abs(3_000f / 28_099f - b.paidShare) < 0.001f)
     }
 
@@ -104,6 +104,26 @@ class MoneyBillsTest {
         assertEquals(listOf("Streamly.com", "Credit card", "Water bill", "Netflux.com"), v.rows.map { it.title })
         // And the payday view without pay says not ready, so Money falls back to this.
         assertNull(payday(regulars).bills)
+    }
+
+    @Test
+    fun withAPaydayAfterTheBillTheCardCountsOnePayMonthNotTheBillTwice() {
+        // Walk-through 2026-11-08 A32: pay on the 5th, a council bill on the 1st. On 21 Oct the bill paid on 1 Oct came
+        // before payday and the one on 1 Nov is still to come, so counting from the 1st said "£153 of £295 this month",
+        // more than one month's bills and above the forecast's whole month out.
+        val day = d(10, 21)
+        val ls = listOf(8, 9, 10).flatMap { m ->
+            listOf(line(d(m, 5), 250_000, "ACME PAYROLL"), line(d(m, 1), -14_200, "OAKFIELD COUNCIL TAX"),
+                line(d(m, 15), -1_099, "STREAMLY.COM"))
+        }
+        val b = MoneyPayday.view(ls, day, names, emptyMap(), emptyList(), HolidayCalendar()).bills!!
+        assertEquals("£142", b.amount)
+        assertEquals("£11 of £153 already paid since payday", b.paidLine)
+        assertEquals(listOf("£142" to false, "£10.99" to true), b.rows.map { it.amount to it.paid })
+        // Without a payday the month still counts from the 1st.
+        val v = MoneyBills.forMonth(MoneyTips.regular(ls.filter { it.pence < 0 }.map { MoneyLine(it.day, it.pence, it.merchant, it.category) }, day),
+            emptyList(), emptySet(), day)!!
+        assertEquals("£153 of £153 this month already paid", v.paidLine)
     }
 
     @Test

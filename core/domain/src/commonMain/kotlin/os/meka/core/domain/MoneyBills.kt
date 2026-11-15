@@ -7,7 +7,7 @@ import kotlin.math.roundToLong
  *
  * The card says what's still to go out before payday (or before the month ends while no payday is found) as one big
  * number with how many bills, a thin bar of how much of the month's bills are already paid, and "£672 of £1,082 this
- * month already paid". Under it every bill of the month by date: those still to come first ("OCT 28 · Sky · Monthly ·
+ * month already paid" ("… already paid since payday" once a payday is found, counted from it). Under it every bill of the month by date: those still to come first ("OCT 28 · Sky · Monthly ·
  * £153.48"), then the ones already paid this month, greyed ("Paid · Fri 2 Oct").
  *
  * The bills are what [MoneyPayday] already counts (so the card's number is the Spending tab's "Bills to come" tile):
@@ -68,11 +68,21 @@ object MoneyBills {
     fun monthEnd(today: Long): Long = CivilDate.fromEpochDay(today).let { CivilDate.toEpochDay(it.year, it.month, CivilDate.lengthOfMonth(it.year, it.month)) }
 
     /** The regular payments already taken this month, as paid bills. */
-    fun paidThisMonth(regular: List<MoneyTips.Regular>, today: Long): List<Due> {
-        val start = monthStart(today)
-        return regular.filter { it.lastDay in start..today }
+    fun paidThisMonth(regular: List<MoneyTips.Regular>, today: Long): List<Due> = paidSince(regular, monthStart(today), today)
+
+    /**
+     * Walk-through 2026-11-08 A32: with a payday found, the bills already paid are those since the last payday, so the
+     * card's whole ("£11 of £153") is one pay month's bills. Counting from the 1st while the bills to come run to payday
+     * counted a bill twice when payday falls after the month's end (the council tax on 1 Oct paid and on 1 Nov to come:
+     * "£153 of £295", more than the forecast's whole month out).
+     */
+    fun paidSince(regular: List<MoneyTips.Regular>, from: Long, today: Long): List<Due> =
+        regular.filter { it.lastDay in from..today }
             .map { Due("p-${it.key}", it.label, it.lastDay, it.monthly, MoneyBillKind.REGULAR, paid = true) }
-    }
+
+    /** The paid line's span: "this month" with no payday found, "since payday" with one. */
+    const val SPAN_MONTH = "this month already paid"
+    const val SPAN_PAYDAY = "already paid since payday"
 
     /** "Monthly", "Monthly · went up £1.50", "Card statement", "From Lists → Renewals", with "Due tomorrow · " leading. */
     fun sub(d: Due, today: Long): String {
@@ -93,7 +103,7 @@ object MoneyBills {
      * The card and list from the bills still [toCome] (before [until]) and those [paid] this month. [untilLabel] names
      * payday ("Fri 30 Oct"), or null when no payday is found (then it's "before the month ends").
      */
-    fun view(toCome: List<Due>, paid: List<Due>, untilLabel: String?, today: Long): MoneyBillsView? {
+    fun view(toCome: List<Due>, paid: List<Due>, untilLabel: String?, today: Long, span: String = SPAN_MONTH): MoneyBillsView? {
         if (toCome.isEmpty() && paid.isEmpty()) return null
         val coming = toCome.sortedWith(compareBy({ it.day }, { it.title }))
         val done = paid.sortedWith(compareByDescending<Due> { it.day }.thenBy { it.title })
@@ -103,7 +113,7 @@ object MoneyBills {
         val head = if (untilLabel != null) "Still to go out before payday · $untilLabel" else "Still to go out before the month ends"
         val n = coming.size
         val count = if (n == 0) NOTHING else "$n bill${if (n == 1) "" else "s"}"
-        val paidLine = if (paidPence > 0) "${fmt(pounds(paidPence))} of ${fmt(pounds(all))} this month already paid" else null
+        val paidLine = if (paidPence > 0) "${fmt(pounds(paidPence))} of ${fmt(pounds(all))} $span" else null
         val rows = (coming + done).take(SHOWN).map { d ->
             val date = CivilDate.fromEpochDay(d.day)
             val sub = sub(d, today)
