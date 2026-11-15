@@ -142,7 +142,7 @@ struct MoneyChatPanel: View {
                 }
                 .transition(.opacity)
             }
-            Text(MoneyChat.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.measured(line: MoneyChat.shared.FOOT)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -174,7 +174,8 @@ struct MoneyChatPanel: View {
     }
 
     private func bubble(_ text: String, mine: Bool) -> some View {
-        Text(text).font(MekaType.body).foregroundStyle(palette.textPrimary)
+        // Walk-through A28 slice 5: his question and Obi's answer wrap whole, as on the Fold.
+        Text(LoneWordGlue.shared.measured(line: text)).font(MekaType.body).foregroundStyle(palette.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(mine ? palette.accent.opacity(0.16) : palette.surfaceRaised))

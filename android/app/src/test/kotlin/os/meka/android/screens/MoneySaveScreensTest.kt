@@ -136,6 +136,13 @@ class MoneySaveScreensTest {
         scrollTo("money-save-card")
         assertTrue(showsText("£1,200"), "six months of £200 should total £1,200")
         assertTrue(showsText("by Apr 2027"))
+        // Walk-through A28 slice 5: on the cover screen no month chip sits alone on its row ("24 months" under three).
+        val tops = MoneySave.MONTHS.map { m ->
+            compose.onNodeWithTag("money-save-months-$m", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top.toInt()
+        }
+        tops.groupingBy { it }.eachCount().forEach { (top, n) ->
+            if (tops.toSet().size > 1 && n < 2) fail("a month chip is alone on its row at y=$top: $tops")
+        }
         tap("money-save-months-12")
         assertTrue(showsText("£2,400"), "twelve months of £200 should total £2,400")
         assertTrue(showsText("by Oct 2027"))

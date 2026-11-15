@@ -32,10 +32,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -43,6 +46,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.core.domain.EvenRows
 import os.meka.core.domain.MoneySave
 import os.meka.core.domain.MoneySaveBase
 import os.meka.core.domain.MoneySaveBar
@@ -86,7 +90,8 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
             tag = "money-save-slider", spoken = "Amount to save each month, ${v.amount}",
         )
         // README item 6: the mockup's smaller chips (drawn small, still a 48 dp target).
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // Walk-through A28 slice 5: no month chip alone on its row ("24 months" under the other three on the cover screen).
+        EvenChipRows(MekaSpace.xs, Modifier.testTag("money-save-months")) {
             for (c in v.months) MoneyChip(c.label, on = c.on, tag = "money-save-months-${c.value}", description = c.spoken) {
                 if (!c.on) { onTick(); months = c.value }
             }
@@ -133,6 +138,33 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
                 .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         )
         // Layout rule (c): how this is worked out is said once, behind Plan's foot ⓘ (MoneyTabs.info).
+    }
+}
+
+/**
+ * Chips in rows like a FlowRow, but never one left alone on the last row ([EvenRows]: three and one become two and two).
+ * The chips keep their own sizes; rows are [gap] apart side to side and stack with no gap (each chip is a 48 dp target).
+ */
+@Composable
+internal fun EvenChipRows(gap: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content, modifier) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val placeables = measurables.map { it.measure(loose) }
+        val g = gap.roundToPx()
+        val max = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
+        val rows = mutableListOf<List<Placeable>>()
+        var at = 0
+        for (n in EvenRows.sizes(placeables.map { it.width }, g, max)) { rows += placeables.subList(at, at + n); at += n }
+        val width = rows.maxOfOrNull { r -> r.sumOf { it.width } + g * (r.size - 1) }?.coerceAtMost(max) ?: 0
+        val height = rows.sumOf { r -> r.maxOf { it.height } }
+        layout(width.coerceAtLeast(constraints.minWidth), height.coerceAtLeast(constraints.minHeight)) {
+            var y = 0
+            rows.forEach { r ->
+                var x = 0
+                r.forEach { p -> p.placeRelative(x, y); x += p.width + g }
+                y += r.maxOf { it.height }
+            }
+        }
     }
 }
 

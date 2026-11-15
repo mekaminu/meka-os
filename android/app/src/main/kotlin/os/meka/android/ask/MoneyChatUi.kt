@@ -243,8 +243,9 @@ internal fun MoneyChatContent(
 private fun Bubble(text: String, mine: Boolean, modifier: Modifier = Modifier) {
     val shape = if (mine) RoundedCornerShape(MekaRadius.l, MekaRadius.l, MekaSpace.xxs, MekaRadius.l)
     else RoundedCornerShape(MekaRadius.l, MekaRadius.l, MekaRadius.l, MekaSpace.xxs)
+    // Walk-through A28 slice 5: his question and Obi's answer wrap whole ("for 6 / months?" left a word alone).
     Text(
-        text, style = MekaType.body, color = Meka.colors.textPrimary,
+        moneyShown(text), style = MekaType.body, color = Meka.colors.textPrimary,
         modifier = modifier.widthIn(max = 480.dp).clip(shape)
             .background(if (mine) Meka.colors.accent.copy(alpha = 0.16f) else Meka.colors.surfaceRaised)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),

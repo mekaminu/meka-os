@@ -126,6 +126,9 @@ object LoneWordGlue {
     /** The marks held to the word before them, so no line starts with one or holds one alone (A14: Calendars' "→"). */
     private val HELD = setOf("·", "→")
 
+    /** The marks that end a sentence, so the word after one starts the next (A28 slice 5). */
+    private val ENDS = setOf('.', '?', '!')
+
     /**
      * [line] with its dates, numbers and counts whole ([PhraseGlue.kept]), each " · " held to the words beside it
      * ([dotsHeld]: no line starts with "· last push 16:55", Health's re-shot, quality gate slice 30) and its last words
@@ -137,6 +140,11 @@ object LoneWordGlue {
         if (starts.size < 3) return s
         var from = starts.size - 2
         if (s.substring(starts[from], starts[from + 1]).trim() in JOINERS && from > 0) from--
+        // A28 slice 5: a short last sentence goes down whole with its first word ("… balances. Not / financial advice."
+        // left "Not" ending the line before), while the three words stay within PAIR_MAX.
+        if (from >= 2 && s.substring(starts[from - 2], starts[from - 1]).trimEnd().let { it.isNotEmpty() && it.last() in ENDS } &&
+            s.substring(starts[from - 1]).length <= PAIR_MAX
+        ) from--
         val tail = s.substring(starts[from])
         if (tail.length > PAIR_MAX) return s
         val held = s.substring(0, starts[from]) + tail.replace(' ', NBSP)
@@ -240,3 +248,39 @@ object LoneWordGlue {
     fun alone(lastLine: String): Boolean = lastLine.trim().let { it.isNotEmpty() && it.none { c -> c.isSpace() } }
 }
 
+
+/**
+ * Chips laid in rows with none left alone (walk-through 2026-11-08, A28 slice 5: What if I save…'s month chips put
+ * "3 months · 6 months · 12 months" on one row on the cover screen and "24 months" alone under them). Non-AI, pure.
+ */
+object EvenRows {
+    /**
+     * How many chips go on each row, given each chip's [widths], the [gap] between them and the row's [max] width: one
+     * row when all fit; otherwise as many rows as wrapping needs, with the chips shared out evenly (the earlier rows
+     * taking any extra) when every row then fits, else plain wrapping.
+     */
+    fun sizes(widths: List<Int>, gap: Int, max: Int): List<Int> {
+        if (widths.isEmpty()) return emptyList()
+        val wrapped = mutableListOf<Int>()
+        var used = 0
+        var count = 0
+        for (w in widths) {
+            if (count > 0 && used + gap + w > max) { wrapped += count; used = 0; count = 0 }
+            used += if (count == 0) w else gap + w
+            count++
+        }
+        wrapped += count
+        if (wrapped.size == 1 || wrapped.last() > 1) return wrapped
+        val rows = wrapped.size
+        val base = widths.size / rows
+        val extra = widths.size % rows
+        val even = List(rows) { r -> base + if (r < extra) 1 else 0 }
+        var at = 0
+        for (n in even) {
+            val row = widths.subList(at, at + n)
+            if (row.sum() + gap * (n - 1) > max) return wrapped
+            at += n
+        }
+        return even
+    }
+}

@@ -199,7 +199,7 @@ internal fun MoneyIdeaDetails(i: MoneyIdea, onAct: () -> Unit, onRemind: () -> U
             Text(i.figure, style = MekaType.itemTitle, color = if (i.lit) Meka.colors.accent else Meka.colors.textSecondary,
                 modifier = Modifier.testTag("money-idea-figure"))
         }
-        Text(i.why, style = MekaType.body, color = Meka.colors.textSecondary)
+        Text(moneyShown(i.why), style = MekaType.body, color = Meka.colors.textSecondary) // A28 slice 5: no lone "year."
         if (i.behind.isNotEmpty()) {
             Text(moneyShown(MoneyCheck.BEHIND), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
             // Walk-through A26: the rows sit flush with the heading, so their names start under the title and their amounts

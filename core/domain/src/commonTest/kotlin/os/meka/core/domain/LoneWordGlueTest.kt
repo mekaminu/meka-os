@@ -107,4 +107,30 @@ class LoneWordGlueTest {
         assertEquals("a drop 10% · a big order", LoneWordGlue.percentsHeld("a drop 10% · a big order"))
         assertTrue(LoneWordGlue.measured("Pitch · 10% higher").endsWith("10%${nb}higher"))
     }
+
+    // A28 slice 5: Ask Obi's foot ended a line on "Not" over "financial advice.".
+    @Test
+    fun aShortLastSentenceGoesDownWhole() {
+        val foot = LoneWordGlue.measured(MoneyChat.FOOT)
+        assertTrue(foot.endsWith("Not${nb}financial${nb}advice."), foot)
+        assertEquals(MoneyChat.FOOT, DateGlue.plain(foot))
+        // A last sentence too long to hold keeps only its last two words together.
+        val long = LoneWordGlue.kept("All done. Remember everything tomorrow.")
+        assertFalse(long.contains("Remember$nb"), long)
+        // No sentence end before: as before.
+        assertFalse(LoneWordGlue.kept("Read the not financial advice").contains("not$nb"))
+    }
+
+    @Test
+    fun noChipIsLeftAloneOnItsRow() {
+        // Three of four fit: two and two, not three and one.
+        assertEquals(listOf(2, 2), EvenRows.sizes(listOf(80, 80, 90, 90), 8, 280))
+        assertEquals(listOf(4), EvenRows.sizes(listOf(60, 60, 60, 60), 8, 280))
+        assertEquals(listOf(2, 2), EvenRows.sizes(listOf(100, 100, 100, 100), 8, 220))
+        // Five where four fit: three and two.
+        assertEquals(listOf(3, 2), EvenRows.sizes(listOf(50, 50, 50, 50, 50), 8, 230))
+        // A wide chip that can't share a row keeps plain wrapping.
+        assertEquals(listOf(1, 1), EvenRows.sizes(listOf(200, 200), 8, 250))
+        assertEquals(emptyList(), EvenRows.sizes(emptyList(), 8, 100))
+    }
 }

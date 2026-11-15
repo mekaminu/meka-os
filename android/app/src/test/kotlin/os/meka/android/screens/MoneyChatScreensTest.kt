@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -179,12 +181,19 @@ class MoneyChatScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi")
 
+        fun drawn(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
+        val question = drawn("money-chat-try-0")
         tap("money-chat-try-0")
         until(core) { shows("money-chat-answer-0") }
         assertTrue(showsText("a month for 6 months puts by"), "the what-if wasn't answered")
         assertTrue(shows("money-chat-act-goal-0"), "no Make it a goal under the answer")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-answer"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-answer")
+        // Walk-through A28 slice 5: "for 6 / months?" and "Not / financial advice." left a word alone or ending a line.
+        val lines = listOf(question, drawn("money-chat-answer-0"), MoneyChat.FOOT)
+        ScreenShots.assertNoLoneWords(compose, "cover-dark-ask-obi-answer", lines)
+        ScreenShots.assertNoDotStartingALine(compose, "cover-dark-ask-obi-answer", lines)
 
         tap("money-chat-act-goal-0")
         until(core) { showsText("Made a goal: Save") }

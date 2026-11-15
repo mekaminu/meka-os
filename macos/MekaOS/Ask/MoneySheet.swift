@@ -1554,7 +1554,7 @@ struct MoneySheet: View {
             .popover(isPresented: Binding(get: { ideaOpenId == id }, set: { if !$0 && ideaOpenId == id { ideaOpenId = nil } }), arrowEdge: .trailing) {
                 ideaDetails(i)
             }
-            Text(i.why).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            Text(LoneWordGlue.shared.measured(line: i.why)).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: MekaSpace.xs) {
                 if let a = i.act {
                     leadPill(a, ink: palette.accent) {
@@ -1612,7 +1612,7 @@ struct MoneySheet: View {
                 Text(i.figure).font(MekaType.itemTitle).foregroundStyle(i.lit ? palette.accent : palette.textSecondary)
             }
             .accessibilityElement(children: .combine)
-            Text(i.why).font(MekaType.body).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            Text(LoneWordGlue.shared.measured(line: i.why)).font(MekaType.body).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             if !i.behind.isEmpty {
                 Text(MoneyCheck.shared.BEHIND).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xxs)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
