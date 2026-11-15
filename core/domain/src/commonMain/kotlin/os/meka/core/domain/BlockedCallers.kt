@@ -359,6 +359,9 @@ object StoppedCallRules {
     const val WINDOW_DAYS = 30
     const val TITLE = "Blocked calls"
     const val HINT = "Calls from numbers on your block list don't ring or notify; they still show in the phone's call log."
+
+    /** The line under STOPPED CALLS: what was stopped lately, then [HINT]. */
+    fun sectionLine(stoppedLine: String?): String = listOfNotNull(stoppedLine, HINT).joinToString(". ")
     const val UNBLOCK_LABEL = "Unblock"
     const val BLOCK_AGAIN_LABEL = "Block again"
     const val UNBLOCKED_LINE = "Unblocked · their calls ring again"

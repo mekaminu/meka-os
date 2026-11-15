@@ -89,4 +89,19 @@ class ActivityExportTest {
         assertEquals("Kept in your data on your devices · this shows the last 30 days and Undo lasts 30 · Export saves all 3 entries",
             ActivityExportRules.keptLine(3))
     }
+
+    @Test
+    fun activityLinesWrapWhole() {
+        // Walk-through A28: "1 / reminder", "stopped." and a lone "log." ended Activity's lines.
+        val nbsp = LifeTileRules.GLUE[0]
+        val intro = LoneWordGlue.measured(ActivityRules.introLine(ActivityView("This week: 1 reminder · 2 changes", listOf(ActivityDay(0, "Today", emptyList())), ActivityRules.EMPTY_LINE)))
+        assertTrue(intro.endsWith("2${nbsp}changes."), intro)
+        assertEquals("What Navilife did and why. This week: 1 reminder · 2 changes.", DateGlue.plain(intro))
+        val kept = LoneWordGlue.measured(ActivityExportRules.keptLine(3))
+        assertTrue(kept.substringAfterLast(' ').contains(nbsp), kept)
+        assertEquals(ActivityRules.EMPTY_LINE, ActivityRules.introLine(ActivityView("", emptyList(), ActivityRules.EMPTY_LINE)))
+        assertEquals(StoppedCallRules.HINT, StoppedCallRules.sectionLine(null))
+        assertTrue(StoppedCallRules.sectionLine("2 calls stopped").startsWith("2 calls stopped. Calls from"))
+        assertEquals(CallLogRules.HINT, CallLogRules.sectionLine(null))
+    }
 }

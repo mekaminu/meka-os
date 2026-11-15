@@ -142,6 +142,9 @@ data class CallLogView(val days: List<CallLogDay>) {
 object CallLogRules {
     const val TITLE = "Recent calls"
     const val HINT = "Calls your call assistant took, calls Navilife stopped, numbers you don't know and calls you missed at work. Tap one for what happened"
+
+    /** The line under RECENT CALLS: the week's count line, then [HINT]. */
+    fun sectionLine(line: String?): String = listOfNotNull(line, HINT).joinToString(". ")
     const val MAX = 30
 
     const val CHIP_BLOCKED = "Blocked"

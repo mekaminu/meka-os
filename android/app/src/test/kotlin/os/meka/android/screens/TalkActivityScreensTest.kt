@@ -41,6 +41,7 @@ import os.meka.core.domain.Digest
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.TalkOnOpenRules
+import os.meka.core.domain.StoppedCallRules
 import os.meka.core.domain.TalkStartRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -211,6 +212,15 @@ class TalkActivityScreensTest {
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOfNotNull(it.summary, it.detail, it.why) }, mustShow = false)
         ScreenShots.assertEachOneLine(compose, name, ActivityRules.filters(v).map { it.label } + rows.map { it.time })
         ScreenShots.assertNoLoneWords(compose, name, rows.flatMap { listOfNotNull(it.summary, it.why) })
+        // Walk-through A28: the line under the title ("1 / reminder"), the stopped calls' line ("stopped.") and the kept
+        // line (a lone "log.") wrap whole, and none starts with a dot.
+        val lines = listOfNotNull(
+            ActivityRules.introLine(v),
+            core.blockedCallers.value.stoppedLine?.let { StoppedCallRules.sectionLine(it) },
+            runBlocking { runCatching { core.activityKeptLine() }.getOrNull() },
+        )
+        ScreenShots.assertNoLoneWords(compose, name, lines)
+        ScreenShots.assertNoDotStartingALine(compose, name, lines)
         return core
     }
 

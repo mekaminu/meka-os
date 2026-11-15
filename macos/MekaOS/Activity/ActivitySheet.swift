@@ -56,7 +56,7 @@ struct ActivitySheet: View {
                     .transition(.opacity)
             }
             if let view = model.activity, !view.isEmpty {
-                Text("What Navilife did and why. \(view.weekLine).")
+                Text(LoneWordGlue.shared.measured(line: ActivityRules.shared.introLine(view: view)))
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)
                 if let note = model.activityNote {
@@ -178,7 +178,7 @@ struct ActivitySheet: View {
             Text(StoppedCallRules.shared.TITLE.uppercased())
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary)
-            Text([view.stoppedLine, StoppedCallRules.shared.HINT].compactMap { $0 }.joined(separator: ". "))
+            Text(LoneWordGlue.shared.measured(line: StoppedCallRules.shared.sectionLine(stoppedLine: view.stoppedLine)))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(view.stopped, id: \.key) { row in

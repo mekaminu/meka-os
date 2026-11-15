@@ -533,6 +533,9 @@ object ActivityRules {
         return ActivityView(if (shown.isEmpty()) "" else weekLine, days, EMPTY_LINE)
     }
 
+    /** Activity's line under its title: the empty line, or "What Navilife did and why. This week: …." (A28: drawn held). */
+    fun introLine(view: ActivityView): String = if (view.isEmpty) view.emptyLine else "What Navilife did and why. ${view.weekLine}."
+
     // ---- Filtering (slice 3) ----
 
     /**

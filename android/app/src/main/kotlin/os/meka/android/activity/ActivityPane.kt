@@ -126,7 +126,8 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         Text("Activity", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ACTIVITY)).appear(rememberAppearance(0)))
         Text(
-            if (view.isEmpty) view.emptyLine else "What Navilife did and why. ${view.weekLine}.",
+            // Walk-through A28: "1 / reminder", "stopped." and a lone "log." ended lines; Activity's lines wrap whole.
+            LoneWordGlue.measured(ActivityRules.introLine(view)),
             style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)),
         )
         AnimatedContent(
@@ -134,37 +135,37 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-ai-today",
         ) { line ->
-            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+            if (line != null) Text(LoneWordGlue.measured(line), style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }
         AnimatedContent(
             targetState = voiceLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-voice",
         ) { line ->
-            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+            if (line != null) Text(LoneWordGlue.measured(line), style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }
         AnimatedContent(
             targetState = liveLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-live",
         ) { line ->
-            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+            if (line != null) Text(LoneWordGlue.measured(line), style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }
         AnimatedContent(
             targetState = timingLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-voice-timing",
         ) { line ->
-            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+            if (line != null) Text(LoneWordGlue.measured(line), style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }
         AnimatedContent(
             targetState = heardLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-heard-timing",
         ) { line ->
-            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+            if (line != null) Text(LoneWordGlue.measured(line), style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }
-        note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+        note?.let { Text(LoneWordGlue.measured(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         // Filter (slice 3): only shown when there's more than one kind of thing; this phone's choice, never synced.
         var filterName by rememberSaveable { mutableStateOf(ActivityRules.filterNamed(null).name) }
         val chips = ActivityRules.filters(view)
@@ -207,7 +208,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
                         Spacer(Modifier.height(MekaSpace.m))
                         Text(StoppedCallRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
                         Text(
-                            listOfNotNull(blocked.stoppedLine, StoppedCallRules.HINT).joinToString(". "),
+                            LoneWordGlue.measured(StoppedCallRules.sectionLine(blocked.stoppedLine)),
                             style = MekaType.caption, color = Meka.colors.textTertiary,
                         )
                         stopped.forEach { row ->
@@ -242,7 +243,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
                 keptLine?.let { kept ->
                     Column(Modifier.fillMaxWidth().appear(rememberAppearance(shown.days.size + 2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         Spacer(Modifier.height(MekaSpace.m))
-                        Text(kept, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        Text(LoneWordGlue.measured(kept), style = MekaType.caption, color = Meka.colors.textTertiary)
                         Text(
                             os.meka.core.domain.ActivityExportRules.LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {

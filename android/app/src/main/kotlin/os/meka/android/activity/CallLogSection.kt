@@ -61,6 +61,7 @@ import os.meka.core.domain.CallDetail
 import os.meka.core.domain.CallLogRow
 import os.meka.core.domain.CallLogRules
 import os.meka.core.domain.ScamAskRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.VoiceRecordingRules
 
 /**
@@ -110,7 +111,7 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
     Column(Modifier.fillMaxWidth().appear(rememberAppearance(index)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Spacer(Modifier.height(MekaSpace.m))
         Text(CallLogRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        Text(listOfNotNull(view.line, CallLogRules.HINT).joinToString(". "), style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.measured(CallLogRules.sectionLine(view.line)), style = MekaType.caption, color = Meka.colors.textTertiary)
         view.days.forEach { day ->
             Text(day.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
             day.rows.forEach { row ->
@@ -267,8 +268,8 @@ private fun CallDetailView(
                 }
             }
         }
-        d.summary?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
-        d.words?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+        d.summary?.let { Text(LoneWordGlue.measured(it), style = MekaType.body, color = Meka.colors.textPrimary) }
+        d.words?.let { Text(LoneWordGlue.measured(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         d.spam?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
         AnimatedContent(
             targetState = d.blockStatus,
