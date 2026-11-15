@@ -245,6 +245,8 @@ class MoneyTradingLayoutScreensTest {
         compose.onAllNodes(field, useUnmergedTree = true)[0].performImeAction()
         repeat(40) { if (core.moneyView.value.trading?.wallets?.size != 2) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertEquals(2, core.moneyView.value.trading?.wallets?.size, "the second address should be followed")
+        // Flaked once on CI (run 43719093575): the wallet was followed a frame before the sheet's line was drawn.
+        repeat(80) { if (!showsText("Added Spare")) { Thread.sleep(25); settle() } }
         assertTrue(showsText("Added Spare"), "the sheet should say the address was added")
     }
 

@@ -247,6 +247,9 @@ class AdminPlacesScreensTest {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             compose.mainClock.advanceTimeBy(100)
         }
+        // kidsByHand flaked once on CI (run 43711575516: "performMeasureAndLayout called during measure layout"): the
+        // next read or tap came while a layout pass from the core's latest change was still running; finish it first.
+        compose.waitForIdle()
     }
 
     /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle for [settle] ms. */
@@ -256,6 +259,7 @@ class AdminPlacesScreensTest {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
             compose.mainClock.advanceTimeBy(100)
+            compose.waitForIdle()
         }
         turns(settle)
     }

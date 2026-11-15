@@ -321,8 +321,10 @@ class NeedsYouMailScreensTest {
         tap(name, add.addLabel, hasContentDescription(add.addSpoken))
         until { find(core, streamly) == null }
         if (find(core, streamly) != null) fail("$name: ${add.addLabel} left Streamly on Renewals from your mail")
-        val onRenewals = core.listsView.value.renewals.let { it.attention + it.upcoming + it.later }
-        if (onRenewals.none { it.title == "Streamly" }) fail("$name: ${add.addLabel} didn't put Streamly on Renewals")
+        // Flaked once on CI (run 43653721578): the find had gone but Lists' view didn't hold the renewal yet.
+        fun onRenewals() = core.listsView.value.renewals.let { it.attention + it.upcoming + it.later }
+        until { onRenewals().any { it.title == "Streamly" } }
+        if (onRenewals().none { it.title == "Streamly" }) fail("$name: ${add.addLabel} didn't put Streamly on Renewals")
 
         val drop = find(core, safeDrive) ?: fail("$name: no Safe Drive on Renewals from your mail")
         assertTouchTargets(name)
