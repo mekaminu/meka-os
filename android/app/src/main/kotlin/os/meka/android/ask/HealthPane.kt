@@ -346,8 +346,10 @@ private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, 
         val label = row.fixLabel
         if (showFix && label != null) {
             Box(
-                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                // Walk-through A32: the pill is drawn inside a whole 48 dp tall target.
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button, onClick = onFix)
+                    .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
                 Text(label, style = MekaType.itemMeta, color = Meka.colors.accent)
@@ -381,7 +383,7 @@ fun HealthTodayLine(core: MekaCore, modifier: Modifier = Modifier) {
         Crossfade(text, Modifier.fillMaxWidth(), MekaMotion.appear(reduced), label = "health-today-text") { t ->
             Text(
                 t, style = MekaType.caption, color = color,
-                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }.padding(vertical = MekaSpace.xs),
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }.minTouch(),
             )
         }
         AnimatedVisibility(
@@ -395,7 +397,7 @@ fun HealthTodayLine(core: MekaCore, modifier: Modifier = Modifier) {
                     val label = row.fixLabel
                     if (row.fixHere(panes = false) && label != null) {
                         Text(label, style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clickable(role = Role.Button) { fix(row) }.padding(vertical = MekaSpace.xxs))
+                            modifier = Modifier.clickable(role = Role.Button) { fix(row) }.minTouch())
                     }
                 }
                 Text("Open Health", style = MekaType.caption, color = Meka.colors.accent,
@@ -405,7 +407,7 @@ fun HealthTodayLine(core: MekaCore, modifier: Modifier = Modifier) {
                             app.openHealth.value = true
                             app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
                         }
-                    }.padding(vertical = MekaSpace.xxs))
+                    }.minTouch())
             }
         }
     }

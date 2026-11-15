@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -216,13 +217,13 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             }
             if (work.switchedManually) {
                 Text("Back to my hours", style = MekaType.itemMeta, color = Meka.colors.accent,
-                    modifier = Modifier.clickable(role = Role.Button) { scope.launch { core.workBackToSchedule() } }.padding(vertical = MekaSpace.xs))
+                    modifier = Modifier.clickable(role = Role.Button) { scope.launch { core.workBackToSchedule() } }.minTouch())
             }
         }
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("Hours", 2)
-        Row(Modifier.appear(rememberAppearance(2)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(Modifier.appear(rememberAppearance(2)).offset(x = -(DAY_CHIP_TARGET_WIDTH - 40.dp) / 2)) {
             (1..7).forEach { d ->
                 DayChip(d, d in schedule.days) {
                     val days = if (d in schedule.days) schedule.days - d else schedule.days + d
@@ -238,7 +239,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Text(
             LoneWordGlue.kept(if (schedule.enabled) HOURS_ON_LINE else HOURS_OFF_LINE),
             style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { save(schedule.copy(enabled = !schedule.enabled)) }.padding(vertical = MekaSpace.xxs),
+            modifier = Modifier.clickable(role = Role.Button) { save(schedule.copy(enabled = !schedule.enabled)) }.minTouch(),
         )
 
         Spacer(Modifier.height(MekaSpace.m))
@@ -513,7 +514,7 @@ internal fun HeldPreviewLine(preview: HeldPreview, modifier: Modifier = Modifier
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
                 .clickable(role = Role.Button, enabled = !preview.isEmpty) { haptics.tick(); open = !open }
                 .semantics { contentDescription = preview.label + ". " + if (open) HeldPreviewRules.HIDE_HINT else HeldPreviewRules.SHOW_HINT }
-                .padding(vertical = MekaSpace.xs),
+                .minTouch(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
@@ -678,15 +679,15 @@ private fun PeopleSection(kind: ListKind, lists: PeopleLists, set: (PeopleLists)
                     // Call assistant polish 7: a contact with no number can't be recognised when they call.
                     Text(ContactNumbers.NO_NUMBER, style = MekaType.caption, color = Meka.colors.critical)
                     Text("Pick another entry", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { onAdd() }.padding(vertical = MekaSpace.xxs))
+                        modifier = Modifier.clickable(role = Role.Button) { onAdd() }.minTouch())
                 }
             }
             Text("Remove", style = MekaType.caption, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { set(kind.remove(lists, name)) }.padding(MekaSpace.xs))
+                modifier = Modifier.clickable(role = Role.Button) { set(kind.remove(lists, name)) }.minTouch().padding(horizontal = MekaSpace.xs))
         }
     }
     Text("Add from contacts", style = MekaType.itemMeta, color = Meka.colors.accent,
-        modifier = Modifier.clickable(role = Role.Button) { onAdd() }.padding(vertical = MekaSpace.xs))
+        modifier = Modifier.clickable(role = Role.Button) { onAdd() }.minTouch())
 }
 
 @Composable
@@ -702,15 +703,25 @@ private fun DayChip(isoDay: Int, on: Boolean, onToggle: () -> Unit) {
     val name = LocalClock.DAY_SHORT[isoDay - 1]
     // A31: an off day is surfaceRaised on Light's page (1.1:1), so in Light it has a 1 dp edge in the track ink.
     val edge = if (on) null else LightInk.pillEdge(Meka.colors, Meka.theme.isDark)
+    // Walk-through A32: the 40 dp circle is drawn inside a 44 × 48 dp target (the circle was the target); the row has
+    // no gaps, so the circles keep their 4 dp apart and all seven fit the cover screen.
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(MekaRadius.pill))
-            .then(if (edge != null) Modifier.border(1.dp, edge, RoundedCornerShape(MekaRadius.pill)) else Modifier)
-            .background(bg)
+        Modifier.size(width = DAY_CHIP_TARGET_WIDTH, height = MekaSpace.touch).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Checkbox) { onToggle() }
             .semantics { contentDescription = name; selected = on },
         contentAlignment = Alignment.Center,
-    ) { Text(name.take(1), style = MekaType.captionStrong, color = fg) }
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                .then(if (edge != null) Modifier.border(1.dp, edge, RoundedCornerShape(MekaRadius.pill)) else Modifier)
+                .background(bg),
+            contentAlignment = Alignment.Center,
+        ) { Text(name.take(1), style = MekaType.captionStrong, color = fg) }
+    }
 }
+
+/** A work day's circle is 40 dp; its target is 44 dp wide (and 48 tall) so the week fits the cover screen. */
+internal val DAY_CHIP_TARGET_WIDTH = 44.dp
 
 @Composable
 internal fun TimeStepper(label: String, minute: Int, modifier: Modifier, onChange: (Int) -> Unit) {
@@ -791,11 +802,11 @@ private fun BlockAndReport(number: String, isBlocked: Boolean, haptics: MekaHapt
                 if (done) Text(BlockedCallerRules.BLOCKED_LINE, style = MekaType.caption, color = Meka.colors.textSecondary,
                     modifier = Modifier.padding(vertical = MekaSpace.xs))
                 else Text(BlockedCallerRules.BLOCK_LABEL, style = MekaType.itemMeta, color = Meka.colors.critical,
-                    modifier = Modifier.clickable(role = Role.Button) { haptics.light(); onBlock() }.padding(vertical = MekaSpace.xs)
+                    modifier = Modifier.clickable(role = Role.Button) { haptics.light(); onBlock() }.minTouch()
                         .semantics { contentDescription = "Block ${BlockedCallerRules.display(number)}" })
             }
             Text(BlockedCallerRules.REPORT_LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); onReport() }.padding(vertical = MekaSpace.xs))
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); onReport() }.minTouch())
         }
         Text(BlockedCallerRules.REPORT_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
     }

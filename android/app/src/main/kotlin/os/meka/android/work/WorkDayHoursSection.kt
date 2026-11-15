@@ -32,6 +32,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.WorkDayRow
 import os.meka.core.domain.WorkSchedule
@@ -70,7 +71,7 @@ private fun DayHoursRow(row: WorkDayRow, open: Boolean, onToggle: () -> Unit, on
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { onToggle() }
-                .semantics { contentDescription = "${row.name}: ${row.line}" }.padding(vertical = MekaSpace.xs),
+                .semantics { contentDescription = "${row.name}: ${row.line}" }.minTouch(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(row.dayShort, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.width(48.dp))
@@ -89,7 +90,7 @@ private fun DayHoursRow(row: WorkDayRow, open: Boolean, onToggle: () -> Unit, on
                 TimeStepper("${row.dayShort} end", row.endMinute, Modifier) { onSet(row.startMinute, it) }
                 if (row.own) {
                     Text("Same as usual", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { onClear() }.padding(vertical = MekaSpace.xxs))
+                        modifier = Modifier.clickable(role = Role.Button) { onClear() }.minTouch())
                 }
             }
         }

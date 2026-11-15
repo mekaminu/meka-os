@@ -279,6 +279,8 @@ class WatchHealthScreensTest {
         // Walk-through A28 (2026-11-15): "Navilife can't see notifications ·" ended a line on the dot.
         ScreenShots.assertNoDotEndingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
+        // Walk-through A32: a row's Reconnect / Fix pill and every tappable line are whole 48 dp tall targets.
+        ScreenShots.assertWholeTargets(compose, name)
         // The walk-through's A7: a row he switched off never wears the working green.
         v.rows.filter { it.line.startsWith("Off ·") && it.state == os.meka.core.domain.HealthState.OK }
             .forEach { fail("$name: ${it.title} is off but drawn as working") }

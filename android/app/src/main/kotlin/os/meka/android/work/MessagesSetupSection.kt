@@ -50,6 +50,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -102,7 +103,7 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); showSteps = !showSteps }
                 .semantics { stateDescription = if (showSteps) "Shown" else "Hidden" }
-                .padding(vertical = MekaSpace.xs),
+                .minTouch(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("WhatsApp settings", style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.weight(1f))
@@ -115,7 +116,7 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
                 }
                 Text("Open WhatsApp's notification settings", style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); openWhatsAppNotifications(context) }
-                        .padding(vertical = MekaSpace.xs))
+                        .minTouch())
             }
         }
 
@@ -138,7 +139,7 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
         Text("Keep someone else from the AI", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) {
                 runCatching { pick.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
-            }.padding(vertical = MekaSpace.xs))
+            }.minTouch())
 
         // Messages grouped per chat, slice 2: Done on a chat's card also marks it read (off: blue ticks).
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {

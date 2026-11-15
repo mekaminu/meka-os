@@ -124,12 +124,12 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                             modifier = Modifier.clickable(role = Role.Button) {
                                 haptics.tick(); shown = false
                                 scope.launch { core.dismissSuspectedCaller(row.key) }
-                            }.padding(MekaSpace.xs))
+                            }.minTouch().padding(horizontal = MekaSpace.xs))
                         Text(BlockedCallerRules.BLOCK_LABEL, style = MekaType.caption, color = Meka.colors.critical,
                             modifier = Modifier.clickable(role = Role.Button) {
                                 haptics.light(); shown = false
                                 scope.launch { core.confirmSuspectedCaller(row.key) }
-                            }.padding(MekaSpace.xs))
+                            }.minTouch().padding(horizontal = MekaSpace.xs))
                     }
                 }
             }

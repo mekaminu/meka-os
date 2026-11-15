@@ -115,7 +115,7 @@ internal fun RequestWatchSection(
         Text("Add from contacts", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) {
                 runCatching { pick.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
-            }.padding(vertical = MekaSpace.xs))
+            }.minTouch())
 
         Crossfade(RequestWatchRules.groupsLine(watch), animationSpec = MekaMotion.appear(reduced), label = "watch-groups") { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
@@ -136,7 +136,7 @@ internal fun RequestWatchSection(
             }
         }
         Text(if (addingGroup) "Cancel" else "Add a group", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); addingGroup = !addingGroup }.padding(vertical = MekaSpace.xs))
+            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); addingGroup = !addingGroup }.minTouch())
 
         Text(RequestWatchRules.LIMITS, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
@@ -161,7 +161,7 @@ private fun WatchRow(
         if (action != null) {
             Text(action, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onAction() }
-                    .semantics { contentDescription = "$action $name" }.padding(MekaSpace.xs))
+                    .semantics { contentDescription = "$action $name" }.minTouch().padding(horizontal = MekaSpace.xs))
         }
     }
 }
@@ -185,12 +185,14 @@ private fun StatePill(label: String, spoken: String, state: NotifyNowState) {
     val fg by animateColorAsState(if (state.on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "now-fg")
     Text(
         label, style = MekaType.caption, color = fg,
-        modifier = Modifier.padding(end = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+        // Walk-through A32: the slim pill is drawn inside a whole 48 dp tall target.
+        modifier = Modifier.padding(end = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Switch) { state.set(!state.on) }
             .semantics {
                 contentDescription = spoken
                 stateDescription = label
             }
+            .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
             .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )
 }

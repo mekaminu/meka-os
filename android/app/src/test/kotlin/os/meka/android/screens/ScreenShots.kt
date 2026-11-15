@@ -568,7 +568,7 @@ object ScreenShots {
      * ("⋯") 48 × 48 (not as wide as its glyph), and every drawn On/Off pill and setting chip is at least 30 dp tall.
      * Only what is laid out inside the screen counts (a row scrolled half off isn't measured).
      */
-    fun assertWholeTargets(compose: ComposeContentTestRule, name: String) {
+    fun assertWholeTargets(compose: ComposeContentTestRule, name: String, narrowOk: Set<String> = emptySet()) {
         val d = compose.density.density
         val roles = setOf(androidx.compose.ui.semantics.Role.Button, androidx.compose.ui.semantics.Role.Switch,
             androidx.compose.ui.semantics.Role.Checkbox)
@@ -579,7 +579,9 @@ object ScreenShots {
             .filter { n ->
                 // A glyph's button ("⋯", "‹", "+") must be 48 wide too; a worded one is as wide as its words.
                 val drawn = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty().trim()
-                n.size.height / d < 47.5f || (drawn.length <= 2 && n.size.width / d < 47.5f)
+                // [narrowOk]: spoken labels of glyph targets allowed under 48 wide (still 48 tall), e.g. Work's day circles.
+                val spoken = n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString().orEmpty()
+                n.size.height / d < 47.5f || (drawn.length <= 2 && spoken !in narrowOk && n.size.width / d < 47.5f)
             }
             .map { n ->
                 val label = n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString()

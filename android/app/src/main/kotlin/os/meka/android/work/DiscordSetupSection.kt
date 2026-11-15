@@ -85,7 +85,7 @@ internal fun DiscordSetupSection(core: MekaCore, index: Int) {
                         .putExtra(Settings.EXTRA_APP_PACKAGE, DiscordRules.PACKAGES.first())
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
-            }.padding(vertical = MekaSpace.xs))
+            }.minTouch())
         view.emptyLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         view.rows.forEach { row ->
             Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
@@ -158,10 +158,10 @@ private fun DiscordAlertsBlock(core: MekaCore, view: DiscordWatchView, onSaid: (
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
             Text(if (adding == true) "Cancel" else "Add a person", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); adding = if (adding == true) null else true }
-                    .padding(vertical = MekaSpace.xs))
+                    .minTouch())
             Text(if (adding == false) "Cancel" else "Add a word", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); adding = if (adding == false) null else false }
-                    .padding(vertical = MekaSpace.xs))
+                    .minTouch())
         }
     }
 }
@@ -170,9 +170,11 @@ private fun DiscordAlertsBlock(core: MekaCore, view: DiscordWatchView, onSaid: (
 private fun AlertChip(label: String, spoken: String, onRemove: () -> Unit) {
     Text(
         "$label  ×", style = MekaType.caption, color = Meka.colors.onAccent,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+        // Walk-through A32: the slim pill is drawn inside a whole 48 dp tall target.
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Button) { onRemove() }
             .semantics { contentDescription = spoken }
+            .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
             .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )
 }
