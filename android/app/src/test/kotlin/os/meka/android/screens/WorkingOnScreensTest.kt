@@ -137,7 +137,8 @@ class WorkingOnScreensTest {
         if (tiles.maxOf { it.width } - tiles.minOf { it.width } > 1f) fail("$name: the tiles are different widths: ${tiles.map { it.width }}")
         val values = compose.onAllNodes(hasTestTag("call-tile-value"), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot.height }
         if (values.size != 3 || values.maxOf { it } - values.minOf { it } > 1f) fail("$name: the tiles' figures aren't one size: $values")
-        if (onScreen(BookingCallRules.PARTY)) fail("$name: \"${BookingCallRules.PARTY}\" repeats the PEOPLE tile")
+        // Exactly the old label: OBI MAY SAY's "Party size and time" stays.
+        if (ScreenShots.texts(compose).any { DateGlue.plain(it).trim() == BookingCallRules.PARTY }) fail("$name: \"${BookingCallRules.PARTY}\" repeats the PEOPLE tile")
         val people = tiles.maxBy { it.left }
         listOf("call-less", "call-more").forEach { tag ->
             val b = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
