@@ -121,7 +121,7 @@ class NeedsYouOpenScreensTest {
         turns()
     }
 
-    private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
+    private fun onScreen(text: String) = ScreenShots.texts(compose).any { os.meka.core.domain.DateGlue.plain(it).contains(os.meka.core.domain.DateGlue.plain(text)) }
     private fun tap(label: String) {
         compose.onAllNodesWithText(label)[0].performSemanticsAction(SemanticsActions.OnClick)
         turns()

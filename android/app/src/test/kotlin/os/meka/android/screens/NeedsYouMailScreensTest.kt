@@ -41,6 +41,7 @@ import os.meka.android.today.NeedsYouGroupStore
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.NEEDS_YOU_MAIL_ROW_TAG
 import os.meka.core.domain.NeedsYouStackRules
+import os.meka.core.domain.NeedsYouGroupRules
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
@@ -162,7 +163,7 @@ class NeedsYouMailScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
         ScreenShots.assertSensible(compose, name)
         // Walk-through A11 (2026-11-08): no "Draft replies to 2" over the AI's "nothing is drafted" line.
-        fun showing(t: String) = compose.onAllNodes(androidx.compose.ui.test.hasText(t, substring = true), useUnmergedTree = true)
+        fun showing(t: String) = compose.onAllNodes(ScreenShots.plainText(t, substring = true), useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
         if (showing("nothing is drafted") && showing("Draft replies to")) fail("$name: Draft replies sits over \"nothing is drafted\"")
         // Walk-through A22 (2026-11-14): beside Mail to answer and Renewals the empty line never says nothing needs him,
@@ -170,6 +171,7 @@ class NeedsYouMailScreensTest {
         if (showing(NeedsYouStackRules.EMPTY_LINE)) fail("$name: \"${NeedsYouStackRules.EMPTY_LINE}\" beside mail to answer and renewals")
         if (name.startsWith("inner") && !showing("2 mail · 2 renewals")) fail("$name: the header doesn't count the renewals with the mail")
         assertEdges(name)
+        assertWrapsWhole(name, core)
         openRow(name, football)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
         // Needs you bugs (2026-11-10): a mail row is its sender and subject; the body waits until he opens the email.
@@ -181,12 +183,24 @@ class NeedsYouMailScreensTest {
     }
 
     /**
+     * Walk-through A28 (2026-11-15): Needs you's hint ("… for the next ·") and the renewals' lines ("£10.99 a month ·")
+     * never end or start a line on a dot or leave a word alone, wherever they wrap.
+     */
+    private fun assertWrapsWhole(name: String, core: MekaCore) {
+        val lines = listOf(NeedsYouGroupRules.HINT) + core.mailFinds.value?.rows.orEmpty().map { it.line } +
+            core.mailNeeds.value?.rows.orEmpty().map { it.line }
+        ScreenShots.assertNoLoneWords(compose, name, lines)
+        ScreenShots.assertNoDotEndingALine(compose, name, lines)
+        ScreenShots.assertNoDotStartingALine(compose, name, lines)
+    }
+
+    /**
      * Walk-through A27 (2026-11-14): a mail row's sender starts on the box's text line (the ten-minute inbox's words),
      * the chips slide to the screen's edge rather than being cut at the gutter, and on the open Fold Close all sits at
      * the page's right edge, not mid-screen at the end of the left column.
      */
     private fun assertEdges(name: String) {
-        fun left(text: String) = compose.onAllNodes(androidx.compose.ui.test.hasText(text, substring = true), useUnmergedTree = true)
+        fun left(text: String) = compose.onAllNodes(ScreenShots.plainText(text, substring = true), useUnmergedTree = true)
             .fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: fail("$name: no \"$text\" on screen")
         val dp = compose.density.density
         val sender = left("Sam Taylor").left

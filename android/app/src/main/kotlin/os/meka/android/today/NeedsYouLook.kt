@@ -89,6 +89,14 @@ import os.meka.core.domain.NeedsYouOpenRules
  * chat's own card, and FYI as thin rows with a tick. The cards inside keep every tap they had.
  */
 
+/**
+ * Walk-through 2026-11-08 A28 (Needs you's hint "for the next ·" and "£10.99 a month ·" ending lines): a wrapping
+ * caption line in Needs you drawn with its dates, numbers, counts and durations whole, each " · " held to its words
+ * and its last words held together ([os.meka.core.domain.LoneWordGlue.measured]). Names, subjects, messages and
+ * tappable words keep their own words.
+ */
+internal fun needsShown(line: String): String = os.meka.core.domain.LoneWordGlue.measured(line)
+
 internal const val NEEDS_YOU_CHIPS_TAG = "needs-you-chips"
 internal const val NEEDS_YOU_HEADER_ACTION_TAG = "needs-you-header-action"
 internal const val NEEDS_YOU_ROW_TAG = "needs-you-row"
@@ -108,7 +116,7 @@ internal fun NeedsYouHeader(
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary)
-            Text(subtitle, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+            Text(needsShown(subtitle), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
         }
         if (showClear) NeedsYouHeaderAction(actionLabel, onClear)
     }
@@ -375,7 +383,7 @@ internal fun NeedsYouMailCard(
                 ) {
                     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = q.spoken }) {
                         Text(q.question, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull(q.line, q.more).joinToString(" · "), style = MekaType.micro, color = Meka.colors.textTertiary,
+                        Text(needsShown(listOfNotNull(q.line, q.more).joinToString(" · ")), style = MekaType.micro, color = Meka.colors.textTertiary,
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.End,

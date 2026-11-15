@@ -1171,7 +1171,7 @@ internal fun NeedsYouColumn(
         }
         if (inG(NeedsYouGroup.MESSAGES) && messageChats.isNotEmpty()) {
             item(key = "messages-hint") {
-                Text(NeedsYouLayoutRules.MESSAGES_HINT, style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.animateItem().padding(start = MekaSpace.xxs))
+                Text(needsShown(NeedsYouLayoutRules.MESSAGES_HINT), style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.animateItem().padding(start = MekaSpace.xxs))
             }
         }
         // FYI · no reply needed: thin rows, each ✓ is the chat's Done (Undo on the bar).
@@ -1313,7 +1313,7 @@ internal fun NeedsYouColumn(
         }
         if (boxed && presentAll.isNotEmpty() && part != NeedsYouPart.RIGHT) {
             item(key = "groups-hint") {
-                Text(NeedsYouGroupRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
+                Text(needsShown(NeedsYouGroupRules.HINT), style = MekaType.micro, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.xxs, start = MekaSpace.xxs))
             }
         }

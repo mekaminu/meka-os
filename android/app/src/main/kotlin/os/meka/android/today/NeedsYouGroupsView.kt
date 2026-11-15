@@ -192,7 +192,7 @@ internal fun NeedsYouGroupLead(
             .padding(start = MekaSpace.m, end = MekaSpace.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        Text(needsShown(line), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         if (second != null) {
             Box(
@@ -228,7 +228,7 @@ internal fun NeedsYouGroupFoot(line: String, onClick: () -> Unit, modifier: Modi
             .clickable(role = Role.Button) { haptics.light(); onClick() }
             .padding(horizontal = MekaSpace.xxs),
         contentAlignment = Alignment.CenterStart,
-    ) { Text(line, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+    ) { Text(needsShown(line), style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis) }
 }
 
 /**

@@ -124,7 +124,7 @@ class NeedsYouMailBoxScreensTest {
         turns()
     }
 
-    private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
+    private fun onScreen(text: String) = ScreenShots.texts(compose).any { os.meka.core.domain.DateGlue.plain(it).contains(os.meka.core.domain.DateGlue.plain(text)) }
     private val mailRow = SemanticsMatcher("a thin mail row") { n ->
         n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("$NEEDS_YOU_MAIL_ROW_TAG-") == true
     }

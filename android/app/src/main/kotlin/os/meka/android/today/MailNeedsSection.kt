@@ -145,7 +145,7 @@ internal fun MailNeedsSection(
                 }
                 // Drafted replies: "3 emails need a reply · 2 drafted" (cross-fades as drafts are sent or put away).
                 AnimatedContent(card.replyLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-needs-replies") { line ->
-                    if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-needs-replies"))
+                    if (line != null) Text(needsShown(line), style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-needs-replies"))
                 }
             }
         }
@@ -244,10 +244,10 @@ internal fun MailNeedsSection(
                 }
                 if (boxed && pg.pages > 1) NeedsYouPager(pg, onPage, Modifier.padding(top = MekaSpace.xxs))
                 if (boxed) draftBar()
-                if (!boxed) card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
-                card.snoozedLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                if (!boxed) card.moreLine?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                card.snoozedLine?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 // Protected time, slice 3: the business mail that waits till morning.
-                card.heldLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                card.heldLine?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
             }
         }
     }
@@ -314,9 +314,9 @@ internal fun MailNeedsRowView(
                 .then(if (head) Modifier.semantics(mergeDescendants = true) { contentDescription = if (onRead != null) "${row.spoken}. ${MailReaderRules.READ_WHOLE}" else row.spoken } else Modifier),
         ) {
             // Junk fix slice 3: a link he emailed himself, above the sender.
-            row.note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-note-${row.id}")) }
+            row.note?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-note-${row.id}")) }
             // Account-security mail: who it's really from and what to do, above the sender.
-            row.security?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-security-${row.id}")) }
+            row.security?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-security-${row.id}")) }
             // A possible scam (critical) or a real company's "log in yourself" (brass), above the sender.
             // Slice 4: Not a scam fades the line away (reduced motion: the plain fade).
             val warningLine = row.warning
@@ -326,7 +326,7 @@ internal fun MailNeedsRowView(
             if (warningLine != null) warningScam.value = row.scam
             AnimatedVisibility(warningLine != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
                 lastWarning.value?.let {
-                    Text(it, style = MekaType.itemMeta, color = if (warningScam.value) Meka.colors.critical else Meka.colors.accent,
+                    Text(needsShown(it), style = MekaType.itemMeta, color = if (warningScam.value) Meka.colors.critical else Meka.colors.accent,
                         modifier = Modifier.testTag("mail-warning-${row.id}"))
                 }
             }
@@ -344,7 +344,7 @@ internal fun MailNeedsRowView(
             if (head) Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             // Sender and subject only (Needs you bugs, 2026-11-10: the first lines carried greetings, his name, a card's
             // last digits); the body shows once he opens the email.
-            if (head) Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            if (head) Text(needsShown(row.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             // Slice 2b: under a thin row, the whole email opens from its own line (a full 48 dp tap).
             if (!head && onRead != null) {
                 Text(
@@ -361,9 +361,9 @@ internal fun MailNeedsRowView(
                 row.pickedLine, label = "mail-picked",
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() },
             ) { picked ->
-                if (picked != null) Text(picked, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-picked"))
+                if (picked != null) Text(needsShown(picked), style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-picked"))
             }
-            row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
+            row.notice?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
             // Drafted replies: what they want, in their words.
             row.wants?.let { w ->
                 Text(
@@ -425,7 +425,7 @@ internal fun MailNeedsRowView(
                     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${l.from}, ${l.subject}. ${l.line}" }) {
                         Text(l.from, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(l.subject, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(l.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                        Text(needsShown(l.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                     }
                 }
             }
@@ -450,10 +450,10 @@ internal fun MailNeedsRowView(
                         modifier = Modifier.fillMaxWidth().testTag("mail-reply-${row.id}").semantics { contentDescription = "Reply to ${row.from}" },
                     )
                 }
-                Text(row.replyLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                Text(needsShown(row.replyLine), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 // The draft's line cross-fades in under the editor (reduced motion: the plain fade).
                 AnimatedContent(draftLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-draft-line") { line ->
-                    if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-draft-line"))
+                    if (line != null) Text(needsShown(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-draft-line"))
                 }
                 if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
                 // Send · Draft it · Cancel wrap on the narrow cover screen rather than squeezing.
@@ -595,7 +595,7 @@ private fun MailSendAllBar(
         }
         val shown = if (sendLabel != null) MailSendAllRules.LINE else line
         AnimatedContent(shown, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-send-all-line") { l ->
-            if (l != null) Text(l, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-send-all-line"))
+            if (l != null) Text(needsShown(l), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-send-all-line"))
         }
     }
 }
@@ -698,7 +698,7 @@ internal fun MailChaseSection(
                         )
                     }
                 }
-                card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                card.moreLine?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
             }
         }
     }
@@ -745,8 +745,8 @@ private fun MailChaseRowView(
                 }
             }
             Text(row.title, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-            row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) }
+            Text(needsShown(row.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            row.notice?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.critical) }
         }
         // Chase unfolds the editor, already holding the chase (expand spring; reduced motion: cross-fade).
         AnimatedVisibility(chasing, enter = unfold(), exit = fold()) {
@@ -768,10 +768,10 @@ private fun MailChaseRowView(
                         modifier = Modifier.fillMaxWidth().testTag("mail-chase-text-${row.id}").semantics { contentDescription = "Chase ${row.from}" },
                     )
                 }
-                Text(row.replyLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                Text(needsShown(row.replyLine), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 // The AI's line cross-fades in under the editor (reduced motion: the plain fade).
                 AnimatedContent(draftLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-chase-draft-line") { line ->
-                    if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-chase-draft-line"))
+                    if (line != null) Text(needsShown(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-chase-draft-line"))
                 }
                 if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -859,7 +859,7 @@ internal fun MailFindSection(
                         )
                     }
                 }
-                card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                card.moreLine?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
             }
         }
     }
@@ -883,7 +883,7 @@ private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: ()
                     )
                 }
             }
-            Text(row.line, style = MekaType.body, color = Meka.colors.textSecondary)
+            Text(needsShown(row.line), style = MekaType.body, color = Meka.colors.textSecondary)
             Text(row.from, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         FlowRow(
@@ -898,7 +898,7 @@ private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: ()
         }
         AnimatedVisibility(waitOpen && row.waits.isNotEmpty(), enter = unfold(), exit = fold()) {
             Column(Modifier.padding(top = MekaSpace.xs).testTag("mail-find-wait-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                row.waitHeading?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                row.waitHeading?.let { Text(needsShown(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     row.waits.forEach { c ->
                         MailCardPill(c.label, spoken = c.spoken, quiet = !c.chosen, onClick = { waitOpen = false; if (!c.chosen) onWait(c.days) })

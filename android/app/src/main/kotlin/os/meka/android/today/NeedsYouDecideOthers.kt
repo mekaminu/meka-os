@@ -75,7 +75,7 @@ internal fun AppointmentDecideView(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Field(card.whenHint, value = text, onValue = { text = it }) { typed -> onBooked(typed) }
-                refusal?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+                refusal?.let { Text(needsShown(it), style = MekaType.caption, color = Meka.colors.accent) }
             }
         }
     }

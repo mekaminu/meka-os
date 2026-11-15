@@ -104,7 +104,7 @@ internal fun LazyListScope.workingItems(lines: List<MeanwhileLine>, play: Boolea
 private fun MeanwhileLabel(text: String, line: String?, modifier: Modifier) {
     Row(modifier.fillMaxWidth().padding(top = MekaSpace.l), verticalAlignment = Alignment.CenterVertically) {
         SectionLabel(text, Modifier.weight(1f))
-        line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xxs)) }
+        line?.let { Text(needsShown(it), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xxs)) }
     }
 }
 

@@ -91,7 +91,7 @@ internal fun NeedsYouDecideShell(
                 Text(card.from, style = MekaType.caption, color = if (card.urgent) Meka.colors.critical else Meka.colors.textSecondary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 // An approval's detail lines (what would happen) stay whole, never cut.
-                card.details.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                card.details.forEach { Text(needsShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
         }
         middle()
@@ -109,7 +109,7 @@ internal fun NeedsYouDecideShell(
                 }
             }
         }
-        card.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        card.note?.let { Text(needsShown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
 
@@ -185,7 +185,7 @@ internal fun DoneForYouRow(
     ) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Text(os.meka.core.domain.HandleForMeRules.HEAD.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent)
-            Text(row.line, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(needsShown(row.line), style = MekaType.body, color = Meka.colors.textPrimary)
             Text(row.from, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {

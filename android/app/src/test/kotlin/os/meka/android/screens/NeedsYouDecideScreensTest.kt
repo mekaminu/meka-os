@@ -94,7 +94,7 @@ class NeedsYouDecideScreensTest {
         turns()
     }
 
-    private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
+    private fun onScreen(text: String) = ScreenShots.texts(compose).any { os.meka.core.domain.DateGlue.plain(it).contains(os.meka.core.domain.DateGlue.plain(text)) }
 
     /** On the narrow cover a long "what" may take its second line (the card allows two); on the inner screen it's one. */
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK, wide: Boolean = false) {

@@ -166,7 +166,7 @@ class NeedsYouGroupsScreensTest {
         turns()
     }
 
-    private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
+    private fun onScreen(text: String) = ScreenShots.texts(compose).any { os.meka.core.domain.DateGlue.plain(it).contains(os.meka.core.domain.DateGlue.plain(text)) }
     private fun fyiRows() = compose.onAllNodesWithTag(NEEDS_YOU_FYI_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
     private fun tapHead(g: NeedsYouGroup) {
         compose.onAllNodesWithTag(NEEDS_YOU_GROUP_TAG, useUnmergedTree = true)

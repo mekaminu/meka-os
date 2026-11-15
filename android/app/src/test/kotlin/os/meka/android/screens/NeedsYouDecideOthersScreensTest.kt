@@ -93,7 +93,7 @@ class NeedsYouDecideOthersScreensTest {
         turns()
     }
 
-    private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
+    private fun onScreen(text: String) = ScreenShots.texts(compose).any { os.meka.core.domain.DateGlue.plain(it).contains(os.meka.core.domain.DateGlue.plain(text)) }
 
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
