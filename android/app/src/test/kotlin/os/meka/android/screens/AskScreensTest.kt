@@ -158,6 +158,12 @@ class AskScreensTest {
                 check(total == 2 && done == 1) { "$name: the shots' habits should be 1 of 2 today, as on Today; got $done of $total" }
                 ScreenShots.assertShows(compose, name, "1 of 2 habits done today")
                 ScreenShots.assertIconOnFirstLine(compose, name, os.meka.android.ask.TILE_ICON_TAG, "Goals and habits")
+                // A32: the Countdowns tile leaves the trip to the Trips tile beside it (both said "Seville in 7 days").
+                val lines = core.lifeLines.value
+                val countdown = lines.of(os.meka.core.domain.LifeTile.COUNTDOWNS)?.text.orEmpty()
+                val trip = lines.of(os.meka.core.domain.LifeTile.TRIPS)?.text.orEmpty()
+                check(!countdown.startsWith("Seville")) { "$name: Countdowns repeats the trip the Trips tile counts down: '$countdown' beside '$trip'" }
+                check(countdown.startsWith("Christmas")) { "$name: Countdowns should name Christmas beside the trip and Sam's birthday, got '$countdown'" }
             }
         }
     }

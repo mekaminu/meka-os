@@ -14,7 +14,7 @@ enum class LifeTile {
     KIDS,
     APPOINTMENTS, LEAVE, GIFTS,
 
-    /** Countdowns, slice 1: the one on Today, else the soonest ("Christmas in 43 days"; lit on the day). */
+    /** Countdowns, slice 1: the one on Today, else the soonest of his own and Christmas ("Christmas in 43 days"; lit on the day; trips, birthdays and school holidays have their own tiles). */
     COUNTDOWNS,
     TRIPS, ERRANDS,
 

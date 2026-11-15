@@ -443,9 +443,14 @@ object CountdownRules {
         if (all.isEmpty()) return CountdownsView.EMPTY.copy(sleeps = settings.sleeps, hiddenCount = hidden)
         val pinned = all.firstOrNull { it.key == settings.pinnedKey }
         val hero = pinned ?: all.first()
+        // Ask's Countdowns tile sits beside the Trips, Gifts and School tiles, which already count their own days down
+        // (the walk-through 2026-11-08, A32: Trips and Countdowns both said "Seville in 7 days"), so unless he put one on
+        // Today the tile names the soonest of his own countdowns and Christmas, and a trip, birthday or school holiday
+        // only when there's nothing else.
+        val tileRow = pinned ?: all.firstOrNull { it.source == CountdownSource.OWN || it.source == CountdownSource.CHRISTMAS } ?: hero
         return CountdownsView(
             hero = hero, rows = all.filter { it.key != hero.key }, sleeps = settings.sleeps, heroOnToday = pinned != null,
-            hiddenCount = hidden, tileLine = tileLine(hero, settings.sleeps),
+            hiddenCount = hidden, tileLine = tileLine(tileRow, settings.sleeps),
         )
     }
 

@@ -88,6 +88,28 @@ class CountdownsTest {
     }
 
     @Test
+    fun asksTileLeavesTheTripToTheTripsTile() {
+        // The walk-through 2026-11-08, A32: Ask's Trips and Countdowns tiles both said "Seville in 7 days".
+        val trips = listOf(TripItem("t1", "Seville", d(11, 19), d(11, 22), 0))
+        val sam = listOf(Occasion("o1", "Sam", OccasionKind.BIRTHDAY, 11, 25, 2017, 3, 0, 0))
+        val v = view(trips = trips, occasions = sam)
+        assertEquals("Seville", v.hero?.name)
+        // Not the trip (Trips counts it down) nor the birthday (Gifts does): Christmas.
+        assertEquals(LifeTileLine("Christmas in 43 days", lit = false), v.tileLine)
+        // His own countdown, sooner than Christmas, comes first.
+        cFold.add("Holiday 13 Dec")
+        assertEquals(LifeTileLine("Holiday in 31 days", lit = false), view(trips = trips, occasions = sam).tileLine)
+        assertTrue(cFold.remove(CountdownRules.ownKey(cFold.items().single().id)))
+        // Put on Today, the trip is what the tile names.
+        assertTrue(cFold.pin(CountdownRules.tripKey("t1")))
+        assertEquals(LifeTileLine("Seville in 7 days", lit = false), view(trips = trips).tileLine)
+        // With nothing else to count down to, the trip it is.
+        assertTrue(cFold.pin(""))
+        assertTrue(cFold.remove(CountdownRules.CHRISTMAS_KEY))
+        assertEquals(LifeTileLine("Seville in 7 days", lit = false), view(trips = trips).tileLine)
+    }
+
+    @Test
     fun sleepsForTheChildrenAndTheDayItself() {
         cFold.add("Holiday 13 Nov")
         assertTrue(cFold.setSleeps(true))
