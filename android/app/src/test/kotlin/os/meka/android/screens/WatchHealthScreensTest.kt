@@ -176,7 +176,6 @@ class WatchHealthScreensTest {
         settle("watch", name)
         val v = core.watchLinkView.value ?: fail("$name: Watch never read the server")
         ScreenShots.assertShows(compose, name, "Watch")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         ScreenShots.assertEachOneLine(compose, name, listOf("Code from the watch") + v.rows.map { it.title })
         val lines = listOf(v.summary, v.how) + v.rows.map { it.line } + listOfNotNull(v.problem)
         ScreenShots.assertNoLoneWords(compose, name, lines)
@@ -273,6 +272,9 @@ class WatchHealthScreensTest {
         // pane's own on-resume check (the updater, then the health refresh) outlasted 80 turns on a slow runner, so
         // this one waits longer; a screen that never settles still fails.
         ScreenShots.awaitShows(compose, name, v.checkedLine, turns = 320)
+        // CI run 43719093575 (twice): while the pane's on-resume check runs, the top line is the last check's count
+        // ("4 things needed a look at the last check", A32 slice 4), so the summary is waited for once the check is done.
+        ScreenShots.awaitShows(compose, name, LoneWordGlue.kept(v.summary), turns = 320)
         ScreenShots.assertEachOneLine(compose, name, v.rows.mapNotNull { it.fixLabel })
         ScreenShots.assertNoLoneWords(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertNoDotStartingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
