@@ -42,6 +42,7 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.MoneyCategory
 import os.meka.core.domain.MoneyChat
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
@@ -97,17 +98,20 @@ class MoneyChatScreensTest {
     private class ObiServer : SyncTransport, AiApi {
         private val sync = SyncService(InMemoryServerOpStore())
         val asked = mutableListOf<MoneyChatCodec.Request>()
+        /** Obi's invented answer; [askObiAQuestionTheRulesCantAnswer] builds it from the month Spending shows. */
+        var answer = "Yes, a little."
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply =
             AskReply.Unavailable("off", null)
         override suspend fun moneyChat(request: MoneyChatCodec.Request): MoneyChatCodec.Response {
             asked += request
-            return MoneyChatCodec.Response("answered", "Yes, a little: Costa came to £57.60 this month, your biggest everyday spend after Tesco at £64.90.")
+            return MoneyChatCodec.Response("answered", answer)
         }
     }
 
-    private fun open(transport: SyncTransport? = null): MekaCore {
+    /** [shotMonth]: open on [MoneyShotMonth], the month Spending's shots show, instead of this test's [CURRENT]. */
+    private fun open(transport: SyncTransport? = null, shotMonth: Boolean = false): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, ThemeChoice.DARK)
         val core = MekaCore(
@@ -118,7 +122,7 @@ class MoneyChatScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", CURRENT).refused)
+            if (shotMonth) MoneyShotMonth.fill(core) else check(!core.importMoneyStatement("Current account", CURRENT).refused)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
@@ -217,7 +221,14 @@ class MoneyChatScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun askObiAQuestionTheRulesCantAnswer() {
         val server = ObiServer()
-        val core = open(server)
+        val core = open(server, shotMonth = true)
+        // Walk-through 2026-11-08 A32: Obi's answer said "Costa came to £57.60" from this test's own statement while
+        // Spending's shots (MoneyShotMonth) showed no such coffee. The answer now quotes the figures Spending draws.
+        val cats = core.moneyView.value.month!!.categories
+        val coffee = cats.firstOrNull { it.key == MoneyCategory.COFFEE.key }?.amount
+        val groceries = cats.firstOrNull { it.key == MoneyCategory.GROCERIES.key }?.amount
+        assertTrue(coffee != null && groceries != null, "Spending's month has no coffee or groceries row: ${cats.map { it.label }}")
+        server.answer = "Not really: coffee came to $coffee this month, well under groceries at $groceries."
         tap("money-ask-bar")
         until(core) { shows("money-chat-try-0") }
         val field = hasContentDescription(MoneyChat.FIELD) and hasSetTextAction()
@@ -227,7 +238,7 @@ class MoneyChatScreensTest {
         until(core) { shows("money-chat-by-0") }
         assertTrue(server.asked.isNotEmpty(), "the question didn't go to Obi")
         assertTrue(shows("money-chat-by-0"), "no \"${MoneyChatObi.BY}\" under Obi's answer")
-        assertTrue(showsText("Costa came to £57.60"), "Obi's answer isn't in the chat")
+        assertTrue(showsText("coffee came to $coffee"), "Obi's answer isn't in the chat")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-ai"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-ai")
     }
