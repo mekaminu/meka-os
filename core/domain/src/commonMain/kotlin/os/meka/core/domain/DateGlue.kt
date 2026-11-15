@@ -153,7 +153,7 @@ object LoneWordGlue {
     const val DOT_RUN_MAX = 20
 
     /**
-     * The longest run one word, its dot and the next word may make when no other dot is in the run (A28, walk-through
+     * The longest run one word, its dot and the next word may make when no other dot is in or after the run (A28, walk-through
      * 2026-11-08: at [DOT_RUN_MAX] Health's "can't see notifications · messages" ended a line on the dot); also the
      * longest run a small leading word makes with the word after it.
      */
@@ -164,7 +164,7 @@ object LoneWordGlue {
 
     /**
      * [s] with each small leading word ([LEADS]) held to the word after it while that run stays within [PAIR_RUN_MAX]
-     * (A28: "· on" ended the call card's line, "· on both devices" the money lines). Not before a joiner or at the end.
+     * (A28: "Obi found … on" ended the call card's line). Not before a joiner, just after a dot or at the end.
      */
     fun leadsHeld(s: String): String {
         val tokens = s.split(' ')
@@ -174,7 +174,9 @@ object LoneWordGlue {
             val t = tokens[i]
             val next = tokens.getOrNull(i + 1)
             val lead = t.lowercase().let { it in LEADS || it.substringAfterLast(NBSP) in LEADS }
-            if (lead && next != null && next.isNotEmpty() && next !in JOINERS && t.length + 1 + next.length <= PAIR_RUN_MAX) {
+            // Just after a dot the word stays free, for the dot to take (CI: "Sun 25 Oct · in 4 days" ended on the dot).
+            val afterDot = tokens.getOrNull(i - 1) in HELD
+            if (lead && !afterDot && next != null && next.isNotEmpty() && next !in JOINERS && t.length + 1 + next.length <= PAIR_RUN_MAX) {
                 runs += t + NBSP + next
                 i += 2
             } else {
@@ -202,7 +204,8 @@ object LoneWordGlue {
             if (t in HELD && runs.isNotEmpty() && runs.last().isNotEmpty()) {
                 runs[runs.lastIndex] = runs.last() + NBSP + t
                 val next = tokens.getOrNull(i + 1)
-                val lone = runs.last().split(NBSP).count { it in HELD } == 1
+                // The longer pair only when it starts no chain: the word after it isn't followed by another dot.
+                val lone = runs.last().split(NBSP).count { it in HELD } == 1 && tokens.getOrNull(i + 2) !in HELD
                 val max = if (lone) PAIR_RUN_MAX else DOT_RUN_MAX
                 if (next != null && next.isNotEmpty() && next !in HELD && runs.last().length + 1 + next.length <= max) {
                     runs[runs.lastIndex] = runs.last() + NBSP + next

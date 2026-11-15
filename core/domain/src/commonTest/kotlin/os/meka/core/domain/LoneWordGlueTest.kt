@@ -90,7 +90,11 @@ class LoneWordGlueTest {
     fun aSmallWordLeadsIntoTheNext() {
         val s = LoneWordGlue.kept("Obi found 01134 960123 on rosaskitchen.example · check it's theirs")
         assertTrue(s.contains("on${nb}rosaskitchen.example"), s)
-        assertTrue(LoneWordGlue.kept("Put away · on both devices").contains("on${nb}both"))
+        assertTrue(LoneWordGlue.kept("Reminder set on both devices").contains("on${nb}both"))
+        // Just after a dot the small word is left for the dot, so a chain of dots still has somewhere to break.
+        val chain = LoneWordGlue.kept("Sam's birthday · Sun 25 Oct · in 4 days · no gift ideas yet")
+        assertTrue(chain.contains("·${nb}in"), chain)
+        assertFalse(chain.contains("birthday${nb}·${nb}Sun"), chain)
         assertEquals("Turn it on", DateGlue.plain(LoneWordGlue.kept("Turn it on")))
         assertFalse(LoneWordGlue.leadsHeld("on").contains(nb))
     }
