@@ -47,6 +47,23 @@ object TodayColumnsRules {
     /** The parts of [TodayOrderRules.ORDER] in [col], in their order. */
     fun slots(col: TodayColumn): List<TodaySlot> = TodayOrderRules.ORDER.filter { column(it) == col }
 
+    /**
+     * Walk-through week 4, A6 (3): split, the health line and the setup card ("12 steps left") sit in the right column
+     * straight after the Schedule, not above it. Heading the column they pushed the day down, so the open Fold's schedule
+     * stopped at 17:15 and never showed the commute or the evening. They still never push Now down (week 3, A1).
+     */
+    val HOUSEKEEPING_AFTER: TodaySlot = TodaySlot.TIMELINE
+
+    /** True for the right column's parts above the health line and setup card (see [HOUSEKEEPING_AFTER]). */
+    fun aboveHousekeeping(slot: TodaySlot): Boolean =
+        column(slot) == TodayColumn.RIGHT &&
+            TodayOrderRules.ORDER.indexOf(slot) <= TodayOrderRules.ORDER.indexOf(HOUSEKEEPING_AFTER)
+
+    /** The right column in order, with null where the health line and setup card go. */
+    fun rightWithHousekeeping(): List<TodaySlot?> =
+        slots(TodayColumn.RIGHT).filter { aboveHousekeeping(it) } + listOf(null) +
+            slots(TodayColumn.RIGHT).filterNot { aboveHousekeeping(it) }
+
     /** The open task's column on the Mac: about a third of the window, never narrower than [MAC_DETAIL_MIN] pt. */
     const val MAC_DETAIL_SHARE = 0.36f
     const val MAC_DETAIL_MIN = 320f

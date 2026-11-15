@@ -1568,7 +1568,9 @@ private fun TodayPane(
                     }
                     slotItems { TodayColumnsRules.column(it) == TodayColumn.LEFT }
                 },
-                right = { slotItems { TodayColumnsRules.column(it) == TodayColumn.RIGHT } })
+                // Walk-through week 4, A6 (3): the Schedule leads the right column, the health line and setup card under it.
+                right = { slotItems { TodayColumnsRules.aboveHousekeeping(it) } },
+                rightTail = { slotItems { TodayColumnsRules.column(it) == TodayColumn.RIGHT && !TodayColumnsRules.aboveHousekeeping(it) } })
         }
         if (collapses && headerFace != null) {
             CollapsingHeader(
@@ -1589,8 +1591,9 @@ private fun TodayPane(
 /**
  * The Today rebuild, slice 2c (Meka approved 2026-11-08 22:58): the open Fold's Today. The header and tiles run across
  * the top (at most [TodayColumnsRules.HEADER_MAX_SHARE] of the height, scrolling beyond); under them two lists side by
- * side, each scrolling on its own: what to do on the left, the shape of the day on the right, headed by the health line
- * and the setup card while there is something to set up (walk-through week 3, A1: they never push Now down).
+ * side, each scrolling on its own: what to do on the left, the shape of the day on the right, with the health line and
+ * the setup card straight under the Schedule while there is something to set up (walk-through week 3, A1: they never
+ * push Now down; week 4, A6 (3): nor the day, core TodayColumnsRules.HOUSEKEEPING_AFTER).
  */
 @Composable
 private fun SplitToday(
@@ -1599,6 +1602,7 @@ private fun SplitToday(
     housekeeping: MekaCore?,
     left: LazyListScope.() -> Unit,
     right: LazyListScope.() -> Unit,
+    rightTail: LazyListScope.() -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val headerMax = maxHeight * TodayColumnsRules.HEADER_MAX_SHARE
@@ -1625,13 +1629,14 @@ private fun SplitToday(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = half, end = MekaSpace.gutter, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
+                    right()
                     if (housekeeping != null) item(key = "housekeeping") {
-                        Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).testTag(SIDE_HOUSEKEEPING_TAG)) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs).testTag(SIDE_HOUSEKEEPING_TAG)) {
                             os.meka.android.ask.HealthTodayLine(housekeeping, Modifier)
                             os.meka.android.ask.SetupTodayCard(housekeeping, Modifier.padding(top = MekaSpace.xs))
                         }
                     }
-                    right()
+                    rightTail()
                 }
             }
         }

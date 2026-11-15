@@ -408,6 +408,15 @@ class TodayScreensTest {
         ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[2])
         // The open Fold's right column lays out what fits its screen; the late dinner is under it there.
         if (name.startsWith("cover")) ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
+        // Walk-through week 4, A6 (3): on the open Fold the health line and setup card headed the right column and the
+        // shot named "schedule" stopped at 17:15. The Schedule leads the column; they sit under it.
+        if (name.startsWith("inner")) {
+            val sched = compose.onAllNodes(label, useUnmergedTree = true).fetchSemanticsNodes().minOfOrNull { it.boundsInRoot.top }
+                ?: return fail("$name: no SCHEDULE label")
+            compose.onAllNodesWithTag(os.meka.android.today.SIDE_HOUSEKEEPING_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+                .forEach { if (it.boundsInRoot.top < sched) fail("$name: Health and Setup sit above the Schedule") }
+            ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
+        }
         val lines = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_BACKGROUND_TAG, useUnmergedTree = true).fetchSemanticsNodes()
         if (lines.isEmpty()) fail("$name: Work isn't one dim line in the Schedule card")
         // The re-shoot's finding: the list's 8 dp item gap showed the screen's black between the card's rows. Between two

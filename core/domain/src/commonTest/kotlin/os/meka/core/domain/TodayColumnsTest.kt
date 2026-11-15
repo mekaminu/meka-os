@@ -69,4 +69,15 @@ class TodayColumnsTest {
         assertFalse(TodayColumnsRules.fastInHeader(split = true))
         assertTrue(TodayColumnsRules.fastInHeader(split = false))
     }
+
+    @Test
+    fun theScheduleLeadsTheRightColumnWithHealthAndSetupStraightUnderIt() {
+        // Walk-through week 4, A6 (3): heading the column, the health line and setup card pushed the day to 17:15.
+        val r = TodayColumnsRules
+        assertEquals(listOf(TodaySlot.TIMELINE, null, TodaySlot.CARDS), r.rightWithHousekeeping())
+        assertTrue(r.aboveHousekeeping(TodaySlot.TIMELINE))
+        assertFalse(r.aboveHousekeeping(TodaySlot.CARDS))
+        // Nothing on the left is above them: they never push Now down (week 3, A1).
+        assertTrue(r.slots(TodayColumn.LEFT).none { r.aboveHousekeeping(it) })
+    }
 }
