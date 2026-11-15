@@ -227,7 +227,8 @@ class LifeAdminScreensTest {
         sun[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.lifeAdminView.value.weekday == 7 }
         if (core.lifeAdminView.value.weekday != 7) fail("$name: Sun left the hour on day ${core.lifeAdminView.value.weekday}")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(core.lifeAdminView.value.summary))
+        // The new summary crossfades in after the write lands; wait for it (it raced once in CI run 43696220561).
+        ScreenShots.awaitShows(compose, name, LoneWordGlue.kept(core.lifeAdminView.value.summary))
 
         val skip = compose.onAllNodes(hasText(LifeAdminRules.SKIP_LABEL) and hasClickAction())
         if (skip.fetchSemanticsNodes().isEmpty()) fail("$name: no Skip this week")
