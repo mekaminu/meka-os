@@ -2410,7 +2410,7 @@ private fun CardDetails(
         }
         // Walk-through A32: Charge card and Not a card are pills (lit while it's a charge card), each drawn inside a whole
         // 48 dp tall target, so they read as the two switches they are rather than loose words under the fields.
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             val chargeBg by animateColorAsState(if (c.charge) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "money-card-charge-bg-${c.id}")
             val chargeFg by animateColorAsState(if (c.charge) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-card-charge-fg-${c.id}")
             Text(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", style = MekaType.caption, color = chargeFg,
@@ -2418,12 +2418,12 @@ private fun CardDetails(
                     .clickable(role = Role.Switch) { onKind(true, !c.charge) }.testTag("money-card-charge")
                     .semantics { stateDescription = if (c.charge) "On" else "Off" }
                     .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(chargeBg)
-                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
             Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) { onKind(false, false) }.testTag("money-card-not-card")
                     .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
         }
         Text(moneyShown(MoneyCards.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
     }

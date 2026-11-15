@@ -770,7 +770,7 @@ struct MoneySheet: View {
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
             }
             ForEach(c.fields, id: \.key) { f in cardField(cardId: c.id, f) }
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 Button(MoneyCards.shared.CHARGE_SWITCH + (c.charge ? " ✓" : "")) {
                     let id = c.id
                     let charge = !c.charge
@@ -778,7 +778,7 @@ struct MoneySheet: View {
                 }
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(c.charge ? palette.onAccent : palette.textSecondary)
                 // Walk-through A32: Charge card and Not a card are pills (lit while it's a charge card), not loose words.
-                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                 .background(c.charge ? palette.accent : palette.surfaceRaised, in: Capsule())
                 .accessibilityValue(c.charge ? "On" : "Off")
                 Button(MoneyCards.shared.NOT_CARD) {
@@ -787,7 +787,7 @@ struct MoneySheet: View {
                     Task { said = await model.moneyCardKind(accountId: id, card: false, charge: false) }
                 }
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                 .background(palette.surfaceRaised, in: Capsule())
             }
         }
