@@ -155,6 +155,7 @@ struct MoneySpendRowView: View {
     let reduced: Bool
     let onPick: () -> Void
     @State private var shown: Double = 0
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button(action: onPick) {
@@ -163,13 +164,13 @@ struct MoneySpendRowView: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     HStack(spacing: MekaSpace.xs) {
                         Text(row.label).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
-                        Text(row.pct).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(row.pct).font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark))
                         Spacer(minLength: 0)
                         Text(row.amount).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
                     }
                     GeometryReader { g in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(palette.surfaceRaised)
+                            Capsule().fill(palette.barTrack(dark: scheme == .dark))
                             Capsule().fill(palette.moneyTone(row.tone)).frame(width: g.size.width * min(max(shown, 0), 1))
                         }
                     }

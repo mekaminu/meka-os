@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +74,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.withFrameNanos
 import os.meka.core.domain.FeelMoment
 import kotlinx.coroutines.withContext
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -1488,6 +1490,8 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
             val fill by animateColorAsState(if (lit) Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surface) else Meka.colors.surface,
                 MekaMotion.appear(reduced), label = "money-tab-${t.name}")
             val ink by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-tab-ink-${t.name}")
+            // A31: an unchosen pill is the surface on Light's page (1.0:1), so in Light it has a 1 dp edge in the track ink.
+            val edge = if (lit) null else LightInk.pillEdge(Meka.colors, Meka.theme.isDark)
             Box(
                 Modifier.heightIn(min = MekaSpace.touch)
                     .clip(RoundedCornerShape(MekaRadius.pill))
@@ -1497,7 +1501,9 @@ internal fun MoneyTabPills(chosen: MoneyTab, modifier: Modifier = Modifier, onPi
             ) {
                 Text(
                     t.label, style = MekaType.metaStrong, color = ink, maxLines = 1,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .then(if (edge != null) Modifier.border(1.dp, edge, RoundedCornerShape(MekaRadius.pill)) else Modifier)
+                        .background(fill)
                         .padding(horizontal = pad, vertical = MekaSpace.xs),
                 )
             }

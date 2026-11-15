@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -264,10 +265,11 @@ internal fun MoneySpendRowView(r: MoneySpendRow, picked: Boolean, modifier: Modi
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(r.label, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 1)
-                Text(r.pct, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+                // A31: the share is small grey words; in Light the secondary ink (tertiary is 3.9:1 on the page).
+                Text(r.pct, style = MekaType.caption, color = LightInk.small(Meka.colors, Meka.theme.isDark), modifier = Modifier.weight(1f))
                 Text(r.amount, style = MekaType.metaStrong, color = Meka.colors.textPrimary)
             }
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(LightInk.barTrack(Meka.colors, Meka.theme.isDark))) {
                 Box(Modifier.fillMaxWidth(bar.coerceIn(0f, 1f)).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(tone))
             }
             Text(r.note, style = MekaType.caption, maxLines = 2,
