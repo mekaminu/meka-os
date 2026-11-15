@@ -152,15 +152,29 @@ object MoneyCheck {
             behindMore = more(s.size), spoken = "$title, ${fmt(monthly)} a month. $why")
     }
 
-    /** This month's categories well over their 6-month average ([MoneyTips.over]): how far, with a cap to set. */
-    fun over(lines: List<MoneyLine>, today: Long): List<MoneyIdea> = MoneyTips.over(lines, today).filter { it.id.startsWith("over-") }.mapNotNull { t ->
-        val key = t.id.removePrefix("over-")
-        val c = MoneyCategory.of(key) ?: return@mapNotNull null
-        val by = Regex("""£[\d,]+(\.\d\d)?""").find(t.title)?.value ?: return@mapNotNull null
+    /**
+     * This month's categories well over their 6-month average ([MoneyTips.over]): how far, with a cap to set. Walk-through
+     * 2026-11-15 A4: the figure is Spending's ("£132 over", whole pounds, the same whole usual month) and why names the
+     * usual month itself, so Spending, Plan and What if's Halve read as one usual; the title is short enough for one line.
+     */
+    fun over(lines: List<MoneyLine>, today: Long): List<MoneyIdea> = MoneyTips.overFigures(lines, today).map { o ->
+        val c = o.category
         val month = MoneyRules.monthOf(today)
         val ls = lines.filter { it.category == c && it.pence < 0 && MoneyRules.monthOf(it.day) == month }
-        MoneyIdea("over-$key", MoneyIdeaKind.OVER.key, "${c.label} over usual this month", "$by over", 0, "${t.title}. ${t.line}.",
-            behind(ls), ACT_CAP_LABEL, ACT_CAP, lit = true, behindMore = more(ls.size), spoken = "${c.label} $by over usual this month. ${t.line}")
+        val by = MoneySpending.whole(o.pence - o.avg)
+        val why = overWhy(c.label, by, o.avgName, o.avg, o.line)
+        MoneyIdea("over-${c.key}", MoneyIdeaKind.OVER.key, overTitle(c.label), "$by over", 0, why,
+            behind(ls), ACT_CAP_LABEL, ACT_CAP, lit = true, behindMore = more(ls.size), spoken = "${c.label} $by over usual this month. ${o.line}")
+    }
+
+    /** "Groceries over usual" (the card's one line; "this month" is in why). */
+    fun overTitle(label: String): String = "$label over usual"
+
+    /** "Groceries £132 over usual this month. Usual is your 2-month average, about £60 a month. £191.75 so far in October · 10 days to go." */
+    fun overWhy(label: String, by: String, avgName: String, avg: Long, line: String): String {
+        val usual = if (avgName.startsWith("your ")) "Usual is $avgName, about ${MoneySpending.whole(avg)} a month"
+            else "Usual is $avgName's ${MoneySpending.whole(avg)}"
+        return "$label $by over usual this month. $usual. $line."
     }
 
     /** His own categories bought often (wants only, as [habits]): "Vape 12× in 30 days", what halving saves a year. */
@@ -197,11 +211,11 @@ object MoneyCheck {
             val p = byMonth[month] ?: 0L
             val avg = prior.sumOf { byMonth[it] ?: 0L } / prior.size
             if (p <= 0 || p - avg < MoneyRules.OVER_MIN_PENCE || p <= avg * (1 + MoneyRules.OVER_SHARE)) return@mapNotNull null
-            val by = fmt(p - avg)
+            val by = MoneySpending.whole(p - avg)
             val line = "${fmt(p)} so far in $monthName · " + when (left) { 0 -> "last day of the month"; 1 -> "1 day to go"; else -> "$left days to go" }
             val cur = ls.filter { MoneyRules.monthOf(it.day) == month }
-            Triple(p - avg, c, MoneyIdea("over-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.OVER.key, "${c.name} over usual this month", "$by over", 0,
-                "${c.name} $by over $avgName. $line.", behind(cur), ACT_CAP_LABEL, ACT_CAP, lit = true, behindMore = more(cur.size),
+            Triple(p - avg, c, MoneyIdea("over-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.OVER.key, overTitle(c.name), "$by over", 0,
+                overWhy(c.name, by, avgName, avg, line), behind(cur), ACT_CAP_LABEL, ACT_CAP, lit = true, behindMore = more(cur.size),
                 spoken = "${c.name} $by over usual this month. $line"))
         }.sortedByDescending { it.first }.take(MoneyTips.MAX_PER_KIND).map { it.third }
     }

@@ -163,7 +163,9 @@ internal fun MoneyBrassCard(modifier: Modifier = Modifier, tag: String? = null, 
 private fun MoneyLeadIdeaCard(i: MoneyIdea, onOpen: () -> Unit, onAct: () -> Unit, onRemind: () -> Unit, onNotFor: () -> Unit) {
     MoneyCard(tag = "money-check-lead") {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onOpen)
+            // Walk-through 2026-11-15 A4: no rounded clip on the row itself; its corners cut the figure's last letter at
+            // the top right and a second line's first letter at the bottom left.
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpen)
                 .semantics(mergeDescendants = true) { contentDescription = i.spoken }.testTag("money-idea-${i.id}"),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
         ) {

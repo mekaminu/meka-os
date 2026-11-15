@@ -118,6 +118,22 @@ class MoneyCheckTest {
         assertNull(v.empty)
     }
 
+    /** Walk-through 2026-11-15 A4: Plan's over idea gives Spending's figure and names the one usual month behind it. */
+    @Test fun overIdeaSaysSpendingsFigureAndItsUsual() {
+        // August and September (a £60.25 usual: none, then £120.50), and £191.75 by Wed 21 Oct, as the Money shots.
+        val oct21 = d(10, 21)
+        val ls = listOf(line(d(8, 1), -14_200, "COUNCIL TAX", MoneyCategory.BILLS),
+            line(d(9, 4), -6_240, "TESCO STORES", MoneyCategory.GROCERIES), line(d(9, 11), -5_810, "TESCO STORES", MoneyCategory.GROCERIES),
+            line(d(10, 2), -7_125, "TESCO STORES", MoneyCategory.GROCERIES), line(d(10, 9), -6_490, "TESCO STORES", MoneyCategory.GROCERIES),
+            line(d(10, 20), -5_560, "TESCO STORES", MoneyCategory.GROCERIES))
+        val o = MoneyCheck.over(ls, oct21).single()
+        assertEquals("Groceries over usual", o.title)
+        assertEquals("£132 over", o.figure)
+        assertEquals("Groceries £132 over usual this month. Usual is your 2-month average, about £60 a month. £191.75 so far in October · 10 days to go.", o.why)
+        // Spending's note on the same figures says the same.
+        assertEquals("£132 over usual", MoneySpendNote.of(MoneyCategory.GROCERIES, false, 19_175, 3, 6_025, "usual", true, 21, 31).text)
+    }
+
     @Test
     fun threeShowThenMore() {
         assertEquals("2 more ›", MoneyCheck.more(5, open = false))

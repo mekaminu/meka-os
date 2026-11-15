@@ -40,10 +40,10 @@ class MoneyOwnPlanTest {
     fun overUsualThisMonthAgainstItsAverage() {
         val o = MoneyCheck.ownOver(vapes, oct16, plan).single()
         assertEquals("over-own-k1", o.id)
-        assertEquals("Vape over usual this month", o.title)
+        assertEquals("Vape over usual", o.title)
         assertEquals("£40 over", o.figure)
         assertEquals(0L, o.savePence)
-        assertEquals("Vape £40 over your 3-month average. £60 so far in October · 15 days to go.", o.why)
+        assertEquals("Vape £40 over usual this month. Usual is your 3-month average, about £20 a month. £60 so far in October · 15 days to go.", o.why)
         assertTrue(o.lit)
         // Only one month before: no average to be over.
         assertTrue(MoneyCheck.ownOver(vapes.filter { it.day >= d(9, 1) }, oct16, plan).isEmpty())

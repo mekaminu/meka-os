@@ -10,7 +10,8 @@ package os.meka.core.domain
  * - A finished month compares with the usual month whole.
  * - This month compares with the usual month's pace by today (as the ring's middle does), from day [EARLIEST_DAY] on,
  *   before which it's too early to say and the count shows. Bills, subscriptions and fees go out in lumps, so they
- *   compare with the whole usual month: over only once past it, else "as usual".
+ *   compare with the whole usual month: over only once past it, else "as usual". A category already well past its
+ *   whole usual month (the over test below) says how far past it, as Plan's idea does, never a bigger pace figure.
  * - Within [MoneyRules.OVER_MIN_PENCE] (and, for over, within [MoneyRules.OVER_SHARE] of usual) is "as usual".
  * [usual] is "usual", or the month's name when only one month came before ("£20 under September").
  */
@@ -35,7 +36,10 @@ object MoneySpendNote {
         if (avg <= 0L) return Note(if (one) "none in $usual" else "new this month", MoneyTone.QUIET)
         if (partial && dayOfMonth < EARLIEST_DAY) return count
         val lumpy = !own && category in LUMPY
-        val against = if (partial && !lumpy) avg * dayOfMonth.coerceIn(1, daysInMonth) / daysInMonth.coerceAtLeast(1) else avg
+        // Walk-through 2026-11-15 A4: a category already well past its whole usual month says how far past it, the
+        // figure Plan's idea gives ("£132 over usual" on both); the pace by today only while it isn't.
+        val pastWhole = pence - avg >= MoneyRules.OVER_MIN_PENCE && pence > avg * (1 + MoneyRules.OVER_SHARE)
+        val against = if (partial && !lumpy && !pastWhole) avg * dayOfMonth.coerceIn(1, daysInMonth) / daysInMonth.coerceAtLeast(1) else avg
         val diff = pence - against
         return when {
             diff >= MoneyRules.OVER_MIN_PENCE && pence > against * (1 + MoneyRules.OVER_SHARE) ->

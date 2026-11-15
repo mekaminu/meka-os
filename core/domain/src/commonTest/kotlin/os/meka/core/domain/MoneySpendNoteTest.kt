@@ -52,4 +52,16 @@ class MoneySpendNoteTest {
         // A finished month is under like anything else.
         assertEquals("£290 under usual", note(MoneyCategory.BILLS, pounds = 100, avgPounds = 390).text)
     }
+
+    /** Walk-through 2026-11-15 A4: past a whole usual month, the note says how far past it (Plan's idea's figure). */
+    @Test
+    fun pastTheWholeUsualMonthSaysHowFarPastIt() {
+        // Day 21 of 31 with a £60.25 usual: the pace by today is about £41, but £191.75 is past the whole month.
+        val n = MoneySpendNote.of(MoneyCategory.GROCERIES, false, 19_175, 3, 6_025, "usual", true, 21, 31)
+        assertEquals(MoneySpendNote.Note("£132 over usual", MoneyTone.OVER), n)
+        // Over the pace but not past the whole month: the pace by today, as before.
+        assertEquals("£100 over usual", note(pounds = 300, avgPounds = 400, partial = true, day = 15).text)
+        // Just past the whole month (under the share that counts as over): still the pace.
+        assertEquals("£210 over usual", note(pounds = 410, avgPounds = 400, partial = true, day = 15).text)
+    }
 }

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.test.core.app.ApplicationProvider
@@ -275,6 +276,42 @@ class MoneyScreensTest {
     fun coverPlan() {
         shoot("cover-dark-plan", Fill.MANY, tab = MoneyTab.PLAN)
         checkHasItsBigLine("cover-dark-plan")
+        checkOneUsualAndShootWhatIf()
+    }
+
+    /**
+     * Walk-through 2026-11-15 A4: Groceries' usual had three values across the shots (Spending's "£151 over usual", Plan's
+     * "£131.50 over your 2-month average", What if's "Halve Groceries +£60" from another statement). The What if sheet is
+     * now shot on the same month as Spending and Plan, and all three come from one usual month.
+     */
+    private fun checkOneUsualAndShootWhatIf() {
+        val v = shotCore.moneyView.value
+        val spend = v.month?.spending?.rows?.firstOrNull { it.key == os.meka.core.domain.MoneyCategory.GROCERIES.key }
+            ?: fail("the shared month has no Groceries on Spending")
+        val idea = v.check?.ideas?.firstOrNull { it.id == "over-groceries" } ?: fail("Groceries should be over usual on Plan")
+        // One figure on both: Spending's note and Plan's idea.
+        if (spend.note != idea.figure.removeSuffix(" over") + " over usual")
+            fail("Spending says \"${spend.note}\" for Groceries, Plan's idea \"${idea.figure}\"")
+        // One usual: the idea names it, and What if's Halve is half of it.
+        val usual = Regex("""about £(\d+) a month""").find(idea.why)?.groupValues?.get(1)?.toLong()
+            ?: fail("Plan's idea doesn't name its usual month: ${idea.why}")
+        val halve = v.forecast?.cuts?.firstOrNull { it.key == os.meka.core.domain.MoneyCategory.GROCERIES.key }
+            ?: fail("What if offers no Halve Groceries")
+        val save = Regex("""£(\d+)""").find(halve.line)?.groupValues?.get(1)?.toLong() ?: fail("Halve's line has no figure: ${halve.line}")
+        if (kotlin.math.abs(save * 2 - usual) > 10) fail("Halve Groceries saves £$save a month beside a usual of £$usual")
+        // The What if sheet, as he'd open it from the forecast card.
+        compose.mainClock.autoAdvance = true
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction())
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag("money-forecast-card"))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        compose.onNodeWithTag("money-whatif-row", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-whatif"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-plan-whatif")
+        if (compose.onAllNodes(ScreenShots.plainText(halve.label, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("the What if sheet doesn't show ${halve.label}")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

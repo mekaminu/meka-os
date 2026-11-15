@@ -222,7 +222,8 @@ class MoneyPlanLayoutScreensTest {
         tap("money-whatif-row")
         assertTrue(shows("money-whatif-sheet") && showsText(MoneyForecast.EXTRA_HINT), "What if… should open the what-ifs")
         if (shows("money-idea-sheet")) fail("an idea's sheet sits under the What if… sheet (walk-through A4)")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-whatif"))
+        // (Shot on the Money shots' shared month by MoneyScreensTest, walk-through 2026-11-15 A4: this statement's own
+        // Groceries made a different usual beside Spending's and Plan's shots.)
         tap("money-whatif-sheet-done")
 
         // Challenges: the fields only in the Set a challenge sheet.

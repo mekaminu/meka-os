@@ -123,6 +123,24 @@ object MoneyTips {
     /** The (up to 6) whole months before [month] that have statements. */
     private fun priorOf(month: Int, firstMonth: Int): List<Int> = (1..6).map { month - it }.filter { it >= firstMonth }
 
+    /** A category well over usual this month: what's gone, the usual month, what it's named by and the tip's second line. */
+    data class OverFigure(val category: MoneyCategory, val pence: Long, val avg: Long, val avgName: String, val line: String)
+
+    /** This month's categories well over usual, as [over]'s tips count them, with the figures (Plan's ideas word their own). */
+    fun overFigures(lines: List<MoneyLine>, today: Long): List<OverFigure> {
+        if (lines.isEmpty()) return emptyList()
+        val firstMonth = MoneyRules.monthOf(lines.minOf { it.day })
+        val thisMonth = MoneyRules.monthOf(today)
+        val d = CivilDate.fromEpochDay(today)
+        val left = CivilDate.lengthOfMonth(d.year, d.month) - d.day
+        val monthName = CivilDate.MONTH_LONG[thisMonth % 12]
+        val avgName = MoneyRules.averageName(priorOf(thisMonth, firstMonth).ifEmpty { return emptyList() })
+        return overIn(lines, thisMonth, firstMonth).take(MAX_PER_KIND).map { (c, v) ->
+            val line = "${fmt(v.first)} so far in $monthName · " + when (left) { 0 -> "last day of the month"; 1 -> "1 day to go"; else -> "$left days to go" }
+            OverFigure(c, v.first, v.second, avgName, line)
+        }
+    }
+
     fun over(lines: List<MoneyLine>, today: Long): List<MoneyTip> {
         val firstMonth = MoneyRules.monthOf(lines.minOf { it.day })
         val thisMonth = MoneyRules.monthOf(today)
