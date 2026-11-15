@@ -54,9 +54,11 @@ fun CommuteSection(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             CommuteRules.choices(commute.toWorkMin).forEach { m ->
                 val label = CommuteRules.label(m)
-                val chosen = commute.chosen && m == commute.toWorkMin
-                SettingChip(label, chosen, spoken = "Commute to work: $label") {
-                    if (!chosen) { haptics.tick(); onSet(m, commute.homeMin) }
+                // A32: the time in use is lit, Navilife's guess too; tapping the lit guess keeps it as his own.
+                val lit = CommuteRules.lit(commute, true, m)
+                val spoken = if (lit && !commute.chosen) "Commute to work: $label, ${CommuteRules.GUESS_SPOKEN}" else "Commute to work: $label"
+                SettingChip(label, lit, spoken = spoken) {
+                    CommuteRules.tap(commute, true, m)?.let { (to, home) -> haptics.tick(); onSet(to, home) }
                 }
             }
         }
@@ -64,9 +66,11 @@ fun CommuteSection(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             CommuteRules.choices(commute.homeMin).forEach { m ->
                 val label = CommuteRules.label(m)
-                val chosen = commute.chosen && m == commute.homeMin
-                SettingChip(label, chosen, spoken = "Commute home: $label") {
-                    if (!chosen) { haptics.tick(); onSet(commute.toWorkMin, m) }
+                // A32: the time in use is lit, Navilife's guess too; tapping the lit guess keeps it as his own.
+                val lit = CommuteRules.lit(commute, false, m)
+                val spoken = if (lit && !commute.chosen) "Commute home: $label, ${CommuteRules.GUESS_SPOKEN}" else "Commute home: $label"
+                SettingChip(label, lit, spoken = spoken) {
+                    CommuteRules.tap(commute, false, m)?.let { (to, home) -> haptics.tick(); onSet(to, home) }
                 }
             }
         }

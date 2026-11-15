@@ -362,6 +362,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         )
         let rules = CommuteRules.shared
         XCTAssertEqual(rules.summary(s: CommuteSetting.companion.DEFAULT), "About 1 h 20 each way · change it below")
+        // Walk-through A32: the guess is the time in use (lit on the Fold); the Mac's Keep these times keeps it.
+        XCTAssertTrue(rules.lit(s: CommuteSetting.companion.DEFAULT, toWork: true, min: 80))
+        XCTAssertFalse(rules.lit(s: CommuteSetting.companion.DEFAULT, toWork: false, min: 60))
+        XCTAssertEqual(rules.KEEP_GUESS, "Keep these times")
         let changed = try await core.setCommute(toWorkMin: 90, homeMin: 70)
         XCTAssertTrue(changed.boolValue)
         XCTAssertEqual(core.workMode.value.commute.toWorkMin, 90)

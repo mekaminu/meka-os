@@ -175,6 +175,29 @@ object CommuteRules {
     /** The chips for one direction: [CHOICES] plus [current] when it is his own odd time, ascending. */
     fun choices(current: Int): List<Int> = (CHOICES + current).distinct().sorted()
 
+    /**
+     * Walk-through 2026-11-08 A32: the chip lit in one direction's row. The time in use is always lit, Navilife's guess
+     * too (the line said "About 1 h 20 each way" with no chip lit, so nothing showed which one counted).
+     */
+    fun lit(s: CommuteSetting, toWork: Boolean, min: Int): Boolean = min == (if (toWork) s.toWorkMin else s.homeMin)
+
+    /**
+     * A32: what a tap on [min]'s chip writes, as (to work, home), or null when it changes nothing. Tapping the lit guess
+     * keeps it as his own (so "About … · change it below" becomes his "1 h 20 each way"); tapping his own lit time does
+     * nothing.
+     */
+    fun tap(s: CommuteSetting, toWork: Boolean, min: Int): Pair<Int, Int>? = when {
+        s.chosen && lit(s, toWork, min) -> null
+        toWork -> min to s.homeMin
+        else -> s.toWorkMin to min
+    }
+
+    /** A32: what TalkBack / VoiceOver adds to the lit guess's chip. */
+    const val GUESS_SPOKEN = "Navilife's guess, tap to keep it"
+
+    /** A32: the Mac's button beside the pickers while the times are the guess (its pickers show the guess already). */
+    const val KEEP_GUESS = "Keep these times"
+
     /** An office day: a work day that isn't from home or on a trip ([WorkHours.atOffice]). */
     fun officeDay(work: WorkHours, epochDay: Long): Boolean = work.atOffice(epochDay)
 

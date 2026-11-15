@@ -167,6 +167,13 @@ class WorkScreensTest {
             val air = (homeLabel.first().positionInRoot.y - toWorkChips.maxOf { it.positionInRoot.y + it.size.height }) / density
             if (air < 8f) fail("$name: the commute's Home label sits ${air.toInt()} dp under the To work chips (want ≥ 8)")
         }
+        // Walk-through A32: one chip is lit in each commute row, Navilife's guess included ("About 1 h 20" had none lit).
+        for (row in listOf("Commute to work:", "Commute home:")) {
+            val chips = compose.onAllNodes(hasContentDescription(row, substring = true)).fetchSemanticsNodes()
+            if (chips.isEmpty()) continue
+            val lit = chips.count { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "On" }
+            if (lit != 1) fail("$name: $lit chips lit in the commute's \"$row\" row (want 1)")
+        }
         when (fill) {
             Fill.EMPTY -> {
                 ScreenShots.assertShows(compose, name, "Add from contacts")

@@ -178,6 +178,12 @@ struct WorkSheet: View {
                     }
                 }
                 .frame(width: 160)
+                // A32: the pickers already show Navilife's guess; this keeps it as his own (picking the shown time
+                // again changes nothing on a Picker).
+                if !setting.chosen {
+                    Button(rules.KEEP_GUESS) { model.setCommute(toWorkMin: toWork, homeMin: home) }
+                        .transition(.opacity)
+                }
             }
             Text(rules.NOTE)
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)

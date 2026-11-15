@@ -41,6 +41,25 @@ class CommuteTest {
     }
 
     @Test
+    fun theGuessIsLitAndATapKeepsIt() {
+        // Walk-through A32: "About 1 h 20 each way" had no chip lit; the guess's chip is lit in both rows.
+        val guess = CommuteSetting.DEFAULT
+        assertEquals(listOf(80), CommuteRules.choices(80).filter { CommuteRules.lit(guess, true, it) })
+        assertEquals(listOf(80), CommuteRules.choices(80).filter { CommuteRules.lit(guess, false, it) })
+        // Tapping the lit guess keeps it as his own; another chip sets that direction only.
+        assertEquals(80 to 80, CommuteRules.tap(guess, true, 80))
+        assertEquals(60 to 80, CommuteRules.tap(guess, true, 60))
+        assertEquals(80 to 90, CommuteRules.tap(guess, false, 90))
+        val own = CommuteSetting(75, 90, chosen = true)
+        assertEquals(true, CommuteRules.lit(own, true, 75))
+        assertEquals(false, CommuteRules.lit(own, false, 75))
+        // His own lit time changes nothing.
+        assertEquals(null, CommuteRules.tap(own, true, 75))
+        assertEquals(null, CommuteRules.tap(own, false, 90))
+        assertEquals(75 to 60, CommuteRules.tap(own, false, 60))
+    }
+
+    @Test
     fun onlyOfficeDaysHaveACommute() {
         assertEquals(80, CommuteRules.toWorkOn(work, fri))
         assertEquals(80, CommuteRules.homeOn(work, thu))
