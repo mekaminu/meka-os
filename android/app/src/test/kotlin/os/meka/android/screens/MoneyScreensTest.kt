@@ -74,37 +74,6 @@ class MoneyScreensTest {
             "03/10/2026,COSTA COFFEE,-3.20\n" +
             "05/10/2026,SALARY OAKFIELD LTD,2500.00\n"
 
-        // Walk-through 2026-11-08 A8: three months of the council tax and Netflix, so they're found as regular bills and
-        // Spending's "Bills to come" and the Bills tab show the same council tax due 1 Nov (it was £0 and no card).
-        const val CURRENT = "Date,Description,Amount\n" +
-            "01/08/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/08/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "15/08/2026,NETFLIX.COM,-10.99\n" +
-            "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "04/09/2026,TESCO STORES 2041,-62.40\n" +
-            "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "11/09/2026,TESCO STORES 2041,-58.10\n" +
-            "15/09/2026,NETFLIX.COM,-10.99\n" +
-            "18/09/2026,TFL TRAVEL CH,-38.50\n" +
-            "25/09/2026,COSTA COFFEE,-3.20\n" +
-            "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "02/10/2026,TESCO STORES 2041,-71.25\n" +
-            "03/10/2026,COSTA COFFEE,-3.20\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "07/10/2026,PRET A MANGER,-6.85\n" +
-            "09/10/2026,TESCO STORES 2041,-64.90\n" +
-            "12/10/2026,TFL TRAVEL CH,-41.20\n" +
-            "14/10/2026,COSTA COFFEE,-3.40\n" +
-            "15/10/2026,NETFLIX.COM,-10.99\n" +
-            "16/10/2026,SHELL FORECOURT 112,-58.00\n" +
-            "17/10/2026,THE GARDEN SHOP OAKFIELD,-24.99\n" +
-            "19/10/2026,COSTA COFFEE,-3.40\n" +
-            "20/10/2026,TESCO STORES 2041,-55.60\n"
-
-        const val CARD = "Date,Description,Amount\n" +
-            "06/10/2026,AMAZON MARKETPLACE,-32.49\n" +
-            "13/10/2026,DELIVEROO,-21.80\n" +
-            "18/10/2026,CINEWORLD OAKFIELD,-17.50\n"
     }
 
     private enum class Fill { EMPTY, ONE, MANY }
@@ -131,9 +100,7 @@ class MoneyScreensTest {
                 Fill.EMPTY -> Unit
                 Fill.ONE -> check(!core.importMoneyStatement("Current account", ONE).refused)
                 Fill.MANY -> {
-                    check(!core.importMoneyStatement("Current account", CURRENT).refused)
-                    check(!core.importMoneyStatement("Credit card", CARD).refused)
-                    check(!core.moneyWorthAdd("Pension £42,000").refused)
+                    MoneyShotMonth.fill(core)
                 }
             }
             core.tick()

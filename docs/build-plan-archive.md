@@ -6426,3 +6426,7 @@ The walk-through saw the What if slider stop short of the card's edge (`inner-da
 ### Found and fixing, week 3 · A32 slice 12 (2026-11-15)
 
 The walk-through saw Obi's voice's shots with Face On beside Health's shots, whose Obi's voice row read "Face · off" (Health reads the device's own Face setting, off on a new phone). Test only: `ShotLife.FACE_ON` (false) is the shots' one Face setting; `VoiceScreensTest`'s empty, one and full screens take it, and `WatchHealthScreensTest`'s Health shots fail if the voice row's face line disagrees with it. Nothing changes in either app.
+
+### Found and fixing, week 3 · A32 slice 13 (2026-11-15)
+
+The walk-through saw Spending's "1 payment without a category" (MoneyScreensTest's full month, where The Garden Shop was the one payee in Other) beside the sorter's "SORT YOUR PAYMENTS · 2 LEFT" (MoneySorterScreensTest imported its own five-line statement). A payment count can't be smaller than the payees it comes from, so the shots disagreed; the app's sums were right. Test only: the full month is now `MoneyShotMonth` (shared by both tests) with Zebra Plover twice in October (2 × £12.60, so it is the biggest payee to sort, ahead of The Garden Shop's £24.99), and `MoneySorterScreensTest.sortThemGoesPayeeByPayee` opens on it, checks the view's line is "3 payments without a category" and the sorter's head reads "SORT YOUR PAYMENTS · 2 LEFT" on screen, then sorts Zebra Plover (both payments move) and skips The Garden Shop. Fold only; nothing changes in either app.

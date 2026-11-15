@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -33,13 +34,15 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.MoneySorter
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 
 /**
  * Money review (Meka 2026-10-26 22:12): "N payments without a category · Sort them" opens the quick sorter on the
- * biggest payee; a chip sorts it and the next comes up; Skip on the last closes it. Shot on the cover screen in Dark.
- * Invented data (rule 13).
+ * biggest payee; a chip sorts it and the next comes up; Skip on the last closes it. Shot on the cover screen in Dark,
+ * on the same month as MoneyScreensTest's ([MoneyShotMonth], walk-through A32), so Spending's count and the sorter's
+ * agree. Invented data (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -56,12 +59,6 @@ class MoneySorterScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val STATEMENT = "Date,Description,Amount\n" +
-            "02/10/2026,QWERTY HOLDINGS,-41.25\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/10/2026,COSTA COFFEE,-3.40\n" +
-            "12/10/2026,QWERTY HOLDINGS,-20.00\n" +
-            "20/10/2026,ZEBRA PLOVER,-12.60\n"
     }
 
     private fun open(): MekaCore {
@@ -75,7 +72,7 @@ class MoneySorterScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", STATEMENT).refused)
+            MoneyShotMonth.fill(core)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
@@ -119,7 +116,8 @@ class MoneySorterScreensTest {
     fun sortThemGoesPayeeByPayee() {
         val core = open()
         val u = core.moneyView.value.month?.unsorted ?: fail("no payments without a category")
-        assertEquals(listOf("Qwerty Holdings", "Zebra Plover"), u.items.map { it.row.merchant })
+        assertEquals(MoneyShotMonth.UNSORTED, u.items.map { it.row.merchant })
+        assertEquals(MoneySorter.line(3), u.line)
         // A lazy list's scroll waits for a frame, so the clock runs while it scrolls.
         compose.mainClock.autoAdvance = true
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-unsorted"))
@@ -129,17 +127,23 @@ class MoneySorterScreensTest {
         tap("money-unsorted")
         assertTrue(shows("money-sort-head"), "the sorter didn't open")
         assertTrue(shows("money-sort-skip"), "no Skip in the sorter")
+        // Walk-through A32: the head counts the same payees as Spending's line.
+        val head = MoneySorter.head(MoneySorter.left(u, emptySet()))
+        assertEquals("${MoneySorter.HEAD} · 2 LEFT", head)
+        if (compose.onAllNodesWithText(head, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("the sorter's head isn't \"$head\"")
+        }
         // The sorter has no toggles: it only sorts.
         if (shows("money-sheet-mark-payment_shared")) fail("the sorter shows the payment's toggles")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-sorter"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-sorter")
         tap("money-sheet-cat-shopping")
-        waitFor { core.moneyView.value.month?.unsorted?.items.orEmpty().none { it.row.merchant == "Qwerty Holdings" } }
+        waitFor { core.moneyView.value.month?.unsorted?.items.orEmpty().none { it.row.merchant == MoneyShotMonth.UNSORTED[0] } }
         // Every payment from the payee moved, and the next payee is up.
-        assertEquals(2, core.moneyView.value.month!!.txns.count { it.merchant == "Qwerty Holdings" && it.category == "shopping" })
+        assertEquals(2, core.moneyView.value.month!!.txns.count { it.merchant == MoneyShotMonth.UNSORTED[0] && it.category == "shopping" })
         assertTrue(shows("money-sort-head"), "the sorter closed before the last payee")
         tap("money-sort-skip")
         if (shows("money-sort-head")) fail("Skip on the last payee didn't close the sorter")
-        assertEquals(listOf("Zebra Plover"), core.moneyView.value.month!!.unsorted!!.items.map { it.row.merchant })
+        assertEquals(listOf(MoneyShotMonth.UNSORTED[1]), core.moneyView.value.month!!.unsorted!!.items.map { it.row.merchant })
     }
 }
