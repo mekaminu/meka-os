@@ -470,7 +470,7 @@ class TodayScreensTest {
         val today = core.today.value
         val listed = today.timeline.anytime.size
         // The Today rebuild, slice 2a: the head counts what's left ("TODAY · 5 LEFT · 4h"), the now line the same tasks.
-        ScreenShots.assertShows(compose, "many", EveningCardRules.head(today.timeline.anytime, today.doneToday).label.uppercase())
+        ScreenShots.assertShows(compose, "many", EveningCardRules.head(today.timeline.anytime, today.doneToday, today.upNext).label.uppercase())
         scrollUntilShown("$listed more anytime task", 400f)
         ScreenShots.assertShows(compose, "many", "$listed more anytime task")
     }
@@ -491,11 +491,44 @@ class TodayScreensTest {
         val core = show(Fill.MANY)
         val today = core.today.value
         if (compose.onAllNodesWithTag(os.meka.android.today.HEADER_TILES_TAG).fetchSemanticsNodes().isEmpty()) fail("tiles: no header tiles")
-        val tiles = os.meka.core.domain.TodayHeaderRules.tiles(today.timeline, today.doneToday, today.mailUnread)
+        val tiles = os.meka.core.domain.TodayHeaderRules.tilesFor(today)
         tiles.forEach { t ->
             val node = compose.onNodeWithTag("header-tile-${t.kind.name.lowercase()}", useUnmergedTree = true).fetchSemanticsNode("tiles: no ${t.kind} tile")
             val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
             if (said != t.spoken) fail("tiles: ${t.kind} said \"$said\", wanted \"${t.spoken}\"")
+        }
+    }
+
+    /**
+     * Walk-through 2026-11-15, A5: one task as Up next read "TASKS 0 · nothing planned" beside Shut down's "1 left"; many
+     * read "1 of 5 done today" and "TODAY · 4 LEFT" beside "5 left". The tile counts what Shut down counts, and the
+     * list's head says its rows are the ones after Up next.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun oneTasksCountsAgreeWithShutDown() = countsAgreeWithShutDown(Fill.ONE)
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun manyTasksCountsAgreeWithShutDown() = countsAgreeWithShutDown(Fill.MANY)
+
+    private fun countsAgreeWithShutDown(fill: Fill) {
+        run {
+            val core = show(fill)
+            val today = core.today.value
+            val left = core.shutdownView.value.left.size
+            val tile = os.meka.core.domain.TodayHeaderRules.tilesFor(today).first()
+            val all = left + today.doneToday.size
+            if (tile.value != "${today.doneToday.size} of $all") fail("${fill.name}: TASKS says \"${tile.value}\" beside Shut down's $left left")
+            val node = compose.onNodeWithTag("header-tile-tasks", useUnmergedTree = true).fetchSemanticsNode("${fill.name}: no tasks tile")
+            val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
+            if (said != tile.spoken) fail("${fill.name}: TASKS said \"$said\", wanted \"${tile.spoken}\"")
+            if (fill == Fill.MANY) {
+                val rows = today.timeline.anytime
+                val head = EveningCardRules.head(rows, today.doneToday, today.upNext).label
+                if (today.upNext != null && rows.none { it.id == today.upNext?.id } && !head.contains("${rows.size} more")) {
+                    fail("many: head \"$head\" doesn't say its ${rows.size} rows come after Up next")
+                }
+                if (rows.size + 1 != left) fail("many: Up next and ${rows.size} rows, but Shut down says $left left")
+            }
         }
     }
 

@@ -57,6 +57,7 @@ object EveningCardRules {
     /** "Day shut down at 18:42" once done; else "2 left · move or drop them", or "Nothing left · close the day". */
     fun shutDownLine(s: ShutdownView): String = s.doneLine ?: when (val n = s.left.size) {
         0 -> "Nothing left · close the day"
+        1 -> "1 left · move or drop it"
         else -> "$n left · move or drop them"
     }
 
@@ -76,18 +77,28 @@ object EveningCardRules {
      */
     fun reviewForTile(review: ReviewCard?, card: EveningCard?): ReviewCard? = review?.takeIf { card == null }
 
-    /** Today's head over its own tasks: [open] the ones still to do, [done] those ticked today. */
-    fun head(open: List<Task>, done: List<Task>): TodayListHead {
+    /**
+     * Today's head over its own tasks: [open] the rows still to do, [done] those ticked today, [upNext] the Up next task
+     * when it sits in its own card above the rows (walk-through 2026-11-15, A5): the rows are then "4 more" after it, so
+     * Up next plus 4 is Shut down's "5 left", and the done line counts it ("1 of 6 done"). The time is what the rows
+     * show: only lengths that are set ("2h 45m" over 15 + 30 + 120 min, a row with no length adding nothing), none
+     * when no row has one. The gold bar's share still counts a task with no length as [DayListRules.DEFAULT_MINUTES].
+     */
+    fun head(open: List<Task>, done: List<Task>, upNext: Task?): TodayListHead {
         val len = { t: Task -> t.estimateMinutes ?: DayListRules.DEFAULT_MINUTES }
-        val openMin = open.sumOf(len)
+        val ahead = upNext?.takeIf { u -> open.none { it.id == u.id } }
+        val openMin = open.sumOf(len) + (ahead?.let(len) ?: 0)
         val doneMin = done.sumOf(len)
         val total = openMin + doneMin
+        val shown = open.sumOf { it.estimateMinutes ?: 0 }
+        val time = if (shown > 0) " · ${TaskEstimateRules.label(shown)}" else ""
         val label = when {
             open.isEmpty() && done.isEmpty() -> "Today"
-            open.isEmpty() -> "Today · all done"
-            else -> "Today · ${open.size} left · ${TaskEstimateRules.label(openMin)}"
+            open.isEmpty() -> if (ahead != null) "Today" else "Today · all done"
+            ahead != null -> "Today · ${open.size} more$time"
+            else -> "Today · ${open.size} left$time"
         }
-        val all = open.size + done.size
+        val all = open.size + done.size + (if (ahead != null) 1 else 0)
         return TodayListHead(
             label = label,
             progress = if (total > 0) doneMin.toFloat() / total else 0f,

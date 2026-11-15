@@ -1479,7 +1479,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let none = EveningCardRules.shared.evening(shutdown: ShutdownView.companion.EMPTY, review: ReviewCard.companion.NONE)
         XCTAssertNil(none)
         XCTAssertEqual(EveningCardRules.shared.LATER_UNTIL_MIN, 21 * 60)
-        XCTAssertEqual(EveningCardRules.shared.head(open: [], done: []).label, "Today")
+        XCTAssertEqual(EveningCardRules.shared.head(open: [], done: [], upNext: nil).label, "Today")
         // Slice 2d-2c: the Mac's Later and Monday's REVIEW tile go through the core, as on the Fold.
         XCTAssertNil(EveningCardRules.shared.shown(card: nil, laterDay: KotlinLong(value: 100), today: 100, minute: 18 * 60))
         XCTAssertNil(EveningCardRules.shared.reviewForTile(review: nil, card: nil))

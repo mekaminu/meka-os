@@ -30,6 +30,19 @@ object TodayHeaderRules {
     fun tiles(timeline: DayTimeline, done: List<Task>, mail: MailUnreadLine?): List<HeaderTile> =
         listOfNotNull(tasksTile(timeline.anytime, done), nextTile(timeline), mail?.let(::mailTile))
 
+    /**
+     * The tiles for [today] (walk-through 2026-11-15, A5): TASKS counts every task still open today, the same ones Shut
+     * down the day counts as left ([openToday]): Up next, the planned and anytime ones, Needs you's and those carried
+     * from yesterday, so one task as Up next reads "0 of 1 · done today", never "0 · nothing planned".
+     */
+    fun tilesFor(today: Today): List<HeaderTile> =
+        listOfNotNull(tasksTile(openToday(today), today.doneToday), nextTile(today.timeline), today.mailUnread?.let(::mailTile))
+
+    /** Every task still open today, each once: Needs you's, carried from yesterday, Up next, then the rest of the day. */
+    fun openToday(today: Today): List<Task> =
+        (today.needsYou.map { it.task } + today.fromYesterday.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
+            .distinctBy { it.id }
+
     fun tasksTile(open: List<Task>, done: List<Task>): HeaderTile {
         val all = open.size + done.size
         return when {
@@ -50,7 +63,9 @@ object TodayHeaderRules {
         timeline.rows.firstOrNull { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
 
     fun nextTile(timeline: DayTimeline): HeaderTile {
-        val row = nextRow(timeline)
+        // With no event left, the commute home still on the schedule is next (walk-through 2026-11-15, A5: "Free ·
+        // nothing else today" sat over "17:30 Commute home").
+        val row = nextRow(timeline) ?: timeline.rows.firstOrNull { it.kind == TimelineKind.COMMUTE }
             ?: return HeaderTile(HeaderTileKind.NEXT, NEXT, FREE, NOTHING_ELSE, "Next: nothing else today.")
         val title = row.title.trim().ifEmpty { "Your next event" }
         if (row.running) return HeaderTile(HeaderTileKind.NEXT, NEXT, NOW, title, "Now: $title.")

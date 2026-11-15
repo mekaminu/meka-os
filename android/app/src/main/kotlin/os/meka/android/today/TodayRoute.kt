@@ -988,7 +988,7 @@ private fun TodayPane(
         val clockDay = java.time.LocalDate.now().toEpochDay()
         val clockMinute = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
         val eveningShown = EveningCardRules.shown(eveningCard, eveningLaterDay, clockDay, clockMinute)
-        val todayHead = remember(today.timeline.anytime, today.doneToday) { EveningCardRules.head(today.timeline.anytime, today.doneToday) }
+        val todayHead = remember(today.timeline.anytime, today.doneToday, today.upNext) { EveningCardRules.head(today.timeline.anytime, today.doneToday, today.upNext) }
         // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
         // The Today rebuild, slice 2c: the header and the parts under it are built once and laid out either as one
@@ -1036,8 +1036,8 @@ private fun TodayPane(
                     // The Today rebuild, slice 2b: TASKS · NEXT · MAIL across the page under the greeting, in place of the
                     // unread-mail lines and the countdown tile. TASKS opens the Day list, NEXT its event, MAIL the inbox.
                     if (today.timeline.dateLabel.isNotEmpty()) {
-                        val headerTiles = remember(today.timeline, today.doneToday, today.mailUnread) {
-                            TodayHeaderRules.tiles(today.timeline, today.doneToday, today.mailUnread)
+                        val headerTiles = remember(today) {
+                            TodayHeaderRules.tilesFor(today)
                         }
                         val tilesApp = LocalContext.current.applicationContext as? MekaApplication
                         HeaderTilesRow(headerTiles, onOpen = { kind ->

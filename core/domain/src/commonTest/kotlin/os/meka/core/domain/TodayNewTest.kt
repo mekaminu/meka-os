@@ -28,7 +28,7 @@ class TodayNewTest {
         assertEquals(listOf(EveningStepKind.REVIEW, EveningStepKind.SHUT_DOWN, EveningStepKind.PLAN_TOMORROW), c.steps.map { it.kind })
         assertEquals("This evening · 0 of 3", c.label)
         assertEquals("12 done · 2 still open", c.steps[0].line)
-        assertEquals("1 left · move or drop them", c.steps[1].line)
+        assertEquals("1 left · move or drop it", c.steps[1].line)
         assertEquals("Mon 9 Nov · nothing planned yet", c.steps[2].line)
         assertFalse(c.allDone)
     }
@@ -85,16 +85,34 @@ class TodayNewTest {
 
     @Test
     fun todaysHeadCountsWhatIsLeftAndHowLong() {
-        val h = EveningCardRules.head(listOf(task("a", 10), task("b")), listOf(task("c", 20)))
-        assertEquals("Today · 2 left · 40m", h.label)
+        // The time is the rows' own lengths (b has none, so it adds nothing); the bar still counts b as 30 min.
+        val h = EveningCardRules.head(listOf(task("a", 10), task("b")), listOf(task("c", 20)), null)
+        assertEquals("Today · 2 left · 10m", h.label)
         assertEquals(20f / 60f, h.progress)
         assertEquals("1 of 3 done", h.doneLine)
-        assertEquals("Today · all done", EveningCardRules.head(emptyList(), listOf(task("c"))).label)
-        val none = EveningCardRules.head(emptyList(), emptyList())
+        assertEquals("Today · all done", EveningCardRules.head(emptyList(), listOf(task("c")), null).label)
+        val none = EveningCardRules.head(emptyList(), emptyList(), null)
         assertEquals("Today", none.label)
         assertEquals(0f, none.progress)
         assertNull(none.doneLine)
-        assertEquals("Today · 1 left · 1h 30m", EveningCardRules.head(listOf(task("a", 90)), emptyList()).label)
+        assertEquals("Today · 1 left · 1h 30m", EveningCardRules.head(listOf(task("a", 90)), emptyList(), null).label)
+        assertEquals("Today · 1 left", EveningCardRules.head(listOf(task("a")), emptyList(), null).label)
+    }
+
+    /**
+     * Walk-through 2026-11-15, A5: "1 of 5 done today" and "TODAY · 4 LEFT · 3H 15M" beside Shut down's "5 left" and
+     * Up next "Fix the gate latch" not among the rows, over 15 + 30 + 120 min of shown lengths.
+     */
+    @Test
+    fun withUpNextAboveTheRowsAreTheMoreAfterIt() {
+        val rows = listOf(task("bins"), task("mot", 30), task("cleaner", 15), task("football", 120))
+        val h = EveningCardRules.head(rows, listOf(task("done", 15)), task("gate", 60))
+        assertEquals("Today · 4 more · 2h 45m", h.label)
+        assertEquals("1 of 6 done", h.doneLine)
+        // Up next among the rows (it isn't drawn above them) is counted once, as a row.
+        assertEquals("Today · 4 left · 2h 45m", EveningCardRules.head(rows, emptyList(), rows[1]).label)
+        // Only Up next open: the head names the list, not "all done".
+        assertEquals("Today", EveningCardRules.head(emptyList(), listOf(task("done")), task("gate")).label)
     }
 
     @Test

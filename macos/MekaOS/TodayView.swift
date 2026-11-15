@@ -304,7 +304,7 @@ struct TodayView: View {
         // opens the Day list, NEXT its event, MAIL the inbox.
         if let today = model.today, !today.timeline.dateLabel.isEmpty {
             MacHeaderTilesRow(
-                tiles: TodayHeaderRules.shared.tiles(timeline: today.timeline, done: today.doneToday, mail: today.mailUnread),
+                tiles: TodayHeaderRules.shared.tilesFor(today: today),
                 palette: palette,
                 onOpen: { kind in
                     switch kind {
@@ -719,7 +719,7 @@ struct TodayView: View {
                 // sits between rows (never under the last), as on the Fold.
                 // The Today rebuild, slice 2d-2c (as the Fold's 2a): "Today · 2 left · 40m" with the gold done bar.
                 let anytime = tl.anytime
-                let head = EveningCardRules.shared.head(open: anytime, done: today.doneToday)
+                let head = EveningCardRules.shared.head(open: anytime, done: today.doneToday, upNext: today.upNext)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     HStack(alignment: .firstTextBaseline) {
                         SectionLabel(head.label, palette)

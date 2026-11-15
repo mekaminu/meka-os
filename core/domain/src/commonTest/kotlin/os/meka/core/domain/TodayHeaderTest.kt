@@ -54,6 +54,30 @@ class TodayHeaderTest {
         val free = TodayHeaderRules.nextTile(DayTimeline.EMPTY.copy(rows = listOf(row(TimelineKind.NOW, "20:10", "Now"))))
         assertEquals("Free", free.value)
         assertEquals("nothing else today", free.line)
+        // Walk-through 2026-11-15, A5: with no event left, the commute home is next, not "Free · nothing else today".
+        val home = TodayHeaderRules.nextTile(DayTimeline.EMPTY.copy(rows = listOf(
+            row(TimelineKind.NOW, "17:15", "Now"), row(TimelineKind.COMMUTE, "17:30–18:20", "Commute home"),
+        )))
+        assertEquals("17:30", home.value)
+        assertEquals("Commute home", home.line)
+    }
+
+    /**
+     * Walk-through 2026-11-15, A5: one task as Up next read "TASKS 0 · nothing planned"; many read "1 of 5" beside Shut
+     * down's "5 left". The tile counts every task open today, the same ones Shut down counts.
+     */
+    @Test
+    fun theTasksTileCountsUpNextAndEveryOpenTask() {
+        val one = Today(emptyList(), task("mot"), emptyList(), emptyList())
+        val t = TodayHeaderRules.tilesFor(one).first()
+        assertEquals("0 of 1", t.value)
+        assertEquals("done today", t.line)
+        val many = Today(
+            listOf(NeedsYouItem(task("late"), NeedsYouReason.OVERDUE)), task("gate"),
+            listOf(task("bins"), task("mot"), task("gate")), listOf(task("done")),
+        )
+        assertEquals(listOf("late", "gate", "bins", "mot"), TodayHeaderRules.openToday(many).map { it.id })
+        assertEquals("1 of 5", TodayHeaderRules.tilesFor(many).first().value)
     }
 
     @Test
