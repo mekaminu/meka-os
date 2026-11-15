@@ -127,6 +127,27 @@ class WorkingOnScreensTest {
     }
 
     /**
+     * Walk-through A30 (2026-11-15): a call card's tiles stand one height with their figures at one size, and the
+     * − / + sit under the PEOPLE tile with no "Party size" line repeating it.
+     */
+    private fun assertCallTiles(name: String) {
+        val tiles = compose.onAllNodes(hasTestTag("call-tile"), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        if (tiles.size != 3) fail("$name: ${tiles.size} call tiles, not 3")
+        if (tiles.maxOf { it.height } - tiles.minOf { it.height } > 1f) fail("$name: the tiles stand different heights: ${tiles.map { it.height }}")
+        if (tiles.maxOf { it.width } - tiles.minOf { it.width } > 1f) fail("$name: the tiles are different widths: ${tiles.map { it.width }}")
+        val values = compose.onAllNodes(hasTestTag("call-tile-value"), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot.height }
+        if (values.size != 3 || values.maxOf { it } - values.minOf { it } > 1f) fail("$name: the tiles' figures aren't one size: $values")
+        if (onScreen(BookingCallRules.PARTY)) fail("$name: \"${BookingCallRules.PARTY}\" repeats the PEOPLE tile")
+        val people = tiles.maxBy { it.left }
+        listOf("call-less", "call-more").forEach { tag ->
+            val b = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+                ?: fail("$name: no $tag")
+            if (b.top < people.bottom) fail("$name: $tag isn't under the PEOPLE tile")
+            if (b.right > people.right + 1f || b.right < people.left) fail("$name: $tag isn't under the PEOPLE tile ($b vs $people)")
+        }
+    }
+
+    /**
      * Week 3's walk-through (A19): a card's buttons start under its words (the card's own padding in from its left
      * edge), like the call card's Play, not pushed to the right edge.
      */
@@ -321,6 +342,7 @@ class WorkingOnScreensTest {
                 // Week 3's walk-through (A5): the head agrees with the card that says it needs his tap.
                 if (!r.needsYou || r.status != BookingCallRules.NEEDS_TAP) fail("$name: the card doesn't wait on him: $r")
                 if ("nothing needs you" in v.summary || onScreen("nothing needs you")) fail("$name: \"nothing needs you\" over a card needing his tap: ${v.summary}")
+                assertCallTiles(name)
             }
             Fill.MANY -> {
                 if (cards != 3) fail("$name: $cards cards, not 3")

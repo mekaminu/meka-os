@@ -307,10 +307,8 @@ struct WorkingOnSheet: View {
             Text(LoneWordGlue.shared.kept(line: length)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
         }
         if !r.resultTiles.isEmpty {
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(Array(r.resultTiles.enumerated()), id: \.offset) { _, t in tile(t.label, t.value) }
-            }
-            .padding(.top, MekaSpace.xs)
+            tileRow(r.resultTiles.map { ($0.label, $0.value) })
+                .padding(.top, MekaSpace.xs)
         }
         if let result = r.resultOnCard {
             Text(LoneWordGlue.shared.kept(line: result)).font(MekaType.body).foregroundStyle(palette.textPrimary)
@@ -395,7 +393,7 @@ struct WorkingOnSheet: View {
         .frame(width: 380)
     }
 
-    /// The brief while the card waits (slice 2a): number, what, the tiles, Party size, may say, won't, foot, buttons.
+    /// The brief while the card waits (slice 2a): number, what, the tiles with − / + under PEOPLE, may say, won't, foot, buttons.
     @ViewBuilder
     private func briefView(_ r: BookingCallRow) -> some View {
         let id = r.id
@@ -413,15 +411,14 @@ struct WorkingOnSheet: View {
                 }
             }
             Text(LoneWordGlue.shared.kept(line: r.what)).font(MekaType.body).foregroundStyle(palette.textSecondary)
-            HStack(spacing: MekaSpace.xs) {
-                tile(BookingCallRules.shared.WHEN, r.whenTile)
-                tile(BookingCallRules.shared.WINDOW, r.windowTile)
-                tile(BookingCallRules.shared.PEOPLE, r.peopleTile)
-            }
+            tileRow([
+                (BookingCallRules.shared.WHEN, r.whenTile), (BookingCallRules.shared.WINDOW, r.windowTile),
+                (BookingCallRules.shared.PEOPLE, r.peopleTile),
+            ])
             .padding(.top, MekaSpace.xs)
+            // Walk-through A30 (2026-11-15): − / + sit under the PEOPLE tile they change, no "Party size" line repeating it.
             if r.canChangePeople {
                 HStack(spacing: MekaSpace.xs) {
-                    Text(BookingCallRules.shared.PARTY).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     Spacer()
                     pill("−", ink: palette.accent, fill: palette.surface) { if people > 1 { setPeople(id, people - 1) } }
                         .accessibilityLabel("One fewer person")
@@ -477,14 +474,31 @@ struct WorkingOnSheet: View {
         }
     }
 
-    private func tile(_ title: String, _ value: String) -> some View {
+    /// A card's tiles in one row at one size (walk-through A30, 2026-11-15): the largest of body, item meta and caption at
+    /// which every figure fits whole, so WINDOW's is never smaller than the others; the tiles stand one height.
+    private func tileRow(_ tiles: [(String, String)]) -> some View {
+        ViewThatFits(in: .horizontal) {
+            tileRowAt(tiles, font: MekaType.body)
+            tileRowAt(tiles, font: MekaType.itemMeta)
+            tileRowAt(tiles, font: MekaType.caption)
+        }
+    }
+
+    private func tileRowAt(_ tiles: [(String, String)], font: Font) -> some View {
+        HStack(alignment: .top, spacing: MekaSpace.xs) {
+            ForEach(Array(tiles.enumerated()), id: \.offset) { _, t in tile(t.0, t.1, font: font) }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func tile(_ title: String, _ value: String, font: Font) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             label(title)
-            // One line, whole ("19:00–20:00"), shrinking a little in a narrow sheet rather than splitting.
-            Text(value).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1).minimumScaleFactor(0.7)
+            // One line, whole ("19:00–20:00"): the row steps down a size together rather than one figure shrinking.
+            Text(value).font(font).foregroundStyle(palette.textPrimary).lineLimit(1).fixedSize(horizontal: true, vertical: false)
         }
         .padding(MekaSpace.xs)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
     }
 

@@ -9,6 +9,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -125,15 +127,15 @@ fun BookingCallCard(
                 modifier = Modifier.testTag("call-use-found"), onClick = onUseFound)
         }
         Text(LoneWordGlue.kept(r.what), style = MekaType.body, color = Meka.colors.textSecondary)
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Tile(BookingCallRules.WHEN, r.whenTile, Modifier.weight(1f))
-            Tile(BookingCallRules.WINDOW, r.windowTile, Modifier.weight(1f))
-            Tile(BookingCallRules.PEOPLE, r.peopleTile, Modifier.weight(1f))
-        }
+        CallTiles(listOf(
+            BookingCallRules.WHEN to r.whenTile, BookingCallRules.WINDOW to r.windowTile, BookingCallRules.PEOPLE to r.peopleTile,
+        ))
+        // Walk-through A30 (2026-11-15): the − / + sit under the PEOPLE tile they change, with no "Party size" line
+        // repeating it; TalkBack still says "One fewer person" / "One more person".
         if (r.canChangePeople) {
             val n = r.peopleTile.toIntOrNull() ?: 1
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Text(BookingCallRules.PARTY, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth().testTag("call-people-steps"), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End)) {
                 TouchPill("−", Meka.colors.surface, Meka.colors.accent, spoken = "One fewer person", modifier = Modifier.testTag("call-less")) {
                     if (n > 1) onPeople(n - 1)
                 }
@@ -231,9 +233,7 @@ private fun ResultView(
 ) {
     r.lengthOnCard?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
     if (r.resultTiles.isNotEmpty()) {
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            r.resultTiles.forEach { Tile(it.label, it.value, Modifier.weight(1f)) }
-        }
+        CallTiles(r.resultTiles.map { it.label to it.value })
     }
     r.resultOnCard?.let {
         Text(LoneWordGlue.kept(it), style = MekaType.body, color = Meka.colors.textPrimary,
@@ -333,18 +333,53 @@ fun BookingCallWordsSheet(row: BookingCallRow?, onClose: () -> Unit) {
     }
 }
 
+/**
+ * A card's tiles in one row, one size (walk-through A30, 2026-11-15): every figure is drawn at the largest step from
+ * body down to 10 sp at which all of them fit their tile on one line ("19:00–20:00" never split at the dash), so
+ * WINDOW's figure is never smaller than WHEN's and PEOPLE's and the three tiles stand the same height.
+ */
 @Composable
-private fun Tile(label: String, value: String, modifier: Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(MekaSpace.xs),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-    ) {
-        Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        // One line, whole ("19:00–20:00", never split at the dash), stepping down on the closed Fold's narrow tiles.
-        BasicText(
-            value, style = MekaType.body.copy(color = Meka.colors.textPrimary), maxLines = 1, softWrap = false,
-            autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.body.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
-        )
+private fun CallTiles(tiles: List<Pair<String, String>>) {
+    if (tiles.isEmpty()) return
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {
+        val gap = MekaSpace.xs
+        val inner = with(density) { ((maxWidth - gap * (tiles.size - 1)) / tiles.size - MekaSpace.xs * 2).toPx() }
+        val body = MekaType.body
+        val size = remember(tiles, inner, body) {
+            TileSizing.shared(body.fontSize.value, MIN_TILE_SP, TILE_STEP_SP) { f ->
+                tiles.maxOf { (_, v) -> measurer.measure(v, body.copy(fontSize = f.sp), maxLines = 1, softWrap = false).size.width.toFloat() } <= inner // type: ok
+            }
+        }
+        val style = body.copy(fontSize = size.sp, lineHeight = body.lineHeight, color = Meka.colors.textPrimary) // type: ok (one size for the row)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            tiles.forEach { (label, value) ->
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(MekaSpace.xs)
+                        .testTag("call-tile"),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                ) {
+                    Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, maxLines = 1)
+                    BasicText(value, style = style, maxLines = 1, softWrap = false, modifier = Modifier.testTag("call-tile-value"))
+                }
+            }
+        }
+    }
+}
+
+private const val MIN_TILE_SP = 10f
+private const val TILE_STEP_SP = 0.5f
+
+/** The one size a row of tiles is drawn at: the largest step from [max] down to [min] at which [fits]; [min] if none. */
+internal object TileSizing {
+    fun shared(max: Float, min: Float, step: Float, fits: (Float) -> Boolean): Float {
+        var s = max
+        while (s > min) {
+            if (fits(s)) return s
+            s -= step
+        }
+        return min
     }
 }
 
