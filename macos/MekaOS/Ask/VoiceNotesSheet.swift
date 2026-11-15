@@ -15,6 +15,7 @@ struct VoiceNotesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     let palette: MekaPalette
     @State private var open: String?
     @State private var playing: String?
@@ -77,7 +78,7 @@ struct VoiceNotesSheet: View {
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: rows.map(\.id))
             }
             .frame(maxHeight: 460)
-            Text(LoneWordGlue.shared.kept(line: rules.MAC_NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: rules.MAC_NOTE)).font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)
             HStack {
@@ -177,6 +178,10 @@ private struct VoiceNoteRowView: View {
     let onKeep: () -> Void
     let onDelete: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
+
+    /// Walk-through A31: a note's small grey lines are tertiary in Dark, the secondary ink in Light (under 4.5:1 there).
+    private var quietInk: Color { palette.smallInk(dark: scheme == .dark) }
 
     var body: some View {
         let rules = VoiceNoteRules.shared
@@ -192,7 +197,7 @@ private struct VoiceNoteRowView: View {
                         Text(LoneWordGlue.shared.kept(line: people)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     }
                     if let cards = row.cardsLine {
-                        Text(LoneWordGlue.shared.kept(line: cards)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(LoneWordGlue.shared.kept(line: cards)).font(MekaType.caption).foregroundStyle(quietInk)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -204,12 +209,12 @@ private struct VoiceNoteRowView: View {
             if expanded {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     if let words = row.words {
-                        Text(rules.WORDS_LABEL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(rules.WORDS_LABEL).font(MekaType.caption).foregroundStyle(quietInk)
                         Text(words).font(MekaType.body).foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
-                    Text(LoneWordGlue.shared.kept(line: row.keepLine)).font(MekaType.caption).foregroundStyle(row.kept ? palette.accent : palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: row.keepLine)).font(MekaType.caption).foregroundStyle(row.kept ? palette.accent : quietInk)
                 }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -234,6 +239,13 @@ private struct VoiceNoteRowView: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        // Walk-through A31: in Light the card (the page colour) sits on the sheet's near-same surface (1.0:1), so it gets
+        // a 1 pt edge in the track ink; none in Dark.
+        .overlay {
+            if let edge = palette.pillEdge(dark: scheme == .dark) {
+                RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(edge, lineWidth: 1)
+            }
+        }
         .mekaHoverLift()
     }
 

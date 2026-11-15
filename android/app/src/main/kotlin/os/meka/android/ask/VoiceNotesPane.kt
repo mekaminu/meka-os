@@ -8,6 +8,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.LightInk
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -211,7 +214,7 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
             )
         }
         item(key = "note") {
-            Text(LoneWordGlue.kept(VoiceNoteRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(LoneWordGlue.kept(VoiceNoteRules.NOTE), style = MekaType.caption, color = quietInk(),
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
@@ -219,6 +222,21 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
 
 internal const val VOICE_NOTE_TITLE_TAG = "voice-note-title"
 internal const val VOICE_NOTE_ACTIONS_TAG = "voice-note-actions"
+internal const val VOICE_NOTE_CARD_TAG = "voice-note-card"
+
+/** Walk-through A31: a note's small grey lines: tertiary in Dark, the secondary ink in Light (tertiary is under 4.5:1 there). */
+@Composable
+private fun quietInk() = LightInk.small(Meka.colors, Meka.theme.isDark)
+
+/**
+ * Walk-through A31: a note's card is the surface on Light's off-white page (1.0:1), so in Light it gets a 1 dp edge in
+ * the track ink; none in Dark.
+ */
+@Composable
+private fun Modifier.lightEdge(): Modifier {
+    val edge = LightInk.pillEdge(Meka.colors, Meka.theme.isDark) ?: return this
+    return border(1.dp, edge, RoundedCornerShape(MekaRadius.m))
+}
 
 @Composable
 private fun NoteRow(
@@ -236,8 +254,8 @@ private fun NoteRow(
 ) {
     val reduced = Meka.reducedMotion
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightEdge().background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag(VOICE_NOTE_CARD_TAG),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Column(
@@ -255,7 +273,7 @@ private fun NoteRow(
                 maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
             )
             row.peopleLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
-            row.cardsLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
+            row.cardsLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = quietInk()) }
         }
         AnimatedVisibility(
             expanded,
@@ -265,10 +283,10 @@ private fun NoteRow(
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 // Slice 2: when the row shows the tidy note, his own words are kept under it.
                 row.words?.let { w ->
-                    Text(VoiceNoteRules.WORDS_LABEL, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(VoiceNoteRules.WORDS_LABEL, style = MekaType.caption, color = quietInk())
                     Text(w, style = MekaType.body, color = Meka.colors.textSecondary)
                 }
-                Text(LoneWordGlue.kept(row.keepLine), style = MekaType.caption, color = if (row.kept) Meka.colors.accent else Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(row.keepLine), style = MekaType.caption, color = if (row.kept) Meka.colors.accent else quietInk())
             }
         }
         // Week 3's walk-through (A27): each button keeps its 8 dp of padding inside its touch area, so the row bleeds

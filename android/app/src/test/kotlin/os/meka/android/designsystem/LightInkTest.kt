@@ -70,6 +70,20 @@ class LightInkTest {
     }
 
     @Test
+    fun voiceNotesCardsHaveAnEdgeAndTheirQuietLinesReadInLight() {
+        // A note's card is the surface on the page (the Mac's is the page colour on the sheet's surface): 1.0:1 alone.
+        assertTrue(contrast(light.surface, light.background) < 1.1)
+        val edge = LightInk.pillEdge(light, dark = false)!!
+        listOf(light.surface, light.background).forEach { assertTrue(contrast(edge, it) >= 1.5) }
+        // Its cards line, "Your words" and the keep line were tertiary; Keep and Delete were already the secondary ink.
+        pageAndCard.forEach { bg ->
+            val r = contrast(LightInk.small(light, dark = false), bg)
+            assertTrue(r >= 4.5, "a note's quiet line is $r:1")
+            assertTrue(contrast(light.textSecondary, bg) >= 4.5, "Keep and Delete are ${contrast(light.textSecondary, bg)}:1")
+        }
+    }
+
+    @Test
     fun moneysOverUsualGoldAlreadyReadsInLight() {
         // The reviewer's gold "£151 over usual" is the accent: measured, it is already over 4.5:1 on page and card.
         pageAndCard.forEach { bg -> assertTrue(contrast(light.accent, bg) >= 4.5, "the accent is ${contrast(light.accent, bg)}:1") }
