@@ -14,6 +14,7 @@ struct AskScreen: View {
     let palette: MekaPalette
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     /// The Ask hub's tab on this Mac (a tab's name; Life until he picks another).
     @AppStorage(AskHub.tabKey) private var tabRaw = ""
     /// Settings' open boxes on this Mac, as the core stores them; nil until he first folds or unfolds one.
@@ -82,14 +83,14 @@ struct AskScreen: View {
                 HStack(spacing: MekaSpace.xs) {
                     Text(LifeTileRules.shared.setUpLabel(count: Int32(toSetUp.count)).uppercased())
                         .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                        .foregroundStyle(palette.textTertiary)
+                        .foregroundStyle(palette.smallInk(dark: scheme == .dark))
                     Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .rotationEffect(.degrees(setUpOpen ? 90 : 0))
                         .accessibilityHidden(true)
                     // The Ask hub: folded, the places' names follow ("Bins, Gifts, Annual leave").
                     if !setUpOpen {
                         Text(AskHubRules.shared.setUpPeek(names: toSetUp.map(\.label)))
-                            .font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                            .font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
                     }
                 }
                 .padding(.top, MekaSpace.xs)
@@ -169,6 +170,7 @@ struct AskScreen: View {
             }
         }
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .askLightEdge(palette, RoundedRectangle(cornerRadius: MekaRadius.m))
         .staggeredAppear(ShellNav.moreRowStep(0, 0))
     }
 
@@ -460,6 +462,7 @@ private struct LifeTileView: View {
             .padding(.horizontal, MekaSpace.m)
             .padding(.vertical, MekaSpace.xs)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .askLightEdge(palette, RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }
         .buttonStyle(MekaPressStyle())
@@ -691,6 +694,7 @@ private struct AskTabSwitch: View {
         }
         .padding(MekaSpace.xxs)
         .background(palette.surface, in: Capsule())
+        .askLightEdge(palette, Capsule())
     }
 }
 
@@ -704,10 +708,11 @@ private struct LifePageTurner: View {
     let canNext: Bool
     let palette: MekaPalette
     let turn: (Int) -> Void
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
-            Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+            Text(line).font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
             Spacer(minLength: MekaSpace.xs)
             HStack(spacing: MekaSpace.xxs) {
                 ForEach(0..<pages, id: \.self) { i in
@@ -727,6 +732,7 @@ private struct LifePageTurner: View {
                 .foregroundStyle(can ? palette.accent : palette.textTertiary)
                 .frame(width: 28, height: 28)
                 .background(palette.surfaceRaised, in: Circle())
+                .askLightEdge(palette, Circle())
         }
         .buttonStyle(MekaPressStyle())
         .disabled(!can)
@@ -744,6 +750,7 @@ private struct SettingsBoxView<Row: View>: View {
     let toggle: () -> Void
     @ViewBuilder let row: (MoreItem) -> Row
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -754,7 +761,7 @@ private struct SettingsBoxView<Row: View>: View {
                             .accessibilityAddTraits(.isHeader)
                         if !open {
                             Text(AskHubRules.shared.peek(labels: rows.map(\.label)))
-                                .font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                                .font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
                         }
                     }
                     Spacer()
@@ -780,6 +787,29 @@ private struct SettingsBoxView<Row: View>: View {
         }
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .clipShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+        .askLightEdge(palette, RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+}
+
+/// Walk-through A31 (Light contrast): Ask's tiles, cards, switch and page arrows are the surface on Light's near-same page
+/// (1.0:1), so in Light each gets a 1 pt edge in the track ink; none in Dark.
+private struct AskLightEdge<S: InsettableShape>: ViewModifier {
+    let palette: MekaPalette
+    let shape: S
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if let edge = palette.pillEdge(dark: scheme == .dark) {
+                shape.strokeBorder(edge, lineWidth: 1).allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+private extension View {
+    func askLightEdge<S: InsettableShape>(_ palette: MekaPalette, _ shape: S) -> some View {
+        modifier(AskLightEdge(palette: palette, shape: shape))
     }
 }
 

@@ -133,8 +133,8 @@ internal fun LifeNumberTiles(tiles: List<PageTile>, modifier: Modifier = Modifie
     Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         tiles.forEach { t ->
             Column(
-                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
-                    .testTag(LIFE_TILE_TAG)
+                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).askLightEdge(RoundedCornerShape(MekaRadius.s))
+                    .background(Meka.colors.surface).testTag(LIFE_TILE_TAG)
                     .semantics(mergeDescendants = true) {}
                     .padding(MekaSpace.xs),
             ) {
@@ -144,7 +144,7 @@ internal fun LifeNumberTiles(tiles: List<PageTile>, modifier: Modifier = Modifie
                     maxLines = 1, softWrap = false,
                     autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.metaStrong.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
                 )
-                Text(LifePageRules.tileLabel(t.label), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(LifePageRules.tileLabel(t.label), style = MekaType.caption, color = askQuietInk(), maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
     }

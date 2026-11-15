@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -59,6 +62,20 @@ import os.meka.core.facade.MekaCore
 /** The switch's own node, for the screen tests. */
 const val ASK_TABS_TAG = "ask-tabs"
 
+/**
+ * Walk-through A31 (Light contrast): Ask's tiles, cards and switch are the surface on Light's off-white page (1.0:1), so in
+ * Light each gets a 1 dp edge in the track ink; none in Dark.
+ */
+@Composable
+internal fun Modifier.askLightEdge(shape: Shape): Modifier {
+    val edge = LightInk.pillEdge(Meka.colors, Meka.theme.isDark) ?: return this
+    return border(1.dp, edge, shape)
+}
+
+/** Walk-through A31: Ask's small grey words (a box's peek, the page line, To set up): tertiary in Dark, secondary in Light. */
+@Composable
+internal fun askQuietInk() = LightInk.small(Meka.colors, Meka.theme.isDark)
+
 /** What TalkBack reads on Life's page arrows (and what the hand tests tap). */
 const val ASK_PREV_PAGE = "Previous page of places"
 const val ASK_NEXT_PAGE = "Next page of places"
@@ -75,8 +92,8 @@ internal fun AskTabSwitch(tab: AskTab, modifier: Modifier = Modifier, onPick: (A
     val haptics = rememberMekaHaptics()
     val tabs = AskHubRules.TABS
     BoxWithConstraints(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
-            .heightIn(min = MekaSpace.touch),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).askLightEdge(RoundedCornerShape(MekaRadius.pill))
+            .background(Meka.colors.surface).heightIn(min = MekaSpace.touch),
     ) {
         val third = maxWidth / tabs.size
         val x by animateDpAsState(third * tabs.indexOf(tab), MekaMotion.expand(reduced), label = "ask-tab-pill")
@@ -115,7 +132,7 @@ internal fun LifePageTurner(page: Int, count: Int, columns: Int, modifier: Modif
     val pages = AskHubRules.pages(count, columns)
     val shown = AskHubRules.page(page, count, columns)
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(line, style = MekaType.caption, color = askQuietInk(), maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
             repeat(pages) { i ->
@@ -132,7 +149,8 @@ internal fun LifePageTurner(page: Int, count: Int, columns: Int, modifier: Modif
                     .semantics { contentDescription = if (by < 0) ASK_PREV_PAGE else ASK_NEXT_PAGE },
                 contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(32.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised),
+                Box(Modifier.size(32.dp).clip(RoundedCornerShape(MekaRadius.pill)).askLightEdge(RoundedCornerShape(MekaRadius.pill))
+                    .background(Meka.colors.surfaceRaised),
                     contentAlignment = Alignment.Center) {
                     Text(glyph, style = MekaType.itemMeta, color = if (can) Meka.colors.accent else Meka.colors.textTertiary)
                 }
@@ -150,7 +168,8 @@ internal fun CardHairline() {
 /** Rows drawn in one card, parted by a faint line (Daily, and each Settings box once unfolded). */
 @Composable
 internal fun RowsCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)) { content() }
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).askLightEdge(RoundedCornerShape(MekaRadius.m))
+        .background(Meka.colors.surface)) { content() }
 }
 
 /**
@@ -167,8 +186,8 @@ internal fun SettingsBoxCard(
     val haptics = rememberMekaHaptics()
     val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.expand(reduced), label = "box-chevron-${box.name}")
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .animateContentSize(MekaMotion.expand(reduced)),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).askLightEdge(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface).animateContentSize(MekaMotion.expand(reduced)),
     ) {
         Row(
             Modifier.fillMaxWidth()
@@ -180,7 +199,7 @@ internal fun SettingsBoxCard(
             Column(Modifier.weight(1f)) {
                 Text(box.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
                 if (!open) {
-                    Text(AskHubRules.peek(rows.map { it.label }), style = MekaType.caption, color = Meka.colors.textTertiary,
+                    Text(AskHubRules.peek(rows.map { it.label }), style = MekaType.caption, color = askQuietInk(),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }

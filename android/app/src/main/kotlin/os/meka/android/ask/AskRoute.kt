@@ -612,6 +612,7 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
     Column(
         modifier
             .clip(RoundedCornerShape(MekaRadius.m))
+            .askLightEdge(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
             .clickable(role = Role.Button) { haptics.tick(); onClick() }
             .semantics { contentDescription = "${item.label}, ${line.text}" }
@@ -919,11 +920,11 @@ private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, peek: St
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
+        Text(text.uppercase(), style = MekaType.sectionLabel, color = askQuietInk(), modifier = Modifier.semantics { heading() })
         Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.rotate(if (reduced) (if (open) 90f else 0f) else turn))
         // The Ask hub: folded, the places' names follow ("Bins, Gifts, Annual leave").
         if (!open && !peek.isNullOrEmpty()) {
-            Text(peek, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1,
+            Text(peek, style = MekaType.caption, color = askQuietInk(), maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
     }
