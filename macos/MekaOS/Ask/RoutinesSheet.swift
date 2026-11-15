@@ -15,6 +15,7 @@ struct RoutinesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(CoreModel.self) private var model
+    @Environment(\.colorScheme) private var scheme
     let palette: MekaPalette
     @State private var said: String?
     /// Slice 2: the routine whose page is open (nil: the list).
@@ -396,12 +397,13 @@ struct RoutinesSheet: View {
     private func pageTile(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(title.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(palette.textTertiary).lineLimit(1)
+                .foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
             Text(value).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
         }
         .padding(MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .overlay(lightEdge(MekaRadius.m))
         .accessibilityElement(children: .combine)
     }
 
@@ -441,12 +443,20 @@ struct RoutinesSheet: View {
     private func dayTile(_ day: String, _ time: String, on: Bool) -> some View {
         VStack(spacing: MekaSpace.xxs) {
             Text(day).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(on ? palette.accent : palette.textTertiary).lineLimit(1).minimumScaleFactor(0.7)
-            Text(time).font(MekaType.itemMeta).foregroundStyle(on ? palette.textPrimary : palette.textTertiary).lineLimit(1)
+                .foregroundStyle(on ? palette.accent : palette.smallInk(dark: scheme == .dark)).lineLimit(1).minimumScaleFactor(0.7)
+            Text(time).font(MekaType.itemMeta).foregroundStyle(on ? palette.textPrimary : palette.smallInk(dark: scheme == .dark)).lineLimit(1)
         }
         .frame(width: Self.dayTileWidth)
         .padding(MekaSpace.xs)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+        .overlay(lightEdge(MekaRadius.s))
+    }
+
+    /// A31: in Light a tile or card on a near-same page (1.1:1) gets a 1 pt edge in the track ink; none in Dark.
+    @ViewBuilder private func lightEdge(_ radius: CGFloat) -> some View {
+        if let edge = palette.pillEdge(dark: scheme == .dark) {
+            RoundedRectangle(cornerRadius: radius).strokeBorder(edge, lineWidth: 1)
+        }
     }
 
     /// One of his routines, as the mockup's row: the tile, the name, its steps on one line ("Paused · …" when off) and
@@ -458,7 +468,7 @@ struct RoutinesSheet: View {
             dayTile(r.day, r.time, on: r.on)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(r.name).font(MekaType.upNextCardTitle)
-                    .foregroundStyle(r.on ? palette.textPrimary : palette.textTertiary)
+                    .foregroundStyle(r.on ? palette.textPrimary : palette.smallInk(dark: scheme == .dark))
                     .lineLimit(1).truncationMode(.tail)
                 // Walk-through A12: the steps wrap (up to three lines) before "…".
                 Text(LoneWordGlue.shared.kept(line: r.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -474,6 +484,7 @@ struct RoutinesSheet: View {
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .overlay(lightEdge(MekaRadius.m))
         .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         // Slice 2: a click on the card opens its page (the switch keeps its own click).
         .onTapGesture { openId = id }

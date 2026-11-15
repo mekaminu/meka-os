@@ -54,6 +54,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.border
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -278,16 +280,30 @@ internal val DAY_TILE_WIDTH = 72.dp
 @Composable
 private fun DayTile(day: String, time: String, on: Boolean) {
     Column(
-        Modifier.width(DAY_TILE_WIDTH).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+        Modifier.width(DAY_TILE_WIDTH).clip(RoundedCornerShape(MekaRadius.s)).lightEdge(MekaRadius.s).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xs).testTag("routine-day-tile"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         BasicText(
-            day, style = MekaType.sectionLabel.copy(color = if (on) Meka.colors.accent else Meka.colors.textTertiary), maxLines = 1, softWrap = false,
+            day, style = MekaType.sectionLabel.copy(color = if (on) Meka.colors.accent else offInk()), maxLines = 1, softWrap = false,
             autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = MekaType.sectionLabel.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 9)
         )
-        Text(time, style = MekaType.itemMeta, color = if (on) Meka.colors.textPrimary else Meka.colors.textTertiary, maxLines = 1)
+        Text(time, style = MekaType.itemMeta, color = if (on) Meka.colors.textPrimary else offInk(), maxLines = 1)
     }
+}
+
+/** A31: a paused routine's words: tertiary in Dark, the secondary ink in Light (tertiary is 3.5:1 on Light's card). */
+@Composable
+private fun offInk() = LightInk.small(Meka.colors, Meka.theme.isDark)
+
+/**
+ * A31: in Light a tile or card filled with the surface sits on a near-same page (1.1:1), so it gets a 1 dp edge in
+ * the track ink; none in Dark.
+ */
+@Composable
+private fun Modifier.lightEdge(radius: androidx.compose.ui.unit.Dp): Modifier {
+    val edge = LightInk.pillEdge(Meka.colors, Meka.theme.isDark) ?: return this
+    return border(1.dp, edge, RoundedCornerShape(radius))
 }
 
 /**
@@ -297,7 +313,7 @@ private fun DayTile(day: String, time: String, on: Boolean) {
 @Composable
 private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, onToggle: () -> Unit) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightEdge(MekaRadius.m).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }
             .semantics { contentDescription = r.spoken }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("routine-row"),
@@ -306,7 +322,7 @@ private fun RoutineCard(r: RoutineRow, modifier: Modifier, onOpen: () -> Unit, o
     ) {
         DayTile(r.day, r.time, r.on)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(r.name, style = MekaType.upNextCardTitle, color = if (r.on) Meka.colors.textPrimary else Meka.colors.textTertiary,
+            Text(r.name, style = MekaType.upNextCardTitle, color = if (r.on) Meka.colors.textPrimary else offInk(),
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             // Walk-through A12: the steps wrap (up to three lines) before "…" ("What came i…" on one said nothing).
             Text(LoneWordGlue.kept(r.line), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis,
@@ -383,10 +399,10 @@ private fun RoutinePage(
 @Composable
 private fun PageTile(label: String, value: String, modifier: Modifier) {
     Column(
-        modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.xs)
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).lightEdge(MekaRadius.m).background(Meka.colors.surfaceRaised).padding(MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "$label: $value" },
     ) {
-        Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, maxLines = 1)
+        Text(label.uppercase(), style = MekaType.sectionLabel, color = offInk(), maxLines = 1)
         Text(os.meka.core.domain.DateGlue.kept(value), style = MekaType.itemMeta, color = Meka.colors.textPrimary)
     }
 }

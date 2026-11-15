@@ -7,4 +7,7 @@ extension MekaPalette {
     func smallInk(dark: Bool) -> Color { dark ? textTertiary : textSecondary }
     /// A thin bar's empty track: surfaceRaised is 1.1:1 on Light's page, so Light uses the `track` token.
     func barTrack(dark: Bool) -> Color { dark ? surfaceRaised : track }
+    /// A tile or card filled with a surface on Light's near-same page (1.1:1) gets a 1 pt edge in the `track` ink;
+    /// none in Dark.
+    func pillEdge(dark: Bool) -> Color? { dark ? nil : track }
 }

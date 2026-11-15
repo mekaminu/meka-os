@@ -55,6 +55,21 @@ class LightInkTest {
     }
 
     @Test
+    fun routinesTilesAndAPausedRoutineReadInLight() {
+        // Routines' day tile is the surface on the raised card, the card the raised surface on the page: both ~1.1:1.
+        assertTrue(contrast(light.surface, light.surfaceRaised) < 1.5)
+        assertTrue(contrast(light.surfaceRaised, light.background) < 1.5)
+        val edge = LightInk.pillEdge(light, dark = false)!!
+        listOf(light.surface, light.surfaceRaised, light.background).forEach { assertTrue(contrast(edge, it) >= 1.3) }
+        // A paused routine's name, day and time (and a page tile's label) were tertiary: under 4.5:1 on the card.
+        assertTrue(contrast(light.textTertiary, light.surfaceRaised) < 4.5)
+        listOf(light.surface, light.surfaceRaised).forEach { bg ->
+            val r = contrast(LightInk.small(light, dark = false), bg)
+            assertTrue(r >= 4.5, "a paused routine's words are $r:1")
+        }
+    }
+
+    @Test
     fun moneysOverUsualGoldAlreadyReadsInLight() {
         // The reviewer's gold "£151 over usual" is the accent: measured, it is already over 4.5:1 on page and card.
         pageAndCard.forEach { bg -> assertTrue(contrast(light.accent, bg) >= 4.5, "the accent is ${contrast(light.accent, bg)}:1") }
