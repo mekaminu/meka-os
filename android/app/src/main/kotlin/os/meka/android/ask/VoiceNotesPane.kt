@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -31,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -215,6 +217,9 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
     }
 }
 
+internal const val VOICE_NOTE_TITLE_TAG = "voice-note-title"
+internal const val VOICE_NOTE_ACTIONS_TAG = "voice-note-actions"
+
 @Composable
 private fun NoteRow(
     row: VoiceNoteRow,
@@ -244,7 +249,7 @@ private fun NoteRow(
                 .minTouch(),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
-            Text(row.title, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(row.title, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.testTag(VOICE_NOTE_TITLE_TAG))
             Text(
                 LoneWordGlue.kept(row.text), style = MekaType.body, color = if (row.heard) Meka.colors.textPrimary else Meka.colors.textSecondary,
                 maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
@@ -266,7 +271,10 @@ private fun NoteRow(
                 Text(LoneWordGlue.kept(row.keepLine), style = MekaType.caption, color = if (row.kept) Meka.colors.accent else Meka.colors.textTertiary)
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // Week 3's walk-through (A27): each button keeps its 8 dp of padding inside its touch area, so the row bleeds
+        // that much into the card's inset and the first button's word starts under the note's words, not 8 dp right of them.
+        Row(Modifier.offset(x = -MekaSpace.xs).testTag(VOICE_NOTE_ACTIONS_TAG), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             if (canPlay) {
                 Crossfade(playing, animationSpec = MekaMotion.appear(reduced), label = "voice-note-play") { p ->
                     Action(if (p) VoiceNoteRules.STOP_PLAYING else VoiceNoteRules.PLAY, accent = true, spoken = (if (p) "Stop " else "Play ") + row.title, onClick = onPlay)

@@ -603,13 +603,15 @@ internal fun AskMatchList(m: AskMatches, onOpen: (AskMatch) -> Unit, onSeeAll: (
     ) {
         m.rows.forEachIndexed { i, row ->
             key(row.hit.kind.name + row.hit.id) {
+                // Week 3's walk-through (A27): the whole card appears, not only its words inside a card already drawn
+                // (the words scaled in from the card's middle, so mid-stagger each row's title started a little further
+                // right than the one above it).
                 Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                    Modifier.appear(rememberAppearance(i)).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
                         .then(if (row.opens) Modifier.clickable(role = Role.Button) { onOpen(row) } else Modifier)
                         .testTag(ASK_MATCH_TAG)
                         .semantics(mergeDescendants = true) { contentDescription = row.spoken }
-                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-                        .appear(rememberAppearance(i)),
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 ) {
                     Text(row.hit.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1)
                     Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1)

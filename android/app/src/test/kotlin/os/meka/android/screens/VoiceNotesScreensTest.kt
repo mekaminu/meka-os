@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -28,9 +29,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.VOICE_NOTE_ACTIONS_TAG
+import os.meka.android.ask.VOICE_NOTE_TITLE_TAG
 import os.meka.android.ask.VoiceNotesPane
 import os.meka.android.capture.VoiceNoteStore
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.DateGlue
@@ -147,6 +151,23 @@ class VoiceNotesScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * Week 3's walk-through (A27): a note's first button word starts under the note's words (its 8 dp of padding bleeds
+     * into the card's inset), not about 8 dp right of them.
+     */
+    private fun assertActionsUnderWords(name: String) {
+        val titles = compose.onAllNodes(hasTestTag(VOICE_NOTE_TITLE_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        val rows = compose.onAllNodes(hasTestTag(VOICE_NOTE_ACTIONS_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        if (titles.size != rows.size) fail("$name: ${titles.size} notes but ${rows.size} button rows")
+        val d = compose.density.density
+        titles.zip(rows).forEach { (t, r) ->
+            val word = r.left + MekaSpace.xs.value * d
+            if (kotlin.math.abs(word - t.left) > d) {
+                fail("$name: a note's buttons start ${((word - t.left) / d).toInt()} dp off its words")
+            }
+        }
+    }
+
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
@@ -179,6 +200,7 @@ class VoiceNotesScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertEachOneLine(compose, name, listOf("✦ " + VoiceNoteRules.MAKE_CARDS, VoiceNoteRules.KEEP, "Kept", VoiceNoteRules.DELETE))
         assertTouchTargets(name)
+        assertActionsUnderWords(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         // Each row's day and time by the core's clock and zone (17:15 in London on Wed 21 Oct), never the phone's.
         val titles = when (fill) {

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performSemanticsAction
@@ -43,6 +44,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.AskRoute
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.HabitTiming
@@ -365,7 +367,16 @@ class AskScreensTest {
         val match = hasTestTag(ASK_MATCH_TAG)
         until { shows(match) }
         if (!shows(match)) fail("$name: typing \"milk\" showed no matches")
+        // The rows have joined (the stagger and the item motion played out), so the shot shows the list at rest.
+        turns()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "cover-dark-field-by-hand"))
+        // Week 3's walk-through (A27): every match's words start on one line, not a step further right each row.
+        val lefts = compose.onAllNodes(hasTestTag(ASK_MATCH_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot.left } +
+            compose.onAllNodes(hasAnyAncestor(hasTestTag(ASK_MATCH_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+                .fetchSemanticsNodes().map { it.boundsInRoot.left - MekaSpace.m.value * compose.density.density }
+        if (lefts.isEmpty() || lefts.max() - lefts.min() > compose.density.density) {
+            fail("$name: the matches' words start ${((lefts.max() - lefts.min()) / compose.density.density).toInt()} dp apart (${lefts.map { (it / compose.density.density).toInt() }})")
+        }
         assertTouchTargets(name)
         val seeAll = hasText("See all", substring = true) and hasClickAction()
         if (!shows(seeAll)) fail("$name: seven matches for \"milk\" and no See all")
