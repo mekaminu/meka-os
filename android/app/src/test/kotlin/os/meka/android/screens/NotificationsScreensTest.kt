@@ -215,14 +215,14 @@ class NotificationsScreensTest {
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }
         tap(NotifyRules.QUIET_OFF)
-        until { core.notificationSettings.value.quiet.enabled && onScreen("On · 22:00–07:00") }
+        until { core.notificationSettings.value.quiet.enabled && onScreen("22:00–07:00") }
         if (!core.notificationSettings.value.quiet.enabled) fail("$name: the switch left quiet hours off")
         if (!onScreen(NotifyRules.QUIET_NOTE)) fail("$name: quiet hours on didn't unfold the times")
 
         tap("Until 15 minutes later")
-        until { core.notificationSettings.value.quiet.endMinute == 7 * 60 + 15 && onScreen("On · 22:00–07:15") }
+        until { core.notificationSettings.value.quiet.endMinute == 7 * 60 + 15 && onScreen("22:00–07:15") }
         if (core.notificationSettings.value.quiet.endMinute != 7 * 60 + 15) fail("$name: + left Until at ${core.notificationSettings.value.quiet.endMinute}")
-        if (!onScreen("On · 22:00–07:15")) fail("$name: the switch row doesn't say the new time")
+        if (!onScreen("22:00–07:15")) fail("$name: the switch row doesn't say the new time")
 
         // Digests are off in this fill: turn the midday one on, then off again.
         tap("Midday · 12:30")

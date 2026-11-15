@@ -193,6 +193,8 @@ class VaultScreensTest {
         compose.onAllNodes(field)[0].performImeAction()
         until { core.documentsView.value.rows.any { "Railcard" in it.title } }
         val row = core.documentsView.value.rows.firstOrNull { "Railcard" in it.title } ?: fail("$name: Done on the field added no Railcard")
+        // CI 2026-11-15 (run 43684548487): the core held the Railcard a frame before the list drew it; wait for the row too.
+        until { compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         ScreenShots.assertShows(compose, name, row.title)
         val rowNode = compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction())
         if (rowNode.fetchSemanticsNodes().isEmpty()) fail("$name: the Railcard row doesn't answer a tap")
