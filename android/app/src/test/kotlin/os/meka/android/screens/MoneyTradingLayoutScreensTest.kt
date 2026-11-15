@@ -86,6 +86,18 @@ class MoneyTradingLayoutScreensTest {
             "09/10/2026,TESCO STORES 2041,-64.90\n"
         // Invented: 0x and 40 hex digits, a public address shape only.
         val ADDRESS = "0x" + "ab12".repeat(10)
+        /** The ECB's rate the equity card's shots carry: £0.775 a dollar, in micros. */
+        const val RATE_MICROS = 775_000L
+        /**
+         * Walk-through A32 (2026-11-14): Kestrel's request says its size in pounds at the rate the equity card uses, so
+         * the two never disagree on one tab: ETH 0.8 at $3,420 is $2,736, about £2,120 at £0.775 (it said £2,140).
+         * Kestrel writes the line itself; the shot's invented one is worked out here, to the nearest £10, as Kestrel does.
+         */
+        val KESTREL_POUNDS: String = run {
+            val pence = 80L * 342_000L / 100L * RATE_MICROS / 1_000_000L // 0.8 × $3,420 in cents, then pence
+            val tens = (pence + 500) / 1_000 * 10
+            "About £" + tens.toString().reversed().chunked(3).joinToString(",").reversed()
+        }
     }
 
     /**
@@ -113,10 +125,10 @@ class MoneyTradingLayoutScreensTest {
             TradingWalletFields.CURVE to TradingTracker.encodeCurve((14 downTo 1).map { d ->
                 TradingCurvePoint(now.floorDiv(86_400_000L) - d, 600_000L + (14 - d) * 3_000L + (d % 3) * 2_000L, (14 - d) * 3_000L + (d % 3) * 2_000L)
             }).fv(),
-            TradingWalletFields.CURVE_NOW to 47_000L.fv(), TradingWalletFields.GBP_PER_USD to 775_000L.fv(),
+            TradingWalletFields.CURVE_NOW to 47_000L.fv(), TradingWalletFields.GBP_PER_USD to RATE_MICROS.fv(),
             TradingWalletFields.FX_DAY to now.floorDiv(86_400_000L).fv(),
         ))
-        ApprovalRules.requestFields(ApprovalKind.TRADE, "Kestrel", "Go long ETH 0.8 at 3,420", listOf("About £2,140", "Stop 3,330"),
+        ApprovalRules.requestFields(ApprovalKind.TRADE, "Kestrel", "Go long ETH 0.8 at 3,420", listOf(KESTREL_POUNDS, "Stop 3,330"),
             now - 5 * 60_000L, now + 40 * 60_000L)!!.let { server.commitLocal(EntityTypes.APPROVAL, ApprovalRules.entityId("Kestrel", "r1"), it) }
     }
 
@@ -271,6 +283,8 @@ class MoneyTradingLayoutScreensTest {
         scrollTo("money-kestrel-card")
         assertTrue(showsText("1 trade waiting for your OK"), "Kestrel's card says what's waiting")
         assertTrue(showsText("Go long ETH 0.8 at 3,420"), "the waiting request's title shows")
+        assertEquals("About £2,120", KESTREL_POUNDS, "Kestrel's pounds are its dollars at the equity card's rate")
+        assertTrue(showsText(KESTREL_POUNDS), "Kestrel's card says the request's size in pounds")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-kestrel"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-kestrel")
         // Review takes him to Needs you; nothing on Trading approves.
