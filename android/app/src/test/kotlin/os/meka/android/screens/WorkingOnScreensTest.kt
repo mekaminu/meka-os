@@ -140,12 +140,14 @@ class WorkingOnScreensTest {
         // Exactly the old label: OBI MAY SAY's "Party size and time" stays.
         if (ScreenShots.texts(compose).any { DateGlue.plain(it).trim() == BookingCallRules.PARTY }) fail("$name: \"${BookingCallRules.PARTY}\" repeats the PEOPLE tile")
         val people = tiles.maxBy { it.left }
-        listOf("call-less", "call-more").forEach { tag ->
-            val b = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+        val steps = listOf("call-less", "call-more").map { tag ->
+            compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
                 ?: fail("$name: no $tag")
-            if (b.top < people.bottom) fail("$name: $tag isn't under the PEOPLE tile")
-            if (b.right > people.right + 1f || b.right < people.left) fail("$name: $tag isn't under the PEOPLE tile ($b vs $people)")
         }
+        if (steps.any { it.top < people.bottom }) fail("$name: − / + aren't under the tiles")
+        // The pair's middle sits under the PEOPLE tile (a pill's 48 dp touch area may reach a little past its edge).
+        val middle = (steps.minOf { it.left } + steps.maxOf { it.right }) / 2
+        if (middle !in people.left..people.right) fail("$name: − / + aren't under the PEOPLE tile (${steps} vs $people)")
     }
 
     /**
