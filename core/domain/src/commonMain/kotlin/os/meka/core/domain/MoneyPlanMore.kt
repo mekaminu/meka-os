@@ -199,6 +199,13 @@ object MoneyPlanMore {
 
     const val NO_SPEND = "NO-SPEND DAYS"
     const val THIS_WEEK = "this week"
+    /**
+     * Walk-through A32: the week's no-spend dots are round marks of this size (dp / pt) with [DAY_DOT_GAP] between,
+     * as in the mockup, never squeezed to share the tile's width; when seven don't fit they go onto two even rows.
+     * They only show the week (not tap targets): Start / Stop counting is the tile's one control.
+     */
+    const val DAY_DOT = 24
+    const val DAY_DOT_GAP = 4
     const val START_COUNTING = "Start counting"
     const val STOP_COUNTING = "Stop counting"
     const val FUN = "FUN MONEY"

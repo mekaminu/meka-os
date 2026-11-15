@@ -203,6 +203,22 @@ class MoneyPlanMoreScreensTest {
         assertTrue(showsText(MoneyPlanMore.START_COUNTING) && showsText(MoneyPlanMore.FUN_NOT_SET), "nothing set yet")
         // Walk-through A28: "Pick a week's fun money" keeps "fun money" together, and the cap row wraps whole.
         ScreenShots.assertNoLoneWords(compose, "plan-challenges-tiles-cover", listOf(MoneyPlanMore.FUN_PICK, MoneyPlanMore.CAP_ROW))
+        // Walk-through A32: the week's dots are round 24 dp marks (they were ~17 dp ovals), seven of them inside the
+        // tile, none a tap target (Start counting is the tile's one control).
+        val d = compose.density.density
+        val dots = compose.onAllNodes(hasTestTag("money-nospend-dot"), useUnmergedTree = true).fetchSemanticsNodes()
+        if (dots.size != 7) fail("the week should have seven no-spend dots, not ${dots.size}")
+        val tile = compose.onNodeWithTag("money-nospend-tile").fetchSemanticsNode().boundsInRoot
+        dots.forEach { n ->
+            val w = n.size.width / d
+            val h = n.size.height / d
+            if (w < MoneyPlanMore.DAY_DOT - 0.5f || kotlin.math.abs(w - h) > 0.5f)
+                fail("a no-spend dot is ${w.toInt()} × ${h.toInt()} dp, not a round ${MoneyPlanMore.DAY_DOT} dp mark")
+            val b = n.boundsInRoot
+            if (b.left < tile.left - 0.5f || b.right > tile.right + 0.5f) fail("a no-spend dot runs out of its tile")
+        }
+        if (compose.onAllNodes(hasTestTag("money-nospend-dots") and androidx.compose.ui.test.hasClickAction())
+                .fetchSemanticsNodes().isNotEmpty()) fail("the no-spend dots only show the week; they shouldn't be a target")
         tap("money-nospend-toggle")
         until(core) { showsText(MoneyPlanMore.STOP_COUNTING) }
         assertTrue(showsText(MoneyPlanMore.STOP_COUNTING), "Start counting should switch no-spend days on")

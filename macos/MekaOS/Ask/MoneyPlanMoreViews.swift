@@ -199,17 +199,33 @@ struct MoneyChallengeTilesView: View {
         .animation(MekaMotion.appear(reduced: reduced), value: t.noSpend.on)
     }
 
+    private var dotGap: CGFloat { CGFloat(MoneyPlanMore.shared.DAY_DOT_GAP) }
+
+    private func dotRow(_ dots: [MoneyWeekDot]) -> some View {
+        let size = CGFloat(MoneyPlanMore.shared.DAY_DOT)
+        return HStack(spacing: dotGap) { // rhythm: ok (the week's dots are one mark)
+            ForEach(Array(dots.enumerated()), id: \.offset) { _, d in
+                Circle()
+                    .fill(d.noSpend ? palette.accent : (d.spent ? palette.background : palette.surface))
+                    .overlay(Circle().strokeBorder(d.pending ? palette.textTertiary.opacity(0.4) : Color.clear, style: StrokeStyle(lineWidth: 1, dash: [2, 2])))
+                    .frame(width: size, height: size)
+                    .overlay(Text(d.letter).font(MekaType.micro).foregroundStyle(d.noSpend ? palette.onAccent : palette.textTertiary))
+            }
+        }
+        .fixedSize()
+    }
+
     private func noSpendTile(_ ns: MoneyNoSpendTile) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(MoneyPlanMore.shared.NO_SPEND).font(MekaType.micro).tracking(MekaType.microTracking)
                 .foregroundStyle(palette.textSecondary).lineLimit(1)
-            HStack(spacing: 3) { // rhythm: ok (the week's dots are one mark)
-                ForEach(Array(ns.dots.enumerated()), id: \.offset) { _, d in
-                    Circle()
-                        .fill(d.noSpend ? palette.accent : (d.spent ? palette.background : palette.surface))
-                        .overlay(Circle().strokeBorder(d.pending ? palette.textTertiary.opacity(0.4) : Color.clear, style: StrokeStyle(lineWidth: 1, dash: [2, 2])))
-                        .frame(width: 18, height: 18)
-                        .overlay(Text(d.letter).font(MekaType.micro).foregroundStyle(d.noSpend ? palette.onAccent : palette.textTertiary))
+            // Walk-through A32: round marks at the mockup's size (core DAY_DOT, DAY_DOT_GAP); seven in a row when they
+            // fit, else four over three. They only show the week.
+            ViewThatFits(in: .horizontal) {
+                dotRow(Array(ns.dots))
+                VStack(alignment: .leading, spacing: dotGap) {
+                    dotRow(Array(ns.dots.prefix(4)))
+                    dotRow(Array(ns.dots.dropFirst(4)))
                 }
             }
             .accessibilityElement(children: .ignore)

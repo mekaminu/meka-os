@@ -247,8 +247,10 @@ internal fun ColumnScope.MoneyChallengeTilesBlock(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             Text(MoneyPlanMore.NO_SPEND, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1)
-            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = t.noSpend.spoken },
-                horizontalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok (the week's dots are one mark)
+            // Walk-through A32: round 24 dp marks as in the mockup (they were squeezed to ~17 dp ovals on the cover
+            // screen), on two even rows when seven don't fit; they only show the week, so they're one spoken mark.
+            EvenChipRows(MoneyPlanMore.DAY_DOT_GAP.dp, Modifier.testTag("money-nospend-dots")
+                .semantics(mergeDescendants = true) { contentDescription = t.noSpend.spoken }) {
                 t.noSpend.dots.forEachIndexed { i, d ->
                     val fill by animateColorAsState(
                         when {
@@ -259,7 +261,7 @@ internal fun ColumnScope.MoneyChallengeTilesBlock(
                     )
                     val dashed = d.pending
                     Box(
-                        Modifier.weight(1f).height(20.dp).clip(CircleShape).background(fill)
+                        Modifier.size(MoneyPlanMore.DAY_DOT.dp).testTag("money-nospend-dot").clip(CircleShape).background(fill)
                             .then(if (dashed) Modifier.border(BorderStroke(1.dp, Meka.colors.textTertiary.copy(alpha = 0.4f)), CircleShape) else Modifier),
                         contentAlignment = Alignment.Center,
                     ) {
