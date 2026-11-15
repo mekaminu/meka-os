@@ -99,6 +99,25 @@ class MoneyCheckTest {
         assertNull(MoneyCheck.view(emptyList(), oct16, emptyList(), MoneyIdeaState()))
     }
 
+    /** Walk-through 2026-11-15, A3: ideas that save no yearly sum (over usual) still give the card a big line. */
+    @Test fun theHeadIsNeverJustFromTwoIdeas() {
+        assertEquals("2 ideas", MoneyCheck.headline(0, 2))
+        assertEquals(MoneyCheck.NO_SUM, MoneyCheck.fromLine(0, 2))
+        assertEquals("1 idea", MoneyCheck.headline(0, 1))
+        assertEquals("£350 a year", MoneyCheck.headline(35_000, 1))
+        assertEquals("from 1 idea", MoneyCheck.fromLine(35_000, 1))
+        assertNull(MoneyCheck.headline(0, 0))
+        assertEquals("", MoneyCheck.fromLine(0, 0))
+        // Groceries well over its usual this month, nothing else: one idea with no sum, and the head says so.
+        val months = (1..6).flatMap { m -> (0..3).map { w -> line(oct16 - 30L * m - 7L * w, -1_000, "TESCO STORES", MoneyCategory.GROCERIES) } }
+        val now = (0..5).map { line(oct16 - it, -4_000, "TESCO STORES", MoneyCategory.GROCERIES) }
+        val v = MoneyCheck.view(months + now, oct16, emptyList(), MoneyIdeaState())!!
+        assertTrue(v.ideas.isNotEmpty() && v.ideas.all { it.savePence == 0L }, "the fixture should make only ideas without a sum: ${v.ideas.map { it.id }}")
+        assertEquals("${v.ideas.size} idea${if (v.ideas.size == 1) "" else "s"}", v.total)
+        assertEquals(MoneyCheck.NO_SUM, v.from)
+        assertNull(v.empty)
+    }
+
     @Test
     fun threeShowThenMore() {
         assertEquals("2 more ›", MoneyCheck.more(5, open = false))

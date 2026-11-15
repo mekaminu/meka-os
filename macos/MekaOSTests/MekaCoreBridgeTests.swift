@@ -4416,6 +4416,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v.ideas.map(\.id), ["interest", "habit-coffee"])
         XCTAssertEqual(v.from, "from 2 ideas")
         XCTAssertNotNil(v.total)
+        // Walk-through 2026-11-15, A3: ideas with no yearly sum still give the card its big line.
+        XCTAssertEqual(MoneyCheck.shared.headline(savePence: 0, n: 2), "2 ideas")
+        XCTAssertEqual(MoneyCheck.shared.fromLine(savePence: 0, n: 2), MoneyCheck.shared.NO_SUM)
         XCTAssertNil(v.away)
         XCTAssertEqual(v.ideas.first?.actKey, MoneyCheck.shared.ACT_CLEAR)
         XCTAssertFalse(v.ideas.first?.behind.isEmpty ?? true)

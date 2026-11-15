@@ -61,6 +61,8 @@ class MoneyScreensTest {
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
 
+    private lateinit var shotCore: MekaCore
+
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
         secureRandom = Random(23), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
@@ -91,6 +93,7 @@ class MoneyScreensTest {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
+        shotCore = core
         context.useCoreForScreens(core)
         runBlocking {
             core.tick()
@@ -269,7 +272,10 @@ class MoneyScreensTest {
     fun coverBills() = shoot("cover-dark-bills", Fill.MANY, tab = MoneyTab.BILLS)
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverPlan() = shoot("cover-dark-plan", Fill.MANY, tab = MoneyTab.PLAN)
+    fun coverPlan() {
+        shoot("cover-dark-plan", Fill.MANY, tab = MoneyTab.PLAN)
+        checkHasItsBigLine("cover-dark-plan")
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverTrading() = shoot("cover-dark-trading", Fill.MANY, tab = MoneyTab.TRADING)
@@ -314,7 +320,19 @@ class MoneyScreensTest {
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerPlan() = shoot("inner-dark-columns-plan", Fill.MANY, tab = MoneyTab.PLAN)
+    fun innerPlan() {
+        shoot("inner-dark-columns-plan", Fill.MANY, tab = MoneyTab.PLAN)
+        checkHasItsBigLine("inner-dark-columns-plan")
+    }
+
+    /** Walk-through 2026-11-15, A3: with ideas, Obi's money check has its big line ("2 ideas"), never just "from 2 ideas". */
+    private fun checkHasItsBigLine(name: String) {
+        val c = shotCore.moneyView.value.check ?: return
+        // Only when the card is laid out in this shot (a lazy column leaves what's below the screen out).
+        if (c.ideas.isEmpty() || compose.onAllNodesWithTag("money-check-card", useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) return
+        if (compose.onAllNodesWithTag("money-check-total", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: Obi's money check has ${c.ideas.size} ideas but no big line over \"${c.from}\"")
+    }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerAccounts() = shoot("inner-dark-columns-accounts", Fill.MANY, tab = MoneyTab.ACCOUNTS)

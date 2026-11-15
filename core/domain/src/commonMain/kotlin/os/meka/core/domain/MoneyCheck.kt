@@ -48,7 +48,7 @@ data class MoneyIdea(
 data class MoneyIdeaState(val notFor: Set<String> = emptySet(), val until: Map<String, Long> = emptyMap())
 
 /**
- * OBI'S MONEY CHECK: [total] "£1,960 a year" (null when no idea saves a sum) over [from] "from 4 ideas", the [ideas]
+ * OBI'S MONEY CHECK: [total] "£1,960 a year" ("2 ideas" when none saves a sum, null with none) over [from] "from 4 ideas", the [ideas]
  * (empty with [empty] said instead, and [from] then blank so the card says it once: walk-through A19), and [away] "2 put away" with Show them again when any are put away.
  */
 data class MoneyCheckView(
@@ -238,11 +238,30 @@ object MoneyCheck {
         val save = shown.sumOf { it.savePence }
         val n = shown.size
         return MoneyCheckWords.apply(MoneyCheckView(
-            total = if (save > 0) "${fmt(save)} a year" else null,
-            from = if (n == 0) "" else "from $n idea${if (n == 1) "" else "s"}",
+            total = headline(save, n),
+            from = fromLine(save, n),
             ideas = shown, empty = if (n == 0) EMPTY else null, away = awayLine(awayN),
         ), words)
     }
+
+    /**
+     * The card's big line: "£350 a year" when the ideas save a sum, else "2 ideas" so the head is never just "from 2 ideas"
+     * with nothing before it (walk-through 2026-11-15, A3: ideas over usual save no yearly sum); null with none.
+     */
+    fun headline(savePence: Long, n: Int): String? = when {
+        n == 0 -> null
+        savePence > 0 -> "${fmt(savePence)} a year"
+        else -> "$n idea${if (n == 1) "" else "s"}"
+    }
+
+    /** The line under [headline]: "from 2 ideas" under a sum, "to look at this month" under a count, blank with none. */
+    fun fromLine(savePence: Long, n: Int): String = when {
+        n == 0 -> ""
+        savePence > 0 -> "from $n idea${if (n == 1) "" else "s"}"
+        else -> NO_SUM
+    }
+
+    const val NO_SUM = "to look at this month"
 
     /** The first [SHOWN] ideas until "more" opens them. */
     fun shown(ideas: List<MoneyIdea>, open: Boolean): List<MoneyIdea> = if (open) ideas else ideas.take(SHOWN)
