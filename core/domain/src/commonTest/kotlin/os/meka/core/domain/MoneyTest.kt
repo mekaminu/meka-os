@@ -106,7 +106,11 @@ class MoneyTest {
         assertEquals(MoneyRules.EMPTY, v.empty)
         assertEquals(MoneyRules.EMPTY_SUMMARY, v.summary)
         assertTrue(v.summary != v.empty)
-        assertTrue(v.summary.startsWith(MoneyRules.EMPTY.substringBefore(" ·")))
+        // Walk-through A29: nothing the title's line says is said again on a tab (Accounts' how-to, Spending's line).
+        for (tab in MoneyTabs.ALL) {
+            val line = MoneyTabs.empty(tab, v) ?: v.empty.takeIf { tab == MoneyTab.ACCOUNTS } ?: continue
+            assertNull(sharedRun(v.summary, line), "${tab.name}: \"${v.summary}\" and \"$line\" say the same thing")
+        }
         assertFalse(v.tradingFirst)
     }
 
@@ -187,5 +191,12 @@ class MoneyTest {
         assertEquals(3, money.txns().size)
         money.deleteAll()
         assertTrue(money.accounts().isEmpty() && money.txns().isEmpty() && money.rules().isEmpty())
+    }
+
+    /** The first three words in a row both lines say (case and punctuation aside), or null. */
+    private fun sharedRun(a: String, b: String): String? {
+        fun words(s: String) = s.lowercase().split(Regex("[^a-z0-9£]+")).filter { it.isNotEmpty() }
+        val bw = words(b).windowed(3).map { it.joinToString(" ") }.toSet()
+        return words(a).windowed(3).map { it.joinToString(" ") }.firstOrNull { it in bw }
     }
 }

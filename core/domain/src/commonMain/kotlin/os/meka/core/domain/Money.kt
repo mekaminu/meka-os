@@ -530,9 +530,13 @@ object MoneyRules {
     const val LOCKED_MAC = "Your money stays behind Touch ID · open it to see"
     const val UNLOCK = "Open Money"
     const val UNLOCK_REASON = "Open Money"
-    const val EMPTY = "Nothing imported yet · download a statement from your bank or card as CSV (a spreadsheet file) and import it here."
-    /** Quality gate: the line under the title with nothing in; how to import is said once, under Import a statement. */
-    const val EMPTY_SUMMARY = "Nothing imported yet · your month shows here once a statement is in"
+    /** Accounts' how-to with nothing in; the title's line already says nothing's in (walk-through A29: said once). */
+    const val EMPTY = "Download a statement from your bank or card as CSV (a spreadsheet file) and import it here."
+    /**
+     * Quality gate: the line under the title with nothing in; how to import is said once, under Import a statement, and
+     * where the month will show once, on Spending ([MoneyTabs.EMPTY_SPENDING]).
+     */
+    const val EMPTY_SUMMARY = "Nothing imported yet"
     const val CONNECT_LATER = "Your banks fill this in by themselves (read-only, through Lunch Flow) once Navilife's server has its key; a statement file works for any bank meanwhile."
     const val ACCOUNT_HINT = "Which account? (Current account, Credit card…)"
     const val NO_ACCOUNT = "Name the account first (e.g. Current account), then pick the file."
