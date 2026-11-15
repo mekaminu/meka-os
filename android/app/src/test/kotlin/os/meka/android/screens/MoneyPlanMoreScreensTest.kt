@@ -24,6 +24,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
+import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -164,6 +165,10 @@ class MoneyPlanMoreScreensTest {
         ).fetchSemanticsNodes().map { it.boundsInRoot }.sortedBy { it.left }
         assertTrue(names.size == 6, "over 12 months every other month should be named, not ${names.size}")
         names.zipWithNext().forEach { (a, b) -> assertTrue(a.right < b.left, "two month names touch: $a and $b") }
+        // Walk-through A32: What if I cut…'s track runs edge to edge under the bars (it stopped ~10 dp short each side).
+        val bars = compose.onNodeWithTag("money-forecast-bars").fetchSemanticsNode().boundsInRoot
+        val track = compose.onNodeWithTag("money-cut-slider-track", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(abs(track.left - bars.left) <= 1f && abs(track.right - bars.right) <= 1f, "the slider's track $track should span the bars $bars")
         tap("money-forecast-span-6")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-six-cover"))
         // Walk-through A20: when the goals' start card already sits under the six-month forecast, that shot shows it and

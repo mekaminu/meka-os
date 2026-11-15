@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -181,6 +182,10 @@ private fun SaveBar(b: MoneySaveBar, i: Int, reduced: Boolean, modifier: Modifie
 /**
  * The mockup's slider (README item 6): a thin 4 dp track, brass up to the value, and a round 20 dp knob, inside the
  * slider's own 48 dp drag area. The knob follows the finger with no animation of its own (direct manipulation).
+ *
+ * Walk-through A32 (2026-11-14): the track runs edge to edge of the card's content, like the text and bars above it.
+ * Material's slider insets its track by half the knob each side (it stopped ~10 dp short), so the slider is laid out
+ * that much wider and the knob's half overhangs into the card's padding at either end.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,14 +194,24 @@ internal fun MoneySlider(value: Float, onValueChange: (Float) -> Unit, range: Cl
     val rail = Meka.colors.surfaceRaised
     Slider(
         value = value, onValueChange = onValueChange, valueRange = range,
-        modifier = Modifier.fillMaxWidth().testTag(tag).semantics { contentDescription = spoken },
-        thumb = { Box(Modifier.size(20.dp).clip(CircleShape).background(accent)) },
+        modifier = Modifier.fillMaxWidth().overhang(SLIDER_KNOB / 2).testTag(tag).semantics { contentDescription = spoken },
+        thumb = { Box(Modifier.size(SLIDER_KNOB).clip(CircleShape).background(accent)) },
         track = { st ->
             val span = (st.valueRange.endInclusive - st.valueRange.start).takeIf { it > 0f } ?: 1f
             val frac = ((st.value - st.valueRange.start) / span).coerceIn(0f, 1f)
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(rail)) {
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(rail).testTag("$tag-track")) {
                 Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(accent))
             }
         },
     )
+}
+
+private val SLIDER_KNOB = 20.dp
+
+/** Lays the content out [each] wider on both sides than the room it is given, centred, so it overhangs both edges. */
+private fun Modifier.overhang(each: Dp): Modifier = layout { m, c ->
+    val extra = each.roundToPx() * 2
+    val p = m.measure(if (c.hasBoundedWidth) c.copy(minWidth = c.minWidth + extra, maxWidth = c.maxWidth + extra) else c)
+    val w = if (c.hasBoundedWidth) p.width - extra else p.width
+    layout(w, p.height) { p.place(if (c.hasBoundedWidth) -extra / 2 else 0, 0) }
 }
